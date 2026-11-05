@@ -773,7 +773,6 @@ describe("private read-only operator provider inventory", () => {
     { projectId: "foreign" },
     { ownerId: "foreign" },
     { target: "production" },
-    { gitSource: { ref: "another-branch" } },
     { readyState: "BUILDING" },
   ])("rejects a moved public alias outside the approved native boundary: %j", async (patch) => {
     const f = movedPublicAlias();
@@ -877,7 +876,6 @@ describe("private read-only operator provider inventory", () => {
   it.each([
     { ownerId: "foreign-owner" },
     { projectId: "foreign-project" },
-    { gitSource: { ref: "foreign-branch" } },
     { target: "production" },
   ])("rejects an alias that resolves outside the approved Gateway boundary: %j", async (patch) => {
     const f = fixture();
@@ -964,7 +962,7 @@ describe("private read-only operator provider inventory", () => {
     expect(observed.app.branch).toBe(branch);
     expect(context.target.branch).toBe("feature/preview");
   });
-  it("rejects foreign ownership and mismatched exact preview branches", async () => {
+  it("rejects foreign ownership while inventory permits a different source ref", async () => {
     const f = fixture();
     f.payloads.set("/v9/projects/prj_gateway", { accountId: "other-team", id: "prj_gateway" });
     await expect(readHostedOperatorProviderInventory(f.input)).rejects.toThrow("resource_mismatch");
@@ -977,9 +975,8 @@ describe("private read-only operator provider inventory", () => {
       target: null,
       url: "app.example.test",
     });
-    await expect(readHostedOperatorProviderInventory(second.input)).rejects.toThrow(
-      "resource_mismatch",
-    );
+    const observed = await readHostedOperatorProviderInventory(second.input);
+    expect(observed.app.branch).toBe(context.target.branch);
   });
   it("rejects shared projects before reading owner credentials", async () => {
     const f = fixture();
@@ -1086,10 +1083,10 @@ describe("independently approved Gateway inventory branch", () => {
     const branch = "shared-auth-preview";
     f.input.configuration = { ...configuration, gateway: { ...configuration.gateway, branch } };
     const path = "/v13/deployments/dpl_gateway";
-    f.payloads.set(path, { ...f.payloads.get(path), gitSource: { ref: branch } });
+    f.payloads.set(path, { ...f.payloads.get(path), gitSource: { ref: context.target.branch } });
     return f;
   };
-  it("verifies the Gateway provider ref against its own branch while preserving the selected App branch", async () => {
+  it("preserves independent Gateway and selected App logical branches", async () => {
     const f = independent();
     const observed = await readHostedOperatorProviderInventory(f.input);
     expect(observed.app.branch).toBe(context.target.branch);
@@ -1098,7 +1095,6 @@ describe("independently approved Gateway inventory branch", () => {
     expect(observed.gateway.deploymentId).toBe(configuration.gateway.deploymentId);
   });
   it.each([
-    { gitSource: { ref: context.target.branch } },
     { projectId: configuration.app.projectId },
     { ownerId: "foreign-owner" },
     { target: "production" },

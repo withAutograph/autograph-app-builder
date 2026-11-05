@@ -118,6 +118,27 @@ age-based deletion path.
 
 ## Idempotency and uncertain submissions
 
+The embedded Next integration routes `/eve/v1/*` directly to its separate Eve
+Vercel service. Its build emits a dedicated function with `maxDuration: 1800`
+for the exact `/eve/v1/session` endpoint and preserves that function destination
+through Eve output normalization. Other protocol routes retain their shared
+function; workflow queue triggers and duration remain unchanged. This is
+per-function deployment output, not a project-wide timeout change or an in-place
+update to an existing deployment. The caller can still time out earlier and
+record `submission_unknown`; the longer function window does not prove a receipt
+was committed or authorize a retry with different operation bytes.
+
+Recovery retains the complete native history and checkpoint provenance. Within
+one authorized collection, it shares equal primitive context strings and isolated
+immutable history-message values. Original mutable context and permission objects
+retain their identities and values; message copies are isolated from aliased
+session state. Repeatability policies validate every
+candidate and native event sequentially, retaining only the latest parsed history
+and the evidence used by their existing approval/result checks. These allocation
+changes grant no replay authority and never waive cancellation, ownership,
+approval or unknown-effect guards. A local reconciliation result remains separate
+from hosted activation and app acceptance.
+
 `start`, `send`, and `respond` reserve a tenant-bound operation before dispatch.
 The client request ID is bound to a canonical request digest. A completed retry
 returns the stored public result. Reusing the ID for different request bytes is
@@ -182,6 +203,31 @@ Reservation responses and unsuccessful settlements are parsed as closed
 runtime discriminated unions and rebound to the exact principal, kind, client
 request ID, request digest, state, and session before they grant any authority.
 Unknown dispositions and mismatched store responses fail closed.
+
+### Recovery of approved publication readback
+
+An interrupted native turn can retain a human-approved `reconcile_github_draft_pr`
+call without its result after a later question moves the approval away from the
+history tail. The app-owned recovery policy may designate only its explicit
+`recordCurrentEquivalentRelease: true` readback mode as repeatable when the
+retained completion, proposal, review, compiled artifact and original authority
+session agree. A unique native `input.requested` action must bind the exact call and input, and its
+independently settled `approval.settled` record must identify the verified
+original owner. A model-supplied approval receipt or transcript approval response
+alone cannot provide this authority. Changed or ambiguous identity, scope,
+approval, completion, or an already recorded result grants no repeatability.
+
+This preserves uncertainty about any earlier effect; it never certifies
+nonexecution or synthesizes a result. The native effect-frontier checks still
+reject unresolved dispatches and uncommitted outcomes. If native reconciliation
+permits continuation, the existing tool performs its normal current-owner,
+artifact, review and exact GitHub readback checks. Only an already verified
+publication can be associated with an exactly equivalent current compiled
+capture. If publication cannot be verified, this mode returns before any Git
+write or source association. Fresh branch updates, other flags, other tools,
+repository creation, provider resource writes, merging, deployment and Production
+activation receive no retry authority from this policy.
+
 Successful settlement is also untrusted until its public result is canonically
 exact and digest-equal to the dispatched result. A successful start additionally
 requires the returned result, proposed new-session record, and an immediate

@@ -204,6 +204,107 @@ describe("private native target terminal approval", () => {
     },
   );
 
+  it("does not reuse one invocation's approval for a different pending invocation", () => {
+    const first = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-one" });
+    const second = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-two" });
+    for (const reader of [first, second]) {
+      reader.observe(requested({ requestId: "request-one", callId: "call-one" }));
+      reader.observe(requested({ requestId: "request-two", callId: "call-two" }));
+      reader.observe(settled("approved", authority.ownerUserId, "request-one"));
+    }
+    expect(first.read()).toMatchObject({ requestId: "request-one", outcome: "approved" });
+    expect(second.read()).toBeNull();
+  });
+
+  it("selects the current invocation from two approved calls without discarding either receipt", () => {
+    const all = capture();
+    for (const [requestId, callId] of [
+      ["request-one", "call-one"],
+      ["request-two", "call-two"],
+    ]) {
+      all.observe(requested({ requestId, callId }));
+      all.observe(settled("approved", authority.ownerUserId, requestId));
+    }
+    all.proveComplete();
+    expect(() => all.read()).toThrow("ambiguous");
+    const current = createPrivateNativeTargetApprovalCapture({
+      owner,
+      record,
+      callId: "call-two",
+      state: all.snapshot(),
+      terminals: all.terminalSnapshot(),
+    });
+    expect(current.read()).toMatchObject({ requestId: "request-two", callId: "call-two" });
+    expect(current.snapshot().entries).toHaveLength(2);
+  });
+
+  it("keeps a prior invocation's cancellation dominant over a fresh approved invocation", () => {
+    const current = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-two" });
+    current.observe(requested({ requestId: "request-one", callId: "call-one" }));
+    current.observe(settled("cancelled", authority.ownerUserId, "request-one"));
+    current.observe(requested({ requestId: "request-two", callId: "call-two" }));
+    current.observe(settled("approved", authority.ownerUserId, "request-two"));
+    expect(current.read()).toMatchObject({
+      requestId: "request-one",
+      callId: "call-one",
+      outcome: "cancelled",
+    });
+  });
+
+  it("still rejects two approved requests for the same invocation", () => {
+    const current = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-one" });
+    for (const requestId of ["request-one", "request-two"]) {
+      current.observe(requested({ requestId, callId: "call-one" }));
+      current.observe(settled("approved", authority.ownerUserId, requestId));
+    }
+    expect(() => current.read()).toThrow("ambiguous");
+  });
+
+  it("reads a saved partial batch as approved for the plan and pending for its unanswered call", async () => {
+    const reader = capture();
+    reader.observe(requested({ requestId: "request-one", callId: "call-one" }));
+    reader.observe(requested({ requestId: "request-two", callId: "call-two" }));
+    reader.observe(settled("approved", authority.ownerUserId, "request-one"));
+    reader.proveComplete();
+    const saved: PrivateNativeTargetApprovalObservation = {
+      version: 1,
+      native: {
+        adapterSessionId: owner.adapterSessionId,
+        adapterGeneration: owner.adapterGeneration,
+        nextNativeIndex: 3,
+        capture: reader.snapshot(),
+      },
+      terminals: reader.terminalSnapshot(),
+    };
+    const readHistory = vi.fn((start: number) => {
+      expect(start).toBe(3);
+      return Promise.resolve({ nextNativeIndex: 3, nativeTailIndex: 2, complete: true });
+    });
+    const common = {
+      owner,
+      record,
+      historyOwner,
+      observation: { state: saved, save: vi.fn(() => Promise.resolve()) },
+      readHistory,
+      assertOwner: () => Promise.resolve(),
+    };
+    expect(await readPrivateNativeTargetApproval(common)).toEqual({
+      status: "approved",
+      proof: {
+        requestId: "request-one",
+        callId: "call-one",
+        planDigest,
+        responderPrincipalId: authority.ownerUserId,
+        publicSessionId: plan.origin.publicSessionId,
+        outcome: "approved",
+        observedAt: "2026-10-21T15:00:01.000Z",
+      },
+    });
+    expect(await readPrivateNativeTargetApproval({ ...common, callId: "call-two" })).toEqual({
+      status: "pending",
+    });
+  });
+
   it("returns the original cancelled settlement proof, and never promotes a later approval", () => {
     const reader = capture();
     reader.observe(requested());

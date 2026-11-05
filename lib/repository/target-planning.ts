@@ -1,3 +1,18 @@
+import {
+  applicationSourceRegistrationSchema,
+  planApplicationSourceRegistration,
+} from "./application-source-registration";
+import { privateComputeProfileSchema } from "../sandbox/private-compute-profile";
+import type { PrivateComputeProfile } from "../sandbox/private-compute-profile";
+import { localSourceReconciliationSchema } from "./local-source-reconciliation-contract";
+import type { LocalSourceReconciliation } from "./local-source-reconciliation-contract";
+import { canAutoSelectDevelopmentSource } from "./development-source";
+import {
+  frameworkUpgradeSchema,
+  planFrameworkUpgrade,
+  resolveLatestFrameworkVersions,
+} from "./framework-upgrade";
+import type { FrameworkVersions } from "./framework-upgrade";
 import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
 import { describeSelectedApp } from "./app-description";
 import { createHash } from "node:crypto";
@@ -8,7 +23,6 @@ import type { SandboxSession } from "eve/sandbox";
 import { hasTestCapability } from "../testing/test-capability";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
-import { safeSourcePath } from "./source-path";
 
 import { dependencyCacheReceiptDigest, planningOverlayRoot } from "./dependency-cache";
 import type { ObservedDependencyCache } from "./dependency-cache";
@@ -19,6 +33,7 @@ import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 import type { SourceReceipt } from "./source-receipt";
 import { ExistingApplicationChangesRequiredError } from "./target-planning-errors";
 import type { ApplicationFileChange } from "./application-file-change";
+import { applicationFilePathSchema } from "./application-file-change";
 
 export {
   ExistingApplicationChangesRequiredError,
@@ -29,6 +44,7 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 const repositoryPath = z.string().regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u);
+const shellArgument = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 // Project only identity fields consumed here; producer metadata grants no authority.
 export const targetIdentitySchema = z.object({
   appId,
@@ -51,38 +67,53 @@ const appSpecBindingSchema = z.strictObject({
 // Persisted creation state can contain retired metadata. Parse only the current
 // fields without rewriting the stored receipt or its digest on resume.
 const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
-  z.strictObject({
-    blockers: z.array(z.string()),
-    contract: z.strictObject({
-      appId,
-      appSpec: appSpecBindingSchema,
-      version: z.literal(1),
-    }),
-    mutations: z.tuple([]),
-    plan: z.strictObject({
-      product: z.strictObject({
+  z
+    .strictObject({
+      blockers: z.array(z.string()),
+      frameworkUpgrade: frameworkUpgradeSchema.optional(),
+      privateCompute: privateComputeProfileSchema.optional(),
+      contract: z.strictObject({
+        appId,
         appSpec: appSpecBindingSchema,
+        version: z.literal(1),
       }),
-      source: z.strictObject({
-        packageName: z.string().min(1),
-        runtime: z.literal("nextjs"),
-        schema: z.discriminatedUnion("kind", [
-          z.strictObject({ kind: z.literal("none") }),
-          z.strictObject({ kind: z.literal("kernel"), path: repositoryPath }),
-        ]),
-        workspacePath: repositoryPath,
+      mutations: z.tuple([]),
+      plan: z.strictObject({
+        product: z.strictObject({
+          appSpec: appSpecBindingSchema,
+        }),
+        source: z.strictObject({
+          packageName: z.string().min(1),
+          runtime: z.literal("nextjs"),
+          schema: z.discriminatedUnion("kind", [
+            z.strictObject({ kind: z.literal("none") }),
+            z.strictObject({ kind: z.literal("kernel"), path: repositoryPath }),
+          ]),
+          workspacePath: repositoryPath,
+        }),
+        topology: z.strictObject({
+          assetRoute: z.string().startsWith("/").optional(),
+          configPath: z.literal(topologyOwner),
+          currentDigest: digest.optional(),
+          packageName: z.string().min(1),
+          projectName: appId,
+          proposedDigest: digest.optional(),
+          routes: z.array(z.string().startsWith("/")),
+        }),
       }),
-      topology: z.strictObject({
-        assetRoute: z.string().startsWith("/").optional(),
-        configPath: z.literal(topologyOwner),
-        currentDigest: digest.optional(),
-        packageName: z.string().min(1),
-        projectName: appId,
-        proposedDigest: digest.optional(),
-        routes: z.array(z.string().startsWith("/")),
-      }),
-    }),
-  });
+    })
+    .superRefine((proposal, context) => {
+      if (
+        proposal.privateCompute !== undefined &&
+        proposal.privateCompute.checkPolicy.path !==
+          `apps/${proposal.contract.appId}/.config/mise/tasks/check`
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "The compute check policy must belong to the exact app contract.",
+        });
+      }
+    });
 
 export const targetCreationProposalSchema =
   targetCreationProposalSchemaForTopology("microfrontends.json");
@@ -102,7 +133,7 @@ const iterationChangeSchema = z
         mode: z.string().regex(/^[0-7]{3,4}$/u),
       })
       .optional(),
-    path: repositoryPath,
+    path: applicationFilePathSchema,
   })
   .superRefine((change, context) => {
     if (change.after === undefined && change.before === undefined) {
@@ -113,16 +144,67 @@ const iterationChangeSchema = z
     }
   });
 
+const applicationSourceImportPlanningSchema = z.strictObject({
+  appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+  manifestDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  importedSessionId: z.string().min(1),
+  registration: applicationSourceRegistrationSchema.optional(),
+});
+
 const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
   targetCreationProposalSchemaForTopology(topologyOwner)
-    .extend({
+    .safeExtend({
       iteration: z.strictObject({
-        changes: z.array(iterationChangeSchema).min(1),
+        changes: z.array(iterationChangeSchema),
         digest,
       }),
       operation: z.literal("iterate-existing-app"),
+      sourceReconciliation: localSourceReconciliationSchema.optional(),
+      applicationSourceImport: applicationSourceImportPlanningSchema.optional(),
     })
     .superRefine((proposal, context) => {
+      if (
+        proposal.iteration.changes.length === 0 &&
+        proposal.frameworkUpgrade === undefined &&
+        proposal.sourceReconciliation === undefined &&
+        proposal.privateCompute === undefined &&
+        proposal.applicationSourceImport === undefined
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "An existing-app iteration requires app changes or a framework upgrade",
+        });
+      }
+      if (
+        proposal.applicationSourceImport !== undefined &&
+        proposal.applicationSourceImport.registration === undefined
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "The imported app requires its platform registration plan.",
+          path: ["applicationSourceImport"],
+        });
+      }
+      if (
+        proposal.applicationSourceImport !== undefined &&
+        proposal.applicationSourceImport.appId !== proposal.contract.appId
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "The application source import belongs to another app.",
+          path: ["applicationSourceImport"],
+        });
+      }
+      if (
+        proposal.sourceReconciliation !== undefined &&
+        (proposal.sourceReconciliation.appId !== proposal.contract.appId ||
+          proposal.sourceReconciliation.appSpecDigest !== proposal.contract.appSpec.sha256)
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "Local source reconciliation must retain its exact app and accepted product.",
+        });
+      }
       if (sha256(JSON.stringify(proposal.iteration.changes)) !== proposal.iteration.digest) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
@@ -423,11 +505,46 @@ export const executeTargetIdentityAndPlanning = async (input: {
   appSpecDigest: string;
   artifactRevision: string;
   existingAppChanges?: readonly ApplicationFileChange[];
+  localSourceReconciliation?: LocalSourceReconciliation;
+  applicationSourceImport?: z.infer<typeof applicationSourceImportPlanningSchema>;
+  privateCompute?: PrivateComputeProfile;
+  frameworkUpgradeRequested?: boolean;
+  resolveFrameworkVersions?: () => Promise<FrameworkVersions>;
   sourceReceipt?: SourceReceipt;
   environment?: Readonly<Record<string, string | undefined>>;
   onIdentity?: (identity: TargetIdentity) => void | Promise<void>;
 }) => {
   planningMarker("target-identity-and-planning", "start");
+  const privateCompute =
+    input.privateCompute === undefined
+      ? undefined
+      : privateComputeProfileSchema.parse(input.privateCompute);
+  if (
+    privateCompute !== undefined &&
+    privateCompute.checkPolicy.path !== `apps/${input.appId}/.config/mise/tasks/check`
+  ) {
+    throw new Error("The private compute check policy belongs to another app.");
+  }
+  let applicationSourceImport =
+    input.applicationSourceImport === undefined
+      ? undefined
+      : applicationSourceImportPlanningSchema.parse(input.applicationSourceImport);
+  if (applicationSourceImport !== undefined && applicationSourceImport.appId !== input.appId) {
+    throw new Error("The imported app identity must be preserved.");
+  }
+  const sourceReconciliation =
+    input.localSourceReconciliation === undefined
+      ? undefined
+      : localSourceReconciliationSchema.parse(input.localSourceReconciliation);
+  if (
+    sourceReconciliation !== undefined &&
+    (!canAutoSelectDevelopmentSource(input.environment) ||
+      sourceReconciliation.appId !== input.appId ||
+      sourceReconciliation.appSpecDigest !== input.appSpecDigest ||
+      sourceReconciliation.sourceReceiptDigest !== input.sourceReceipt?.digest)
+  ) {
+    throw new Error("Local source reconciliation does not belong to this planning input.");
+  }
   const overlay = await materializePlanningOverlay(input);
   const identity = parseOutput(
     await input.executor({
@@ -450,15 +567,30 @@ export const executeTargetIdentityAndPlanning = async (input: {
     command: `test -d /workspace/repository/${identity.workspacePath}`,
   });
   const existingApplication = existingApplicationResult.exitCode === 0;
-  if (existingApplication && input.existingAppChanges === undefined) {
+  const frameworkUpgrade =
+    input.frameworkUpgradeRequested === true ||
+    (!existingApplication && input.resolveFrameworkVersions !== undefined)
+      ? await planFrameworkUpgrade(
+          input.sandbox,
+          await (input.resolveFrameworkVersions ?? resolveLatestFrameworkVersions)(),
+        )
+      : undefined;
+  if (
+    existingApplication &&
+    input.existingAppChanges === undefined &&
+    frameworkUpgrade === undefined &&
+    sourceReconciliation === undefined &&
+    privateCompute === undefined &&
+    applicationSourceImport === undefined
+  ) {
     throw new ExistingApplicationChangesRequiredError();
   }
-  if (existingApplication && input.existingAppChanges !== undefined) {
+  if (existingApplication) {
     const seen = new Set<string>();
     const changes: TargetIterationChange[] = [];
-    for (const requested of input.existingAppChanges) {
+    for (const requested of input.existingAppChanges ?? []) {
       if (
-        !safeSourcePath(requested.path) ||
+        !applicationFilePathSchema.safeParse(requested.path).success ||
         !requested.path.startsWith(`${identity.workspacePath}/`) ||
         requested.path === identity.appSpecPath ||
         seen.has(requested.path)
@@ -475,7 +607,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
           ? undefined
           : // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             await input.sandbox.run({
-              command: `stat -c %a /workspace/repository/${requested.path}`,
+              command: `stat -c %a -- ${shellArgument(`/workspace/repository/${requested.path}`)}`,
             });
       const mode =
         observedMode?.exitCode === 0 && /^[0-7]{3,4}$/u.test(observedMode.stdout.trim())
@@ -505,30 +637,55 @@ export const executeTargetIdentityAndPlanning = async (input: {
         path: requested.path,
       });
     }
-    if (changes.length === 0) {
+    if (
+      changes.length === 0 &&
+      frameworkUpgrade === undefined &&
+      sourceReconciliation === undefined &&
+      privateCompute === undefined &&
+      applicationSourceImport === undefined
+    ) {
       throw new Error("At least one existing-app change is required.");
     }
     const iterationDigest = sha256(JSON.stringify(changes));
     await input.onIdentity?.(identity);
-    const schemaChange = input.existingAppChanges.find(
+    const schemaChange = input.existingAppChanges?.find(
       (change) => change.path === identity.schemaCuePath,
     );
+    if (applicationSourceImport !== undefined) {
+      applicationSourceImport = {
+        ...applicationSourceImport,
+        registration: await planApplicationSourceRegistration(input.sandbox, input.appId),
+      };
+    }
+    const importedSchema =
+      applicationSourceImport === undefined
+        ? undefined
+        : await input.sandbox.run({
+            command: `test -f /workspace/repository/${identity.schemaCuePath}`,
+            workingDirectory: "/workspace/repository",
+          });
     const description =
-      schemaChange === undefined
+      schemaChange === undefined && applicationSourceImport === undefined
         ? await describeSelectedApp({
             appId: identity.appId,
             root: "/workspace/repository",
             sandbox: input.sandbox,
           })
         : undefined;
-    const hasSchema =
-      schemaChange === undefined
+    const observedSchema =
+      applicationSourceImport === undefined
         ? description?.backend.kind === "generated-postgres"
-        : schemaChange.operation !== "delete";
+        : importedSchema?.exitCode === 0;
+    const hasSchema =
+      schemaChange === undefined ? observedSchema : schemaChange.operation !== "delete";
     const proposal = targetIterationProposalSchemaForTopology("microfrontends.json").parse({
       ...creationPlan(identity, input.appSpecDigest, hasSchema),
+      ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
       iteration: { changes, digest: iterationDigest },
       operation: "iterate-existing-app",
+      ...(applicationSourceImport === undefined ? {} : { applicationSourceImport }),
+      ...(sourceReconciliation === undefined ? {} : { sourceReconciliation }),
+      ...(privateCompute === undefined ? {} : { privateCompute }),
     });
     const result = { identity, proposal, ...overlay };
     planningMarker("target-identity-and-planning", "finish");
@@ -539,7 +696,11 @@ export const executeTargetIdentityAndPlanning = async (input: {
     command: `test -f ${identity.cueSourcePath}`,
     workingDirectory: "/workspace/repository",
   });
-  const proposal = creationPlan(identity, input.appSpecDigest, cue.exitCode === 0);
+  const proposal = {
+    ...(privateCompute === undefined ? {} : { privateCompute }),
+    ...creationPlan(identity, input.appSpecDigest, cue.exitCode === 0),
+    ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
+  };
   const result = { identity, proposal, ...overlay };
   planningMarker("target-identity-and-planning", "finish");
   return result;

@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
+  nativeDeliveryGitRef,
   retainedOperatorAuthSchema,
   sameOperatorSelection,
 } from "./hosted-operator-contract";
@@ -14,6 +15,7 @@ import type {
   ProtectedHostedOperatorDependencies,
 } from "./hosted-operator-service";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
+import { inspectParticipantBootstrapPreparation } from "./hosted-operator-participant-bootstrap";
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 
 type Configuration = Pick<
@@ -65,7 +67,7 @@ export const configuredBootstrapGatewayBindings = (
   };
 };
 
-const infrastructureOnly = (plan: HostedOperatorPlan) =>
+export const infrastructureOnly = (plan: HostedOperatorPlan) =>
   plan.action === "prepare" &&
   plan.stage === "auth-bootstrap" &&
   plan.access.length === 0 &&
@@ -93,6 +95,7 @@ export const createExistingAuthBootstrapPrerequisite = (
   configuration: Configuration,
   appDatabase: HostedOperatorPlan["appDatabase"],
   now: number,
+  gatewaySource?: NonNullable<HostedOperatorPlan["gatewayDelivery"]>,
 ) => {
   const current = record?.operator;
   const parsed = retainedOperatorAuthSchema.safeParse(
@@ -177,7 +180,12 @@ export const createExistingAuthBootstrapPrerequisite = (
     return undefined;
   }
   const gatewayBindings = configuredBootstrapGatewayBindings(configuration);
-  const gatewayDelivery = { ...prior.gatewayDelivery, gitSha: configuration.gateway.gitSha };
+  const gatewayDelivery = gatewaySource ?? {
+    branch: configuration.gateway.branch,
+    gitSha: configuration.gateway.gitSha,
+    projectId: configuration.gateway.projectId,
+    repoId: configuration.gateway.repoId,
+  };
   const currentMatches =
     isDeepStrictEqual(
       {
@@ -185,7 +193,17 @@ export const createExistingAuthBootstrapPrerequisite = (
         readonlyAttesters: current.plan.gatewayBindings?.readonlyAttesters,
       },
       { ...gatewayBindings, readonlyAttesters: gatewayBindings.readonlyAttesters },
-    ) && isDeepStrictEqual(current.plan.gatewayDelivery, gatewayDelivery);
+    ) &&
+    isDeepStrictEqual(
+      {
+        ...current.plan.gatewayDelivery,
+        gitRef:
+          current.plan.gatewayDelivery === undefined
+            ? undefined
+            : nativeDeliveryGitRef(current.plan, current.plan.gatewayDelivery, "gateway"),
+      },
+      { ...gatewayDelivery, gitRef: gatewayDelivery.gitRef ?? gatewayDelivery.branch },
+    );
   if (currentMatches) {
     return infrastructureOnly(current.plan) &&
       current.plan.effects.some(
@@ -214,6 +232,16 @@ export const createExistingAuthBootstrapPrerequisite = (
     },
     retention: { ...prior.retention, expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString() },
   });
+  // Account approval freezes its original Gateway intent. A separately completed
+  // infrastructure refresh remains usable without replacing that account plan.
+  if (
+    current.plan.stage === "auth-participants" &&
+    record.status === "participants-prepared" &&
+    record.accountPreparation?.accountsCompletedAt !== undefined &&
+    inspectParticipantBootstrapPreparation(plan, record).gatewayPrepared
+  ) {
+    return undefined;
+  }
   return { auth, plan };
 };
 
@@ -231,6 +259,7 @@ export const readExistingAuthBootstrapPrerequisite = async (
     store: Pick<ProtectedHostedOperatorDependencies["store"], "read">;
   },
   now: number,
+  gatewaySource?: NonNullable<HostedOperatorPlan["gatewayDelivery"]>,
 ) => {
   const proposed = createExistingAuthBootstrapPrerequisite(
     current?.record,
@@ -238,6 +267,7 @@ export const readExistingAuthBootstrapPrerequisite = async (
     configuration,
     appDatabase,
     now,
+    gatewaySource,
   );
   if (proposed === undefined) {
     return undefined;

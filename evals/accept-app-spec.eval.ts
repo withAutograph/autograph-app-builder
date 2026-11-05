@@ -75,9 +75,7 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await session.send("Apply the current creation proposal.");
-    session.requireInputRequest({ toolName: "apply_app_creation" });
-    const turn9 = await session.respondAll("approve");
+    const turn9 = await session.send("Apply the current creation proposal.");
     t.succeeded();
     t.check(turn9.message, includes("private preview"));
     t.check(turn9.message, includes("quality checks"));

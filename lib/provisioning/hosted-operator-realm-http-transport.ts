@@ -1,6 +1,7 @@
 import { getVercelOidcToken, verifyVercelOidcToken } from "@vercel/oidc";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import { HostedOperatorError } from "./hosted-operator-contract";
+import type { HostedOperatorContext } from "./hosted-operator-service";
 
 const isApprovedUrl = (url: URL, origin: string): boolean =>
   [
@@ -49,7 +50,10 @@ export const createHostedOperatorRealmHttpTransport =
       sourceHost === "builder"
         ? configuration.workloadPolicy
         : configuration.nativeNeon.configuration.operator;
-    const token = await (io.getOidc ?? getVercelOidcToken)();
+    const token = await (io.getOidc ?? getVercelOidcToken)({
+      project: source.projectId,
+      team: source.ownerId,
+    });
     await (io.verifyOidc ?? verifyVercelOidcToken)(token, {
       audience: source.audience,
       environment: source.environment,
@@ -81,4 +85,49 @@ export const createHostedOperatorRealmHttpTransport =
         ? AbortSignal.any([init.signal, AbortSignal.timeout(20_000)])
         : AbortSignal.timeout(20_000),
     });
+  };
+
+/** Host-owned public verification reads share the fixed server transport, never normal-account cookies. */
+export const createHostedOperatorPublicJwksReader =
+  (
+    dependencies: {
+      configuration: HostedOperatorSourceConfiguration;
+      assertPlanningAuthorized: (context: HostedOperatorContext) => Promise<void>;
+      assertCurrentOwner: (context: HostedOperatorContext) => Promise<void>;
+    },
+    io: Parameters<typeof createHostedOperatorRealmHttpTransport>[2] = {},
+  ) =>
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The runtime public-profile reader parses this external JWKS JSON into its closed public-key schema.
+  async (context: HostedOperatorContext, url: string): Promise<unknown> => {
+    const { configuration } = dependencies;
+    const application = configuration.applications[context.target.appId];
+    const source = configuration.nativeNeon.configuration.operator;
+    const approved = [
+      url === `${configuration.gateway.publicOrigin}/_platform/jwks.json`,
+      application?.projectId === context.target.projectId,
+      application?.branch === context.target.branch,
+      context.target.environment === "preview",
+      context.target.scopeId === configuration.teamId,
+      configuration.operator.projectId === source.projectId,
+      configuration.teamId === source.ownerId,
+      configuration.operator.environment === source.environment,
+    ].every(Boolean);
+    if (!approved) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+    await dependencies.assertPlanningAuthorized(context);
+    await dependencies.assertCurrentOwner(context);
+    const transport = createHostedOperatorRealmHttpTransport(
+      configuration,
+      "operator",
+      io,
+      configuration.gateway.publicOrigin,
+    );
+    const response = await transport(url, { method: "GET", redirect: "error" });
+    await dependencies.assertCurrentOwner(context);
+    if (!response.ok) {
+      throw new HostedOperatorError("operator_unavailable");
+    }
+    const value: unknown = await response.json();
+    return value;
   };

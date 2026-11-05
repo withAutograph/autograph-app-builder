@@ -34,8 +34,10 @@ app-owned files and reuse the same component-backed preview flow.
    scaffolding.
 2. Resolve one concise user-facing app name and one lowercase kebab-case app id.
    Preserve each explicitly supplied valid value. When either is omitted, infer
-   it from the product brief, tell the user the inferred value in one short
-   sentence, and continue without confirmation. Derive an inferred id
+   it from the product brief, tell the user the inferred product name in one
+   short sentence, and continue without confirmation. Mention the inferred id
+   only when it helps the user identify the app or resolve a real collision.
+   Derive an inferred id
    deterministically from the chosen name by lowercasing it, replacing each run
    of non-alphanumeric characters with one hyphen, and trimming hyphens. Ask
    only when the result is unsupported, the prepared source proves a real
@@ -65,6 +67,9 @@ app-owned files and reuse the same component-backed preview flow.
    and `docs/schema-compiler.md`. Follow current repository docs and actual
    commands; missing documentation is context to investigate, not a build gate.
    Preserve unrelated changes.
+   When the brief requests provider data or an integrations management surface,
+   follow [optional integrations](references/optional-integrations.md) for
+   discovery, typed recipes, the repository installer and shared composition.
    When the brief requests an existing app revision from an agreed historical
    version while retaining current shared platform capabilities, select that
    baseline in this first `resolve_github_source` call, before reading any app
@@ -73,9 +78,9 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    for an explicitly supplied full commit. The platform branch/open PR remains
    the ordinary source selection. Builder verifies and projects the app itself;
    never ask the evaluator to restore files or manually construct a baseline.
-   Retry the saved selection after a preparation failure. Report the receipt's
-   historical app source and actual platform base separately from newly authored
-   changes. Retained later release archives are not initial implementation input;
+   Retry the saved selection after a preparation failure. Report the app source
+   and actual platform base separately from newly authored changes; include
+   receipt details in supporting context when useful. Retained later release archives are not initial implementation input;
    do not inspect them to copy a later revision. A baseline is provenance only,
    and grants no publication, deployment, or readiness authority.
    For a hosted existing repository named as `owner/name`, use only
@@ -131,8 +136,10 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    Keep the scaffolded repository infrastructure authoritative. Do not include
    `package.json`, lockfiles, `next.config.*`, `tsconfig.json`, Turbo config, or
    duplicate frontend entrypoints in `implementationFiles` for a new app. Use
-   the dependency versions and scripts already present in the prepared
-   workspace; never guess or pin framework versions from model knowledge.
+   concrete framework versions resolved by the accepted build plan and the scripts
+   present in the prepared workspace. New-app plans resolve the latest stable
+   compatible Next.js, React/React DOM, and React types once. Preserve that
+   selection through retries; never guess versions from model knowledge.
    For a complete app, Builder owns the backend and persistence implementation
    as well as the UI. Follow [full app authoring](../../../docs/full-app-authoring.md), including
    its authenticated route, mounted receipt and fresh-process persistence requirements.
@@ -140,6 +147,28 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    the CUE model and policies from the accepted product decisions, compile the
    checked release, and implement the authenticated server reads and actions.
    The user supplies product meaning, not schema source or backend code.
+   When accepted access requirements name application roles, declare the CUE
+   `authorization.roles` and matching model/operation/field/row `grants` in the
+   app schema. Follow the selected repository's generated-data-operations
+   contract. Use the compiler's canonical role IDs throughout app policy and
+   runtime consumers; product labels are not PostgreSQL identifiers. Inspect
+   `app:describe` after compiling: its checked release must expose the intended
+   roles. AppSpec prose, a role literal in application code, or a fixture actor
+   does not declare a schema grant. If authenticated local setup reports no
+   schema roles, repair that app's schema/policy through ordinary implementation
+   repairs and retry validation. Never invent a default role or manually inject
+   `APP_RUNTIME_ROLES` to bypass missing app authorization.
+   When accepted access requirements name application roles, declare the CUE
+   `authorization.roles` and matching model/operation/field/row `grants` in the
+   app schema. Follow the selected repository's generated-data-operations
+   contract. Use the compiler's canonical role IDs throughout app policy and
+   runtime consumers; product labels are not PostgreSQL identifiers. Inspect
+   `app:describe` after compiling: its checked release must expose the intended
+   roles. AppSpec prose, a role literal in application code, or a fixture actor
+   does not declare a schema grant. If authenticated local setup reports no
+   schema roles, repair that app's schema/policy through ordinary implementation
+   repairs and retry validation. Never invent a default role or manually inject
+   `APP_RUNTIME_ROLES` to bypass missing app authorization.
    Preserve `catalog:` and `workspace:*` references. The generator profile owns
    the standard scaffold toolset, not every app-specific dependency. Additional
    dependencies need the appropriate reviewed app manifest/lockfile changes,
@@ -208,7 +237,8 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    Preserve unrelated changes. Repair actual reported technical failures
    through the supported tools when safe, without requesting the same approval
    again. If recovery is unavailable, explain the incomplete product outcome.
-8. When the user requests restoration of the currently published app and defers
+8. For an explicitly protected Preview journey, when the user requests
+   restoration of the currently published app and defers
    unpublished changes, recover the existing hosted Preview before continuing
    private candidate validation or review. Preserve the candidate and its
    diagnostics for later iteration. Use `plan-app-hosted-runtime` with
@@ -226,9 +256,16 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    unassessed authenticated behavior explicit. Resume the candidate's full
    validation, review and separate publication approval when delivering its
    changes; do not reset it or pin ongoing revision work to published source.
-   For delivery of applied changes, after apply succeeds continue with
-   `validate_app_creation`. It runs the repository's normal commands against
-   the current applied app. When it
+   For delivery of applied changes with approved optional integrations, run
+   `install-app-integrations` against the executable app definition after apply
+   and before validation. When an accepted revision explicitly defers integrations,
+   remove the executable provider selection and reconcile it with that same
+   operation; `status: "omitted"` proceeds with normal app/Auth delivery without
+   connecting a provider or changing retained bindings/data. Follow the optional
+   integration reference for app-owned UI conflicts and source-only removal.
+   After apply and any requested integration installation
+   succeed, continue with `validate_app_creation`. It runs the repository's normal
+   commands against the current applied app. When it
    reports a repairable failure, provide corrected `implementationFiles` to
    `validate_app_creation` and retry in the same approved checkout. Use the
    returned diagnostics and status; do not invent extra validation capabilities
@@ -294,6 +331,18 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    the complete candidate and review both diffs again. Run the selected app's schema,
    repository checks, browser tests, and applicable guard on the reconciled
    candidate with `validate_github_draft_pr_reconciliation`.
+   If an existing app dependency needs shared Bun catalog alignment, use
+   `normalize_github_draft_pr_dependency_catalog` with its package name. It operates
+   on this candidate, preserves the existing concrete version, normalizes its
+   declared workspace consumers, and generates lock metadata with pinned Bun and
+   install scripts disabled. Inspect its exact metadata paths and command outcome;
+   a lock failure is not success. Retain the candidate and retry the same operation
+   after resolving the actual failure. Do not hand-edit shared files, guess a
+   version, or misuse framework upgrades. Complete normal current-source validation
+   including `check:package-manifests`, then review all changed metadata before
+   publication approval. Additional check failures have durable, session-scoped
+   `additional-check` logs discoverable through `get_validation_log`; missing
+   excerpts are not a reason to rerun app tests or invent another readiness gate.
    If CI reports app formatting defects, run the repository-owned formatter
    with `format_github_draft_pr_candidate` on the isolated candidate before
    validation. It may change only the selected app. Revalidate and review both
@@ -394,8 +443,9 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    When validation returns `productionHandoff`, follow
    [Production handoff](../../../docs/production-readiness-handoff.md) for
    reviewed Auth identity, explicit QA access and runtime binding delivery.
-   Include its declared app route,
-   roles, checked release, operator guide, and blockers in the result. Keep it
+   Include its declared app route, roles, and blockers in the result. Keep the
+   checked release and operator-guide references in supporting context when
+   useful. Keep the handoff
    separate from private validation and GitHub checks: a protected operator
    owns tenant preparation, access grants, and hosted activation. Missing
    Production metadata is not a private build failure. Preserve the selected
@@ -420,6 +470,59 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    JSON, or other internal verification values. One approval never authorizes
    another outcome. Keep internal execution mechanics out of the public
    conversation.
+
+## Normal public app delivery
+
+When the requested result is a public app URL with application sign-in, use the
+normal Builder destination and public-release capability. Vercel account sign-in
+is not an app access requirement. Do not start a separate native Preview target,
+acceptance project or Auth project to satisfy this journey.
+
+- Keep the accepted app and saved session. Use its normal owned provisioned
+  destination. If setup reports `builder_destination_required`, direct the user
+  to the returned normal Store In / Deploy To destination control and continue
+  that session. Builder owns reservation, attachment, creation and independent
+  project readback. Do not invent a handoff, adopt a project by name, or copy an
+  old approval to a different destination.
+- Keep Gateway, Auth and the app in that same repository-root Services project.
+  The privileged operator is separate infrastructure. Preserve the normal
+  `apps-<app-id>` naming and recorded project for later revisions.
+- Finish technical validation, source review and the ordinary separately
+  approved publication path. Record its actual reviewed source association.
+  A draft PR or local source change is not public delivery. Use the shared
+  runtime setup tools for the selected isolated resources and compiled release.
+  A fresh Preview resource-installation plan may prepare schema and Auth in
+  this same project; it does not require visiting a Vercel-protected Preview or
+  create another delivery destination.
+- Use `plan-app-public-release` and the separate exact-plan approval from
+  `release-app-public-release`. An Auth-bootstrap plan first makes the normal
+  public Auth entry point available. It does not prove app schema readiness,
+  login or application behavior. Follow its ordinary signup and identity
+  continuation in this same Builder session. Then finish the app's restricted
+  schema and assignment setup and request a fresh application-release plan.
+  Bootstrap consent is not consent for that later plan.
+- Public release uses Standard Protection and a public production domain, with
+  Better Auth enforcing user sessions, organizations and app assignments.
+  Public delivery may use explicitly isolated development provider resources;
+  it does not grant customer Production provider access. Never weaken operator
+  protection, insert base/admin credentials, manually deploy, promote or alias,
+  or select a deployment by a source SHA or Git history.
+- Read the release result and open its ordinary public app URL. Exercise real
+  Better Auth login/logout and a persistent app action before calling the app
+  usable. For integrations, additionally exercise the approved provider
+  lifecycle and independent data/isolation readbacks. Keep all these results
+  separate from source tests, deployment readiness and prototype observations.
+- Preserve old protected Preview intents and history. Changed targets and
+  exposure require new supported plans and ordinary approvals. Unknown effects
+  stay visible and are reconciled through the saved operation; never resend an
+  uncertain public response or start a replacement app to hide the outcome.
+
+When developing Builder itself, use the local Builder and parallel isolated
+instances described in `docs/local-development-lifecycle.md`. Fix shared
+mechanics, then continue the saved work. Do not finish generated app files or
+force private stages on the evaluator's behalf. Local runs remain local proof;
+hosted acceptance still requires the app's actual public delivery and provider
+behavior.
 
 ## Boundaries
 
@@ -455,6 +558,16 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   come from the authenticated durable approval outcome, never assistant
   narration, a client acknowledgement or tool arguments. New or changed effects
   require their own exact approval.
+  An `auth-bootstrap` plan intentionally prepares Auth and Gateway before
+  account capture. Continue the returned prerequisite through
+  `prepare-app-hosted-runtime` with approval for its exact effects. Follow its
+  ordinary account connection link for the existing account and resume that
+  same approved preparation to read back capture. Then plan again for the same
+  app/session and release intent; the renewed full app plan supplies app
+  installation, access, delivery and routing through their normal approval
+  flow. Do not stop because the first plan contains only bootstrap effects or
+  require an app deployment before initial account connection. Reconcile unknown
+  outcomes before retrying; account capture alone does not prove app readiness.
   A current authority, credential, isolation or provider refusal remains a
   blocker; never treat that fresh refusal as stale or infer readiness from a
   repair report.
@@ -541,3 +654,37 @@ For a new CUE-backed app, include `.config/app-specs/<id>.cue` in
 `implementationFiles` with the reviewed schema contents. Apply stages this
 convention input before creation and preserves the resulting app-owned CUE and
 checked release. Do not request a backend through Markdown metadata.
+
+## Upgrade an existing Next application
+
+Follow [Builder-managed framework upgrades](../../../docs/framework-upgrades.md).
+
+Treat a framework upgrade as an existing-app revision, never as creation or a
+template overwrite. Inspect the current app's routes, Server Components,
+request-scoped authentication, DAL, actions, cache invalidation, and tests.
+Ordinary revisions retain their versions. When the user requests an upgrade,
+pass `frameworkUpgrade: "latest"` to `accept_app_spec`. Version-only upgrades
+may have no authored app file changes; navigation improvements include the
+actual app-owned edits. New-app plans select current stable versions automatically.
+
+When an existing Arrusted app has explicit Next.js, React/React DOM, or React
+type pins in its own manifest, include the app-owned manifest migration to
+`catalog:` in the planned changes, preserving unrelated dependencies and custom
+configuration. A shared catalog change alone cannot upgrade an app that still
+uses its own old pin. Use version-only upgrades with no authored app edits only
+when its dependencies already follow the repository catalog.
+
+The accepted plan retains concrete versions through apply, retries, and resume.
+Use its version-matched installed Next docs and the published adoption skills.
+Builder's repository adapter invokes the declared `repository:upgrade-framework`
+operation; do not submit root manifests or hand-authored lockfiles as arbitrary
+implementation files. In Arrusted, catalog and lock changes affect the workspace,
+so include that scope in the same reviewed change set. Follow the existing build
+approval and publication flow rather than asking for an additional upgrade approval.
+
+Use `arrusted-next-app-like-experience` to modernize navigation while retaining
+server reads and Server Actions. Preserve the app's identity, schema, product
+behavior, and custom configuration. Verify direct loads, soft navigation and
+Back/Forward; test cache reuse and successful-mutation invalidation where caching
+is introduced. Use existing focused tests and report unexercised behavior. A
+successful dependency installation alone does not prove a migrated app works.

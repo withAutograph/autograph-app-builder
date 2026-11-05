@@ -1,3 +1,6 @@
+import { internalCorrectionRequiresSuccessor } from "@/lib/agent/preapproval-authoring-runtime";
+import { applyApprovedPrivateComputeProfile } from "@/lib/sandbox/private-compute-activation";
+import { PRIVATE_COMPUTE_PROFILE_ID } from "@/lib/sandbox/private-compute-profile";
 import { completionGuidance } from "@/lib/agent/completion-guidance";
 import { stageImplementationFiles } from "@/lib/agent/staged-implementation";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
@@ -14,6 +17,7 @@ import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   updateExactWorkflow,
+  assertExactWorkflowState,
 } from "@/lib/agent/workflow-state";
 import {
   executeProposalBoundApply,
@@ -31,6 +35,10 @@ import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-
 
 export default defineTool({
   approval(ctx) {
+    if (internalCorrectionRequiresSuccessor(ctx)) {
+      discardPendingPrivateApplyApproval(ctx.callId);
+      return "not-applicable";
+    }
     const current = appBuilderWorkflowState.get();
     if (
       current.phase !== "planned" &&
@@ -39,6 +47,10 @@ export default defineTool({
     ) {
       discardPendingPrivateApplyApproval(ctx.callId);
       // Only the read-only prerequisite report can execute in this phase.
+      return "not-applicable";
+    }
+    if (ctx.toolInput?.privateCompute !== current.proposal.target.privateCompute?.id) {
+      discardPendingPrivateApplyApproval(ctx.callId);
       return "not-applicable";
     }
     return requestPrivateApplyApproval(
@@ -50,12 +62,22 @@ export default defineTool({
         workspaceId: current.workspace.workspaceId,
       },
       ctx.callId,
+      { requiresUserApproval: current.proposal.target.privateCompute !== undefined },
     );
   },
   description:
-    "Build this app in the private preview checkout, then validate it for review. For a retry of the same proposal, send only repaired files: paths omitted from the retry retain their previously approved contents, and supplied paths replace them. A new proposal starts a fresh submission and requires its own approval. Repairing the same approved private build does not ask for the same approval again. This does not publish, deploy, provision resources, or change the user's repository.",
+    "Build this app in the build workspace, then validate it for review. For a retry of the same proposal, send only repaired files. Omitted paths retain their staged contents, and supplied paths replace them. A new proposal starts a fresh submission. When the plan selects privateCompute, send its exact profile ID so the user can approve the compute footprint before resizing the private execution session. This does not publish, deploy, provision application resources, or change the user's repository.",
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep exact current proposal, internal correction, approval, workspace and implementation scope checks ordered at the effect boundary.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
+    if (internalCorrectionRequiresSuccessor(ctx)) {
+      return {
+        status: "corrected_proposal_required" as const,
+        guidance:
+          "Correct the declined draft through prepare_app_creation with explicit existingAppChanges and freeze a successor proposal before continuing the build. Do not retry the unchanged declined proposal.",
+        workflowPhase: current.phase,
+      };
+    }
     if (
       current.phase !== "planned" &&
       current.phase !== "apply_failed" &&
@@ -65,6 +87,14 @@ export default defineTool({
         guidance: completionGuidance(current),
         status: "implementation_plan_required" as const,
         workflowPhase: current.phase,
+      };
+    }
+    if (input.privateCompute !== current.proposal.target.privateCompute?.id) {
+      return {
+        status: "compute_profile_required" as const,
+        privateCompute: current.proposal.target.privateCompute?.id,
+        guidance:
+          "Use the exact private compute profile from the current plan so the user can approve the resize footprint.",
       };
     }
     const scope = {
@@ -77,12 +107,30 @@ export default defineTool({
     if (!hasPendingPrivateApplyApproval(scope, ctx.callId)) {
       return {
         guidance:
-          "This tool call has no matching approval policy decision for the current proposal and private target. Retry apply_app_creation to request or reuse its exact Build approval before implementation.",
+          "This tool call has no matching approval policy decision for the current proposal and private target. Retry apply_app_creation so its policy can bind the current private target and request compute approval when needed.",
         status: "build_approval_required" as const,
         workflowPhase: current.phase,
       };
     }
     recordApprovedPrivateApply(scope, ctx.callId);
+    if (current.proposal.target.privateCompute !== undefined) {
+      await applyApprovedPrivateComputeProfile({
+        profile: current.proposal.target.privateCompute,
+        proposalDigest: current.proposal.digest,
+        callId: ctx.callId,
+        sessionId: ctx.session.id,
+        appId: scope.appId,
+        assertCurrent: () => {
+          ctx.abortSignal.throwIfAborted();
+          assertExactWorkflowState(
+            appBuilderWorkflowState.get(),
+            current,
+            "activate the reviewed private compute profile",
+          );
+        },
+      });
+    }
+
     if (current.phase === "applied") {
       return {
         appId: current.proposal.target.contract.appId,
@@ -174,10 +222,10 @@ export default defineTool({
         .filter(Boolean)
         .join("\n");
       let repair =
-        " Repair the reported command error in the isolated checkout, then retry the private build.";
+        " Repair the reported command error in the isolated checkout, then retry the build.";
       if (result.receipt.commandFailureKind === "stale-proposal") {
         repair =
-          " Re-observe the current app-owned files, accept a proposal based on their current contents, then retry the private build.";
+          " Re-observe the current app-owned files, accept a proposal based on their current contents, then retry the build.";
       } else if (result.receipt.command.exitCode === -1) {
         repair =
           " The execution service did not return a normal command result; check the sandbox provider and retry.";
@@ -218,6 +266,7 @@ export default defineTool({
   },
   inputSchema: z.object({
     implementationFiles: implementationFilesSchema.default([]),
-    productSummary: z.string().trim().min(1).max(600).optional(),
+    productSummary: z.string().trim().optional(),
+    privateCompute: z.literal(PRIVATE_COMPUTE_PROFILE_ID).optional(),
   }),
 });

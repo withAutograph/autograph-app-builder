@@ -35,7 +35,10 @@ export function ModelControls({
           onChange={(event) => onZdrChange(event.target.checked)}
         />{" "}
         Zero Data Retention
-        <InfoTooltip>Only use providers that support Zero Data Retention.</InfoTooltip>
+        <InfoTooltip>
+          When enabled, the model list shows options marked as offering Zero Data Retention. Check
+          the provider&apos;s policy for details.
+        </InfoTooltip>
       </label>
       <SearchCombobox
         label={options.find((option) => option.value === model)?.label ?? "Select model"}

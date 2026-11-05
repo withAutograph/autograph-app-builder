@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await -- The build port is asynchronous by contract; this source-only test double performs no I/O. */
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,6 +13,56 @@ import {
 } from "./dev-package";
 
 describe("development Codex package", () => {
+  it("leaves an existing client profile untouched when plugin installation is disabled", async () => {
+    const codexHome = await mkdtemp(path.join(tmpdir(), "codex-endpoint-only-"));
+    const existing = '[plugins."app-builder@autograph-dev"]\nenabled = true\n';
+    await writeFile(path.join(codexHome, "config.toml"), existing);
+    let commands = 0;
+    try {
+      const result = await registerDevelopmentPackage({
+        codexHome,
+        installPlugin: false,
+        marketplaceRoot: "/private/another-instance/marketplace",
+        version: "0.0.0-development.3200",
+        runner: async () => {
+          commands += 1;
+          throw new Error("An endpoint-only launch must not execute Codex commands.");
+        },
+      });
+      expect(result).toMatchObject({ installed: false });
+      expect(commands).toBe(0);
+      expect(await readFile(path.join(codexHome, "config.toml"), "utf-8")).toBe(existing);
+    } finally {
+      await rm(codexHome, { force: true, recursive: true });
+    }
+  });
+
+  it("leaves an existing client profile untouched when plugin installation is disabled", async () => {
+    const codexHome = await mkdtemp(path.join(tmpdir(), "codex-endpoint-only-"));
+    const existing = '[plugins."app-builder@autograph-dev"]\nenabled = true\n';
+    await writeFile(path.join(codexHome, "config.toml"), existing);
+    let commands = 0;
+    try {
+      const result = await registerDevelopmentPackage({
+        codexHome,
+        installPlugin: false,
+        marketplaceRoot: "/private/another-instance/marketplace",
+        version: "0.0.0-development.3200",
+        runner: () => {
+          commands += 1;
+          return Promise.reject(
+            new Error("An endpoint-only launch must not execute Codex commands."),
+          );
+        },
+      });
+      expect(result).toMatchObject({ installed: false });
+      expect(commands).toBe(0);
+      expect(await readFile(path.join(codexHome, "config.toml"), "utf-8")).toBe(existing);
+    } finally {
+      await rm(codexHome, { force: true, recursive: true });
+    }
+  });
+
   it("creates a stable loopback-only marketplace with exactly five public tools and no app surface", async () => {
     const root = await realpath(await mkdtemp(path.join(tmpdir(), "autograph-dev-package-")));
     try {
@@ -69,6 +120,36 @@ describe("development Codex package", () => {
         publication: false,
         selector: "app-builder@autograph-dev",
         version: "0.0.0-development.3210",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("uses native stdio for existing hosted sessions without a loopback OAuth resource", async () => {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), "autograph-native-package-")));
+    try {
+      const result = await createDevelopmentPackage({
+        repositoryRoot: path.resolve("."),
+        outputRoot: root,
+        port: 3210,
+        hostedSession: {
+          resourceUrl: "https://builder.example.test/mcp",
+          codexBin: "/tools/codex",
+          nodeBin: "/tools/node",
+          cwd: "/private/native-client",
+        },
+      });
+      const mcp = JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"));
+      const server = mcp.mcpServers["app-builder-dev-3210-hosted"];
+      expect(server.type).toBe("stdio");
+      expect(server.command).toBe("/tools/node");
+      expect(server.args).toContain("https://builder.example.test/mcp");
+      expect(server.args).toContain("/tools/codex");
+      expect(server).not.toHaveProperty("oauth_resource");
+      expect(result.receipt).toMatchObject({
+        hostedSessionResource: "https://builder.example.test/mcp",
+        execution: "hosted",
       });
     } finally {
       await rm(root, { force: true, recursive: true });

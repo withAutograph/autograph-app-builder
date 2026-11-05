@@ -612,6 +612,36 @@ describe("legacy owner bootstrap public readiness", () => {
 });
 
 describe("protected hosted operator boundary", () => {
+  it("reports approved-plan recovery refusal without exposing private approval context", async () => {
+    const f = fixture();
+    const failure = new HostedOperatorError("operation_in_progress");
+    failure.message = "private approval token and owner detail";
+    f.deps.readApprovedPlan = vi.fn(async () => {
+      throw failure;
+    });
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const result = await f.client.request({ action: "plan", operation: "prepare", selection });
+      expect(result).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          planningFailure: {
+            stage: "approved_plan_recovery",
+            errorClass: "operator_error",
+            code: "operation_in_progress",
+          },
+        }),
+      ]);
+      const output = JSON.stringify(log.mock.calls);
+      expect(output).not.toContain(failure.message);
+      expect(output).not.toContain(selection.sessionId);
+      expect(f.row).toBeUndefined();
+      expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
   it("serves consent-only setup before full resource configuration and refuses planning/effects", async () => {
     const f = fixture();
     const deps = composeHostedOperatorAuthorizationDependencies(
@@ -1150,7 +1180,7 @@ describe("protected hosted operator boundary", () => {
       }),
     ).toThrow("protected_operator_required");
   });
-  it("plans without effects, exposes concrete approval scope and rejects caller-asserted approval", async () => {
+  it("plans without effects, requests Preview approval and rejects caller-asserted approval", async () => {
     const f = fixture();
     const request = await prepared(f);
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
@@ -1160,16 +1190,7 @@ describe("protected hosted operator boundary", () => {
       { ...selection, plan, planDigest: operatorPlanDigest(plan) },
       "prepare-app-hosted-runtime",
     );
-    for (const value of [
-      "shared_auth_runtime",
-      "synthetic-reviewer",
-      "reviewer",
-      "Fixture owner",
-      "Retain while",
-      "br_synthetic",
-    ]) {
-      expect(description).toContain(value);
-    }
+    expect(description).toBe("This approval may incur provider costs.");
   });
   it("carries explicit prepared Preview intent through normal owner-authorized planning", async () => {
     const f = fixture();
@@ -4272,6 +4293,118 @@ describe("completed owned Gateway binding convergence", () => {
     ).toHaveLength(1);
   });
 
+  it.each(["unknown", "matching", "nonmatching", "retryable", "absent", "orphan"] as const)(
+    "preserves another pending effect during binding readback until its %s delivery outcome",
+    async (outcome) => {
+      const f = fixture();
+      f.deps.plan = async () =>
+        hostedOperatorPlanSchema.parse({
+          ...plan,
+          stage: "app",
+          gatewayBindings: adoptedGatewayPlan().gatewayBindings,
+          gatewayDelivery: {
+            projectId: "prj_gateway",
+            branch: selection.branch,
+            repoId: "gateway-repo",
+            gitSha: "c".repeat(40),
+          },
+          effects: [
+            ...plan.effects,
+            { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+            { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
+          ],
+        });
+      const request = await prepared(f);
+      f.approve();
+      expect((await f.client.request(request)).status).toBe("prepared");
+      const row = f.row;
+      if (row?.record.operator === undefined) {
+        throw new Error("Missing approved fixture operation");
+      }
+      const pending = { id: "11111111-1111-4111-8111-111111111111", contextDigest: "a".repeat(64) };
+      const pendingId = outcome === "orphan" ? undefined : "gateway-delivery";
+      f.row = {
+        ...row,
+        record: hostedRuntimeJournalRecordSchema.parse({
+          ...row.record,
+          status: "pending",
+          step: "reserved",
+          operator: {
+            ...row.record.operator,
+            receipts: row.record.operator.receipts.filter(
+              (receipt) => receipt.effectId !== "gateway-delivery",
+            ),
+            pendingEffectId: pendingId,
+            pendingEffectAttempt: pending,
+          },
+        }),
+      };
+      const executeCalls = vi.mocked(f.deps.executeEffect).mock.calls.length;
+      const reconcile = f.deps.reconcile;
+      const deliveryReceipt = {
+        effectId: outcome === "nonmatching" ? "unrelated-effect" : "gateway-delivery",
+        resourceVersion: "verified-existing-delivery",
+        observedAt: "2026-10-29T00:00:00Z",
+      };
+      let observedDelivery = false;
+      let pendingAtDelivery: { id?: string; attempt?: unknown } | undefined;
+      f.deps.reconcile = async (input) => {
+        if (input.effect.kind === "gateway-bindings") {
+          await input.assertCurrent();
+          if (outcome === "retryable" || outcome === "orphan") {
+            return { status: "retryable", resourceVersion: "verified-bindings-need-retry" };
+          }
+          if (outcome === "absent") {
+            return { status: "absent" };
+          }
+          return {
+            status: "applied",
+            receipt: {
+              effectId: input.effect.id,
+              resourceVersion: "verified-existing-bindings",
+              observedAt: "2026-10-29T00:00:00Z",
+            },
+          };
+        }
+        if (input.effect.kind === "gateway-delivery") {
+          observedDelivery = true;
+          pendingAtDelivery = structuredClone({
+            id: f.row?.record.operator?.pendingEffectId,
+            attempt: f.row?.record.operator?.pendingEffectAttempt,
+          });
+          return outcome === "unknown"
+            ? { status: "unknown" }
+            : { status: "applied", receipt: deliveryReceipt };
+        }
+        return await reconcile(input);
+      };
+      const result = await f.client.request(request);
+      const after = hostedOperatorRecordSchema.parse(f.row?.record.operator);
+      const bindingNeedsExecution =
+        outcome === "retryable" || outcome === "absent" || outcome === "orphan";
+      expect(observedDelivery).toBe(!bindingNeedsExecution);
+      if (!bindingNeedsExecution) {
+        expect(pendingAtDelivery).toEqual({ id: pendingId, attempt: pending });
+      }
+      expect(f.deps.executeEffect).toHaveBeenCalledTimes(executeCalls);
+      if (outcome === "matching") {
+        expect(result.status).toBe("prepared");
+        expect(after.pendingEffectId).toBeUndefined();
+        expect(after.pendingEffectAttempt).toBeUndefined();
+        expect(after.receipts).toContainEqual(deliveryReceipt);
+      } else {
+        expect(result.code).toBe(
+          outcome === "nonmatching" ? "resource_mismatch" : "reconciliation_required",
+        );
+        expect(after.pendingEffectId).toBe(pendingId);
+        expect(after.pendingEffectAttempt).toEqual(pending);
+        expect(after.receipts.some((receipt) => receipt.effectId === "gateway-delivery")).toBe(
+          false,
+        );
+      }
+    },
+  );
+
   it("retains a completed Gateway receipt when fresh reconciliation is unknown", async () => {
     const f = fixture();
     f.deps.plan = async () =>
@@ -4293,4 +4426,69 @@ describe("completed owned Gateway binding convergence", () => {
     expect(f.row?.record.operator?.receipts).toEqual(receipts);
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(calls);
   });
+});
+
+it("completes resource preparation without claiming a bound or deployed app", async () => {
+  const f = fixture();
+  if (plan.deploymentBoundary === undefined || plan.publicGateway === undefined) {
+    throw new Error("missing fixture boundary");
+  }
+  const resources = hostedOperatorPlanSchema.parse({
+    ...plan,
+    runtimePreparation: "single-project-resources-v1",
+    deploymentBoundary: {
+      ...plan.deploymentBoundary,
+      composition: "single-project-services",
+      gateway: { ...plan.deploymentBoundary.gateway, projectId: selection.projectId },
+    },
+    publicGateway: { ...plan.publicGateway, projectId: selection.projectId },
+    effects: plan.effects.filter((effect) => effect.kind !== "bindings"),
+  });
+  f.deps.plan = async () => resources;
+  f.deps.bindings = vi.fn(f.deps.bindings);
+  const input = await prepared(f);
+  f.approve();
+  expect((await f.client.request(input)).status).toBe("prepared");
+  expect(f.row?.record).toMatchObject({
+    status: "prepared",
+    step: "resource-ready",
+    environmentBound: false,
+    proof,
+  });
+  expect(f.deps.bindings).not.toHaveBeenCalled();
+  expect(f.row?.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual(
+    resources.effects.map((effect) => effect.id),
+  );
+});
+it("completes resource preparation without claiming a bound or deployed app", async () => {
+  const f = fixture();
+  if (plan.deploymentBoundary === undefined || plan.publicGateway === undefined) {
+    throw new Error("missing fixture boundary");
+  }
+  const resources = hostedOperatorPlanSchema.parse({
+    ...plan,
+    runtimePreparation: "single-project-resources-v1",
+    deploymentBoundary: {
+      ...plan.deploymentBoundary,
+      composition: "single-project-services",
+      gateway: { ...plan.deploymentBoundary.gateway, projectId: selection.projectId },
+    },
+    publicGateway: { ...plan.publicGateway, projectId: selection.projectId },
+    effects: plan.effects.filter((effect) => effect.kind !== "bindings"),
+  });
+  f.deps.plan = async () => resources;
+  f.deps.bindings = vi.fn(f.deps.bindings);
+  const input = await prepared(f);
+  f.approve();
+  expect((await f.client.request(input)).status).toBe("prepared");
+  expect(f.row?.record).toMatchObject({
+    status: "prepared",
+    step: "resource-ready",
+    environmentBound: false,
+    proof,
+  });
+  expect(f.deps.bindings).not.toHaveBeenCalled();
+  expect(f.row?.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual(
+    resources.effects.map((effect) => effect.id),
+  );
 });

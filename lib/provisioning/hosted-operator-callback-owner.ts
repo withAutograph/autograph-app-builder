@@ -32,7 +32,7 @@ const samePrincipal = (left: HostedPrincipal, right: HostedPrincipal) =>
 
 const denied = () => new HostedOperatorError("authorization_required");
 
-const recoveredCallbackMatches = (input: {
+const recoveredCallbackIdentityMatches = (input: {
   authoritySession: ReturnType<typeof toDurableHostedSessionRecord>;
   currentSession: ReturnType<typeof toDurableHostedSessionRecord>;
   execution?: HostedOperatorCallbackExecution;
@@ -46,11 +46,42 @@ const recoveredCallbackMatches = (input: {
     binding?.originalAuthoritySessionId === input.authoritySession.sessionId,
     binding?.logicalSessionId === input.logicalSessionId,
     binding?.ownerRunId === input.currentSession.adapterSessionId,
-    (input.currentSession.cancellationRevision ?? 0) ===
-      (input.currentSession.resumedCancellationRevision ?? 0),
     input.execution?.ownerRunId !== undefined && input.execution.ownerRunId.length > 0,
     input.execution?.ownerAnchorRunId === input.currentSession.adapterSessionId,
   ].every(Boolean);
+};
+
+const shouldReconcileOwnerDelivery = (input: {
+  authoritySession: ReturnType<typeof toDurableHostedSessionRecord>;
+  currentSession: ReturnType<typeof toDurableHostedSessionRecord>;
+  owner: OperatorOwnerContext;
+  execution?: HostedOperatorCallbackExecution;
+  logicalSessionId: string;
+  canReadCurrent: boolean;
+}) => {
+  const { authoritySession, currentSession, logicalSessionId } = input;
+  const cancellationPending =
+    currentSession.status === "cancelled" ||
+    (currentSession.cancellationRevision ?? 0) !==
+      (currentSession.resumedCancellationRevision ?? 0);
+  const canObserve = [
+    samePrincipal(currentSession.principal, input.owner.principal),
+    currentSession.sourceHandoffId === authoritySession.sourceHandoffId,
+    currentSession.appId === authoritySession.appId,
+    currentSession.sessionId !== authoritySession.sessionId ||
+      logicalSessionId === authoritySession.adapterSessionId,
+    input.execution?.ownerRunId !== undefined && input.execution.ownerRunId.length > 0,
+    input.execution?.ownerAnchorRunId === currentSession.adapterSessionId,
+    currentSession.sessionId === authoritySession.sessionId ||
+      recoveredCallbackIdentityMatches({
+        authoritySession,
+        currentSession,
+        execution: input.execution,
+        logicalSessionId,
+        canReadCurrent: input.canReadCurrent,
+      }),
+  ].every(Boolean);
+  return cancellationPending && canObserve;
 };
 
 /** Keep immutable human receipts separate from the committed current execution owner. */
@@ -58,7 +89,13 @@ export const readHostedOperatorCallbackSessions = async (input: {
   store: HostedOperatorCallbackStore;
   owner: OperatorOwnerContext;
   execution?: HostedOperatorCallbackExecution;
-}) => {
+  reconcileOwnerDelivery?: (
+    session: ReturnType<typeof toDurableHostedSessionRecord>,
+  ) => Promise<void>;
+}): Promise<{
+  authoritySession: ReturnType<typeof toDurableHostedSessionRecord>;
+  currentSession: ReturnType<typeof toDurableHostedSessionRecord>;
+}> => {
   const raw = await input.store.getSession(input.owner.principal, input.owner.sessionId);
   if (raw === null) {
     throw denied();
@@ -77,11 +114,32 @@ export const readHostedOperatorCallbackSessions = async (input: {
       logicalSessionId,
       principal: input.owner.principal,
     })) ?? authoritySession;
+  if (
+    input.reconcileOwnerDelivery !== undefined &&
+    shouldReconcileOwnerDelivery({
+      authoritySession,
+      currentSession,
+      owner: input.owner,
+      execution: input.execution,
+      logicalSessionId,
+      canReadCurrent: input.store.readCurrentBuildSession !== undefined,
+    })
+  ) {
+    await input.reconcileOwnerDelivery(currentSession);
+    // Re-read every guard, including a later Stop, after exact native proof observation.
+    return await readHostedOperatorCallbackSessions({
+      store: input.store,
+      owner: input.owner,
+      execution: input.execution,
+    });
+  }
   const currentMatches = [
     samePrincipal(currentSession.principal, input.owner.principal),
     currentSession.sourceHandoffId === authoritySession.sourceHandoffId,
     currentSession.appId === authoritySession.appId,
     currentSession.status !== "cancelled",
+    (currentSession.cancellationRevision ?? 0) ===
+      (currentSession.resumedCancellationRevision ?? 0),
     currentSession.sessionId !== authoritySession.sessionId ||
       logicalSessionId === authoritySession.adapterSessionId,
     currentSession.sessionId !== authoritySession.sessionId ||
@@ -92,7 +150,7 @@ export const readHostedOperatorCallbackSessions = async (input: {
     throw denied();
   }
   if (currentSession.sessionId !== authoritySession.sessionId) {
-    const recoveryMatches = recoveredCallbackMatches({
+    const recoveryMatches = recoveredCallbackIdentityMatches({
       authoritySession,
       currentSession,
       execution: input.execution,

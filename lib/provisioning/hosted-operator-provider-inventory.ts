@@ -26,7 +26,6 @@ const projectSchema = z.object({ accountId: id, id });
 const deploymentSchema = z.object({
   customEnvironment: z.unknown().optional(),
   env: z.array(z.string()).optional(),
-  gitSource: z.object({ ref: id }).optional(),
   id,
   oidcTokenClaims: z.unknown().optional(),
   ownerId: id.optional(),
@@ -135,10 +134,9 @@ const invalidDeploymentObservation = (input: {
   reference: OperatorDeploymentReference;
   projectId: string;
   scopeId: string;
-  branch?: string;
   resolveAlias: boolean;
 }) => {
-  const { deployment, reference, projectId, scopeId, branch, resolveAlias } = input;
+  const { deployment, reference, projectId, scopeId, resolveAlias } = input;
   return {
     deployment_project: deployment.projectId !== projectId,
     deployment_identity: !resolveAlias && deployment.id !== reference.deploymentId,
@@ -148,7 +146,6 @@ const invalidDeploymentObservation = (input: {
       reference.environment === "production"
         ? deployment.target !== "production"
         : !isNativePreviewDeployment(deployment),
-    deployment_branch: branch !== undefined && deployment.gitSource?.ref !== branch,
   };
 };
 
@@ -226,6 +223,7 @@ const readPublicKeyIds = async (input: PublicKeyReadbackInput): Promise<string[]
 };
 
 /** Concrete GET-only owner-bound Vercel inventory. This is not an operational-ready factory. */
+// oxlint-disable-next-line eslint/complexity -- Preserve ordered inventory and provider identity checks in the existing coordinator.
 export const readHostedOperatorProviderInventory = async (input: {
   assertCurrentOwner: () => Promise<void>;
   configuration: OperatorInventoryConfiguration;
@@ -430,6 +428,7 @@ export const readHostedOperatorProviderInventory = async (input: {
         throw error;
       }
     };
+    // oxlint-disable-next-line eslint/complexity -- Preserve the existing ordered project, deployment, environment and ownership checks.
     const observe = async (
       targetName: "app" | "gateway" | "operator",
       reference: OperatorDeploymentReference,
@@ -481,7 +480,6 @@ export const readHostedOperatorProviderInventory = async (input: {
           reference,
           projectId: project.id,
           scopeId: target.scopeId,
-          branch,
           resolveAlias: planningAlias !== undefined,
         });
         if (Object.values(invalidDeployment).some(Boolean)) {
@@ -599,7 +597,6 @@ export const readHostedOperatorProviderInventory = async (input: {
           reference: config.gateway,
           projectId: gateway.summary.projectId,
           scopeId: target.scopeId,
-          branch: config.gateway.branch,
           resolveAlias: true,
         });
         ownsPublicOrigin = !Object.values(invalidPublicDeployment).some(Boolean);

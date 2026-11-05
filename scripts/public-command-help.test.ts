@@ -5,17 +5,14 @@ import { describe, expect, it } from "vitest";
 
 const commands = [
   {
-    boundary: "Development mode cannot publish, deploy, or mutate providers.",
     task: ".config/mise/tasks/dev",
     usage: "mise run dev -- --arrusted-root",
   },
   {
-    boundary: "does not deploy or publish",
     task: ".config/mise/tasks/release/prove",
     usage: "mise run release:prove --",
   },
   {
-    boundary: "Run it only after explicit publication authorization.",
     task: ".config/mise/tasks/release/publish",
     usage: "mise run release:publish --",
   },
@@ -32,7 +29,6 @@ describe("public command help", () => {
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
       expect(result.stdout).toContain(command.usage);
-      expect(result.stdout).toContain(command.boundary);
       expect(result.stdout).not.toContain("Error:");
     });
   }

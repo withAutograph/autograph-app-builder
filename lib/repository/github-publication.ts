@@ -20,6 +20,8 @@ import type { z } from "zod";
 import type { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 import type {
+  ExistingDraftInspectionRequest,
+  OwnedDraftInspectionRecovery,
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
 } from "./github-draft-reconciliation";
@@ -378,12 +380,9 @@ export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter 
   }) => Promise<HistoricalAppSourceObservation>;
   /** Available when the provider can prove access to one repository without listing the installation. */
   targetSourceAdapter?: GitHubTargetSourceResolutionAdapter;
-  inspectExistingDraft: (input: {
-    repositoryId: string;
-    owner: string;
-    name: string;
-    number: number;
-  }) => Promise<ExistingDraftObservation>;
+  inspectExistingDraft: (
+    input: ExistingDraftInspectionRequest,
+  ) => Promise<ExistingDraftObservation>;
   updateExistingDraft: (
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
@@ -401,10 +400,12 @@ export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter 
   reconcileExistingDraft?: (
     proposal: ExistingDraftReconciliationProposal,
     content: ReconciliationContent,
+    recovery?: OwnedDraftInspectionRecovery,
   ) => Promise<GitHubMutationAcknowledgement>;
   inspectAppliedDraftReconciliation?: (
     proposal: ExistingDraftReconciliationProposal,
     observed: ExistingDraftObservation,
+    recovery?: OwnedDraftInspectionRecovery,
   ) => Promise<boolean>;
   inspectDestination: (input: {
     owner: string;

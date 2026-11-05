@@ -27,7 +27,31 @@ import {
   contextStorage,
 } from "../../node_modules/eve/dist/src/context/container.js";
 import { requestPrivateApplyApproval, recordApprovedPrivateApply } from "./private-apply-authority";
+import type { MessageStreamEvent } from "eve/client";
+import { createHostedEveSessionService, HostedSubmissionUnknownError } from "../eve/hosted-service";
+import type { HostedEveTransport } from "../eve/hosted-service";
+import { InMemoryHostedEveStore, toDurableHostedSessionRecord } from "../eve/hosted-store";
+import { hostedEveOperationScopes } from "../eve/hosted-auth";
+import { nativeDeliveryForEvents } from "../eve/native-delivery-state";
+import { projectInstalledEveEvent } from "../eve/public-events";
+import { createHostedOperatorOwnerContextResolver } from "../provisioning/hosted-operator-owner-context";
+import { readHostedOperatorCallbackOwner } from "../provisioning/hosted-operator-callback-owner";
+import { createHostedOperatorClient } from "../provisioning/hosted-operator-client";
+import {
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "../provisioning/hosted-operator-contract";
+import {
+  privateHostedApprovalReceiptSchema,
+  readPrivateHostedApproval,
+} from "../eve/private-hosted-approval";
 import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
+import {
+  createReviewedChangeSetReceipt,
+  deriveNormalizedChangeSet,
+} from "../repository/reviewed-change-set";
+import type { TargetApplyReceipt } from "../repository/target-apply";
+import type { TargetValidationReceipt } from "../repository/target-validation";
 
 const mocks = vi.hoisted(() => ({
   associate: vi.fn<NonNullable<OperatorArtifactSelections["associatePublishedSource"]>>(),
@@ -60,7 +84,8 @@ vi.mock("./draft-reconciliation-state", () => ({
     }
   },
 }));
-vi.mock("../provisioning/hosted-operator-owner-context", () => ({
+vi.mock("../provisioning/hosted-operator-owner-context", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   resolveHostedOperatorOwnerContext: mocks.resolve,
 }));
 vi.mock("../auth/preview-oauth-runtime", () => ({
@@ -644,6 +669,164 @@ describe("owned compiled artifact workflow hook", () => {
       );
     }
   });
+  const lostReviewCandidate = () => {
+    const apply: TargetApplyReceipt = {
+      version: 2,
+      status: "applied",
+      appSpecDigest: digest,
+      appSpecPath: ".config/app-specs/spend-review.cue",
+      applyRoot: "/workspace/repository",
+      appliedByCallId: "original-apply",
+      artifactRevision: "reviewed-revision",
+      changedContentDigest: digest,
+      changes: [],
+      command: {
+        name: "iterate-existing-app",
+        exitCode: 0,
+        stdoutDigest: digest,
+        stderrDigest: digest,
+      },
+      dependencyCacheContentDigest: digest,
+      dependencyCacheDigest: digest,
+      dependencyReceiptDigest: digest,
+      digest,
+      eligibilityDigest: digest,
+      identityDigest: digest,
+      imageDigest: digest,
+      planningTreeDigest: digest,
+      preparedTreeDigest: digest,
+      postTree: [],
+      postTreeDigest: digest,
+      preTree: [],
+      preTreeDigest: digest,
+      proposalDigest: digest,
+      sourceReceiptDigest: digest,
+      sourceSha: "a".repeat(40),
+      sourceTree: "b".repeat(40),
+      targetReceipt: {
+        appId: "spend-review",
+        mutations: ["apps/spend-review", "microfrontends.json"],
+        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+        recovered: false,
+        topology: { path: "microfrontends.json", oldDigest: digest, newDigest: digest },
+        version: 1,
+        workspacePath: "apps/spend-review",
+      },
+      workspaceDigest: digest,
+    };
+    const validation: TargetValidationReceipt = {
+      ...apply,
+      version: 3,
+      status: "passed",
+      appId: "spend-review",
+      attemptDigest: digest,
+      testShards: ["1/1"],
+      appValidationSha256: digest,
+      applyDigest: apply.digest,
+      appliedTreeDigest: apply.postTreeDigest,
+      validatedByCallId: "original-validation",
+      commands: [
+        {
+          name: "check-build",
+          command: "mise run --no-deps --skip-tools app:check spend-review",
+          validationRoot: apply.applyRoot,
+          inputTreeDigest: digest,
+          exitCode: 0,
+          stdoutDigest: digest,
+          stderrDigest: digest,
+        },
+        {
+          name: "test",
+          command: "mise run --no-deps --skip-tools app:test spend-review 1/1",
+          validationRoot: apply.applyRoot,
+          inputTreeDigest: digest,
+          exitCode: 0,
+          stdoutDigest: digest,
+          stderrDigest: digest,
+        },
+      ],
+    };
+    const review = createReviewedChangeSetReceipt(
+      deriveNormalizedChangeSet(apply, validation, digest, digest),
+      "original-review",
+    );
+    const reviewed = {
+      appSpec: { appId: "spend-review", digest },
+      applyReceipt: apply,
+      validationReceipt: validation,
+      githubSource: { digest, repository: { repositoryId: "4242" } },
+      identityReceipt: { digest },
+      phase: "reviewed",
+      proposal: { digest },
+      reviewReceipt: review,
+      sourceReceipt: { digest, sourceKind: "existing-repository" },
+      workspace: { workspaceId: "workspace", workspaceDigest: digest },
+    };
+    mocks.state = { ...reviewed, phase: "validated" };
+    Reflect.deleteProperty(mocks.state, "reviewReceipt");
+    mocks.candidate = {
+      appId: "spend-review",
+      githubSourceDigest: digest,
+      originalReviewDigest: review.digest,
+      repositoryId: "4242",
+      root: "/workspace/.app-builder/candidate",
+      reviewedLineage: structuredClone(reviewed),
+    };
+    return { ...frame(), root: "/workspace/.app-builder/candidate" };
+  };
+  it("captures the actual candidate under retained review lineage after creation review loss", async () => {
+    const input = lostReviewCandidate();
+    await expect(publishCompiledOperatorArtifactsForSession(input)).resolves.toMatchObject({
+      status: "published",
+    });
+    expect(mocks.state?.phase).toBe("validated");
+    expect(mocks.state).not.toHaveProperty("reviewReceipt");
+    expect(input.sandbox.readBinaryFile).toHaveBeenCalled();
+    for (const [request] of input.sandbox.readBinaryFile.mock.calls) {
+      expect(request.path).toMatch(
+        /^\.app-builder\/candidate\/apps\/spend-review\/schema\/release\//u,
+      );
+    }
+    expect(mocks.rows.size).toBeGreaterThan(0);
+    expect(mocks.record).toHaveBeenCalledWith(
+      { authority, target: { appId: "spend-review", sessionId: "durable-original" } },
+      input.callId,
+      expect.objectContaining({ appSpecDigest: digest, releaseId: "fixture-v1" }),
+    );
+    expect(mocks.associate).not.toHaveBeenCalled();
+  });
+  it.each(["source", "apply"])(
+    "refuses retained candidate capture after the %s binding changes",
+    async (binding) => {
+      const input = lostReviewCandidate();
+      const field = binding === "source" ? "githubSource" : "applyReceipt";
+      mocks.state = {
+        ...mocks.state,
+        [field]: { ...(mocks.state?.[field] as Record<string, unknown>), digest: "f".repeat(64) },
+      };
+      await expect(publishCompiledOperatorArtifactsForSession(input)).rejects.toThrow(
+        "artifact is unavailable",
+      );
+      expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
+      expect(mocks.record).not.toHaveBeenCalled();
+      expect(mocks.rows.size).toBe(0);
+    },
+  );
+  it("does not finalize retained-lineage capture after current owner authority changes", async () => {
+    const input = lostReviewCandidate();
+    mocks.resolve.mockImplementation(async () => {
+      if (input.sandbox.readBinaryFile.mock.calls.length >= 2) {
+        return { ...mocks.owner, sessionId: "foreign-owner-session" };
+      }
+      return mocks.owner;
+    });
+    await expect(publishCompiledOperatorArtifactsForSession(input)).rejects.toThrow(
+      "artifact is unavailable",
+    );
+    expect(input.sandbox.readBinaryFile).toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+    expect(mocks.rows.size).toBe(0);
+  });
   it("denies unapproved app/digest/root and stale owner before selection", async () => {
     await Promise.all(
       [
@@ -672,6 +855,356 @@ describe("owned compiled artifact workflow hook", () => {
     await expect(publishCompiledOperatorArtifactsForSession(input)).rejects.toThrow();
     expect(mocks.record).not.toHaveBeenCalled();
     expect(mocks.rows.size).toBe(0);
+  });
+  it("resumes the same stopped native lineage through exact SEND proof, artifact capture and private bindings", async () => {
+    const store = new InMemoryHostedEveStore();
+    const principal = { ...authority, scopes: Object.values(hostedEveOperationScopes) };
+    const sessionAuth = {
+      current: { ...auth, attributes: { ...auth.attributes, "mcp:scopes": principal.scopes } },
+      initiator: { ...auth, attributes: { ...auth.attributes, "mcp:scopes": principal.scopes } },
+    };
+    let events: MessageStreamEvent[] = [];
+    const snapshot = () => ({
+      events: events.flatMap((event, index) => projectInstalledEveEvent(event, index)),
+      nativeDeliveryState: nativeDeliveryForEvents(events),
+      status: "waiting" as const,
+    });
+    const send = vi.fn<HostedEveTransport["send"]>(async (input) => {
+      await input.onAccepted?.("explicit-resume-delivery");
+      throw new Error("Lost SEND readback after durable ACK");
+    });
+    const start = vi.fn<HostedEveTransport["start"]>(async (input) => {
+      if (input.recovery === undefined) {
+        return { adapterSessionId: "adapter", snapshot: { events: [], status: "failed" } };
+      }
+      const recoveryBinding = {
+        ...input.recovery,
+        ownerRunId: "adapter-child",
+        provenance: {
+          kind: "failed-turn-input" as const,
+          sourceStepId: "retained-step",
+          sourceEventId: "retained-event",
+          sourceSlot: 1,
+          checkpointVersion: 1 as const,
+        },
+      };
+      await store.commitNativeRecoveryReceipt({
+        principal,
+        descriptor: input.recovery,
+        recoveryBinding,
+        nowEpochMs: Date.now(),
+      });
+      return { adapterSessionId: "adapter-child", recoveryBinding, snapshot: snapshot() };
+    });
+    const service = createHostedEveSessionService({
+      principal,
+      store,
+      assertNativeRecoveryOwner: async () => {},
+      assertSendDeliveryOwner: async () => {},
+      transport: {
+        start,
+        send,
+        get: async () => snapshot(),
+        cancel: async () => snapshot(),
+        respond: async () => snapshot(),
+        activateRecovery: async ({ operationId }) => {
+          const operation = await store.getPrivateOperation(principal, operationId);
+          const child = await store.getSession(principal, operation?.sessionId ?? "missing");
+          if (child?.version !== 2 || child.nativeRecoveryBinding === undefined) {
+            throw new Error("Missing committed native recovery");
+          }
+          return child.nativeRecoveryBinding;
+        },
+      },
+    });
+    const source = await service.start({
+      clientRequestId: "canary-initial",
+      prompt: "Continue the existing app",
+    });
+    const recovered = await service.start({
+      clientRequestId: "canary-recovery",
+      resumeSessionId: source.sessionId,
+    });
+    const original = await store.getSession(principal, source.sessionId);
+    const resolver = createHostedOperatorOwnerContextResolver({
+      audience: authority.audience,
+      issuer: authority.issuer,
+      sessions: store,
+      handoffs: {
+        read: async () => {
+          new Map<string, never>().get("missing");
+        },
+      },
+      isActiveMember: async () => true,
+    });
+    const execution = {
+      logicalSessionId: "adapter",
+      ownerRunId: "callback-step-owner",
+      ownerAnchorRunId: "adapter-child",
+    };
+    const resolve = () =>
+      resolver({ adapterSessionId: "adapter", authority, principal, sessionAuth, execution });
+    mocks.resolve.mockImplementation((input: Parameters<typeof resolver>[0]) => resolver(input));
+    const input = { ...frame(), sessionAuth, callbackExecution: execution };
+    await service.cancel({ sessionId: recovered.sessionId });
+    await expect(resolve()).rejects.toMatchObject({ code: "authorization_required" });
+    await expect(publishCompiledOperatorArtifactsForSession(input)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(mocks.rows.size).toBe(0);
+    const request = {
+      clientRequestId: "canary-resume-exact",
+      message: "Resume the same approved app work",
+      sessionId: recovered.sessionId,
+    };
+    await expect(service.send(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    await expect(resolve()).rejects.toMatchObject({ code: "authorization_required" });
+    const queued = await store.getSession(principal, recovered.sessionId);
+    expect(queued?.version === 2 ? queued.resumedCancellationRevision : undefined).not.toBe(1);
+    events = [
+      {
+        type: "turn.started",
+        data: { sequence: 1, turnId: "resumed-native-turn" },
+        meta: {
+          at: "2026-10-29T00:00:00Z",
+          id: "native-resume-event",
+          deliveryIds: ["explicit-resume-delivery"],
+        },
+      },
+    ];
+    await service.get({ sessionId: recovered.sessionId, cursor: 0, limit: 100 });
+    await expect(resolve()).rejects.toMatchObject({ code: "authorization_required" });
+    await service.send(request);
+    expect(send).toHaveBeenCalledOnce();
+    const resumed = await store.getSession(principal, recovered.sessionId);
+    expect(resumed).toMatchObject({ cancellationRevision: 1, resumedCancellationRevision: 1 });
+    const owner = await resolve();
+    expect(owner).toMatchObject({
+      sessionId: source.sessionId,
+      adapterSessionId: "adapter-child",
+      adapterGeneration: 1,
+    });
+    await expect(
+      resolver({
+        adapterSessionId: "adapter",
+        authority,
+        principal,
+        sessionAuth,
+        execution: { ...execution, ownerAnchorRunId: "wrong-anchor" },
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    await expect(
+      readHostedOperatorCallbackOwner({
+        store,
+        owner: { ...owner, adapterGeneration: 2 },
+        execution,
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    const captured = await publishCompiledOperatorArtifactsForSession(input);
+    expect(captured.status).toBe("published");
+    expect(input.sandbox.readBinaryFile).toHaveBeenCalledTimes(GENERATED_RELEASE_MEMBERS.length);
+    expect(mocks.record).toHaveBeenCalledWith(
+      { authority, target: { appId: input.appId, sessionId: source.sessionId } },
+      input.callId,
+      expect.objectContaining({ releaseId: "fixture-v1", appSpecDigest: digest }),
+    );
+    const selection = {
+      appId: input.appId,
+      branch: "preview",
+      environment: "preview" as const,
+      projectId: "project-owned",
+      sessionId: source.sessionId,
+    };
+    const release = mocks.record.mock.calls[0]?.[2] as CompiledOperatorReleaseSelection;
+    const plan = hostedOperatorPlanSchema.parse({
+      version: 1,
+      action: "prepare",
+      selection,
+      access: [],
+      contextId: "owned-context",
+      effects: ["resources", "install", "access", "bindings"].map((kind) => ({
+        id: kind,
+        kind,
+        description: `Approved ${kind}`,
+      })),
+      publicGateway: {
+        projectId: "gateway-owned",
+        branch: "gateway",
+        origin: "https://app.example",
+      },
+      appDatabase: {
+        resourceId: "owned-app",
+        database: "app",
+        migratorRole: "app_owner",
+        runtimeRole: "app_runtime",
+      },
+      authDatabase: {
+        resourceId: "owned-auth",
+        database: "auth",
+        migratorRole: "auth_owner",
+        runtimeRole: "auth_runtime",
+      },
+      neon: {
+        projectId: "neon-owned",
+        branchId: "branch-owned",
+        endpoint: "ep-owned.neon.tech",
+        connectionRef: "owner-connection",
+        source: "synthetic-only",
+      },
+      installer: { reference: "fixed-installer", sha256: "b".repeat(64) },
+      release: {
+        id: release.releaseId,
+        sha256: release.manifestSha256,
+        artifactRef: release.artifactRef,
+      },
+      retention: { expiresAt: "2030-01-01T00:00:00Z", policy: "Retain approved Preview" },
+      cost: {
+        class: "independent-service",
+        owner: authority.ownerUserId,
+        description: "Owned fixture only",
+      },
+      deploymentBoundary: {
+        authority,
+        teamId: "team-owned",
+        app: { projectId: selection.projectId, branch: selection.branch, environment: "preview" },
+        gateway: { projectId: "gateway-owned", branch: "gateway", environment: "preview" },
+        operator: { projectId: "builder", deploymentId: "operator", environment: "production" },
+        verification: {
+          gatewayOrigin: "https://gateway.example",
+          publicOrigin: "https://app.example",
+          jwksUrl: "https://gateway.example/_platform/jwks.json",
+        },
+      },
+    });
+    const operationRef = "11111111-1111-4111-8111-111111111111";
+    const receipt = privateHostedApprovalReceiptSchema.parse({
+      format: "autograph-hosted-approval-v1",
+      requestId: "runtime-approval",
+      callId: "runtime-call",
+      sequence: 1,
+      turnId: "",
+      outcome: "approved",
+      responderPrincipalId: principal.ownerUserId,
+      toolName: "prepare-app-hosted-runtime",
+      toolInput: {
+        appId: selection.appId,
+        branch: selection.branch,
+        environment: selection.environment,
+        projectId: selection.projectId,
+        plan,
+        planDigest: operatorPlanDigest(plan),
+        operationRef,
+      },
+    });
+    await store.recordPrivateApprovalReceipts({
+      principal,
+      sessionId: source.sessionId,
+      receipts: [receipt],
+    });
+    let approvalCallId = receipt.callId;
+    const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
+      await readHostedOperatorCallbackOwner({ store, owner, execution });
+      const body = z
+        .object({ ownerContext: z.unknown() })
+        .parse(JSON.parse(z.string().parse(init?.body)));
+      expect(body.ownerContext).toEqual(owner);
+      const approved = await readPrivateHostedApproval({
+        store,
+        principal,
+        sessionId: source.sessionId,
+        callId: approvalCallId,
+        action: "prepare",
+        planDigest: operatorPlanDigest(plan),
+        selection,
+      });
+      if (approved?.outcome !== "approved") {
+        return Response.json({
+          appId: input.appId,
+          authenticatedBehavior: "unassessed",
+          status: "blocked",
+          code: "authorization_required",
+        });
+      }
+      return Response.json({
+        operationRef,
+        plan,
+        proof: {
+          actors: 0,
+          tenants: 1,
+          artifactHash: release.schemaSha256,
+          manifestSha256: release.manifestSha256,
+          releaseId: release.releaseId,
+          authenticatedBehavior: "unassessed",
+        },
+        environment: {
+          SPEND_REVIEW_DATABASE_URL:
+            "postgresql://app_runtime:private@ep-owned.neon.tech/app?sslmode=verify-full",
+          PLATFORM_ORIGIN: "https://gateway.example",
+          PLATFORM_PUBLIC_ORIGIN: "https://app.example",
+          PLATFORM_JWKS_URL: "https://gateway.example/_platform/jwks.json",
+        },
+      });
+    });
+    const client = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      ownerContext: owner,
+      token: async () => "synthetic-workload",
+      fetch: fetcher,
+    });
+    const bindingRequest = { action: "bindings" as const, operationRef, selection };
+    await expect(client.bindings(bindingRequest)).resolves.toMatchObject({
+      operationRef,
+      proof: { releaseId: release.releaseId, artifactHash: release.schemaSha256 },
+    });
+    await store.recordPrivateApprovalReceipts({
+      principal,
+      sessionId: source.sessionId,
+      receipts: [
+        {
+          ...receipt,
+          requestId: "cancelled-runtime-approval",
+          callId: "cancelled-runtime-call",
+          sequence: 2,
+          outcome: "cancelled",
+        },
+      ],
+    });
+    approvalCallId = "cancelled-runtime-call";
+    await expect(client.bindings(bindingRequest)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    const capturedRows = new Map(mocks.rows);
+    const evidence = await store.getSession(principal, source.sessionId);
+    const savedReceipt =
+      evidence?.version === 2 ? evidence.privateApprovalReceipts?.[0] : undefined;
+    expect(
+      savedReceipt?.toolName === "prepare-app-hosted-runtime"
+        ? savedReceipt.toolInput.plan.release
+        : undefined,
+    ).toEqual(plan.release);
+    await service.cancel({ sessionId: recovered.sessionId });
+    await expect(publishCompiledOperatorArtifactsForSession(input)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    await expect(client.bindings(bindingRequest)).rejects.toBeDefined();
+    expect(mocks.rows).toEqual(capturedRows);
+    expect(send).toHaveBeenCalledOnce();
+    const originalApproval = await readPrivateHostedApproval({
+      store,
+      principal,
+      sessionId: source.sessionId,
+      callId: receipt.callId,
+      action: "prepare",
+      planDigest: operatorPlanDigest(plan),
+      selection,
+    });
+    expect(originalApproval).toEqual(receipt);
+    expect(original).toMatchObject({ sessionId: source.sessionId, status: "failed" });
+    const finalSource = await store.getSession(principal, source.sessionId);
+    if (finalSource === null) {
+      throw new Error("Original source evidence is missing");
+    }
+    expect(toDurableHostedSessionRecord(finalSource).adapterSessionId).toBe("adapter");
   });
   it("normal developer profile captures through actual private files and Eve approval without hosted auth or DB", async () => {
     const stateRoot = await realpath(

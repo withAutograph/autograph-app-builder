@@ -1,6 +1,13 @@
+import {
+  createValidationToolingFailureObserver,
+  missingAppTaskHint,
+  toolingFailureHint,
+} from "./validation-tooling-failure";
 import { createHash } from "node:crypto";
+import { applicationFilePathSchema } from "./application-file-change";
 import nodePath from "node:path";
 import { localRuntimeEnvironmentPath } from "./runtime-environment";
+import { sourceDeclaredToolchainActivationCommand } from "./source-toolchain";
 import type { PreparedRuntimeExecution } from "../agent/prepared-runtime-execution";
 
 import type { SandboxSession } from "eve/sandbox";
@@ -100,6 +107,7 @@ export type TargetValidationFailureReason =
   | "materialization-failed"
   | "input-tree-mismatch"
   | "command-failed"
+  | "tooling-prerequisite"
   | "command-timeout"
   | "output-limit"
   | "execution-error"
@@ -116,6 +124,7 @@ export type TargetValidationFailureReceipt = ValidationReceiptBase & {
     name: TargetValidationCommandName;
     exitCode: number;
     operation?: "run-validation-command";
+    failureClass?: "native-tool-panic" | "missing-app-task";
     hint?: string;
   };
   digest: string;
@@ -258,11 +267,10 @@ const safeDiagnosticPath = (value: string): string | undefined => {
   const appsOffset = normalized.indexOf("apps/");
   const path = appsOffset === -1 ? normalized : normalized.slice(appsOffset);
   if (
-    path.length === 0 ||
     path.length > 500 ||
-    path.startsWith("/") ||
-    path.split("/").some((segment) => segment === "" || segment === "." || segment === "..") ||
-    !/^[A-Za-z0-9._@/-]+$/u.test(path)
+    !applicationFilePathSchema.safeParse(path).success ||
+    // Retained diagnostics remain a bounded filename projection, never source literals or credentials.
+    !/^[A-Za-z0-9._@/()[\]-]+$/u.test(path)
   ) {
     return undefined;
   }
@@ -486,7 +494,13 @@ export const sandboxValidationCommandExecutor =
       APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath),
       ...(options?.alreadyCompiled === true ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
     };
-    const executionCommand = `if [ -f '${environmentPath}' ]; then mise run --no-deps app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi`;
+    const executionCommand = `(
+set -e
+(
+${sourceDeclaredToolchainActivationCommand()}
+)
+if [ -f '${environmentPath}' ]; then mise run --no-deps app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi
+)`;
     const detachedCommand = `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
 ${executionCommand} > "$log" 2>&1
@@ -636,6 +650,9 @@ export const executeProposalBoundValidation = (input: {
           stderr: Awaited<ReturnType<ValidationLogWriter["finish"]>>;
         }
       | undefined;
+    const toolingFailure = createValidationToolingFailureObserver(
+      planned.name === "check-build" ? `//apps/${input.appId}:check` : undefined,
+    );
     const startedAt = new Date().toISOString();
     const startedMonotonic = performance.now();
     try {
@@ -655,14 +672,14 @@ export const executeProposalBoundValidation = (input: {
         environment: input.environment,
         sandbox: input.sandbox,
         validationRoot: planned.validationRoot,
-        ...(stdoutLog === undefined || stderrLog === undefined
-          ? {}
-          : {
-              onChunk: async (channel: ValidationLogChannel, content: string) => {
-                await (channel === "stdout" ? stdoutLog : stderrLog).append(content);
-              },
-            }),
+        onChunk: async (channel: ValidationLogChannel, content: string) => {
+          toolingFailure.observe(channel, content);
+          const writer = channel === "stdout" ? stdoutLog : stderrLog;
+          await writer?.append(content);
+        },
       });
+      toolingFailure.observe("stdout", result.stdout);
+      toolingFailure.observe("stderr", result.stderr);
       const finishedAt = new Date().toISOString();
       const elapsedMs = Math.round(performance.now() - startedMonotonic);
       if (stdoutLog !== undefined && stderrLog !== undefined) {
@@ -746,10 +763,19 @@ export const executeProposalBoundValidation = (input: {
         receipt: failureReceipt(
           input.attempt,
           commands,
-          "command-failed",
+          toolingFailure.classification() === undefined ? "command-failed" : "tooling-prerequisite",
           {
             exitCode: result.exitCode,
             name: planned.name,
+            ...(toolingFailure.classification() === undefined
+              ? {}
+              : {
+                  failureClass: toolingFailure.classification(),
+                  hint:
+                    toolingFailure.classification() === "missing-app-task"
+                      ? missingAppTaskHint
+                      : toolingFailureHint,
+                }),
             ...(/(?:script not found|missing script|task .* not found)/iu.test(
               `${result.stderr}\n${result.stdout}`,
             )

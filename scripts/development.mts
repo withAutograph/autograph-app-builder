@@ -1,5 +1,9 @@
+import { assertDevelopmentApplicationDependencies } from "../lib/development/application-dependencies";
+import { prepareDevelopmentEveWrapperEnvironment } from "../lib/development/eve-wrapper-environment";
+import { maintainLocalDevelopmentOidcLease } from "../lib/development/local-oidc-lease";
 import { prepareDevelopmentEmulatedWeb } from "../lib/development/emulated-web";
 import { spawn } from "node:child_process";
+import type { HostedSessionConnection } from "../lib/development/dev-package";
 import type { ChildProcess } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import nodePath from "node:path";
@@ -29,7 +33,7 @@ import {
 } from "../lib/development/process-supervisor";
 import {
   fingerprintDevelopmentRuntime,
-  waitForDevelopmentRuntimeChange,
+  observeDevelopmentRuntimeChanges,
 } from "../lib/development/runtime-watch";
 import {
   HOSTED_BUN_VERSION,
@@ -40,6 +44,8 @@ import {
 import { loopbackDevelopmentOrigin } from "../lib/mcp/browser-preview";
 import { rotateLocalEveCycleBinding } from "../lib/eve/local-cycle-binding";
 import { ensureLocalDevelopmentOidc } from "../lib/development/local-oidc-startup";
+
+import { resumeDevelopmentCycle } from "../lib/development/resume-cycle";
 
 const repositoryRoot = nodePath.resolve(".");
 const developmentTools = {
@@ -118,53 +124,19 @@ function nextEnvironment(input: {
   } satisfies NodeJS.ProcessEnv;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function eveWrapperEnvironment(input: {
-  closed: Readonly<Record<string, string>>;
-  applicationRoot: string;
-  runsRoot: string;
-  supervisorRoot: string;
-  runtimeHome: string;
-  web?: Awaited<ReturnType<typeof prepareDevelopmentEmulatedWeb>>;
-  workflowData: string;
-}) {
-  const runtimeEnvironment = {
-    HOME: input.runtimeHome,
-    LANG: process.env.LANG ?? "C",
-    LC_ALL: process.env.LC_ALL ?? "C",
-    NODE_ENV: "production" as const,
-    PATH: `${nodePath.dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
-    TMPDIR: process.env.TMPDIR ?? "/tmp",
-    TZ: process.env.TZ ?? "UTC",
-  };
-  return {
-    ...runtimeEnvironment,
-    ...input.closed,
-    APP_BUILDER_DEV_EVE_ROOT: input.applicationRoot,
-    APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
-    APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
-    APP_BUILDER_DEV_SUPERVISOR_ROOT: input.supervisorRoot,
-    APP_BUILDER_EVE_PORT: new URL(input.closed.EVE_AGENT_HOST).port,
-    // Eve's world-local queue must use the same explicitly selected loopback
-    // endpoint as the public adapter.  Leaving this unset makes world-local
-    // probe arbitrary ports, which can route a redelivery to Next instead of
-    // the Eve worker and replay a turn without durable progress.
-    WORKFLOW_LOCAL_BASE_URL: input.closed.EVE_AGENT_HOST,
-    WORKFLOW_LOCAL_DATA_DIR: input.workflowData,
-    WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
-  } satisfies NodeJS.ProcessEnv;
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line eslint/func-style, eslint/complexity -- Explicit retained-cycle recovery shares the same owned process shutdown path.
 async function runEveCycle(input: {
   cycleFile: string;
   sourceRoot: string;
   runsRoot: string;
+  resumeCycle?: string;
   codexRoot: string;
   supervisorRoot: string;
   packageState: DevelopmentSupervisorState;
   destinationRoot: string;
+  installPlugin?: boolean;
   nextPort: number;
+  hostedSession?: HostedSessionConnection;
   evePort: number;
   signal: AbortSignal;
   shutdownExitCode: () => number;
@@ -186,12 +158,22 @@ async function runEveCycle(input: {
   // any response stream owned by the child we are replacing.
   await rotateLocalEveCycleBinding(input.cycleFile);
   const cycleStartedAt = performance.now();
-  const cycle = await createDevelopmentCycle({
-    repositoryRoot,
-    supervisorRoot: input.supervisorRoot,
-  });
   const activeRun = await realpath(await mkdtemp(nodePath.join(input.runsRoot, "run-")));
+  const cycle =
+    input.resumeCycle === undefined
+      ? await createDevelopmentCycle({ repositoryRoot, supervisorRoot: input.supervisorRoot })
+      : await resumeDevelopmentCycle({
+          repositoryRoot,
+          runsRoot: input.runsRoot,
+          cycleRoot: input.resumeCycle,
+          evePort: input.evePort,
+        });
   try {
+    const dependencyBinding = await assertDevelopmentApplicationDependencies({
+      repositoryRoot,
+      applicationRoot: cycle.application.root,
+    });
+    console.log("[builder:development:dependencies]", JSON.stringify(dependencyBinding));
     const snapshot = await createDevelopmentSnapshot({
       runRoot: activeRun,
       sourceRoot: input.sourceRoot,
@@ -221,6 +203,7 @@ async function runEveCycle(input: {
     const runtimeFingerprint = await fingerprintDevelopmentRuntime(repositoryRoot);
     const packageFingerprint = await developmentPackageFingerprint({
       origin: input.web?.origin,
+      hostedSession: input.hostedSession,
       port: input.nextPort,
       repositoryRoot,
     });
@@ -230,6 +213,7 @@ async function runEveCycle(input: {
     if (!packageReused) {
       input.packageState.result = await createDevelopmentPackage({
         origin: input.web?.origin,
+        hostedSession: input.hostedSession,
         outputRoot: input.codexRoot,
         port: input.nextPort,
         repositoryRoot,
@@ -250,6 +234,33 @@ async function runEveCycle(input: {
       sourceSha: snapshot.commit,
       sourceTree: snapshot.tree,
     });
+    const wrapperEnvironment = await prepareDevelopmentEveWrapperEnvironment({
+      cycleFile: input.cycleFile,
+      closed,
+      applicationRoot: cycle.application.root,
+      runsRoot: input.runsRoot,
+      supervisorRoot: nodePath.dirname(cycle.root),
+      runtimeHome: cycle.runtimeHome,
+      workflowData: cycle.workflowData,
+      repositoryRoot,
+      nodeExecutable: requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
+      vercelExecutable: requiredEnvironment("APP_BUILDER_DEV_VERCEL_BIN"),
+      environment: process.env,
+      signal: input.signal,
+    });
+    input.signal.throwIfAborted();
+    const stopOidcLease = maintainLocalDevelopmentOidcLease({
+      repositoryRoot,
+      applicationRoot: cycle.application.root,
+      runtimeHome: cycle.runtimeHome,
+      vercelExecutable: requiredEnvironment("APP_BUILDER_DEV_VERCEL_BIN"),
+      miseExecutable: requiredEnvironment("APP_BUILDER_DEV_MISE_BIN"),
+      onUnavailable: () => {
+        console.warn(
+          "Builder model credential renewal is unavailable; saved work is preserved. Check the existing Vercel login.",
+        );
+      },
+    });
     const eve = spawn(
       requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
       [
@@ -259,6 +270,7 @@ async function runEveCycle(input: {
           repositoryRoot,
           ".config/mise/scripts/repository/run-local-development-eve.mts",
         ),
+        ...(input.resumeCycle === undefined ? [] : ["--resume"]),
       ],
       {
         cwd: repositoryRoot,
@@ -266,14 +278,7 @@ async function runEveCycle(input: {
         // every descendant in a separate process group so Ctrl+C cleans up
         // the whole Eve cycle instead of leaving its listener on the port.
         detached: process.platform !== "win32",
-        env: eveWrapperEnvironment({
-          applicationRoot: cycle.application.root,
-          closed,
-          runsRoot: input.runsRoot,
-          runtimeHome: cycle.runtimeHome,
-          supervisorRoot: input.supervisorRoot,
-          workflowData: cycle.workflowData,
-        }),
+        env: wrapperEnvironment,
         stdio: "inherit",
       },
     );
@@ -283,12 +288,26 @@ async function runEveCycle(input: {
     }
     // Eve reads the canonical Arrusted checkout directly. Its ordinary edits
     // are live planning input and must not replace the child or local queue.
-    const runtimeChanged = waitForDevelopmentRuntimeChange({
-      expectedFingerprint: runtimeFingerprint,
-      repositoryRoot,
-      signal: watchers.signal,
-      // oxlint-disable-next-line promise/prefer-await-to-then
-    }).then(() => ({ code: 0, kind: "restart" as const }));
+    // Source edits must not end the process that owns active or waiting sessions.
+    // A new runtime generation is an explicit separate instance, not a restart race.
+    void (async () => {
+      try {
+        await observeDevelopmentRuntimeChanges({
+          expectedFingerprint: runtimeFingerprint,
+          repositoryRoot,
+          signal: watchers.signal,
+          onChanged: () => {
+            console.info(
+              "Builder runtime source changed; existing Eve sessions retain their pinned worker. Use a separate local instance to exercise the changed runtime.",
+            );
+          },
+        });
+      } catch {
+        console.warn(
+          "Builder runtime source observation is unavailable; the pinned Eve worker remains running.",
+        );
+      }
+    })();
     // This derived promise is an input to the shared race below.
     // oxlint-disable-next-line promise/prefer-await-to-then
     const eveExited = developmentChildExit(eve).then((code) => ({
@@ -303,7 +322,6 @@ async function runEveCycle(input: {
           fetcher: input.web?.fetcher,
           signal: watchers.signal,
         }).then(() => ({ code: 0, kind: "ready" as const })),
-        runtimeChanged,
         eveExited,
         input.nextExited,
         stopping,
@@ -313,8 +331,9 @@ async function runEveCycle(input: {
       }
       if (!packageReused) {
         await registerDevelopmentPackage({
-          codexBin: requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
-          codexHome: requiredEnvironment("APP_BUILDER_DEV_CODEX_HOME", "profile root"),
+          codexBin: process.env.APP_BUILDER_DEV_CODEX_BIN,
+          codexHome: process.env.APP_BUILDER_DEV_CODEX_HOME,
+          installPlugin: input.installPlugin,
           marketplaceRoot: packageResult.marketplaceRoot,
           version: packageResult.receipt.version,
         });
@@ -326,7 +345,7 @@ async function runEveCycle(input: {
           eveRestartMs: Math.round(performance.now() - cycleStartedAt),
           event: "autograph.local.eve-cycle",
           packageReused,
-          persistentEveStateReused: false,
+          persistentEveStateReused: input.resumeCycle !== undefined,
           snapshotDeltaBytes,
           snapshotDeltaFiles,
         }),
@@ -334,10 +353,18 @@ async function runEveCycle(input: {
       input.packageState.dependencyKey = dependencyKey;
       input.packageState.snapshot = snapshot;
       console.log("Autograph App Builder development is ready.");
-      console.log("Open a fresh Codex task and select Autograph App Builder (Development).");
+      console.log(
+        "Connect a client to the loopback endpoint below. If plugin installation is enabled, select Autograph App Builder (Development) in a fresh Codex task.",
+      );
       console.log(`Loopback endpoint: ${packageResult.receipt.endpoint}`);
-      return await Promise.race([runtimeChanged, eveExited, input.nextExited, stopping]);
+      if (input.hostedSession !== undefined) {
+        console.log(
+          `Existing-session connector: ${input.hostedSession.resourceUrl} (local native transport; hosted execution)`,
+        );
+      }
+      return await Promise.race([eveExited, input.nextExited, stopping]);
     } finally {
+      stopOidcLease();
       watchers.abort();
       await stopDevelopmentChild(eve, { processGroup: true });
       await waitForDevelopmentPortRelease(input.evePort);
@@ -369,6 +396,15 @@ try {
     await realpath(await mkdtemp(nodePath.join(runsRoot, "supervisor-"))),
   );
   const packageState: DevelopmentSupervisorState = {};
+  const hostedSession: HostedSessionConnection | undefined =
+    args.hostedSessionResource === undefined
+      ? undefined
+      : {
+          resourceUrl: args.hostedSessionResource,
+          codexBin: args.hostedSessionCodexBin ?? requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
+          nodeBin: requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
+          cwd: await privateRoot(nodePath.join(stateRoot, "native-session-client")),
+        };
   const nextHome = await privateRoot(nodePath.join(stateRoot, "next-home"));
   const destinationRoot = await privateRoot(
     args.destinationRoot ?? nodePath.join(artifactRoot, "destination"),
@@ -424,10 +460,14 @@ try {
       cycleFile,
       destinationRoot,
       evePort: args.evePort,
+      installPlugin: args.installPlugin,
       nextExited,
       nextPort: args.nextPort,
+      hostedSession,
       packageState,
       runsRoot,
+      resumeCycle: args.resumeCycle,
+
       shutdownExitCode: shutdown.exitCode,
       signal: shutdown.signal,
       sourceRoot,
@@ -443,9 +483,6 @@ try {
       process.exitCode = outcome.code;
       break;
     }
-    console.log(
-      "Development runtime changed; Eve and the local package are restarting while Next stays live.",
-    );
   }
 } catch (error) {
   if (!shutdown.signal.aborted) {

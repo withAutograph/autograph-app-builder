@@ -19,8 +19,11 @@ Neon branches with `parent-schema` or `schema-only` provenance. Explicit synthet
 enrollment supports a dedicated project's default `main` root with `parent-data`
 or `schema-only` provenance. Provider readback must match the enrolled project ID,
 owner and creation metadata, plus the root's branch ID, creation metadata,
-initialization source, ready state and `default: true`. Enrolled children also
-require verified lineage and fork metadata back to that root.
+initialization source, `ready` or idle-cache `archived` state and `default: true`.
+Enrolled children also require verified lineage and fork metadata back to that
+root. Archived cache reactivates on database access; it does not require branch
+replacement or enrollment changes. Metadata planning does not wake the database
+or renew expired effect authority.
 
 Operator use can select the enrolled root directly; creating a child is optional.
 Default branches remain unavailable without explicit synthetic enrollment. Preserve
@@ -81,6 +84,19 @@ usable hosted Preview.
 Private planning failures report only a closed stage, error class, known code,
 and hashed session identity. They preserve the original result or error and never
 log error messages, stacks, provider responses, credentials, or app content.
+Native-target clients also recognize the existing typed `blocked` response from
+the shared operator error boundary, including its literal `unknown` app identity.
+They preserve its closed error code as a failure, never as an approval or readiness
+result. Malformed responses and concrete foreign-app responses remain unavailable;
+this handling does not resend a request or relax owner verification.
+Native-target planning failures additionally identify the closed boundary that
+failed: workload, canonical owner, retained registry, captured release, resource
+configuration, or planned-scope transition. Only fixed error classifications
+are reported. Diagnostics never include the request, saved plan, artifact,
+provider response, identity, URL, or arbitrary exception text. A failed observer
+cannot replace the original failure or retry an operation. This evidence helps
+distinguish a rejected retained target from unavailable infrastructure; it does
+not authorize rescoping, approval, preparation, or provider effects.
 Browser acceptance receives `APP_TEST_BASE_URL` only for `test-e2e`, from the same
 owner-verified native Preview projection used to prepare runtime execution. This
 URL handoff supplies no actors, sessions, roles, or authenticated behavior proof.
@@ -110,6 +126,15 @@ compiled release. Generated app delivery consumes this `publishedSource`
 association; it never substitutes configured starter source, a baseline commit,
 or a latest-repository guess. An update records its newly observed head, while
 replaying the original publication retains its original completion marker.
+
+The Gateway's configured branch remains its environment, alias, and saved
+candidate namespace. When an approved app plan delivers the Gateway from the
+same repository and exact commit as its published app, native Git creation,
+listing, and readback use that app's approved source branch. The commit, project,
+owner, and operation checks remain exact. Bootstrap and other repository or
+commit combinations retain the Gateway's configured source reference. This
+source projection does not change environment rows, approval digests, or pending
+delivery attempts.
 
 For a new selected release, optional `deployment` metadata in the captured
 repository `app:describe` result supplies the provider framework, outside-root
@@ -175,8 +200,12 @@ For both projects,
 reads project ownership and Preview environment inventory even when delivery
 has not happened. Configured origins are intended routing inputs, not observed
 Gateway ownership or public-key evidence. A supplied deployment reference must
-still be independently READY and match its project and branch. The operator's
-own deployment reference remains mandatory.
+still be independently READY within its team, project and declared native
+environment (Preview for the app and Gateway); non-alias reads also retain the
+exact deployment identity. Inventory does not
+admit or reject source branch spelling. Logical branches still select environment
+rows, while approved delivery separately verifies its repository, native Git ref
+and commit SHA. The operator's own deployment reference remains mandatory.
 
 Gateway delivery records its candidates in the durable journal. Identity-link
 preparation requires the journal's actual READY Gateway candidate and validates
@@ -261,6 +290,34 @@ retained READY candidate and unchanged consumed proof, with the current Auth
 resource, owner session, browser origin, and issuer bindings intact. Retained
 origin evidence does not authorize another identity-link consumption or replace
 fresh deployment observation under the new approval.
+
+The same rule applies when a new Gateway becomes selected while the original
+READY candidate remains in the owned candidate list. A consumed proof keeps its
+exact endpoint and proof reference; selecting a new serving deployment does not
+invalidate that historical identity fact. Unconsumed links still require the
+approved endpoint or selected Gateway. Neither retained identity evidence nor a
+successful hostname write replaces the current delivery's verified receipt.
+Reconciliation refusals report only closed stages and error classifications;
+they preserve uncertain attempts and never authorize a duplicate deployment.
+
+Gateway setup and app installation both reverify completed Gateway bindings
+while reconciling their pending Gateway delivery. That read uses the same live
+owner, approval, operation, plan, fence, lease and sealed resource checkpoint.
+The completed binding receipt and actual pending delivery attempt remain
+required; this observation cannot authorize a worker attempt or replay a write.
+
+An approved app plan may install for retained customers while requesting zero
+access grants. Verify its current account state and execution authority, then
+record only the empty grant set; do not launch an access worker or borrow schema
+installation customers as access targets. Nonempty grants, revocation and
+installation keep their existing workers. An empty-access receipt proves no
+existing access, installation, readiness or delivery outcome.
+
+Reobserving an earlier completed effect preserves another effect's pending
+attempt. Only the matching verified receipt clears that pending state. If an
+earlier effect instead needs another worker, retain the uncertain effect and
+refuse that reservation until it is reconciled; an orphan attempt also remains
+unresolved. Same-effect retries retain their existing proof requirements.
 
 Under the fresh approval, reconcile access and runtime bindings again, apply
 and read back the approved service grant, and read both existing native
@@ -583,3 +640,116 @@ no custody enrollment, Secret write or receiving key-injection refresh follows
 from this source repair alone. Hosted acceptance still requires the separately
 approved enrollment, original-owner form submission, approved receiver refresh,
 nonce-bound possession receipt and independent readback of that saved operation.
+
+A native-target plan read may omit the current selected specification when an
+owner-authorized, noncancelled operation is already retained. It returns that
+operation unchanged, including its original plan and approval scope. If no such
+operation exists, a selected app specification remains mandatory before capture,
+planning or reservation. This read never grants approval or creates a target.
+
+### Owner-scoped native resource selection
+
+A native target may select `resourceProfileId` from the deployment-owned
+`PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES` inventory. Each entry contains an
+ID, exact Builder authority (issuer, audience, workspace and owner), app ID and a
+complete operator source configuration. Model input selects only the ID; it
+cannot supply a scope, credential or replacement configuration. Profiles retain
+the trusted Builder workload, operator and team boundaries and must pass the
+same coherent configuration checks as the deployment base. Calls without a
+selector retain the existing base behavior for other apps.
+
+The plan binds an authority digest of the selected Auth resource and roles,
+Neon store/scope and connector authority, protected Gateway identity and
+origins, operator/callback identity and bootstrap capabilities. Ordinary Git
+SHAs, deployment IDs, source snapshots, worker bytes and descriptive metadata
+are excluded; the app installer remains separately frozen in `plan.worker`.
+Ready projection reselects this exact owner/app profile and verifies the bound
+authority rather than mixing its app database with the base Auth/Gateway scope.
+Actual provider, grant, database/login and deployment readback remain mandatory;
+a profile entry is not evidence that these resources work.
+
+An explicit changed resource selection may supersede only a planned operation
+with no creation attempts. The physical target, captured app release, database
+and role names and retention/cost policy stay the same. Revision CAS archives
+the complete previous plan without claiming its pending approval was cancelled
+or its unknown response settled. A monotonically increasing resource-selection
+revision changes the approval digest even if a later selection returns to an
+older resource. Late old approvals cannot authorize the revised intent. Creating,
+uncertain and ready operations retain their existing reconciliation rules and
+cannot be replaced through this path. The revised plan requires fresh normal
+in-product approval before any provider creation.
+
+The Vercel create-project request contains only fields supported by `POST
+/v11/projects`. In particular, `sourceFilesOutsideRootDirectory` is an
+update-only field and must not be sent to creation. New Vercel projects default
+it to enabled; independent exact-ID readback still checks the requested value
+before registration. A missing or different value remains a candidate, never a
+ready target. This does not authorize patching or adopting an existing project.
+See the [create API](https://vercel.com/docs/rest-api/projects/create-a-new-project)
+and [monorepo defaults](https://vercel.com/docs/monorepos/monorepo-faq).
+
+A definitive rejected create retires its exact attempt while preserving all
+prior planned scopes and approvals. A rescope must not make this retirement
+fail by dropping its audit history. A lost rejection receipt still requires
+trusted attempt-specific evidence and normal CAS reconciliation; expiration
+or a project-name lookup alone never authorizes a second POST.
+
+Native-target preparation consumes positive approval for its current trusted
+tool-call identity, including every registry approval recheck. Multiple approved
+invocations of the same unchanged plan retain their separate receipts; an old
+approval cannot authorize a pending new invocation. Two approved requests for
+one call remain ambiguous. Cancellation for the exact plan remains dominant
+across invocations, and complete authenticated history plus current owner and
+plan checks are still required. No receipt or checkpoint is discarded to make
+approval selection succeed.
+
+The journal's first approved plan receipt remains immutable when that exact
+plan is resumed by a later invocation. A fresh independently verified approval
+may have a different request and call ID; it authorizes the current invocation
+without replacing the original plan receipt or requiring an approved-to-approved
+CAS. Pending, foreign-owner, changed-plan or previously cancelled approvals
+remain insufficient. A changed receipt for the same original call is rejected.
+Each claim, dispatch authorization and ready registration still rechecks
+current approval through the trusted native-history port. Saving an accepted
+provider ID remains bound to its exact attempt, lease and prior dispatch
+authorization so a later approval change cannot erase an already-created resource.
+Fresh receipts remain in authenticated native history; prior scopes, attempt
+history and the original journal approval are preserved.
+
+A typed incomplete-history timeout during the read-only
+`native-target-approval-read` lookup returns `pending`, allowing the normal
+current-invocation approval control to ask for consent. It never returns an
+approved receipt or permits an effect. Caller cancellation, explicit owner,
+plan or authorization denials, and non-timeout failures remain errors.
+Preparation still requires complete authenticated history, including any earlier cancellation that was
+outside an incomplete prefix; a fresh card cannot override that cancellation.
+The existing observation checkpoint remains available for the next read.
+
+Accepted app workflow facts survive internal notes and new design drafts. Recording
+a draft does not silently replace the selected specification or discard its build,
+validation, review or publication receipts. Explicitly accepting a different AppSpec
+continues the normal planning path; accepting the same artifact reuses existing facts.
+
+Approval observation cursors are scoped to their native adapter epoch. A verified
+current recovered owner may checkpoint a lower cursor in its new stream, using
+the exact revision read before replay. Owner rechecks and revision CAS prevent a
+stale writer from restoring the prior epoch; same-epoch rewinds remain rejected.
+An observation checkpoint is not approval settlement and does not resolve an
+unknown public response.
+
+## Native Services ingress inventory
+
+The operator Services configuration forwards these exact paths to the existing
+request-scoped operator factory: `/v1/key-custody/possession`, `/v1/runtime`,
+`/v1/public-release`, `/v1/app-integrations`, `/v1/central-integrations`, and
+`/v1/central-deployment-events`. The integration and deployment-event paths use
+the same closed workload authorization and owner-bound adapters as their existing
+factory handlers. Routing supplies reachability only; it grants no authorization
+or approval and adds no wildcard route or separate backend. Unknown child paths
+remain unavailable.
+
+Before a bundled release, run `mise run test:compiled-operator -- --bun-bin
+/absolute/installed/bun` to compile the actual Services entrypoint and exercise
+all six ingress paths without private configuration or network effects. Missing
+configuration must fail closed at every path. This proves the packaged ingress
+and factory composition, not authenticated installation or hosted acceptance.

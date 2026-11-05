@@ -1,3 +1,11 @@
+import { createHostedOperatorNativeHandler } from "./hosted-operator-native";
+import {
+  captureFixture,
+  context as captureContext,
+} from "./hosted-operator-unapproved-app-successor.test-support";
+import { inspectUnapprovedAppSuccessor } from "./hosted-operator-unapproved-app-successor";
+import { createUnapprovedParticipantPlan } from "./hosted-operator-unapproved-participant-plan";
+import { createParticipantSuccessorPlan } from "./hosted-operator-participant-successor";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
 import {
@@ -41,14 +49,17 @@ import {
 import {
   createHostedOperatorControlPlane,
   createRetainedAppInstallationCustomerReader,
+  createRetainedAppInstallationScopeReader,
   matchesApprovedMembershipJwks,
   selectAuthPlanningResourceBindingRow,
 } from "./hosted-operator-deployment";
 import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
 import {
+  createRequestScopedHostedOperatorDependencies,
   composeHostedOperatorDependencies,
   createDependencies,
   createConfiguredPreviewTargetResolver,
+  readCompletedCaptureBootstrap,
   resolveFullPlan,
 } from "./hosted-operator-composition";
 import { readHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
@@ -388,9 +399,29 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   const unexpectedPort = vi.fn(async (): Promise<never> => {
     throw new Error("Unexpected provider or effect port during planning");
   });
+  const planningSession = durableHostedSessionRecordSchema.parse({
+    adapterGeneration: 1,
+    adapterSessionId: "adapter",
+    appId: context.target.appId,
+    createdAtEpochMs: 100,
+    lastProgressAtEpochMs: 100,
+    originAdapterSessionId: "adapter",
+    principal: operatorOwnerContextSchema.parse(context.ownerContext).principal,
+    resumability: "live",
+    sessionId: context.target.sessionId,
+    stage: "ready",
+    status: "waiting",
+    title: "Controlled planning owner",
+    updatedAtEpochMs: 100,
+    version: 2,
+  });
+  const readCurrentPlanningOwner = vi.fn<
+    Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCurrentPlanningOwner"]
+  >(() => Promise.resolve({ session: structuredClone(planningSession), target: context.target }));
   const controlPlane = {
     readCapturedRealmIdentity,
     readCapturedRealmIdentityProof,
+    readCurrentPlanningOwner,
     assertPlanningAuthorized: unexpectedPort,
   };
   const verifiedIdentity = vi.spyOn(realmIdentity, "readVerifiedRealmAccess").mockResolvedValue({
@@ -431,6 +462,7 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
     controlPlane,
     readCapturedRealmIdentity,
     readCapturedRealmIdentityProof,
+    planningSession,
     unexpectedPort,
     verifiedIdentity,
   };
@@ -966,9 +998,9 @@ describe("configured owner-authorized Preview target metadata", () => {
   });
 });
 
-const participantResolutionFixture = () => {
+const participantResolutionFixture = (captureOnly = false) => {
   const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
-  const program = normalActorProgramSchema.parse({
+  const declaredProgram = normalActorProgramSchema.parse({
     version: 1,
     appId: context.target.appId,
     origin: f.configuration.gateway.publicOrigin,
@@ -993,6 +1025,15 @@ const participantResolutionFixture = () => {
       { organizationId: "second-org", actorKey: "owner", roles: ["member"] },
     ],
   });
+  const program = captureOnly
+    ? normalActorProgramSchema.parse({
+        ...declaredProgram,
+        actors: declaredProgram.actors.map((actor) => ({ ...actor, account: "capture-existing" })),
+        organizations: [],
+        memberships: [],
+        appAccess: [],
+      })
+    : declaredProgram;
   const base = hostedOperatorPlanSchema.parse({
     ...bootstrapWithGatewayOrigin("https://gateway.example"),
     normalActorProgram: program,
@@ -1126,6 +1167,8 @@ const unusedCompositionControlPlane = (): Parameters<
     reserveFenceGeneration: unexpectedPort,
   };
   return {
+    centralIntegrationHostRequest: unexpectedPort,
+    centralIntegrationDeploymentReceiptRequest: unexpectedPort,
     exportRequest: unexpectedPort,
     continuityRequest: unexpectedPort,
     readNormalActorRuntimeBindings: unexpectedPort,
@@ -1170,6 +1213,7 @@ const unusedCompositionControlPlane = (): Parameters<
     checkpointSharedAuthAdoption: unexpectedPort,
     close: unexpectedPort,
     consumeOwnerRealmIdentityCallback: unexpectedPort,
+    resolveRealmIdentityCallbackOwnerContext: unexpectedPort,
     prepareRealmIdentityLink: unexpectedPort,
     prepareNormalActorCapture: unexpectedPort,
     readPendingNormalActorCapture: unexpectedPort,
@@ -1193,11 +1237,245 @@ const unusedCompositionControlPlane = (): Parameters<
     readSharedGatewayRows: unexpectedPort,
     reserveRealmIdentityLink: unexpectedPort,
     resolveRealmIdentityCallbackContext: unexpectedPort,
+    readApprovedPublicAuthBootstrap: unexpectedPort,
+    readOwnedAppResourceSource: unexpectedPort,
+    checkpointOwnedAppResourceSource: unexpectedPort,
     store,
     verifySharedAuthAdoption: unexpectedPort,
     withResourceLease: unexpectedPort,
   };
 };
+
+describe("empty approved access effects", () => {
+  const setup = async (captureOnly = true) => {
+    const f = participantResolutionFixture(captureOnly);
+    f.state.memberships = f.state.memberships.map((membership) => ({
+      ...membership,
+      status: "complete",
+    }));
+    const plan = await resolveFullPlan(
+      f.base,
+      context,
+      f.configuration,
+      {
+        ...f.ports,
+        readAppInstallationCustomerIds: async () => await Promise.resolve(["existing-owner"]),
+      },
+      {},
+      true,
+      true,
+    );
+    const effect = plan.effects.find((candidate) => candidate.kind === "access");
+    if (effect === undefined) {
+      throw new Error("Controlled access effect missing");
+    }
+    const inspect = vi.fn<
+      ReturnType<typeof membershipLauncher.createHostedOperatorSandboxLauncher>["inspect"]
+    >(
+      async () =>
+        await Promise.resolve({
+          version: 1,
+          operation_id: "00000000-0000-4000-8000-000000000021",
+          context_digest: "d".repeat(64),
+          fence_generation: 1,
+          status: "applied",
+          readback_sha256: "e".repeat(64),
+        }),
+    );
+    const execute = vi.fn<
+      ReturnType<typeof membershipLauncher.createHostedOperatorSandboxLauncher>["execute"]
+    >(async () => {
+      await Promise.resolve();
+    });
+    vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
+      inspect,
+      execute,
+    });
+    const assertCurrent = vi.fn<HostedOperatorEffectContext["assertCurrent"]>(async () => {
+      await Promise.resolve();
+    });
+    const assertAuthorized = vi.fn<ProtectedHostedOperatorDependencies["assertAuthorized"]>(
+      async () => {
+        await Promise.resolve();
+      },
+    );
+    const verifyNormalActorMemberships = vi.fn(async () => await Promise.resolve(f.state));
+    const readResourceBindings = vi.fn(
+      async () =>
+        await Promise.resolve({
+          authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
+          appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
+        }),
+    );
+    const readGeneratedRelease = vi.fn(
+      async () => await Promise.reject(new Error("Controlled worker release read")),
+    );
+    const dependencies = composeHostedOperatorDependencies(f.configuration, {
+      ...unusedCompositionControlPlane(),
+      assertAuthorized,
+      verifyNormalActorMemberships,
+      readResourceBindings,
+      readGeneratedRelease,
+    });
+    const input: HostedOperatorWorkerEffectContext = {
+      ...context,
+      plan,
+      effect,
+      accountPreparation: f.preparation,
+      operationRef: "00000000-0000-4000-8000-000000000021",
+      fenceGeneration: 7,
+      leaseId: "00000000-0000-4000-8000-000000000022",
+      workerAttemptId: "00000000-0000-4000-8000-000000000023",
+      workerCheckpoints: [],
+      assertCurrent,
+      checkpoint: async () => {
+        await Promise.resolve();
+      },
+      bindWorkerContext: async () =>
+        await Promise.resolve(async () => {
+          await Promise.resolve();
+        }),
+    };
+    return {
+      f,
+      input,
+      dependencies,
+      inspect,
+      execute,
+      assertCurrent,
+      assertAuthorized,
+      verifyNormalActorMemberships,
+      readResourceBindings,
+      readGeneratedRelease,
+    };
+  };
+  it("settles only zero approved grants under the original captured accounts without opening a worker or credentials", async () => {
+    const f = await setup();
+    const before = structuredClone({
+      plan: f.input.plan,
+      preparation: f.f.preparation,
+      state: f.f.state,
+    });
+    expect(f.input.plan.access).toEqual([]);
+    expect(f.input.plan.appInstallation?.customerIds).toEqual(["existing-owner"]);
+    expect(f.input.plan.normalActorPreparation?.accountOperationRef).toBe(
+      f.f.preparation.accountOperationRef,
+    );
+    const observed = await f.dependencies.reconcile(f.input);
+    const executed = await f.dependencies.executeEffect(f.input);
+    expect(observed).toMatchObject({
+      status: "applied",
+      receipt: {
+        effectId: f.input.effect.id,
+        fenceGeneration: 7,
+        resourceVersion: executed.resourceVersion,
+      },
+    });
+    expect(executed.resourceVersion).toBe(
+      createHash("sha256")
+        .update(JSON.stringify({ effect: "access", grants: [] }))
+        .digest("hex"),
+    );
+    expect(f.verifyNormalActorMemberships).toHaveBeenCalledWith(f.input);
+    expect({ plan: f.input.plan, preparation: f.f.preparation, state: f.f.state }).toEqual(before);
+    expect(f.inspect).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.readResourceBindings).not.toHaveBeenCalled();
+    expect(f.readGeneratedRelease).not.toHaveBeenCalled();
+  });
+  it.each(
+    (["inspect", "execute"] as const).flatMap((mode) =>
+      (
+        [
+          "owner",
+          "fence",
+          "account",
+          "participant-scope",
+          "changed-plan",
+          "changed-effect",
+        ] as const
+      ).map((failure) => ({
+        mode,
+        failure,
+      })),
+    ),
+  )("rejects $failure before $mode can settle empty grants", async ({ mode, failure }) => {
+    const f = await setup();
+    const denied = new HostedOperatorError("authorization_required");
+    if (failure === "owner") {
+      f.assertAuthorized
+        .mockImplementationOnce(async () => {
+          await Promise.resolve();
+        })
+        .mockRejectedValue(denied);
+    } else if (failure === "fence") {
+      f.verifyNormalActorMemberships.mockImplementation(async () => {
+        f.assertCurrent.mockRejectedValue(denied);
+        return await Promise.resolve(f.f.state);
+      });
+    } else if (failure === "account") {
+      f.verifyNormalActorMemberships.mockRejectedValue(denied);
+    } else if (failure === "changed-plan" || failure === "changed-effect") {
+      f.verifyNormalActorMemberships.mockImplementation(async () => {
+        if (failure === "changed-plan") {
+          f.input.plan = hostedOperatorPlanSchema.parse({
+            ...f.input.plan,
+            contextId: "changed-after-account-check",
+          });
+        } else {
+          f.input.effect = { ...f.input.effect, id: "unapproved-empty-access" };
+        }
+        return await Promise.resolve(f.f.state);
+      });
+    } else {
+      f.verifyNormalActorMemberships.mockResolvedValue({
+        ...f.f.state,
+        operationRef: "00000000-0000-4000-8000-000000000099",
+      });
+    }
+    await expect(
+      mode === "inspect"
+        ? f.dependencies.reconcile(f.input)
+        : f.dependencies.executeEffect(f.input),
+    ).rejects.toThrow();
+    expect(f.inspect).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.readResourceBindings).not.toHaveBeenCalled();
+  });
+  it.each(["inspect", "execute"] as const)(
+    "rejects cleanup before %s can settle empty access",
+    async (mode) => {
+      const f = await setup();
+      f.input.plan = { ...f.input.plan, action: "cleanup" };
+      await expect(
+        mode === "inspect"
+          ? f.dependencies.reconcile(f.input)
+          : f.dependencies.executeEffect(f.input),
+      ).rejects.toMatchObject({ code: "resource_mismatch" });
+      expect(f.assertAuthorized).not.toHaveBeenCalled();
+      expect(f.verifyNormalActorMemberships).not.toHaveBeenCalled();
+      expect(f.readResourceBindings).not.toHaveBeenCalled();
+      expect(f.inspect).not.toHaveBeenCalled();
+      expect(f.execute).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["install", "revoke"] as const)(
+    "keeps %s on the existing worker preparation path even without grants",
+    async (kind) => {
+      const f = await setup();
+      const input = { ...f.input, effect: { ...f.input.effect, id: kind, kind } };
+      await expect(f.dependencies.reconcile(input)).rejects.toThrow();
+      expect(f.readResourceBindings).toHaveBeenCalledWith(input);
+    },
+  );
+  it("keeps nonempty grants on the existing worker preparation path", async () => {
+    const f = await setup(false);
+    expect(f.input.plan.access.length).toBeGreaterThan(0);
+    await expect(f.dependencies.reconcile(f.input)).rejects.toThrow();
+    expect(f.verifyNormalActorMemberships).toHaveBeenCalledWith(f.input);
+    expect(f.readResourceBindings).toHaveBeenCalledWith(f.input);
+  });
+});
 
 describe("participant plan resolution", () => {
   it.each(["inspect", "execute"] as const)(
@@ -2158,6 +2436,20 @@ describe("existing populated Auth workflow planning", () => {
 
   const settledAppPlanningFixture = async () => {
     const f = await retainedAuthReadinessFixture();
+    f.planningSession.privateBuildDecision = {
+      adapterSessionId: f.planningSession.adapterSessionId,
+      currentSpec: {
+        appId: context.target.appId,
+        appSpecDigest: "new-spec",
+        sessionId: f.planningSession.adapterSessionId,
+        workspaceId: "current-source-workspace",
+      },
+      decision: "blocked",
+      turnId: "accepted-turn",
+      turnSequence: 1,
+      version: 1,
+      workflowPhase: "applied",
+    };
     const record = f.row.record;
     const operator = record.operator!;
     f.configuration.applications.actual!.repoId = "actual-repository-id";
@@ -3904,10 +4196,64 @@ describe("retained active schema installation scope", () => {
       readApproval,
       readActiveCustomers,
     });
-    return { desired, prior, receipt, session, readOwner, readApproval, readActiveCustomers, read };
+    const readScopes = createRetainedAppInstallationScopeReader({ readOwner, readApproval });
+    return {
+      desired,
+      prior,
+      receipt,
+      session,
+      readOwner,
+      readApproval,
+      readActiveCustomers,
+      read,
+      readScopes,
+    };
   };
 
-  const deploymentFixture = async () => {
+  it("reads canonical retained actor metadata scopes without credentials or granting installation customers access", async () => {
+    const f = fixture();
+    f.desired.access = [];
+    f.desired.appInstallation = { customerIds: ["original-org"] };
+    await expect(f.readScopes(context, f.desired)).resolves.toEqual([
+      {
+        appId: context.target.appId,
+        actorId: "original-owner",
+        organizationId: "original-org",
+        role: "member",
+      },
+    ]);
+    expect(f.readApproval).toHaveBeenCalledWith(context, f.receipt(1));
+    expect(f.readActiveCustomers).not.toHaveBeenCalled();
+    expect(f.desired.access).toEqual([]);
+  });
+  it("does not return scope from a cancelled canonical historical approval", async () => {
+    const f = fixture();
+    f.readApproval.mockResolvedValueOnce(null);
+    await expect(f.readScopes(context, f.desired)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.readActiveCustomers).not.toHaveBeenCalled();
+  });
+  it("rechecks historical scope revocation during the scope read", async () => {
+    const f = fixture();
+    f.readOwner
+      .mockImplementationOnce(async () => ({ session: structuredClone(f.session) }))
+      .mockImplementationOnce(async () => ({
+        session: {
+          ...f.session,
+          privateApprovalReceipts: [
+            f.receipt(1),
+            { ...f.receipt(1), sequence: 2, outcome: "cancelled" },
+          ],
+        },
+      }));
+    await expect(f.readScopes(context, f.desired)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.readActiveCustomers).not.toHaveBeenCalled();
+  });
+
+  const deploymentFixture = async (encrypted = false) => {
     const f = fixture();
     const row = {
       revision: 1,
@@ -3926,7 +4272,7 @@ describe("retained active schema installation scope", () => {
         },
         operator: {
           mode: "protected-operator-v1",
-          approvalId: "prior-approval",
+          approvalId: f.receipt(1).requestId,
           operationRef: f.receipt(1).toolInput.operationRef,
           plan: f.prior,
           planDigest: operatorPlanDigest(f.prior),
@@ -3945,7 +4291,17 @@ describe("retained active schema installation scope", () => {
     const owners = await import("./hosted-operator-owner");
     const credentials = await import("./hosted-operator-resource-credentials");
     const appReadiness = await import("./hosted-operator-app-readiness");
-    const readJournal = vi.fn(async () => await Promise.resolve(row));
+    if (encrypted) {
+      const prepared = credentials.prepareHostedOperatorResourceCredentials({
+        ...context,
+        plan: f.prior,
+        record: { ...row.record, privateState: undefined },
+        database: "appDatabase",
+        config: { tokenKey: Buffer.alloc(32, 1), tokenKeyVersion: "fixture-key" },
+      });
+      row.record.privateState = prepared.privateState;
+    }
+    const readJournal = vi.fn(async () => await Promise.resolve(structuredClone(row)));
     const createJournal = journal.createPostgresHostedRuntimeJournalStore;
     vi.spyOn(journal, "createPostgresHostedRuntimeJournalStore").mockImplementation((database) => ({
       ...createJournal(database),
@@ -3960,19 +4316,27 @@ describe("retained active schema installation scope", () => {
       await Promise.resolve();
     });
     const createOwner = owners.createHostedOperatorOwnerAuthority;
+    const assertAuthorized = vi.fn<ReturnType<typeof createOwner>["assertAuthorized"]>(
+      async (input) => {
+        expect(input.purpose).toBe("planning");
+        await assertPlanningAuthorized();
+      },
+    );
     vi.spyOn(owners, "createHostedOperatorOwnerAuthority").mockImplementation((dependencies) => ({
       ...createOwner(dependencies),
       readCurrentPlanningOwner: async () =>
         await Promise.resolve({ session: f.session, target: context.target }),
       assertPlanningAuthorized,
+      assertAuthorized,
     }));
     const bindings = {
       appDatabase: { migrationUrl: "fixture-app-migrator", runtimeUrl: "fixture-app-runtime" },
       authDatabase: { migrationUrl: "fixture-auth-migrator", runtimeUrl: "fixture-auth-runtime" },
     };
-    const readBindings = vi
-      .spyOn(credentials, "readHostedOperatorResourceBindings")
-      .mockReturnValue(bindings);
+    const readBindings = vi.spyOn(credentials, "readHostedOperatorResourceBindings");
+    if (!encrypted) {
+      readBindings.mockReturnValue(bindings);
+    }
     const metadataRead = vi.fn(async () => await Promise.resolve(["original-org"]));
     const readMetadata = vi
       .spyOn(appReadiness, "readActiveAppInstallationCustomerIds")
@@ -4005,9 +4369,170 @@ describe("retained active schema installation scope", () => {
       readMetadata,
       metadataRead,
       assertPlanningAuthorized,
+      assertAuthorized,
       bindings,
+      readResourceBindings: controlPlane.readResourceBindings,
     };
   };
+
+  const pausedEncryptedRead = async () => {
+    const f = await deploymentFixture(true);
+    f.row.record.status = "pending";
+    f.row.record.step = "reserved";
+    f.row.record.leaseId = "00000000-0000-4000-8000-000000000031";
+    f.row.record.leaseExpiresAt = new Date(Date.now() + 60_000).toISOString();
+    const before = structuredClone(f.row);
+    const entered = Promise.withResolvers<undefined>();
+    const resume = Promise.withResolvers<undefined>();
+    let checks = 0;
+    f.assertAuthorized.mockImplementation(async () => {
+      checks += 1;
+      if (checks === 2) {
+        entered.resolve(undefined);
+        await resume.promise;
+      }
+    });
+    const reading = f.readResourceBindings({
+      ...context,
+      plan: f.prior,
+      privateState: before.record.privateState,
+    });
+    // Attach the rejection handler before resuming the deliberately paused read.
+    const result = (async () => {
+      try {
+        return { bindings: await reading };
+      } catch (error) {
+        return { error };
+      }
+    })();
+    await entered.promise;
+    expect(f.readBindings).toHaveBeenCalledOnce();
+    f.row.revision += 1;
+    f.row.record.leaseExpiresAt = new Date(Date.now() + 90_000).toISOString();
+    return { ...f, before, result, resume };
+  };
+
+  it("reads real encrypted credentials across renewal of the same active lease", async () => {
+    const f = await pausedEncryptedRead();
+    expect(f.row.record.operator).toEqual(f.before.record.operator);
+    expect(f.row.record.privateState).toEqual(f.before.record.privateState);
+    expect(f.row.record.leaseId).toBe(f.before.record.leaseId);
+    f.resume.resolve(undefined);
+    const result = await f.result;
+    expect(result).not.toHaveProperty("error");
+    if (result.bindings === undefined) {
+      throw new Error("expected decrypted bindings");
+    }
+    expect(new URL(result.bindings.appDatabase.runtimeUrl).username).toBe(
+      f.prior.appDatabase.runtimeRole,
+    );
+    expect(new URL(result.bindings.authDatabase.runtimeUrl).username).toBe(
+      f.prior.authDatabase.runtimeRole,
+    );
+    expect(f.row.record.status).toBe("pending");
+    expect(f.assertAuthorized).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    "lease identity",
+    "lease removal",
+    "expiry rollback",
+    "expired lease",
+    "unchanged expiry",
+    "revision rollback",
+    "private state",
+    "approval",
+    "approval call",
+    "fence",
+    "receipt",
+    "plan",
+    "checkpoint",
+  ] as const)(
+    "refuses real encrypted credentials after a concurrent change to %s",
+    async (changed) => {
+      const f = await pausedEncryptedRead();
+      const operator = f.row.record.operator!;
+      if (changed === "lease identity") {
+        f.row.record.leaseId = "00000000-0000-4000-8000-000000000032";
+      }
+      if (changed === "lease removal") {
+        delete f.row.record.leaseId;
+        delete f.row.record.leaseExpiresAt;
+        f.row.record.status = "prepared";
+        f.row.record.step = "bound";
+      }
+      if (changed === "expiry rollback") {
+        f.row.record.leaseExpiresAt = new Date(Date.now() + 30_000).toISOString();
+      }
+      if (changed === "expired lease") {
+        f.row.record.leaseExpiresAt = new Date(Date.now() - 1000).toISOString();
+      }
+      if (changed === "unchanged expiry") {
+        f.row.record.leaseExpiresAt = f.before.record.leaseExpiresAt;
+      }
+      if (changed === "revision rollback") {
+        f.row.revision = f.before.revision - 1;
+      }
+      if (changed === "private state") {
+        f.row.record.privateState!.encryptedToken = "replacement-ciphertext";
+      }
+      if (changed === "approval") {
+        operator.approvalId = "replacement-approval";
+      }
+      if (changed === "approval call") {
+        f.row.record.approvedByCallId = "replacement-call";
+      }
+      if (changed === "fence") {
+        operator.fenceGeneration! += 1;
+      }
+      if (changed === "receipt") {
+        operator.receipts = [];
+      }
+      if (changed === "plan") {
+        operator.plan = hostedOperatorPlanSchema.parse({
+          ...f.prior,
+          contextId: "replacement-context",
+        });
+        operator.planDigest = operatorPlanDigest(operator.plan);
+      }
+      if (changed === "checkpoint") {
+        f.row.record.environmentBound = true;
+      }
+      f.resume.resolve(undefined);
+      const result = await f.result;
+      expect(result).toHaveProperty("error");
+      expect(result).not.toHaveProperty("bindings");
+    },
+  );
+
+  it("refuses decrypted bindings when the second owner check is revoked", async () => {
+    const f = await deploymentFixture(true);
+    f.assertAuthorized
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
+    await expect(
+      f.readResourceBindings({
+        ...context,
+        plan: f.prior,
+        privateState: f.row.record.privateState,
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.readBindings).toHaveBeenCalledOnce();
+  });
+
+  it("refuses real credentials without the canonical durable approval", async () => {
+    const f = await deploymentFixture(true);
+    f.assertAuthorized.mockResolvedValue(undefined);
+    f.session.privateApprovalReceipts = [{ ...f.receipt(1), outcome: "cancelled" }];
+    await expect(
+      f.readResourceBindings({
+        ...context,
+        plan: f.prior,
+        privateState: f.row.record.privateState,
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.readBindings).not.toHaveBeenCalled();
+  });
 
   it("uses the deployed retained-scope reader with prepared protected bindings", async () => {
     const f = await deploymentFixture();
@@ -4030,6 +4555,9 @@ describe("retained active schema installation scope", () => {
       }),
     );
     expect(f.metadataRead).toHaveBeenCalled();
+    expect(f.assertAuthorized).toHaveBeenCalledWith(
+      expect.objectContaining({ purpose: "planning", plan: f.prior }),
+    );
   });
 
   it.each([
@@ -4234,8 +4762,7 @@ describe("normal actor plan with retained installation scope", () => {
       },
       "prepare-app-hosted-runtime",
     );
-    expect(description).toContain("retained-owner-org");
-    expect(description).toContain(proposed.release.id);
+    expect(description).toBe("This approval may incur provider costs.");
   });
 
   it("does not silently omit an unknown retained installation scope", async () => {
@@ -4256,4 +4783,401 @@ describe("normal actor plan with retained installation scope", () => {
       ),
     ).rejects.toThrow("retained scope unknown");
   });
+});
+
+it("resolves the completed additive participant successor into its newly approved app scope", async () => {
+  const f = participantResolutionFixture(true);
+  const originalApp = await resolveFullPlan(
+    f.base,
+    context,
+    f.configuration,
+    f.ports,
+    {},
+    true,
+    true,
+  );
+  const original = structuredClone(f.preparation);
+  const record = hostedRuntimeJournalRecordSchema.parse({
+    version: 1,
+    kind: "app-runtime",
+    request: context.target,
+    status: "prepared",
+    step: "bound",
+    approvedByCallId: "app-call",
+    accountPreparation: original,
+    privateState: { encryptedToken: "resource", keyVersion: "key", tokenIv: "iv", tokenTag: "tag" },
+    proof: {
+      actors: 0,
+      tenants: 1,
+      artifactHash: "a".repeat(64),
+      manifestSha256: originalApp.release.sha256,
+      releaseId: originalApp.release.id,
+      authenticatedBehavior: "unassessed",
+    },
+    operator: {
+      mode: "protected-operator-v1",
+      operationRef: "00000000-0000-4000-8000-000000000042",
+      plan: originalApp,
+      planDigest: operatorPlanDigest(originalApp),
+      approvalId: "app-approval",
+      fenceGeneration: 1,
+      receipts: originalApp.effects.map((effect) => ({
+        effectId: effect.id,
+        ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
+        observedAt: "2026-10-20T00:00:00.000Z",
+        resourceVersion: "observed",
+      })),
+    },
+  });
+  const qa = participantResolutionFixture();
+  const program = normalActorProgramSchema.parse({
+    ...qa.program,
+    actors: [
+      ...original.program.actors,
+      ...qa.program.actors.map((actor) => ({
+        ...actor,
+        actorKey: "qa-owner",
+        email: "qa@example.test",
+      })),
+    ],
+    organizations: qa.program.organizations.map((organization) => ({
+      ...organization,
+      ownerActorKey: "qa-owner",
+    })),
+    memberships: qa.program.memberships.map((member) => ({ ...member, actorKey: "qa-owner" })),
+    appAccess: qa.program.appAccess.map((grant) => ({ ...grant, actorKey: "qa-owner" })),
+  });
+  const successor = createParticipantSuccessorPlan(record, program, Date.now());
+  if (successor === undefined || record.operator === undefined) {
+    throw new Error("missing successor fixture");
+  }
+  record.participantPreparationHistory = [
+    {
+      preparation: original,
+      operator: record.operator,
+      approvedByCallId: record.approvedByCallId,
+      proof: record.proof,
+    },
+  ];
+  const operation = "00000000-0000-4000-8000-000000000031";
+  Object.assign(f.preparation, {
+    program,
+    programDigest: normalActorProgramDigest(program),
+    accountOperationRef: operation,
+    accountPlan: successor,
+    accountPlanDigest: operatorPlanDigest(successor),
+    predecessor: successor.normalActorPredecessor,
+    accountApprovalId: "new-account-approval",
+    accountApprovedByCallId: "new-account-call",
+  });
+  const qaActor = qa.state.actors[0];
+  if (qaActor?.session === undefined) {
+    throw new Error("missing QA session");
+  }
+  Object.assign(f.state, initialNormalActorState(program, operation), {
+    actors: [
+      ...f.state.actors,
+      {
+        ...qaActor,
+        actorKey: "qa-owner",
+        session: {
+          ...qaActor.session,
+          reference: "00000000-0000-4000-8000-000000000051",
+          actorId: "normal-qa-from-session",
+          realmSessionId: "normal-qa-session",
+        },
+      },
+    ],
+    organizationSessions: qa.state.organizationSessions?.map((entry, index) => ({
+      ...entry,
+      actorKey: "qa-owner",
+      session: {
+        ...entry.session,
+        reference: `00000000-0000-4000-8000-00000000005${index + 2}`,
+        actorId: "normal-qa-from-session",
+      },
+    })),
+  });
+  f.ports.readNormalActorOrganizationProofs.mockResolvedValue(
+    qa.organizations.map((organization) => ({
+      ...organization,
+      actorId: "normal-qa-from-session",
+    })),
+  );
+  record.accountPreparation = f.preparation;
+  record.operator = {
+    ...record.operator,
+    operationRef: operation,
+    plan: successor,
+    planDigest: operatorPlanDigest(successor),
+    approvalId: f.preparation.accountApprovalId,
+    receipts: [
+      {
+        effectId: "normal-accounts",
+        observedAt: "2026-10-20T00:00:00.000Z",
+        resourceVersion: "accounts-observed",
+      },
+    ],
+  };
+  record.status = "participants-prepared";
+  record.step = "reserved";
+  const before = structuredClone(record.participantPreparationHistory);
+  expect(createParticipantSuccessorPlan(record, program, Date.now())).toBeUndefined();
+  const resolved = await resolveFullPlan(
+    hostedOperatorPlanSchema.parse({ ...f.base, normalActorProgram: program }),
+    context,
+    f.configuration,
+    f.ports,
+    {},
+    true,
+    true,
+  );
+  expect(resolved.stage).toBe("app");
+  expect(resolved.normalActorPreparation?.accountOperationRef).toBe(operation);
+  expect(resolved.normalActorPreparation?.accountPlanDigest).toBe(operatorPlanDigest(successor));
+  expect(resolved.normalActorPredecessor).toBeUndefined();
+  expect(resolved.access).toHaveLength(2);
+  expect(resolved.access.every((grant) => grant.actorId === "normal-qa-from-session")).toBe(true);
+  expect(record.participantPreparationHistory).toEqual(before);
+});
+
+it("selects the account-only successor from an unapproved app proposal before composing a delivery", async () => {
+  const f = publicationFixture();
+  const { record, added } = captureFixture();
+  const untouched = structuredClone(record);
+  const unused = unusedCompositionControlPlane();
+  const authorized = vi.fn(async () => {
+    await Promise.resolve();
+  });
+  const dependencies = composeHostedOperatorDependencies(f.configuration, {
+    ...unused,
+    assertPlanningAuthorized: authorized,
+    store: {
+      ...unused.store,
+      read: async () => await Promise.resolve({ record: structuredClone(record), revision: 7 }),
+    },
+  });
+  const plan = await dependencies.plan({
+    ...context,
+    action: "prepare",
+    normalActorProgram: added,
+  });
+  expect(plan.stage).toBe("auth-participants");
+  expect(plan.normalActorProgram).toEqual(added);
+  expect(plan.normalActorCapturePredecessor?.preparation.accountApprovalId).toBe(
+    "account-approval",
+  );
+  expect(plan.effects.map((effect) => effect.kind)).toEqual(["normal-accounts"]);
+  expect(plan.delivery).toBeUndefined();
+  expect(authorized).toHaveBeenCalled();
+  expect(record).toEqual(untouched);
+});
+
+it("uses only the same approved completed additive capture successor for app planning", () => {
+  const { record, added } = captureFixture();
+  const before = inspectUnapprovedAppSuccessor(record, captureContext.target, added, Date.now());
+  if (before === undefined) {
+    throw new Error("missing predecessor fixture");
+  }
+  const successor = createUnapprovedParticipantPlan(before, added);
+  const old = structuredClone(record.operator);
+  if (
+    old === undefined ||
+    record.retainedAuth === undefined ||
+    record.accountPreparation === undefined
+  ) {
+    throw new Error("missing retained fixture");
+  }
+  record.unapprovedAppProposalHistory = [
+    {
+      approvedByCallId: "operator:unapproved-plan",
+      operator: old,
+      preparation: record.accountPreparation,
+      retainedAuth: record.retainedAuth,
+      retainedParticipantGateway: record.retainedParticipantGateway,
+    },
+  ];
+  const operation = "00000000-0000-4000-8000-000000000022";
+  const digest = operatorPlanDigest(successor);
+  record.accountPreparation = {
+    ...record.accountPreparation,
+    program: added,
+    programDigest: normalActorProgramDigest(added),
+    accountPlan: successor,
+    accountPlanDigest: digest,
+    accountOperationRef: operation,
+    accountApprovalId: "new-approval",
+    accountApprovedByCallId: "new-call",
+    capturePredecessor: successor.normalActorCapturePredecessor,
+    accountsCompletedAt: "2026-10-20T00:00:00.000Z",
+  };
+  record.operator = {
+    ...old,
+    plan: successor,
+    planDigest: digest,
+    operationRef: operation,
+    approvalId: "new-approval",
+    receipts: [
+      {
+        effectId: "normal-accounts",
+        observedAt: "2026-10-20T00:00:00.000Z",
+        resourceVersion: "verified",
+      },
+    ],
+  };
+  record.approvedByCallId = "new-call";
+  record.status = "participants-prepared";
+  const snapshot = structuredClone(record);
+  expect(readCompletedCaptureBootstrap(successor, record)?.bootstrap.auth.approvalId).toBe(
+    "actual-approval",
+  );
+  expect(record).toEqual(snapshot);
+  record.operator.approvalId = "wrong";
+  expect(readCompletedCaptureBootstrap(successor, record)).toBeUndefined();
+  record.operator.approvalId = "new-approval";
+  record.operator.pendingEffectId = "normal-accounts";
+  expect(readCompletedCaptureBootstrap(successor, record)).toBeUndefined();
+});
+
+it("keeps legacy project separation frozen and accepts an explicitly planned single Services destination", async () => {
+  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  const original = bootstrapWithGatewayOrigin("https://apps.example");
+  const boundary = original.deploymentBoundary;
+  if (
+    boundary === undefined ||
+    original.publicGateway === undefined ||
+    original.gatewayDelivery === undefined ||
+    original.gatewayBindings === undefined
+  ) {
+    throw new Error("Missing fixture boundary");
+  }
+  const sameProject = {
+    ...original,
+    deploymentBoundary: {
+      ...boundary,
+      gateway: { ...boundary.gateway, projectId: context.target.projectId },
+    },
+    publicGateway: { ...original.publicGateway, projectId: context.target.projectId },
+    gatewayDelivery: { ...original.gatewayDelivery, projectId: context.target.projectId },
+    gatewayBindings: {
+      ...original.gatewayBindings,
+      sourceWorkload: {
+        ...original.gatewayBindings.sourceWorkload,
+        projectId: context.target.projectId,
+      },
+    },
+  };
+  expect(() => hostedOperatorPlanSchema.parse(sameProject)).toThrow();
+  const fresh = hostedOperatorPlanSchema.parse({
+    ...sameProject,
+    deploymentBoundary: {
+      ...sameProject.deploymentBoundary,
+      composition: "single-project-services",
+    },
+  });
+  f.configuration.composition = "single-project-services";
+  f.configuration.gateway.projectId = context.target.projectId;
+  f.configuration.gateway.workload.projectId = context.target.projectId;
+  const plan = await resolveFullPlan(fresh, context, f.configuration, f.controlPlane);
+  expect(plan.deploymentBoundary?.composition).toBe("single-project-services");
+  expect(plan.appTrustedSources).toBeUndefined();
+  expect(plan.selection.projectId).toBe(plan.publicGateway?.projectId);
+  expect(original.deploymentBoundary).toEqual(boundary);
+});
+
+it("plans same-project resource preparation without Preview effects or an environment claim", async () => {
+  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  f.configuration.composition = "single-project-services";
+  f.configuration.gateway.projectId = context.target.projectId;
+  f.configuration.gateway.workload.projectId = context.target.projectId;
+  const authorizedControlPlane = {
+    ...f.controlPlane,
+    assertPlanningAuthorized: () => Promise.resolve(),
+  };
+  const original = bootstrapWithGatewayOrigin("https://apps.example");
+  if (original.deploymentBoundary === undefined || original.publicGateway === undefined) {
+    throw new Error("missing fixture boundary");
+  }
+  const { gatewayBindings, gatewayDelivery, ...bootstrap } = original;
+  void gatewayBindings;
+  void gatewayDelivery;
+  const fresh = hostedOperatorPlanSchema.parse({
+    ...bootstrap,
+    runtimePreparation: "single-project-resources-v1",
+    deploymentBoundary: {
+      ...original.deploymentBoundary,
+      composition: "single-project-services",
+      gateway: { ...original.deploymentBoundary.gateway, projectId: context.target.projectId },
+    },
+    publicGateway: { ...original.publicGateway, projectId: context.target.projectId },
+    effects: original.effects.filter(
+      (effect) => !["gateway-bindings", "gateway-delivery"].includes(effect.kind),
+    ),
+  });
+  const result = await resolveFullPlan(fresh, context, f.configuration, authorizedControlPlane);
+  expect(result.stage).toBe("app");
+  expect(result.runtimePreparation).toBe("single-project-resources-v1");
+  expect(result.effects.map((effect) => effect.kind)).not.toEqual(
+    expect.arrayContaining(["bindings", "delivery", "gateway-bindings", "gateway-delivery"]),
+  );
+  expect(result.delivery).toBeUndefined();
+  expect(result.gatewayBindings).toBeUndefined();
+  expect(result.gatewayDelivery).toBeUndefined();
+  expect(() =>
+    hostedOperatorPlanSchema.parse({
+      ...result,
+      effects: [
+        ...result.effects,
+        { id: "bindings", kind: "bindings", description: "Not approved by a resource plan" },
+      ],
+    }),
+  ).toThrow();
+});
+it("forwards all additive native delivery contracts through the actual request-scoped production composition", async () => {
+  const f = publicationFixture();
+  const base = unusedCompositionControlPlane();
+  const paths = [
+    "/v1/public-release",
+    "/v1/app-integrations",
+    "/v1/central-integrations",
+    "/v1/central-deployment-events",
+  ];
+  const seen: string[] = [];
+  const delegated = async (incomingRequest: Request) => {
+    if (incomingRequest.headers.get("authorization") !== "Bearer exact-workload") {
+      return Response.json({ code: "denied" }, { status: 403 });
+    }
+    seen.push(new URL(incomingRequest.url).pathname);
+    return Response.json({ status: "native-owner-bound" });
+  };
+  const handler = createHostedOperatorNativeHandler({
+    createRequestDependencies: createRequestScopedHostedOperatorDependencies({
+      resolveConfiguration: () => Promise.resolve(f.configuration),
+      openControlPlane: (input) => {
+        expect(input.request).toBeInstanceOf(Request);
+        return Promise.resolve({
+          ...base,
+          publicReleaseRequest: delegated,
+          appIntegrationCapabilityRequest: delegated,
+          centralIntegrationHostRequest: delegated,
+          centralIntegrationDeploymentReceiptRequest: delegated,
+          close: () => Promise.resolve(),
+        });
+      },
+    }),
+  });
+  await Promise.all(
+    paths.map(async (path) => {
+      const response = await handler(
+        new Request(`https://operator.example${path}`, {
+          method: "POST",
+          headers: { authorization: "Bearer exact-workload" },
+          body: "{}",
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ status: "native-owner-bound" });
+    }),
+  );
+  expect(seen.toSorted()).toEqual(paths.toSorted());
 });

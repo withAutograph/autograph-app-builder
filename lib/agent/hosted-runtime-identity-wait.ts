@@ -128,7 +128,19 @@ export async function* continueHostedRuntimeOwnerPreparation(
       }
       // Local time never creates an expiry event: this step verifies the server receipt.
       // oxlint-disable-next-line eslint/no-await-in-loop -- Acknowledge the canonical receipt before continuing its approved preparation.
-      await acknowledge(input, ctx, { eventId });
+      const acknowledged = await acknowledge(input, ctx, { eventId });
+      if (acknowledged.status === "expired") {
+        return {
+          ...prepared.result,
+          appId: input.appId,
+          operationRef: input.operationRef,
+          planDigest: input.planDigest,
+          status: "blocked" as const,
+          code: "auth_identity_required" as const,
+          nextStep:
+            "The connection expired before sign-in. Reconnect to continue this preparation.",
+        };
+      }
     } finally {
       hook.dispose();
     }

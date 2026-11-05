@@ -1,3 +1,5 @@
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
+import { draftInspectionRecoveryForSession } from "@/lib/agent/prepare-published-draft-repair";
 import { sealPublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
 import {
   currentDraftCandidateSource,
@@ -28,6 +30,7 @@ export default defineTool({
     "Seal a proposal for the exact validated reconciliation of an existing draft PR. The result includes the exact approvalReceipt for the draft branch head; pass it verbatim to reconcile_github_draft_pr after separate approval. The proposal binds the live base, old head, resolved tree, both reviewed diffs, and selected repository.",
   // oxlint-disable-next-line eslint/complexity -- Keep exact source, review, validation and retained publication authority in the same sealing boundary.
   async execute(input, ctx) {
+    ctx.abortSignal?.throwIfAborted();
     const candidate = draftReconciliationState.get();
     if (candidate?.kind === "published-draft-repair") {
       return await sealPublishedDraftRepair({
@@ -36,7 +39,8 @@ export default defineTool({
       });
     }
 
-    const state = appBuilderWorkflowState.get();
+    const workflow = appBuilderWorkflowState.get();
+    const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
     const githubSource = currentDraftCandidateSource(state, candidate);
     // oxlint-disable-next-line sonarjs/expression-complexity -- exact review, diff reads, validation, and source must all match.
     if (
@@ -94,6 +98,14 @@ export default defineTool({
       review: candidate.review,
       selectedCheckoutHeadSha: candidate.headSha,
       selectedCheckoutHeadTree: candidate.headTree,
+      recovery: draftInspectionRecoveryForSession({
+        ctx,
+        appId: state.appSpec.appId,
+        appSpecDigest: state.appSpec.digest,
+        root: candidate.root,
+        pullRequestNumber: candidate.pullRequestNumber,
+        priorPublishedProposalDigest,
+      }),
     };
     const proposal =
       priorPublishedProposalDigest === undefined

@@ -1,3 +1,4 @@
+import { publicRuntimeBindingSchema, assertPublicRuntimeBinding } from "./public-runtime-binding";
 import type { HostedOperatorCallbackExecution } from "./hosted-operator-callback-owner";
 import {
   continuityTransportRequestSchema,
@@ -46,6 +47,8 @@ import { resolveHostedOperatorOwnerContext } from "./hosted-operator-owner-conte
 import {
   OPERATOR_EXECUTION_OBSERVATION_HEADER,
   OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+  OPERATOR_PREPARATION_PROGRESS_HEADER,
+  OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
 } from "./hosted-operator-execution-observation-protocol";
 import type { OperatorOwnerContext, OperatorRequest } from "./hosted-operator-contract";
 import {
@@ -73,6 +76,7 @@ const operatorDispatcher = createHostedOperatorDispatcher();
 const bindingSchema = z.strictObject({
   environment: z.record(z.string(), z.string()),
   nativePreview: operatorNativePreviewSchema.optional(),
+  publicDelivery: publicRuntimeBindingSchema.optional(),
   normalActors: z
     .strictObject({
       origin: z.url(),
@@ -188,7 +192,10 @@ export const createHostedOperatorClient = (input: {
         "content-type": "application/json",
         "x-vercel-trusted-oidc-idp-token": token,
         ...(body.action === "status" || body.action === "execute"
-          ? { [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE }
+          ? {
+              [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+              [OPERATOR_PREPARATION_PROGRESS_HEADER]: OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
+            }
           : {}),
       },
       method: "POST",
@@ -383,7 +390,10 @@ export const createHostedOperatorClient = (input: {
       stage = "client_response_validation";
       const blocked = operatorPublicResultSchema.safeParse(value);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable", {
+          recoveryStage: blocked.data.recoveryStage,
+          recoveryProgressAdvanced: blocked.data.recoveryProgressAdvanced,
+        });
       }
       try {
         return resultSchema.parse(value);
@@ -416,10 +426,12 @@ export const createHostedOperatorClient = (input: {
       runtime: ContinuityRuntimeSelection,
       idempotencyKey: string,
       signal?: AbortSignal,
+      recovery?: { predecessorIntentId: string },
     ) {
       const result = await sendContinuity(
         {
           action: "continuity-plan",
+          ...recovery,
           selection,
           runtime,
           idempotencyKey,
@@ -434,6 +446,9 @@ export const createHostedOperatorClient = (input: {
         sameOperatorSelection(selection, result.plan.preparedPlan.selection),
         result.plan.runtime.sandboxId === runtime.sandboxId,
         result.plan.runtime.root === runtime.root,
+        JSON.stringify(result.plan.runtime.browserSelection) ===
+          JSON.stringify(runtime.browserSelection),
+        result.plan.predecessorIntentId === recovery?.predecessorIntentId,
         result.status.intentId === result.plan.intentId,
         result.status.planRef === result.plan.planRef,
       ].every(Boolean);
@@ -487,7 +502,7 @@ export const createHostedOperatorClient = (input: {
           action: "continuity-approval",
           ownerContext: exportOwner(),
         },
-        z.strictObject({ approved: z.boolean() }),
+        z.strictObject({ approved: z.boolean(), pending: z.boolean().optional() }),
         signal,
       );
     },
@@ -607,7 +622,14 @@ export const createHostedOperatorClient = (input: {
       if (value.nativePreview) {
         assertOperatorNativePreview(value.nativePreview, value.plan, request.operationRef);
       }
-      if (value.normalActors && value.normalActors.origin !== value.nativePreview?.publicOrigin) {
+      if (value.publicDelivery) {
+        assertPublicRuntimeBinding(value.publicDelivery, value.plan, request.operationRef);
+      }
+      if (
+        value.normalActors &&
+        value.normalActors.origin !==
+          (value.publicDelivery?.publicOrigin ?? value.nativePreview?.publicOrigin)
+      ) {
         throw new HostedOperatorError("resource_mismatch");
       }
       return {

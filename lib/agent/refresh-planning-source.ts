@@ -1,3 +1,4 @@
+import { refreshLocalPlanningSource } from "./refresh-local-planning-source";
 import type { ToolContext } from "eve/tools";
 import { appBaselineState } from "./app-baseline-state";
 import { repositoryAccessRuntimeForSession } from "./deployment-repository-access-runtime";
@@ -34,6 +35,12 @@ export const refreshPlanningSource = async (
   ctx: Pick<ToolContext, "callId" | "getSandbox"> & { session: { auth: unknown; id: string } },
   purpose: "planning" | "schema-compilation" = "planning",
 ) => {
+  if (purpose === "planning") {
+    const local = await refreshLocalPlanningSource(ctx);
+    if (local !== undefined) {
+      return local;
+    }
+  }
   const current = appBuilderWorkflowState.get();
   const sandbox = await getSourceBoundSandbox(ctx);
   if (!canRefreshSource(current, purpose)) {

@@ -224,20 +224,90 @@ describe("native target protected client", () => {
     ).rejects.toThrow("plan-app-hosted-runtime");
     expect(f.request).toHaveBeenCalledTimes(1);
   });
+  it("sends a missing-selection retained-plan read without forwarding unrelated workflow state", async () => {
+    const f = fixture();
+    const result = await f.client.plan(
+      {
+        appId: f.plan.appId,
+        project: {
+          name: f.plan.project.name,
+          teamId: f.plan.project.teamId,
+          installationId: f.plan.project.installationId,
+          projectSettings: f.plan.project.projectSettings,
+        },
+        branch: f.plan.branch,
+        conflictPolicy: f.plan.conflictPolicy,
+      },
+      f.ctx,
+      { phase: "prepared" },
+    );
+    expect(result.operationRef).toBe(f.input.operationRef);
+    expect(f.request).toHaveBeenCalledTimes(1);
+    expect(f.sent[0]?.body.action).toBe("native-target-plan");
+    expect(f.sent[0]?.body).not.toHaveProperty("selectedApp");
+    expect(f.sent[0]?.body).not.toHaveProperty("state");
+  });
+  it("still rejects an explicit foreign selected app before sending a retained read", async () => {
+    const f = fixture();
+    await expect(
+      f.client.plan(
+        {
+          appId: f.plan.appId,
+          project: {
+            name: f.plan.project.name,
+            teamId: f.plan.project.teamId,
+            installationId: f.plan.project.installationId,
+            projectSettings: f.plan.project.projectSettings,
+          },
+          branch: f.plan.branch,
+          conflictPolicy: f.plan.conflictPolicy,
+        },
+        f.ctx,
+        { phase: "prepared", appSpec: { appId: "other-app", digest: f.plan.origin.appSpecDigest } },
+      ),
+    ).rejects.toThrow();
+    expect(f.request).not.toHaveBeenCalled();
+  });
   it("describes the exact target approval without requiring declared product roles", () => {
     const f = fixture();
     const description = publicApprovalDescription(f.input, "prepare-app-native-target");
     expect(description).toContain(f.plan.project.name);
     expect(description).toContain(f.plan.cost.description);
     expect(description).toContain(f.plan.retention.policy);
-    expect(description).toContain("Vercel Authentication for All Deployments");
-    expect(description).toContain("team-issued OIDC tokens");
+    expect(description).toContain("Require Vercel sign-in for deployments");
+    expect(description).toContain("workload identity");
     expect(
       publicApprovalDescription(
         { ...f.input, planDigest: "0".repeat(64) },
         "prepare-app-native-target",
       ),
     ).toBeUndefined();
+  });
+  it("shows the changed resource scope and fresh approval requirement", () => {
+    const f = fixture();
+    const plan = {
+      ...f.plan,
+      resourceProfileId: "isolated-development",
+      resourceProfileAuthorityDigest: "a".repeat(64),
+      resourceSelectionRevision: 1,
+    };
+    const description = publicApprovalDescription(
+      { ...f.input, plan, planDigest: nativeTargetOnboardingPlanDigest(plan) },
+      "prepare-app-native-target",
+    );
+    for (const reference of [
+      plan.resourceProfileId,
+      plan.nativeNeon.scope.projectId,
+      plan.nativeNeon.scope.branchId,
+      plan.appDatabase.resourceId,
+      plan.appDatabase.database,
+      plan.appDatabase.runtimeRole,
+      plan.appDatabase.migratorRole,
+    ]) {
+      expect(description).toContain(reference);
+    }
+    expect(description).toContain("needs a new approval");
+    expect(description).toContain("No database or app-user access is created now");
   });
   it("uses protected runtime and project OIDC without forwarding raw state/auth", async () => {
     const f = fixture();
@@ -305,6 +375,140 @@ describe("native target protected client", () => {
     f.request.mockRejectedValue(new Error("connection lost"));
     await expect(f.client.prepare(f.input, f.ctx)).rejects.toThrow();
     expect(f.request).toHaveBeenCalledTimes(1);
+  });
+  it("reports a failed approval read without exposing its request or credentials", async () => {
+    const f = fixture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      f.request.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
+      await expect(f.client.hasApproval(f.input, f.ctx)).rejects.toThrow("operator_unavailable");
+      expect(f.request).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith("[builder:native-target-transport]", {
+        action: "native-target-approval-read",
+        failure: "http",
+        status: 503,
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("synthetic-oidc");
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(f.input.operationRef);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it.each([
+    "authorization_required",
+    "resource_mismatch",
+    "reconciliation_required",
+    "operator_unavailable",
+  ] as const)(
+    "preserves typed blocked operator code %s without repeating or exposing private data",
+    async (code) => {
+      const f = fixture();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        f.request.mockResolvedValueOnce(
+          Response.json({
+            appId: f.input.appId,
+            authenticatedBehavior: "unassessed",
+            status: "blocked",
+            code,
+          }),
+        );
+        await expect(f.client.hasApproval(f.input, f.ctx)).rejects.toMatchObject({
+          name: "HostedOperatorError",
+          code,
+        });
+        expect(f.request).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls).toEqual([
+          [
+            "[builder:native-target-transport]",
+            { action: "native-target-approval-read", failure: code },
+          ],
+        ]);
+        expect(JSON.stringify(warn.mock.calls)).not.toContain(f.input.operationRef);
+        expect(JSON.stringify(warn.mock.calls)).not.toContain("synthetic-oidc");
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
+  it("preserves the generic handler's typed blocked envelope with unknown app identity", async () => {
+    const f = fixture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      f.request.mockResolvedValueOnce(
+        Response.json({
+          appId: "unknown",
+          authenticatedBehavior: "unassessed",
+          status: "blocked",
+          code: "resource_mismatch",
+        }),
+      );
+      await expect(f.client.prepare(f.input, f.ctx)).rejects.toMatchObject({
+        name: "HostedOperatorError",
+        code: "resource_mismatch",
+      });
+      expect(f.request).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls).toEqual([
+        [
+          "[builder:native-target-transport]",
+          { action: "native-target-prepare", failure: "resource_mismatch" },
+        ],
+      ]);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(f.input.operationRef);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("synthetic-oidc");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it.each([
+    { status: "blocked", code: "authorization_required" },
+    { authenticatedBehavior: "unassessed", status: "blocked", code: "unknown-private-code" },
+    {
+      authenticatedBehavior: "unassessed",
+      status: "blocked",
+      code: "resource_mismatch",
+      secret: "private-response",
+    },
+    { authenticatedBehavior: "unassessed", status: "blocked" },
+    { authenticatedBehavior: "unassessed", status: "ready", code: "resource_mismatch" },
+  ])("does not accept malformed, unknown or nonblocked operator results", async (result) => {
+    const f = fixture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      f.request.mockResolvedValueOnce(Response.json({ appId: f.input.appId, ...result }));
+      await expect(f.client.prepare(f.input, f.ctx)).rejects.toMatchObject({
+        code: "operator_unavailable",
+      });
+      expect(f.request).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls).toEqual([
+        [
+          "[builder:native-target-transport]",
+          { action: "native-target-prepare", failure: "invalid_response" },
+        ],
+      ]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it("does not propagate a blocked response for another app", async () => {
+    const f = fixture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      f.request.mockResolvedValueOnce(
+        Response.json({
+          appId: "another-app",
+          authenticatedBehavior: "unassessed",
+          status: "blocked",
+          code: "resource_mismatch",
+        }),
+      );
+      await expect(f.client.prepare(f.input, f.ctx)).rejects.toMatchObject({
+        code: "operator_unavailable",
+      });
+      expect(f.request).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
   it("accepts only exact terminal approval, with explicit pending and cancellation", async () => {
     const f = fixture();

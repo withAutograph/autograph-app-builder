@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/cognitive-complexity -- The private dispatcher handles recovery, cancellation, redaction and selected browser arguments together. */
 import type { HostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 /** Shared execution over approved private bindings; this module does not resolve agent state or define tools. */
 import type { Sandbox } from "@vercel/sandbox";
@@ -10,9 +11,15 @@ import type {
 } from "../provisioning/hosted-runtime-service";
 import { hostedRuntimeProofSchema } from "../provisioning/hosted-runtime-journal";
 import { appDescriptionSchema } from "../repository/app-description";
+import type { AppDescription } from "../repository/app-description";
 import { sanitizeValidationDiagnosticText } from "../repository/validation-output-sanitize";
 import { normalActorBrowserFiles } from "./normal-actor-browser-state";
 import type { NormalActorRuntimeProjection } from "../provisioning/hosted-operator-normal-actor-program";
+import { browserTestSelectionArguments } from "./browser-test-selection";
+import type { BrowserTestSelection } from "./browser-test-selection";
+
+const selectedBrowserEntry = (selected: string | null | undefined, description: AppDescription) =>
+  selected === undefined ? (description.app.browserEntryPath ?? null) : selected;
 
 type PreparedRuntimeMismatchStage =
   | "app-description-command"
@@ -76,6 +83,7 @@ export interface PreparedRuntimeExecutionContext {
 export interface PreparedRuntimeExecution {
   /** Canonical native browser origin from the protected bindings read, for test commands only. */
   readonly browserTestBaseUrl?: string;
+  readonly browserTestEntryPath?: string | null;
   installationProof: {
     appId: string;
     branch: string;
@@ -97,6 +105,9 @@ export interface PreparedRuntimeExecution {
     commandCheckpoint?: (commandId: string) => Promise<void>;
     allowDispatch?: boolean;
     shard?: string;
+    browserSelection?: BrowserTestSelection;
+    /** Internal: a saved command uses the immutable approved continuity plan selection. */
+    frozenBrowserSelection?: true;
     /** Only after the selected compile task succeeded in this validation pass. */
     alreadyCompiled?: true;
     environment?: Readonly<Record<string, string | undefined>>;
@@ -156,6 +167,7 @@ export const runtimeFilesForOrigin = (files: PrivateRuntimeFiles, origin: string
 export const restorePreparedRuntimeExecution = async (input: {
   appId: string;
   browserTestBaseUrl?: string;
+  browserTestEntryPath?: string | null;
   root: string;
   normalActors?: NormalActorRuntimeProjection;
   /** Additional server-owned values that must never enter diagnostics or streamed output. */
@@ -273,6 +285,7 @@ export const restorePreparedRuntimeExecution = async (input: {
   if (description.backend.release.artifactHash.replace(/^sha256:/u, "") !== proof.artifactHash) {
     throw preparedRuntimeResourceMismatch("artifact-identity");
   }
+  const browserTestEntryPath = selectedBrowserEntry(input.browserTestEntryPath, description);
   const secretValues = new Set(privateValues);
   const jsonSchema = z.json();
   const collect = (value: z.infer<typeof jsonSchema>, key = "") => {
@@ -354,6 +367,7 @@ export const restorePreparedRuntimeExecution = async (input: {
       }
     };
   return {
+    browserTestEntryPath,
     ...((input.browserTestBaseUrl ?? input.normalActors?.origin) === undefined
       ? {}
       : { browserTestBaseUrl: input.browserTestBaseUrl ?? input.normalActors?.origin }),
@@ -377,9 +391,12 @@ export const restorePreparedRuntimeExecution = async (input: {
       await restore();
     },
     runTask: withPrivateTaskErrors(
+      // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- One private task dispatch preserves execution, redaction, cancellation and optional browser selection.
       async ({
         task,
         shard,
+        browserSelection,
+        frozenBrowserSelection,
         alreadyCompiled,
         environment,
         onChunk,
@@ -388,6 +405,16 @@ export const restorePreparedRuntimeExecution = async (input: {
         commandCheckpoint,
         allowDispatch,
       }) => {
+        if (browserSelection !== undefined && task !== "test-e2e") {
+          throw new Error("A browser selection is only supported for the browser test task.");
+        }
+        if (
+          browserSelection !== undefined &&
+          commandId !== undefined &&
+          frozenBrowserSelection !== true
+        ) {
+          throw new Error("A saved browser command cannot be resumed with a new test selection.");
+        }
         const command = await resolveTaskCommand(
           { commandId, commandCheckpoint, allowDispatch },
           {
@@ -399,6 +426,9 @@ export const restorePreparedRuntimeExecution = async (input: {
               input.appId,
               task,
               ...(shard !== undefined && shard !== "" ? [shard] : []),
+              ...(browserSelection === undefined
+                ? []
+                : browserTestSelectionArguments(browserSelection)),
             ],
             cmd: "/usr/bin/env",
             cwd: input.root,

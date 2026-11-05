@@ -173,3 +173,36 @@ it("does not authorize other tools, denied approvals, completed calls, or missin
   }
   expect(authorizeRepeatablePrivateApplyCalls({ ...input, payload: {} })).toEqual([]);
 });
+
+it("validates every old candidate while selecting the greatest slot without changing input", () => {
+  const input = fixture();
+  const latest = input.payload.candidates[0];
+  const older = structuredClone(latest);
+  older.origin.slot = 2;
+  older.sessionState.snapshot.session.history = [];
+  input.payload.candidates = [older, latest, { ...older, origin: { slot: 3 } }];
+  const before = structuredClone(input);
+  expect(authorizeRepeatablePrivateApplyCalls(input)).toEqual(["call"]);
+  expect(input).toEqual(before);
+  const malformed = {
+    ...older,
+    sessionState: {
+      snapshot: { session: { sessionId: "logical", history: [{ role: 7, content: [] }] } },
+    },
+  };
+  expect(
+    authorizeRepeatablePrivateApplyCalls({
+      ...input,
+      payload: { ...input.payload, candidates: [latest, malformed] },
+    }),
+  ).toEqual([]);
+});
+it("preserves first-candidate selection for equal greatest apply slots", () => {
+  const input = fixture();
+  const denied = structuredClone(input.payload.candidates[0]);
+  denied.sessionState.snapshot.session.history = [];
+  input.payload.candidates.push(denied);
+  expect(authorizeRepeatablePrivateApplyCalls(input)).toEqual(["call"]);
+  input.payload.candidates.reverse();
+  expect(authorizeRepeatablePrivateApplyCalls(input)).toEqual([]);
+});

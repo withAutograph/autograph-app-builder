@@ -1,3 +1,4 @@
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { createPublishedDraftRepairReview } from "@/lib/repository/published-draft-repair-review";
 import {
   draftCandidateValidationDigest,
@@ -20,8 +21,10 @@ export default defineTool({
   description:
     "Reobserve the validated isolated merge and record both exact diffs in server state. Return counts and the first bounded metadata page for each diff; use optional inspect_github_draft_pr_reconciliation change or raw diff pages for more detail. No complete diff read is required. This does not update GitHub.",
   async execute(_input, ctx) {
+    ctx.abortSignal?.throwIfAborted();
     const candidate = draftReconciliationState.get();
-    const state = appBuilderWorkflowState.get();
+    const workflow = appBuilderWorkflowState.get();
+    const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
     // oxlint-disable-next-line sonarjs/expression-complexity -- verify candidate, source, and validation as one precondition.
     if (
       // oxlint-disable-next-line sonarjs/expression-complexity -- one exact candidate precondition.
@@ -91,6 +94,9 @@ export default defineTool({
       ...(candidate.publicationScope === undefined
         ? {}
         : { publicationScope: candidate.publicationScope }),
+      ...(candidate.dependencyCatalog === undefined
+        ? {}
+        : { dependencyCatalog: candidate.dependencyCatalog }),
       baseChanges: observed.baseChanges,
       baseSha: candidate.baseSha,
       baseTree: candidate.baseTree,

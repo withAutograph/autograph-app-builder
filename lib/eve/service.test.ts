@@ -50,6 +50,45 @@ describe("Eve input response mapping", () => {
 });
 
 describe("local Eve acceptance", () => {
+  it.each(["recover", "recover-idle"] as const)(
+    "refuses hosted-only %s without replacing a local session",
+    async (resumeMode) => {
+      const attach = vi.fn();
+      const create = vi.fn();
+      const service = createLocalEveSessionService(
+        { sessions: { attach, create } as never },
+        { stateGeneration: `hosted-only-${resumeMode}` },
+      );
+      await expect(
+        service.start({
+          clientRequestId: "recover-original",
+          resumeSessionId: "original",
+          resumeMode,
+        }),
+      ).rejects.toBeInstanceOf(LocalSessionRecoveryUnavailableError);
+      expect(attach).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
+  it("does not route hosted idle takeover through the qualified local terminal recovery port", async () => {
+    const attach = vi.fn();
+    const create = vi.fn();
+    const recoverTerminal = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const service = createLocalEveSessionService(
+      { sessions: { attach, create } as never },
+      { stateGeneration: "local-terminal-not-idle-takeover", recoverTerminal },
+    );
+    await expect(
+      service.start({
+        resumeSessionId: "original",
+        resumeMode: "recover-idle",
+        clientRequestId: "idle-mode-not-local-terminal",
+      }),
+    ).rejects.toBeInstanceOf(LocalSessionRecoveryUnavailableError);
+    expect(recoverTerminal).not.toHaveBeenCalled();
+    expect(attach).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
   it("returns an actionable missing original request result without touching the adapter", async () => {
     const attach = vi.fn();
     const create = vi.fn();

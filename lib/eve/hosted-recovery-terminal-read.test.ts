@@ -70,7 +70,9 @@ const fixture = async () => {
     events: HostedCheckpointPage["events"];
     metadata: HostedPagedCheckpointMetadata;
   } | null = null;
-  const beforeRead = vi.fn(() => Promise.reject(new Error("beforeRead must stay fenced")));
+  const beforeRead = vi.fn<
+    NonNullable<Parameters<typeof createHostedEveSessionService>[0]["beforeRead"]>
+  >(() => Promise.reject(new Error("beforeRead must stay fenced")));
   const assertNativeRecoveryOwner = vi.fn(() =>
     ownerAllowed ? Promise.resolve() : Promise.reject(new Error("Current owner revoked")),
   );
@@ -280,6 +282,27 @@ const fixture = async () => {
 };
 
 describe("recovered child terminal read after activation transport failure", () => {
+  it("keeps a committed recovered child working after successful current-owner activation", async () => {
+    const f = await fixture();
+    f.activateRecovery.mockImplementation(async () => {
+      const child = await f.base.getSession(principal, f.childSessionId);
+      if (child?.version !== 2 || child.nativeRecoveryBinding === undefined) {
+        throw new Error("missing committed child receipt");
+      }
+      return child.nativeRecoveryBinding;
+    });
+    f.beforeRead.mockResolvedValue();
+    f.setMode("working");
+    const result = await f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 });
+    expect(result.status).toBe("working");
+    expect(f.beforeRead).toHaveBeenCalledOnce();
+    expect(await f.base.getSession(principal, f.originalSessionId)).toMatchObject({
+      status: "failed",
+      resumability: "terminal",
+    });
+    expect(f.observeSessionPaged).toHaveBeenCalledOnce();
+  });
+
   it.each(["failed", "completed", "cancelled"] as const)(
     "returns a fresh complete exact-owner %s terminal observation without continuation",
     async (status) => {

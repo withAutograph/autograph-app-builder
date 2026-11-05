@@ -17,11 +17,11 @@ import { hostedEveOperationScopes } from "../lib/eve/hosted-auth.ts";
 
 const require = createRequire(import.meta.url);
 const sdk = path.dirname(require.resolve("eve/package.json"));
-const { recoverTerminalSession, activateTerminalSession } = await import(
+const { handleTerminalRecoveryRequest } = await import(
   pathToFileURL(path.join(sdk, "dist/src/execution/session/terminal-recovery.js")).href
 );
 
-test("unknown CID adopts a terminal receipt without replay, GET exposes failure and ordinary resume reconciles the failed child", async () => {
+const terminalReceiptLifecycle = async (reconciliationKind) => {
   const principal = {
     audience: "https://builder.example.test/mcp",
     issuer: "https://builder.example.test/api/auth",
@@ -68,7 +68,7 @@ test("unknown CID adopts a terminal receipt without replay, GET exposes failure 
     },
     reconcile: async (candidate) => {
       reconciled.push(candidate);
-      return { kind: "uncertain", reason: "fixture-stops-at-reconciler" };
+      return { kind: reconciliationKind, reason: "fixture-stops-at-reconciler" };
     },
     start: async () => {
       ownerStarts += 1;
@@ -115,21 +115,9 @@ test("unknown CID adopts a terminal receipt without replay, GET exposes failure 
         }
         throw new Error("Lost old native receipt response.");
       }
-      const result =
-        payload.recoveryPhase === "activate"
-          ? await activateTerminalSession({ auth, descriptor, ports }, deps)
-          : await recoverTerminalSession({ auth, descriptor, ports }, deps);
-      if (result.kind !== "accepted") {
-        return Response.json({ ok: false, code: "terminal_recovery_uncertain" }, { status: 409 });
-      }
-      return Response.json(
-        {
-          ok: true,
-          status: "accepted",
-          sessionId: result.recoveryBinding.ownerRunId,
-          recoveryBinding: result.recoveryBinding,
-        },
-        { status: 202 },
+      return await handleTerminalRecoveryRequest(
+        { payload, auth, forwarded: true, ports },
+        async () => deps,
       );
     },
   });
@@ -196,10 +184,18 @@ test("unknown CID adopts a terminal receipt without replay, GET exposes failure 
   assert.equal(activations, 0);
   const terminal = await service().get({ sessionId: adopted.sessionId, cursor: 0, limit: 100 });
   assert.equal(terminal.status, "failed");
-  const newRequest = { clientRequestId: "normal-child-resume", resumeSessionId: adopted.sessionId };
-  await assert.rejects(service().start(newRequest), HostedRejectedOperationError);
+  const newRequest = {
+    clientRequestId: "normal-child-resume",
+    resumeSessionId: adopted.sessionId,
+  };
+  const expectedFailure =
+    reconciliationKind === "uncertain"
+      ? HostedSubmissionUnknownError
+      : HostedRejectedOperationError;
+  await assert.rejects(service().start(newRequest), expectedFailure);
   const next = await store.getStartOperation(principal, newRequest.clientRequestId);
   assert.notEqual(next.operationId, unknown.operationId);
+  assert.equal(next.state, reconciliationKind === "uncertain" ? "submission_unknown" : "rejected");
   assert.equal(next.nativeRecovery.sourcePublicSessionId, adopted.sessionId);
   assert.equal(next.nativeRecovery.sourceOwnerRunId, oldReceipt.ownerRunId);
   assert.equal(next.nativeRecovery.logicalSessionId, "logical-original");
@@ -209,12 +205,25 @@ test("unknown CID adopts a terminal receipt without replay, GET exposes failure 
     { ownerRunId: oldReceipt.ownerRunId, logicalSessionId: "logical-original" },
   ]);
   assert.deepEqual(reconciled, [frontier]);
+  // An exact retry checks this same operation; it never substitutes a fresh owner
+  // or converts uncertain native reconciliation into a pre-dispatch rejection.
+  await assert.rejects(service().start(newRequest), expectedFailure);
+  const retried = await store.getStartOperation(principal, newRequest.clientRequestId);
+  assert.equal(retried.operationId, next.operationId);
+  assert.equal(retried.state, next.state);
+  assert.equal(retried.nativeRecoveryReceipt, undefined);
   const retainedOperation = await store.getStartOperation(principal, oldRequest.clientRequestId);
   const retainedChild = await store.getSession(principal, adopted.sessionId);
   const retainedOriginal = await store.getSession(principal, original.sessionId);
+  assert.equal(retainedOperation.state, "succeeded");
   assert.deepEqual(retainedOperation.nativeRecoveryReceipt, oldReceipt);
   assert.deepEqual(retainedChild.privateBuildDecision.scope, protection);
   assert.deepEqual(retainedOriginal.privateBuildDecision.scope, protection);
   assert.equal(ownerStarts, 0);
   assert.equal(activations, 0);
-});
+};
+
+test.each(["uncertain", "unavailable"])(
+  "unknown CID retains its receipt and ordinary child resume preserves a %s reconciliation outcome",
+  terminalReceiptLifecycle,
+);

@@ -1,3 +1,5 @@
+import { sourceCandidateReferenceSchema } from "./application-source-contract";
+import { createSourceCandidateValidator } from "./source-candidate-validation";
 import { z } from "zod";
 
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview-oauth-deployment";
@@ -79,6 +81,7 @@ export const builderHandoffCreateRequestSchema = z
     connections: z.array(z.string().trim().min(1).max(100)).max(50),
     creationRequestId: z.string().uuid(),
     destination: builderHandoffDestinationSchema.optional(),
+    sourceCandidate: sourceCandidateReferenceSchema.optional(),
     modelId: activeBuilderModelIdSchema,
     provisioningRequestId: z.string().uuid().optional(),
     repository: z
@@ -162,7 +165,11 @@ export function createBuilderHandoffRouteHandler(input: {
         creationRequestId: body.creationRequestId,
         intent: {
           ...(body.destination === undefined ? {} : { destination: body.destination }),
-          appId: provision?.record.response.appId ?? deriveBuilderAppId(appName),
+          appId:
+            provision?.record.response.appId ??
+            body.sourceCandidate?.appId ??
+            deriveBuilderAppId(appName),
+          ...(body.sourceCandidate === undefined ? {} : { sourceCandidate: body.sourceCandidate }),
           appName,
           brief: body.brief,
           connections: body.connections,
@@ -315,6 +322,7 @@ function deploymentContext(environment: Environment) {
     database,
     handoffs: createBuilderHandoffService({
       store: createPostgresBuilderHandoffStore(database),
+      validateSourceCandidate: createSourceCandidateValidator(database),
     }),
     preview,
   };

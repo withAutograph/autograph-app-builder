@@ -1,6 +1,7 @@
 import { cp, lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { codexClientId, codexRedirectUri } from "../lib/auth/codex-client-metadata.ts";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 import {
   deterministicGzip,
@@ -201,6 +202,7 @@ await writeFile(
     {
       mcpServers: {
         [portable.name]: {
+          oauth: { callback_url: codexRedirectUri, client_id: codexClientId },
           oauth_resource: `${endpoint}/mcp`,
           type: "http",
           url: `${endpoint}/mcp`,

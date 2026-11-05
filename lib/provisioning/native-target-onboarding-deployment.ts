@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import {
+  resolveNativeTargetResourceProfile,
+  nativeTargetResourceProfileAuthorityDigest,
+} from "./native-target-resource-profile";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -13,8 +17,9 @@ import {
 } from "../eve/private-native-target-approval";
 import type { PrivateNativeTargetApprovalObservation } from "../eve/private-native-target-approval";
 import { createSameOriginEveTransport } from "../eve/same-origin-http";
-import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
+import { createBuilderApprovalStreamFetch } from "./hosted-operator-approval-observer";
 import { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
+import { inspectNativeTargetVercelAuthorization } from "./native-target-vercel-authorization";
 import { readVercelTokenKeyringEnvironment } from "../integrations/vercel-installation";
 import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 import { createPostgresOperatorArtifactSelections } from "./hosted-operator-artifact-selection";
@@ -51,6 +56,8 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext };
 interface AppOwner {
   verifyWorkload: (request: Request) => Promise<void>;
+  assertNoStandardBuilderDestination?: AppOwner["assertCanonicalAppOwner"];
+
   assertCanonicalAppOwner: (input: {
     authority: OperatorOwnerContext["authority"];
     ownerContext: OperatorOwnerContext;
@@ -73,20 +80,26 @@ export const nativeTargetDatabaseNames = (appId: string) => {
   };
 };
 
-/** Pick an actual configured generic installer capability; never synthesize worker bytes. */
+/** Existing per-app pins remain historical; fresh apps require an explicit captured generic capability. */
 export const selectNativeTargetInstaller = (
   workers: HostedOperatorSourceConfiguration["sandbox"]["workers"],
   appId: string,
+  generic?: HostedOperatorSourceConfiguration["sandbox"]["genericInstallerWorker"],
 ) => {
   const configured = workers[appId];
-  const compatible = (worker: typeof configured) =>
-    worker?.operationScope === "generated-app-release-install-v1" &&
-    worker.subcommand === "protected-generated-app-install";
-  const worker = compatible(configured) ? configured : Object.values(workers).find(compatible);
-  if (worker === undefined) {
-    throw unavailable();
+  if (configured !== undefined) {
+    if (
+      configured.operationScope !== "generated-app-release-install-v1" ||
+      configured.subcommand !== "protected-generated-app-install"
+    ) {
+      throw unavailable();
+    }
+    return configured;
   }
-  return worker;
+  if (generic === undefined) {
+    throw new HostedOperatorError("generic_installer_configuration_required");
+  }
+  return generic;
 };
 
 /** A configured physical target already owns this app ID, including its existing resource names. */
@@ -128,6 +141,11 @@ export const createNativeTargetApprovalCheckpoint = (
   authority: Current["authority"],
   appId: string,
   planDigest: string,
+  writeAuthority?: {
+    adapterSessionId: string;
+    adapterGeneration: number;
+    assertCurrent: () => Promise<void>;
+  },
 ) => {
   const requestId = nativeTargetApprovalCheckpointId(authority, appId, planDigest);
   const key = authority;
@@ -138,6 +156,10 @@ export const createNativeTargetApprovalCheckpoint = (
     eq(builderProvisioningJournals.ownerUserId, key.ownerUserId),
     eq(builderProvisioningJournals.requestId, requestId),
   );
+  let expected:
+    | { revision: number; observation: PrivateNativeTargetApprovalObservation }
+    | null
+    | undefined;
   const read = async (): Promise<PrivateNativeTargetApprovalObservation | undefined> => {
     const rows = await database
       .select()
@@ -146,23 +168,39 @@ export const createNativeTargetApprovalCheckpoint = (
       .limit(1);
     const row = rows[0];
     if (row === undefined) {
+      expected = null;
       return undefined;
     }
     const parsed = approvalCheckpointRecordSchema.parse(row.record);
     if (row.requestDigest !== planDigest || parsed.planDigest !== planDigest) {
       throw mismatch();
     }
+    expected = { revision: row.revision, observation: structuredClone(parsed.observation) };
     return parsed.observation;
   };
-  const save = async (observation: PrivateNativeTargetApprovalObservation) => {
-    const parsed = privateNativeTargetApprovalObservationSchema.parse(observation);
-    const value = approvalCheckpointRecordSchema.parse({
-      kind: "native-target-approval-observation",
-      version: 1,
-      planDigest,
-      observation: parsed,
-    });
-    const now = new Date();
+  const assertObservationBinding = (parsed: PrivateNativeTargetApprovalObservation) => {
+    const intentMatches = [
+      parsed.native.capture.ownerUserId === authority.ownerUserId,
+      parsed.native.capture.request.action === "native-target",
+      parsed.native.capture.request.planDigest === planDigest,
+      parsed.native.capture.request.idempotencyKey === appId,
+    ].every(Boolean);
+    if (!intentMatches) {
+      throw mismatch();
+    }
+    if (
+      writeAuthority !== undefined &&
+      (parsed.native.adapterSessionId !== writeAuthority.adapterSessionId ||
+        parsed.native.adapterGeneration !== writeAuthority.adapterGeneration)
+    ) {
+      throw mismatch();
+    }
+  };
+  const insertInitial = async (
+    value: z.infer<typeof approvalCheckpointRecordSchema>,
+    parsed: PrivateNativeTargetApprovalObservation,
+    now: Date,
+  ) => {
     await database
       .insert(builderProvisioningJournals)
       .values({
@@ -181,27 +219,123 @@ export const createNativeTargetApprovalCheckpoint = (
       .from(builderProvisioningJournals)
       .where(predicate)
       .limit(1);
-    const existing = rows[0];
-    if (existing === undefined || existing.requestDigest !== planDigest) {
+    const inserted = rows[0];
+    if (inserted === undefined || inserted.requestDigest !== planDigest) {
       throw mismatch();
     }
-    const previous = approvalCheckpointRecordSchema.parse(existing.record).observation;
+    const stored = approvalCheckpointRecordSchema.parse(inserted.record);
+    await writeAuthority?.assertCurrent();
+    // An insert conflict is not permission to replace a row we never read.
+    if (stored.planDigest !== planDigest || !isDeepStrictEqual(stored.observation, parsed)) {
+      throw unavailable();
+    }
+    expected = { revision: inserted.revision, observation: structuredClone(parsed) };
+  };
+  const assertForwardObservation = (
+    previous: PrivateNativeTargetApprovalObservation,
+    parsed: PrivateNativeTargetApprovalObservation,
+    previouslyRead: boolean,
+  ) => {
+    const sameAdapter =
+      previous.native.adapterSessionId === parsed.native.adapterSessionId &&
+      previous.native.adapterGeneration === parsed.native.adapterGeneration;
+    if (sameAdapter) {
+      if (previous.native.nextNativeIndex >= parsed.native.nextNativeIndex) {
+        throw unavailable();
+      }
+      return;
+    }
+    if (writeAuthority === undefined || !previouslyRead) {
+      throw unavailable();
+    }
+    if (!isDeepStrictEqual(previous.native.capture.request, parsed.native.capture.request)) {
+      throw unavailable();
+    }
+  };
+  const save = async (observation: PrivateNativeTargetApprovalObservation) => {
+    const parsed = privateNativeTargetApprovalObservationSchema.parse(observation);
+    assertObservationBinding(parsed);
+    await writeAuthority?.assertCurrent();
+    const previouslyRead = expected !== undefined;
+    if (!previouslyRead) {
+      await read();
+    }
+    const value = approvalCheckpointRecordSchema.parse({
+      kind: "native-target-approval-observation",
+      version: 1,
+      planDigest,
+      observation: parsed,
+    });
+    const now = new Date();
+    if (expected === null) {
+      await insertInitial(value, parsed, now);
+      return;
+    }
+    if (expected === undefined) {
+      throw unavailable();
+    }
+    const expectedSnapshot = expected;
+    const previous = expectedSnapshot.observation;
     if (isDeepStrictEqual(previous, parsed)) {
       return;
     }
-    if (previous.native.nextNativeIndex >= parsed.native.nextNativeIndex) {
-      throw unavailable();
-    }
+    assertForwardObservation(previous, parsed, previouslyRead);
+    await writeAuthority?.assertCurrent();
     const updated = await database
       .update(builderProvisioningJournals)
-      .set({ record: value, revision: existing.revision + 1, updatedAt: now })
-      .where(and(predicate, eq(builderProvisioningJournals.revision, existing.revision)))
+      .set({ record: value, revision: expectedSnapshot.revision + 1, updatedAt: now })
+      .where(and(predicate, eq(builderProvisioningJournals.revision, expectedSnapshot.revision)))
       .returning({ revision: builderProvisioningJournals.revision });
     if (updated.length !== 1) {
       throw unavailable();
     }
+    if ((expected?.revision ?? 0) <= expectedSnapshot.revision) {
+      expected = {
+        revision: expectedSnapshot.revision + 1,
+        observation: structuredClone(parsed),
+      };
+    }
   };
   return { read, save };
+};
+
+export const createNativeTargetApprovalHistoryTransport = (input: {
+  builderOrigin: string;
+  owner: Current;
+  appId: string;
+  workload: { authorization: string | null; signal: AbortSignal };
+  assertCanonicalAppOwner: AppOwner["assertCanonicalAppOwner"];
+  fetch?: typeof fetch;
+}) => {
+  const carrier = input.workload.authorization;
+  if (carrier === null || !carrier.startsWith("Bearer ") || carrier.length === 7) {
+    throw denied();
+  }
+  return createSameOriginEveTransport({
+    config: { baseUrl: input.builderOrigin },
+    workloadIdentity: { token: () => Promise.resolve(carrier.slice(7)) },
+    fetchImplementation: createBuilderApprovalStreamFetch({
+      origin: input.builderOrigin,
+      adapterSessionId: input.owner.adapterSessionId,
+      signal: input.workload.signal,
+      fetchImplementation: input.fetch ?? fetch,
+    }),
+    verifyReadAuthority: async ({ adapterSessionId, principal, sessionId }) => {
+      if (
+        adapterSessionId !== input.owner.adapterSessionId ||
+        sessionId !== input.owner.publicSessionId ||
+        !isDeepStrictEqual(principal, input.owner.historyOwner.principal)
+      ) {
+        return false;
+      }
+      await input.assertCanonicalAppOwner({
+        authority: input.owner.authority,
+        ownerContext: input.owner.historyOwner,
+        target: { appId: input.appId, sessionId },
+      });
+      return true;
+    },
+  });
 };
 
 export const createNativeTargetOnboardingDeployment = (input: {
@@ -226,6 +360,15 @@ export const createNativeTargetOnboardingDeployment = (input: {
       target: { appId: request.input.appId, sessionId: historyOwner.sessionId },
     };
     await input.owner.assertCanonicalAppOwner(context);
+    if (
+      request.action === "native-target-prepare" ||
+      (request.action === "native-target-plan" && request.selectedApp !== undefined)
+    ) {
+      if (input.owner.assertNoStandardBuilderDestination === undefined) {
+        throw unavailable();
+      }
+      await input.owner.assertNoStandardBuilderDestination(context);
+    }
     if (historyOwner.adapterSessionId !== request.adapterSessionId) {
       throw denied();
     }
@@ -310,16 +453,39 @@ export const createNativeTargetOnboardingDeployment = (input: {
       captured: NativeTargetCapturedRelease;
     },
   ): Promise<NativeTargetOnboardingPlan> => {
-    assertNoConfiguredNativeTarget(configuration.applications, proposal.appId);
-    if (proposal.project.teamId !== configuration.teamId) {
+    let selectedConfiguration: HostedOperatorSourceConfiguration;
+    try {
+      selectedConfiguration = resolveNativeTargetResourceProfile({
+        base: configuration,
+        resourceProfileId: proposal.resourceProfileId,
+        authority: owner.authority,
+        appId: proposal.appId,
+        environment: input.environment,
+      });
+    } catch {
+      throw mismatch();
+    }
+    assertNoConfiguredNativeTarget(selectedConfiguration.applications, proposal.appId);
+    if (proposal.project.teamId !== selectedConfiguration.teamId) {
       throw mismatch();
     }
     await readInstallation(owner, proposal.project.installationId, proposal.project.teamId);
-    const worker = selectNativeTargetInstaller(configuration.sandbox.workers, proposal.appId);
-    const nativeNeon = configuration.nativeNeon;
+    const worker = selectNativeTargetInstaller(
+      selectedConfiguration.sandbox.workers,
+      proposal.appId,
+      selectedConfiguration.sandbox.genericInstallerWorker,
+    );
+    const nativeNeon = selectedConfiguration.nativeNeon;
     return nativeTargetOnboardingPlanSchema.parse({
       version: 1,
       appId: proposal.appId,
+      ...(proposal.resourceProfileId === undefined
+        ? {}
+        : {
+            resourceProfileId: proposal.resourceProfileId,
+            resourceProfileAuthorityDigest:
+              nativeTargetResourceProfileAuthorityDigest(selectedConfiguration),
+          }),
       origin: {
         publicSessionId: owner.publicSessionId,
         adapterSessionId: owner.adapterSessionId,
@@ -366,7 +532,8 @@ export const createNativeTargetOnboardingDeployment = (input: {
   const readApproval = async (
     owner: Current,
     record: NativeTargetOnboardingRecord,
-    callId?: string,
+    callId: string | undefined,
+    workload: { authorization: string | null; signal: AbortSignal },
   ) => {
     await input.owner.assertCanonicalAppOwner({
       authority: owner.authority,
@@ -378,27 +545,26 @@ export const createNativeTargetOnboardingDeployment = (input: {
       owner.authority,
       record.appId,
       record.planDigest,
+      {
+        adapterSessionId: owner.adapterSessionId,
+        adapterGeneration: owner.adapterGeneration,
+        assertCurrent: async () => {
+          await input.owner.assertCanonicalAppOwner({
+            authority: owner.authority,
+            ownerContext: owner.historyOwner,
+            target: { appId: record.appId, sessionId: owner.publicSessionId },
+          });
+        },
+      },
     );
     const observation = await checkpoint.read();
-    const transport = createSameOriginEveTransport({
-      config: { baseUrl: input.builderOrigin },
-      workloadIdentity: createVercelWorkloadIdentity(),
-      ...(input.fetch === undefined ? {} : { fetchImplementation: input.fetch }),
-      verifyReadAuthority: async ({ adapterSessionId, principal, sessionId }) => {
-        if (
-          adapterSessionId !== owner.adapterSessionId ||
-          sessionId !== owner.publicSessionId ||
-          !isDeepStrictEqual(principal, owner.historyOwner.principal)
-        ) {
-          return false;
-        }
-        await input.owner.assertCanonicalAppOwner({
-          authority: owner.authority,
-          ownerContext: owner.historyOwner,
-          target: { appId: record.appId, sessionId },
-        });
-        return true;
-      },
+    const transport = createNativeTargetApprovalHistoryTransport({
+      builderOrigin: input.builderOrigin,
+      owner,
+      appId: record.appId,
+      workload,
+      assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
     });
     if (transport.observePrivateHistory === undefined) {
       throw unavailable();
@@ -437,6 +603,21 @@ export const createNativeTargetOnboardingDeployment = (input: {
     readCapturedRelease,
     resolvePlan,
     readApproval,
+    inspectProviderAuthorization: async ({ owner, plan, signal }) =>
+      await inspectNativeTargetVercelAuthorization({
+        expectedInstallationId: plan.project.installationId,
+        expectedTeamId: plan.project.teamId,
+        readInstallationToken: async () => {
+          const credential = await readInstallation(
+            owner,
+            plan.project.installationId,
+            plan.project.teamId,
+          );
+          return credential.token;
+        },
+        fetch: input.fetch ?? fetch,
+        signal,
+      }),
     createProject: async ({ owner, plan, name, authorizeAttempt, acceptProjectId }) => {
       let credential: Awaited<ReturnType<typeof readInstallation>>;
       try {

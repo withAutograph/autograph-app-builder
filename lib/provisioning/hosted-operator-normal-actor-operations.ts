@@ -213,6 +213,7 @@ export const createHostedOperatorNormalActorOperations = (
     context: HostedOperatorContext,
     preparation: NormalActorAccountPreparation,
     stateInput: NormalActorState,
+    options?: { carryExpiredCapturedActor?: boolean },
   ) => {
     const state = assertNormalActorState(
       preparation.program,
@@ -231,6 +232,15 @@ export const createHostedOperatorNormalActorOperations = (
         ) {
           throw required();
         }
+        // Preserve the exact encrypted predecessor checkpoint for a normal
+        // reconnect. Never send an expired cookie to the provider.
+        if (
+          options?.carryExpiredCapturedActor === true &&
+          actor.account === "capture-existing" &&
+          Date.parse(checkpoint.session.expiresAt) <= deps.journalPorts.now()
+        ) {
+          return;
+        }
         const client = createHostedOperatorNormalAuthClient({
           origin: preparation.program.origin,
           storageState: checkpoint.storageState,
@@ -246,7 +256,14 @@ export const createHostedOperatorNormalActorOperations = (
     );
     return state;
   };
-  const checkpoint = async (input: HostedOperatorEffectContext, state: NormalActorState) => {
+  const checkpoint = async (
+    input: HostedOperatorContext &
+      Pick<
+        HostedOperatorEffectContext,
+        "assertCurrent" | "assertCurrentObservation" | "checkpointAccountPreparation"
+      >,
+    state: NormalActorState,
+  ) => {
     if (input.checkpointAccountPreparation === undefined) {
       throw new HostedOperatorError("operation_in_progress");
     }
@@ -408,6 +425,7 @@ export const createHostedOperatorNormalActorOperations = (
   const firstUnusableCapture = async (
     context: HostedOperatorContext,
     prepared: { preparation: NormalActorAccountPreparation; state: NormalActorState },
+    // oxlint-disable-next-line sonarjs/cognitive-complexity -- Stop at the first stale base or scoped identity without issuing another capture.
   ): Promise<{ actorKey: string; organizationId?: string } | undefined> => {
     const { program } = prepared.preparation;
     const fetch = await transport(context, program);
@@ -421,6 +439,9 @@ export const createHostedOperatorNormalActorOperations = (
     for (const actor of program.actors.filter((entry) => entry.account === "capture-existing")) {
       const saved = actors.get(actor.actorKey);
       if (saved?.session === undefined || saved.storageState === undefined) {
+        return { actorKey: actor.actorKey };
+      }
+      if (Date.parse(saved.session.expiresAt) <= deps.journalPorts.now()) {
         return { actorKey: actor.actorKey };
       }
       const normal = createHostedOperatorNormalAuthClient({
@@ -445,6 +466,9 @@ export const createHostedOperatorNormalActorOperations = (
           }
           usedSessions.add(saved.session.realmSessionId);
           continue;
+        }
+        if (Date.parse(candidate.session.expiresAt) <= deps.journalPorts.now()) {
+          return { actorKey: actor.actorKey, organizationId: membership.organizationId };
         }
         usedSessions.add(candidate.session.realmSessionId);
         const scoped = createHostedOperatorNormalAuthClient({
@@ -474,7 +498,34 @@ export const createHostedOperatorNormalActorOperations = (
         throw mismatch();
       }
       const program = selectedProgram(input.plan);
-      let prepared = await read(input, input.plan);
+      let prepared = await read(input);
+      if (
+        prepared !== undefined &&
+        prepared.preparation.programDigest !== normalActorProgramDigest(program)
+      ) {
+        await journal.initializeSuccessor(
+          input,
+          {
+            program,
+            programDigest: normalActorProgramDigest(program),
+            accountOperationRef: input.operationRef,
+            accountPlan: input.plan,
+            accountPlanDigest: input.planDigest,
+            accountApprovalId: input.approvalId,
+            accountApprovedByCallId: input.callId,
+            predecessor: input.plan.normalActorPredecessor,
+            capturePredecessor: input.plan.normalActorCapturePredecessor,
+          },
+          async () => {
+            await deps.assertCurrentPlan(input);
+          },
+          async (preparation, state) =>
+            await freshAccounts(input, preparation, state, {
+              carryExpiredCapturedActor: input.plan.normalActorCapturePredecessor !== undefined,
+            }),
+        );
+        prepared = await readRequired(input, input.plan);
+      }
       if (prepared === undefined) {
         await journal.retain(input, {
           program,
@@ -535,6 +586,7 @@ export const createHostedOperatorNormalActorOperations = (
       const state = await freshAccounts(input, prepared.preparation, prepared.state);
       await freshOrganizationCandidates(input, prepared.preparation, state);
       await input.assertCurrent();
+      await checkpoint(input, state);
       return state;
     },
     async readNormalActorOrganizationProofs(input) {

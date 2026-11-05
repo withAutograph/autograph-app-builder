@@ -177,7 +177,8 @@ export const createNativeTargetVercelProject = async (
           name: input.name,
           framework: settings.framework,
           rootDirectory: settings.rootDirectory,
-          sourceFilesOutsideRootDirectory: settings.sourceFilesOutsideRootDirectory,
+          // The create API rejects this update-only field. Independent readback below
+          // still requires its requested value before this project can be registered.
           ...(settings.buildCommand === undefined ? {} : { buildCommand: settings.buildCommand }),
           ssoProtection: protection.ssoProtection,
           oidcTokenConfig: protection.oidcTokenConfig,

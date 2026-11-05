@@ -38,6 +38,43 @@ operations. Preserve the tenant, owner, adapter generation, operation, request,
 call, plan digest and cancellation checks. A recorded response or a tool
 invocation alone cannot substitute for the actual terminal approval receipt.
 
+## Failed native session recovery
+
+A failed terminal public session can retain a last successful checkpoint whose
+native status was working. A complete, unchanged observation of that same
+checkpoint must preserve the canonical failed state and its original bytes.
+This does not skip activation, current ownership, tenant or revocation checks.
+Fresh native evidence still uses the ordinary observation path, and a committed
+recovery child has its own current state and owner binding.
+
+Native checkpoint recovery accepts completed, failed and provider-cancelled
+owners only through the existing exact handoff provenance checks. Running or
+pending owners remain unavailable. Cancelling a worker does not establish that
+its separate parked coordinator finished, and does not authorize a fabricated
+completion signal or replacement checkpoint.
+
+A terminal worker can leave its native history stream open. Recovery reads a
+finite snapshot through the existing World stream API, validates complete
+encrypted frames and checks the unchanged stream boundary after decoding.
+Interrupted transport resumes at the next complete native frame, preserving
+the decoded prefix and rereading only the connection's partial frame. A
+missing, malformed, stalled or changing snapshot remains uncertain. Snapshot
+collection grants no execution permission: original owner,
+approval, cancellation, inbox and effect-frontier reconciliation still apply.
+Cancelled calls and unknown effects never acquire replay permission from a
+terminal status or a successful snapshot read.
+
+Accepted inbox commands beyond the latest authored checkpoint remain native
+frontier facts. Recovery may carry their exact encrypted-source envelopes,
+physical owner, event identities and order only when no later authored step
+could have admitted them. Unsupported or ambiguous control inputs remain
+uncertain. The private recovery entry binds this suffix to its existing
+receipt and activation. A fresh activation and its current interrupt checks
+run before historical commands enter ordinary FIFO admission. Historical
+cancels retain their original turn target; queued messages remain messages.
+Neither restoration nor an exact activation retry creates a tool result,
+approval, cancellation outcome or additional execution authority.
+
 ## Continuity Sandbox ownership
 
 Continuity reuses the fresh canonical realm restriction, tenant and public
@@ -118,6 +155,36 @@ preparation, and the subsequently resolved membership/access/app delivery plan
 retain their concrete effect approvals. Continue the original public session;
 the evaluator does not create fixture users, edit grants or invoke private stages.
 
+A completed personal capture-only program can receive an additive participant
+successor in the same Builder session and physical resource scope. This path
+requires a fully prepared, idle app operation with every effect receipted and
+no lease, pending effect, uncertain attempt or running acknowledgement. It
+supports predecessors whose actors all use `capture-existing` and whose
+organizations, memberships and app grants are empty. Original actor entries
+remain unchanged and personal: the successor cannot add organization membership
+or app grants for them. Programs with prior organization proofs require their
+own explicit migration capability and are refused by this path.
+
+The new account plan has a separate operation and concrete approval. Planning
+archives the original account preparation and completed app operation without
+switching account state. Only after that new approval, both canonical predecessor
+approvals and fresh GetSession checks can the unchanged original session state
+be carried into a newly encrypted successor state. Original sealed state,
+captures, nonces, AAD, plan, approval and app evidence remain immutable history.
+Historical capture reads retain their original authority and encryption scope.
+Completed account and app history does not expire with its old plan's execution
+retention: reuse still requires canonical original approvals, current approved
+plan authority and fresh actual session validity. Initial successor proposals
+require the currently prepared app plan to remain unexpired. No historical
+expiry, ciphertext or approval is rewritten, and history never replays the old
+app plan or approves current effects. New actors
+start pending and use the existing ordinary account flow. New organization and
+app-access effects still require the subsequently resolved app plan's approval,
+and runtime proof/handoff occurs only after that plan finishes normally. Account
+preparation does not authorize or inherit an app signup enrollment policy. An
+explicit signup-policy request at this account-only successor boundary refuses;
+request that policy on the subsequent resolved app-stage plan instead.
+
 Account preparation uses ordinary Auth sign-up/sign-in. An existing account uses
 the normal browser sign-in request. Its private session capture requires the
 configured native sender, canonical pending nonce, pinned Gateway proof and
@@ -133,10 +200,25 @@ organization's retained identity proof. Ordinary invitations, acceptance and
 active-organization selection establish membership. A single Realm session is
 not relabeled to represent multiple organizations.
 
+For an actor with no approved program memberships, the browser manifest keeps
+`organizationId: null` and `roles: []`. An existing normal Auth session may
+still have a selected organization. That actual session fact is retained; it
+does not become an approved organization or grant. Fresh reads and successor
+carry verify the exact actor, session, email and live expiry without constraining
+that unscoped session’s mutable selection. Carry and account-worker retries keep
+the original checkpoint and storage unchanged; the normal app authorizer resolves
+the current actual scope. Organization-scoped identities still require the exact
+approved organization and live membership role.
+
 The private prepared-runtime handoff freshly reads GetSession for each selected
 session and the actual membership role for each organization, then rechecks the
 current plan approval. Only the authenticated private bindings response carries
 the resulting storage files; they are not environment variables or tool text.
+Runtime identity handoff refusals report only fixed stage and reason labels
+through the centralized consent diagnostic. Identity, session, cookie,
+organization, URL, header and raw exception values never enter that report;
+the original refusal and all authorization/readback behavior remain unchanged.
+
 Keep approval, credential, tenant, lease and physical-fence checks. Do not add
 source-layout, version, receipt-count, actor-count or regular-app-change gates.
 Legacy plans without a participant program retain their existing path.

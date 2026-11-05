@@ -1,3 +1,12 @@
+import {
+  ReviewedCheckRecipeRequiredError,
+  prepareValidationPrivateComputeRepair,
+} from "@/lib/agent/validation-private-compute-repair";
+import {
+  deletesPrivateComputeCheck,
+  verifyPrivateComputeCheckIntegrity,
+  privateComputeCheckIntegrityProblem,
+} from "@/lib/agent/private-compute-check-integrity";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { validationLogsWithReadInputs } from "@/lib/agent/validation-log-read-input";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
@@ -10,6 +19,10 @@ import { runAppBrowserTests } from "./run-app-browser-tests";
 import { unavailableSourceAssessment } from "@/lib/agent/product-source-review";
 import { productRequestState } from "@/lib/agent/product-source-review-state";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
+import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
+import { validateDraftReconciliation } from "./validate_github_draft_pr_reconciliation";
+import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { prepareValidationLocalData } from "./prepare-app-local-preview";
@@ -168,10 +181,22 @@ export const createAppValidationTool = (
 ) =>
   defineTool({
     description:
-      "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. For persistent apps, run any declared authenticated browser task after that preparation succeeds and report its result separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
+      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. For persistent apps, run any declared authenticated browser task after that preparation succeeds and report its result separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
     // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep the workflow phase, cancellation and original failure receipt branches explicit.
     async execute(input, ctx) {
       const current = appBuilderWorkflowState.get();
+      const candidate = draftReconciliationState.get();
+      if (
+        input.implementationFiles.length === 0 &&
+        candidate !== null &&
+        resolveDraftReviewedWorkflow(current, candidate) !== undefined &&
+        currentDraftCandidateSource(current, candidate) !== undefined
+      ) {
+        return await validateDraftReconciliation(
+          { additionalCheckTasks: [], incremental: false, runBrowserTests: false },
+          ctx,
+        );
+      }
       if (
         current.phase !== "applied" &&
         current.phase !== "validation_pending" &&
@@ -182,6 +207,38 @@ export const createAppValidationTool = (
         throw new Error("Apply the requested changes before running the repository checks.");
       }
       assertExistingAppImplementationFiles(input.implementationFiles, current.proposal.target);
+      if (
+        deletesPrivateComputeCheck(
+          current.proposal.target.privateCompute,
+          input.implementationFiles,
+        )
+      ) {
+        return {
+          status: "needs_repair" as const,
+          reason: "validation-tooling-prerequisite",
+          failureClass: "private-compute-check-policy",
+          problem: privateComputeCheckIntegrityProblem,
+        };
+      }
+      let repairComputeCheck: ReturnType<typeof prepareValidationPrivateComputeRepair>;
+      try {
+        repairComputeCheck = prepareValidationPrivateComputeRepair({
+          state: current,
+          files: input.implementationFiles,
+          sessionId: ctx.session.id,
+          signal: ctx.abortSignal,
+        });
+      } catch (error) {
+        if (error instanceof ReviewedCheckRecipeRequiredError) {
+          return {
+            status: "needs_repair" as const,
+            reason: error.code,
+            problem: error.message,
+            implementationFiles: [error.implementationFile],
+          };
+        }
+        throw error;
+      }
       validationPhase(ctx.callId, "resolving_sandbox");
       const sandbox = await ctx.getSandbox();
       validationPhase(ctx.callId, "sandbox_ready");
@@ -216,8 +273,28 @@ export const createAppValidationTool = (
       if (input.implementationFiles.length > 0) {
         invalidateProductBehaviorEvidence("source-repair");
         validationPhase(ctx.callId, "writing_implementation_files");
+        ctx.abortSignal?.throwIfAborted();
+        repairComputeCheck?.assertAuthorized();
         await applyImplementationFiles(sandbox, relativeApplyRoot, input.implementationFiles);
+        await repairComputeCheck?.applyPolicy(sandbox);
         validationPhase(ctx.callId, "implementation_files_written");
+      }
+      if (
+        !fixture &&
+        !(await verifyPrivateComputeCheckIntegrity({
+          appId: current.appSpec.appId,
+          root: current.applyReceipt.applyRoot,
+          profile: current.proposal.target.privateCompute,
+          sandbox,
+          signal: ctx.abortSignal,
+        }))
+      ) {
+        return {
+          status: "needs_repair" as const,
+          reason: "validation-tooling-prerequisite",
+          failureClass: "private-compute-check-policy",
+          problem: privateComputeCheckIntegrityProblem,
+        };
       }
       let logStore: Awaited<ReturnType<typeof validationLogStoreForSession>> | undefined;
       if (current.phase === "validation_failed") {

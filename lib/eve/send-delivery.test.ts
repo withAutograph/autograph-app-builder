@@ -1,3 +1,4 @@
+import { readHostedOperatorCallbackSessions } from "../provisioning/hosted-operator-callback-owner";
 import { z } from "zod";
 import type { MessageStreamEvent } from "eve/client";
 import { describe, expect, it, vi } from "vitest";
@@ -1398,6 +1399,111 @@ describe("canonical SEND delivery acknowledgement", () => {
       expect(
         fetchImplementation.mock.calls.filter(([, init]) => init?.method === "POST"),
       ).toHaveLength(1);
+    },
+  );
+});
+
+describe("first protected callback after Stop", () => {
+  it.each(["delivered", "ACK only", "later Stop"] as const)(
+    "reconciles only exact current native SEND proof before callback authorization: %s",
+    async (outcome) => {
+      const f = await fixture();
+      await f.store.recordCancellationIntent({
+        principal,
+        sessionId: f.request.sessionId,
+        nowEpochMs: Date.now(),
+      });
+      const stored = await f.store.getSession(principal, f.request.sessionId);
+      if (stored === null) {
+        throw new Error("Controlled session missing");
+      }
+      const current = toDurableHostedSessionRecord(stored);
+      const authority = {
+        issuer: principal.issuer,
+        audience: principal.audience,
+        workspaceId: principal.workspaceId,
+        ownerUserId: principal.ownerUserId,
+      };
+      const resolver = (reconcile = true) =>
+        readHostedOperatorCallbackSessions({
+          store: f.store,
+          owner: {
+            kind: "direct",
+            authority,
+            principal,
+            sessionId: f.request.sessionId,
+            adapterSessionId: current.adapterSessionId,
+            adapterGeneration: current.adapterGeneration,
+          },
+          execution: {
+            logicalSessionId: current.adapterSessionId,
+            ownerRunId: "trusted-worker",
+            ownerAnchorRunId: current.adapterSessionId,
+          },
+          reconcileOwnerDelivery: reconcile
+            ? async (session) => {
+                await f.create().reconcileOwnerDelivery({
+                  sessionId: session.sessionId,
+                  adapterSessionId: session.adapterSessionId,
+                  adapterGeneration: session.adapterGeneration,
+                  cancellationRevision: session.cancellationRevision ?? 0,
+                });
+              }
+            : undefined,
+        });
+      let callbackRan = false;
+      f.send.mockImplementation(async (input) => {
+        await input.onAccepted?.("ack");
+        if (outcome !== "ACK only") {
+          f.setEvents([turnEvent("turn.started", "resumed", ["ack"])]);
+        }
+        if (outcome === "later Stop") {
+          vi.mocked(f.adapter.get).mockImplementationOnce(async () => {
+            await f.store.recordCancellationIntent({
+              principal,
+              sessionId: f.request.sessionId,
+              nowEpochMs: Date.now(),
+            });
+            return snapshot(f.getEvents());
+          });
+        }
+        if (outcome === "delivered") {
+          // Reproduce the old first-callback denial before the public SEND observer runs.
+          await expect(resolver(false)).rejects.toMatchObject({ code: "authorization_required" });
+          expect(await f.store.getSession(principal, f.request.sessionId)).not.toHaveProperty(
+            "resumedCancellationRevision",
+          );
+        }
+        const callback = resolver();
+        if (outcome === "delivered") {
+          await expect(callback).resolves.toMatchObject({
+            currentSession: { sessionId: f.request.sessionId },
+          });
+          callbackRan = true;
+          expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+            cancellationRevision: 1,
+            resumedCancellationRevision: 1,
+          });
+        } else {
+          await expect(callback).rejects.toMatchObject({ code: "authorization_required" });
+        }
+        return snapshot(f.getEvents());
+      });
+      await (outcome === "ACK only"
+        ? expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError)
+        : f.create().send(f.request));
+      if (outcome === "later Stop") {
+        expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+          cancellationRevision: 2,
+        });
+      }
+      expect(callbackRan).toBe(outcome === "delivered");
+      expect(f.send).toHaveBeenCalledOnce();
+      if (outcome !== "delivered") {
+        expect(await f.store.getSession(principal, f.request.sessionId)).not.toHaveProperty(
+          "resumedCancellationRevision",
+        );
+      }
     },
   );
 });

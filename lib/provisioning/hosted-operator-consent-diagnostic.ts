@@ -32,6 +32,8 @@ const operatorPlanStage = z.enum([
   "successor_prior_read",
   "successor_classification",
   "prior_successor_approval",
+  "approved_plan_recovery",
+  "retained_installation_targets",
   "retained_state_read",
   "retained_approval",
   "plan_journal_update",
@@ -280,6 +282,33 @@ const normalActorProofFailure = z.strictObject({
   code: operatorPublicResultSchema.shape.code.unwrap().optional(),
 });
 export type OperatorNormalActorProofFailure = z.infer<typeof normalActorProofFailure>;
+
+const runtimeIdentityFailure = z.strictObject({
+  stage: z.enum([
+    "authority",
+    "journal",
+    "preparation",
+    "projection",
+    "transport",
+    "session_binding",
+    "get_session",
+    "identity",
+    "membership",
+    "final_authority",
+  ]),
+  reason: z.enum([
+    "read_failed",
+    "unavailable",
+    "scope_mismatch",
+    "actor_mismatch",
+    "session_mismatch",
+    "email_mismatch",
+    "expired",
+    "selected_organization_mismatch",
+    "membership_mismatch",
+  ]),
+});
+export type OperatorRuntimeIdentityFailure = z.infer<typeof runtimeIdentityFailure>;
 
 const operatorExecutionStage = z.enum([
   "owner_authorization",
@@ -638,6 +667,10 @@ export type OperatorWorkloadFailure = z.infer<typeof operatorWorkloadFailureSche
 
 const operatorPlanningMismatchBoundary = z.enum([
   "application_selection",
+  "canonical_owner_app",
+  "direct_owner_project",
+  "prepared_preview_journal",
+  "prepared_preview_selection",
   "inventory_configuration",
   "inventory_project",
   "inventory_deployment",
@@ -647,6 +680,30 @@ const operatorPlanningMismatchBoundary = z.enum([
 export type OperatorPlanningMismatchBoundary = z.infer<typeof operatorPlanningMismatchBoundary>;
 const operatorPlanningMismatchField = z.enum([
   "application_missing",
+  "owner_app_missing",
+  "owner_app_mismatch",
+  "active_installations_missing",
+  "ready_project_missing",
+  "ready_project_ambiguous",
+  "journal_missing",
+  "operator_missing",
+  "delivery_missing",
+  "delivery_sha_missing",
+  "artifact_missing",
+  "journal_status",
+  "plan_stage",
+  "plan_digest",
+  "selection_app",
+  "selection_branch",
+  "selection_environment",
+  "selection_project",
+  "selection_session",
+  "delivery_project",
+  "selection_missing",
+  "release_source_binding",
+  "release_app",
+  "release_id",
+  "release_manifest",
   "app_project",
   "app_branch",
   "team",
@@ -798,8 +855,33 @@ const gatewayProviderTerm = z.enum([
   "size",
   "update",
   "length",
+  "repository",
+  "commit",
+  "framework",
+  "author",
+  "build",
+  "source",
+  "sha",
+  "ref",
+  "repoId",
+  "gitSource",
+  "projectSettings",
 ]);
-const gatewayValidationField = z.enum(["gitBranch", "target", "type", "key", "value", "comment"]);
+const gatewayValidationField = z.enum([
+  "gitBranch",
+  "target",
+  "type",
+  "key",
+  "value",
+  "comment",
+  "gitSource",
+  "ref",
+  "sha",
+  "repoId",
+  "name",
+  "project",
+  "projectSettings",
+]);
 
 /** Literal observations only: labels are neither provider causes nor permission to retry. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the parser for untrusted advisory provider metadata; only closed fields are returned.
@@ -861,7 +943,7 @@ export const projectOperatorGatewayProviderFailure = (payload: unknown) => {
 };
 
 const gatewayBindingsDiagnostic = z.strictObject({
-  mode: z.enum(["bind", "reconcile"]),
+  mode: z.enum(["bind", "reconcile", "verify"]),
   stage: z.enum([
     "context",
     "authority",
@@ -907,6 +989,36 @@ const gatewayBindingsDiagnostic = z.strictObject({
   result: z.enum(["bound", "applied", "absent", "unknown", "failed"]),
 });
 export type OperatorGatewayBindingsDiagnostic = z.infer<typeof gatewayBindingsDiagnostic>;
+
+const gatewayDeliveryDiagnostic = z.strictObject({
+  stage: z.enum([
+    "context",
+    "reconciliation",
+    "alias_assignment",
+    "environment",
+    "authority",
+    "prior_attempt",
+    "project_read",
+    "project_assertion",
+    "before_create",
+    "correction_intent",
+    "deployment_create",
+    "deployment_readback",
+    "checkpoint",
+  ]),
+  phase: z
+    .enum(["authority", "credential", "fetch", "http_response", "json_decode", "response_schema"])
+    .optional(),
+  method: z.enum(["GET", "POST"]).optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  result: z.enum(["applied", "retryable", "unknown"]),
+  errorClass: operatorPlanningFailure.shape.errorClass.optional(),
+  publicCode: operatorPublicResultSchema.shape.code.unwrap().optional(),
+  providerCode: gatewayProviderCode.optional(),
+  providerTerms: z.array(gatewayProviderTerm).optional(),
+  validationFields: z.array(gatewayValidationField).optional(),
+});
+export type OperatorGatewayDeliveryDiagnostic = z.infer<typeof gatewayDeliveryDiagnostic>;
 
 const inventoryReadFailure = z.strictObject({
   target: z.enum(["inventory", "app", "gateway", "operator"]),
@@ -992,9 +1104,11 @@ const metadata = z.strictObject({
   continuityPlanningFailure: continuityPlanningFailure.optional(),
   exportPlanningFailure: exportPlanningFailure.optional(),
   normalActorProofFailure: normalActorProofFailure.optional(),
+  runtimeIdentityFailure: runtimeIdentityFailure.optional(),
   executionFailure: operatorExecutionFailure.optional(),
   hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
   gatewayBindings: gatewayBindingsDiagnostic.optional(),
+  gatewayDelivery: gatewayDeliveryDiagnostic.optional(),
   inventoryReadFailure: inventoryReadFailure.optional(),
   planningMismatch: z
     .strictObject({
@@ -1138,6 +1252,36 @@ export const reportOperatorNormalActorProofFailure = (
     });
   } catch {
     /* Reporting cannot change collection, authority or error behavior. */
+  }
+};
+
+/** Own closed enum descriptors only; exceptions and private session values are never accepted. */
+export const reportOperatorRuntimeIdentityFailure = (
+  sessionId: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Untrusted advisory metadata is projected from own data descriptors without invoking accessors.
+  failure: unknown,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): void => {
+  try {
+    const projected = runtimeIdentityFailure.safeParse({
+      stage: ownDiagnosticValue(failure, "stage"),
+      reason: ownDiagnosticValue(failure, "reason"),
+    });
+    if (!projected.success) {
+      return;
+    }
+    createHostedOperatorConsentDiagnostic(
+      sessionId,
+      sink,
+    )({
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      runtimeIdentityFailure: projected.data,
+    });
+  } catch {
+    /* Reporting cannot change the original runtime handoff rejection. */
   }
 };
 
@@ -1455,6 +1599,34 @@ export const reportOperatorExecutionFailure = (
   } catch {
     /* Reporting cannot change the original rejection. */
   }
+};
+
+/** Project a swallowed delivery rejection without exposing its message or provider data. */
+export const projectOperatorGatewayDeliveryFailure = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Exception boundary accepts arbitrary thrown values and returns closed labels only.
+  error: unknown,
+): Pick<OperatorGatewayDeliveryDiagnostic, "errorClass" | "publicCode"> => {
+  const failure: Pick<OperatorGatewayDeliveryDiagnostic, "errorClass" | "publicCode"> = {
+    errorClass: "unexpected",
+  };
+  try {
+    if (error instanceof HostedOperatorError) {
+      failure.errorClass = "operator_error";
+      const code = operatorPublicResultSchema.shape.code
+        .unwrap()
+        .safeParse(ownDiagnosticValue(error, "code"));
+      if (code.success) {
+        failure.publicCode = code.data;
+      }
+    } else if (error instanceof z.ZodError) {
+      failure.errorClass = "validation_error";
+    } else if (error instanceof TypeError) {
+      failure.errorClass = "type_error";
+    }
+  } catch {
+    /* Hostile exceptions cannot change delivery reconciliation. */
+  }
+  return failure;
 };
 
 /** Report one private provider inventory read using only closed operation and error labels. */

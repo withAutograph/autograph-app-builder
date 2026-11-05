@@ -1,3 +1,4 @@
+import { sourceCandidateReferenceSchema } from "./application-source-contract";
 import { createHash } from "node:crypto";
 
 import { z } from "zod";
@@ -27,6 +28,7 @@ export const builderHandoffDestinationSchema = z.enum(["codex", "cursor"]);
 export const builderHandoffIntentSchema = z
   .object({
     appId: builderAppIdSchema,
+    sourceCandidate: sourceCandidateReferenceSchema.optional(),
     appName: z.string().trim().min(1).max(120),
     brief: z.string().trim().min(1).max(32_000),
     connections: z.array(z.string().trim().min(1).max(100)).max(50),
@@ -57,6 +59,13 @@ export const builderHandoffIntentSchema = z
   })
   .strict()
   .superRefine((intent, context) => {
+    if (intent.sourceCandidate !== undefined && intent.sourceCandidate.appId !== intent.appId) {
+      context.addIssue({
+        code: "custom",
+        message: "The source candidate must preserve the app identity.",
+        path: ["sourceCandidate"],
+      });
+    }
     if (
       (intent.provisioningRequestId === undefined) !==
       (intent.provisioningRequestDigest === undefined)

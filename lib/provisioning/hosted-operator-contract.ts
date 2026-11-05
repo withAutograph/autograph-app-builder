@@ -1,3 +1,7 @@
+import { operatorWorkerSourceCaptureSchema } from "./operator-worker-source-capture";
+import { ownedAppResourceSourceSchema } from "./owned-app-resource-source-contract";
+
+import { publicRealmReleaseBindingSchema } from "./public-realm-enrollment";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { generatedAppRoleSchema } from "../repository/generated-app-role";
@@ -107,6 +111,8 @@ const previewDeploymentSchema = z.strictObject({
   projectId: id,
 });
 const deploymentBoundarySchema = z.strictObject({
+  /** Omitted plans retain their original three-project Preview semantics. */
+  composition: z.literal("single-project-services").optional(),
   app: previewDeploymentSchema,
   authority: hostedTenantAuthoritySchema,
   gateway: previewDeploymentSchema,
@@ -208,6 +214,31 @@ export const normalActorPreparationSchema = z.strictObject({
   accountApprovedByCallId: id,
 });
 export type NormalActorPreparation = z.infer<typeof normalActorPreparationSchema>;
+/** Exact immutable predecessor of an additive participant preparation; never successor approval. */
+export const normalActorPredecessorSchema = z.strictObject({
+  preparation: normalActorPreparationSchema,
+  operationRef: z.uuid(),
+  planDigest: digest,
+  approvalId: id,
+  approvedByCallId: id,
+});
+/** Exact account and Auth prerequisites for adding participants before the app is delivered.
+ * This reference is provenance only: callers must independently re-read both approvals. */
+export const normalActorCapturePredecessorSchema = z.strictObject({
+  preparation: normalActorPreparationSchema,
+  bootstrapOperationRef: z.uuid(),
+  bootstrapPlanDigest: digest,
+  bootstrapApprovalId: id,
+  bootstrapApprovedByCallId: id,
+  gateway: z
+    .strictObject({
+      operationRef: z.uuid(),
+      planDigest: digest,
+      approvalId: id,
+      approvedByCallId: id,
+    })
+    .optional(),
+});
 const hostedOperatorAuthSignupPolicyFieldsSchema = z.strictObject({
   version: z.literal(1),
   policyId: id,
@@ -284,6 +315,9 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   ),
   action: z.enum(["prepare", "cleanup"]),
   releaseIntent: z.literal("prepared-preview").optional(),
+  runtimePreparation: z.literal("single-project-resources-v1").optional(),
+  existingResources: ownedAppResourceSourceSchema.optional(),
+
   appDatabase: databaseResource,
   /** Schema installation scope is independent of actor and role grants. */
   appInstallation: z.strictObject({ customerIds: z.array(id).min(1) }).optional(),
@@ -410,6 +444,8 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   gatewayDelivery: z
     .strictObject({
       branch: id,
+      /** Approved native source ref; branch retains the Gateway environment and alias namespace. */
+      gitRef: id.optional(),
       gitSha: z
         .string()
         .regex(/^[a-f0-9]{40}$/u)
@@ -418,7 +454,11 @@ const hostedOperatorPlanDataSchema = z.strictObject({
       repoId: id,
     })
     .optional(),
-  installer: z.strictObject({ reference: id, sha256: digest }),
+  installer: z.strictObject({
+    reference: id,
+    sha256: digest,
+    sourceCapture: operatorWorkerSourceCaptureSchema.optional(),
+  }),
   hostProtection: externallyManagedTrustedSourcesSchema.optional(),
   appDeliveryReplacement: readyDeliveryReplacementIntentSchema.optional(),
   neon: z.strictObject({
@@ -430,6 +470,8 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   }),
   normalActorProgram: normalActorProgramSchema.optional(),
   normalActorPreparation: normalActorPreparationSchema.optional(),
+  normalActorPredecessor: normalActorPredecessorSchema.optional(),
+  normalActorCapturePredecessor: normalActorCapturePredecessorSchema.optional(),
   // Optional only when parsing persisted protected-operator-v1 records created before
   // native Gateway origins were part of the verified plan.
   publicGateway: z
@@ -449,7 +491,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
 export const plannedAppBranch = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) =>
   plan.deploymentBoundary?.app.branch ?? plan.selection.branch;
 const boundaryAppBranch = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) =>
-  plan.action === "cleanup"
+  plan.action === "cleanup" || plan.stage === AUTH_PARTICIPANTS_STAGE
     ? plannedAppBranch(plan)
     : (plan.delivery?.branch ?? plan.selection.branch);
 const validatePlanStage = (
@@ -521,6 +563,29 @@ const validateNormalActorPlan = (
 ) => {
   const program = plan.normalActorProgram;
   const participantStage = plan.stage === AUTH_PARTICIPANTS_STAGE;
+  if (
+    plan.normalActorCapturePredecessor !== undefined &&
+    (plan.action !== "prepare" ||
+      !participantStage ||
+      plan.normalActorPredecessor !== undefined ||
+      program === undefined)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "A captured-account predecessor is exclusive to an approved participant preparation.",
+    });
+  }
+  if (
+    plan.normalActorPredecessor !== undefined &&
+    (plan.action !== "prepare" || !participantStage)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "A participant predecessor authorizes only a separately approved account preparation successor.",
+    });
+  }
   if (program === undefined) {
     if (participantStage || plan.normalActorPreparation !== undefined) {
       ctx.addIssue({
@@ -645,6 +710,70 @@ const validateAuthSignupPolicy = (
     });
   }
 };
+const validateResourcePreparation = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  if (plan.existingResources !== undefined) {
+    const target = plan.existingResources.source.target;
+    if (
+      ![
+        plan.runtimePreparation === "single-project-resources-v1",
+        plan.authAdoption === undefined,
+        target.appId === plan.selection.appId,
+        target.projectId === plan.selection.projectId,
+        target.scopeId === plan.deploymentBoundary?.teamId,
+        target.installationId.length > 0,
+      ].every(Boolean)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["existingResources"],
+        message: "Existing credential reuse must remain in the same owned normal app and project.",
+      });
+    }
+  }
+
+  if (plan.existingResources !== undefined) {
+    const target = plan.existingResources.source.target;
+    if (
+      ![
+        plan.runtimePreparation === "single-project-resources-v1",
+        plan.authAdoption === undefined,
+        target.appId === plan.selection.appId,
+        target.projectId === plan.selection.projectId,
+        target.scopeId === plan.deploymentBoundary?.teamId,
+        target.installationId.length > 0,
+      ].every(Boolean)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["existingResources"],
+        message: "Existing credential reuse must remain in the same owned normal app and project.",
+      });
+    }
+  }
+
+  if (
+    plan.runtimePreparation !== undefined &&
+    (plan.deploymentBoundary?.composition !== "single-project-services" ||
+      plan.action !== "prepare" ||
+      plan.releaseIntent !== undefined ||
+      plan.delivery !== undefined ||
+      plan.gatewayDelivery !== undefined ||
+      plan.gatewayBindings !== undefined ||
+      plan.appTrustedSources !== undefined ||
+      plan.effects.some((effect) =>
+        ["bindings", "delivery", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
+      ))
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["runtimePreparation"],
+      message: "Resource preparation cannot authorize deployment or environment binding effects.",
+    });
+  }
+};
 const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) => {
   if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
     return ["normal-accounts"];
@@ -658,7 +787,10 @@ const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>)
     if (plan.authSignupPolicy !== undefined) {
       phases.push("auth-signup-policy");
     }
-    phases.push("access", "bindings");
+    phases.push("access");
+    if (plan.runtimePreparation === undefined) {
+      phases.push("bindings");
+    }
     if (plan.delivery !== undefined) {
       phases.push("delivery");
     }
@@ -796,6 +928,7 @@ const validateGatewayAppTrustedSource = (
     });
   }
 };
+// oxlint-disable-next-line sonarjs/cognitive-complexity -- Preserve the existing aggregate plan authority refinements alongside the optional installer receipt.
 export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine((plan, ctx) => {
   if (plan.appInstallation !== undefined) {
     const customers = new Set(plan.appInstallation.customerIds);
@@ -897,8 +1030,11 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
     const boundary = plan.deploymentBoundary;
     const jwks = new URL(boundary.verification.jwksUrl);
     const invalidBoundary = [
-      new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
-        .size !== 3,
+      boundary.composition === "single-project-services"
+        ? boundary.app.projectId !== boundary.gateway.projectId ||
+          boundary.app.projectId === boundary.operator.projectId
+        : new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
+            .size !== 3,
       boundary.app.projectId !== plan.selection.projectId,
       boundary.app.branch !== boundaryAppBranch(plan),
       boundary.gateway.branch !== plan.publicGateway?.branch,
@@ -926,6 +1062,26 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   validateAuthSignupPolicy(plan, ctx);
   // Each phase has an observed receipt, including a no-op verification for already-existing resources.
   // Authority is opened only after install/grant verification, and closed before retirement.
+  validateResourcePreparation(plan, ctx);
+  if (
+    plan.runtimePreparation !== undefined &&
+    (plan.deploymentBoundary?.composition !== "single-project-services" ||
+      plan.action !== "prepare" ||
+      plan.releaseIntent !== undefined ||
+      plan.delivery !== undefined ||
+      plan.gatewayDelivery !== undefined ||
+      plan.gatewayBindings !== undefined ||
+      plan.appTrustedSources !== undefined ||
+      plan.effects.some((effect) =>
+        ["bindings", "delivery", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
+      ))
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["runtimePreparation"],
+      message: "Resource preparation cannot authorize deployment or environment binding effects.",
+    });
+  }
   const phases = authorizationPhases(plan);
   const kinds = plan.effects.map((effect) => effect.kind);
   const groups = kinds.filter((kind, index) => index === 0 || kind !== kinds[index - 1]);
@@ -937,6 +1093,27 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   }
 });
 export type HostedOperatorPlan = z.infer<typeof hostedOperatorPlanSchema>;
+
+/** Provider source ref is separate from the Gateway environment and alias namespace. */
+export const nativeDeliveryGitRef = (
+  plan: HostedOperatorPlan,
+  delivery: NonNullable<HostedOperatorPlan["delivery"]>,
+  target: "app" | "gateway",
+): string => {
+  if (target !== "gateway") {
+    return delivery.branch;
+  }
+  if (plan.gatewayDelivery?.gitRef !== undefined) {
+    return plan.gatewayDelivery.gitRef;
+  }
+  return plan.stage === "app" &&
+    delivery.gitSha !== undefined &&
+    plan.delivery?.repoId === delivery.repoId &&
+    plan.delivery.gitSha === delivery.gitSha
+    ? plan.delivery.branch
+    : delivery.branch;
+};
+
 /** Legacy plans install only their grant tenants; explicit plans retain owned installation tenants. */
 export const hostedOperatorInstallationCustomerIds = (
   plan: Pick<HostedOperatorPlan, "access" | "appInstallation">,
@@ -996,6 +1173,7 @@ export const workerEffectCheckpointFrameSchema = z.strictObject({
 export type WorkerEffectCheckpointFrame = z.infer<typeof workerEffectCheckpointFrameSchema>;
 export const operatorRealmIdentityLinkSchema = z
   .strictObject({
+    publicRelease: publicRealmReleaseBindingSchema.optional(),
     audience: httpsPublicOrigin,
     browserSession: z
       .strictObject({
@@ -1082,12 +1260,20 @@ export const retainedAppDeliverySchema = z.object({
 });
 export type RetainedAppDelivery = z.infer<typeof retainedAppDeliverySchema>;
 
+export const operatorDeliveryCorrectionSchema = z.strictObject({
+  effectId: id,
+  rejectedDeploymentIds: z.array(id),
+  createAttempted: z.boolean(),
+});
+export type OperatorDeliveryCorrection = z.infer<typeof operatorDeliveryCorrectionSchema>;
+
 const hostedOperatorRecordBaseSchema = z.strictObject({
   approvalId: id.optional(),
   authPreparation: operatorAuthSchemaPreparationSchema.optional(),
   deliveredDeploymentId: id.optional(),
   deliveredGatewayDeploymentId: id.optional(),
   deliveryCandidates: operatorDeploymentCandidatesSchema.optional(),
+  deliveryCorrections: z.array(operatorDeliveryCorrectionSchema).optional(),
   /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
   fenceGeneration: z.number().int().positive().optional(),
   gatewayDeliveryCandidates: operatorDeploymentCandidatesSchema.optional(),
@@ -1209,11 +1395,48 @@ const retainedRenewalGatewayDeliveryOrigin = (
       candidate.origin === link.endpointOrigin,
   )?.origin;
 };
+/** A consumed proof keeps its observed endpoint after serving selection advances.
+ * These retained observations prove identity origin only, never current delivery.
+ */
+const retainedConsumedGatewayDeliveryOrigin = (
+  operator: z.infer<typeof hostedOperatorRecordDataSchema>,
+): string | undefined => {
+  const link = operator.identityLink;
+  if (
+    link?.consumedAt === undefined ||
+    link.proofRef === undefined ||
+    link.proofSha256 === undefined ||
+    operator.plan.gatewayDelivery === undefined ||
+    operator.plan.publicGateway === undefined
+  ) {
+    return undefined;
+  }
+  return operator.gatewayDeliveryCandidates?.find(
+    (candidate) =>
+      candidate.readyState === "READY" &&
+      candidate.origin === link.endpointOrigin &&
+      candidate.projectId === operator.plan.publicGateway?.projectId &&
+      candidate.branch === operator.plan.publicGateway?.branch &&
+      candidate.repoId === operator.plan.gatewayDelivery?.repoId,
+  )?.origin;
+};
 /** Exact identity scope shared by validation and successor metadata composition. */
 export const matchesHostedOperatorIdentityLinkScope = (
   operator: z.infer<typeof hostedOperatorRecordDataSchema>,
 ): boolean => {
   const link = operator.identityLink;
+  if (link !== undefined && operator.plan.runtimePreparation !== undefined) {
+    return [
+      link.publicRelease !== undefined,
+      operator.plan.deploymentBoundary?.composition === "single-project-services",
+      operator.plan.publicGateway?.projectId === operator.plan.selection.projectId,
+      link.authResourceId === operator.plan.authDatabase.resourceId,
+      link.ownerSessionId === operator.plan.selection.sessionId,
+      link.browserOrigin === operator.plan.publicGateway?.origin,
+      link.endpointOrigin === operator.plan.publicGateway?.origin,
+      link.issuer === operator.plan.publicGateway?.origin,
+    ].every(Boolean);
+  }
   return (
     link === undefined ||
     [
@@ -1223,6 +1446,7 @@ export const matchesHostedOperatorIdentityLinkScope = (
       link.issuer === operator.plan.deploymentBoundary?.verification.publicOrigin,
       link.endpointOrigin === operator.plan.deploymentBoundary?.verification.gatewayOrigin ||
         gatewayDeliveryOrigin(operator) === link.endpointOrigin ||
+        retainedConsumedGatewayDeliveryOrigin(operator) === link.endpointOrigin ||
         retainedRenewalGatewayDeliveryOrigin(operator) === link.endpointOrigin,
     ].every(Boolean)
   );
@@ -1568,6 +1792,11 @@ export const operatorAuthIdentityInputSchema = z.strictObject({
 });
 const operatorPublicCodeSchema = z.enum([
   "protected_operator_required",
+  "builder_destination_required",
+  "builder_destination_configuration_required",
+  "builder_public_domain_selection_required",
+  "builder_destination_required",
+  "builder_destination_configuration_required",
   "auth_identity_required",
   "auth_membership_required",
   "auth_schema_not_ready",
@@ -1579,6 +1808,7 @@ const operatorPublicCodeSchema = z.enum([
   "app_delivery_configuration_changed",
   "app_source_publication_required",
   "export_customer_selection_required",
+  "generic_installer_configuration_required",
   "operator_unavailable",
   "legacy_runtime_requires_migration",
   "signup_not_ready",
@@ -1594,34 +1824,69 @@ const operatorPublicStatusSchema = z.enum([
   "waiting_for_signup",
   "ready",
 ]);
+export const operatorRecoveryStageSchema = z.enum([
+  "canonical_read",
+  "setup",
+  "native_history",
+  "journal",
+]);
 export const operatorExecutionOutcomeSchema = z.strictObject({
   status: operatorPublicStatusSchema,
   code: operatorPublicCodeSchema.optional(),
+  recoveryStage: operatorRecoveryStageSchema.optional(),
+  recoveryProgressAdvanced: z.boolean().optional(),
 });
 export const operatorExecutionObservationSchema = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("running") }),
   z.strictObject({ state: z.literal("unknown") }),
   z.strictObject({ state: z.literal("settled"), outcome: operatorExecutionOutcomeSchema }),
 ]);
+/** Recorded preparation facts only; no provider proof or execution authority. */
+export const operatorPreparationProgressSchema = z.strictObject({
+  planStage: hostedOperatorPlanDataSchema.shape.stage,
+  lease: z.enum(["absent", "active", "expired", "unclassified"]),
+  hasPendingEffect: z.boolean(),
+  pendingEffectKind: hostedOperatorPlanDataSchema.shape.effects.element.shape.kind.optional(),
+  hasPendingAttempt: z.boolean(),
+  allPlanEffectsReceipted: z.boolean(),
+  missingEffectKinds: z.array(hostedOperatorPlanDataSchema.shape.effects.element.shape.kind),
+  hasAccountPreparation: z.boolean(),
+  accountsCompleted: z.boolean(),
+  accountProgramMatchesPlan: z.boolean().optional(),
+});
+export type OperatorPreparationProgress = z.infer<typeof operatorPreparationProgressSchema>;
 export const operatorPublicResultSchema = z.strictObject({
   appId: id,
   authenticatedBehavior: z.literal("unassessed"),
   code: operatorPublicCodeSchema.optional(),
+  recoveryStage: operatorRecoveryStageSchema.optional(),
+  recoveryProgressAdvanced: z.boolean().optional(),
   operationRef: z.uuid().optional(),
   plan: hostedOperatorPlanSchema.optional(),
   planDigest: digest.optional(),
   status: operatorPublicStatusSchema,
   execution: operatorExecutionObservationSchema.optional(),
+  preparationProgress: operatorPreparationProgressSchema.optional(),
   appUrl: z.url().optional(),
   signupUrl: z.url().optional(),
 });
 export type OperatorPublicResult = z.infer<typeof operatorPublicResultSchema>;
 export class HostedOperatorError extends Error {
   readonly code: NonNullable<OperatorPublicResult["code"]>;
-  constructor(code: NonNullable<OperatorPublicResult["code"]>) {
-    super(code);
+  readonly recoveryStage?: z.infer<typeof operatorRecoveryStageSchema>;
+  readonly recoveryProgressAdvanced?: boolean;
+  constructor(
+    code: NonNullable<OperatorPublicResult["code"]>,
+    options?: ErrorOptions & {
+      recoveryStage?: z.infer<typeof operatorRecoveryStageSchema>;
+      recoveryProgressAdvanced?: boolean;
+    },
+  ) {
+    super(code, options);
     this.name = "HostedOperatorError";
     this.code = code;
+    this.recoveryStage = options?.recoveryStage;
+    this.recoveryProgressAdvanced = options?.recoveryProgressAdvanced;
   }
 }
 

@@ -2,18 +2,17 @@ import { z } from "zod";
 import { digest } from "./hosted-operation-identifiers";
 import { nativeInputBatchSchema } from "./session-limit-input";
 import type { PrivateInputState } from "./session-limit-input";
-import { privateHostedApprovalReceiptSchema } from "./private-hosted-approval";
+import {
+  privateResourceApprovalReceiptSchema,
+  privateResourcePendingApprovalSchema,
+  privateResourceApprovalSessionId,
+} from "./private-hosted-approval";
 import type {
   PrivateHostedApprovalCaptureState,
-  PrivateHostedApprovalReceipt,
+  PrivateResourceApprovalReceipt,
 } from "./private-hosted-approval";
 
-const approvalRequestSchema = z.strictObject({
-  callId: privateHostedApprovalReceiptSchema.shape.callId,
-  requestId: privateHostedApprovalReceiptSchema.shape.requestId,
-  toolInput: privateHostedApprovalReceiptSchema.shape.toolInput,
-  toolName: privateHostedApprovalReceiptSchema.shape.toolName,
-});
+const approvalRequestSchema = privateResourcePendingApprovalSchema;
 export const resourceApprovalResponseMarkerSchema = z.strictObject({
   adapterGeneration: z.number().int().positive(),
   adapterSessionId: z.string().min(1),
@@ -91,7 +90,7 @@ export const provesResourceApprovalResponse = (input: {
   proof: ResourceApprovalResponseProof;
   state?: PrivateInputState;
   capture?: PrivateHostedApprovalCaptureState;
-  receipts: readonly PrivateHostedApprovalReceipt[];
+  receipts: readonly PrivateResourceApprovalReceipt[];
 }): boolean => {
   const { proof, state, capture, marker } = input;
   if (state === undefined || capture?.sessionId !== input.sessionId) {
@@ -141,11 +140,11 @@ export const provesResourceApprovalResponse = (input: {
     if (matches.length !== 1 || nativeMatches.length !== 1) {
       return false;
     }
-    const receipt = privateHostedApprovalReceiptSchema.parse(matches[0]);
+    const receipt = privateResourceApprovalReceiptSchema.parse(matches[0]);
     if (
       [
         digest(receipt) !== digest(nativeMatches[0]),
-        receipt.toolInput.plan.selection.sessionId !== input.sessionId,
+        privateResourceApprovalSessionId(receipt) !== input.sessionId,
         receipt.responderPrincipalId !== input.ownerUserId,
         receipt.outcome !== (entry.response.kind === "approve" ? "approved" : "cancelled"),
       ].some(Boolean)

@@ -1,7 +1,9 @@
+import { capturedGenericWorkerFixture } from "./operator-worker-source-capture.test-fixture";
 import { describe, expect, it } from "vitest";
 import {
   assertNoConfiguredNativeTarget,
   createNativeTargetApprovalCheckpoint,
+  createNativeTargetApprovalHistoryTransport,
   nativeTargetApprovalCheckpointId,
   nativeTargetDatabaseNames,
   selectNativeTargetInstaller,
@@ -41,14 +43,28 @@ describe("native target deployment-owned resource selection", () => {
     expect(() => nativeTargetDatabaseNames("../different-app")).toThrow();
   });
 
-  it("reuses a configured generic installer, prefers an app-specific configured capability, and rejects absence", () => {
-    const workers = { platform: access, existing: generic };
-    expect(selectNativeTargetInstaller(workers, "fresh-app")).toEqual(generic);
-    const selected = { ...generic, id: "app-specific" };
-    expect(selectNativeTargetInstaller({ ...workers, "fresh-app": selected }, "fresh-app")).toEqual(
-      selected,
+  it("requires an explicit captured generic for fresh apps instead of inferring it from per-app aliases", () => {
+    const workers = { existing: generic, alias: generic };
+    expect(() => selectNativeTargetInstaller(workers, "fresh-app")).toThrow(
+      "generic_installer_configuration_required",
     );
-    expect(() => selectNativeTargetInstaller({ platform: access }, "fresh-app")).toThrow();
+    expect(selectNativeTargetInstaller(workers, "fresh-app", capturedGenericWorkerFixture)).toEqual(
+      capturedGenericWorkerFixture,
+    );
+    expect(
+      selectNativeTargetInstaller(
+        { ...workers, "fresh-app": generic },
+        "fresh-app",
+        capturedGenericWorkerFixture,
+      ),
+    ).toEqual(generic);
+    expect(() =>
+      selectNativeTargetInstaller(
+        { "fresh-app": access },
+        "fresh-app",
+        capturedGenericWorkerFixture,
+      ),
+    ).toThrow();
   });
 
   it("blocks a second dedicated project for an app with an existing configured physical target", () => {
@@ -91,8 +107,6 @@ describe("native target deployment-owned resource selection", () => {
       revision: number;
     }
     let row: Row | undefined;
-    let insertCount = 0;
-    let updateCount = 0;
     const fakeDatabase = {
       select: () => ({
         from: () => ({
@@ -109,7 +123,6 @@ describe("native target deployment-owned resource selection", () => {
             expect(value.requestDigest).toMatch(/^[0-9a-f]{64}$/u);
             expect(["pending", "settled"]).toContain(value.state);
             expect(value.record).toBeTypeOf("object");
-            insertCount += 1;
             row ??= value;
             return Promise.resolve();
           },
@@ -123,7 +136,6 @@ describe("native target deployment-owned resource selection", () => {
                 throw new Error("Approval checkpoint update requires a prior insert.");
               }
               row = { ...row, ...value };
-              updateCount += 1;
               return Promise.resolve([{ revision: row.revision }]);
             },
           }),
@@ -169,9 +181,80 @@ describe("native target deployment-owned resource selection", () => {
       ...observation,
       native: { ...observation.native, nextNativeIndex: 2 },
     });
-    expect(updateCount).toBe(1);
-    expect(insertCount).toBe(2);
+    expect(row?.revision).toBe(2);
     const saved = await checkpoint.read();
     expect(saved?.native.nextNativeIndex).toBe(2);
+  });
+});
+
+describe("native target approval history carrier", () => {
+  it("uses the verified Builder carrier only after owner and session scope checks", async () => {
+    const principal = { ...authority, scopes: ["autograph:session"] };
+    const historyOwner = {
+      kind: "direct" as const,
+      adapterGeneration: 1,
+      adapterSessionId: "wrun_fixture",
+      authority,
+      principal,
+      sessionId: "public-session",
+    };
+    const owner = {
+      authority,
+      adapterGeneration: 1,
+      adapterSessionId: historyOwner.adapterSessionId,
+      publicSessionId: historyOwner.sessionId,
+      historyOwner,
+    };
+    const calls: { resource: string; authorization: string | null }[] = [];
+    const controller = new AbortController();
+    const transport = createNativeTargetApprovalHistoryTransport({
+      builderOrigin: "https://builder.example",
+      appId: "requests-app",
+      owner,
+      workload: { authorization: "Bearer verified-builder-token", signal: controller.signal },
+      assertCanonicalAppOwner: () => Promise.resolve(),
+      fetch: (resource, init) => {
+        const requested = resource instanceof Request ? resource.url : resource;
+        const url = requested instanceof URL ? requested.href : requested;
+        calls.push({
+          resource: url,
+          authorization: new Headers(init?.headers).get("authorization"),
+        });
+        return Promise.resolve(new Response("", { status: 401 }));
+      },
+    });
+    const read = transport.observePrivateHistory;
+    expect(read).toBeDefined();
+    await expect(
+      read?.({
+        principal,
+        adapterSessionId: "wrong",
+        sessionId: "public-session",
+        startIndex: 0,
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow();
+    expect(calls).toEqual([]);
+    await expect(
+      read?.({
+        principal,
+        adapterSessionId: "wrun_fixture",
+        sessionId: "public-session",
+        startIndex: 0,
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.resource).toContain("/eve/v1/session/wrun_fixture/stream");
+    expect(calls[0]?.authorization).toBe("Bearer verified-builder-token");
+    expect(() =>
+      createNativeTargetApprovalHistoryTransport({
+        builderOrigin: "https://builder.example",
+        appId: "requests-app",
+        owner,
+        workload: { authorization: null, signal: controller.signal },
+        assertCanonicalAppOwner: () => Promise.resolve(),
+      }),
+    ).toThrow();
   });
 });

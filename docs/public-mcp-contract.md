@@ -21,7 +21,8 @@ cursor pagination, sanitized errors, complete approval-batch validation,
 tenant and audience isolation, idempotent mutation retries, unknown-submission
 handling, lost-response recovery, and cooperative cancellation settlement.
 The internal Eve routes, adapter session identifiers, storage records, and
-transport protocol remain implementation details.
+transport protocol remain implementation details. If work finishes before cancellation takes effect, Builder reports the actual
+outcome once the session settles.
 
 The [complete-app phases](full-app-authoring.md#build-phases-and-delivery) are
 initial version and build approval, build, independent review, and requested
@@ -84,6 +85,44 @@ missing adapter for otherwise-active work is fenced by adapter generation before
 the same public handle continues. User-visible sessions do not expire with
 their short-lived compute leases.
 
+The existing `autograph_start` tool accepts `resumeMode: "recover"` only with
+`resumeSessionId`. This explicit owner request transfers a parked hosted native
+approval through the existing structured recovery path. An owner may instead
+request `resumeMode: "recover-idle"` for a waiting session with a retained
+checkpoint. This separate mode admits only a natively verified inbox wait;
+pending approvals still require the original recovery mode. Ordinary resume is
+unchanged and discovery still returns five tools. Admission requires the complete
+retained checkpoint and independently closed native effect steps across the entire
+verified handoff lineage. A source with pending approvals retains those exact
+requests. A separately proven idle source resumes into its inbox wait without
+starting a model turn or replaying an earlier response. The server derives this
+resume phase from native state and verifies it again after stopping the source;
+a public status or stale approval control cannot select it.
+Builder fences source mutations. A separate opaque read-only preflight may inspect
+running handoff ancestors using the retained activation, checkpoint and inbox
+proofs. It cannot boot a child. Builder proves effect closure across the complete
+verified lineage, stops each active owner from root to current inbox owner, and
+independently verifies an operation-bound native cancellation receipt for every
+stopped run. Completed ancestors are observed without stopping them. Exact retries
+reconstruct partial progress from those native receipts. A newly discovered
+handoff refuses adoption until the same operation rechecks and quiesces that
+lineage. Only terminal-only collection and reconciliation can boot a successor.
+Active, cancelled, or unproven failed effect steps cause refusal before stop or
+prevent adoption.
+Pending approvals retain their original request identity and authority; an earlier
+`submission_unknown` response remains retained and is never implicitly resent.
+An idle checkpoint does not prove that an absent approval was allowed, denied,
+or cancelled; it cannot settle an uncertain response or manufacture a grant.
+Any uncertainty, including a refusal after a stop may have occurred, retains the
+operation and source fence for exact retry. A verified pre-effect refusal may
+reject recovery without stopping an owner.
+An authorized GET for a parked source may run a separate advisory native inspection.
+It rechecks exact tenant, owner, adapter generation and cancellation coordinates,
+then reports only fixed structural categories and counts. Inspection does not
+reserve recovery, stop or start execution, authorize approval, or settle the
+unknown response; duplicate observations may share diagnostic work. Local
+execution returns `session_recovery_unavailable` for this hosted-only mode.
+
 Failed hosted builds recover from authoritative native checkpoints and their
 actual retained delivery and tool results. Public conversation excerpts do not
 restore private workflow state or authorize a replacement build. Recovery keeps
@@ -127,6 +166,20 @@ it does not change mutation identity, send again, resume Stop, or recover work.
 Pending or unknown delivery remains unknown. Keep the largest cursor seen for
 the same session, preserving every returned event page, and continue with
 `autograph_get`. A different session starts with its own cursor.
+
+The embedded MCP approval UI may retain a card after its request has already
+resolved in the chat session. After a known pre-dispatch `input_batch_changed`
+rejection, the server may recover success only for an all-approval response
+batch whose exact request IDs and `approve`/`deny` directions match unique,
+owner-scoped hosted approval receipts in the same session. It returns the
+current session snapshot without resubmitting the approval. The UI then shows
+the normal successful response state. The retained receipt schema currently
+covers only the hosted runtime preparation and cleanup approvals
+(`prepare-app-hosted-runtime` and `cleanup-app-hosted-runtime`). Missing,
+ambiguous, conflicting, or unrelated evidence keeps the original error.
+Questions, mixed batches, unknown outcomes, and Build, native-target, or
+draft-publication approvals without these exact receipts are not inferred
+successful.
 
 New hosted checkpoints store the complete public history in tenant-scoped,
 digest-verified pages and publish a versioned manifest only after its chunks

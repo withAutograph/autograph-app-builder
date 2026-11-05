@@ -75,7 +75,9 @@ function reportPasskeyFailures(page: Page) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function expectPasskeyFailure(page: Page) {
-  await expect(page.getByRole("button", { name: "Passkey failed (try again)" })).toBeVisible({
+  await expect(
+    page.getByRole("button", { name: "Couldn’t use your passkey. Try again." }),
+  ).toBeVisible({
     timeout: 30_000,
   });
 }
@@ -531,7 +533,7 @@ test("cancelled passkey registration stays on Sign Up without partial state", as
   expect(firstContextIds).toHaveLength(1);
 
   await expireOnboardingContexts();
-  await page.getByRole("button", { name: "Passkey failed (try again)" }).click();
+  await page.getByRole("button", { name: "Couldn’t use your passkey. Try again." }).click();
   await expectPasskeyFailure(page);
   const replacementContextIds = await onboardingContextIds();
   expect(replacementContextIds).toHaveLength(1);
@@ -634,7 +636,7 @@ test("verification transport loss stays on Sign In after an assertion", async ({
     expect(authenticationVerificationRequests).toBe(1);
     expect(await authCounts()).toEqual(baseline);
     await page.unroute("**/api/auth/passkey/verify-authentication");
-    await page.getByRole("button", { name: "Passkey failed (try again)" }).click();
+    await page.getByRole("button", { name: "Couldn’t use your passkey. Try again." }).click();
     await expect
       .poll(() => currentSession(page))
       .toMatchObject({

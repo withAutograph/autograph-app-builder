@@ -31,12 +31,12 @@ type McpOperation =
 
 const unknownSubmissionMessage = (operation: McpOperation, sessionId: string): string => {
   if (operation === "autograph_respond") {
-    return "The response may have been accepted, but Builder could not confirm its settlement before the session read deadline. Do not submit the response again. Read the same session with autograph_get to see whether the input resolved; if its read is delayed, retry that read with the same session ID and cursor.";
+    return "Your response may have been accepted, but Builder could not confirm it. Don’t send it again yet. Read the same session with autograph_get to see whether the request was resolved; if that read is delayed, retry it with the same session ID and cursor.";
   }
   if (operation === "autograph_start" || sessionId.length === 0) {
-    return "Builder could not confirm whether the start was saved. Call autograph_get with the original start clientRequestId to recover its session. Keep the same ID and original start input for an exact retry; do not create a replacement request.";
+    return "Builder could not confirm whether your new app request was saved. Use autograph_get with the original clientRequestId to recover the session. If you retry, use the same ID and request so Builder does not start a duplicate.";
   }
-  return "The service could not confirm whether the last submission was saved, so it was not replayed. Read the same session with autograph_get before sending another request.";
+  return "Builder could not confirm whether your last message was saved, so it was not sent again. Read the same session with autograph_get before sending another message.";
 };
 
 const isVerifiedSendPreflightRejection = (error: HostedRejectedOperationError): boolean => {
@@ -52,13 +52,13 @@ const rejectedToolError = (error: HostedRejectedOperationError, operation: McpOp
     return {
       code: "send_preflight_unavailable",
       message:
-        "Builder could not read this session before sending your message. This request was rejected before the message was dispatched. Retry autograph_get with the same session ID and cursor; once the read succeeds, submit your message with a new clientRequestId because the original ID retains this rejection.",
+        "Builder could not read this session, so your message was not sent. Retry autograph_get with the same session ID and cursor. After it succeeds, send your message with a new clientRequestId because the original ID is tied to this rejection.",
     };
   }
   return {
     code: "operation_rejected",
     message:
-      "The service rejected this operation before saving a result. Read the session with autograph_get to see its current state, then retry only if the action was not applied.",
+      "Builder could not complete this request. Read the session with autograph_get to check its current state, then retry only if the action was not applied.",
   };
 };
 
@@ -96,6 +96,17 @@ const safeUnexpectedCause = (error: unknown): string => {
     .trim();
 };
 
+const genericUnexpectedMessage = (safeCause: string): string => {
+  const noDetail = safeCause.length === 0 ? "No further detail was provided. " : "";
+  const recovery =
+    "Retry this saved session; if the problem continues, contact support with the session ID and error code.";
+  let message = `Builder could not complete this request. ${noDetail}${recovery}`;
+  if (safeCause.length > 0) {
+    message += `\n\nDetails: ${safeCause}`;
+  }
+  return message;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function toolResult<const Result extends EveSessionListResult | EveSessionResult>(
   result: Result,
@@ -121,7 +132,7 @@ export function safeToolError(
 ) {
   if (error instanceof McpProviderUnavailableError) {
     const message =
-      "Provider access is temporarily unavailable. Retry this same handoff shortly; your prepared app and connections are saved. No provider login is needed for this outage.";
+      "A connected provider is temporarily unavailable. Your prepared app and connections are saved. Try this same handoff again shortly; you don’t need to sign in again.";
     return {
       ...toolResult(
         {
@@ -149,46 +160,48 @@ export function safeToolError(
   const localRecoveryUnavailable = error instanceof LocalSessionRecoveryUnavailableError;
   const cancellationUnsettled = error instanceof HostedCancellationUnsettledError;
   let code = "internal_error";
-  let message = rejected
-    ? "The service rejected this operation before saving a result."
-    : `Autograph App Builder could not complete ${operation}. Cause: ${safeUnexpectedCause(error) || "The service returned no error detail."} Retry this saved session after fixing the cause; if it repeats, report the operation and session ID.`;
+  let message: string;
   if (authenticationRequired) {
     code = "authentication_required";
     message = "Sign in to Autograph App Builder to continue.";
   } else if (notConfigured) {
     code = "adapter_not_configured";
-    message =
-      "Autograph App Builder's session service is not configured. An operator must connect the hosted session adapter before this action can run.";
+    message = "Builder’s session service is not available yet. Try again later or contact support.";
   } else if (notFound) {
     code = "not_found";
     message = handoffUnavailable
       ? "This handoff is unavailable. Connect Autograph with the same account used on the web, or reopen your prepared app to renew an expired handoff."
-      : "The requested Builder session was not found. Check the session ID or list your recent builds with autograph_get, then reopen the intended session.";
+      : "Builder couldn’t find this session. Check the session ID or list your recent builds with autograph_get, then reopen the right session.";
   } else if (forbidden) {
     code = "forbidden";
     message =
-      "The signed-in account cannot access this Builder session or workspace. Sign in with the account that owns the app, then retry the same session.";
+      "This account can’t open the session. Sign in with the account that owns the app, then retry the same session.";
   } else if (conflict) {
     code = "request_conflict";
     message =
-      "This client request ID was already used for a different operation. Read the current session state, then send the new request with a new clientRequestId.";
+      "This request ID was already used for a different action. Read the current session state, then use a new clientRequestId for your next request.";
   } else if (unknown) {
     code = "submission_unknown";
     message = unknownSubmissionMessage(operation, sessionId);
   } else if (cancellationUnsettled) {
     code = "cancellation_unsettled";
-    message = "Cancellation was accepted but has not settled. Continue with autograph_get.";
+    message =
+      "Cancellation was accepted but is still in progress. Check the session with autograph_get.";
   } else if (busy) {
     code = "already_continuing";
-    message = "This app is already continuing elsewhere. Try again shortly.";
+    message = "This app is already continuing in another place. Try again shortly.";
   } else if (localRecoveryUnavailable) {
-    ({ code, message } = localSessionRecoveryError);
+    code = localSessionRecoveryError.code;
+    message =
+      "Builder couldn’t recover this local session. Keep the original session open and contact your administrator before trying again.";
   } else if (recoveryUnavailable) {
     code = "restart_required";
     message =
-      "This app cannot continue from its last saved point. Start again from the latest result.";
+      "Builder can’t continue from the last saved point. Start again from the latest result.";
   } else if (rejected) {
     ({ code, message } = rejectedToolError(error, operation));
+  } else {
+    message = genericUnexpectedMessage(safeUnexpectedCause(error));
   }
 
   const result: EveSessionResult = {

@@ -1,3 +1,4 @@
+import { isIdlePendingAccountCapture } from "./hosted-operator-pending-account-capture";
 import { createHash } from "node:crypto";
 import type { VercelTokenKeyringConfig } from "../integrations/vercel-installation";
 import { operatorPlanDigest, sameOperatorSelection } from "./hosted-operator-contract";
@@ -56,8 +57,8 @@ export const confirmNormalActorCapture = (
     const sameOrganization = capture?.organizationId === payload.organizationId;
     const valid = [
       record.leaseId === undefined,
-      operator.pendingEffectId === undefined,
-      operator.pendingEffectAttempt === undefined,
+      (operator.pendingEffectId === undefined && operator.pendingEffectAttempt === undefined) ||
+        isIdlePendingAccountCapture(record),
       sameOperatorSelection(record.request, context.target),
       sameOperatorSelection(preparation.accountPlan.selection, context.target),
       preparation.program.appId === context.target.appId,

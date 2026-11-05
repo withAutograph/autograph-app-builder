@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { codexClientId, codexRedirectUri } from "../lib/auth/codex-client-metadata.ts";
 import { formatWithOxfmt } from "./format-with-oxfmt.mts";
 import {
   assertAutographMcpEndpoint,
@@ -106,6 +107,9 @@ if (endpoint) {
       JSON.stringify({
         mcpServers: {
           [AUTOGRAPH_MCP_SERVER_NAME]: {
+            ...(suppliedEndpoint
+              ? { oauth: { callback_url: codexRedirectUri, client_id: codexClientId } }
+              : {}),
             oauth_resource: endpoint,
             type: "http",
             url: endpoint,

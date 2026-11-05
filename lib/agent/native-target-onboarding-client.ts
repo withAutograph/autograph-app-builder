@@ -6,6 +6,7 @@ import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import {
   HostedOperatorError,
   operatorOwnerContextSchema,
+  operatorPublicResultSchema,
 } from "../provisioning/hosted-operator-contract";
 import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
 import { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operator-owner-context";
@@ -24,6 +25,8 @@ import type {
 
 const unavailable = () => new HostedOperatorError("operator_unavailable");
 const denied = () => new HostedOperatorError("authorization_required");
+const blockedAppMatches = (actual: string, expected: string) =>
+  actual === expected || actual === "unknown";
 
 export const createNativeTargetOnboardingClient = (options: {
   endpoint: string;
@@ -77,10 +80,19 @@ export const createNativeTargetOnboardingClient = (options: {
     } catch {
       signal?.throwIfAborted();
       // Never repeat an uncertain request here. The protected journal owns recovery.
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: "transport",
+      });
       throw unavailable();
     }
     signal?.throwIfAborted();
     if (response.status === 401 || response.status === 403) {
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: "authorization",
+        status: response.status,
+      });
       throw denied();
     }
     if (body.action === "native-target-plan" && response.status === 409) {
@@ -104,16 +116,42 @@ export const createNativeTargetOnboardingClient = (options: {
       throw unavailable();
     }
     if (!response.ok) {
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: "http",
+        status: response.status,
+      });
       throw unavailable();
     }
     let raw: unknown;
     try {
       raw = await response.json();
     } catch {
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: "invalid_json",
+      });
       throw unavailable();
+    }
+    const blocked = operatorPublicResultSchema.safeParse(raw);
+    if (
+      blocked.success &&
+      blocked.data.status === "blocked" &&
+      blockedAppMatches(blocked.data.appId, body.input.appId) &&
+      blocked.data.code !== undefined
+    ) {
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: blocked.data.code,
+      });
+      throw new HostedOperatorError(blocked.data.code);
     }
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: "invalid_response",
+      });
       throw unavailable();
     }
     return parsed.data;
@@ -155,7 +193,7 @@ export const createNativeTargetOnboardingClient = (options: {
   };
   return {
     async plan(input, ctx, state) {
-      if (state.appSpec === undefined || state.appSpec.appId !== input.appId) {
+      if (state.appSpec !== undefined && state.appSpec.appId !== input.appId) {
         throw denied();
       }
       const output = await send(
@@ -163,7 +201,9 @@ export const createNativeTargetOnboardingClient = (options: {
           ...common(ctx),
           action: "native-target-plan",
           input,
-          selectedApp: { appId: state.appSpec.appId, appSpecDigest: state.appSpec.digest },
+          ...(state.appSpec === undefined
+            ? {}
+            : { selectedApp: { appId: state.appSpec.appId, appSpecDigest: state.appSpec.digest } }),
         },
         nativeTargetTransportResponseSchemas["native-target-plan"],
         ctx.abortSignal,

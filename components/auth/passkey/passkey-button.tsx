@@ -194,7 +194,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       >
         {pending ? <Spinner /> : <Fingerprint />}
         {failed
-          ? "Passkey failed (try again)"
+          ? "Couldn’t use your passkey. Try again."
           : localization.auth.continueWith.replace("{{provider}}", passkeyLocalization.passkey)}
       </Button>
     </div>

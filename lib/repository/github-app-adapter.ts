@@ -31,6 +31,8 @@ import {
 import type { GitHubTargetAccessProof } from "./github-target-access-proof";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 import type {
+  ExistingDraftInspectionRequest,
+  OwnedDraftInspectionRecovery,
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
 } from "./github-draft-reconciliation";
@@ -269,12 +271,7 @@ export interface GitHubAppInstallationProvider {
     name: string;
     source: HistoricalAppSourceSelector;
   }) => Promise<unknown>;
-  inspectExistingDraft: (input: {
-    repositoryId: string;
-    owner: string;
-    name: string;
-    number: number;
-  }) => Promise<unknown>;
+  inspectExistingDraft: (input: ExistingDraftInspectionRequest) => Promise<unknown>;
   updateExistingDraft: (
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
@@ -292,10 +289,12 @@ export interface GitHubAppInstallationProvider {
   reconcileExistingDraft: (
     proposal: ExistingDraftReconciliationProposal,
     content: ReconciliationContent,
+    recovery?: OwnedDraftInspectionRecovery,
   ) => Promise<unknown>;
   inspectAppliedDraftReconciliation: (
     proposal: ExistingDraftReconciliationProposal,
     observed: ExistingDraftObservation,
+    recovery?: OwnedDraftInspectionRecovery,
   ) => Promise<unknown>;
   inspectInstallation: (input: {
     operation: GitHubOperation;
@@ -484,12 +483,12 @@ export function createGitHubAppPublicationAdapter(
         ),
       ) as GitHubMutationAcknowledgement;
     },
-    async inspectAppliedDraftReconciliation(proposal, observed) {
+    async inspectAppliedDraftReconciliation(proposal, observed, recovery) {
       return z
         .boolean()
         .parse(
           await sanitizedProviderCall(
-            () => provider.inspectAppliedDraftReconciliation(proposal, observed),
+            () => provider.inspectAppliedDraftReconciliation(proposal, observed, recovery),
             "verify whether the draft PR reconciliation was applied",
           ),
         );
@@ -606,11 +605,11 @@ export function createGitHubAppPublicationAdapter(
         ),
       ) as GitHubMutationAcknowledgement;
     },
-    async reconcileExistingDraft(proposal, content) {
+    async reconcileExistingDraft(proposal, content, recovery) {
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(
-          () => provider.reconcileExistingDraft(proposal, content),
+          () => provider.reconcileExistingDraft(proposal, content, recovery),
           "update the existing draft PR",
         ),
       ) as GitHubMutationAcknowledgement;

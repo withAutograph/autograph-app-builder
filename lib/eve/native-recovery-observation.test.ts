@@ -1,3 +1,4 @@
+import { observeNativeSource } from "./native-recovery-observation";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { hostedEveOperationScopes } from "./hosted-auth";
@@ -183,4 +184,52 @@ it("uses the authenticated existing observation route once without session start
     forwardedPrincipal: { current: { principalId: principal.ownerUserId } },
   });
   expect(init?.redirect).toBe("manual");
+});
+
+it("observes exact source coordinates through the protected route without recovery authority", async () => {
+  const source = {
+    sourcePublicSessionId: "source",
+    sourceAdapterSessionId: "anchor",
+    sourceAdapterGeneration: 1,
+    cancellationRevision: 0,
+  };
+  const request = vi.fn<typeof fetch>(() =>
+    Promise.resolve(
+      Response.json({ ok: true, status: "accepted", sessionId: "anchor" }, { status: 202 }),
+    ),
+  );
+  const adapter = createSameOriginEveTransport({
+    config: { baseUrl: "https://builder.example.test" },
+    workloadIdentity: { token: () => Promise.resolve("synthetic-project-token") },
+    fetchImplementation: request,
+  });
+  await adapter.observeSource?.({ principal, source });
+  expect(request).toHaveBeenCalledOnce();
+  const call = request.mock.calls[0];
+  const body: unknown = JSON.parse(z.string().parse(call?.[1]?.body));
+  expect(body).toMatchObject({ recoveryPhase: "inspect-source", sourceObservation: source });
+  expect(body).not.toHaveProperty("operationId");
+  expect(body).not.toHaveProperty("recovery");
+});
+it("coalesces identical source observations and re-inspects changed cancellation", async () => {
+  const observeSource = vi.fn<NonNullable<HostedEveTransport["observeSource"]>>(() =>
+    Promise.resolve(),
+  );
+  const source = {
+    sourcePublicSessionId: "coalesced-source",
+    sourceAdapterSessionId: "anchor",
+    sourceAdapterGeneration: 1,
+    cancellationRevision: 0,
+  };
+  await Promise.all([
+    observeNativeSource({ principal, source, transport: { observeSource } }),
+    observeNativeSource({ principal, source, transport: { observeSource } }),
+  ]);
+  expect(observeSource).toHaveBeenCalledOnce();
+  await observeNativeSource({
+    principal,
+    source: { ...source, cancellationRevision: 1 },
+    transport: { observeSource },
+  });
+  expect(observeSource).toHaveBeenCalledTimes(2);
 });

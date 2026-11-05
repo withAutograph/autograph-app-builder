@@ -1,3 +1,4 @@
+import type { HostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import {
   HostedOperatorError,
   operatorPublicResultSchema,
@@ -71,7 +72,13 @@ export const retainHostedRuntimePreparationReference = (
  * current owner, generation, cancellation revision, plan, and operation.
  */
 export const resolveHostedRuntimePreparationSelection = async (
-  input: { appId: string; sessionAuth: unknown; sessionId: string; signal?: AbortSignal },
+  input: {
+    appId: string;
+    sessionAuth: unknown;
+    sessionId: string;
+    signal?: AbortSignal;
+    callbackExecution?: HostedOperatorCallbackExecution;
+  },
   ports: HandoffPorts = deployedPorts,
 ): Promise<PreparedRuntimeSelection | null> => {
   const references = preparedRuntimeReferences.get();
@@ -98,18 +105,24 @@ export const resolveHostedRuntimePreparationSelection = async (
   });
   const ctx = {
     abortSignal: input.signal ?? new AbortController().signal,
-    session: { id: input.sessionId, auth: input.sessionAuth },
+    session: {
+      id: input.sessionId,
+      auth: input.sessionAuth,
+      ownerRunId: input.callbackExecution?.ownerRunId,
+      ownerAnchorRunId: input.callbackExecution?.ownerAnchorRunId,
+    },
   };
   ctx.abortSignal.throwIfAborted();
   const loaded = await ports.load(
     { appId: reference.appId, operationRef: reference.operationRef },
     ctx,
   );
+  const ownerAdapterSessionId = input.callbackExecution?.ownerAnchorRunId ?? input.sessionId;
   if (
     loaded.input.appId !== input.appId ||
     loaded.input.operationRef !== reference.operationRef ||
     loaded.input.planDigest !== reference.planDigest ||
-    loaded.snapshot.adapterSessionId !== input.sessionId
+    loaded.snapshot.adapterSessionId !== ownerAdapterSessionId
   ) {
     throw new HostedOperatorError("resource_mismatch");
   }

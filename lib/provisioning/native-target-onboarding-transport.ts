@@ -26,10 +26,13 @@ export const nativeTargetTransportRequestSchema = z
       ...common,
       action: z.literal("native-target-plan"),
       input: nativeTargetPlanRequestSchema,
-      selectedApp: z.strictObject({
-        appId: nativeTargetPlanRequestSchema.shape.appId,
-        appSpecDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-      }),
+      // Absence authorizes only reading an existing owner-scoped operation.
+      selectedApp: z
+        .strictObject({
+          appId: nativeTargetPlanRequestSchema.shape.appId,
+          appSpecDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+        })
+        .optional(),
     }),
     z.strictObject({
       ...common,
@@ -56,7 +59,9 @@ export const nativeTargetTransportRequestSchema = z
   .superRefine((request, context) => {
     const matches = [request.adapterSessionId === request.ownerContext.adapterSessionId];
     if (request.action === "native-target-plan") {
-      matches.push(request.selectedApp.appId === request.input.appId);
+      matches.push(
+        request.selectedApp === undefined || request.selectedApp.appId === request.input.appId,
+      );
     } else {
       matches.push(
         request.input.appId === request.input.plan.appId,

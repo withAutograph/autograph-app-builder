@@ -126,6 +126,61 @@ const seal = async (adapter: ExistingDraftReconciliationAdapter) =>
   });
 
 describe("existing draft reconciliation", () => {
+  it("binds exact catalog metadata into source review without admitting unrelated shared changes", () => {
+    const source = {
+      version: review.version,
+      appId: review.appId,
+      baseSha: review.baseSha,
+      baseTree: review.baseTree,
+      headSha: review.headSha,
+      headTree: review.headTree,
+      resolvedTree: review.resolvedTree,
+      baseChanges: review.baseChanges,
+      headChanges: review.headChanges,
+    };
+    const file = {
+      path: "package.json",
+      digest: digest(new TextEncoder().encode("catalog metadata")),
+    };
+    const change = {
+      path: file.path,
+      kind: "modified" as const,
+      before: { digest: digest(bytes), mode: "644" },
+      after: { digest: file.digest, mode: "644" },
+    };
+    const dependencyCatalog = { files: [file], nonAppIndexDigest: "a".repeat(64) };
+    const accepted = createReconciliationReviewReceipt({
+      ...source,
+      dependencyCatalog,
+      baseChanges: [...source.baseChanges, change],
+      headChanges: [...source.headChanges, change],
+    });
+    expect(accepted.approvedPaths).toContain("package.json");
+    expect(accepted.dependencyCatalog).toEqual(dependencyCatalog);
+    expect(() =>
+      createReconciliationReviewReceipt({
+        ...source,
+        dependencyCatalog,
+        baseChanges: [
+          ...source.baseChanges,
+          { ...change, after: { ...change.after, digest: "b".repeat(64) } },
+        ],
+      }),
+    ).toThrow("review is incomplete");
+    expect(() =>
+      createReconciliationReviewReceipt({
+        ...source,
+        dependencyCatalog,
+        baseChanges: [...source.baseChanges, { ...change, path: "docs/unrelated.md" }],
+      }),
+    ).toThrow("review is incomplete");
+    expect(() =>
+      createReconciliationReviewReceipt({
+        ...source,
+        dependencyCatalog: { ...dependencyCatalog, files: [{ ...file, path: "../package.json" }] },
+      }),
+    ).toThrow("metadata receipt");
+  });
   it("seals both reviewed diffs and updates only the exact head and live base", async () => {
     const mock = mockAdapter();
     const proposal = await seal(mock.adapter);

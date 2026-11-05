@@ -187,7 +187,11 @@ const plan = hostedOperatorPlanSchema.parse({
     },
   },
 });
-const fixture = async () => {
+const fixture = async (publicRelease?: {
+  enrollmentRef: string;
+  operationRef: string;
+  planDigest: string;
+}) => {
   const { privateKey, publicKey } = await generateKeyPair("EdDSA");
   const auth = betterAuth({
     secret: "normal-owner-proof-local-fixture-long-secret",
@@ -311,6 +315,15 @@ const fixture = async () => {
         .update(values.get("nonce") ?? "")
         .digest("hex"),
       resource,
+      ...(values.has("publicEnrollmentRef")
+        ? {
+            publicRelease: {
+              enrollmentRef: values.get("publicEnrollmentRef"),
+              operationRef: values.get("publicOperationRef"),
+              planDigest: values.get("publicPlanDigest"),
+            },
+          }
+        : {}),
     })
       .setProtectedHeader({
         alg: "EdDSA",
@@ -383,6 +396,8 @@ const fixture = async () => {
     resolveRealmBinding: async () => ({
       authResourceId: plan.authDatabase.resourceId,
       bootstrapPlanDigest: operatorPlanDigest(plan),
+      ...(publicRelease === undefined ? {} : { publicRelease }),
+
       issuer: program.origin,
       audience: "https://operator.example.com",
       endpointOrigin,
@@ -1017,4 +1032,46 @@ describe("normal organization owner proof collector", () => {
     await expect(f.collect(input)).rejects.toMatchObject({ code: "auth_identity_required" });
     expect(f.requests).toHaveLength(before);
   });
+});
+
+it("carries the exact public release through durable organization nonce, Auth request and signed proof", async () => {
+  const publicRelease = {
+    enrollmentRef: "88888888-8888-4888-a888-888888888888",
+    operationRef: "99999999-9999-4999-a999-999999999999",
+    planDigest: "d".repeat(64),
+  };
+  const f = await fixture(publicRelease);
+  await f.collect(await f.input("org-one"));
+  const retained = f.row.record.accountPreparation?.organizationProofs?.[0];
+  expect(retained?.link.publicRelease).toEqual(publicRelease);
+  expect(retained?.link.consumedAt).toBeDefined();
+  const request = f.requests.find(
+    (entry) => new URL(entry.url).pathname === "/api/auth/platform/operator-link",
+  );
+  expect(request).toBeDefined();
+  const body = new URLSearchParams(await requiredFixture(request).text());
+  expect(body.get("publicEnrollmentRef")).toBe(publicRelease.enrollmentRef);
+  expect(body.get("publicOperationRef")).toBe(publicRelease.operationRef);
+  expect(body.get("publicPlanDigest")).toBe(publicRelease.planDigest);
+});
+
+it("carries the exact public release through durable organization nonce, Auth request and signed proof", async () => {
+  const publicRelease = {
+    enrollmentRef: "88888888-8888-4888-a888-888888888888",
+    operationRef: "99999999-9999-4999-a999-999999999999",
+    planDigest: "d".repeat(64),
+  };
+  const f = await fixture(publicRelease);
+  await f.collect(await f.input("org-one"));
+  const retained = f.row.record.accountPreparation?.organizationProofs?.[0];
+  expect(retained?.link.publicRelease).toEqual(publicRelease);
+  expect(retained?.link.consumedAt).toBeDefined();
+  const request = f.requests.find(
+    (entry) => new URL(entry.url).pathname === "/api/auth/platform/operator-link",
+  );
+  expect(request).toBeDefined();
+  const body = new URLSearchParams(await requiredFixture(request).text());
+  expect(body.get("publicEnrollmentRef")).toBe(publicRelease.enrollmentRef);
+  expect(body.get("publicOperationRef")).toBe(publicRelease.operationRef);
+  expect(body.get("publicPlanDigest")).toBe(publicRelease.planDigest);
 });

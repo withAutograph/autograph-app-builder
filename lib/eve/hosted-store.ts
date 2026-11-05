@@ -1,3 +1,14 @@
+import {
+  preapprovalAuthoringDecisionSchema,
+  internalAuthoringContinuationSchema,
+} from "../agent/preapproval-authoring";
+import type { PreapprovalAuthoringDecision } from "../agent/preapproval-authoring";
+import { builderSessionDestinationSchema } from "../provisioning/builder-session-destination-contract";
+import type {
+  BuilderSessionDestination,
+  BuilderDestinationEpoch,
+} from "../provisioning/builder-session-destination-contract";
+
 import type { NativeSendReadObservation } from "./hosted-submission-diagnostic";
 import {
   nativeRecoveryDescriptorSchema,
@@ -50,9 +61,9 @@ import type { PublicSessionSummary } from "../mcp/contracts";
 import type { pagedCheckpointMetadataSchema } from "./postgres-hosted-checkpoint-history";
 import {
   mergePrivateHostedApprovalReceipts,
-  privateHostedApprovalReceiptSchema,
+  privateResourceApprovalReceiptSchema,
 } from "./private-hosted-approval";
-import type { PrivateHostedApprovalReceipt } from "./private-hosted-approval";
+import type { PrivateResourceApprovalReceipt } from "./private-hosted-approval";
 
 export const hostedOperationKindSchema = z.enum(["start", "resume", "send", "respond"]);
 export type HostedOperationKind = z.infer<typeof hostedOperationKindSchema>;
@@ -277,12 +288,15 @@ export const durableHostedSessionRecordSchema = z
     parentSessionId: z.string().min(1).max(200).optional(),
     principal: hostedPrincipalSchema,
     // Private Eve authority facts live beside the session record, outside its public checkpoint.
-    privateApprovalReceipts: z.array(privateHostedApprovalReceiptSchema).optional(),
+    privateApprovalReceipts: z.array(privateResourceApprovalReceiptSchema).optional(),
     privateBuildDecision: approvedBuildDecisionSchema.optional(),
+    privateAuthoringDecision: preapprovalAuthoringDecisionSchema.optional(),
     nativeRecoveryBinding: nativeRecoveryBindingSchema.optional(),
     resumability: publicSessionResumabilitySchema,
     sessionId: z.string().min(1).max(200),
     sourceHandoffId: z.string().uuid().optional(),
+    builderDestination: builderSessionDestinationSchema.optional(),
+
     stage: publicSessionStageSchema,
     status: sessionStatusSchema,
     title: z.string().min(1).max(200),
@@ -502,6 +516,7 @@ const hostedOperationCommonShape = {
   clientRequestId: z.string().min(1).max(200),
   createdAtEpochMs: z.number().int().nonnegative(),
   internalBuildContinuation: internalBuildContinuationSchema.optional(),
+  internalAuthoringContinuation: internalAuthoringContinuationSchema.optional(),
   nativeRecovery: nativeRecoveryDescriptorSchema.optional(),
   nativeRecoveryReceipt: nativeRecoveryBindingSchema.optional(),
   internalSessionLimitResponse: internalSessionLimitResponseSchema.optional(),
@@ -558,6 +573,23 @@ export const hostedOperationRecordSchema = z
   // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Operation parsing checks each durable recovery identity alongside the existing state machine.
   .superRefine((record, context) => {
     reportInvalidStartAlias(record, context);
+    const conflictingAuthoringPurpose = [
+      record.internalBuildContinuation,
+      record.nativeRecovery,
+      record.internalSessionLimitResponse,
+      record.resourceApprovalResponse,
+      record.sendDelivery,
+      record.resumeSessionId,
+      record.startAlias,
+    ].some((value) => value !== undefined);
+    if (
+      record.internalAuthoringContinuation !== undefined &&
+      (record.kind !== "send" || conflictingAuthoringPurpose)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Authoring continuation must have one distinct send purpose.",
+      });
     if (
       record.nativeRecovery !== undefined &&
       (record.kind !== "start" ||
@@ -651,6 +683,14 @@ export const hostedOperationRecordSchema = z
 
 export type HostedOperationRecord = z.infer<typeof hostedOperationRecordSchema>;
 
+/** Reservation freshness only; native recovery independently proves the actual parked phase. */
+export const matchesNativeExecutionTransferCheckpoint = (
+  source: HostedSessionRecord,
+  transfer: NonNullable<NativeRecoveryDescriptor["executionTransfer"]>,
+): boolean =>
+  source.status === (transfer.kind === "idle-checkpoint" ? "waiting" : "input_required") &&
+  toDurableHostedSessionRecord(source).checkpointDigest === transfer.sourceCheckpointDigest;
+
 /** Current canonical source identity, never checkpoint/model prose, authorizes native access. */
 // oxlint-disable-next-line eslint/complexity -- Every canonical source identity and cancellation fence is mandatory.
 export const assertNativeRecoverySourceBinding = (
@@ -662,7 +702,7 @@ export const assertNativeRecoverySourceBinding = (
     // oxlint-disable-next-line sonarjs/expression-complexity -- These comparisons form one authorization boundary.
     source === null ||
     source.version !== 2 ||
-    source.status !== "failed" ||
+    (descriptor.executionTransfer === undefined && source.status !== "failed") ||
     operation.kind !== "start" ||
     operation.resumeSessionId !== descriptor.sourcePublicSessionId ||
     operation.operationId !== descriptor.operationId ||
@@ -730,6 +770,18 @@ export const assertRecoveredBuildContinuationChild = (
   assertNativeRecoverySessionReceipt(operation, child);
 };
 
+/** Rebind physical ownership only; accepted logical intent remains unchanged. */
+export const recoveredAuthoringDecision = (
+  decision: PreapprovalAuthoringDecision | undefined,
+  child: HostedSessionRecord,
+): PreapprovalAuthoringDecision | undefined =>
+  decision === undefined
+    ? undefined
+    : preapprovalAuthoringDecisionSchema.parse({
+        ...decision,
+        adapterSessionId: child.adapterSessionId,
+      });
+
 /** Keep the original logical approval scope while binding a private decision to its current physical owner. */
 export const recoveredBuildDecision = (
   decision: ApprovedBuildDecision | undefined,
@@ -742,6 +794,18 @@ export const recoveredBuildDecision = (
         adapterSessionId: child.adapterSessionId,
       });
 
+const latestContinuationDecision = <T extends { turnSequence: number }>(
+  source: T | undefined,
+  authority: T | undefined,
+  sourceIsCurrentChild: boolean,
+): T | undefined => {
+  const sourceSequence = source?.turnSequence ?? -1;
+  const authoritySequence = authority?.turnSequence ?? -1;
+  return sourceSequence > authoritySequence ||
+    (sourceSequence === authoritySequence && sourceIsCurrentChild)
+    ? source
+    : authority;
+};
 export const inheritRecoveryBuildDecision = (
   source: HostedSessionRecord,
   authority: HostedSessionRecord,
@@ -749,20 +813,34 @@ export const inheritRecoveryBuildDecision = (
 ): HostedSessionRecord => {
   const sourceDecision = toDurableHostedSessionRecord(source).privateBuildDecision;
   const authorityDecision = toDurableHostedSessionRecord(authority).privateBuildDecision;
-  const sourceSequence = sourceDecision?.turnSequence ?? -1;
-  const authoritySequence = authorityDecision?.turnSequence ?? -1;
   const sourceIsCurrentChild = source.version === 2 && source.nativeRecoveryBinding !== undefined;
-  const latestDecision =
-    sourceSequence > authoritySequence ||
-    (sourceSequence === authoritySequence && sourceIsCurrentChild)
-      ? sourceDecision
-      : authorityDecision;
-  return latestDecision === undefined
-    ? child
-    : durableHostedSessionRecordSchema.parse({
-        ...toDurableHostedSessionRecord(child),
-        privateBuildDecision: recoveredBuildDecision(latestDecision, child),
-      });
+  const latestDecision = latestContinuationDecision(
+    sourceDecision,
+    authorityDecision,
+    sourceIsCurrentChild,
+  );
+  const destination =
+    toDurableHostedSessionRecord(source).builderDestination ??
+    toDurableHostedSessionRecord(authority).builderDestination;
+  const sourceAuthoring = toDurableHostedSessionRecord(source).privateAuthoringDecision;
+  const authorityAuthoring = toDurableHostedSessionRecord(authority).privateAuthoringDecision;
+  const latestAuthoring = latestContinuationDecision(
+    sourceAuthoring,
+    authorityAuthoring,
+    sourceIsCurrentChild,
+  );
+  if (latestDecision === undefined && latestAuthoring === undefined && destination === undefined)
+    return child;
+  return durableHostedSessionRecordSchema.parse({
+    ...toDurableHostedSessionRecord(child),
+    ...(latestDecision === undefined
+      ? {}
+      : { privateBuildDecision: recoveredBuildDecision(latestDecision, child) }),
+    ...(latestAuthoring === undefined
+      ? {}
+      : { privateAuthoringDecision: recoveredAuthoringDecision(latestAuthoring, child) }),
+    ...(destination === undefined ? {} : { builderDestination: destination }),
+  });
 };
 export const unsettledSendAcknowledgementSchema = z.strictObject({
   operation: hostedOperationRecordSchema,
@@ -777,6 +855,12 @@ export type SendAcknowledgementCursor = z.infer<typeof sendAcknowledgementCursor
 export const unsettledSendAcknowledgementPageSchema = z.strictObject({
   acknowledgements: z.array(unsettledSendAcknowledgementSchema),
   nextCursor: sendAcknowledgementCursorSchema.optional(),
+});
+/** The cursor is an ordered storage coordinate, never a limit on total recovery history. */
+export const unsettledResponseCursorSchema = sendAcknowledgementCursorSchema;
+export const unsettledResponsePageSchema = z.strictObject({
+  operations: z.array(hostedOperationRecordSchema),
+  nextCursor: unsettledResponseCursorSchema.optional(),
 });
 
 const START_ALIAS_CANNOT_BIND = "The original start request cannot bind this canonical result.";
@@ -838,11 +922,21 @@ export const assertExistingStartSession = (
 
 const SESSION_NOT_FOUND = "Hosted session was not found.";
 
-export const isDeliveredInternalContinuation = (operation: HostedOperationRecord): boolean =>
-  operation.kind === "send" &&
-  operation.state === "submission_unknown" &&
-  operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
-  operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
+/** Internal messages authenticate one native delivery; they are never ordinary public SEND proof. */
+export const hasInternalSendPurpose = (operation: HostedOperationRecord): boolean =>
+  operation.internalBuildContinuation !== undefined ||
+  operation.internalAuthoringContinuation !== undefined;
+export const isDeliveredInternalContinuation = (operation: HostedOperationRecord): boolean => {
+  const build =
+    operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
+    operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
+  const authoring =
+    operation.internalAuthoringContinuation?.deliveredTurnId !== undefined &&
+    operation.internalAuthoringContinuation.deliveredMessageSequence !== undefined;
+  return (
+    operation.kind === "send" && operation.state === "submission_unknown" && (build || authoring)
+  );
+};
 
 /** Unknown RESPOND is terminal only with exact typed resolution and the current owned adapter binding. */
 export const isProvedSessionLimitResponse = (
@@ -929,11 +1023,7 @@ export const bindSendDelivery = (
   marker: SendDelivery,
 ): HostedOperationRecord => {
   const delivery = sendDeliverySchema.parse(marker);
-  if (
-    operation.kind !== "send" ||
-    operation.internalBuildContinuation !== undefined ||
-    current === null
-  )
+  if (operation.kind !== "send" || hasInternalSendPurpose(operation) || current === null)
     throw new Error(SEND_BINDING_UNAVAILABLE);
   if (
     operation.sessionId !== delivery.sessionId ||
@@ -997,7 +1087,7 @@ export const canProjectQueuedSendAcknowledgement = (input: {
   const current = toDurableHostedSessionRecord(input.current);
   if (
     operation.kind !== "send" ||
-    operation.internalBuildContinuation !== undefined ||
+    hasInternalSendPurpose(operation) ||
     marker === undefined ||
     cancellationRevisionAtDispatch === null
   )
@@ -1036,17 +1126,20 @@ export const mayReviveCancelledSession = (
   current: HostedSessionRecord,
   proof?: NativeDeliveryState,
 ): boolean => {
+  if (operation === null || !["reserved", "submission_unknown"].includes(operation.state)) {
+    return false;
+  }
+  const durable = toDurableHostedSessionRecord(current);
   if (
-    current.status !== "cancelled" ||
-    operation === null ||
-    !["reserved", "submission_unknown"].includes(operation.state)
+    current.status !== "cancelled" &&
+    (durable.cancellationRevision ?? 0) <= (durable.resumedCancellationRevision ?? 0)
   ) {
     return false;
   }
   const revision = operation.sendDelivery?.resumeCancellationRevision;
   return (
     revision !== undefined &&
-    revision === (toDurableHostedSessionRecord(current).cancellationRevision ?? 0) &&
+    revision === (durable.cancellationRevision ?? 0) &&
     isProvedSendDelivery(operation, current, proof)
   );
 };
@@ -1099,7 +1192,56 @@ export type ReserveOperationResult = z.infer<typeof reserveOperationResultSchema
  * owner in the storage predicate. `settleSucceeded` must atomically persist an
  * optional new session and the terminal operation result.
  */
+/** Metadata-only selection; epoch fences do not settle or replay native operations. */
+export const attachBuilderDestinationRecord = (
+  value: HostedSessionRecord,
+  input: {
+    expected: BuilderDestinationEpoch;
+    destination: BuilderSessionDestination;
+    nowEpochMs: number;
+  },
+): DurableHostedSessionRecord => {
+  const current = toDurableHostedSessionRecord(value);
+  const destination = builderSessionDestinationSchema.parse(input.destination);
+  const matches = [
+    current.status === "waiting",
+    current.appId === destination.appId,
+    current.sourceHandoffId === undefined,
+    current.adapterSessionId === input.expected.adapterSessionId,
+    current.adapterGeneration === input.expected.adapterGeneration,
+    (current.cancellationRevision ?? 0) === input.expected.cancellationRevision,
+    (current.cancellationRevision ?? 0) === (current.resumedCancellationRevision ?? 0),
+    current.checkpointDigest === input.expected.checkpointDigest,
+    (current.checkpoint?.inputRequests?.length ?? 0) === 0,
+  ].every(Boolean);
+  if (!matches) throw new Error("Builder destination selection is stale or unavailable.");
+  const existing = current.builderDestination;
+  if (
+    existing !== undefined &&
+    [
+      existing.appId !== destination.appId,
+      existing.requestId !== destination.requestId,
+      existing.requestDigest !== destination.requestDigest,
+    ].some(Boolean)
+  ) {
+    throw new Error("Builder destination is already selected.");
+  }
+  return durableHostedSessionRecordSchema.parse({
+    ...current,
+    builderDestination: destination,
+    updatedAtEpochMs: Math.max(current.updatedAtEpochMs, input.nowEpochMs),
+  });
+};
+
 export interface HostedEveStore {
+  attachBuilderDestination?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    expected: BuilderDestinationEpoch;
+    destination: BuilderSessionDestination;
+    nowEpochMs: number;
+  }) => Promise<HostedSessionRecord>;
+
   getPrivateOperation?: (
     principal: HostedPrincipal,
     operationId: string,
@@ -1120,11 +1262,28 @@ export interface HostedEveStore {
     messageSequence: number;
   }) => Promise<boolean>;
 
+  recordPreapprovalAuthoringDecision?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    decision: PreapprovalAuthoringDecision;
+  }) => Promise<void>;
+  claimInternalAuthoringMessage?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    logicalSessionId?: string;
+    operationId: string;
+    scopeDigest: string;
+    nonce: string;
+    turnId: string;
+    turnSequence: number;
+    messageSequence: number;
+  }) => Promise<boolean>;
+
   /** Append raw Eve approval settlements to the owner-scoped session record. */
   recordPrivateApprovalReceipts?: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
-    receipts: readonly PrivateHostedApprovalReceipt[];
+    receipts: readonly PrivateResourceApprovalReceipt[];
   }) => Promise<void>;
   bindExistingStart?: (
     principal: z.infer<typeof hostedPrincipalSchema>,
@@ -1181,6 +1340,13 @@ export interface HostedEveStore {
     cursor?: SendAcknowledgementCursor;
     limit: number;
   }) => Promise<z.infer<typeof unsettledSendAcknowledgementPageSchema>>;
+  /** Read only unknown RESPONDs for the exact authenticated tenant and public session. */
+  readUnsettledResponseOperations?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    cursor?: z.infer<typeof unsettledResponseCursorSchema>;
+    limit: number;
+  }) => Promise<z.infer<typeof unsettledResponsePageSchema>>;
   settleSucceeded: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     operationId: string;
@@ -1241,6 +1407,12 @@ export interface HostedEveStore {
   }) => Promise<HostedSessionRecord>;
   observeSessionPaged?: (input: {
     explicitSendOperationId?: string;
+    replayBinding?: {
+      adapterSessionId: string;
+      adapterGeneration: number;
+      cancellationRevision: number;
+    };
+    verifiedReplayReceipts?: readonly PrivateResourceApprovalReceipt[];
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
     expectedCheckpointDigest: string | undefined;
@@ -1392,7 +1564,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return operation === undefined ? null : structuredClone(operation);
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  // oxlint-disable-next-line eslint/require-await, eslint/complexity -- Reservation admission keeps exact retries, source fencing and successor routing in one synchronous atomic section.
   async reserveOperation(
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
@@ -1415,6 +1587,22 @@ export class InMemoryHostedEveStore implements HostedEveStore {
         existing.startAlias?.sourceHandoffId === parsed.startAlias?.sourceHandoffId
         ? { disposition: "existing", operation: structuredClone(existing) }
         : { disposition: "conflict" };
+    }
+    const targetSessionId = parsed.sessionId ?? parsed.resumeSessionId;
+    if (
+      targetSessionId !== undefined &&
+      [...this.operations.values()].some((record) => {
+        if (tenantKeyFor(record.principal) !== tenantKeyFor(principal)) return false;
+        if (record.resumeSessionId !== targetSessionId) return false;
+        if (record.nativeRecovery?.executionTransfer === undefined) return false;
+        return (
+          record.state === "reserved" ||
+          record.state === "submission_unknown" ||
+          record.nativeRecoveryReceipt !== undefined
+        );
+      })
+    ) {
+      return { disposition: "rejected", reason: "session_busy" };
     }
     if (
       parsed.kind !== "start" &&
@@ -1442,6 +1630,28 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       )
     ) {
       return { disposition: "rejected", reason: "session_busy" };
+    }
+    if (
+      parsed.nativeRecovery?.executionTransfer !== undefined &&
+      [...this.operations.values()].some(
+        (record) =>
+          tenantKeyFor(record.principal) === tenantKeyFor(principal) &&
+          record.sessionId === parsed.resumeSessionId &&
+          record.state === "reserved",
+      )
+    ) {
+      return { disposition: "rejected", reason: "session_busy" };
+    }
+    if (parsed.nativeRecovery?.executionTransfer !== undefined) {
+      const source = this.sessions.get(
+        InMemoryHostedEveStore.sessionKey(principal, parsed.nativeRecovery.sourcePublicSessionId),
+      );
+      if (
+        source === undefined ||
+        !matchesNativeExecutionTransferCheckpoint(source, parsed.nativeRecovery.executionTransfer)
+      ) {
+        return { disposition: "conflict" };
+      }
     }
     if (parsed.nativeRecovery !== undefined) {
       assertNativeRecoverySourceBinding(
@@ -1576,10 +1786,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
         ) {
           return false;
         }
-        if (
-          operation.internalBuildContinuation !== undefined ||
-          operation.sendDelivery === undefined
-        ) {
+        if (hasInternalSendPurpose(operation) || operation.sendDelivery === undefined) {
           return false;
         }
         if (operation.state !== "reserved" && operation.state !== "submission_unknown") {
@@ -1627,21 +1834,71 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     );
   };
 
+  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous store contract for validation errors.
+  async readUnsettledResponseOperations(
+    input: Parameters<NonNullable<HostedEveStore["readUnsettledResponseOperations"]>>[0],
+  ): Promise<z.infer<typeof unsettledResponsePageSchema>> {
+    const principal = hostedPrincipalSchema.parse(input.principal);
+    const sessionId = z.string().min(1).parse(input.sessionId);
+    const limit = z
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER - 1)
+      .parse(input.limit);
+    const cursor =
+      input.cursor === undefined ? undefined : unsettledResponseCursorSchema.parse(input.cursor);
+    const operations = [...this.operations.values()]
+      .filter((operation) => {
+        if (
+          tenantKeyFor(operation.principal) !== tenantKeyFor(principal) ||
+          operation.sessionId !== sessionId ||
+          operation.kind !== "respond" ||
+          operation.state !== "submission_unknown"
+        ) {
+          return false;
+        }
+        if (cursor === undefined) {
+          return true;
+        }
+        return (
+          operation.createdAtEpochMs > cursor.createdAtEpochMs ||
+          (operation.createdAtEpochMs === cursor.createdAtEpochMs &&
+            operation.operationId > cursor.operationId)
+        );
+      })
+      .toSorted(
+        (left, right) =>
+          left.createdAtEpochMs - right.createdAtEpochMs ||
+          (left.operationId < right.operationId
+            ? -1
+            : Number(left.operationId > right.operationId)),
+      );
+    const page = operations.slice(0, limit);
+    const last = page.at(-1);
+    return unsettledResponsePageSchema.parse({
+      operations: structuredClone(page),
+      ...(operations.length > page.length && last !== undefined
+        ? { nextCursor: { createdAtEpochMs: last.createdAtEpochMs, operationId: last.operationId } }
+        : {}),
+    });
+  }
+
   // oxlint-disable-next-line eslint/complexity -- Settlement now checks the native recovery receipt alongside existing operation guards.
   async settleSucceeded(
     input: Parameters<HostedEveStore["settleSucceeded"]>[0],
   ): Promise<HostedOperationRecord> {
-    const operation = this.operations.get(
-      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
-    );
-    if (operation === undefined || operation.requestDigest !== input.requestDigest) {
+    const operationKey = InMemoryHostedEveStore.operationKey(input.principal, input.operationId);
+    const pendingOperation = this.operations.get(operationKey);
+    if (pendingOperation === undefined || pendingOperation.requestDigest !== input.requestDigest) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
     const [provedResponse, provedSend, provedApproval] = await Promise.all([
-      this.provedSessionLimitResponse(operation, input.sessionLimitResolution),
-      this.provedSendDelivery(operation, input.sendDeliveryResolution),
-      this.provedResourceApprovalResponse(operation, input.resourceApprovalResolution),
+      this.provedSessionLimitResponse(pendingOperation, input.sessionLimitResolution),
+      this.provedSendDelivery(pendingOperation, input.sendDeliveryResolution),
+      this.provedResourceApprovalResponse(pendingOperation, input.resourceApprovalResolution),
     ]);
+    const { operation, current } = this.readCurrentSettlement(input);
     if (
       !maySettleHostedOperation(
         operation,
@@ -1707,10 +1964,22 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       }
       this.sessions.set(key, structuredClone(session));
     }
-    this.operations.set(
-      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
-      structuredClone(settled),
-    );
+    if (
+      current !== null &&
+      mayReviveCancelledSession(operation, current, input.sendDeliveryResolution)
+    ) {
+      const durable = toDurableHostedSessionRecord(current);
+      const resumed = durableHostedSessionRecordSchema.parse({
+        ...durable,
+        resumedCancellationRevision: durable.cancellationRevision ?? 0,
+        updatedAtEpochMs: Math.max(durable.updatedAtEpochMs, input.nowEpochMs),
+      });
+      this.sessions.set(
+        InMemoryHostedEveStore.sessionKey(input.principal, current.sessionId),
+        structuredClone(resumed),
+      );
+    }
+    this.operations.set(operationKey, structuredClone(settled));
     return structuredClone(settled);
   }
 
@@ -1761,6 +2030,26 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       settledCount += 1;
     }
     return settledCount;
+  }
+
+  async attachBuilderDestination(
+    input: Parameters<NonNullable<HostedEveStore["attachBuilderDestination"]>>[0],
+  ) {
+    const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
+    const current = this.sessions.get(key);
+    if (current === undefined) throw new Error(SESSION_NOT_FOUND);
+    const pending = [...this.operations.values()].some(
+      (operation) =>
+        tenantKeyFor(operation.principal) === tenantKeyFor(input.principal) &&
+        (operation.sessionId === input.sessionId ||
+          operation.resumeSessionId === input.sessionId) &&
+        ["reserved", "submission_unknown"].includes(operation.state),
+    );
+    if (pending)
+      throw new Error("Builder destination selection requires settled session operations.");
+    const updated = attachBuilderDestinationRecord(current, input);
+    this.sessions.set(key, structuredClone(updated));
+    return await Promise.resolve(structuredClone(updated));
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -1871,11 +2160,93 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return true;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- The in-memory implementation preserves the asynchronous canonical store contract.
+  async recordPreapprovalAuthoringDecision(input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    decision: PreapprovalAuthoringDecision;
+  }): Promise<void> {
+    const decision = preapprovalAuthoringDecisionSchema.parse(input.decision);
+    const current = this.currentBuildSession(
+      input.principal,
+      input.sessionId,
+      decision.adapterSessionId,
+    );
+    const key = InMemoryHostedEveStore.sessionKey(input.principal, current.sessionId);
+    const boundDecision = recoveredAuthoringDecision(decision, current);
+    if (boundDecision === undefined) throw new Error(SESSION_NOT_FOUND);
+    if ((current.privateAuthoringDecision?.turnSequence ?? -1) > decision.turnSequence) {
+      return;
+    }
+    this.sessions.set(
+      key,
+      durableHostedSessionRecordSchema.parse({
+        ...current,
+        privateAuthoringDecision: boundDecision,
+      }),
+    );
+  }
+  // oxlint-disable-next-line eslint/require-await -- The in-memory implementation preserves the asynchronous canonical store contract.
+  async claimInternalAuthoringMessage(input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    logicalSessionId?: string;
+    operationId: string;
+    scopeDigest: string;
+    nonce: string;
+    turnId: string;
+    turnSequence: number;
+    messageSequence: number;
+  }): Promise<boolean> {
+    const key = InMemoryHostedEveStore.operationKey(input.principal, input.operationId);
+    const operation = this.operations.get(key);
+    const marker = operation?.internalAuthoringContinuation;
+    if (operation === undefined || marker === undefined || operation.state === "rejected") {
+      return false;
+    }
+    const current = this.currentBuildSession(
+      input.principal,
+      input.sessionId,
+      input.logicalSessionId ?? marker.decision.adapterSessionId,
+    );
+    if (
+      current.status === "cancelled" ||
+      (current.cancellationRevision ?? 0) !== (current.resumedCancellationRevision ?? 0)
+    )
+      return false;
+    const wrongIdentity =
+      operation.sessionId !== current.sessionId ||
+      marker.decision.adapterSessionId !== current.adapterSessionId ||
+      marker.decision.scopeDigest !== input.scopeDigest ||
+      marker.nonce !== input.nonce;
+    if (wrongIdentity || input.turnSequence <= marker.decision.turnSequence) {
+      return false;
+    }
+    if (marker.deliveredTurnId !== undefined) {
+      return (
+        marker.deliveredTurnId === input.turnId &&
+        marker.deliveredMessageSequence === input.messageSequence
+      );
+    }
+    this.operations.set(
+      key,
+      hostedOperationRecordSchema.parse({
+        ...operation,
+        internalAuthoringContinuation: {
+          ...marker,
+          deliveredMessageSequence: input.messageSequence,
+          deliveredTurnId: input.turnId,
+        },
+      }),
+    );
+    return true;
+  }
+
   // oxlint-disable-next-line eslint/require-await -- The in-memory implementation retains the async canonical store contract.
   async recordPrivateApprovalReceipts(input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
-    receipts: readonly PrivateHostedApprovalReceipt[];
+    receipts: readonly PrivateResourceApprovalReceipt[];
   }): Promise<void> {
     const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
     const current = this.sessions.get(key);
@@ -2045,11 +2416,39 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return true;
   }
 
+  private readCurrentSettlement(input: Parameters<HostedEveStore["settleSucceeded"]>[0]) {
+    const operation = this.operations.get(
+      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
+    );
+    if (operation === undefined || operation.requestDigest !== input.requestDigest) {
+      throw new Error("Hosted operation cannot settle at this digest.");
+    }
+    const current =
+      operation.sessionId === undefined
+        ? null
+        : (this.sessions.get(
+            InMemoryHostedEveStore.sessionKey(input.principal, operation.sessionId),
+          ) ?? null);
+    if (
+      operation.kind === "send" &&
+      operation.internalBuildContinuation === undefined &&
+      operation.internalAuthoringContinuation === undefined &&
+      !isProvedSendDelivery(operation, current, input.sendDeliveryResolution)
+    ) {
+      throw new Error("Canonical SEND delivery is not proved.");
+    }
+    return { operation, current };
+  }
+
   private async provedSendDelivery(
     operation: HostedOperationRecord,
     proof: NativeDeliveryState | undefined,
   ): Promise<boolean> {
-    if (operation.kind !== "send" || operation.internalBuildContinuation !== undefined)
+    if (
+      operation.kind !== "send" ||
+      operation.internalBuildContinuation !== undefined ||
+      operation.internalAuthoringContinuation !== undefined
+    )
       return false;
     const current =
       operation.sessionId === undefined

@@ -98,6 +98,30 @@ const launchResponse = () =>
   });
 
 describe("shared working preview startup", () => {
+  it("releases the exact ready startup if prior artifact authority changed before return", async () => {
+    const { command, options, provider } = setup();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(launchResponse())
+      .mockResolvedValueOnce(
+        new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
+      );
+    await expect(
+      startWorkingPreview({
+        ...options,
+        fetch: fetcher,
+        assertCurrent: () => {
+          if (ownership.current?.status === "ready") {
+            throw new Error("Prior artifact changed.");
+          }
+        },
+      }),
+    ).rejects.toThrow("Prior artifact changed.");
+    expect(command.kill).toHaveBeenCalledOnce();
+    expect(provider.update).toHaveBeenLastCalledWith({ ports: [] }, expect.anything());
+    expect(ownership.current).toBeNull();
+  });
+
   it("binds with closed ingress and returns only an HTTP-verified implementation URL", async () => {
     const { events, options, provider } = setup();
     const sandboxExpiresAt = provider.expiresAt;

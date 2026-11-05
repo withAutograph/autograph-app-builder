@@ -1,19 +1,36 @@
 import { authorizeRepeatablePrivateApplyCalls } from "./native-recovery-repeatable-apply";
+import { isDeepStrictEqual } from "node:util";
+import { z } from "zod";
+import { authorizeRepeatableDraftReconciliationCalls } from "./native-recovery-repeatable-draft-reconciliation";
 import { observePrivateApplyRecoveryCandidate } from "./native-recovery-apply-observation";
+import {
+  draftReviewedLineageContextKey,
+  draftReviewedWorkflowContextKey,
+  maySearchPreviousDraftReviews,
+  recoverPreviousDraftReview,
+  recoverDraftReviewedLineage,
+  samePersistedDraftReview,
+} from "./native-recovery-draft-reviewed-lineage";
 import { openHostedPostgresDatabase } from "../db/hosted-postgres";
+import type { AppBuilderWorkflowState } from "../agent/workflow-state";
 import {
   exactForwardedSessionAuthority,
   sourceHandoffIdForSessionAuth,
 } from "../hosted/session-authority";
 import { assertHostedBuildDecisionOwner } from "./approved-build-owner";
-import { requireHostedOperationScope } from "./hosted-auth";
+import { requireHostedOperationScope, tenantKeyFor } from "./hosted-auth";
 import {
   assertNativeRecoveryReceipt,
   nativeRecoveryBindingSchema,
+  nativeSourceObservationSchema,
   nativeRecoveryDescriptorSchema,
   sameNativeRecoveryDescriptor,
 } from "./native-recovery-contract";
-import type { NativeRecoveryBinding, NativeRecoveryDescriptor } from "./native-recovery-contract";
+import type {
+  NativeRecoveryBinding,
+  NativeRecoveryDescriptor,
+  NativeSourceObservation,
+} from "./native-recovery-contract";
 import { createPostgresHostedEveStore } from "./postgres-hosted-store";
 import {
   assertNativeRecoverySourceBinding,
@@ -26,6 +43,50 @@ import type { HostedPrincipal } from "./hosted-auth";
 interface RecoveryCall {
   auth: unknown;
   descriptor: NativeRecoveryDescriptor;
+}
+
+const workflowPhases: Record<AppBuilderWorkflowState["phase"], true> = {
+  empty: true,
+  prepared: true,
+  ui_previewed: true,
+  ui_accepted: true,
+  app_spec_accepted: true,
+  dependencies_prepared: true,
+  identity_resolved: true,
+  planned: true,
+  apply_failed: true,
+  applied: true,
+  validation_pending: true,
+  validation_failed: true,
+  validated: true,
+  reviewed: true,
+  publication_pending: true,
+  publication_failed: true,
+  published_local: true,
+  branch_publication_pending: true,
+  branch_publication_failed: true,
+  published_branch_worktree: true,
+  fresh_bootstrap_pending: true,
+  fresh_bootstrap_failed: true,
+  published_fresh_bootstrap: true,
+};
+
+interface RecoveryPredecessorWindow {
+  ownerRunId: string;
+  logicalSessionId: string;
+  cutoff: NativeRecoveryBinding["provenance"];
+  authorizeRead: () => Promise<void>;
+}
+
+interface HistoricalReviewCheckpoint {
+  runIndex: number;
+  origin: { eventId: string; stepId: string; slot: number };
+  value: unknown;
+}
+
+interface RecoveryPredecessorEdge {
+  childSessionId: string;
+  binding: NativeRecoveryBinding;
 }
 
 interface RecoveryHolderCall extends RecoveryCall {
@@ -176,7 +237,140 @@ export function createNativeRecoveryBinding(input: {
     return current;
   };
 
+  // Resolve the exact committed public recovery chain afresh for each private read.
+  // A prior native run is authority only through its canonical succeeded child/receipt.
+  const resolvePredecessorPath = async (
+    call: RecoveryCall,
+    path: readonly RecoveryPredecessorEdge[],
+  ): Promise<HostedSessionRecord> => {
+    const initial = await authorizeUncommittedRecovery(call);
+    let child: HostedSessionRecord = initial.source;
+    for (const edge of path) {
+      if (child.version !== 2) {
+        throw new Error("Recovery predecessor child changed.");
+      }
+      if (
+        child.sessionId !== edge.childSessionId ||
+        child.nativeRecoveryBinding === undefined ||
+        !isDeepStrictEqual(child.nativeRecoveryBinding, edge.binding) ||
+        child.parentSessionId === undefined
+      ) {
+        throw new Error("Recovery predecessor child changed.");
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each edge depends on the verified child of the preceding edge.
+      const [parent, operation] = await Promise.all([
+        input.store.getSession(initial.principal, child.parentSessionId),
+        input.store.getPrivateOperation?.(initial.principal, edge.binding.operationId),
+      ]);
+      if (parent === null || operation === null || operation === undefined) {
+        throw new Error("Recovery predecessor authority is unavailable.");
+      }
+      if (
+        !samePrincipal(parent.principal, initial.principal) ||
+        !samePrincipal(operation.principal, initial.principal)
+      ) {
+        throw new Error("Recovery predecessor authority is unavailable.");
+      }
+      assertRecoveredBuildContinuationChild(
+        call.descriptor.originalAuthoritySessionId,
+        call.descriptor.logicalSessionId,
+        parent,
+        child,
+        operation,
+      );
+      child = parent;
+    }
+    await authorizeUncommittedRecovery(call);
+    return child;
+  };
+
   return {
+    /** Visit only committed, owner-authorized predecessor windows, newest first. */
+    async visitRecoveryPredecessors(
+      call: RecoveryCall,
+      visit: (window: RecoveryPredecessorWindow) => Promise<"continue" | "stop">,
+    ): Promise<void> {
+      const path: RecoveryPredecessorEdge[] = [];
+      const seen = new Set<string>();
+      let child = await resolvePredecessorPath(call, path);
+      while (child.version === 2 && child.nativeRecoveryBinding !== undefined) {
+        if (seen.has(child.sessionId)) {
+          throw new Error("Recovery predecessor chain is cyclic.");
+        }
+        seen.add(child.sessionId);
+        const binding = nativeRecoveryBindingSchema.parse(child.nativeRecoveryBinding);
+        path.push({ childSessionId: child.sessionId, binding });
+        const windowPath = [...path];
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Verify each lineage edge before visiting its parent.
+        const parent = await resolvePredecessorPath(call, path);
+        if (seen.has(parent.sessionId)) {
+          throw new Error("Recovery predecessor chain is cyclic.");
+        }
+        const authorizeRead = async () => {
+          const current = await resolvePredecessorPath(call, windowPath);
+          if (
+            current.sessionId !== parent.sessionId ||
+            current.adapterSessionId !== parent.adapterSessionId
+          ) {
+            throw new Error("Recovery predecessor source changed.");
+          }
+        };
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Reauthorize this exact predecessor before its private read.
+        await authorizeRead();
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Newer checkpoints must be exhausted before older predecessors.
+        const result = await visit({
+          ownerRunId: parent.adapterSessionId,
+          logicalSessionId: call.descriptor.logicalSessionId,
+          cutoff: binding.provenance,
+          authorizeRead,
+        });
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Reauthorize after the visitor before accepting its result.
+        await authorizeRead();
+        if (result === "stop") {
+          return;
+        }
+        if (result !== "continue") {
+          throw new Error("Recovery predecessor visitor returned an invalid result.");
+        }
+        child = parent;
+      }
+    },
+    async authorizeSourceObservation(call: { auth: unknown; source: NativeSourceObservation }) {
+      const sourceCoordinates = nativeSourceObservationSchema.parse(call.source);
+      const { principal } = exactForwardedSessionAuthority({
+        current: call.auth,
+        initiator: call.auth,
+      });
+      requireHostedOperationScope(principal, "get");
+      const source = await input.store.getSession(
+        principal,
+        sourceCoordinates.sourcePublicSessionId,
+      );
+      if (source === null || tenantKeyFor(source.principal) !== tenantKeyFor(principal)) {
+        throw new Error("Native source observation unavailable.");
+      }
+      const durable = toDurableHostedSessionRecord(source);
+      if (durable.sessionId !== sourceCoordinates.sourcePublicSessionId) {
+        throw new Error("Native source observation session changed.");
+      }
+      if (
+        durable.adapterSessionId !== sourceCoordinates.sourceAdapterSessionId ||
+        durable.adapterGeneration !== sourceCoordinates.sourceAdapterGeneration ||
+        (durable.cancellationRevision ?? 0) !== sourceCoordinates.cancellationRevision
+      ) {
+        throw new Error("Native source observation changed.");
+      }
+      const handoffId = sourceHandoffIdForSessionAuth({ current: call.auth, initiator: call.auth });
+      if (handoffId !== durable.sourceHandoffId) {
+        throw new Error("Native source observation handoff changed.");
+      }
+      await (input.assertOwner ?? assertHostedBuildDecisionOwner)(durable);
+      return {
+        ownerRunId: durable.adapterSessionId,
+        logicalSessionId:
+          durable.nativeRecoveryBinding?.logicalSessionId ?? durable.adapterSessionId,
+      };
+    },
     /** Positive immutable-winner proof, freshly re-read before each native closure effect. */
     async authorizeRecoveryHolderClosure(
       call: RecoveryHolderClosureCall,
@@ -380,6 +574,65 @@ export function createNativeRecoveryBinding(input: {
   };
 }
 
+/** Build the same native review hook for hosted and controlled public-entrypoint tests. */
+// eslint-disable-next-line eslint/func-style -- The named factory is a shared dependency-injection boundary.
+export function createNativeDraftReviewedLineageRecovery(
+  authorize: (call: RecoveryCall) => Promise<void>,
+) {
+  return {
+    contextKey: draftReviewedLineageContextKey,
+    field: "reviewedLineage",
+    historicalContextKey: draftReviewedWorkflowContextKey,
+    async recover(
+      call: Parameters<typeof recoverDraftReviewedLineage>[0] &
+        RecoveryCall & {
+          visitHistoricalCheckpoints?: (
+            visit: (checkpoint: HistoricalReviewCheckpoint) => Promise<"continue" | "stop">,
+          ) => Promise<void>;
+        },
+    ) {
+      await authorize(call);
+      let lineage = recoverDraftReviewedLineage(call);
+      if (
+        lineage === undefined &&
+        call.visitHistoricalCheckpoints !== undefined &&
+        maySearchPreviousDraftReviews(call)
+      ) {
+        let found: HistoricalReviewCheckpoint | undefined;
+        let conflicting = false;
+        await call.visitHistoricalCheckpoints((checkpoint) => {
+          const { value } = checkpoint;
+          const phase = z.object({ phase: z.string() }).safeParse(value);
+          if (!phase.success || !Object.hasOwn(workflowPhases, phase.data.phase)) {
+            conflicting = true;
+            return Promise.resolve("stop" as const);
+          }
+          if (phase.data.phase !== "reviewed") {
+            return Promise.resolve("continue" as const);
+          }
+          if (found === undefined) {
+            found = checkpoint;
+            lineage = recoverPreviousDraftReview(call, value);
+          } else if (
+            found.runIndex !== checkpoint.runIndex ||
+            found.origin.slot !== checkpoint.origin.slot ||
+            !samePersistedDraftReview(found.value, value)
+          ) {
+            conflicting = true;
+          }
+          // A newer incompatible review supersedes every older review, even when invalid.
+          return Promise.resolve("stop" as const);
+        });
+        if (conflicting) {
+          lineage = undefined;
+        }
+      }
+      await authorize(call);
+      return lineage;
+    },
+  };
+}
+
 /** Channel construction opens no provider connection. The first trusted recovery request composes the store. */
 // eslint-disable-next-line eslint/func-style -- Preserve a named factory for the hosted channel boundary.
 export function createHostedNativeRecoveryBinding(
@@ -395,16 +648,32 @@ export function createHostedNativeRecoveryBinding(
     return binding;
   };
   return {
+    authorizeSourceObservation: (call: { auth: unknown; source: NativeSourceObservation }) =>
+      get().authorizeSourceObservation(call),
     authorizeRecoveryHolderClosure: (call: RecoveryHolderClosureCall) =>
       get().authorizeRecoveryHolderClosure(call),
     observeRecoveryHolderBinding: (call: RecoveryHolderCall) =>
       get().observeRecoveryHolderBinding(call),
     authorizeRepeatableRecoveryCalls: (
-      input: Parameters<typeof authorizeRepeatablePrivateApplyCalls>[0],
-    ) => Promise.resolve(authorizeRepeatablePrivateApplyCalls(input)),
+      input: Parameters<typeof authorizeRepeatablePrivateApplyCalls>[0] & RecoveryCall,
+    ) =>
+      Promise.resolve([
+        ...authorizeRepeatablePrivateApplyCalls(input),
+        ...authorizeRepeatableDraftReconciliationCalls({
+          ...input,
+          expectedPrincipalId: principalFor(input).ownerUserId,
+        }),
+      ]),
+    applicationStateRecovery: createNativeDraftReviewedLineageRecovery((call) =>
+      get().authorize(call),
+    ),
     observeCandidateFacts: (input: Parameters<typeof observePrivateApplyRecoveryCandidate>[0]) =>
       Promise.resolve(observePrivateApplyRecoveryCandidate(input)),
     authorize: (call: RecoveryCall) => get().authorize(call),
+    visitRecoveryPredecessors: (
+      call: RecoveryCall,
+      visit: (window: RecoveryPredecessorWindow) => Promise<"continue" | "stop">,
+    ) => get().visitRecoveryPredecessors(call, visit),
     authorizeActivation: (call: RecoveryCall) => get().authorizeActivation(call),
     readReceipt: (call: RecoveryCall) => get().readReceipt(call),
     commitReceipt: (call: RecoveryCall & { recoveryBinding: NativeRecoveryBinding }) =>

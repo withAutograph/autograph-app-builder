@@ -1,7 +1,33 @@
 import { isDeepStrictEqual } from "node:util";
-import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
+import {
+  HostedOperatorError,
+  operatorPlanDigest,
+  retainedOperatorAuthSchema,
+} from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord, HostedRuntimeJournalRow } from "./hosted-runtime-journal";
+
+/** A heartbeat may advance the revision without changing the approved read checkpoint. */
+export const isFinalResourceBindingLeaseRenewal = (
+  current: HostedRuntimeJournalRow,
+  latest: HostedRuntimeJournalRow,
+) => {
+  const { leaseExpiresAt: currentExpiry, ...currentCheckpoint } = current.record;
+  const { leaseExpiresAt: latestExpiry, ...latestCheckpoint } = latest.record;
+  if (
+    currentExpiry === undefined ||
+    latestExpiry === undefined ||
+    current.record.leaseId === undefined
+  ) {
+    return false;
+  }
+  return [
+    current.record.leaseId.length > 0,
+    latest.revision > current.revision,
+    Date.parse(latestExpiry) > Date.parse(currentExpiry),
+    isDeepStrictEqual(currentCheckpoint, latestCheckpoint),
+  ].every(Boolean);
+};
 
 interface ResourceBindingReadInput {
   plan: HostedOperatorPlan;
@@ -80,4 +106,63 @@ export const requireFinalResourceBindingPhase = (
     throw new HostedOperatorError("operation_in_progress");
   }
   return row;
+};
+
+/** Select only the original retained prepare evidence for a read-only binding request.
+ * Approval, owner, completion, sealed checkpoint and second-read checks remain with the caller.
+ */
+export const selectAuthPlanningResourceBindingRow = (
+  row: HostedRuntimeJournalRow | undefined,
+  plan: HostedOperatorPlan,
+): HostedRuntimeJournalRow | undefined => {
+  if (row === undefined || row.record.operator?.planDigest === operatorPlanDigest(plan)) {
+    return row;
+  }
+  const parsed = retainedOperatorAuthSchema.safeParse(row.record.retainedAuth);
+  if (!parsed.success) {
+    return row;
+  }
+  const retained = parsed.data;
+  if (retained.planDigest !== operatorPlanDigest(plan)) {
+    return row;
+  }
+  const current = row.record.operator;
+  // An idle app delivery cannot mutate the completed retained Auth credentials.
+  // Keep unknown Auth/resource effects and cleanup behind the existing phase guard.
+  const pendingAppDelivery =
+    current?.plan.action === "prepare" &&
+    current.plan.stage === "app" &&
+    current.plan.effects.some(
+      (effect) => effect.kind === "delivery" && effect.id === current.pendingEffectId,
+    );
+  const pendingMutation =
+    !pendingAppDelivery &&
+    (current?.pendingEffectId !== undefined || current?.pendingEffectAttempt !== undefined);
+  if (
+    row.record.leaseId !== undefined ||
+    row.record.leaseExpiresAt !== undefined ||
+    pendingMutation
+  ) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  return {
+    ...row,
+    record: {
+      ...row.record,
+      approvedByCallId: retained.approvedByCallId,
+      operator: {
+        approvalId: retained.approvalId,
+        authPreparation: retained.authPreparation,
+        fenceGeneration: retained.fenceGeneration,
+        gatewayEnvironment: retained.gatewayEnvironment,
+        mode: "protected-operator-v1",
+        operationRef: retained.operationRef,
+        plan: retained.plan,
+        planDigest: retained.planDigest,
+        receipts: retained.receipts,
+      },
+      status: "prepared",
+      step: "bound",
+    },
+  };
 };

@@ -41,6 +41,7 @@ import {
   dependencyTargetForWorkspace,
   executionDependencyViewScript,
   checkoutDependencyViewScript,
+  detachCheckoutDependencyViewScript,
   inspectDependencyCache,
   materializedDependencyNodeModulesRoot,
   materializeOfflineDependencies,
@@ -1183,7 +1184,13 @@ describe("linked package dependency views", () => {
     const workspace = join(root, "workspace");
     const source = join(workspace, "repository");
     const candidate = join(workspace, "candidate");
-    const view = join(workspace, ".app-builder", "dependency-views", "linked");
+    const view = join(
+      workspace,
+      ".app-builder",
+      "dependency-views",
+      "checkout",
+      createHash("sha256").update(candidate).digest("hex"),
+    );
     const rootModules = join(source, "node_modules");
     const appModules = join(source, "apps", "example", "node_modules");
     const physicalPackage = join(
@@ -1357,6 +1364,120 @@ describe("linked package dependency views", () => {
         expect(packageStat.mode).toBe(fixture.packageMode);
         expect(await readFile(join(fixture.source, "packages", "local", "index.cjs"))).toEqual(
           fixture.sourceBytes,
+        );
+      } finally {
+        await rm(fixture.root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  const detach = async (fixture: Awaited<ReturnType<typeof linkedFixture>>) =>
+    await executeFile(process.execPath, [
+      "-e",
+      detachCheckoutDependencyViewScript,
+      fixture.source,
+      fixture.candidate,
+      fixture.view,
+      fixture.workspace,
+    ]);
+
+  it("detaches borrowed roots before a candidate-owned install without changing checkout or cache bytes", async () => {
+    const fixture = await linkedFixture();
+    try {
+      await fixture.run("checkout");
+      const originalLink = await readlink(join(fixture.rootModules, "linked-runtime"));
+      const borrowedTarget = await readlink(join(fixture.candidate, "node_modules"));
+      await detach(fixture);
+      await expect(lstat(join(fixture.candidate, "node_modules"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(
+        lstat(join(fixture.candidate, "apps", "example", "node_modules")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      const borrowed = await lstat(borrowedTarget);
+      expect(borrowed.isDirectory()).toBe(true);
+      // Model the package manager's candidate-owned closure after the borrowed links are detached.
+      const installed = join(fixture.candidate, "node_modules");
+      await mkdir(join(installed, "new-locked-package"), { recursive: true });
+      await mkdir(join(installed, "@fixture"), { recursive: true });
+      await writeFile(
+        join(installed, "new-locked-package", "index.cjs"),
+        'module.exports="new-locked-dependency";',
+      );
+      await symlink("../../packages/local", join(installed, "@fixture", "local"));
+      const resolved = await executeFile(
+        process.execPath,
+        [
+          "-e",
+          'console.log(JSON.stringify([require("new-locked-package/index.cjs"),require("@fixture/local")]))',
+        ],
+        { cwd: fixture.candidate },
+      );
+      expect(resolved.stdout.trim()).toBe(
+        JSON.stringify(["new-locked-dependency", "candidate-workspace"]),
+      );
+      await fixture.run("checkout");
+      await expect(
+        lstat(join(fixture.candidate, "apps", "example", "node_modules")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      const appImports = await executeFile(
+        process.execPath,
+        [
+          "-e",
+          'console.log(JSON.stringify([require("new-locked-package/index.cjs"),require("@fixture/local")]))',
+        ],
+        { cwd: join(fixture.candidate, "apps", "example") },
+      );
+      expect(appImports.stdout.trim()).toBe(
+        JSON.stringify(["new-locked-dependency", "candidate-workspace"]),
+      );
+      await detach(fixture);
+      const ownedInstall = await lstat(installed);
+      expect(ownedInstall.isDirectory()).toBe(true);
+      expect(await readFile(join(fixture.physicalPackage, "index.cjs"))).toEqual(
+        fixture.packageBytes,
+      );
+      expect(await readFile(join(fixture.source, "packages", "local", "index.cjs"))).toEqual(
+        fixture.sourceBytes,
+      );
+      expect(await readlink(join(fixture.rootModules, "linked-runtime"))).toBe(originalLink);
+      await expect(lstat(join(fixture.rootModules, "new-locked-package"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["original-checkout", "another-candidate"])(
+    "preserves all roots when a dependency link points at %s",
+    async (kind) => {
+      const fixture = await linkedFixture();
+      try {
+        await fixture.run("checkout");
+        const ownedLink = join(fixture.candidate, "node_modules");
+        const ownedTarget = await readlink(ownedLink);
+        const foreignLink = join(fixture.candidate, "apps", "example", "node_modules");
+        const foreignTarget =
+          kind === "original-checkout"
+            ? fixture.appModules
+            : join(
+                fixture.workspace,
+                ".app-builder",
+                "dependency-views",
+                "checkout",
+                "another-candidate",
+                "apps",
+                "example",
+                "node_modules",
+              );
+        await rm(foreignLink);
+        await symlink(foreignTarget, foreignLink);
+        await expect(detach(fixture)).rejects.toThrow("not its owned borrowed view");
+        expect(await readlink(ownedLink)).toBe(ownedTarget);
+        expect(await readlink(foreignLink)).toBe(foreignTarget);
+        expect(await readFile(join(fixture.physicalPackage, "index.cjs"))).toEqual(
+          fixture.packageBytes,
         );
       } finally {
         await rm(fixture.root, { recursive: true, force: true });

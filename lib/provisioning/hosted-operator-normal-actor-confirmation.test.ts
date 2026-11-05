@@ -1,6 +1,7 @@
 /* oxlint-disable typescript/no-non-null-assertion -- Fixture always constructs these required private envelopes and links; tests mutate them to exercise rejection. */
 /* oxlint-disable eslint/require-await, unicorn/no-useless-undefined, typescript/consistent-return -- In-memory CAS is asynchronous and returns undefined for a real lost conditional write. */
 import { createHash } from "node:crypto";
+import { canReserveIdentityLink } from "./hosted-operator-pending-account-capture";
 import { describe, expect, it } from "vitest";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import {
@@ -227,6 +228,48 @@ const fixture = () => {
 const readState = (record: HostedRuntimeJournalRecord) =>
   decryptNormalActorState({ ...scope, sealed: record.accountPreparation!.sealedState });
 describe("human confirmation of private actual actor capture", () => {
+  it("reconnects the same approved actor while preserving an interrupted account attempt", () => {
+    const input = fixture();
+    const operator = input.record.operator!;
+    const preparation = input.record.accountPreparation!;
+    input.record.approvedByCallId = preparation.accountApprovedByCallId;
+    operator.approvalId = preparation.accountApprovalId;
+    const effect = operator.plan.effects.find((entry) => entry.kind === "normal-accounts");
+    if (!effect) {
+      throw new Error("missing account effect");
+    }
+    operator.pendingEffectId = effect.id;
+    operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000009" };
+    const reservation = {
+      operationRef: operator.operationRef,
+      planDigest: operator.planDigest,
+      participantCapture: true,
+    };
+    expect(canReserveIdentityLink(input.record, reservation)).toBe(true);
+    expect(
+      canReserveIdentityLink(input.record, { ...reservation, participantCapture: false }),
+    ).toBe(false);
+    expect(canReserveIdentityLink(input.record, { ...reservation, operationRef: "other" })).toBe(
+      false,
+    );
+    expect(canReserveIdentityLink(input.record, { ...reservation, planDigest: "other" })).toBe(
+      false,
+    );
+    const result = confirmNormalActorCapture(input);
+    expect(result.operator?.pendingEffectId).toBe(effect.id);
+    expect(result.operator?.pendingEffectAttempt).toEqual(operator.pendingEffectAttempt);
+    expect(readState(result).actors[0].session?.actorId).toBe(session.actorId);
+    expect(result.operator?.identityLink?.consumedAt).toBeDefined();
+    const wrongApproval = fixture();
+    wrongApproval.record = structuredClone(input.record);
+    wrongApproval.record.operator!.approvalId = "other-approval";
+    expect(() => confirmNormalActorCapture(wrongApproval)).toThrow();
+    const leased = fixture();
+    leased.record = structuredClone(input.record);
+    leased.record.leaseId = "00000000-0000-4000-8000-000000000010";
+    expect(canReserveIdentityLink(leased.record, reservation)).toBe(false);
+    expect(() => confirmNormalActorCapture(leased)).toThrow();
+  });
   it("atomically consumes nonce and activates exact encoded actual cookie bytes", () => {
     const input = fixture();
     const result = confirmNormalActorCapture(input);

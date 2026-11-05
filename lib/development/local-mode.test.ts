@@ -90,6 +90,40 @@ async function fixture() {
 }
 
 describe("development source snapshots", () => {
+  it("accepts an explicit endpoint-only launch without changing the plugin-install default", () => {
+    expect(
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]).installPlugin,
+    ).toBeUndefined();
+    expect(
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "false"])
+        .installPlugin,
+    ).toBe(false);
+    expect(
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "true"])
+        .installPlugin,
+    ).toBe(true);
+    expect(() =>
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "yes"]),
+    ).toThrow(/--install-plugin/u);
+  });
+
+  it("accepts an explicit endpoint-only launch without changing the plugin-install default", () => {
+    expect(
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]).installPlugin,
+    ).toBeUndefined();
+    expect(
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "false"])
+        .installPlugin,
+    ).toBe(false);
+    expect(
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "true"])
+        .installPlugin,
+    ).toBe(true);
+    expect(() =>
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "yes"]),
+    ).toThrow(/--install-plugin/u);
+  });
+
   it("skips uninitialized gitlinks and snapshots live initialized submodule files", async () => {
     const source = await fixture();
     const { execFileSync } = await import("node:child_process");
@@ -124,6 +158,36 @@ describe("development source snapshots", () => {
       code: "ENOENT",
     });
     expect(snapshot.fingerprint).not.toBe(empty);
+  });
+
+  it("retains already captured tracked-but-ignored source in the actual snapshot Git tree", async () => {
+    const source = await fixture();
+    await writeFile(
+      join(source, ".gitignore"),
+      ".config/mise/config.toml\nignored-secret.env\nnode_modules/\n",
+    );
+    await writeFile(join(source, ".config/mise/config.toml"), '[tools]\nbun = "dirty-original"\n');
+    await writeFile(join(source, "ignored-secret.env"), "private synthetic value");
+    await mkdir(join(source, "node_modules"));
+    await writeFile(join(source, "node_modules/ignored.js"), "not source");
+    const runRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-ignored-tracked-")));
+    roots.push(runRoot);
+    await chmod(runRoot, 0o700);
+    const snapshot = await createDevelopmentSnapshot({ sourceRoot: source, runRoot });
+    const { execFileSync } = await import("node:child_process");
+    const actual = execFileSync(
+      "/usr/bin/git",
+      ["-C", snapshot.root, "show", `${snapshot.commit}:.config/mise/config.toml`],
+      { encoding: "utf-8", env: { HOME: "/dev/null", PATH: "/usr/bin:/bin", NODE_ENV: "test" } },
+    );
+    expect(actual).toBe(await readFile(join(source, ".config/mise/config.toml"), "utf-8"));
+    expect(snapshot.fingerprint).toBe(await fingerprintDevelopmentSource(snapshot.root));
+    await expect(stat(join(snapshot.root, "ignored-secret.env"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(stat(join(snapshot.root, "node_modules/ignored.js"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("captures dirty and untracked source in an owner-writable Git snapshot", async () => {
@@ -323,4 +387,50 @@ it("opts into emulated web without changing default development", () => {
   expect(() =>
     parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--emulated-web", "yes"]),
   ).toThrow("true or false");
+});
+
+it("selects an existing hosted MCP resource through the native connector", () => {
+  expect(
+    parseDevelopmentArguments([
+      "--arrusted-root",
+      "/tmp/arrusted",
+      "--hosted-session-resource",
+      "https://builder.example.test/mcp",
+    ]).hostedSessionResource,
+  ).toBe("https://builder.example.test/mcp");
+  for (const value of [
+    "http://builder.example.test/mcp",
+    "https://private@builder.example.test/mcp",
+    "https://builder.example.test/mcp?token=private",
+  ]) {
+    expect(() =>
+      parseDevelopmentArguments([
+        "--arrusted-root",
+        "/tmp/arrusted",
+        "--hosted-session-resource",
+        value,
+      ]),
+    ).toThrow();
+  }
+});
+
+it("selects an existing native client by an explicit absolute path", () => {
+  expect(
+    parseDevelopmentArguments([
+      "--arrusted-root",
+      "/tmp/arrusted",
+      "--hosted-session-resource",
+      "https://builder.example.test/mcp",
+      "--hosted-session-codex-bin",
+      "/tools/codex",
+    ]).hostedSessionCodexBin,
+  ).toBe("/tools/codex");
+  expect(() =>
+    parseDevelopmentArguments([
+      "--arrusted-root",
+      "/tmp/arrusted",
+      "--hosted-session-codex-bin",
+      "relative-codex",
+    ]),
+  ).toThrow();
 });

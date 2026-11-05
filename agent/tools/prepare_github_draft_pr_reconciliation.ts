@@ -1,7 +1,12 @@
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { setBuilderSandboxNetworkPolicy } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
-import { preparePublishedDraftReconciliation } from "@/lib/agent/prepare-published-draft-repair";
+import type { ToolContext } from "eve/tools";
+import {
+  preparePublishedDraftReconciliation,
+  draftInspectionRecoveryForSession,
+} from "@/lib/agent/prepare-published-draft-repair";
 import {
   draftPreparationPrerequisiteDiagnostic,
   draftPrerequisiteMessage,
@@ -162,24 +167,45 @@ const freshPublishedRepair = (state: AppBuilderWorkflowState): ReviewedWorkflow 
   return null;
 };
 
+const prepareOwnedDraftRecovery = async (input: {
+  state: AppBuilderWorkflowState;
+  ctx: ToolContext;
+  pullRequestNumber: number;
+  recovery?: "reopen-current-owned-draft";
+}) => {
+  const repairOrigin = freshPublishedRepair(input.state);
+  if (repairOrigin !== null) {
+    return await preparePublishedDraftReconciliation({ ...input, state: repairOrigin });
+  }
+  if (input.recovery !== undefined) {
+    throw new Error(
+      "Reopening an owned draft is supported only for this reviewed starter-created app's existing publication. Preserve its source and complete the normal app review before reopening that same owned draft; this mode cannot replace an existing repository selection.",
+    );
+  }
+  return null;
+};
+
+const isReviewedExistingSource = (
+  state: AppBuilderWorkflowState,
+): state is ReviewedWorkflow & { githubSource: NonNullable<ReviewedWorkflow["githubSource"]> } =>
+  state.phase === "reviewed" &&
+  state.githubSource !== undefined &&
+  state.sourceReceipt.sourceKind === "existing-repository";
+
 export default defineTool({
   description:
-    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. A fresh-template build that already published its own draft uses that verified owned publication and preserves its original starter source; it does not replace the occupied source through resolve_github_source. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. Builder preserves original approved root registration through the repository's automatic merge result. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval.",
+    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. A fresh-template build that already published its own draft uses that verified owned publication and preserves its original starter source; it does not replace the occupied source through resolve_github_source. For an existing-repository app, retry normal preparation without a recovery flag: Builder can reuse this candidate's retained original app-review lineage while the same app, source and apply bindings still match, preserving its unpublished edits. Explicit recovery: reopen-current-owned-draft applies only to a reviewed starter-created app's verified owned publication; it starts a fresh candidate from that same draft and base without replaying the old review or candidate. Private work is preserved for inspection and deliberate current-candidate edits; normal retries retain this recovery mode. The new candidate needs validation, review and separate exact publication approval. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. Builder preserves original approved root registration through the repository's automatic merge result. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval.",
+  // oxlint-disable-next-line eslint/complexity -- Preserve source recovery and the existing independent owner/draft guards.
   async execute(input, ctx) {
-    const state = appBuilderWorkflowState.get();
-    const repairOrigin = freshPublishedRepair(state);
-    if (repairOrigin !== null) {
-      return await preparePublishedDraftReconciliation({
-        state: repairOrigin,
-        ctx,
-        pullRequestNumber: input.pullRequestNumber,
-      });
+    ctx.abortSignal?.throwIfAborted();
+    const workflow = appBuilderWorkflowState.get();
+    const state =
+      resolveDraftReviewedWorkflow(workflow, draftReconciliationState.get()) ?? workflow;
+    const ownedRecovery = await prepareOwnedDraftRecovery({ ...input, state, ctx });
+    if (ownedRecovery !== null) {
+      return ownedRecovery;
     }
-    if (
-      state.phase !== "reviewed" ||
-      state.githubSource === undefined ||
-      state.sourceReceipt.sourceKind !== "existing-repository"
-    ) {
+    if (!isReviewedExistingSource(state)) {
       throw new Error(
         draftPrerequisiteMessage(
           draftPreparationPrerequisiteDiagnostic(state),
@@ -221,6 +247,7 @@ export default defineTool({
       state.applyReceipt.applyRoot,
       ...state.validationReceipt.commands.map((command) => command.validationRoot),
       ...(retainedCandidate === null ? [] : [retainedCandidate.root]),
+      ...(retainedCandidate?.preservedWorkspaces ?? []).map((workspace) => workspace.root),
       ...draftReconciliationCompletions.get().map((completion) => completion.root),
     ];
     const workspaceMaintenance = await retireUnusedDraftWorktrees({
@@ -263,6 +290,14 @@ export default defineTool({
       const lineage = reconciliationLineageRequest(state, original);
       const source = await runtime.inspectExistingDraftReconciliationSource({
         ...lineage,
+        recovery: draftInspectionRecoveryForSession({
+          ctx,
+          appId: state.appSpec.appId,
+          appSpecDigest: state.appSpec.digest,
+          root: state.applyReceipt.applyRoot,
+          pullRequestNumber: input.pullRequestNumber,
+          priorPublishedProposalDigest: lineage.priorPublishedProposalDigest,
+        }),
         readPublishedSource: async (draft) =>
           await readPublishedOperatorSourceForSession({
             appId: state.appSpec.appId,
@@ -364,6 +399,7 @@ export default defineTool({
         ),
         githubSourceDigest: state.githubSource.digest,
         originalReviewDigest: state.reviewReceipt.digest,
+        reviewedLineage: structuredClone(state),
         pullRequestNumber: input.pullRequestNumber,
         repositoryId: state.githubSource.repository.repositoryId,
         version: 1 as const,
@@ -399,6 +435,9 @@ export default defineTool({
       throw error;
     }
   },
-  inputSchema: z.strictObject({ pullRequestNumber: z.number().int().positive() }),
+  inputSchema: z.strictObject({
+    pullRequestNumber: z.number().int().positive(),
+    recovery: z.literal("reopen-current-owned-draft").optional(),
+  }),
 });
 // oxlint-disable github/filenames-match-regex -- Eve tool discovery requires the public snake_case tool name.

@@ -163,6 +163,79 @@ describe("synthetic Neon provenance helper", () => {
     ]);
   });
 
+  it.each(["br-root", "br-child"])(
+    "verifies %s and its enrolled lineage while Neon has archived the idle branch cache",
+    async (branchId) => {
+      const provider = branchReads();
+      const readBranch = vi.fn(async (id: string) => {
+        const value = await provider(id);
+        if (value === undefined) {
+          throw new Error("Expected an enrolled branch fixture.");
+        }
+        return { branch: { ...value.branch, current_state: "archived" } };
+      });
+      await expect(
+        readNativePreviewNeonProvenance({
+          enrollment: enrollment(),
+          readBranch,
+          readProject: async () => project(),
+          scope: { branchId, projectId: "project-123" },
+        }),
+      ).resolves.toBe("parent-data");
+      expect(readBranch.mock.calls.map(([id]) => id)).toEqual(
+        branchId === "br-root" ? ["br-root"] : ["br-child", "br-parent", "br-root"],
+      );
+    },
+  );
+
+  it.each(["init", "resetting", "failed", "unknown"])(
+    "still rejects a branch in %s state",
+    async (state) => {
+      const readBranch = branchReads();
+      await expect(
+        readNativePreviewNeonProvenance({
+          enrollment: enrollment(),
+          readBranch: async (id) => {
+            const value = await readBranch(id);
+            if (value === undefined) {
+              throw new Error("Expected an enrolled branch fixture.");
+            }
+            return { branch: { ...value.branch, current_state: state } };
+          },
+          readProject: async () => project(),
+          scope: { branchId: "br-root", projectId: "project-123" },
+        }),
+      ).rejects.toThrow("Protected Preview Neon provenance is unavailable.");
+    },
+  );
+
+  it.each(["br-root", "br-child"])(
+    "still rejects changed creation provenance for archived %s",
+    async (branchId) => {
+      const readBranch = branchReads();
+      await expect(
+        readNativePreviewNeonProvenance({
+          enrollment: enrollment(),
+          readBranch: async (id) => {
+            const value = await readBranch(id);
+            if (value === undefined) {
+              throw new Error("Expected an enrolled branch fixture.");
+            }
+            return {
+              branch: {
+                ...value.branch,
+                current_state: "archived",
+                ...(id === branchId ? { created_at: "2026-10-09T00:00:00Z" } : {}),
+              },
+            };
+          },
+          readProject: async () => project(),
+          scope: { branchId, projectId: "project-123" },
+        }),
+      ).rejects.toThrow("Protected Preview Neon provenance is unavailable.");
+    },
+  );
+
   it("compares every enrolled fork-position field when both are returned", async () => {
     const bothPositions = enrollment();
     const firstChild = bothPositions.branches.at(0);

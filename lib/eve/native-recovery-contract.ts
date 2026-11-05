@@ -11,6 +11,13 @@ export const nativeRecoveryDescriptorSchema = z.strictObject({
   originalAuthoritySessionId: z.string().min(1),
   parentCancellationRevision: z.number().int().nonnegative(),
   sourceHandoffId: z.uuid().optional(),
+  /** Explicit owner-requested transfer of a parked native execution, never a user cancellation. */
+  executionTransfer: z
+    .strictObject({
+      kind: z.enum(["pending-approval", "idle-checkpoint"]),
+      sourceCheckpointDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+    })
+    .optional(),
 });
 export type NativeRecoveryDescriptor = z.infer<typeof nativeRecoveryDescriptorSchema>;
 
@@ -27,6 +34,8 @@ export const nativeRecoveryBindingSchema = nativeRecoveryDescriptorSchema
       sourceStepId: z.string().min(1),
       sourceEventId: z.string().min(1),
       sourceSlot: z.number().int().nonnegative(),
+      checkpointOwnerRunId: z.string().min(1).optional(),
+      resumePhase: z.literal("await-input").optional(),
       checkpointVersion: z.literal(1),
     }),
   })
@@ -55,3 +64,12 @@ export const assertNativeRecoveryReceipt = (
     throw new Error("Native recovery receipt differs from its canonical reservation.");
   }
 };
+
+/** Exact source coordinates for advisory native reads; never recovery or dispatch authority. */
+export const nativeSourceObservationSchema = z.strictObject({
+  sourcePublicSessionId: z.string().min(1),
+  sourceAdapterSessionId: z.string().min(1),
+  sourceAdapterGeneration: z.number().int().positive(),
+  cancellationRevision: z.number().int().nonnegative(),
+});
+export type NativeSourceObservation = z.infer<typeof nativeSourceObservationSchema>;

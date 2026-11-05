@@ -123,9 +123,21 @@ apply only to repositories that satisfy the App Builder's explicit supported
 repository contract; it does not claim support for arbitrary repositories.
 
 Confirm that a new task exposes exactly `autograph_start`, `autograph_get`, `autograph_send`,
-`autograph_respond`, and `autograph_cancel`. The bundled App Builder skill is fail-closed:
-if any App Builder tool is unavailable, it stops without using another app
-builder or editing a target directly.
+`autograph_respond`, and `autograph_cancel`. If tools are unavailable or the
+connection fails, the bundled skill follows
+[connection recovery](../skills/autograph-app-builder/references/connection-recovery.md):
+Codex discovers the tools, checks access with a read-only call, and uses the
+host's supported connection or authentication flow where available. The user
+completes only the required sign-in/consent or native connection action. Access
+must be verified before continuing the same saved Builder session. Recovery does
+not start a replacement app, replay an approval, or edit the target directly.
+
+A skill cannot hot-load tools when the host requires a fresh chat. In that case,
+Codex preserves the goal, saved Builder session, cursor and unresolved request
+identities in a continuation handoff, without credentials. Opening that chat
+continues the existing build rather than creating a new app. Explicit local
+`codex mcp login` is a recovery option only for a discovered separately registered
+OAuth server; it is not an additional normal-installation step.
 
 The repository and release assets are public. The release archive is the
 supported external installation path until the shared marketplace is

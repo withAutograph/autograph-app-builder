@@ -22,6 +22,18 @@ describe("canonical Arrusted source preparation", () => {
     const run = vi.fn(async ({ command }: { command: string }) => {
       await Promise.resolve();
       commands.push(command);
+      if (command.includes("canonical-main-acquisition-proof-v1"))
+        return {
+          exitCode: 0,
+          stderr: "",
+          stdout: JSON.stringify({
+            sourceSha: "a".repeat(40),
+            sourceTree: "b".repeat(40),
+            mainSha: "a".repeat(40),
+            mainTree: "b".repeat(40),
+            originMatches: true,
+          }),
+        };
       return {
         exitCode: command.startsWith("test -L ") ? 1 : 0,
         stderr: "",
@@ -46,6 +58,79 @@ describe("canonical Arrusted source preparation", () => {
     expect(receipt.sourceKind).toBe("fresh-template");
     expect(commands.some((command) => command.includes("git clone"))).toBe(false);
     expect(written).toContain(".app-builder/prepare-intent.json");
+  });
+
+  it("materializes the template into an empty resumed sandbox", async () => {
+    const sourceSha = "a".repeat(40);
+    const sourceTree = "b".repeat(40);
+    let acquired = false;
+    const materializeGitSource = vi.fn(async () => {
+      await Promise.resolve();
+      acquired = true;
+    });
+    const run = vi.fn(async ({ command }: { command: string }) => {
+      await Promise.resolve();
+      if (command.includes("canonical-main-acquisition-proof-v1"))
+        return {
+          exitCode: 0,
+          stderr: "",
+          stdout: JSON.stringify({
+            sourceSha,
+            sourceTree,
+            mainSha: sourceSha,
+            mainTree: sourceTree,
+            originMatches: true,
+          }),
+        };
+      if (command.startsWith("test -e ") || command.startsWith("test -L ")) {
+        return { exitCode: 1, stderr: "", stdout: "" };
+      }
+      if (command.includes("rev-parse")) {
+        return acquired
+          ? {
+              exitCode: 0,
+              stderr: "",
+              stdout: `${sourceSha}\n${sourceTree}\nhttps://github.com/withAutograph/arrusted-development.git\n`,
+            }
+          : { exitCode: 1, stderr: "missing", stdout: "" };
+      }
+      return { exitCode: 0, stderr: "", stdout: "" };
+    });
+    await acquireCanonicalArrustedTemplate({
+      callId: "prepare",
+      reader: { acquire: async () => await Promise.resolve({ token: "test-token" }) },
+      sandbox: {
+        id: "sandbox",
+        materializeGitSource,
+        readTextFile: async () => await Promise.resolve(null),
+        run,
+        writeTextFile: async () => {
+          await Promise.resolve();
+        },
+      } as never,
+    });
+    expect(materializeGitSource).toHaveBeenCalledOnce();
+    expect(materializeGitSource).toHaveBeenCalledWith({
+      token: "test-token",
+      url: "https://github.com/withAutograph/arrusted-development.git",
+      revision: "main",
+    });
+  });
+
+  it("does not materialize over an occupied workspace", async () => {
+    const materializeGitSource = vi.fn();
+    const run = vi.fn(async ({ command }: { command: string }) => {
+      await Promise.resolve();
+      return { exitCode: command.startsWith("test -e ") ? 0 : 1, stderr: "missing", stdout: "" };
+    });
+    await expect(
+      acquireCanonicalArrustedTemplate({
+        callId: "prepare",
+        reader: { acquire: async () => await Promise.resolve({ token: "test-token" }) },
+        sandbox: { id: "sandbox", materializeGitSource, run } as never,
+      }),
+    ).rejects.toThrow("occupied");
+    expect(materializeGitSource).not.toHaveBeenCalled();
   });
 
   it("reuses the recorded session workspace without legacy reinspection", async () => {

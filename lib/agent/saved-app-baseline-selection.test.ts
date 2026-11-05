@@ -54,6 +54,10 @@ const mocks = vi.hoisted((): FixtureRuntime => ({
   workflow: { phase: "empty" },
   workflowUpdate: vi.fn(),
 }));
+vi.mock("./application-source-import-state", () => ({
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- No uploaded application source exists in this source-status fixture.
+  applicationSourceImportState: { get: () => undefined },
+}));
 vi.mock("./source-state", () => ({
   APP_BUILDER_SOURCE_VERSION: 3,
   sourceWorkflowState: { get: () => mocks.source, update: mocks.sourceUpdate },

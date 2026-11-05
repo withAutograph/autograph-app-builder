@@ -1,5 +1,9 @@
 /* oxlint-disable eslint/sort-keys, eslint/consistent-type-definitions, eslint/require-await, eslint/object-shorthand, eslint/func-names, eslint/curly, eslint/no-await-in-loop, unicorn/no-useless-undefined, unicorn/no-useless-spread, typescript/no-non-null-assertion, typescript/strict-boolean-expressions, typescript/no-unsafe-type-assertion, typescript/no-unnecessary-type-assertion, anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-conditional-empty-object-spread, anti-slop/require-safety-comment-for-type-assertion -- Synthetic SDK fakes use minimal opaque fixtures to exercise the real protocol boundary without provider calls. */
 import { createHash } from "node:crypto";
+import {
+  receipt as sourceReceipt,
+  capture as sourceCapture,
+} from "./operator-worker-source-capture.test-fixture";
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it, vi } from "vitest";
@@ -20,6 +24,16 @@ import {
 } from "./hosted-operator-sandbox-launcher";
 import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
+
+const currentReceipt = structuredClone(sourceReceipt);
+currentReceipt.workers.genericInstaller.path = "trusted-worker";
+currentReceipt.workers.genericInstaller.sha256 = "a".repeat(64);
+const currentReceiptBytes = Buffer.from(JSON.stringify(currentReceipt));
+const currentCapture = {
+  ...sourceCapture,
+  catalogPath: "/opt/catalog.json",
+  catalogSha256: createHash("sha256").update(currentReceiptBytes).digest("hex"),
+};
 
 const runId = "a79c7cc3-9236-4a09-9e4a-5f772d08a255";
 const rustWire = JSON.parse(
@@ -125,6 +139,7 @@ const makeFixture = (
     abortBeforeAuthority?: AbortController;
     delayCreate?: Promise<void>;
     generated?: boolean;
+    captured?: boolean;
     auth?: boolean;
     signupPolicy?: boolean;
     startupFailure?: { code: string; metadata?: unknown };
@@ -270,6 +285,12 @@ const makeFixture = (
       appInstallation: { customerIds: options.installationCustomers },
     });
   }
+  if (options.captured) {
+    selectedPlan = hostedOperatorPlanSchema.parse({
+      ...selectedPlan,
+      installer: { ...selectedPlan.installer, sourceCapture: currentCapture },
+    });
+  }
   const customWorker =
     options.generated === true || options.auth === true || options.signupPolicy === true;
   const baseSelectedContext = buildProtectedInstallContext({
@@ -335,7 +356,7 @@ const makeFixture = (
       })),
       mkdir: vi.fn(async () => undefined),
       rm: vi.fn(async () => undefined),
-      readFile: vi.fn(),
+      readFile: vi.fn(async () => currentReceiptBytes),
     },
     readFileToBuffer: vi.fn(
       async ({ path: filePath }: { path: string }) => files.get(filePath) ?? null,
@@ -611,6 +632,7 @@ const makeFixture = (
       workers: {
         [selectedPlan.selection.appId]: {
           executablePath: "/opt/trusted-worker",
+          ...(options.captured ? { sourceCapture: currentCapture } : {}),
           id: selectedPlan.installer.reference,
           operationScope: options.generated
             ? "generated-app-release-install-v1"
@@ -662,6 +684,31 @@ const makeFixture = (
 /* oxlint-enable eslint/complexity, sonarjs/cognitive-complexity */
 
 describe("hosted protected installer Sandbox launcher", () => {
+  it("reads the actual current catalog before dispatch and refuses tampered receipt bytes", async () => {
+    const valid = makeFixture({ generated: true, captured: true });
+    await valid.launcher.execute(valid.input);
+    expect(valid.sandbox.fs.readFile).toHaveBeenCalledWith(
+      currentCapture.catalogPath,
+      expect.anything(),
+    );
+    expect(valid.records.length).toBeGreaterThan(0);
+    const tampered = makeFixture({ generated: true, captured: true });
+    tampered.sandbox.fs.readFile.mockResolvedValue(Buffer.from("wrong receipt"));
+    await expect(tampered.launcher.execute(tampered.input)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(tampered.sandbox.writeFiles).not.toHaveBeenCalled();
+    expect(tampered.workerCommand()).toBeUndefined();
+  });
+  it("refuses removal of the source receipt frozen in a new plan before Sandbox creation", async () => {
+    const f = makeFixture({ generated: true });
+    f.input.plan = hostedOperatorPlanSchema.parse({
+      ...f.input.plan,
+      installer: { ...f.input.plan.installer, sourceCapture: currentCapture },
+    });
+    await expect(f.launcher.execute(f.input)).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(f.createSandbox).not.toHaveBeenCalled();
+  });
   it("limits schema-only tenants to install contexts and preserves access contexts", () => {
     const selectedPlan = hostedOperatorPlanSchema.parse({
       ...plan,
@@ -706,6 +753,34 @@ describe("hosted protected installer Sandbox launcher", () => {
       inspector.launcher.inspect({ ...inspector.input, readbackOnly: true }),
     ).resolves.toMatchObject({ status: "incomplete" });
     expect(inspector.records).toHaveLength(0);
+  });
+
+  it("keeps empty access contexts invalid when schema installation retains an existing customer", async () => {
+    const fixture = makeFixture({
+      generated: true,
+      access: true,
+      fenceOnly: true,
+      installationCustomers: ["tenant-a", "existing-owner"],
+      readbackStatus: "incomplete",
+    });
+    fixture.input.plan = hostedOperatorPlanSchema.parse({
+      ...fixture.input.plan,
+      access: [],
+      appInstallation: { customerIds: ["existing-owner"] },
+    });
+    expect(
+      buildProtectedInstallContext({
+        plan: fixture.input.plan,
+        database: "appDatabase",
+        fenceGeneration: 3,
+        operationRef: runId,
+        purpose: "install",
+      }).tenant_targets,
+    ).toEqual(["existing-owner"]);
+    await expect(
+      fixture.launcher.inspect({ ...fixture.input, readbackOnly: true }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(fixture.createSandbox).not.toHaveBeenCalled();
   });
 
   it("keeps access inspection limited to access targets when installation includes an existing owner", async () => {

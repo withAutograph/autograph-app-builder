@@ -60,9 +60,20 @@ export const retainedParticipantGatewaySchema = z.strictObject({
   candidate: operatorDeploymentCandidateSchema,
 });
 
-export const hostedRuntimeJournalRecordSchema = z.strictObject({
+const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
   approvedByCallId: z.string().min(1),
   accountPreparation: normalActorAccountPreparationSchema.optional(),
+  /** Immutable prior account scope and completed app evidence; never current-plan approval. */
+  participantPreparationHistory: z
+    .array(
+      z.strictObject({
+        preparation: normalActorAccountPreparationSchema,
+        approvedByCallId: z.string().min(1),
+        operator: hostedOperatorRecordSchema,
+        proof: hostedRuntimeProofSchema.optional(),
+      }),
+    )
+    .optional(),
   cleanupApprovedByCallId: z.string().min(1).optional(),
   credentialReference: z
     .strictObject({
@@ -144,10 +155,41 @@ export const hostedRuntimeJournalRecordSchema = z.strictObject({
     "prepared",
     "verified",
     "bound",
+    "resource-ready",
+    "resource-ready",
     "environment-removed",
     "cleaned",
   ]),
   version: z.literal(1),
+});
+
+export const hostedRuntimeJournalRecordSchema = hostedRuntimeJournalRecordBaseSchema.extend({
+  /** Immutable unapproved app proposal and its real approved prerequisites. This history
+   * never grants approval to the app proposal or implies its effects were absent. */
+  unapprovedAppProposalHistory: z
+    .array(
+      z.strictObject({
+        approvedByCallId: z.literal("operator:unapproved-plan"),
+        operator: hostedOperatorRecordSchema,
+        preparation: normalActorAccountPreparationSchema,
+        retainedAuth: retainedOperatorAuthSchema,
+        retainedParticipantGateway: retainedParticipantGatewaySchema.optional(),
+      }),
+    )
+    .optional(),
+  /** Immutable prerequisites displaced only by exact pending-account restoration. */
+  pendingAccountRestorations: z
+    .array(
+      z.strictObject({
+        approvedByCallId: z.string().min(1),
+        operator: hostedOperatorRecordSchema,
+        retainedAuth: retainedOperatorAuthSchema.optional(),
+        executionObservation: hostedRuntimeJournalRecordBaseSchema.shape.executionObservation,
+        realmIdentityWait: hostedRuntimeJournalRecordBaseSchema.shape.realmIdentityWait,
+        realmContinuation: hostedRuntimeJournalRecordBaseSchema.shape.realmContinuation,
+      }),
+    )
+    .optional(),
 });
 
 export type HostedRuntimeJournalRecord = z.infer<typeof hostedRuntimeJournalRecordSchema>;
@@ -170,8 +212,9 @@ export const retainedOperatorAuthFromJournal = (
       ? record.status === "pending" && record.step === "reserved"
       : [
           record.status === "prepared",
-          record.step === "bound",
-          record.environmentBound === true,
+          operator.plan.runtimePreparation === "single-project-resources-v1"
+            ? record.step === "resource-ready" && record.environmentBound === false
+            : record.step === "bound" && record.environmentBound === true,
           record.proof?.manifestSha256 === operator.plan.release.sha256,
           record.proof?.releaseId === operator.plan.release.id,
         ].every(Boolean);

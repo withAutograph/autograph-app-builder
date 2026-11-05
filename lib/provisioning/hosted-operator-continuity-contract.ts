@@ -1,4 +1,5 @@
 import { privateOperatorApprovalObservationSchema } from "../eve/private-operator-approval-observation";
+import { browserTestSelectionSchema } from "../agent/browser-test-selection";
 import { createHash } from "node:crypto";
 import { managedRuntimePublicProfileSchema } from "../sandbox/managed-runtime-capabilities";
 import { isDeepStrictEqual } from "node:util";
@@ -25,13 +26,18 @@ export const managedRuntimeWorkerDescriptorSchema = z.strictObject({
   operationScope: z.literal("managed-app-runtime-v1"),
   subcommand: z.literal("protected-managed-app-runtime"),
 });
-export const continuityRuntimeSelectionSchema = z.strictObject({ sandboxId: id, root: id });
+export const continuityRuntimeSelectionSchema = z.strictObject({
+  sandboxId: id,
+  root: id,
+  browserSelection: browserTestSelectionSchema.optional(),
+});
 export type ContinuityRuntimeSelection = z.infer<typeof continuityRuntimeSelectionSchema>;
 export const hostedContinuityPlanSchema = z
   .strictObject({
     version: z.literal(1),
     kind: z.literal("app-continuity-plan"),
     intentId: z.uuid(),
+    predecessorIntentId: z.uuid().optional(),
     planRef: id,
     authority: hostedTenantAuthoritySchema,
     target: hostedRuntimeTargetSchema,
@@ -190,6 +196,7 @@ export const continuityRecordSchema = z
   .strictObject({
     kind: z.literal("app-continuity"),
     requestId: z.uuid(),
+    supersededBy: z.uuid().optional(),
     revision: z.number().int().nonnegative(),
     idempotencyKey: id,
     plan: hostedContinuityPlanSchema,
@@ -242,10 +249,57 @@ export const continuityRecordSchema = z
     }
   });
 export type ContinuityRecord = z.infer<typeof continuityRecordSchema>;
+
+/** Only an approved attempt with no possible process or publication dispatch may follow a resumed VM session. */
+export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord): boolean => {
+  const { locator, current, approval, attemptId, plan } = record;
+  if (
+    locator === undefined ||
+    current === undefined ||
+    approval === undefined ||
+    attemptId === undefined
+  ) {
+    return false;
+  }
+  return [
+    ["starting", "reconciliation-required"].includes(record.state),
+    record.pendingStage === "runtime",
+    record.supersededBy === undefined,
+    record.cancelled !== true,
+    record.failure === undefined,
+    record.outcome === undefined,
+    record.fence > 0,
+    locator.commandId === undefined,
+    locator.dispatchAttempted !== true,
+    locator.attemptId === attemptId,
+    locator.sandboxId === plan.runtime.sandboxId,
+    locator.root === plan.runtime.root,
+    record.projection === undefined,
+    record.environmentRows.length === 0,
+    record.environmentWrites.length === 0,
+    record.deliveryCandidates.length === 0,
+    record.deliveryAttempted !== true,
+    record.suiteDispatched !== true,
+    record.suiteCommandId === undefined,
+    current.state === "starting",
+    isDeepStrictEqual(continuityIdentitySchema.strip().parse(current), {
+      intentId: record.requestId,
+      approvalRef: approval.approvalId,
+      owner: { ...plan.authority, sessionId: plan.target.sessionId },
+      appId: plan.target.appId,
+      runtimeAttemptId: attemptId,
+      fence: record.fence,
+      sandboxId: locator.sandboxId,
+      providerSessionId: locator.providerSessionId,
+    }),
+  ].every(Boolean);
+};
+
 export const continuityStatus = (record: ContinuityRecord) => ({
   intentId: record.requestId,
   planRef: record.plan.planRef,
   state: record.state,
+  ...(record.supersededBy === undefined ? {} : { supersededBy: record.supersededBy }),
   ...(record.outcome === undefined ? {} : { outcome: record.outcome }),
   ...(record.failure === undefined ? {} : { failure: record.failure }),
   ...(record.current === undefined
@@ -263,6 +317,7 @@ export const continuityStatusSchema = z.strictObject({
   intentId: z.uuid(),
   planRef: id,
   state: continuityRecordSchema.shape.state,
+  supersededBy: z.uuid().optional(),
   outcome: continuityRecordSchema.shape.outcome,
   failure: continuityRecordSchema.shape.failure,
   runtime: z

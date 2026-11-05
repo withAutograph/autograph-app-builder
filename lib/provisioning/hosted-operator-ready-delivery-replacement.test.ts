@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -300,7 +301,7 @@ const recoveryFixture = () => {
 };
 
 describe("native externally managed policy recovery integration", () => {
-  it("shows exact external policy evidence and named READY predecessors in the new approval", () => {
+  it("shows the concise cost disclaimer for Preview approval", () => {
     const f = recoveryFixture();
     const input = {
       ...f.proposed.selection,
@@ -308,18 +309,7 @@ describe("native externally managed policy recovery integration", () => {
       planDigest: operatorPlanDigest(f.proposed),
     };
     const description = publicApprovalDescription(input, "prepare-app-hosted-runtime");
-    for (const identity of [
-      externalPolicy.teamId,
-      externalPolicy.appPreview.sourceProjectId,
-      externalPolicy.appPreview.targetProjectId,
-      externalPolicy.provenance.reference,
-      externalPolicy.observedAt,
-      "ready-notes",
-      "ready-gateway",
-      f.original.planDigest,
-    ]) {
-      expect(description).toContain(identity);
-    }
+    expect(description).toBe("This approval may incur provider costs.");
     expect(
       publicApprovalDescription(
         { ...input, planDigest: f.current.operator!.planDigest },
@@ -393,6 +383,8 @@ describe("native externally managed policy recovery integration", () => {
       const readGatewayAlias = vi.fn(async () => {
         throw new Error("ordinary first proposal must not read predecessor alias");
       });
+      const existingGrants = structuredClone(ordinary.access);
+      const executed: string[] = [];
       const deps: ProtectedHostedOperatorDependencies = {
         store,
         now: () => now,
@@ -412,8 +404,26 @@ describe("native externally managed policy recovery integration", () => {
             }),
         readApproval: async (input) => ({ ...input, approved: true, approvalId: "approval-notes" }),
         withResourceLease: async (_input, run) => await run(async () => {}),
-        reconcile: async () => ({ status: "absent" }),
+        reconcile: async (input) => {
+          await input.assertCurrent();
+          if (
+            input.effect.kind === "access" &&
+            isDeepStrictEqual(existingGrants, input.plan.access)
+          ) {
+            return {
+              status: "applied",
+              receipt: {
+                effectId: input.effect.id,
+                observedAt: new Date(now).toISOString(),
+                resourceVersion: "existing-approved-grants",
+                fenceGeneration: input.fenceGeneration,
+              },
+            };
+          }
+          return { status: "absent" };
+        },
         executeEffect: async (input) => {
+          executed.push(input.effect.kind);
           expect(input.plan.hostProtection).toBeUndefined();
           expect(input.plan.appTrustedSources).toEqual(f.record.operator!.plan.appTrustedSources);
           expect(input.plan.gatewayBindings!.trustedSources).toEqual(
@@ -487,6 +497,8 @@ describe("native externally managed policy recovery integration", () => {
           ),
         );
         expect(result.status).toBe("prepared");
+        expect(executed).not.toContain("access");
+        expect(existingGrants).toEqual(ordinary.access);
         expect(row.record.operator!.planDigest).toBe(oldDigest);
         expect(row.record.operator!.retainedReadyDeliveryOperations).toBeUndefined();
         expect(row.record.operator!.plan.appDeliveryReplacement).toBeUndefined();
@@ -916,7 +928,35 @@ describe("native externally managed policy recovery integration", () => {
                   : "new-human-approval",
         }),
         withResourceLease: async (_input, run) => await run(async () => {}),
-        reconcile: async () => ({ status: "absent" }),
+        reconcile: async (input) => {
+          await input.assertCurrent();
+          const currentAppOrigin = input.deliveryCandidates
+            ?.filter(
+              (candidate) =>
+                candidate.operationRef === input.operationRef && candidate.readyState === "READY",
+            )
+            .find(
+              (candidate) =>
+                candidate.projectId === input.plan.delivery?.projectId &&
+                candidate.branch === input.plan.delivery?.branch &&
+                candidate.repoId === input.plan.delivery?.repoId,
+            )?.origin;
+          if (
+            input.effect.kind === "gateway-bindings" &&
+            currentAppOrigin !== undefined &&
+            gatewayBoundOrigin === currentAppOrigin
+          ) {
+            return {
+              status: "applied",
+              receipt: {
+                effectId: input.effect.id,
+                observedAt: new Date(now).toISOString(),
+                resourceVersion: "existing-current-app-gateway-binding",
+              },
+            };
+          }
+          return { status: "absent" };
+        },
         executeEffect: async (input) => {
           executed.push(input.effect.kind);
           if (input.effect.kind === "bindings") {
@@ -1112,8 +1152,12 @@ describe("native externally managed policy recovery integration", () => {
           expect(
             calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
           ).toHaveLength(0);
+          const bindingsBeforeResume = executed.filter((kind) => kind === "gateway-bindings");
           const resumed = await readOperatorResponse(await handler(request(execute)));
           expect(resumed.status).toBe("prepared");
+          expect(executed.filter((kind) => kind === "gateway-bindings")).toEqual(
+            bindingsBeforeResume,
+          );
           expect(aliasTarget).toBe("fresh-gateway");
           expect(
             calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),

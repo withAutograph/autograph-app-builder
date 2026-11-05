@@ -38,14 +38,55 @@ even when its original publication receipt is unavailable to that tenant.
 The recovery path does not invent an original receipt. It asks GitHub for the
 current open draft, verifies the selected same-repository branch and head,
 checks that the PR author is this GitHub App's bot, and requires the same
-Builder origin marker in the PR body and current head commit. It then writes
-one immutable adoption record in `hosted_github_draft_adoption`, keyed by the
+Builder origin marker in the PR body and current head commit. The PR-body
+marker is a standalone HTML comment within the description; normal evidence
+text and whitespace do not change its meaning. Identical repeated markers are
+accepted, while distinct conflicting markers leave the origin unverified.
+These comments still require the configured App's bot author, matching Builder
+branch and full marker in the current head commit. It then writes one immutable
+adoption record in `hosted_github_draft_adoption`, keyed by the
 tenant and exact repository and PR IDs. Each later Builder update commit
 preserves the origin marker so subsequent reads keep that commit-level proof.
 The sealed proposal still binds the current head and exact reviewed app-owned
 diff; a separate approval and GitHub atomic expected-OID update are required.
 If GitHub provenance cannot be verified, Builder reports that reason and leaves
 the PR branch untouched.
+
+An isolated existing-app draft retains the complete original reviewed workflow
+as private lineage. Authoring and technical validation can use that lineage if
+creation-workspace validation later loses its current review, provided the
+original app, apply, selected-source, repository, proposal, identity and workspace bindings still
+match. A different current review supersedes the retained lineage. The retained
+review does not assess edited candidate bytes or authorize their publication:
+the actual candidate still needs its own validation, diff review and exact
+publication approval.
+
+An ordinary no-edit validation of a currently owned draft selects the existing
+candidate validation service before changing creation-workspace state. Its
+result describes the candidate's actual source; creation-workspace results do
+not establish that separately authored candidate's correctness. Explicit
+creation repairs remain creation-workspace operations.
+
+Legacy recovery may recover a missing complete lineage only from the original
+owner-authenticated native session history at the supported recovery boundary.
+Compact review summaries and unverified proposal metadata cannot reconstruct
+it. Recovery preserves the latest draft and its edits, does not roll back the
+current workflow, and grants no permission to replay an external effect.
+For a starter-created app's owned published draft, the retained full review
+must match the current starter/apply/workspace and the verified publication
+origin of the same candidate. A later recovery may look into predecessor native
+executions only through the committed, owner-authorized public recovery receipt
+chain. It checks each owner's original checkpoint boundary and orders records
+within that execution; event slots from different executions are not comparable.
+A newer conflicting or incomplete review cannot be bypassed by searching for
+an older favorable one. If the full original review or candidate is unavailable,
+recovery retains the existing state and reports the limitation.
+For an already waiting hosted session, an explicit owner `recover-idle` request
+reaches that boundary through the existing native recovery reservation and
+receipt. Normal resume keeps the healthy handle and does not reconstruct
+history. Idle recovery must independently prove a closed, unchanged native
+inbox wait before stopping the old owner; it cannot recover a pending approval
+or treat missing approval evidence as consent.
 
 Initial source selection is separate from publication. In a new session,
 `resolve_github_source` accepts a named branch or any open same-repository PR,
@@ -96,7 +137,41 @@ and the app browser task when requested. Candidate commands select the existing
 `app-validation` Mise environment alongside other explicitly selected profiles.
 This carries the explicit dependency-setup boundary through nested formatter,
 compiler, runtime and browser commands: dependencies are prepared by the locked
-install step, and child Mise processes inherit that policy.
+install step, and child Mise processes inherit that policy. Each coherent candidate
+validation pass starts with the fixed cached `bun install --frozen-lockfile` operation
+in that candidate's root. Builder first unlinks only that candidate's borrowed
+checkout dependency-view roots; it preserves candidate-owned installations and
+never installs through those links into the original checkout or shared cache.
+Saved validation runs without a successful locked-install acknowledgement insert
+this setup before their pending check, preserving acknowledged schema compilation
+and historical command evidence. Installation failure stays pending with its real
+cause. Normal source edits can start a new pass using the same package-manager
+cache and installed candidate files; they do not rebuild a sandbox or dependency
+closure. Actual checks and fresh source review remain required after setup.
+Candidate local-runtime preparation uses the same owner-bound durable log capture
+as app checks and tests. `get_validation_log` discovery identifies these attempts
+as `local-preparation`, retaining their exact candidate and invocation identity,
+exit status, capture completion and durability across later edits or sandbox
+cleanup. A successful preparation is `prepared`; it does not prove an app check
+passed. Sanitized log references remain session-scoped. Missing storage or an
+interrupted command stays explicit and never changes the command's outcome.
+The candidate-bound `normalize_github_draft_pr_dependency_catalog` operation
+aligns one dependency already declared by the selected app with a shared Bun
+catalog without selecting a new version. It verifies compatible existing
+consumers before writing, retains unrelated manifest data, and uses pinned Bun
+with install scripts disabled to generate lock metadata. Its server-retained
+receipt binds exact changed metadata bytes and the resulting non-app index.
+Normal candidate review includes those shared metadata paths; arbitrary shared
+edits, changed receipt bytes, symlinks and unrelated root edits remain denied.
+The original automatic-merge receipt remains provenance, never substituted by
+caller-provided catalog authority. Successful normalization is not validation,
+publication, deployment, or hosted acceptance. A failed lock operation retains
+its metadata result and failure so the same candidate can retry normally.
+Additional repository checks stream through detached execution into the same
+durable, tenant-bound validation log store as app tests. Their `additional-check`
+references remain discoverable and pageable after a later repair; a failed
+manifest command no longer loses its output through whole-result truncation.
+
 Independent semantic source review
 remains required through the app acceptance workflow. Separately,
 `review_github_draft_pr_reconciliation` records a deterministic exact-candidate,
@@ -136,6 +211,41 @@ original owned draft receipt. The marker must match the provider-observed
 repository, branch, commit and tree exactly. This reads retained publication
 history; it neither selects a latest release nor accepts a supplied historical
 commit. An absent or mismatched marker leaves the original baseline unchanged.
+
+GitHub's PR snapshot may still report an older head after an accepted branch
+update. Same-draft recovery obtains the tenant-owned publication and its retained
+applied proposal or canonical owner/app/spec-scoped source before that mismatch
+can prevent source acquisition. The recovery context stays internal and follows
+the same operation through inspection, sealing, mutation and exact-result
+read-back; public tools accept no caller-supplied source proof.
+
+Recovery binds the same repository, PR, branch and verified Builder origin to
+the existing publication. A marker or commit ancestry alone grants no authority.
+A later approved merge proves its exact parent commits, reviewed tree and commit
+message against that owned baseline, even when the PR snapshot predates it.
+Result recovery runs before recording the new published source, so that record
+is not a prerequisite for proving an already accepted write. Live-ref rereads,
+expected-OID non-force updates, review and separate effect approval remain
+required. An unproved branch advance still leaves the draft untouched.
+
+When the original app review cannot be replayed onto its current owned draft,
+`prepare_github_draft_pr_reconciliation` supports the explicit
+`recovery: "reopen-current-owned-draft"` mode. Builder verifies the same owned
+publication, current draft and live base, then creates a fresh isolated merge
+candidate without replaying the ambiguous original overlay or an earlier
+candidate. The original starter provenance, apply workspace and earlier private
+candidates remain retained. The result identifies the unreplayed original
+review and preserved workspaces; those edits are not claimed as part of the new
+candidate.
+
+The recovery mode follows subsequent preparation attempts within the same owned
+review lineage. Original app-review content remains available through
+`change_set_status`; retained draft candidates can be read through the bounded,
+read-only preserved-workspace selector on `edit_github_draft_pr_candidate`.
+Edits still target only the current candidate. Builder must validate that
+candidate, review its new base and prior-head diffs, seal the exact result and
+obtain separate outward-effect approval. Reopening is private preparation and
+does not replace the accepted source or update GitHub.
 
 `hosted_github_installation` binds that same tenant tuple to one exact GitHub
 App installation and expected account identity. Binding is available only

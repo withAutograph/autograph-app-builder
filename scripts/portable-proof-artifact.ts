@@ -5,6 +5,7 @@ import { gunzipSync } from "node:zlib";
 
 import { z } from "zod";
 
+import { codexClientId, codexRedirectUri } from "../lib/auth/codex-client-metadata.ts";
 import {
   AUTOGRAPH_PACKAGE_VERSION,
   validateAgentPluginPackage,
@@ -228,6 +229,7 @@ export async function verifyPortableProofArtifact(input: {
     JSON.stringify({
       mcpServers: {
         "app-builder": {
+          oauth: { callback_url: codexRedirectUri, client_id: codexClientId },
           oauth_resource: receipt.endpoint,
           type: "http",
           url: receipt.endpoint,

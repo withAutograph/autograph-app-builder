@@ -17,6 +17,7 @@ import type {
   ContinuityCapabilities,
 } from "../provisioning/hosted-operator-continuity-contract";
 import {
+  canRebindUndispatchedContinuityRuntime,
   managedRuntimeWorkerDescriptorSchema,
   continuityCurrentSchema,
   continuityIdentitySchema,
@@ -282,6 +283,44 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
       }
     }
   };
+  const recoverUndispatchedLocator = async (
+    provider: ManagedRuntimeSandboxPort,
+    record: ContinuityRecord,
+    locator: NonNullable<ContinuityRecord["locator"]>,
+    assertCurrent: Parameters<HostedContinuityDependencies["runtime"]["start"]>[3],
+    checkpoint: Parameters<HostedContinuityDependencies["runtime"]["start"]>[4],
+  ) => {
+    if (
+      locator.attemptId !== record.attemptId ||
+      locator.sandboxId !== record.plan.runtime.sandboxId ||
+      locator.root !== record.plan.runtime.root
+    ) {
+      throw unavailable();
+    }
+    if (locator.commandId === undefined && locator.dispatchAttempted === true) {
+      throw unavailable();
+    }
+    const session = await currentSession(provider);
+    if (session.id === locator.providerSessionId) {
+      return { locator, current: record.current };
+    }
+    if (!canRebindUndispatchedContinuityRuntime(record)) {
+      throw unavailable();
+    }
+    const expiresAt = provider.expiresAt?.toISOString();
+    if (expiresAt === undefined || Date.parse(expiresAt) <= Date.now()) {
+      throw unavailable();
+    }
+    const recoveredLocator = { ...locator, providerSessionId: session.id };
+    const current = continuityCurrentSchema.parse({
+      ...record.current,
+      providerSessionId: session.id,
+      leaseExpiresAt: expiresAt,
+    });
+    await assertCurrent();
+    await checkpoint({ locator: recoveredLocator, current });
+    return { locator: recoveredLocator, current };
+  };
   const runtime: HostedContinuityDependencies["runtime"] = {
     async start(context, record, _capabilities, assertCurrent, checkpoint) {
       const descriptor = managedRuntimeWorkerDescriptorSchema.parse(
@@ -291,6 +330,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
       await assertCurrent();
       const provider = await providerFor(context, record.plan);
       let locator = record.locator;
+      let retainedCurrent = record.current;
       if (locator === undefined) {
         if (record.attemptId === undefined || record.approval === undefined) {
           throw unavailable();
@@ -323,14 +363,17 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         });
         await checkpoint({ locator, current });
       } else {
-        await assertLocator(context, record);
-        if (locator.commandId === undefined && locator.dispatchAttempted === true) {
-          throw unavailable();
-        }
+        ({ locator, current: retainedCurrent } = await recoverUndispatchedLocator(
+          provider,
+          record,
+          locator,
+          assertCurrent,
+          checkpoint,
+        ));
       }
       if (locator.commandId === undefined) {
         const current =
-          record.current ??
+          retainedCurrent ??
           continuityCurrentSchema.parse({
             intentId: record.requestId,
             approvalRef: record.approval?.approvalId,
@@ -356,15 +399,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
             await checkpoint({ workerAsset });
           },
         });
-        const executable = await provider.runCommand({
-          cmd: "sha256sum",
-          args: ["--", descriptor.executablePath],
-        });
-        const executableOutput = await executable.stdout();
-        const executableSha256 = executableOutput.split(/\s+/u)[0];
-        if (executable.exitCode !== 0 || executableSha256 !== descriptor.sha256) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
+        // Installation verifies the configured binary and target readback through the file API.
         const material = await deps.readExecution(context, record.plan);
         const profile =
           record.publicProfile ??
@@ -499,6 +534,12 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         runTask: async (input: Parameters<typeof runTask>[0]) =>
           await runTask({
             ...input,
+            ...(record.plan.runtime.browserSelection === undefined
+              ? {}
+              : {
+                  browserSelection: record.plan.runtime.browserSelection,
+                  frozenBrowserSelection: true,
+                }),
             environment: { ...input.environment, ...privateEnvironment },
             commandId: record.suiteCommandId,
             commandCheckpoint: checkpoint,

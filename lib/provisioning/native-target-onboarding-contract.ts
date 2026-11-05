@@ -127,6 +127,12 @@ export type NativeTargetCancellationProvenance = z.infer<
   typeof nativeTargetCancellationProvenanceSchema
 >;
 
+/** Retired planning intent only: no attempt or approval is claimed settled by supersession. */
+export const nativeTargetPlanSupersessionSchema = z.strictObject({
+  plan: nativeTargetOnboardingPlanSchema,
+  planDigest: digest,
+  supersededAt: instant,
+});
 const common = {
   kind: z.literal("native-target-onboarding"),
   version: z.literal(1),
@@ -135,6 +141,7 @@ const common = {
   planDigest: digest,
   previousAttempts: z.array(nativeTargetCompletedAttemptSchema),
   priorCancellations: z.array(nativeTargetCancellationProvenanceSchema).optional(),
+  priorPlannedScopes: z.array(nativeTargetPlanSupersessionSchema).optional(),
 };
 const approved = { ...common, approval: nativeTargetOnboardingApprovalSchema };
 export const nativeTargetOnboardingRecordSchema = z
@@ -176,6 +183,14 @@ export const nativeTargetOnboardingRecordSchema = z
       record.planDigest !== nativeTargetOnboardingPlanDigest(record.plan)
     ) {
       fail("Target plan identity mismatch.");
+    }
+    for (const prior of record.priorPlannedScopes ?? []) {
+      if (
+        prior.plan.appId !== record.appId ||
+        prior.planDigest !== nativeTargetOnboardingPlanDigest(prior.plan)
+      ) {
+        fail("Prior planning scope identity does not match its immutable plan.");
+      }
     }
     for (const prior of record.priorCancellations ?? []) {
       if (

@@ -1,3 +1,5 @@
+import { sameJournalAfterLeaseRenewal } from "./hosted-operator-lease-renewal";
+import { isIdlePendingAccountCapture } from "./hosted-operator-pending-account-capture";
 import { z } from "zod";
 import {
   HostedOperatorError,
@@ -51,9 +53,14 @@ export const createNormalActorJournalAuthority = (input: {
       throw new HostedOperatorError("authorization_required");
     }
   },
-  async assertMutationAuthority(context, row) {
+  // oxlint-disable-next-line eslint/complexity -- Lease, approval and capture recovery remain independently scoped.
+  async assertMutationAuthority(context, row, mode) {
     await input.assertCanonicalOwner(context);
-    const { record } = row;
+    const currentRow = await input.store.read(context);
+    if (!sameJournalAfterLeaseRenewal(row, currentRow, input.now()) || currentRow === undefined) {
+      throw new HostedOperatorError("operation_in_progress");
+    }
+    const { record } = currentRow;
     const { operator } = record;
     if (operator === undefined) {
       throw new HostedOperatorError("operation_in_progress");
@@ -91,16 +98,22 @@ export const createNormalActorJournalAuthority = (input: {
         throw new HostedOperatorError("authorization_required");
       }
     } else if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- An idle capture exception requires the exact retained account attempt.
       record.leaseId !== undefined ||
       record.leaseExpiresAt !== undefined ||
-      operator.pendingEffectId !== undefined ||
-      operator.pendingEffectAttempt !== undefined
+      ((operator.pendingEffectId !== undefined || operator.pendingEffectAttempt !== undefined) &&
+        !(mode === "capture" && isIdlePendingAccountCapture(record)))
     ) {
       throw new HostedOperatorError("operation_in_progress");
     }
     await input.assertCanonicalOwner(context);
     const latest = await input.store.read(context);
-    if (latest?.revision !== row.revision || latest.record.leaseId !== record.leaseId) {
+    if (
+      !sameJournalAfterLeaseRenewal(currentRow, latest, input.now()) ||
+      ("effect" in context &&
+        (latest?.record.leaseExpiresAt === undefined ||
+          Date.parse(latest.record.leaseExpiresAt) <= input.now()))
+    ) {
       throw new HostedOperatorError("operation_in_progress");
     }
   },

@@ -81,7 +81,9 @@ it("shows an inline retry after a hydrated verification transport failure", asyn
     async () => button.click(),
   );
   expect(auth.signIn).toHaveBeenCalledOnce();
-  expect(container.querySelector("button")?.textContent).toContain("Passkey failed (try again)");
+  expect(container.querySelector("button")?.textContent).toContain(
+    "Couldn’t use your passkey. Try again.",
+  );
   expect(container.querySelector("button")?.disabled).toBe(false);
   expect(auth.navigate).not.toHaveBeenCalled();
 });

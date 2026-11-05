@@ -2,8 +2,10 @@ import { holdActiveCommandLease } from "./active-command-lease";
 import type { Sandbox, Command } from "@vercel/sandbox";
 import type { SandboxRunOptions, SandboxProcess } from "eve/sandbox";
 import path from "node:path";
-import { Readable, Writable } from "node:stream";
+import { Readable } from "node:stream";
 import type { BuilderSandboxSession } from "./builder-sandbox";
+import { writeVercelStream } from "./vercel-stream-write";
+
 import { materializeVercelGitSource } from "./vercel-git-source";
 
 export type VercelSdkSessionNative = Pick<
@@ -16,7 +18,7 @@ export type VercelSdkSessionNative = Pick<
   | "update"
   | "expiresAt"
   | "extendTimeout"
-> & { readonly fs: Pick<Sandbox["fs"], "mkdir" | "writeFile" | "appendFile" | "rm"> };
+> & { readonly fs: Pick<Sandbox["fs"], "mkdir" | "rm"> };
 
 const resolvePath = (value: string) => path.posix.resolve("/workspace", value);
 const encoding = (value = "utf-8"): BufferEncoding => {
@@ -31,13 +33,14 @@ export const createVercelSdkSession = (
   native: VercelSdkSessionNative,
   current: () => VercelSdkSessionNative = () => native,
   authorize?: () => Promise<void>,
+  environment?: Readonly<Record<string, string>>,
 ): BuilderSandboxSession => {
   const runCommand = (options: SandboxRunOptions) => ({
     // A login profile may change directories after the SDK applies cwd.
     args: ["-c", options.command],
     cmd: "bash",
     cwd: resolvePath(options.workingDirectory ?? "."),
-    env: options.env,
+    env: environment === undefined ? options.env : { ...environment, ...options.env },
     signal: options.abortSignal,
   });
   const readBinaryFile: BuilderSandboxSession["readBinaryFile"] = async (options) =>
@@ -154,29 +157,45 @@ export const createVercelSdkSession = (
       await current().update({ networkPolicy: policy });
     },
     async spawn(options): Promise<SandboxProcess> {
-      const stdout = new TransformStream<Uint8Array, Uint8Array>();
-      const stderr = new TransformStream<Uint8Array, Uint8Array>();
-      const output = Writable.fromWeb(stdout.writable);
-      const errors = Writable.fromWeb(stderr.writable);
-      // Detached SDK commands stream directly; no command/output deadline is added.
+      let output: TransformStreamDefaultController<Uint8Array> | undefined;
+      let errors: TransformStreamDefaultController<Uint8Array> | undefined;
+      const stdout = new TransformStream<Uint8Array, Uint8Array>({
+        start(controller) {
+          output = controller;
+        },
+      });
+      const stderr = new TransformStream<Uint8Array, Uint8Array>({
+        start(controller) {
+          errors = controller;
+        },
+      });
+      const outputWriter = stdout.writable.getWriter();
+      const errorWriter = stderr.writable.getWriter();
+      const stopped = new AbortController();
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the native cancellation or log transport exception as both stream failures.
+      const interrupt = (error: unknown) => {
+        stopped.abort(error);
+        // Error the transform itself to unblock a write stalled on a cancelled/absent reader.
+        output?.error(error);
+        errors?.error(error);
+      };
+      // Process exit and SDK log exhaustion are independent completion signals.
       const lease = await holdActiveCommandLease({
         authorize,
         current,
         signal: options.abortSignal,
       });
+      const signal = AbortSignal.any([lease.signal, stopped.signal]);
       let command;
       try {
         command = await current().runCommand({
           ...runCommand(options),
           detached: true,
-          signal: lease.signal,
-          stderr: errors,
-          stdout: output,
+          signal,
         });
       } catch (error) {
         await lease.finish();
-        output.end();
-        errors.end();
+        interrupt(error);
         throw error;
       }
       let killing: Promise<void> | undefined;
@@ -187,6 +206,7 @@ export const createVercelSdkSession = (
         await killing;
       };
       const abort = () => {
+        interrupt(lease.signal.reason);
         void (async () => {
           try {
             await kill();
@@ -201,9 +221,26 @@ export const createVercelSdkSession = (
       }
       const completion = (async () => {
         try {
-          const result = await command.wait({ signal: lease.signal });
-          lease.signal.throwIfAborted();
-          return { exitCode: result.exitCode };
+          const drain = async () => {
+            const encoder = new TextEncoder();
+            for await (const log of command.logs({ signal })) {
+              const writer = log.stream === "stdout" ? outputWriter : errorWriter;
+              // oxlint-disable-next-line eslint/no-await-in-loop -- Await downstream consumption before requesting more SDK log data.
+              await writer.write(encoder.encode(log.data));
+            }
+          };
+          const results = await Promise.all([drain(), command.wait({ signal })]);
+          signal.throwIfAborted();
+          await Promise.all([outputWriter.close(), errorWriter.close()]);
+          return { exitCode: results[1].exitCode };
+        } catch (error) {
+          interrupt(error);
+          try {
+            await kill();
+          } catch {
+            // Keep the original transport or cancellation failure if cleanup also fails.
+          }
+          throw error;
         } finally {
           lease.signal.removeEventListener("abort", abort);
           await lease.finish();
@@ -214,8 +251,6 @@ export const createVercelSdkSession = (
               /* Cancellation retains its own error. */
             }
           }
-          output.end();
-          errors.end();
         }
       })();
       // Preserve rejection for wait() while avoiding an unhandled rejection if the owner closes first.
@@ -235,17 +270,13 @@ export const createVercelSdkSession = (
     },
     writeBinaryFile,
     async writeFile(options) {
-      const provider = current();
-      const target = resolvePath(options.path);
-      await provider.fs.mkdir(path.posix.dirname(target), {
-        recursive: true,
+      await writeVercelStream({
+        current,
+        authorize,
+        target: resolvePath(options.path),
+        content: options.content,
         signal: options.abortSignal,
       });
-      await provider.fs.writeFile(target, Buffer.alloc(0), { signal: options.abortSignal });
-      for await (const chunk of options.content) {
-        options.abortSignal?.throwIfAborted();
-        await provider.fs.appendFile(target, chunk, { signal: options.abortSignal });
-      }
     },
     writeTextFile: (options) =>
       writeBinaryFile({

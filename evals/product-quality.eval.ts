@@ -26,9 +26,9 @@ export default defineEval({
     const session = await t.session();
     const vendor = productQualityScenario("vendor-onboarding");
     const repository = createSupportedRepositoryFixture();
-    await session.send(`Supported repository at ${repository}\nProduct brief: ${vendor.brief}`);
-    session.requireInputRequest({ toolName: "apply_app_creation" });
-    const turn1 = await session.respondAll("approve");
+    const turn1 = await session.send(
+      `Supported repository at ${repository}\nProduct brief: ${vendor.brief}`,
+    );
     t.succeeded();
     t.calledTool("record_prototype_artifact", {
       count: 1,

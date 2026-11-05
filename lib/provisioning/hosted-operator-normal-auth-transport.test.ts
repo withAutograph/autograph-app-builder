@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
+import { readManagedRuntimePublicProfile } from "../sandbox/managed-runtime-capabilities";
 import type { verifyVercelOidcToken } from "@vercel/oidc";
 import { createHostedOperatorNormalAuthTransport } from "./hosted-operator-normal-auth-transport";
 import type { NormalAuthTransportConfiguration } from "./hosted-operator-normal-auth-transport";
 import type { HostedOperatorContext } from "./hosted-operator-service";
-import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-http-transport";
+import {
+  createHostedOperatorRealmHttpTransport,
+  createHostedOperatorPublicJwksReader,
+} from "./hosted-operator-realm-http-transport";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 
 const origin = "https://public.example.com";
@@ -130,6 +135,116 @@ describe("private Realm readback native transport", () => {
     };
   };
 
+  it("builds the actual runtime public profile through owner-bound server JWKS transport and native operator OIDC", async () => {
+    const native = realmIo();
+    const { publicKey } = generateKeyPairSync("ed25519");
+    const key = {
+      ...publicKey.export({ format: "jwk" }),
+      kid: "gateway-key",
+      alg: "EdDSA",
+      use: "sig",
+    };
+    native.fetch.mockResolvedValue(Response.json({ keys: [key] }));
+    const owner = dependencies();
+    const reader = createHostedOperatorPublicJwksReader(
+      {
+        configuration: realmConfiguration,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        assertCurrentOwner: owner.assertCurrentOwner,
+      },
+      native,
+    );
+    const result = await readManagedRuntimePublicProfile({
+      appId: context.target.appId,
+      publicOrigin: origin,
+      readPublicJwks: (url) => reader(context, url),
+    });
+    expect(result.keys).toEqual([key]);
+    expect(result.jwksUrl).toBe(`${origin}/_platform/jwks.json`);
+    expect(owner.assertPlanningAuthorized).toHaveBeenCalledWith(context);
+    expect(owner.assertCurrentOwner).toHaveBeenCalledTimes(2);
+    expect(native.getOidc).toHaveBeenCalledWith({ project: "operator-project", team: "team" });
+    expect(native.verifyOidc).toHaveBeenCalledWith(
+      "private-native-token",
+      realmConfiguration.nativeNeon.configuration.operator,
+    );
+    const [address, options] = native.fetch.mock.calls[0] ?? [];
+    expect(address instanceof URL && address.href).toBe(result.jwksUrl);
+    expect(options?.method).toBe("GET");
+    expect(options?.redirect).toBe("error");
+    const headers = new Headers(options?.headers);
+    expect(headers.get("x-vercel-trusted-oidc-idp-token")).toBe("private-native-token");
+    expect(headers.has("cookie")).toBe(false);
+    expect(headers.has("authorization")).toBe(false);
+    // The former callback used this normal-account transport and failed before any network read.
+    const former = await createHostedOperatorNormalAuthTransport(owner, {
+      ...native,
+      verifyOidc: async (token, verificationOptions) => {
+        await native.verifyOidc(token, verificationOptions);
+      },
+    });
+    await expect(
+      former(result.jwksUrl, { method: "GET", redirect: "error" }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(native.fetch).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    "https://foreign.example/_platform/jwks.json",
+    `${origin}/_platform/jwks.json?extra=1`,
+    `${origin}/api/auth/get-session`,
+  ])("refuses public-profile callbacks outside the configured exact JWKS URL (%s)", async (url) => {
+    const native = realmIo();
+    const owner = dependencies();
+    const reader = createHostedOperatorPublicJwksReader(
+      {
+        configuration: realmConfiguration,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        assertCurrentOwner: owner.assertCurrentOwner,
+      },
+      native,
+    );
+    await expect(reader(context, url)).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(native.getOidc).not.toHaveBeenCalled();
+    expect(native.fetch).not.toHaveBeenCalled();
+  });
+  it("refuses the profile read after owner revocation or an app target mismatch", async () => {
+    const native = realmIo();
+    const owner = dependencies();
+    owner.assertCurrentOwner.mockRejectedValue(new Error("Owner revoked"));
+    const reader = createHostedOperatorPublicJwksReader(
+      {
+        configuration: realmConfiguration,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        assertCurrentOwner: owner.assertCurrentOwner,
+      },
+      native,
+    );
+    await expect(reader(context, `${origin}/_platform/jwks.json`)).rejects.toThrow("Owner revoked");
+    await expect(
+      reader(
+        { ...context, target: { ...context.target, projectId: "foreign-project" } },
+        `${origin}/_platform/jwks.json`,
+      ),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(native.getOidc).not.toHaveBeenCalled();
+    expect(native.fetch).not.toHaveBeenCalled();
+  });
+  it("keeps the actual server JWKS transport closed to cookies and wrong methods", async () => {
+    const native = realmIo();
+    const transport = createHostedOperatorRealmHttpTransport(
+      realmConfiguration,
+      "operator",
+      native,
+      origin,
+    );
+    await expect(
+      transport(`${origin}/_platform/jwks.json`, { method: "POST" }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    await expect(
+      transport(`${origin}/_platform/jwks.json`, { headers: { cookie: "private-session" } }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(native.fetch).not.toHaveBeenCalled();
+  });
   it.each([undefined, "https://untrusted-caller.example.com"])(
     "derives POST Origin from the journal-pinned endpoint rather than caller metadata (%s)",
     async (callerOrigin) => {

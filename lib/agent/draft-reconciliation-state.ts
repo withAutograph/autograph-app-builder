@@ -1,3 +1,4 @@
+import type { CandidateDependencyCatalogIntent } from "../repository/candidate-dependency-catalog";
 import { defineState } from "eve/context";
 import type { PublishedDraftRepairSource } from "./published-draft-repair";
 import type { PublishedDraftRepairReview } from "../repository/published-draft-repair-review";
@@ -8,6 +9,7 @@ import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-op
 import type { PrivateApplyScope } from "./private-apply-authority";
 import type { PublishedAppSourceReview } from "./published-app-source";
 import type { ValidationLogReference } from "../repository/validation-log";
+import type { DraftReviewedWorkflow } from "./draft-reviewed-lineage";
 
 import type {
   ExistingDraftReconciliationProposal,
@@ -73,7 +75,18 @@ export const assertRetainedDraftReconciliationCompletion = (
   }
 };
 
+/** Owned private work retained for comparison; it grants no replay or publication authority. */
+export interface PreservedDraftWorkspace {
+  kind: "app-review" | "draft-candidate";
+  root: string;
+  reviewDigest: string;
+  paths?: readonly string[];
+}
+
 interface DraftCandidateFields {
+  /** Original complete app review, retained independently from creation-workspace revalidation. */
+  reviewedLineage?: DraftReviewedWorkflow;
+  dependencyCatalogPending?: CandidateDependencyCatalogIntent;
   version: 1;
   appId: string;
   githubSourceDigest: string;
@@ -87,6 +100,13 @@ interface DraftCandidateFields {
   baseSha: string;
   baseTree: string;
   conflicts: readonly string[];
+  /** Server-produced exact catalog normalization, scoped to this retained candidate. */
+  dependencyCatalog?: {
+    files: readonly { path: string; digest: string }[];
+    nonAppIndexDigest: string;
+  };
+  recoveryMode?: "reopen-current-owned-draft";
+  preservedWorkspaces?: readonly PreservedDraftWorkspace[];
   validation?: {
     resolvedTree: string;
     commands: readonly { command: string; exitCode: number }[];
@@ -186,7 +206,8 @@ export interface CandidateValidationAttempt {
   appId: string;
   baseSha: string;
   callId: string;
-  category: "check-build" | "test";
+  // oxlint-disable-next-line sonarjs/max-union-size -- Persisted command categories distinguish the supported diagnostic readback forms.
+  category: "check-build" | "test" | "local-preparation" | "additional-check";
   command: string;
   completion: "complete" | "interrupted" | "unavailable";
   durability: "available" | "unavailable";
@@ -215,13 +236,24 @@ export const retainCandidateValidationAttempt = (attempt: CandidateValidationAtt
   candidateValidationAttemptHistory.update((current) => [...current, attempt]);
 };
 
+/** Compare the durable JSON value, ignoring object-key order and omitted undefined fields. */
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- The JSON-normalized value is used only for equality, never as a typed candidate.
+const storedDraftCandidate = (candidate: DraftReconciliationCandidate | null): unknown => {
+  const serialized = JSON.stringify(candidate);
+  return JSON.parse(serialized);
+};
+export const samePersistedDraftCandidate = (
+  left: DraftReconciliationCandidate | null,
+  right: DraftReconciliationCandidate | null,
+): boolean => isDeepStrictEqual(storedDraftCandidate(left), storedDraftCandidate(right));
+
 export const updateExactDraftReconciliation = (input: {
   expected: DraftReconciliationCandidate | null;
   operation: string;
   transition: (current: DraftReconciliationCandidate | null) => DraftReconciliationCandidate | null;
 }): void => {
   draftReconciliationState.update((current) => {
-    if (JSON.stringify(current) !== JSON.stringify(input.expected)) {
+    if (!samePersistedDraftCandidate(current, input.expected)) {
       throw new Error(
         `The draft reconciliation changed while Builder was ${input.operation}. Inspect its current state, then retry.`,
       );

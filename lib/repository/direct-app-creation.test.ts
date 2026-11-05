@@ -1,3 +1,4 @@
+import { workspaceBinInstallCommand } from "./workspace-bin-install";
 // oxlint-disable eslint/require-await -- Promise-returning sandbox test doubles model asynchronous I/O.
 import { describe, expect, it, vi } from "vitest";
 
@@ -71,7 +72,7 @@ describe("direct app creation", () => {
     });
     expect(calls.slice(0, 2)).toEqual([
       "repository/.config/app-specs/inventory.cue",
-      "bun install",
+      workspaceBinInstallCommand("/workspace/repository", false),
     ]);
     expect(calls[2]).toContain("mise install --locked cue");
     expect(calls.slice(3)).toEqual([

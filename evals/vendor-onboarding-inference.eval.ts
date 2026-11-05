@@ -10,12 +10,9 @@ export default defineEval({
   async test(t) {
     const session = await t.session();
     const repository = createSupportedRepositoryFixture();
-    await session.send(`Supported repository at ${repository}
+    const turn1 = await session.send(`Supported repository at ${repository}
 Product brief: Build an internal vendor-onboarding workflow for operations to review new vendor submissions, resolve missing information, and involve Finance when tax verification is actually required.`);
-
-    session.requireInputRequest({ toolName: "apply_app_creation" });
-    t.event("input.requested", { count: 1 });
-    const turn1 = await session.respondAll("approve");
+    turn1.notEvent("input.requested");
     t.succeeded();
     t.toolOrder([
       "inspect_source",

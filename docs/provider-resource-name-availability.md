@@ -23,3 +23,62 @@ of an existing resource based only on an availability response.
 
 This change intentionally does not add form-time provider requests or inline
 conflict UI.
+
+## Public app deployment policy
+
+New normal web Builder provisioning records `deploymentAccess: "public-app"`
+in its durable request, digest, response and handoff. Creation requests Standard
+Protection (`prod_deployment_urls_and_all_previews`) and enabled team-issued
+OIDC, then independently reads both settings back before reporting success.
+The production app domain is publicly reachable; the app's Better Auth and
+application authorization still control access to its data and actions. Preview
+and immutable deployment URLs remain protected. This setting does not deploy
+or activate the app or establish authenticated behavior.
+
+The standard project remains `apps-<app-id>`, uses the Services framework at the
+repository root, and retains its selected GitHub link. A policy mismatch is a
+failed postcondition; provisioning does not patch the project, create another
+project, or disable protection to repair it. Existing frozen requests without
+the optional access field preserve their digest and inherited provider policy;
+handoff continuations retain that absence. Dedicated native Preview plans keep
+their separately approved All Deployments policy unchanged.
+
+## Safe provider rejection evidence
+
+Standard Vercel provisioning retains only an HTTP failure status, an optional
+closed allowlisted provider error code, and an optional bounded `x-vercel-id`
+request reference in Vercel's region-prefixed format. Unknown codes, response
+messages, bodies, URLs and credentials are not retained. An unreadable error
+body does not discard the observed rejection status or its safe request reference.
+The durable operation preserves the latest such observation through a later
+reconciliation failure; tenant-scoped provisioning diagnostics expose those
+same bounded facts. They describe the prior rejection, not permission for a
+retry, proof of creation, or resolution of an uncertain write. Successful
+provisioning does not present the prior rejection as a current failure.
+
+Published app delivery retains an explicitly selected root Services project's
+build settings. An individual app's descriptor still supplies its own package
+build profile to the repository, but does not replace the project's Services
+preset or root with that app's Next.js preset/workspace. App-root legacy
+destinations continue to use the captured app descriptor. The selected release's
+actual published source remains delivery provenance in either case.
+
+## Safe provider rejection evidence
+
+Standard Vercel provisioning retains only an HTTP failure status, an optional
+closed allowlisted provider error code, and an optional bounded `x-vercel-id`
+request reference in Vercel's region-prefixed format. Unknown codes, response
+messages, bodies, URLs and credentials are not retained. An unreadable error
+body does not discard the observed rejection status or its safe request reference.
+The durable operation preserves the latest such observation through a later
+reconciliation failure; tenant-scoped provisioning diagnostics expose those
+same bounded facts. They describe the prior rejection, not permission for a
+retry, proof of creation, or resolution of an uncertain write. Successful
+provisioning does not present the prior rejection as a current failure.
+
+Published app delivery retains an explicitly selected root Services project's
+build settings. An individual app's descriptor still supplies its own package
+build profile to the repository, but does not replace the project's Services
+preset or root with that app's Next.js preset/workspace. App-root legacy
+destinations continue to use the captured app descriptor. The selected release's
+actual published source remains delivery provenance in either case.

@@ -1,3 +1,4 @@
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
@@ -7,7 +8,10 @@ import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled
 import type { ToolContext } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { withCandidateCommandEnvironment } from "@/lib/agent/candidate-command-environment";
-import { attachCheckoutDependencyView } from "@/lib/repository/dependency-cache";
+import {
+  attachCheckoutDependencyView,
+  detachCheckoutDependencyView,
+} from "@/lib/repository/dependency-cache";
 import { retireUnusedDraftWorktrees } from "@/lib/repository/retire-unused-draft-worktrees";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -46,7 +50,8 @@ const publishCandidateArtifacts = async (
   candidate: DraftReconciliationCandidate,
   sandbox: SandboxSession,
 ) => {
-  const state = appBuilderWorkflowState.get();
+  const workflow = appBuilderWorkflowState.get();
+  const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
   if (state.phase !== "reviewed") {
     throw new Error("The reviewed app no longer owns this compilation.");
   }
@@ -76,6 +81,7 @@ const validationSteps = (input: {
   additionalCheckTasks: string[];
   runBrowserTests: boolean;
   schemaTaskCompleted?: true;
+  dependenciesPrepared?: true;
   testShards: readonly string[];
 }): ValidationStep[] => {
   const checks: ValidationStep[] = supportedValidationCommands(input.appId, input.testShards, {
@@ -85,6 +91,9 @@ const validationSteps = (input: {
     kind: "check",
   }));
   return [
+    ...(input.dependenciesPrepared === true
+      ? []
+      : [{ command: installCommand, kind: "install" as const }]),
     ...(input.schemaTaskCompleted === true
       ? []
       : [{ command: appSchemaReleaseCommand(input.appId), kind: "schema" as const }]),
@@ -184,30 +193,33 @@ const recoveryStep = async (input: {
   return undefined;
 };
 
-const executeCandidateCheck = async (input: {
-  planned: ReturnType<typeof supportedValidationCommands>[number];
+const runCandidateCommandWithLogs = async <
+  Result extends { exitCode: number | null; stdout: string; stderr: string },
+>(input: {
+  category: CandidateValidationAttempt["category"];
+  command: string;
   candidate: DraftReconciliationCandidate;
   callId: string;
   sessionId: string;
   sessionAuth: unknown;
   resolvedTree: string;
-  sandbox: SandboxSession;
-  signal?: AbortSignal;
-  alreadyCompiled?: true;
-  testShards: readonly string[];
-}): Promise<Awaited<ReturnType<ReturnType<typeof sandboxValidationCommandExecutor>>>> => {
+  run: (
+    onChunk: (channel: "stdout" | "stderr", content: string) => Promise<void>,
+  ) => Promise<Result>;
+}): Promise<Result> => {
   const binding = {
     appId: input.candidate.appId,
     baseSha: input.candidate.baseSha,
     callId: input.callId,
-    category: input.planned.name,
-    command: input.planned.command,
+    category: input.category,
+    command: input.command,
     githubSourceDigest: input.candidate.githubSourceDigest,
     headSha: input.candidate.headSha,
     originalReviewDigest: input.candidate.originalReviewDigest,
     pullRequestNumber: input.candidate.pullRequestNumber,
     repositoryId: input.candidate.repositoryId,
     resolvedTree: input.resolvedTree,
+    root: input.candidate.root,
     sessionId: input.sessionId,
     unique: randomUUID(),
   };
@@ -238,7 +250,7 @@ const executeCandidateCheck = async (input: {
             {
               attemptDigest,
               channel: "stderr",
-              command: input.planned.name,
+              command: input.category,
               sessionId: input.sessionId,
             },
             { bestEffort: true },
@@ -248,7 +260,7 @@ const executeCandidateCheck = async (input: {
             {
               attemptDigest,
               channel: "stdout",
-              command: input.planned.name,
+              command: input.category,
               sessionId: input.sessionId,
             },
             { bestEffort: true },
@@ -310,18 +322,12 @@ const executeCandidateCheck = async (input: {
     }
   };
   try {
-    // The executor uses onChunk to switch to spawn; retain its detached run lifecycle and capture its returned output.
-    const result = await sandboxValidationCommandExecutor({
-      alreadyCompiled: input.alreadyCompiled,
-      testShards: input.testShards,
-    })({
-      appId: input.candidate.appId,
-      command: input.planned.command,
-      sandbox: input.sandbox,
-      validationRoot: input.candidate.root,
-      abortSignal: input.signal,
+    let streamed = false;
+    const result = await input.run(async (channel, content) => {
+      streamed = true;
+      await writers?.[channel].append(content);
     });
-    if (writers !== undefined) {
+    if (writers !== undefined && !streamed) {
       try {
         if (result.stdout) {
           await writers.stdout.append(result.stdout);
@@ -333,10 +339,60 @@ const executeCandidateCheck = async (input: {
         // Best-effort capture must not affect the command outcome.
       }
     }
-    await finish("complete", result.exitCode);
+    await finish(result.exitCode === null ? "interrupted" : "complete", result.exitCode);
     return result;
   } catch (error) {
     await finish("interrupted", null);
+    throw error;
+  }
+};
+
+/** Stream detached provider output before its bounded command response can truncate it. */
+const runAdditionalCandidateCheck = async (input: {
+  sandbox: SandboxSession;
+  command: string;
+  root: string;
+  signal?: AbortSignal;
+  onChunk: (channel: "stdout" | "stderr", content: string) => Promise<void>;
+}) => {
+  const process = await input.sandbox.spawn({
+    abortSignal: input.signal,
+    command: input.command,
+    workingDirectory: input.root,
+  });
+  const output = { stdout: "", stderr: "" };
+  const drain = async (channel: "stdout" | "stderr", stream: ReadableStream<Uint8Array>) => {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    const append = async (content: string) => {
+      // The response is an excerpt; the durable writer retains the complete stream.
+      output[channel] = (output[channel] + content).slice(0, 2400);
+      await input.onChunk(channel, content);
+    };
+    try {
+      while (true) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Drain serially with durable-write backpressure.
+        const next = await reader.read();
+        if (next.done) {
+          break;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve ordered UTF-8 output in each channel.
+        await append(decoder.decode(next.value, { stream: true }));
+      }
+      await append(decoder.decode());
+    } finally {
+      reader.releaseLock();
+    }
+  };
+  try {
+    const results = await Promise.all([
+      drain("stdout", process.stdout),
+      drain("stderr", process.stderr),
+      process.wait(),
+    ]);
+    return { ...output, exitCode: results[2].exitCode };
+  } catch (error) {
+    await process.kill();
     throw error;
   }
 };
@@ -474,6 +530,7 @@ const runIncrementalValidation = async (
     // An expired/replaced sandbox or a normal source edit invalidates only this validation pass.
     run = null;
   }
+  const startingRun = run === null;
   if (run === null) {
     const steps = validationSteps({
       ...input,
@@ -500,8 +557,29 @@ const runIncrementalValidation = async (
   }
   const originalStep = run.steps[run.nextIndex];
   const originalStepCommand = originalStep?.command;
-  const nextIndexToRun = run.nextIndex;
   const schemaTaskCompleted = run.schemaTaskCompleted;
+  const dependenciesPrepared = run.commands.some(
+    ({ command, exitCode }) =>
+      exitCode === 0 &&
+      [installCommand, "mise exec -- bun install --frozen-lockfile"].includes(command),
+  );
+  const bootstrapNeeded = !dependenciesPrepared && originalStep?.kind !== "install";
+  if (bootstrapNeeded) {
+    const completed = run.steps.slice(0, run.nextIndex);
+    const acknowledgedSchema = completed.filter((entry) => entry.kind === "schema");
+    run = {
+      ...run,
+      nextIndex: acknowledgedSchema.length,
+      steps: [
+        ...acknowledgedSchema,
+        { command: installCommand, kind: "install" },
+        ...completed.filter((entry) => entry.kind !== "schema" && entry.kind !== "install"),
+        ...run.steps.slice(run.nextIndex),
+      ],
+      compilation: undefined,
+    };
+  }
+  const nextIndexToRun = run.nextIndex;
   run = {
     ...run,
     steps: currentValidationSteps(run, candidate.appId, testShards),
@@ -515,11 +593,19 @@ const runIncrementalValidation = async (
       "Candidate validation has no next command. Inspect this saved session and restart validation.",
     );
   }
-  if (
+  const requestedPreviousStep =
     originalStep !== undefined &&
-    input.expectedCommand === originalStepCommand &&
-    currentValidationStep(originalStep, candidate.appId, schemaTaskCompleted, testShards)
-      .command !== step.command
+    (input.expectedCommand === originalStepCommand ||
+      input.expectedCommand ===
+        currentValidationStep(originalStep, candidate.appId, schemaTaskCompleted, testShards)
+          .command);
+  const initialSchemaRequest =
+    startingRun && input.expectedCommand === appSchemaReleaseCommand(candidate.appId);
+  if (
+    initialSchemaRequest ||
+    (requestedPreviousStep &&
+      currentValidationStep(originalStep, candidate.appId, schemaTaskCompleted, testShards)
+        .command !== step.command)
   ) {
     const latest = draftReconciliationState.get();
     if (latest === null) {
@@ -528,8 +614,16 @@ const runIncrementalValidation = async (
     const refreshed = run;
     updateExactDraftReconciliation({
       expected: latest,
-      operation: "refreshing the current declared test plan",
-      transition: () => ({ ...latest, validationRun: refreshed }),
+      operation: "refreshing the current candidate validation setup and test plan",
+      transition: () => {
+        const next = { ...latest, validationRun: refreshed };
+        delete next.validation;
+        delete next.proposal;
+        delete next.review;
+        delete next.repairReview;
+        delete next.reviewReadProgress;
+        return next;
+      },
     });
     return {
       status: "plan_refreshed" as const,
@@ -547,11 +641,53 @@ const runIncrementalValidation = async (
       `Candidate validation is ready for ${step.command}, but this call supplied a different command.${checkoutChanged ? " The checkout changed since the prior validation command, so Builder restarted the check sequence." : ""} Resume with the returned nextCommand; no command was run.`,
     );
   }
+  if (bootstrapNeeded) {
+    const latest = draftReconciliationState.get();
+    if (latest === null) {
+      throw new Error("The candidate is unavailable while preparing its locked dependencies.");
+    }
+    const preparedRun = run;
+    updateExactDraftReconciliation({
+      expected: latest,
+      operation: "preparing the candidate's own locked dependency graph",
+      transition: () => {
+        const next = { ...latest, validationRun: preparedRun };
+        delete next.validation;
+        delete next.proposal;
+        delete next.review;
+        delete next.repairReview;
+        delete next.reviewReadProgress;
+        return next;
+      },
+    });
+  }
   let result: ValidationStepResult;
   let recovery: ValidationStep | undefined;
   let compilation = run.compilation;
   try {
-    if (step.kind === "capture") {
+    if (step.kind === "install") {
+      if (step.command !== installCommand) {
+        throw new Error("The saved candidate installation command is not supported.");
+      }
+      await detachCheckoutDependencyView({
+        sandbox,
+        checkoutRoot: `${candidate.workspaceRoot}/repository`,
+        candidateRoot: candidate.root,
+        workspaceRoot: candidate.workspaceRoot,
+        signal: ctx.abortSignal,
+      });
+      const installed = await sandbox.run({
+        abortSignal: ctx.abortSignal,
+        command: installCommand,
+        workingDirectory: candidate.root,
+      });
+      result = {
+        command: installCommand,
+        exitCode: installed.exitCode,
+        output: validationOutputExcerpt(installed.stdout, installed.stderr),
+        status: installed.exitCode === 0 ? "passed" : "failed",
+      };
+    } else if (step.kind === "capture") {
       try {
         const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
         compilation = captured.compilation;
@@ -602,11 +738,21 @@ const runIncrementalValidation = async (
         status: schema.status === "compiled" ? "passed" : "failed",
       };
     } else if (step.kind === "local") {
-      const local = await prepareAppLocalPreview({
-        appId: candidate.appId,
-        root: candidate.root,
-        sandbox,
-        signal: ctx.abortSignal,
+      const local = await runCandidateCommandWithLogs({
+        category: "local-preparation",
+        command: step.command,
+        candidate,
+        callId: ctx.callId,
+        resolvedTree: before.resolvedTree,
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+        run: () =>
+          prepareAppLocalPreview({
+            appId: candidate.appId,
+            root: candidate.root,
+            sandbox,
+            signal: ctx.abortSignal,
+          }),
       });
       result = {
         command: local.command,
@@ -639,6 +785,7 @@ const runIncrementalValidation = async (
         status: browser.status === "passed" ? "passed" : "failed",
       };
     } else {
+      const alreadyCompiled = run.schemaTaskCompleted;
       const planned = supportedValidationCommands(candidate.appId, testShards, {
         alreadyCompiled: run.schemaTaskCompleted,
       }).find(({ command }) => command === step.command);
@@ -647,22 +794,43 @@ const runIncrementalValidation = async (
       }
       const execution =
         step.kind === "check" && planned !== undefined
-          ? await executeCandidateCheck({
+          ? await runCandidateCommandWithLogs({
+              category: planned.name,
+              command: planned.command,
               candidate,
               callId: ctx.callId,
-              planned,
               resolvedTree: before.resolvedTree,
-              sandbox,
               sessionAuth: ctx.session.auth,
               sessionId: ctx.session.id,
-              signal: ctx.abortSignal,
-              alreadyCompiled: run.schemaTaskCompleted,
-              testShards,
+              // Preserve the executor's detached command lifecycle and capture its returned output.
+              run: () =>
+                sandboxValidationCommandExecutor({
+                  alreadyCompiled,
+                  testShards,
+                })({
+                  appId: candidate.appId,
+                  command: planned.command,
+                  sandbox,
+                  validationRoot: candidate.root,
+                  abortSignal: ctx.abortSignal,
+                }),
             })
-          : await sandbox.run({
-              abortSignal: ctx.abortSignal,
+          : await runCandidateCommandWithLogs({
+              category: "additional-check",
               command: step.command,
-              workingDirectory: candidate.root,
+              candidate,
+              callId: ctx.callId,
+              resolvedTree: before.resolvedTree,
+              sessionAuth: ctx.session.auth,
+              sessionId: ctx.session.id,
+              run: (onChunk) =>
+                runAdditionalCandidateCheck({
+                  sandbox,
+                  command: step.command,
+                  root: candidate.root,
+                  signal: ctx.abortSignal,
+                  onChunk,
+                }),
             });
       const checkedBuild =
         step.kind === "check" && planned?.name === "check-build" && execution.exitCode === 0;
@@ -722,6 +890,7 @@ const runIncrementalValidation = async (
           root: candidate.root,
           sandbox,
           schemaTaskCompleted: recovery.kind === "schema" ? true : run.schemaTaskCompleted,
+          dependenciesPrepared: true,
           testShards,
         }),
       ];
@@ -829,65 +998,78 @@ const runIncrementalValidation = async (
   };
 };
 
+// oxlint-disable-next-line eslint/complexity -- Preserve the existing ordered candidate command flow.
+export const validateDraftReconciliation = async (
+  input: {
+    additionalCheckTasks: string[];
+    expectedCommand?: string;
+    incremental: boolean;
+    runBrowserTests: boolean;
+  },
+  ctx: ToolContext,
+) => {
+  ctx.abortSignal?.throwIfAborted();
+  const candidate = draftReconciliationState.get();
+  const workflow = appBuilderWorkflowState.get();
+  const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
+  if (
+    candidate === null ||
+    state.phase !== "reviewed" ||
+    currentDraftCandidateSource(state, candidate) === undefined ||
+    state.reviewReceipt.digest !== candidate.originalReviewDigest
+  ) {
+    throw new Error(
+      "The prepared merge candidate no longer matches the selected app and source review. Prepare reconciliation again.",
+    );
+  }
+  const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
+  if (candidate.validationRun?.schemaTaskCompleted !== true) {
+    await retireUnusedDraftWorktrees({
+      sandbox,
+      workspaceRoot: candidate.workspaceRoot,
+      retainedRoots: [
+        state.workspace.workspacePath,
+        state.applyReceipt.applyRoot,
+        ...state.validationReceipt.commands.map((command) => command.validationRoot),
+        candidate.root,
+        ...(candidate.preservedWorkspaces ?? []).map((workspace) => workspace.root),
+        ...draftReconciliationCompletions.get().map((completion) => completion.root),
+      ],
+      signal: ctx.abortSignal,
+    });
+  }
+  await attachCheckoutDependencyView({
+    sandbox,
+    checkoutRoot: `${candidate.workspaceRoot}/repository`,
+    candidateRoot: candidate.root,
+    workspaceRoot: candidate.workspaceRoot,
+  });
+  let current = candidate;
+  let expectedCommand = input.expectedCommand;
+  for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Single-call mode uses the same durable ordered steps as incremental mode.
+    const result = await runIncrementalValidation(
+      { ...input, expectedCommand },
+      ctx,
+      current,
+      sandbox,
+    );
+    if (input.incremental || result.status !== "in_progress") {
+      return result;
+    }
+    const latest = draftReconciliationState.get();
+    if (latest === null) {
+      throw new Error("The candidate is unavailable after its validation command.");
+    }
+    current = latest;
+    expectedCommand = result.nextCommand;
+  }
+};
+
 export default defineTool({
   description:
-    "Compile the selected app once for this coherent candidate validation, then run repository app:check and all declared app:test shards without repeating their compile dependency, optional local/browser and check: tasks, and capture its actual checked release. Reuse installed dependencies; only concrete missing-dependency diagnostics schedule locked installation. Failures identify the command and cause. This does not update GitHub.",
-  // oxlint-disable-next-line eslint/complexity -- ordered candidate checks need one exit for each named failure.
-  async execute(input, ctx) {
-    const candidate = draftReconciliationState.get();
-    const state = appBuilderWorkflowState.get();
-    if (
-      candidate === null ||
-      state.phase !== "reviewed" ||
-      currentDraftCandidateSource(state, candidate) === undefined ||
-      state.reviewReceipt.digest !== candidate.originalReviewDigest
-    ) {
-      throw new Error(
-        "The prepared merge candidate no longer matches the selected app and source review. Prepare reconciliation again.",
-      );
-    }
-    const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
-    if (candidate.validationRun?.schemaTaskCompleted !== true) {
-      await retireUnusedDraftWorktrees({
-        sandbox,
-        workspaceRoot: candidate.workspaceRoot,
-        retainedRoots: [
-          state.workspace.workspacePath,
-          state.applyReceipt.applyRoot,
-          ...state.validationReceipt.commands.map((command) => command.validationRoot),
-          candidate.root,
-          ...draftReconciliationCompletions.get().map((completion) => completion.root),
-        ],
-        signal: ctx.abortSignal,
-      });
-    }
-    await attachCheckoutDependencyView({
-      sandbox,
-      checkoutRoot: `${candidate.workspaceRoot}/repository`,
-      candidateRoot: candidate.root,
-      workspaceRoot: candidate.workspaceRoot,
-    });
-    let current = candidate;
-    let expectedCommand = input.expectedCommand;
-    for (;;) {
-      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Single-call mode uses the same durable ordered steps as incremental mode.
-      const result = await runIncrementalValidation(
-        { ...input, expectedCommand },
-        ctx,
-        current,
-        sandbox,
-      );
-      if (input.incremental || result.status !== "in_progress") {
-        return result;
-      }
-      const latest = draftReconciliationState.get();
-      if (latest === null) {
-        throw new Error("The candidate is unavailable after its validation command.");
-      }
-      current = latest;
-      expectedCommand = result.nextCommand;
-    }
-  },
+    "Restore this candidate's locked dependencies using the existing sandbox cache, compile the selected app once for this coherent candidate validation, then run repository app:check and all declared app:test shards without repeating their compile dependency, optional local/browser and check: tasks, and capture its actual checked release. Each coherent validation pass checks its own locked dependency graph before running checks; preserve earlier source and validation evidence. Failures identify the command and cause. This does not update GitHub.",
+  execute: validateDraftReconciliation,
   inputSchema: z.strictObject({
     additionalCheckTasks: z.array(z.string().regex(/^check:[A-Za-z0-9:_-]+$/u)).default([]),
     expectedCommand: z.string().max(1024).optional(),

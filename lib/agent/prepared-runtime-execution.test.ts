@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/require-await, sonarjs/no-hardcoded-passwords -- Only synthetic SDK fixtures run. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { runAppBrowserTests } from "./app-browser-test-runner";
 import type {
   PreparedRuntimeExecutionDependencies,
   RuntimeTransport,
@@ -69,7 +70,12 @@ const proof = {
   tenants: 2,
 };
 const descriptor = {
-  app: { id: "spend-review", routes: [], workspacePath: "apps/spend-review" },
+  app: {
+    id: "spend-review",
+    routes: [],
+    workspacePath: "apps/spend-review",
+    browserEntryPath: z.string().nullable().optional().parse("/private-entry"),
+  },
   backend: {
     authorization: "declared-policy",
     kind: "generated-postgres",
@@ -280,6 +286,108 @@ beforeEach(() => {
 });
 
 describe("approved hosted runtime consumers", () => {
+  it.each(["/private-entry", null, undefined])(
+    "projects the actual private app description entry %s without public delivery",
+    async (entry) => {
+      const fixture = transport({
+        ...descriptor,
+        app: { ...descriptor.app, browserEntryPath: entry },
+      });
+      const runtime = await restorePreparedRuntimeExecution({
+        appId: context.appId,
+        binding: binding(),
+        observeInstallation: async () => ({
+          actors: proof.actors,
+          artifactHash: proof.artifactHash,
+          authenticatedBehavior: proof.authenticatedBehavior,
+          releaseId: proof.releaseId,
+          tenants: proof.tenants,
+        }),
+        provider: fixture.provider,
+        root: context.root,
+      });
+      expect(runtime.browserTestEntryPath).toBe(entry ?? null);
+      const browserResult = await runAppBrowserTests({
+        appId: context.appId,
+        root: context.root,
+        sandbox: { run: vi.fn() },
+        runtime,
+      });
+      expect(browserResult.status).toBe(entry === "/private-entry" ? "passed" : "failed");
+      if (entry === "/private-entry") {
+        const command = fixture.provider.runCommand.mock.calls.at(-1)?.[0];
+        const environment = z.record(z.string(), z.string()).parse(command?.env);
+        expect(environment.APP_TEST_ENTRY_PATH).toBe("/private-entry");
+      }
+
+      const publicFixture = transport();
+      const preserved = await restorePreparedRuntimeExecution({
+        appId: context.appId,
+        binding: binding(),
+        observeInstallation: async () => ({
+          actors: proof.actors,
+          artifactHash: proof.artifactHash,
+          authenticatedBehavior: proof.authenticatedBehavior,
+          releaseId: proof.releaseId,
+          tenants: proof.tenants,
+        }),
+        provider: publicFixture.provider,
+        root: context.root,
+        browserTestEntryPath: "/public-entry",
+        browserTestBaseUrl: "https://owned.example.test",
+      });
+      expect(preserved.browserTestEntryPath).toBe("/public-entry");
+      expect(preserved.browserTestBaseUrl).toBe("https://owned.example.test");
+    },
+  );
+  it("passes a literal focused browser selection as structured task arguments", async () => {
+    const fixture = transport();
+    const runtime = await restorePreparedRuntimeExecution({
+      appId: context.appId,
+      binding: binding(),
+      observeInstallation: async (actualFiles) =>
+        await mocks.observeInstallation({
+          ...context,
+          files: actualFiles,
+          stateDirectory: "/private-state",
+        }),
+      provider: fixture.provider,
+      root: context.root,
+    });
+    await runtime.runTask({
+      task: "test-e2e",
+      browserSelection: { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 },
+    });
+    expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        args: [
+          "mise",
+          "run",
+          "app:runtime",
+          "run",
+          context.appId,
+          "test-e2e",
+          "--grep",
+          "@acceptance",
+          "--workers=1",
+          "--retries=0",
+          "--max-failures=1",
+        ],
+        cmd: "/usr/bin/env",
+        cwd: context.root,
+      }),
+    );
+    await expect(
+      runtime.runTask({ task: "repository-check", browserSelection: { testName: "x" } }),
+    ).rejects.toThrow();
+    await expect(
+      runtime.runTask({
+        task: "test-e2e",
+        commandId: "saved",
+        browserSelection: { testName: "x" },
+      }),
+    ).rejects.toThrow("cannot be resumed with a new test selection");
+  });
   it.each([
     ["repository-check", undefined, undefined],
     ["repository-test", "1/1", undefined],
@@ -346,9 +454,13 @@ describe("approved hosted runtime consumers", () => {
       );
     },
   );
-  it.each([undefined, "https://apps-preview.example.test"])(
-    "preserves the verified native browser origin %s without adding runtime bindings",
-    async (publicOrigin) => {
+  it.each([
+    { publicOrigin: undefined, publicDelivery: false },
+    { publicOrigin: "https://apps-preview.example.test", publicDelivery: false },
+    { publicOrigin: "https://public-app.example.test", publicDelivery: true },
+  ])(
+    "preserves the verified browser destination $publicOrigin with publicDelivery=$publicDelivery",
+    async ({ publicOrigin, publicDelivery }) => {
       const fixture = transport();
       const operationRef = "11111111-1111-4111-8111-111111111111";
       const environment = {
@@ -360,7 +472,10 @@ describe("approved hosted runtime consumers", () => {
       };
       const bindings = vi.fn().mockResolvedValue({
         environment,
-        nativePreview: publicOrigin === undefined ? undefined : { publicOrigin },
+        nativePreview: publicOrigin === undefined || publicDelivery ? undefined : { publicOrigin },
+        ...(publicDelivery
+          ? { publicDelivery: { publicOrigin, appEntryPath: "/actual-catalog-route" } }
+          : {}),
         operationRef,
         plan: operatorPlan,
         proof: {
@@ -383,6 +498,9 @@ describe("approved hosted runtime consumers", () => {
         { ...mocks, operatorClient },
       );
       expect(runtime?.browserTestBaseUrl).toBe(publicOrigin);
+      expect(runtime?.browserTestEntryPath).toBe(
+        publicDelivery ? "/actual-catalog-route" : "/private-entry",
+      );
       const restoredEnvironment = fixture.provider.writeFiles.mock.calls
         .flatMap(([restored]) => restored)
         .find((file) => file.path.endsWith("/environment.json"));

@@ -7,7 +7,15 @@ import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contr
 import type { PrivateHistoryObservation } from "./same-origin-http";
 
 const requestSchema = z.strictObject({
-  action: z.enum(["export", "continuity", "native-target"]),
+  action: z.enum([
+    "export",
+    "continuity",
+    "native-target",
+    "public-release",
+    "app-integration-capability",
+    "central-integration-host",
+    "normal-platform-integrations",
+  ]),
   planRef: z.string().min(1),
   planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   idempotencyKey: z.string().min(1),
@@ -24,6 +32,7 @@ export const privateOperatorApprovalCaptureSchema = z
         cancelled: z.boolean(),
         completedApproved: z.boolean().default(false),
         completedCancelled: z.boolean().default(false),
+        settledAt: z.iso.datetime({ offset: true }).optional(),
       }),
     ),
   })
@@ -52,6 +61,7 @@ export const createPrivateOperatorApprovalCapture = (input: {
   ownerUserId: string;
   callId?: string;
   state?: PrivateOperatorApprovalCapture;
+  captureSettlementTime?: boolean;
 }) => {
   const saved =
     input.state === undefined ? undefined : privateOperatorApprovalCaptureSchema.parse(input.state);
@@ -92,6 +102,9 @@ export const createPrivateOperatorApprovalCapture = (input: {
         entry.cancelled = true;
       } else {
         entry.approved = true;
+        if (input.captureSettlementTime === true && entry.settledAt === undefined) {
+          entry.settledAt = z.iso.datetime({ offset: true }).parse(event.meta.at);
+        }
       }
     },
     proveComplete: () => {
@@ -205,7 +218,7 @@ export const readPrivateOperatorApproval = async <Approval>(input: {
     /* Diagnostic delivery never changes approval authority. */
   }
   if (!observed.complete) {
-    throw new HostedSessionReadTimeoutError();
+    throw new HostedSessionReadTimeoutError(persisted && observed.nextNativeIndex > startIndex);
   }
   return approval;
 };

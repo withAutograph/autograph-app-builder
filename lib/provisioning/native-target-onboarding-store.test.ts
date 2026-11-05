@@ -269,6 +269,35 @@ describe("native target registry authorization and restart", () => {
       f.registry.claimAttempt("server-invocation", f.p.appId, attempt()),
     ).rejects.toThrow();
   });
+  it("keeps initial plan approval immutable while freshly authorizing another invocation", async () => {
+    const f = makeFixture();
+    await f.approved();
+    const before = await f.registry.read("server-invocation", f.p.appId);
+    const initial = f.getReceipt()!;
+    f.setReceipt({ ...initial, requestId: "fresh-request", callId: "fresh-call" });
+    const checked = await f.registry.recordApproval("server-invocation", f.p.appId);
+    expect(checked).toEqual(before);
+    expect(checked.record).toMatchObject({ approval: initial });
+    await f.registry.claimAttempt("server-invocation", f.p.appId, attempt());
+    f.setReceipt(null);
+    await expect(
+      f.registry.authorizeAttempt(
+        "server-invocation",
+        f.p.appId,
+        attempt().attemptId,
+        attempt().leaseId,
+      ),
+    ).rejects.toThrow();
+    f.setReceipt({ ...initial, requestId: "fresh-request", callId: "fresh-call" });
+    await f.registry.authorizeAttempt(
+      "server-invocation",
+      f.p.appId,
+      attempt().attemptId,
+      attempt().leaseId,
+    );
+    const current = await f.registry.read("server-invocation", f.p.appId);
+    expect(current?.record).toMatchObject({ approval: initial });
+  });
   it("allows only one durable POST authorization and checks the live exact lease", async () => {
     const f = makeFixture();
     await f.creating();

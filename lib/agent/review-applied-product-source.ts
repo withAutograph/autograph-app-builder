@@ -9,6 +9,7 @@ import {
 import {
   assessApplicationSource,
   applicationSourceReviewKey,
+  applicationSourceReviewRubricDigest,
   applicationSourceReviewCacheSessionId,
 } from "./application-source-review";
 import type {
@@ -30,6 +31,7 @@ import type { OverlayChange, OverlaySnapshot } from "@/lib/repository/target-app
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
   sourceReviewBindingDigest,
+  matchesSourceReviewPolicy,
   unavailableSourceAssessment,
 } from "@/lib/agent/product-source-review";
 import type {
@@ -137,6 +139,28 @@ export const reviewObservedProductSource = async (
 
 const applicationCompletedKind = "application-completed";
 
+/** A durable result must match the active reviewer policy, rubric and product binding. */
+export const completedReviewForInput = (
+  record: SourceReviewJournalRecord | undefined,
+  input: ProductSourceReviewInput,
+): record is Extract<SourceReviewJournalRecord, { kind: "application-completed" }> => {
+  if (record?.kind !== applicationCompletedKind || !record.assessment.reviewCompleted) {
+    return false;
+  }
+  if (!matchesSourceReviewPolicy(record.assessment)) {
+    return false;
+  }
+  return (
+    record.assessment.bindingDigest === sourceReviewBindingDigest(input) &&
+    record.assessment.reviewRubricDigest === applicationSourceReviewRubricDigest()
+  );
+};
+
+const incompatibleRetainedReview = (
+  record: SourceReviewJournalRecord | undefined,
+  input: ProductSourceReviewInput,
+): boolean => record !== undefined && !completedReviewForInput(record, input);
+
 /** Canonical owner-authorized application reuse precedes every completed cache return. */
 export const reviewApplicationWithJournal = async (
   input: {
@@ -150,33 +174,39 @@ export const reviewApplicationWithJournal = async (
   assess = assessApplicationSource,
 ): Promise<ProductSourceAssessment> => {
   const signal = input.options?.abortSignal;
-  signal?.throwIfAborted();
+  const assertNotStopped = () => signal?.throwIfAborted();
+  assertNotStopped();
   const key = applicationSourceReviewKey(input.reviewInput, input.normalizedChanges);
   const retained = await input.journal.read(key);
-  signal?.throwIfAborted();
-  const reusable =
-    retained?.kind === applicationCompletedKind &&
-    retained.assessment.bindingDigest === sourceReviewBindingDigest(input.reviewInput);
+  assertNotStopped();
+  const reusable = completedReviewForInput(retained, input.reviewInput);
+  if (incompatibleRetainedReview(retained, input.reviewInput)) {
+    return unavailableSourceAssessment(
+      input.reviewInput,
+      "The retained application review does not match the current review policy or evidence.",
+      "blocked",
+    );
+  }
   const options: ApplicationSourceReviewOptions = {
     ...input.options,
     cacheSessionId: applicationSourceReviewCacheSessionId(input.options?.sessionId, key),
     async assertCurrentOwner() {
-      signal?.throwIfAborted();
+      assertNotStopped();
       await input.journal.assertCurrentOwner();
-      signal?.throwIfAborted();
+      assertNotStopped();
     },
   };
   const assessment = reusable
     ? { ...retained.assessment, invocation: { ...emptySourceReviewInvocation(), journalReuses: 1 } }
     : await assess(input.reviewInput, input.evidence, options);
-  signal?.throwIfAborted();
+  assertNotStopped();
   if ((await input.currentDigest()) !== input.reviewInput.sourceDigest) {
     return unavailableSourceAssessment(
       input.reviewInput,
       "Source changed during review; this assessment is stale. Review the current implementation when ready.",
     );
   }
-  signal?.throwIfAborted();
+  assertNotStopped();
   if (reusable) {
     input.options?.onInvocation?.(assessment.invocation ?? emptySourceReviewInvocation());
     return assessment;
@@ -185,13 +215,25 @@ export const reviewApplicationWithJournal = async (
     return assessment;
   }
   const { invocation, ...durableAssessment } = assessment;
+  if (
+    !completedReviewForInput(
+      { kind: applicationCompletedKind, assessment: durableAssessment },
+      input.reviewInput,
+    )
+  ) {
+    return unavailableSourceAssessment(
+      input.reviewInput,
+      "The application review does not match the current review policy or evidence.",
+      "blocked",
+    );
+  }
   const recorded = await input.journal.put(key, {
     kind: applicationCompletedKind,
     assessment: durableAssessment,
   });
-  signal?.throwIfAborted();
-  if (recorded.kind !== applicationCompletedKind) {
-    throw new Error("Completed application review could not be retained.");
+  assertNotStopped();
+  if (!completedReviewForInput(recorded, input.reviewInput)) {
+    throw new Error("Completed application review could not be retained under the current policy.");
   }
   return { ...recorded.assessment, ...(invocation === undefined ? {} : { invocation }) };
 };
@@ -389,13 +431,6 @@ const currentApplicationReviewInput = (input: AppliedReviewInput): ProductSource
   };
 };
 
-const completedReviewForInput = (
-  record: SourceReviewJournalRecord | undefined,
-  input: ProductSourceReviewInput,
-): record is Extract<SourceReviewJournalRecord, { kind: "application-completed" }> =>
-  record?.kind === applicationCompletedKind &&
-  record.assessment.bindingDigest === sourceReviewBindingDigest(input);
-
 /** Capture harness-only state and Sandbox identity before entering a durable workflow. */
 export const prepareAppliedProductSourceReview = async (
   input: AppliedReviewInput,
@@ -406,7 +441,8 @@ export const prepareAppliedProductSourceReview = async (
   const unavailable = (reason: string) => ({
     assessment: unavailableSourceAssessment(reviewInput, reason, "blocked"),
   });
-  input.abortSignal?.throwIfAborted();
+  const assertNotStopped = () => input.abortSignal?.throwIfAborted();
+  assertNotStopped();
   if (hasTestCapability("mock-model")) {
     return unavailable("Independent review is unassessed in the credential-free mock profile.");
   }
@@ -420,13 +456,18 @@ export const prepareAppliedProductSourceReview = async (
       sessionId: input.sessionId,
     });
     const retained = await journal.read(reviewKey);
-    input.abortSignal?.throwIfAborted();
+    assertNotStopped();
+    if (incompatibleRetainedReview(retained, reviewInput)) {
+      return unavailable(
+        "The retained application review does not match the current review policy or evidence.",
+      );
+    }
     if (completedReviewForInput(retained, reviewInput)) {
       const current = await inspectApplyOverlay(
         await input.getSandbox(),
         input.applyReceipt.applyRoot,
       );
-      input.abortSignal?.throwIfAborted();
+      assertNotStopped();
       if (current.treeDigest !== reviewInput.sourceDigest) {
         return unavailable(
           "Source changed while reading saved review evidence; its current source remains unassessed.",
@@ -459,7 +500,7 @@ export const prepareAppliedProductSourceReview = async (
         sessionAuth: input.sessionAuth,
         sessionId: input.sessionId,
       })) {
-        input.abortSignal?.throwIfAborted();
+        assertNotStopped();
         parts.push(part);
       }
       reviewInput.appSpec = parts.join("");
@@ -502,7 +543,7 @@ export const prepareAppliedProductSourceReview = async (
       },
     };
   } catch {
-    input.abortSignal?.throwIfAborted();
+    assertNotStopped();
     return unavailable(
       "Independent source review could not be prepared; current source remains unassessed.",
     );
@@ -555,6 +596,14 @@ export const finalizeAppliedProductSourceReview = async (
     if (!outcome.assessment.reviewCompleted) {
       return outcome.assessment;
     }
+    if (
+      !completedReviewForInput(
+        { kind: applicationCompletedKind, assessment: outcome.assessment },
+        current,
+      )
+    ) {
+      return unavailable();
+    }
     const journal = await sourceReviewJournalForSession({
       sessionAuth: input.sessionAuth,
       sessionId: input.sessionId,
@@ -565,7 +614,7 @@ export const finalizeAppliedProductSourceReview = async (
       assessment,
     });
     input.abortSignal?.throwIfAborted();
-    if (recorded.kind !== applicationCompletedKind) {
+    if (!completedReviewForInput(recorded, current)) {
       return unavailable();
     }
     retainScopedProductSourceAssessment(recorded.assessment, currentKey);

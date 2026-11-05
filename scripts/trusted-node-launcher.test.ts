@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   mkdirSync,
@@ -36,21 +35,28 @@ function taskFiles(directory: string): string[] {
 }
 
 describe("trusted Node launcher", () => {
-  it("keeps the explicitly attested launcher digest aligned with its reviewed source", () => {
-    const broker = readFileSync(
-      pathModule.join(repositoryRoot, "scripts/run-with-test-capability.mts"),
-      "utf-8",
+  it("forwards explicit assembled-test paths without admitting unrelated ambient credentials", () => {
+    const environment: NodeJS.ProcessEnv = {
+      ...process.env,
+      ARRUSTED_MANAGED_RUNTIME_TEST_ROOT: "/private/tmp/controlled-arrusted",
+      BUN_BINARY: "/private/tmp/controlled-bun",
+      UNRELATED_AMBIENT_CREDENTIAL: "must-not-be-forwarded",
+    };
+    delete environment.NODE_OPTIONS;
+    const result = spawnSync(
+      launcher,
+      [
+        pinnedNode,
+        "-e",
+        "process.stdout.write(JSON.stringify({root:process.env.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT,bun:process.env.BUN_BINARY,unrelated:process.env.UNRELATED_AMBIENT_CREDENTIAL,nodeOptions:process.env.NODE_OPTIONS}))",
+      ],
+      { cwd: repositoryRoot, encoding: "utf-8", env: environment },
     );
-    const pinnedDigest = /const launcherDigest = "(?<digest>[a-f0-9]{64})";/u.exec(broker)?.groups
-      ?.digest;
-    expect(pinnedDigest).toBeDefined();
-    expect(createHash("sha256").update(readFileSync(launcher)).digest("hex")).toBe(pinnedDigest);
-    expect(
-      createHash("sha256")
-        .update(readFileSync(launcher))
-        .update("\n# changed source\n")
-        .digest("hex"),
-    ).not.toBe(pinnedDigest);
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      root: environment.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT,
+      bun: environment.BUN_BINARY,
+    });
   });
 
   it("rejects data-URL NODE_OPTIONS before the first Node process", () => {

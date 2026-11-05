@@ -1,3 +1,4 @@
+import { reportNativeSourceDiagnostic } from "./native-source-diagnostic";
 import {
   emptyNativeDeliveryState,
   nativeDeliveryForEvents,
@@ -105,6 +106,10 @@ const acceptedTurnSchema = z
     status: z.literal("accepted"),
     recoveryBinding: nativeRecoveryBindingSchema.optional(),
   })
+  .strict();
+
+const sourceInspectionAcceptedSchema = acceptedTurnSchema
+  .extend({ sourceDiagnostic: z.unknown().optional() })
   .strict();
 
 const cancelResponseSchema = z.discriminatedUnion("status", [
@@ -264,11 +269,15 @@ async function postMutation(input: {
     // Only this private recovery response carries a structured receipt. The
     // ordinary session response remains on the bounded streaming reader.
     const body: unknown =
-      input.body.recovery !== undefined && response.status === 202
+      (input.body.recovery !== undefined || input.body.recoveryPhase === "inspect-source") &&
+      response.status === 202
         ? await response.json()
         : await readJson(response);
     if (response.status >= 400 && response.status < 500) {
       const parsed = errorResponseSchema.safeParse(body);
+      if (parsed.success && parsed.data.code === "terminal_recovery_uncertain") {
+        throw new SubmissionOutcomeUnknownError();
+      }
       throw new SubmissionRejectedBeforeDispatchError(
         parsed.success ? parsed.data.code : "eve_request_rejected",
       );
@@ -276,7 +285,10 @@ async function postMutation(input: {
     if (response.status !== 202) {
       throw new Error("Unexpected response status.");
     }
-    const accepted = acceptedTurnSchema.parse(body);
+    const accepted =
+      input.body.recoveryPhase === "inspect-source"
+        ? sourceInspectionAcceptedSchema.parse(body)
+        : acceptedTurnSchema.parse(body);
     if (input.path !== "/eve/v1/session" && accepted.deliveryId === undefined) {
       throw new Error("Canonical Eve omitted the accepted delivery identity.");
     }
@@ -754,6 +766,74 @@ const reconcileHistoricalAuthorizations = async (
   }
 };
 
+/** Re-read retained native facts after a presentation failure, without replaying private effects or history. */
+const reprojectRetainedPendingInputs = async (
+  input: Parameters<typeof streamSameOriginEveEvents>[0],
+  state: NativeObservationState,
+): Promise<PublicInputRequest[] | undefined> => {
+  if (!state.invalidInput || ["completed", "failed", "cancelled"].includes(state.boundary)) {
+    return undefined;
+  }
+  const pending = new Map<string, Extract<MessageStreamEvent, { type: "input.requested" }>>();
+  let count = 0;
+  let tail: number | undefined;
+  try {
+    for await (const event of streamSameOriginEveEvents({
+      ...input,
+      startIndex: 0,
+      onNativeTail: (index) => {
+        tail = index;
+      },
+    })) {
+      if (count < state.nextNativeIndex) {
+        if (event.type === "input.requested") {
+          for (const request of event.data.requests) {
+            pending.set(request.requestId, event);
+          }
+        } else if (event.type === "input.resolved") {
+          for (const resolution of event.data.resolutions) {
+            pending.delete(resolution.requestId);
+          }
+        } else if (event.type === "approval.settled") {
+          pending.delete(event.data.requestId);
+        }
+      }
+      count += 1;
+    }
+    if (
+      tail === undefined ||
+      count !== tail + 1 ||
+      count < state.nextNativeIndex ||
+      pending.size === 0
+    ) {
+      return undefined;
+    }
+    const requests: PublicInputRequest[] = [];
+    for (const event of new Set(pending.values())) {
+      const projected = projectInstalledEveEvent(
+        {
+          ...event,
+          data: {
+            ...event.data,
+            requests: event.data.requests.filter((request) => pending.has(request.requestId)),
+          },
+        },
+        0,
+      );
+      for (const entry of projected) {
+        if (entry.type !== "input.requested" || entry.request === undefined) {
+          return undefined;
+        }
+        requests.push(entry.request);
+      }
+    }
+    return requests;
+  } catch {
+    // Unavailable, incomplete or still unsupported history cannot restore a confirmation.
+    return undefined;
+  }
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function observeSameOriginEveStream(
   input: Parameters<typeof streamSameOriginEveEvents>[0] & {
@@ -810,6 +890,26 @@ export async function observeSameOriginEveStream(
     let publicEventCount = state?.publicEventCount ?? 0;
     let boundary: EveSessionStatus = state?.boundary ?? "working";
     let invalidInput = state?.invalidInput ?? false;
+    if (state?.invalidInput === true) {
+      const recovered = await reprojectRetainedPendingInputs({ ...input, readSignal }, state);
+      if (recovered !== undefined) {
+        invalidInput = false;
+        for (const request of recovered) {
+          if (!isDeepStrictEqual(pending.get(request.requestId), request)) {
+            const indexed: InternalEveEvent = {
+              index: publicEventCount,
+              request,
+              type: "input.requested",
+            };
+            // Append the repaired presentation at the existing public cursor; native history is unchanged.
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve public storage backpressure and event order.
+            await input.onEvent(indexed);
+            publicEventCount += 1;
+          }
+          pending.set(request.requestId, request);
+        }
+      }
+    }
     // Eve's emission state uses an empty ID between turns. It is absence,
     // including in a retained observer seed, rather than an active identity.
     let currentTurnId: string | undefined =
@@ -1111,6 +1211,17 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
   return active;
 }
 
+const endsTurn = (event: MessageStreamEvent, turnId: string): boolean =>
+  (event.type === "turn.completed" ||
+    event.type === "turn.failed" ||
+    event.type === "turn.cancelled") &&
+  event.data.turnId === turnId;
+
+const isSessionBoundary = (event: MessageStreamEvent): boolean =>
+  event.type === "session.waiting" ||
+  event.type === "session.completed" ||
+  event.type === "session.failed";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function cancellationSettled(
   events: readonly MessageStreamEvent[],
@@ -1281,7 +1392,7 @@ async function readCancellationSettlementIncremental(input: {
 }): Promise<void> {
   const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
   let nextNativeIndex = input.beforeEventCount;
-  let cancelled = false;
+  let turnEnded = false;
   let currentTurnId: string | undefined = input.turnId;
   while (true) {
     if (readSignal.aborted) {
@@ -1317,10 +1428,10 @@ async function readCancellationSettlementIncremental(input: {
       if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
         currentTurnId = undefined;
       }
-      if (event.type === "turn.cancelled" && event.data.turnId === input.turnId) {
-        cancelled = true;
+      if (endsTurn(event, input.turnId)) {
+        turnEnded = true;
       }
-      if (cancelled && event.type === "session.waiting") {
+      if (turnEnded && isSessionBoundary(event)) {
         settled = true;
       }
     }
@@ -1781,6 +1892,31 @@ export function createSameOriginEveTransport(input: {
         throw new SubmissionOutcomeUnknownError();
       }
       await request.onAccepted?.(accepted.deliveryId);
+    },
+    async observeSource(request) {
+      let accepted: Awaited<ReturnType<typeof postMutation>>;
+      try {
+        accepted = await postMutation({
+          ...common,
+          body: { recoveryPhase: "inspect-source", sourceObservation: request.source },
+          path: "/eve/v1/session",
+          principal: request.principal,
+          sourceHandoffId: request.sourceHandoffId,
+        });
+      } catch (error) {
+        reportNativeSourceDiagnostic(undefined, "request_failed");
+        throw error;
+      }
+      if (
+        accepted.sessionId !== request.source.sourceAdapterSessionId ||
+        accepted.recoveryBinding !== undefined
+      ) {
+        reportNativeSourceDiagnostic(undefined, "identity_mismatch");
+        throw new SubmissionOutcomeUnknownError();
+      }
+      reportNativeSourceDiagnostic(
+        "sourceDiagnostic" in accepted ? accepted.sourceDiagnostic : undefined,
+      );
     },
     async observeRecovery(request) {
       const accepted = await postMutation({

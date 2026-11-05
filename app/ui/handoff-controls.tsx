@@ -268,10 +268,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       return (
         <>
           <p>
-            Required App Builder connection endpoint: <code>{data.mcpUrl}</code>. Before sending,
-            confirm your plugin connection targets this endpoint. The official release plugin may
-            target Production; local and Preview handoffs need a matching configured App Builder
-            plugin connection.
+            Builder connection address: <code>{data.mcpUrl}</code>. Before sending, make sure your
+            client uses this address. The release plugin may use Production; local and Preview
+            handoffs need a connection configured for that environment.
           </p>
           <p>
             Install the official App Builder plugin in Codex, enable it, and connect to Autograph.

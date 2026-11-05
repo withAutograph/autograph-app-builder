@@ -18,6 +18,8 @@ import {
 import {
   OPERATOR_EXECUTION_OBSERVATION_HEADER,
   OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+  OPERATOR_PREPARATION_PROGRESS_HEADER,
+  OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
 } from "./hosted-operator-execution-observation-protocol";
 
 const now = Date.parse("2026-10-19T12:00:00Z");
@@ -190,13 +192,19 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
     bindings: () => Promise.resolve({}),
   };
   const handler = createProtectedHostedOperatorHandler(deps);
-  const request = (action: "execute" | "status", observe = true, signal?: AbortSignal) =>
+  const request = (
+    action: "execute" | "status",
+    observe = true,
+    signal?: AbortSignal,
+    progress?: string,
+  ) =>
     handler(
       new Request("https://operator.example/v1/runtime", {
         method: "POST",
         signal,
         headers: {
           "content-type": "application/json",
+          ...(progress === undefined ? {} : { [OPERATOR_PREPARATION_PROGRESS_HEADER]: progress }),
           ...(observe
             ? { [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE }
             : {}),
@@ -252,6 +260,69 @@ const readExecutingEffect = (f: ReturnType<typeof fixture>) => {
 };
 
 describe("canonical execution observation", () => {
+  it.each([false, true])(
+    "includes recorded preparation progress in read-only status (observation %s)",
+    async (observe) => {
+      const f = fixture();
+      const read = vi.spyOn(f.store, "read");
+      const write = vi.spyOn(f.store, "compareAndSet");
+      const record = structuredClone(f.record);
+      const response = await f.request(
+        "status",
+        observe,
+        undefined,
+        OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
+      );
+      const result = operatorPublicResultSchema.parse(await response.json());
+      expect(result).toMatchObject({
+        status: "pending",
+        preparationProgress: {
+          lease: "absent",
+          hasPendingEffect: false,
+          hasPendingAttempt: false,
+          allPlanEffectsReceipted: false,
+          missingEffectKinds: ["resources", "install", "access", "bindings"],
+          hasAccountPreparation: false,
+          accountsCompleted: false,
+        },
+      });
+      expect(result.preparationProgress).not.toHaveProperty("planStage");
+      expect(read).toHaveBeenCalledOnce();
+      expect(write).not.toHaveBeenCalled();
+      expect(f.assertAuthorized).toHaveBeenCalledOnce();
+      expect(f.executeEffect).not.toHaveBeenCalled();
+      expect(f.record).toEqual(record);
+    },
+  );
+
+  it.each([undefined, "requested", "v2"])(
+    "preserves legacy result shape for missing or unsupported preparation preference %s",
+    async (preference) => {
+      const f = fixture();
+      const response = await f.request("status", true, undefined, preference);
+      const result = operatorPublicResultSchema
+        .omit({ preparationProgress: true })
+        .parse(await response.json());
+      expect(result).not.toHaveProperty("preparationProgress");
+      expect(result.execution).toEqual({ state: "unknown" });
+    },
+  );
+
+  it("does not disclose preparation facts when status authorization fails", async () => {
+    const f = fixture();
+    f.assertAuthorized.mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
+    const response = await f.request(
+      "status",
+      true,
+      undefined,
+      OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
+    );
+    const result = operatorPublicResultSchema.parse(await response.json());
+    expect(result).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(result.preparationProgress).toBeUndefined();
+    expect(f.executeEffect).not.toHaveBeenCalled();
+  });
+
   it("keeps frequent observations read-only while mutations still reauthorize the provider", async () => {
     const f = fixture();
     const execution = f.request("execute");

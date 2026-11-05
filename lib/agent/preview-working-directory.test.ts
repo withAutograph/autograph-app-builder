@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
     invalidate: vi.fn(),
     nativeBindings: vi.fn().mockResolvedValue(null),
     nativePreview: vi.fn(),
+    prior: vi.fn(),
     prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
     previewStateUpdate:
       vi.fn<(transition: (state: { commandId: string } | null) => null) => void>(),
@@ -66,7 +67,12 @@ vi.mock("./prepared-runtime-execution", () => ({
   resolveProtectedRuntimeBindings: mocks.nativeBindings,
 }));
 vi.mock("./native-working-preview", () => ({ nativeWorkingPreview: mocks.nativePreview }));
-vi.mock("./checkout-dependencies", () => ({ ensureCheckoutDependencies: mocks.dependencies }));
+vi.mock("./checkout-dependencies", () => ({
+  ensureCheckoutDependencies: mocks.dependencies,
+}));
+vi.mock("./prior-validated-private-artifact", () => ({
+  priorValidatedPrivateArtifact: mocks.prior,
+}));
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
   appDeclaresLocalSetup: async ({
     appId,
@@ -139,7 +145,7 @@ describe("preview command working directory", () => {
       expect.objectContaining({ sandboxId: "sandbox_replacement", sessionId: "session" }),
     );
   });
-  it("opens an existing selected app before an implementation proposal", async () => {
+  it("opens an existing selected app without an app-spec marker or implementation proposal", async () => {
     mocks.workflowState = {
       githubSource: { digest: "selected-source" },
       phase: "prepared",
@@ -147,7 +153,7 @@ describe("preview command working directory", () => {
       workspace: { workspacePath: "/workspace/repository" },
     };
     const readTextFile = vi.fn(({ path }: { path: string }) =>
-      Promise.resolve(path.endsWith("package.json") ? "{}" : "# App contract"),
+      Promise.resolve(path.endsWith("package.json") ? "{}" : null),
     );
     try {
       await startAppPreview.execute(
@@ -174,9 +180,6 @@ describe("preview command working directory", () => {
           toolName: "start_app_preview",
         },
       );
-      expect(readTextFile).toHaveBeenCalledWith({
-        path: "/workspace/repository/apps/existing-app/.config/app-spec.md",
-      });
       expect(mocks.start).toHaveBeenCalledWith(
         expect.objectContaining({
           appId: "existing-app",
@@ -190,6 +193,79 @@ describe("preview command working directory", () => {
       };
     }
   });
+  it.each([true, false])(
+    "runs a repository-declared command for prior preview after dependency setup (ready: %s)",
+    async (ready) => {
+      const saved = mocks.workflowState;
+      const verifyCurrent = vi.fn().mockResolvedValue(null);
+      const assertCurrent = vi.fn(() => {
+        expect(mocks.workflowState).toBe(saved);
+      });
+      mocks.prior.mockResolvedValueOnce({
+        appId: "app",
+        root: "/workspace/repository",
+        revision: "prior-apply",
+        validationDigest: "prior-validation",
+        reusable: true,
+        assertCurrent,
+        verifyCurrent,
+      });
+      mocks.dependencies.mockClear();
+      mocks.dependencies.mockResolvedValueOnce({
+        status: ready ? "reused" : "installed",
+        attempts: [],
+      });
+      mocks.start.mockClear();
+      const signal = new AbortController().signal;
+      const result = startAppPreview.execute(
+        {
+          artifact: "prior-validated",
+          command: { args: ["run", "preview"], executable: "npm" },
+          landingPath: "/app",
+          port: 3000,
+          workingDirectory: ".",
+        },
+        {
+          abortSignal: signal,
+          callId: "call-prior",
+          getSandbox: vi.fn().mockResolvedValue({
+            id: "sandbox",
+            readTextFile: vi.fn().mockResolvedValue('{"packageManager":"pnpm@10.0.0"}'),
+          }),
+          getToken: vi.fn(),
+          requireAuth: (): never => {
+            throw new Error("Unexpected auth request in prior preview test");
+          },
+          session: {
+            auth: { current: null, initiator: null },
+            id: "session",
+            turn: { id: "turn", sequence: 0 },
+          },
+          toolName: "start_app_preview",
+        },
+      );
+      await expect(result).resolves.toMatchObject({
+        dependencies: { status: ready ? "reused" : "installed" },
+      });
+      expect(mocks.dependencies).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ root: "/workspace/repository", checkoutIdentity: "prior-apply" }),
+      );
+      expect(mocks.dependencies).not.toHaveBeenCalledWith(
+        expect.objectContaining({ reconcileWorkspace: true }),
+      );
+      const request: unknown = mocks.dependencies.mock.calls[0]?.[0];
+      expect(request).not.toHaveProperty("onAttempt");
+      expect(verifyCurrent).toHaveBeenCalledBefore(mocks.start);
+      expect(mocks.start).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cwd: "/workspace/repository",
+          command: { args: ["run", "preview"], executable: "pnpm" },
+        }),
+      );
+      expect(mocks.workflowState).toBe(saved);
+    },
+  );
+
   it("defaults to the existing applied repository root", () => {
     expect(resolvePreviewWorkingDirectory("/workspace/repository", parseDirectory())).toBe(
       "/workspace/repository",
@@ -281,7 +357,7 @@ describe("preview command working directory", () => {
       mocks.prepare.mock.invocationCallOrder[0] ?? 0,
     );
     expect(mocks.dependencies).toHaveBeenCalledWith(
-      expect.objectContaining({ requiredExecutable: "next", root: "/workspace/repository" }),
+      expect.objectContaining({ reconcileWorkspace: true, root: "/workspace/repository" }),
     );
     expect(mocks.prepare.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.start.mock.invocationCallOrder[0] ?? 0,

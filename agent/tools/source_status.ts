@@ -1,3 +1,5 @@
+import { importPreparedApplicationSource } from "@/lib/agent/application-source-import";
+import { applicationSourceImportState } from "@/lib/agent/application-source-import-state";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { APP_BUILDER_SOURCE_VERSION, sourceWorkflowState } from "@/lib/agent/source-state";
@@ -9,10 +11,11 @@ import { acquireCanonicalArrustedTemplate } from "@/lib/repository/arrusted-temp
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { savedAppBaselineSummary } from "@/lib/agent/saved-app-baseline-selection";
+import { ownedPublishedDraftRecovery } from "@/lib/agent/draft-reconciliation-prerequisites";
 
 export default defineTool({
   description:
-    "Return the durable source-review phase and current app baseline provenance when selected. receipt.sourceSha identifies the platform checkout, while appBaseline.commitSha identifies the historical app version. For an owned prepared baseline, historical app files are projected into the selected platform checkout; the platform branch (which may be main) remains selected, and the source-bound sandbox restores that projection on use. There is no separate baseline activation or ref switch. A pending baseline is not prepared. To start a new hosted app, explicitly pass sourceKind=fresh-template to acquire the canonical Arrusted starter. Existing hosted apps use resolve_github_source instead.",
+    "Return the durable source-review phase and current app baseline provenance when selected. For an authenticated prepared application source candidate, after genuine platform acquisition this stages and verifies its app-owned source without executing it and returns a separate applicationSourceImport receipt. It preserves the candidate app identity and grants no Build or publication approval. receipt.sourceSha identifies the platform checkout, while appBaseline.commitSha identifies the historical app version. For an owned prepared baseline, historical app files are projected into the selected platform checkout; the platform branch (which may be main) remains selected, and the source-bound sandbox restores that projection on use. There is no separate baseline activation or ref switch. A pending baseline is not prepared. To start a new hosted app, explicitly pass sourceKind=fresh-template to acquire the canonical Arrusted starter. Initial selection of an existing app uses resolve_github_source. A starter-created app that already published its own draft keeps its starter origin and continues in the same session through prepare_github_draft_pr_reconciliation; its ownedDraftRecovery result describes the explicit fresh-review recovery when replay of the old app review is ambiguous.",
   async execute(input, ctx) {
     let state = sourceWorkflowState.get();
     if (state.phase === "empty") {
@@ -43,6 +46,8 @@ export default defineTool({
     if (state.phase === "empty") {
       return state;
     }
+    await importPreparedApplicationSource(ctx, state.receipt);
+    const applicationSourceImport = applicationSourceImportState.get();
     const workflow = appBuilderWorkflowState.get();
     // Report saved provenance; source binding and compute verification stay with source acquisition.
     const githubSource =
@@ -55,10 +60,13 @@ export default defineTool({
       githubSource,
       sessionId: ctx.session.id,
     });
+    const ownedDraftRecovery = ownedPublishedDraftRecovery(workflow);
     const result = {
+      ...(applicationSourceImport === undefined ? {} : { applicationSourceImport }),
       phase: state.phase,
       receipt: state.receipt,
       version: state.version,
+      ...(ownedDraftRecovery === null ? {} : { ownedDraftRecovery }),
     };
     if (githubSource === undefined) {
       return result;

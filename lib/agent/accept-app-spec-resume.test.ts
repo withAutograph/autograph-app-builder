@@ -144,6 +144,55 @@ describe("accepted AppSpec resume", () => {
     },
   );
 
+  it("plans an explicit framework upgrade for an unchanged already accepted product spec", async () => {
+    const before = seed("planned");
+    mocks.prepare.mockImplementationOnce(() => {
+      expect(appBuilderWorkflowState.get()).toMatchObject({
+        phase: "app_spec_accepted",
+        appSpec: { frameworkUpgrade: "latest", digest: accepted.digest },
+      });
+      const current = appBuilderWorkflowState.get();
+      appBuilderWorkflowState.update(
+        () =>
+          ({
+            ...current,
+            phase: "planned",
+            proposal: {
+              digest: "upgrade-plan",
+              target: {
+                frameworkUpgrade: {
+                  scope: "workspace",
+                  versions: {
+                    next: "16.4.3",
+                    react: "19.3.1",
+                    reactDom: "19.3.1",
+                    typesReact: "19.3.0",
+                    typesReactDom: "19.3.0",
+                  },
+                },
+              },
+            },
+          }) as unknown as AppBuilderWorkflowState,
+      );
+    });
+    const result = await acceptAppSpec.execute(
+      { appId: artifact.appId, frameworkUpgrade: "latest" },
+      context,
+    );
+    expect(result).toMatchObject({
+      frameworkUpgradePlan: {
+        scope: "workspace",
+        versions: { next: "16.4.3" },
+        sharedPaths: ["package.json", "bun.lock"],
+      },
+    });
+    expect(mocks.prepare).toHaveBeenCalledOnce();
+    expect(appBuilderWorkflowState.get()).not.toBe(before);
+    const planned = appBuilderWorkflowState.get();
+    await acceptAppSpec.execute({ appId: artifact.appId, frameworkUpgrade: "latest" }, context);
+    expect(appBuilderWorkflowState.get()).toBe(planned);
+    expect(mocks.prepare).toHaveBeenCalledOnce();
+  });
   it("accepts a newly recorded raw revision instead of reusing an older acceptance", async () => {
     const state = seed("planned");
     if (!("artifacts" in state)) {

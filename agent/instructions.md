@@ -28,7 +28,7 @@ answer the next implementation question. Read additional files for missing
 information or a concrete repair, rather than repeatedly rediscovering the
 same repository or re-preparing its workspace. Use `artifact_workflow_status`
 to recover compact accepted design and planning references. A planned proposal
-continues through the normal build approval; missing full UI content in its
+continues through the normal build; missing full UI content in its
 status does not call for a new prototype. Real source or product changes may
 require fresh inspection and design acceptance.
 
@@ -66,12 +66,15 @@ writes, pushes, draft PRs, deployments, provisioning, and releases require a
 later approval naming their visible effect. A new blocking check requires a
 documented concrete failure and recovery path.
 
-Make outward-effect approval requests concise and specific. Use a short title
-that names the action, then explain the target and visible result in plain
-language. For a draft pull request, name the repository and pull request,
-summarize the reviewed changes, and say it will remain a draft and will not be
-merged or deployed. Do not include commit IDs, content digests, receipt JSON,
-or other internal verification values in user-facing copy. Present one-click
+Make outward-effect approval requests concise and specific. Use a short title,
+a one-sentence summary, and small labeled groups such as “What will happen,”
+“Access and cost,” and “Retention.” State why the user needs to act and what
+they should do next. Name the target and visible result in plain language. For
+a draft pull request, name the repository and pull request, summarize the
+reviewed changes, and say it will remain a draft and will not be merged or
+deployed. Do not include commit IDs, content digests, receipt JSON, role
+plumbing, or other internal verification values in user-facing copy. Keep
+material access, data, billing, and Production consequences clear. Present one-click
 **Accept** and **Cancel** choices; do not ask the user to select a checkbox and
 then press Continue for a yes-or-no approval.
 
@@ -136,8 +139,11 @@ When a user gives a product brief, begin the product work immediately. Resolve
 the available source and create the writable builder workspace automatically;
 do not ask the user to inspect or approve setup. Use the repository's actual
 components and commands as context, then produce a visual prototype and an
-implementation plan. Present the visible interface and intended behavior
-concisely, then invoke the approval-bound build operation so the first normal
+implementation plan. Present the visible interface and intended behavior in
+plain language with short headings and a small amount of useful detail. Explain
+how the app will work and what the user can do next; leave paths, schema details,
+tool calls and validation internals out of the main message. Then invoke the
+approval-bound build operation so the first normal
 prompt is **Build this app?** Repair incomplete internal artifacts and retry
 when the actual command gives enough information to do so. Ask a product
 question only for genuine ambiguity. Never ask for approval to start a session,
@@ -166,7 +172,7 @@ Resume the candidate's full validation, review and separate publication approval
 when delivering its changes; do not reset the candidate or pin ongoing revision
 work to the published source.
 For requested hosted delivery of changed generated-app source, technically
-validate and independently review the private implementation, then complete the
+validate and independently review the implementation, then complete the
 normal destination diff
 review, seal its proposal, and obtain separate publication approval. Use
 `publish_github_draft_pr`, or the existing draft update/reconciliation path, to
@@ -177,7 +183,7 @@ may happen first. Keep hosted behavior unassessed until the actual app runs;
 do not wait for authenticated Preview acceptance before publishing the source
 needed to deploy that Preview. Never substitute another app or repository head.
 For hosted Preview persistence, use `plan-app-hosted-runtime` when restoring the
-published version or after the private implementation is ready and the user
+published version or after the implementation is ready and the user
 requests connected Preview resources.
 For a new generated app without a dedicated native Preview target, first use
 `plan-app-native-target` with the selected app and its source-derived deployment
@@ -198,11 +204,23 @@ optional `buildCommand`. The repository's `app:describe` supplies this metadata
 for the selected release; its `app.workspacePath` supplies `rootDirectory`.
 Update the declaration when the build profile changes. Do not infer a command
 from package scripts or reuse the initial target profile as current source proof.
-Present the returned concrete targets, app/Auth roles, access grants,
-effects, cost owner and retention. Pass that unchanged plan, digest and operation
+Present a short summary of the concrete Preview resources, user access, visible
+effects, cost ownership and retention. Use labeled groups and plain language;
+do not echo provider IDs, role plumbing, release hashes or approval digests.
+Pass the unchanged plan, digest and operation
 reference to `prepare-app-hosted-runtime` for separate effect approval. Read
 pending status with `get-app-hosted-runtime`; never report completion before
-operator readback. Use `cleanup-app-hosted-runtime` only with a separately
+operator readback. An `auth-bootstrap` plan intentionally prepares Auth and
+Gateway before account capture. Continue that prerequisite through the returned
+`prepare-app-hosted-runtime` operation and approval for its exact effects. Follow
+its ordinary account connection link for the existing account, resume the same
+approved preparation to read back capture, then plan again for the same
+app/session and release intent. The renewed full app plan supplies app
+installation, access, delivery and routing through their normal approval flow.
+Do not stop because the first plan contains only bootstrap effects or require
+an app deployment before initial account connection. Preserve unknown outcomes
+for reconciliation; account capture alone does not prove app readiness.
+Use `cleanup-app-hosted-runtime` only with a separately
 planned and approved cleanup scope. Static apps require no database preparation.
 The protected operator must be separately configured with explicit owner Neon
 authority and a synthetic-only nonproduction context. Missing operator,
@@ -214,7 +232,7 @@ credentials already issued. Never remove persistent resources during turn
 cleanup or overwrite another app's shared authentication bindings.
 
 Organize the complete-app journey around the four business phases in
-`docs/full-app-authoring.md`: initial version and build approval, build,
+`docs/full-app-authoring.md`: initial version, build,
 independent review, and requested delivery. These phases are not a promise of
 exactly four model requests. Reuse current assessment and behavioral evidence;
 do not add a second independent review or repeat a covered browser scenario for
@@ -257,10 +275,30 @@ compiler and data-operation contracts for backend features. These repository
 instructions own implementation details rather than a copied Builder rule set.
 Architecture observations are advisory; use repository checks and exercised
 behavior to verify persistence, authentication, and tenant isolation. Do not
-reject a working app solely for a source-pattern heuristic. Preserve the
-scaffolded dependency versions (`catalog:` and `workspace:*` included) and
-repository tasks; app-specific dependencies do not automatically require a
-new generator profile.
+reject a working app solely for a source-pattern heuristic. Preserve `catalog:` and `workspace:*` references and repository tasks. New-app
+plans resolve current stable framework versions once. Existing-app revisions
+preserve versions unless the user requests an upgrade; then use
+`accept_app_spec` with `frameworkUpgrade: "latest"`. Apply only the concrete
+versions retained by the accepted plan through the repository adapter. The
+repository framework operation owns shared catalog and generated lockfile
+changes; include their workspace-wide impact in the same review and publication.
+Never regenerate an existing app or hand-author a lockfile. App-specific
+dependencies do not automatically require a new generator profile.
+Optional third-party app integration setup/activation is unavailable in this
+release scope. Missing/deferred implementation is not `not_configured`; that
+state requires a supported implementation and a genuine authorized binding read.
+Do not probe accounts, invent connection facts or add a provider backend. An
+explicit accepted AppSpec revision may defer the capability and continue the
+normal app/Auth/resource lifecycle, preserving retained data and receipts.
+
+When accepted product intent includes optional provider integrations, follow
+`skills/create-app/references/optional-integrations.md`. Discover executable
+provider recipes and the shared integrations surface in the selected Arrusted
+checkout. Author typed app-owned bindings against generated schema metadata and
+a real app DAL host, then call `install-app-integrations` after apply and before
+validation. The repository installer serves new and existing apps. Keep ordinary
+apps unchanged and report missing provider capability explicitly. AppSpec prose
+does not grant activation, connection or disconnect authority.
 When validation returns a truncated repair excerpt, use `get_validation_log`
 by copying the complete channel `readInput` and each continuation cursor to inspect
 complete sanitized command output before deciding on a repair. If a reference is
@@ -276,8 +314,9 @@ Sandbox cleanup. A page's `complete` flag only ends paging; its `completion`
 metadata reports whether capture was complete, interrupted, or lost a durable
 suffix. Report unavailable durability honestly and preserve any readable prefix.
 When validation returns `productionHandoff`, report its declared app route,
-roles, checked release, operator guide, and blockers as a separate Production
-iteration. Missing handoff metadata does not invalidate private app validation.
+roles, and blockers as a separate Production iteration. Keep the checked
+release and operator-guide references in supporting detail when they help with
+follow-up. Missing handoff metadata does not invalidate private app validation.
 Builder source and Preview evidence do not prove protected access or hosted
 Production readiness. Do not restore a retired demo authentication bypass to
 make a walkthrough pass.
@@ -314,11 +353,12 @@ run `compile-app-schema-release` in the same approved private checkout, then
 rerun `validate_app_creation`. This fixed operation compiles only the selected
 app's release and reports the exact repository command and compiler output.
 If a command or provider cannot make progress because a concrete failure needs
-new input or an external action, name the failed operation, exit status when
-available, specific file or cause, and next repair action. Do not use a fixed
-number of repair attempts as the stopping condition or replace the evidence
-with a generic preparation error. Retry transient failures with durable
-backoff; pause on the actionable cause or explicit cancellation.
+new input or an external action, explain what failed, what the user needs to do,
+and the next repair action. Keep exit status, exact file, command output, and
+other technical cause details in supporting detail when useful for diagnosis.
+Do not use a fixed number of repair attempts as the stopping condition or
+replace the evidence with a generic preparation error. Retry transient failures
+with durable backoff; pause on the actionable cause or explicit cancellation.
 Existing-app iteration changes already come from the proposal and may use an
 empty file list. Do not mistake scaffolding for an implemented product. When an
 actual validation command returns structured compiler diagnostics, repair those
@@ -433,4 +473,12 @@ download link may enter chat; never read or summarize row bytes in model context
 Resume the same export intent after uncertainty; do not invent another snapshot
 or call SQL manually. Export is optional manual retention, never a Preview gate.
 
-For an explicitly requested manual continuity exercise, use `plan-app-hosted-runtime` operation `continuity`, then submit its exact returned plan and request to `run-app-continuity-tests` for ordinary human approval. The server selects the owned checkout, prepared resources, actor scope and compute identity. Do not supply a PID, executable, environment, private capability or arbitrary target. The existing app-authored browser suite receives private managed-target and lifecycle adapters; make any required app fixture integration through this Builder's normal app revision workflow. This optional exercise is not an app admission or Preview gate. Report only what its actual assertions prove. A controlled app-process replacement and a subsequent native deployment are separate observations; a successful local process replacement alone proves neither native deployment nor retained data after that deployment. Preserve the same intent on uncertain command/provider outcomes. Closing the owned runtime precedes deletion of its separate Gateway rows; cleanup does not trigger another deployment.
+When a saved continuity plan cannot run because its checkout is stale, recover through `plan-app-hosted-runtime` operation `continuity` with `recoverContinuityIntentId` and a fresh idempotency key. Builder restores the selected owned checkout and preserves the old plan and evidence; a linked successor requires its own ordinary approval through `run-app-continuity-tests`. Do not reinterpret old approval or replace an intent with uncertain effects. For focused app-authored acceptance requiring managed lifecycle actions, pass `browserSelection` in this plan so the selection is frozen into approval and reaches the managed runner. Keep a full browser suite nonblocking when the user requested that scope.
+
+For an explicitly requested manual continuity exercise, use `plan-app-hosted-runtime` operation `continuity`, then submit only its exact returned four-field request to `run-app-continuity-tests` for ordinary human approval. Builder reloads the canonical full plan server-side; never reconstruct or retype its nested immutable resource and actor fields. The server selects the owned checkout, prepared resources, actor scope and compute identity. Do not supply a PID, executable, environment, private capability or arbitrary target. The existing app-authored browser suite receives private managed-target and lifecycle adapters; make any required app fixture integration through this Builder's normal app revision workflow. This optional exercise is not an app admission or Preview gate. Report only what its actual assertions prove. A controlled app-process replacement and a subsequent native deployment are separate observations; a successful local process replacement alone proves neither native deployment nor retained data after that deployment. Preserve the same intent on uncertain command/provider outcomes. Closing the owned runtime precedes deletion of its separate Gateway rows; cleanup does not trigger another deployment.
+
+When a user asks to save or transfer the local app, wait until its accepted app apply/validation work is idle, then call `export-application-source` with its display name. Return the actual source download reference and report omissions. This saves the current owning Sandbox files, including binary assets and app-owned schema history; do not substitute the original host checkout, an old authored bundle, a compiled preview, or reconstructed journal. Source exports carry no database, identity, destination, approval or native-session authority. An authenticated hosted start imports this as untrusted app source through its ordinary workflow and fresh effect approvals.
+
+When validation reports `tooling-prerequisite` with `native-tool-panic`, the checker itself failed before completing. Preserve the current app and its failed receipt, explain the blocked check, and wait for an ordinary user continuation or the required tooling/compute approval. Do not repeatedly edit app source or rerun the same fatal checker as if it were a lint/type diagnostic. Exit 134 by itself does not establish an out-of-memory cause. Ordinary app lint, type and assertion failures remain part of the approved repair loop.
+
+After a positive native checker panic, `prepare_app_creation` with `privateCompute: "private-checks-16gib-v1"` is the supported read-only same-app profile proposal when its source/task and provider-capacity prerequisites pass. It freezes the actual Sandbox/Drive and 8 vCPU/16 GiB ephemeral billing description into a fresh proposal; require approval of the compute resize before `apply_app_creation` with the same profile. Do not reuse prior approval, silently resize, replace the app or infer that this necessarily fixes the panic. If the supported profile cannot be qualified, expose that prerequisite and wait.

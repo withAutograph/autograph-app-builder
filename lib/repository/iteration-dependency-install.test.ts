@@ -1,3 +1,4 @@
+import { workspaceBinInstallCommand } from "./workspace-bin-install";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -44,7 +45,7 @@ const fixture = (
     resolvePath: (path) => path,
     run: vi.fn<BuilderSandboxSession["run"]>(async ({ command }) => {
       await Promise.resolve();
-      if (command === "bun install") {
+      if (command === workspaceBinInstallCommand("/workspace/repository", false)) {
         events.push("install");
         expect(manifest).toBe(options.delete === true ? null : after);
         return options.installFails === true ? failure : { exitCode: 0, stderr: "", stdout: "" };
@@ -125,7 +126,16 @@ const fixture = (
       proposal,
       sandbox,
     });
-  return { cueCommand: () => cueCommand, cueFailure, events, execute, failure, policies, sandbox };
+  return {
+    cueCommand: () => cueCommand,
+    cueFailure,
+    events,
+    execute,
+    failure,
+    policies,
+    sandbox,
+    proposal,
+  };
 };
 
 const executeCueActivation = async function executeCueActivation(
@@ -190,7 +200,7 @@ describe("existing-app dependency installation", () => {
     ]);
     expect(state.policies).toEqual(["allow-all"]);
     expect(state.sandbox.run).toHaveBeenNthCalledWith(1, {
-      command: "bun install",
+      command: workspaceBinInstallCommand("/workspace/repository", false),
       workingDirectory: "/workspace/repository",
     });
     expect(state.sandbox.run).toHaveBeenNthCalledWith(
@@ -262,4 +272,63 @@ describe("existing-app dependency installation", () => {
     await executeCueActivation(command, "development/bin");
     await executeCueActivation(command, "hosted/node_modules/.bin");
   });
+});
+
+it("applies the exact imported application catalog plan only within the approved build", async () => {
+  const f = fixture();
+  const topology = '{"applications":{}}';
+  const proposed = '{"applications":{"vendor":{}}}';
+  const sandbox = {
+    ...f.sandbox,
+    readTextFile: vi.fn<BuilderSandboxSession["readTextFile"]>(async () => {
+      await Promise.resolve();
+      return topology;
+    }),
+    writeTextFile: vi.fn<BuilderSandboxSession["writeTextFile"]>(async (input) => {
+      if (input.path.endsWith("microfrontends.json")) {
+        f.events.push("registration");
+        return;
+      }
+      await f.sandbox.writeTextFile(input);
+    }),
+  };
+  const proposal = targetIterationProposalSchema.parse({
+    ...f.proposal,
+    applicationSourceImport: {
+      appId: "vendor",
+      manifestDigest: "a".repeat(64),
+      importedSessionId: "new-hosted-session",
+      registration: {
+        oldDigest: digest(topology),
+        newDigest: digest(proposed),
+        proposedBytes: proposed,
+        projectName: "vendor",
+        assetRoute: "/asset/:path*",
+      },
+    },
+  });
+  const result = await sandboxApplyCommandExecutor()({
+    appId: "vendor",
+    applyRoot: "/workspace/repository",
+    proposal,
+    sandbox,
+  });
+  expect(result.exitCode).toBe(0);
+  expect(f.events.indexOf("registration")).toBeLessThan(f.events.indexOf("install"));
+  expect(targetApplyCommandReceiptSchema.parse(JSON.parse(result.stdout)).topology).toEqual({
+    oldDigest: digest(topology),
+    newDigest: digest(proposed),
+    path: "microfrontends.json",
+  });
+  sandbox.readTextFile.mockResolvedValue("changed-by-other-writer");
+  f.events.length = 0;
+  const stale = await sandboxApplyCommandExecutor()({
+    appId: "vendor",
+    applyRoot: "/workspace/repository",
+    proposal,
+    sandbox,
+  });
+  expect(stale.exitCode).toBe(2);
+  expect(f.events).not.toContain("registration");
+  expect(f.events).not.toContain("install");
 });

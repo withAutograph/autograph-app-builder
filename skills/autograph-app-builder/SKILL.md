@@ -7,9 +7,16 @@ description: Create apps or continue app sessions through Autograph App Builder.
 
 ## Connection
 
-Use the five App Builder tools when they are available. If the connection is
-missing, ask Codex to connect or install the plugin; never substitute a shell
-or direct filesystem implementation.
+Use the five public App Builder tools. If they are missing or the connection
+fails, follow [connection recovery](references/connection-recovery.md) before
+asking the user to troubleshoot: discover the tools, verify with a read-only
+`autograph_get`, and use the host's supported connect/reconnect action when
+available. Let the host handle sign-in and consent; after recovery, verify access
+and continue the same saved Builder session. If the host needs a user click or a
+fresh chat, give one concrete next action and preserve the continuation context.
+Never substitute a shell-based app implementation or direct filesystem edits
+for Builder's public workflow. Host connection-management commands are allowed
+under the recovery guidance; they do not authorize app or provider effects.
 
 ## Workflow
 

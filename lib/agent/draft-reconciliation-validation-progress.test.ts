@@ -1,4 +1,5 @@
 import type { runAppBrowserTests as runAppBrowserTestsPort } from "../../agent/tools/run-app-browser-tests";
+import type { SandboxSession } from "eve/sandbox";
 import type { resolvePreparedRuntimeExecution } from "./prepared-runtime-execution";
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, typescript/no-unsafe-type-assertion, eslint/require-await -- Isolated Eve state and sandbox stubs exercise the real validation tool. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +12,7 @@ import type {
 import type { retireUnusedDraftWorktrees } from "../repository/retire-unused-draft-worktrees";
 
 import validateReconciliation from "../../agent/tools/validate_github_draft_pr_reconciliation";
+import getValidationLog, { validationLogInputSchema } from "../../agent/tools/get_validation_log";
 import formatCandidate from "../../agent/tools/format_github_draft_pr_candidate";
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 
@@ -36,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   logStore: vi.fn(),
   publish: vi.fn(),
   run: vi.fn(),
+  spawn: vi.fn(),
   replace: vi.fn(),
   readText: vi.fn(),
   workflow: null as Record<string, unknown> | null,
@@ -53,6 +56,7 @@ vi.mock("./source-bound-sandbox", () => ({
     id: "owned-provider-sandbox",
     readTextFile: mocks.readText,
     run: mocks.run,
+    spawn: mocks.spawn,
   }),
 }));
 vi.mock("./draft-reconciliation-state", () => ({
@@ -102,6 +106,7 @@ vi.mock(import("../repository/target-validation"), async (importOriginal) => ({
 }));
 vi.mock("./validation-log-store-for-session", () => ({
   validationLogStoreForSession: mocks.logStore,
+  assertValidationLogSession: vi.fn(),
 }));
 
 const abortSignal = new AbortController().signal;
@@ -111,22 +116,73 @@ const context = {
   session: { auth: { owned: "auth" }, id: "adapter" },
 } as never;
 
-const incremental = async (expectedCommand: string) => {
-  if (expectedCommand !== schemaCommand && mocks.candidate?.validationRun === undefined) {
-    await validateReconciliation.execute(
-      {
-        additionalCheckTasks: [],
-        expectedCommand: schemaCommand,
-        incremental: true,
-        runBrowserTests: false,
-      },
-      context,
-    );
-  }
-  return await validateReconciliation.execute(
-    { additionalCheckTasks: [], expectedCommand, incremental: true, runBrowserTests: false },
+// SAFETY: These controlled mocks receive only sandbox command options from the actual tools.
+const candidateInstallCalls = () =>
+  mocks.run.mock.calls
+    .map(([input]: unknown[]) => input as Parameters<SandboxSession["run"]>[0])
+    .filter((input) => input.command === installCommand);
+
+const candidateLogStore = () => {
+  const manifests = new Map<string, ValidationLogReference>();
+  const chunks = new Map<string, { content: string; digest: string }>();
+  const keyFor = (key: ValidationLogKey) =>
+    JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
+  const store: ValidationLogStore = {
+    async getChunk(key, index) {
+      return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`));
+    },
+    async getReference(key) {
+      return await Promise.resolve(manifests.get(keyFor(key)));
+    },
+    async publish(key, reference) {
+      await Promise.resolve(manifests.set(keyFor(key), reference));
+    },
+    async putChunk(key, index, content, chunkDigest) {
+      await Promise.resolve(
+        chunks.set(`${keyFor(key)}:${index}`, { content, digest: chunkDigest }),
+      );
+    },
+    async removeStaged(key) {
+      await Promise.resolve(manifests.delete(keyFor(key)));
+    },
+  };
+  return store;
+};
+
+const candidateValidationCall = async (command?: string) =>
+  (await validateReconciliation.execute(
+    {
+      additionalCheckTasks: [],
+      expectedCommand: command,
+      incremental: true,
+      runBrowserTests: false,
+    },
     context,
-  );
+  )) as Exclude<Awaited<ReturnType<typeof validateReconciliation.execute>>, AsyncIterable<unknown>>;
+
+const incremental = async (expectedCommand: string) => {
+  const call = candidateValidationCall;
+  if (mocks.candidate?.validationRun === undefined) {
+    const bootstrap = await call();
+    if (expectedCommand === installCommand || bootstrap.status !== "in_progress") {
+      return bootstrap;
+    }
+    if (expectedCommand !== schemaCommand) {
+      const schema = await call(schemaCommand);
+      if (schema.status !== "in_progress") {
+        return schema;
+      }
+    }
+  }
+  const result = await call(expectedCommand);
+  if (result.status === "plan_refreshed" && result.nextCommand === installCommand) {
+    const installed = await call(installCommand);
+    if (installed.status !== "in_progress" || expectedCommand === installCommand) {
+      return installed;
+    }
+    return await call(installed.nextCommand ?? expectedCommand);
+  }
+  return result;
 };
 
 describe("draft reconciliation command progress", () => {
@@ -184,6 +240,20 @@ describe("draft reconciliation command progress", () => {
       stderr: "",
       stdout: "",
     });
+    mocks.spawn.mockImplementation(async () => ({
+      stdout: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      stderr: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      wait: async () => ({ exitCode: 0 }),
+      kill: async () => {},
+    }));
     mocks.logStore.mockRejectedValue(new Error("log storage unavailable"));
     mocks.candidate = {
       appId: "spend-review",
@@ -216,6 +286,217 @@ describe("draft reconciliation command progress", () => {
     });
     mocks.run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
     mocks.check.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
+  });
+
+  it("bootstraps the actual candidate root with only the fixed cached locked install", async () => {
+    const result = await validateReconciliation.execute(
+      { additionalCheckTasks: [], incremental: true, runBrowserTests: false },
+      context,
+    );
+    expect(result).toMatchObject({
+      status: "in_progress",
+      command: installCommand,
+      nextCommand: schemaCommand,
+    });
+    const installs = candidateInstallCalls();
+    expect(installs).toHaveLength(1);
+    expect(installs[0]).toMatchObject({
+      workingDirectory: "/workspace/candidate",
+      env: { MISE_ENV: "app-validation" },
+      abortSignal,
+    });
+    expect(installs[0].env).not.toHaveProperty("DATABASE_URL");
+    expect(mocks.compile).not.toHaveBeenCalled();
+    expect(mocks.check).not.toHaveBeenCalled();
+  });
+
+  it("migrates an already compiled failed candidate before retrying its existing app check", async () => {
+    const historical = { attemptDigest: "historical-failure", command: checkCommand, exitCode: 1 };
+    mocks.attempts.push(historical);
+    mocks.candidate = {
+      ...mocks.candidate,
+      validationRun: {
+        resolvedTree: tree,
+        schemaTaskCompleted: true,
+        nextIndex: 1,
+        commands: [{ command: schemaCommand, exitCode: 0 }],
+        steps: [
+          { kind: "schema", command: schemaCommand },
+          { kind: "check", command: checkCommand },
+          { kind: "check", command: testCommand },
+          { kind: "capture", command: captureCommand },
+        ],
+      },
+    };
+    const call = candidateValidationCall;
+    await expect(call(checkCommand)).resolves.toMatchObject({
+      status: "plan_refreshed",
+      nextCommand: installCommand,
+    });
+    expect(candidateInstallCalls()).toHaveLength(0);
+    await expect(call(installCommand)).resolves.toMatchObject({
+      status: "in_progress",
+      nextCommand: checkCommand,
+    });
+    mocks.check.mockResolvedValue({
+      exitCode: 1,
+      stderr: "error TS2307: Cannot find module './app-source'",
+      stdout: "",
+    });
+    await expect(call(checkCommand)).resolves.toMatchObject({
+      status: "needs_repair",
+      exitCode: 1,
+    });
+    await expect(call(checkCommand)).resolves.toMatchObject({
+      status: "needs_repair",
+      exitCode: 1,
+    });
+    expect(mocks.compile).not.toHaveBeenCalled();
+    expect(mocks.attempts).toContain(historical);
+    expect(candidateInstallCalls()).toHaveLength(1);
+    expect(mocks.candidate?.validationRun).toMatchObject({ schemaTaskCompleted: true });
+    expect(mocks.candidate?.validation).toBeUndefined();
+  });
+
+  it("rejects an arbitrary requested command while migrating candidate dependency setup", async () => {
+    mocks.candidate = {
+      ...mocks.candidate,
+      validationRun: {
+        resolvedTree: tree,
+        nextIndex: 0,
+        commands: [],
+        steps: [{ kind: "check", command: checkCommand }],
+      },
+    };
+    await expect(
+      validateReconciliation.execute(
+        {
+          additionalCheckTasks: [],
+          expectedCommand: "bun install --force; arbitrary-command",
+          incremental: true,
+          runBrowserTests: false,
+        },
+        context,
+      ),
+    ).rejects.toThrow("supplied a different command");
+    expect(candidateInstallCalls()).toHaveLength(0);
+    expect(mocks.check).not.toHaveBeenCalled();
+  });
+
+  it("stops before installation when borrowed dependency roots cannot be detached safely", async () => {
+    mocks.run
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "foreign dependency root" });
+    await expect(
+      validateReconciliation.execute(
+        {
+          additionalCheckTasks: [],
+          expectedCommand: installCommand,
+          incremental: true,
+          runBrowserTests: false,
+        },
+        context,
+      ),
+    ).rejects.toThrow("no installation was attempted");
+    expect(candidateInstallCalls()).toHaveLength(0);
+    expect(mocks.compile).not.toHaveBeenCalled();
+    expect(mocks.check).not.toHaveBeenCalled();
+    expect(mocks.candidate?.validationRun).toMatchObject({ nextIndex: 0, commands: [] });
+  });
+
+  it("does not loop locked installation when a declared dependency error persists", async () => {
+    mocks.check.mockResolvedValue({
+      exitCode: 1,
+      stderr: "error: Cannot find package 'vitest' from '/workspace/candidate/task.ts'",
+      stdout: "",
+    });
+    await expect(incremental(checkCommand)).resolves.toMatchObject({
+      status: "in_progress",
+      nextCommand: installCommand,
+    });
+    await expect(incremental(installCommand)).resolves.toMatchObject({
+      status: "in_progress",
+      nextCommand: checkCommand,
+    });
+    await expect(incremental(checkCommand)).resolves.toMatchObject({
+      status: "needs_repair",
+      exitCode: 1,
+    });
+    await expect(incremental(checkCommand)).resolves.toMatchObject({
+      status: "needs_repair",
+      exitCode: 1,
+    });
+    expect(candidateInstallCalls()).toHaveLength(2);
+  });
+
+  it("rechecks earlier tests after migrating a later pending candidate command", async () => {
+    mocks.candidate = {
+      ...mocks.candidate,
+      validationRun: {
+        resolvedTree: tree,
+        schemaTaskCompleted: true,
+        nextIndex: 3,
+        commands: [schemaCommand, checkCommand, testCommand].map((command) => ({
+          command,
+          exitCode: 0,
+        })),
+        steps: [
+          { kind: "schema", command: schemaCommand },
+          { kind: "check", command: checkCommand },
+          { kind: "check", command: testCommand },
+          { kind: "capture", command: captureCommand },
+        ],
+      },
+    };
+    const call = candidateValidationCall;
+    await expect(call(captureCommand)).resolves.toMatchObject({
+      status: "plan_refreshed",
+      nextCommand: installCommand,
+    });
+    await expect(call(installCommand)).resolves.toMatchObject({
+      status: "in_progress",
+      nextCommand: checkCommand,
+    });
+    await expect(call(checkCommand)).resolves.toMatchObject({
+      status: "in_progress",
+      nextCommand: testCommand,
+    });
+    await expect(call(testCommand)).resolves.toMatchObject({
+      status: "in_progress",
+      nextCommand: captureCommand,
+    });
+    expect(mocks.compile).not.toHaveBeenCalled();
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed bootstrap pending with its actual install error", async () => {
+    mocks.run.mockImplementation(async (input: { command: string }) => ({
+      exitCode: input.command === installCommand ? 1 : 0,
+      stderr: input.command === installCommand ? "lockfile mismatch" : "",
+      stdout: "",
+    }));
+    const call = () =>
+      validateReconciliation.execute(
+        {
+          additionalCheckTasks: [],
+          expectedCommand: installCommand,
+          incremental: true,
+          runBrowserTests: false,
+        },
+        context,
+      );
+    await expect(call()).resolves.toMatchObject({
+      status: "needs_repair",
+      command: installCommand,
+      output: { stderr: "lockfile mismatch" },
+    });
+    expect(mocks.candidate?.validationRun).toMatchObject({ nextIndex: 0, commands: [] });
+    expect(mocks.compile).not.toHaveBeenCalled();
+    mocks.run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
+    await expect(call()).resolves.toMatchObject({
+      status: "in_progress",
+      nextCommand: schemaCommand,
+    });
   });
 
   it("retires only unused worktrees before a direct failed-compilation retry", async () => {
@@ -322,7 +603,6 @@ describe("draft reconciliation command progress", () => {
           status: "formatted",
         });
         expect(events.indexOf("attached")).toBeLessThan(events.indexOf("format"));
-        expect(mocks.compile).not.toHaveBeenCalled();
       } else {
         await expect(
           validateReconciliation.execute(
@@ -334,9 +614,9 @@ describe("draft reconciliation command progress", () => {
             },
             context,
           ),
-        ).resolves.toMatchObject({ status: "in_progress", command: schemaCommand });
-        expect(events.indexOf("attached")).toBeLessThan(events.indexOf("compile"));
+        ).resolves.toMatchObject({ status: "plan_refreshed", nextCommand: installCommand });
       }
+      expect(mocks.compile).not.toHaveBeenCalled();
       expect(mocks.candidate?.root).toBe(root);
       expect(mocks.run).not.toHaveBeenCalledWith(
         expect.objectContaining({ command: installCommand }),
@@ -382,12 +662,10 @@ describe("draft reconciliation command progress", () => {
     await expect(incremental(checkCommand)).resolves.toMatchObject({
       command: checkCommand,
       nextCommand: testCommand,
-      passedCommands: 2,
+      passedCommands: 3,
       status: "in_progress",
     });
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(1);
     expect(mocks.compile).toHaveBeenCalledOnce();
     expect(mocks.publish).not.toHaveBeenCalled();
     await expect(incremental(testCommand)).resolves.toMatchObject({
@@ -415,14 +693,13 @@ describe("draft reconciliation command progress", () => {
       ),
     ).resolves.toMatchObject({ status: "validated" });
     expect(mocks.publish).toHaveBeenCalledOnce();
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(1);
     expect(mocks.compile).toHaveBeenCalledOnce();
     expect(mocks.check).toHaveBeenCalledTimes(2);
     expect(mocks.candidate?.validation).toMatchObject({
       compilation: { release: { selection: { releaseId: "captured-release" } } },
       commands: [
+        { command: installCommand, exitCode: 0 },
         { command: schemaCommand, exitCode: 0 },
         { command: checkCommand, exitCode: 0 },
         { command: testCommand, exitCode: 0 },
@@ -434,9 +711,7 @@ describe("draft reconciliation command progress", () => {
     await incremental(checkCommand);
     await expect(incremental(checkCommand)).rejects.toThrow(`ready for ${testCommand}`);
     expect(mocks.check).toHaveBeenCalledOnce();
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(1);
   });
 
   it("resumes checks and capture and validates only after the final result", async () => {
@@ -447,7 +722,7 @@ describe("draft reconciliation command progress", () => {
     }
     await expect(incremental(captureCommand)).resolves.toMatchObject({ status: "validated" });
     expect(mocks.candidate?.validation).toMatchObject({
-      commands: [schemaCommand, checkCommand, testCommand].map((command) => ({
+      commands: [installCommand, schemaCommand, checkCommand, testCommand].map((command) => ({
         command,
         exitCode: 0,
       })),
@@ -462,8 +737,11 @@ describe("draft reconciliation command progress", () => {
       `Builder could not run ${checkCommand} during draft PR candidate validation`,
     );
     expect(mocks.candidate?.validationRun).toMatchObject({
-      nextIndex: 1,
-      commands: [{ command: schemaCommand, exitCode: 0 }],
+      nextIndex: 2,
+      commands: [
+        { command: installCommand, exitCode: 0 },
+        { command: schemaCommand, exitCode: 0 },
+      ],
     });
     expect(mocks.publish).not.toHaveBeenCalled();
     await expect(incremental(checkCommand)).resolves.toMatchObject({ status: "in_progress" });
@@ -474,9 +752,7 @@ describe("draft reconciliation command progress", () => {
       exitCode: null,
     });
     expect(mocks.attempts[1]).toMatchObject({ completion: "complete", exitCode: 0 });
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(1);
     expect(mocks.compile).toHaveBeenCalledOnce();
   });
 
@@ -491,9 +767,7 @@ describe("draft reconciliation command progress", () => {
     await incremental(checkCommand);
     expect(mocks.compile).toHaveBeenCalledTimes(2);
     expect(mocks.check).toHaveBeenCalledTimes(2);
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(2);
     expect(mocks.compile).toHaveBeenCalledTimes(2);
   });
 
@@ -528,10 +802,11 @@ describe("draft reconciliation command progress", () => {
       mocks.candidate = {
         ...mocks.candidate,
         validationRun: {
-          commands: [completed],
-          nextIndex: 1,
+          commands: [{ command: installCommand, exitCode: 0 }, completed],
+          nextIndex: 2,
           resolvedTree: tree,
           steps: [
+            { command: installCommand, kind: "install" },
             { command: completed.command, kind: "schema" },
             { command: pending.original, kind: pending.kind },
             { command: "mise run app:runtime run spend-review test-e2e", kind: "browser" },
@@ -543,11 +818,20 @@ describe("draft reconciliation command progress", () => {
         nextCommand: "mise run --no-deps app:runtime run spend-review test-e2e",
         status: "in_progress",
       });
-      const executor = pending.kind === "check" ? mocks.check : mocks.run;
+      let executor = mocks.run;
+      if (pending.kind === "check") {
+        executor = mocks.check;
+      } else if (pending.kind === "additional") {
+        executor = mocks.spawn;
+      }
       expect(executor).toHaveBeenCalledWith(expect.objectContaining({ command: pending.current }));
       expect(mocks.candidate?.validationRun).toMatchObject({
-        commands: [completed, { command: pending.current, exitCode: 0 }],
-        nextIndex: 2,
+        commands: [
+          { command: installCommand, exitCode: 0 },
+          completed,
+          { command: pending.current, exitCode: 0 },
+        ],
+        nextIndex: 3,
       });
     },
   );
@@ -599,7 +883,10 @@ describe("draft reconciliation command progress", () => {
       status: "needs_repair",
     });
     expect(mocks.candidate?.validationRun).toMatchObject({
-      commands: [{ command: schemaCommand, exitCode: 0 }],
+      commands: [
+        { command: installCommand, exitCode: 0 },
+        { command: schemaCommand, exitCode: 0 },
+      ],
       nextIndex: 0,
     });
     await expect(incremental(installCommand)).resolves.toMatchObject({
@@ -608,30 +895,134 @@ describe("draft reconciliation command progress", () => {
     });
   });
 
-  it("retains one historical attempt for a real failed supported command", async () => {
-    const manifests = new Map<string, ValidationLogReference>();
-    const chunks = new Map<string, { content: string; digest: string }>();
-    const keyFor = (key: ValidationLogKey) =>
-      JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
-    const store: ValidationLogStore = {
-      async getChunk(key, index) {
-        return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`));
-      },
-      async getReference(key) {
-        return await Promise.resolve(manifests.get(keyFor(key)));
-      },
-      async publish(key, reference) {
-        await Promise.resolve(manifests.set(keyFor(key), reference));
-      },
-      async putChunk(key, index, content, chunkDigest) {
-        await Promise.resolve(
-          chunks.set(`${keyFor(key)}:${index}`, { content, digest: chunkDigest }),
-        );
-      },
-      async removeStaged(key) {
-        await Promise.resolve(manifests.delete(keyFor(key)));
-      },
+  it("retains a failed local preparation cause with exact candidate identity after ordinary repair", async () => {
+    const store = candidateLogStore();
+    mocks.logStore.mockResolvedValue(store);
+    mocks.declaresLocal = true;
+    await incremental(checkCommand);
+    const prior = [...mocks.attempts];
+    mocks.local.mockResolvedValueOnce({
+      command: "mise run app:local -- spend-review setup",
+      status: "failed",
+      exitCode: 1,
+      stdout: "local setup began\n",
+      stderr:
+        "kernel_bind_actor_membership rejected runtime preparation\nBearer local-secret\nhttps://user:db-secret@database.invalid/app\n",
+      problem: "The selected local runtime failed",
+    });
+    await expect(incremental("mise run app:local -- spend-review setup")).resolves.toMatchObject({
+      status: "needs_repair",
+      exitCode: 1,
+    });
+    const attempt = mocks.attempts.at(-1) as {
+      attemptDigest: string;
+      logs: { stderr: ValidationLogReference };
     };
+    expect(attempt).toMatchObject({
+      category: "local-preparation",
+      command: "mise run app:local -- spend-review setup",
+      appId: "spend-review",
+      baseSha: "base-sha",
+      headSha: "head-sha",
+      repositoryId: "repo-id",
+      pullRequestNumber: 7,
+      githubSourceDigest: digest,
+      originalReviewDigest: digest,
+      resolvedTree: tree,
+      callId: "validation_1",
+      completion: "complete",
+      durability: "available",
+      exitCode: 1,
+    });
+    expect(mocks.attempts.slice(0, -1)).toEqual(prior);
+    const key = {
+      attemptDigest: attempt.attemptDigest,
+      command: "local-preparation",
+      channel: "stderr" as const,
+      logId: attempt.logs.stderr.logId,
+      sessionId: "adapter",
+    };
+    const saved = await store.getChunk(key, 0);
+    expect(saved?.content).toContain("kernel_bind_actor_membership rejected runtime preparation");
+    expect(saved?.content).not.toMatch(/local-secret|db-secret/u);
+    mocks.candidate = { ...mocks.candidate, validationRun: undefined };
+    expect(mocks.attempts.at(-1)).toBe(attempt);
+    expect(mocks.candidate.validation).toBeUndefined();
+  });
+
+  it.each(["unavailable", "partial"])(
+    "keeps failed local setup independent of %s log storage",
+    async (state) => {
+      mocks.declaresLocal = true;
+      await incremental(checkCommand);
+      if (state === "partial") {
+        const store = candidateLogStore();
+        store.putChunk = async () => {
+          throw new Error("log storage offline");
+        };
+        mocks.logStore.mockResolvedValue(store);
+      }
+      mocks.local.mockResolvedValueOnce({
+        command: "mise run app:local -- spend-review setup",
+        status: "failed",
+        exitCode: 3,
+        stdout: "",
+        stderr: "kernel_bind_actor_membership rejected runtime preparation",
+      });
+      await expect(incremental("mise run app:local -- spend-review setup")).resolves.toMatchObject({
+        status: "needs_repair",
+        exitCode: 3,
+      });
+      expect(mocks.attempts.at(-1)).toMatchObject({
+        category: "local-preparation",
+        completion: "complete",
+        durability: "unavailable",
+        exitCode: 3,
+      });
+      if (state === "partial") {
+        expect(mocks.attempts.at(-1)).toMatchObject({
+          logs: { stderr: { completion: "unavailable" } },
+        });
+      }
+      expect(mocks.candidate?.validation).toBeUndefined();
+    },
+  );
+
+  it.each(["returned", "thrown"])(
+    "retains interrupted local preparation when its failure is %s",
+    async (mode) => {
+      mocks.logStore.mockResolvedValue(candidateLogStore());
+      mocks.declaresLocal = true;
+      await incremental(checkCommand);
+      if (mode === "returned") {
+        mocks.local.mockResolvedValueOnce({
+          command: "mise run app:local -- spend-review setup",
+          status: "failed",
+          exitCode: null,
+          stdout: "",
+          stderr: "",
+        });
+        await expect(
+          incremental("mise run app:local -- spend-review setup"),
+        ).resolves.toMatchObject({ status: "needs_repair", exitCode: null });
+      } else {
+        mocks.local.mockRejectedValueOnce(new Error("sandbox command interrupted"));
+        await expect(incremental("mise run app:local -- spend-review setup")).rejects.toThrow(
+          "sandbox command interrupted",
+        );
+      }
+      expect(mocks.attempts.at(-1)).toMatchObject({
+        category: "local-preparation",
+        completion: "interrupted",
+        durability: "available",
+        exitCode: null,
+      });
+      expect(mocks.candidate?.validation).toBeUndefined();
+    },
+  );
+
+  it("retains one historical attempt for a real failed supported command", async () => {
+    const store = candidateLogStore();
     mocks.logStore.mockResolvedValue(store);
     const check = checkCommand;
     mocks.check.mockResolvedValueOnce({
@@ -727,9 +1118,7 @@ describe("draft reconciliation command progress", () => {
       status: "needs_repair",
       exitCode: 2,
     });
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(1);
     expect(mocks.compile).toHaveBeenCalledOnce();
     expect(mocks.publish).not.toHaveBeenCalled();
   });
@@ -769,9 +1158,7 @@ describe("draft reconciliation command progress", () => {
     ).resolves.toMatchObject({ status: "validated" });
     expect(mocks.check).toHaveBeenCalledTimes(2);
     expect(mocks.compile).toHaveBeenCalledOnce();
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(1);
   });
 
   it("captures static app completion as not-required after its selected compile task", async () => {
@@ -789,6 +1176,87 @@ describe("draft reconciliation command progress", () => {
       compilation: { release: { status: "not-required" } },
     });
     expect(mocks.compile).toHaveBeenCalledOnce();
+  });
+
+  it("recovers complete additional-check diagnostics through supported paged readback after repair", async () => {
+    const store = candidateLogStore();
+    mocks.logStore.mockResolvedValue(store);
+    // Larger than both the provider response and durable chunk size, with a split UTF-8 character.
+    const stdout = `catalog inspection started\n${"workspace package detail\n".repeat(4000)}catalog inspection finished\n`;
+    const stderr = "catalog mismatch: missing café workspace entry\nBearer catalog-secret\n";
+    const encode = (text: string) =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          const bytes = new TextEncoder().encode(text);
+          const split = bytes.indexOf(0xc3) + 1;
+          controller.enqueue(bytes.slice(0, split));
+          controller.enqueue(bytes.slice(split));
+          controller.close();
+        },
+      });
+    mocks.spawn.mockResolvedValueOnce({
+      stdout: encode(stdout),
+      stderr: encode(stderr),
+      wait: async () => ({ exitCode: 1 }),
+      kill: vi.fn(),
+    });
+    await expect(
+      validateReconciliation.execute(
+        {
+          additionalCheckTasks: ["check:package-manifests"],
+          incremental: false,
+          runBrowserTests: false,
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({ status: "needs_repair", exitCode: 1 });
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "mise run --no-deps --skip-tools check:package-manifests",
+        workingDirectory: "/workspace/candidate",
+        abortSignal,
+      }),
+    );
+    // Repair may reset current validation; historical diagnostics must remain discoverable.
+    mocks.candidate = { ...mocks.candidate, validationRun: undefined };
+    mocks.workflow = { phase: "empty" };
+    const discovery = (await getValidationLog.execute(
+      { operation: "validation-attempts" },
+      context,
+    )) as {
+      attempts: {
+        commands: {
+          category: string;
+          exitCode: number;
+          logs: Record<string, { readInput: unknown }>;
+        }[];
+      }[];
+    };
+    const command = discovery.attempts
+      .flatMap((attempt) => attempt.commands)
+      .find((entry) => entry.category === "additional-check");
+    expect(command?.exitCode).toBe(1);
+    const recovered: Record<string, string> = {};
+    for (const channel of ["stdout", "stderr"]) {
+      const readInput = validationLogInputSchema.parse(command?.logs[channel]?.readInput);
+      let cursor: string | undefined;
+      let content = "";
+      do {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Follow the authenticated page cursor sequentially.
+        const page = (await getValidationLog.execute({ ...readInput, cursor }, context)) as {
+          content: string;
+          nextCursor?: string;
+          completion: string;
+        };
+        content += page.content;
+        cursor = page.nextCursor;
+        expect(page.completion).toBe("complete");
+      } while (cursor !== undefined);
+      recovered[channel] = content;
+    }
+    expect(recovered.stdout).toBe(stdout);
+    expect(recovered.stderr).toContain("catalog mismatch: missing café workspace entry");
+    expect(recovered.stderr).not.toContain("catalog-secret");
   });
 
   it("retains local, browser and additional repository task behavior", async () => {
@@ -813,11 +1281,12 @@ describe("draft reconciliation command progress", () => {
     );
     expect(mocks.local.mock.calls[0]?.[0]).not.toHaveProperty("execution");
     expect(mocks.browser).toHaveBeenCalledOnce();
-    expect(mocks.run).toHaveBeenCalledWith(
+    expect(mocks.spawn).toHaveBeenCalledWith(
       expect.objectContaining({ command: "mise run --no-deps --skip-tools check:vercel-services" }),
     );
     expect(mocks.candidate?.validation).toMatchObject({
       commands: [
+        { command: installCommand, exitCode: 0 },
         { command: schemaCommand, exitCode: 0 },
         { command: checkCommand, exitCode: 0 },
         { command: "mise run app:local -- spend-review setup", exitCode: 0 },
@@ -842,6 +1311,7 @@ describe("draft reconciliation command progress", () => {
       });
       if (isIncremental) {
         for (const expectedCommand of [
+          installCommand,
           schemaCommand,
           checkCommand,
           testCommand,
@@ -915,12 +1385,13 @@ describe("draft reconciliation command progress", () => {
       }
       mocks.readText.mockResolvedValue(JSON.stringify({}));
       mocks.candidate.validationRun = {
-        commands: [],
+        commands: [{ command: installCommand, exitCode: 0 }],
         compilation: undefined,
-        nextIndex: 0,
+        nextIndex: 1,
         resolvedTree: tree,
         schemaTaskCompleted: true,
         steps: [
+          { kind: "install", command: installCommand },
           { kind: "browser", command: "mise run --no-deps app:runtime run spend-review test-e2e" },
         ],
       };
@@ -954,7 +1425,7 @@ describe("draft reconciliation command progress", () => {
     },
   );
 
-  it("revalidates after the real candidate edit clears progress without reinstalling or recompiling", async () => {
+  it("revalidates after candidate edits with cached locked setup for the new coherent pass", async () => {
     await validateReconciliation.execute(
       { additionalCheckTasks: [], incremental: false, runBrowserTests: false },
       context,
@@ -1006,9 +1477,7 @@ describe("draft reconciliation command progress", () => {
       ),
     ).resolves.toMatchObject({ status: "validated" });
     expect(mocks.check).toHaveBeenCalledTimes(4);
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(2);
     expect(mocks.publish).toHaveBeenCalledTimes(2);
     expect(mocks.compile).toHaveBeenCalledTimes(2);
     expect(mocks.candidate?.validation).toMatchObject({
@@ -1128,13 +1597,14 @@ describe("draft reconciliation command progress", () => {
       status: "needs_repair",
       exitCode: 1,
     });
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(1);
     expect(mocks.compile).toHaveBeenCalledOnce();
     expect(mocks.candidate?.validationRun).toMatchObject({
-      nextIndex: 1,
-      commands: [{ command: schemaCommand, exitCode: 0 }],
+      nextIndex: 2,
+      commands: [
+        { command: installCommand, exitCode: 0 },
+        { command: schemaCommand, exitCode: 0 },
+      ],
     });
   });
 
@@ -1151,9 +1621,7 @@ describe("draft reconciliation command progress", () => {
       status: "needs_repair",
       exitCode: 1,
     });
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(1);
   });
   it.each([
     "Error: Cannot find package 'vitest/wrong-internal-path' imported from '/workspace/candidate/apps/spend-review/test.ts'",
@@ -1166,9 +1634,7 @@ describe("draft reconciliation command progress", () => {
         status: "needs_repair",
         exitCode: 1,
       });
-      expect(mocks.run).not.toHaveBeenCalledWith(
-        expect.objectContaining({ command: installCommand }),
-      );
+      expect(candidateInstallCalls()).toHaveLength(1);
       expect(mocks.compile).toHaveBeenCalledOnce();
     },
   );
@@ -1180,16 +1646,14 @@ describe("draft reconciliation command progress", () => {
     });
     expect(mocks.candidate?.validationRun).toMatchObject({
       schemaTaskCompleted: true,
-      nextIndex: 1,
+      nextIndex: 2,
     });
     expect(mocks.check).not.toHaveBeenCalled();
     await incremental(checkCommand);
     await incremental(testCommand);
     await incremental(captureCommand);
     expect(mocks.compile).toHaveBeenCalledOnce();
-    expect(mocks.run).not.toHaveBeenCalledWith(
-      expect.objectContaining({ command: installCommand }),
-    );
+    expect(candidateInstallCalls()).toHaveLength(1);
   });
 
   it("repairs a declared missing compiler dependency before acknowledging compilation", async () => {

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { SandboxProcess, SandboxSession } from "eve/sandbox";
 
+import { workspaceBinInstallCommand } from "../repository/workspace-bin-install";
 import { ValidationLogWriter } from "../repository/validation-log";
 import type { ValidationLogReference, ValidationLogStore } from "../repository/validation-log";
 import { sanitizeValidationDiagnosticText } from "../repository/validation-output-sanitize";
@@ -10,6 +11,8 @@ export interface DependencyAttemptResult {
   attemptDigest: string;
   command: "dependency-probe" | "dependency-install";
   executionCommand: string;
+  /** Exact Sandbox command hash when the displayed install recipe runs inside the mode-preserving wrapper. */
+  dispatchedCommandDigest?: string;
   exitCode: number | null;
   completion: "pending" | "complete" | "interrupted";
   excerpt: string;
@@ -27,6 +30,8 @@ interface DependencyRecoveryInput {
   checkoutIdentity: string;
   signal?: AbortSignal;
   requiredExecutable?: string;
+  /** Authored workspace manifests may legitimately require a package-manager lockfile update. */
+  reconcileWorkspace?: boolean;
   logStore?: ValidationLogStore;
   onAttempt?: (attempt: DependencyAttemptResult) => void | Promise<void>;
   assertCurrent?: () => void;
@@ -154,17 +159,42 @@ const captureProcess = async (
   return execution;
 };
 
+const dependencyDispatch = (
+  root: string,
+  command: DependencyAttemptResult["command"],
+  executionCommand: string,
+) => {
+  if (command === "dependency-probe") {
+    return { sandboxCommand: executionCommand, provenance: {} };
+  }
+  if (executionCommand !== "bun install" && executionCommand !== "bun install --frozen-lockfile") {
+    throw new Error("The checkout dependency install recipe is unsupported.");
+  }
+  const sandboxCommand = workspaceBinInstallCommand(
+    root,
+    executionCommand === "bun install --frozen-lockfile",
+  );
+  return {
+    sandboxCommand,
+    provenance: {
+      dispatchedCommandDigest: createHash("sha256").update(sandboxCommand).digest("hex"),
+    },
+  };
+};
+
 const dependencyAttempt = async (
   input: DependencyRecoveryInput,
   command: DependencyAttemptResult["command"],
   executionCommand: string,
   recoveryOfValidationFailure?: TargetValidationFailureReceipt,
 ) => {
+  const { sandboxCommand, provenance } = dependencyDispatch(input.root, command, executionCommand);
   const attemptDigest = createHash("sha256")
     .update(
       JSON.stringify({
         checkoutIdentity: input.checkoutIdentity,
         command,
+        ...provenance,
         executionAttempt: randomUUID(),
         executionCommand,
         root: input.root,
@@ -190,13 +220,14 @@ const dependencyAttempt = async (
       durability: "unavailable",
       excerpt: "",
       executionCommand,
+      ...provenance,
       exitCode: null,
       logs: {},
       recoveryOfValidationFailure,
       truncated: false,
     });
   }
-  const execution = await captureProcess(input, executionCommand, stdout, stderr);
+  const execution = await captureProcess(input, sandboxCommand, stdout, stderr);
   const [out, err] = await Promise.all([
     stdout.finishCapture(execution.completion),
     stderr.finishCapture(execution.completion),
@@ -219,6 +250,7 @@ const dependencyAttempt = async (
         : "unavailable",
     excerpt: combined.slice(0, 2400),
     executionCommand,
+    ...provenance,
     exitCode: execution.exitCode,
     logs,
     truncated: out.omitted || err.omitted || combined.length > 2400,
@@ -315,7 +347,9 @@ export const repairCheckoutDependenciesAfterValidationFailure = async (
   input.assertCurrent();
 };
 
-/** Reinstalls repository dependencies only when replacement compute lacks them. */
+const checkoutDependencyDirectoryProbe = "test -d node_modules/.bin";
+
+/** Reconcile authored workspaces, or restore a frozen checkout missing its dependencies. */
 export const ensureCheckoutDependencies = async (
   input: DependencyRecoveryInput,
 ): Promise<{ status: "reused" | "installed"; attempts: readonly DependencyAttemptResult[] }> => {
@@ -325,11 +359,17 @@ export const ensureCheckoutDependencies = async (
   ) {
     throw new Error("The required repository executable name is invalid.");
   }
+  if (input.reconcileWorkspace === true) {
+    const install = await dependencyAttempt(input, "dependency-install", "bun install");
+    input.signal?.throwIfAborted();
+    input.assertCurrent?.();
+    return { attempts: [install], status: "installed" };
+  }
   const probe = await dependencyAttempt(
     input,
     "dependency-probe",
     input.requiredExecutable === undefined
-      ? "test -d node_modules/.bin"
+      ? checkoutDependencyDirectoryProbe
       : `test -x node_modules/.bin/${input.requiredExecutable}`,
   );
   const attempts = [probe];

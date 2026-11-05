@@ -1,3 +1,4 @@
+import { applicationSourceExportReferenceSchema } from "../handoff/application-source-contract";
 import { z } from "zod";
 
 import { githubRepositoryAccessSchema } from "../integrations/store-in-view-model";
@@ -232,6 +233,7 @@ export const eveSessionResultSchema = z
     error: z.object({ code: z.string(), message: z.string() }).strict().optional(),
     events: z.array(publicEveEventSchema),
     inputRequests: z.array(publicInputRequestSchema).optional(),
+    applicationSource: applicationSourceExportReferenceSchema.optional(),
     prototype: publicPrototypeSchema.optional(),
     prototypeRef: publicPrototypeReferenceSchema.optional(),
     sessionId: z.string(),
@@ -306,9 +308,13 @@ export const eveStartInputSchema = z
     handoffId: z.string().uuid().optional(),
     prompt: z.string().trim().min(1).max(32_000).optional(),
     resumeSessionId: z.string().min(1).max(200).optional(),
+    resumeMode: z.enum(["recover", "recover-idle"]).optional(),
   })
   .strict()
-  .superRefine(({ prompt, handoffId, resumeSessionId }, context) => {
+  .superRefine(({ prompt, handoffId, resumeSessionId, resumeMode }, context) => {
+    if (resumeMode !== undefined && resumeSessionId === undefined) {
+      context.addIssue({ code: "custom", message: "Recovery requires an existing session." });
+    }
     if ([prompt, handoffId, resumeSessionId].filter((value) => value !== undefined).length !== 1) {
       context.addIssue({
         code: "custom",

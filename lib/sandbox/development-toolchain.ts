@@ -46,6 +46,10 @@ export const DEVELOPMENT_SANDBOX_ENVIRONMENT = {
   LD_LIBRARY_PATH: "/workspace/.app-builder/toolchain/rust/lib",
   MISE_AUTO_INSTALL: "false",
   MISE_DATA_DIR: "/workspace/.app-builder/toolchain/mise-data",
+  MISE_CARGO_HOME: "/workspace/.app-builder/toolchain/cargo-home",
+  MISE_RUSTUP_HOME: "/workspace/.app-builder/toolchain/rustup-home",
+  RUSTUP_HOME: "/workspace/.app-builder/toolchain/rustup-home",
+
   MISE_EXEC_AUTO_INSTALL: "false",
   MISE_TASK_RUN_AUTO_INSTALL: "false",
   PATH: "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin",
@@ -467,7 +471,9 @@ source_archive='/workspace/${DEVELOPMENT_SOURCE_ARCHIVE_PATH}'
 printf '%s  %s\n' '${input.sourceArchiveSha256}' "$source_archive" | sha256sum --check --strict
 cache_root='${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}'
 cache_dependencies="$cache_root/dependencies/${input.dependencyKey}"
-if node - "$cache_root/manifest.json" "$cache_dependencies" "$cache_root" <<'NODE'
+if test -x "${DEVELOPMENT_SANDBOX_ENVIRONMENT.CARGO_HOME}/bin/rustup" &&
+  "${DEVELOPMENT_SANDBOX_ENVIRONMENT.CARGO_HOME}/bin/rustup" run '${HOSTED_RUST_VERSION}' rustc --version >/dev/null &&
+  node - "$cache_root/manifest.json" "$cache_dependencies" "$cache_root" <<'NODE'
 const fs = require("node:fs");
 const [manifestPath, dependencies, cacheRoot] = process.argv.slice(2);
 const expected = {
@@ -519,7 +525,7 @@ node - "$work/source" <<'NODE'
 ${developmentDependencySymlinkScript}
 NODE
 stage='mise-tools'
-mise install --locked cue
+mise install --locked cue rust
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"
@@ -600,7 +606,7 @@ node - "$work/source" <<'NODE'
 ${developmentDependencySymlinkScript}
 NODE
 stage='mise-tools'
-mise install --locked cue
+mise install --locked cue rust
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"

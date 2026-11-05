@@ -45,7 +45,11 @@ const fixture = () => {
 const assertPreservesCustody = (queries: SQL[]) => {
   expect(queries).toHaveLength(1);
   const query = new PgDialect().sqlToQuery(queries[0]);
-  expect(query.sql).toContain("->> 'kind' IS DISTINCT FROM 'vercel-token-key-custody-v1'");
+  expect(query.sql).toContain("->> 'kind' IS DISTINCT FROM");
+  expect(
+    query.sql.includes("'vercel-token-key-custody-v1'") ||
+      query.params.includes("vercel-token-key-custody-v1"),
+  ).toBe(true);
   expect(query.params.slice(0, 4)).toEqual([
     authority.issuer,
     authority.audience,
@@ -60,6 +64,9 @@ describe("hosted admin custody tombstones", () => {
     await store.applyRetention({ authority, deleteBefore: new Date("2026-10-01T00:00:00Z") });
     assertPreservesCustody(journalDeletes);
     expect(new PgDialect().sqlToQuery(journalDeletes[0]).params).toContain("settled");
+    expect(new PgDialect().sqlToQuery(journalDeletes[0]).params).toContain(
+      "builder-public-origin-choice-v1",
+    );
   });
 
   it("tenant deletion preserves pending and settled global custody evidence", async () => {
@@ -70,5 +77,8 @@ describe("hosted admin custody tombstones", () => {
     });
     assertPreservesCustody(journalDeletes);
     expect(new PgDialect().sqlToQuery(journalDeletes[0]).sql).not.toContain('"state"');
+    expect(new PgDialect().sqlToQuery(journalDeletes[0]).params).not.toContain(
+      "builder-public-origin-choice-v1",
+    );
   });
 });

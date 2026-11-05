@@ -624,17 +624,21 @@ describe("image lifecycle", () => {
     approved.fill(0);
     try {
       withFakeGhEnvironment(fixture, () => {
-        const result = spawnSync(nodePath.join(root, "docker-credential-ghcr-bound"), ["get"], {
-          cwd: builder,
-          encoding: "utf-8",
-          env: {
-            HOME: builder,
-            NODE_ENV: "test",
-            XDG_STATE_HOME: nodePath.join(builder, "hostile-state"),
-            ...ghcrCredentialEnvironment(root, identity),
+        const result = spawnSync(
+          "/bin/sh",
+          [nodePath.join(root, "docker-credential-ghcr-bound"), "get"],
+          {
+            cwd: builder,
+            encoding: "utf-8",
+            env: {
+              HOME: builder,
+              NODE_ENV: "test",
+              XDG_STATE_HOME: nodePath.join(builder, "hostile-state"),
+              ...ghcrCredentialEnvironment(root, identity),
+            },
+            input: "ghcr.io\n",
           },
-          input: "ghcr.io\n",
-        });
+        );
         const spawnFailure = JSON.stringify({
           errorCode:
             result.error !== undefined && "code" in result.error ? result.error.code : undefined,

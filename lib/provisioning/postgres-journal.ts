@@ -64,6 +64,29 @@ export function createPostgresBuilderProvisionJournalStore(
     return rows[0] ? parseRow(rows[0]) : undefined;
   };
   return {
+    async findSettledAppRepository(input) {
+      const authority = hostedTenantAuthoritySchema.parse(input.authority);
+      const rows = await database
+        .select()
+        .from(builderProvisioningJournals)
+        .where(
+          and(
+            eq(builderProvisioningJournals.issuer, authority.issuer),
+            eq(builderProvisioningJournals.audience, authority.audience),
+            eq(builderProvisioningJournals.workspaceId, authority.workspaceId),
+            eq(builderProvisioningJournals.ownerUserId, authority.ownerUserId),
+            eq(builderProvisioningJournals.state, "settled"),
+            sql`${builderProvisioningJournals.record}->>'kind' IS NULL`,
+            sql`${builderProvisioningJournals.record}->'response'->>'appId' = ${input.appId}`,
+            sql`${builderProvisioningJournals.record}->'response'->'github'->>'status' = 'succeeded'`,
+            sql`${builderProvisioningJournals.record}->'response'->'github'->>'repositoryId' = ${input.repositoryId}`,
+            sql`${builderProvisioningJournals.record}->'response'->'github'->>'installationId' = ${input.githubInstallationId}`,
+            sql`${builderProvisioningJournals.record}->'response'->'vercel'->>'status' = 'succeeded'`,
+          ),
+        )
+        .limit(2);
+      return rows.map(parseRow);
+    },
     async compareAndSet(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const record = builderProvisionJournalRecordSchema.parse(input.record);

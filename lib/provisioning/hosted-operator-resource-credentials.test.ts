@@ -214,7 +214,7 @@ describe("owned installed resource bindings", () => {
 });
 
 /* oxlint-disable eslint/require-await -- In-memory owner, lease and journal ports preserve the asynchronous production reader contract. */
-const completedGatewayBindingObservation = () => {
+const completedGatewayBindingObservation = (stage: "app" | "auth-bootstrap" = "app") => {
   const operationRef = "00000000-0000-4000-8000-000000000021";
   const bindingEffect = {
     description: "Bind the approved Gateway configuration",
@@ -226,7 +226,7 @@ const completedGatewayBindingObservation = () => {
     id: "gateway-delivery",
     kind: "gateway-delivery" as const,
   };
-  const gatewayPlan = hostedOperatorPlanSchema.parse({
+  const appPlan = hostedOperatorPlanSchema.parse({
     ...plan,
     delivery: {
       branch: selection.branch,
@@ -301,6 +301,24 @@ const completedGatewayBindingObservation = () => {
     },
     stage: "app",
   });
+  const gatewayPlan =
+    stage === "app"
+      ? appPlan
+      : hostedOperatorPlanSchema.parse({
+          ...appPlan,
+          stage,
+          access: [],
+          delivery: undefined,
+          authSchema: {
+            artifactRef: "auth-fixture",
+            installer: { reference: "auth-worker", sha256: "f".repeat(64) },
+            planDigest: "a".repeat(64),
+            targetDigest: "b".repeat(64),
+          },
+          effects: appPlan.effects.filter((effect) =>
+            ["resources", "install", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
+          ),
+        });
   const prepared = prepareHostedOperatorResourceCredentials({ ...input, plan: gatewayPlan });
   const attemptId = "00000000-0000-4000-8000-000000000022";
   const record = hostedRuntimeJournalRecordSchema.parse({
@@ -345,119 +363,140 @@ const completedGatewayBindingObservation = () => {
   return { attemptId, effect, gatewayDeliveryEffect, gatewayPlan, record };
 };
 
-describe("completed Gateway binding resource observations", () => {
-  it("reads sealed credentials under the completed binding receipt while delivery owns the lease", async () => {
-    const fixture = completedGatewayBindingObservation();
-    let reads = 0;
-    const store = {
-      read: async () => {
-        reads += 1;
-        return { record: fixture.record, revision: reads };
-      },
-    };
-    let authorizations = 0;
-    let fences = 0;
-    const bindings = await readHostedOperatorEffectResourceBindings({
-      assertAuthorized: async () => {
-        authorizations += 1;
-      },
-      config: input.config,
-      effect: {
-        ...fixture.effect,
-        assertCurrent: async () => {
-          fences += 1;
-        },
-      },
-      store,
-    });
-    expect(reads).toBe(2);
-    expect(authorizations).toBe(2);
-    expect(fences).toBe(2);
-    expect(new URL(bindings.authDatabase.runtimeUrl).username).toBe(
-      fixture.gatewayPlan.authDatabase.runtimeRole,
-    );
-    expect(new URL(bindings.appDatabase.runtimeUrl).username).toBe(
-      fixture.gatewayPlan.appDatabase.runtimeRole,
-    );
-  });
-
-  it.each(["receipt", "phase", "attempt", "plan", "fence", "privateState"] as const)(
-    "rejects a completed Gateway binding observation with an invalid %s",
-    async (invalid) => {
-      const fixture = completedGatewayBindingObservation();
-      const record = structuredClone(fixture.record);
-      const effect: HostedOperatorEffectContext & { workerAttemptId?: string } = {
-        ...fixture.effect,
-      };
-      const { operator } = record;
-      if (operator === undefined) {
-        throw new Error("Missing canonical operator fixture");
-      }
-      if (invalid === "receipt") {
-        operator.receipts = [];
-      } else if (invalid === "phase") {
-        operator.pendingEffectId = "bind";
-      } else if (invalid === "attempt") {
-        effect.workerAttemptId = fixture.attemptId;
-      } else if (invalid === "plan") {
-        effect.plan = hostedOperatorPlanSchema.parse({
-          ...fixture.gatewayPlan,
-          release: { ...fixture.gatewayPlan.release, sha256: "e".repeat(64) },
-        });
-      } else if (invalid === "fence") {
-        effect.fenceGeneration += 1;
-      } else {
-        effect.privateState = undefined;
-      }
-      const store = {
-        read: async () => ({ record, revision: 1 }),
-      };
-      await expect(
-        readHostedOperatorEffectResourceBindings({
-          assertAuthorized: async () => {},
-          config: input.config,
-          effect,
-          store,
-        }),
-      ).rejects.toThrow();
-    },
-  );
-
-  it.each(["attempt", "privateState"] as const)(
-    "rejects if %s changes during the second journal read",
-    async (changed) => {
-      const fixture = completedGatewayBindingObservation();
+describe.each(["app", "auth-bootstrap"] as const)(
+  "completed %s Gateway binding resource observations",
+  (stage) => {
+    it("reads sealed credentials under the completed binding receipt while delivery owns the lease", async () => {
+      const fixture = completedGatewayBindingObservation(stage);
+      const before = structuredClone(fixture.record);
       let reads = 0;
       const store = {
         read: async () => {
           reads += 1;
-          const record = structuredClone(fixture.record);
-          if (reads === 2) {
-            const attempt = record.operator?.pendingEffectAttempt;
-            const { privateState } = record;
-            if (attempt === undefined || privateState === undefined) {
-              throw new Error("Missing protected attempt fixture");
-            }
-            if (changed === "attempt") {
-              attempt.id = "00000000-0000-4000-8000-000000000024";
-            } else {
-              privateState.encryptedToken = "changed-sealed-state";
-            }
-          }
-          return { record, revision: reads };
+          return { record: fixture.record, revision: reads };
         },
       };
-      await expect(
-        readHostedOperatorEffectResourceBindings({
-          assertAuthorized: async () => {},
-          config: input.config,
-          effect: fixture.effect,
-          store,
-        }),
-      ).rejects.toThrow("operation_in_progress");
-    },
-  );
-});
+      let authorizations = 0;
+      let fences = 0;
+      const bindings = await readHostedOperatorEffectResourceBindings({
+        assertAuthorized: async () => {
+          authorizations += 1;
+        },
+        config: input.config,
+        effect: {
+          ...fixture.effect,
+          assertCurrent: async () => {
+            fences += 1;
+          },
+        },
+        store,
+      });
+      expect(fixture.record).toEqual(before);
+      expect(reads).toBe(2);
+      expect(authorizations).toBe(2);
+      expect(fences).toBe(2);
+      expect(new URL(bindings.authDatabase.runtimeUrl).username).toBe(
+        fixture.gatewayPlan.authDatabase.runtimeRole,
+      );
+      expect(new URL(bindings.appDatabase.runtimeUrl).username).toBe(
+        fixture.gatewayPlan.appDatabase.runtimeRole,
+      );
+    });
+
+    it.each([
+      "receipt",
+      "phase",
+      "attempt",
+      "plan",
+      "fence",
+      "privateState",
+      "lease",
+      "operation",
+      "pending-attempt",
+    ] as const)(
+      "rejects a completed Gateway binding observation with an invalid %s",
+      async (invalid) => {
+        const fixture = completedGatewayBindingObservation(stage);
+        const record = structuredClone(fixture.record);
+        const effect: HostedOperatorEffectContext & { workerAttemptId?: string } = {
+          ...fixture.effect,
+        };
+        const { operator } = record;
+        if (operator === undefined) {
+          throw new Error("Missing canonical operator fixture");
+        }
+        if (invalid === "receipt") {
+          operator.receipts = [];
+        } else if (invalid === "phase") {
+          operator.pendingEffectId = "bind";
+        } else if (invalid === "attempt") {
+          effect.workerAttemptId = fixture.attemptId;
+        } else if (invalid === "plan") {
+          effect.plan = hostedOperatorPlanSchema.parse({
+            ...fixture.gatewayPlan,
+            release: { ...fixture.gatewayPlan.release, sha256: "e".repeat(64) },
+          });
+        } else if (invalid === "fence") {
+          effect.fenceGeneration += 1;
+        } else if (invalid === "lease") {
+          record.leaseExpiresAt = "2000-01-01T00:00:00Z";
+        } else if (invalid === "operation") {
+          effect.operationRef = "00000000-0000-4000-8000-000000000099";
+        } else if (invalid === "pending-attempt") {
+          delete operator.pendingEffectAttempt;
+        } else {
+          effect.privateState = undefined;
+        }
+        const store = {
+          read: async () => ({ record, revision: 1 }),
+        };
+        await expect(
+          readHostedOperatorEffectResourceBindings({
+            assertAuthorized: async () => {},
+            config: input.config,
+            effect,
+            store,
+          }),
+        ).rejects.toThrow();
+      },
+    );
+
+    it.each(["attempt", "privateState"] as const)(
+      "rejects if %s changes during the second journal read",
+      async (changed) => {
+        const fixture = completedGatewayBindingObservation(stage);
+        let reads = 0;
+        const store = {
+          read: async () => {
+            reads += 1;
+            const record = structuredClone(fixture.record);
+            if (reads === 2) {
+              const attempt = record.operator?.pendingEffectAttempt;
+              const { privateState } = record;
+              if (attempt === undefined || privateState === undefined) {
+                throw new Error("Missing protected attempt fixture");
+              }
+              if (changed === "attempt") {
+                attempt.id = "00000000-0000-4000-8000-000000000024";
+              } else {
+                privateState.encryptedToken = "changed-sealed-state";
+              }
+            }
+            return { record, revision: reads };
+          },
+        };
+        await expect(
+          readHostedOperatorEffectResourceBindings({
+            assertAuthorized: async () => {},
+            config: input.config,
+            effect: fixture.effect,
+            store,
+          }),
+        ).rejects.toThrow("operation_in_progress");
+      },
+    );
+  },
+);
 
 /* oxlint-enable eslint/require-await */
 

@@ -1,4 +1,5 @@
 import type { SandboxSession } from "eve/sandbox";
+import { workspaceBinInstallCommand } from "../repository/workspace-bin-install";
 import { runSequentially } from "../async-sequential";
 
 import { uiPreviewSourceDigest } from "./ui-preview";
@@ -106,7 +107,7 @@ await writeFile(path.join(root, "index.html"), '<!doctype html><html lang="en"><
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function renderUiPreview(
   input: UiPreviewInput,
-  sandbox: SandboxSession,
+  sandbox: Pick<SandboxSession, "readTextFile" | "run" | "writeTextFile">,
 ): Promise<string> {
   const bundle = uiPreviewRendererFiles(input);
   await runSequentially(bundle.files, async (file) => {
@@ -128,7 +129,7 @@ export async function renderUiPreview(
     /could not resolve|cannot find (?:module|package)/iu.test(`${result.stderr}\n${result.stdout}`)
   ) {
     const installation = await sandbox.run({
-      command: "bun install",
+      command: workspaceBinInstallCommand("/workspace/repository", false),
       workingDirectory: "/workspace/repository",
     });
     if (installation.exitCode !== 0) {

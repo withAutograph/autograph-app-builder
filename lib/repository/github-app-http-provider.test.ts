@@ -1381,6 +1381,154 @@ describe("GitHub App fixed-origin HTTP provider", () => {
   });
 });
 
+describe("existing draft publication origin", () => {
+  const marker = "d".repeat(64);
+  const comment = `<!-- App-Builder-Idempotency: ${marker} -->`;
+  const branch = `app-builder/review-${marker.slice(0, 20)}`;
+  const inspect = async (
+    body: string | null,
+    overrides: {
+      appId?: number;
+      authorType?: string;
+      authorLogin?: string;
+      headBranch?: string;
+      commitMessage?: string;
+    } = {},
+  ) => {
+    const headBranch = overrides.headBranch ?? branch;
+    // oxlint-disable-next-line eslint/complexity, eslint/require-await -- Controlled provider responses exercise the actual ownership inspection.
+    const implementation: typeof fetch = async (request, init = {}) => {
+      const url = String(request);
+      if (url.endsWith("/app")) {
+        return json({ id: overrides.appId ?? 123, slug: "autograph-app-builder" });
+      }
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        const tokenRequest = JSON.parse(String(init.body)) as { permissions: unknown };
+        return json(
+          {
+            permissions: tokenRequest.permissions,
+            token: "ghs_operation_scoped_installation_token",
+          },
+          201,
+        );
+      }
+      if (url.endsWith("/repositories/100")) {
+        return json({
+          default_branch: "main",
+          id: 100,
+          name: "example-app",
+          owner: { login: "withAutograph" },
+          private: true,
+        });
+      }
+      if (url.endsWith("/commits/HEAD")) {
+        return json({ commit: { tree: { sha: sourceTree } }, sha: sourceSha });
+      }
+      if (url.endsWith("/actions/variables?per_page=100&page=1")) {
+        return json({ variables: [] });
+      }
+      if (url.endsWith("/pulls/1500")) {
+        return json({
+          base: { ref: "main", repo: { id: 100 } },
+          body,
+          draft: true,
+          head: { ref: headBranch, repo: { id: 100 }, sha: sourceSha },
+          id: 150_000,
+          number: 1500,
+          state: "open",
+          user: {
+            id: 900,
+            login: overrides.authorLogin ?? "autograph-app-builder[bot]",
+            type: overrides.authorType ?? "Bot",
+          },
+        });
+      }
+      if (url.endsWith(`/git/ref/heads/${headBranch}`)) {
+        return json({ object: { sha: sourceSha } });
+      }
+      if (url.endsWith(`/commits/${sourceSha}`)) {
+        return json({
+          commit: {
+            message: overrides.commitMessage ?? `Add app\n\nApp-Builder-Idempotency: ${marker}`,
+            tree: { sha: sourceTree },
+          },
+          sha: sourceSha,
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+    return (await createProvider(implementation).inspectExistingDraft({
+      name: "example-app",
+      number: 1500,
+      owner: "withAutograph",
+      repositoryId: "100",
+    })) as ExistingDraftObservation;
+  };
+
+  it.each([
+    ["marker-only", comment],
+    [
+      "multiline description and evidence",
+      `${comment}\n\nDraft changes\n\nAcceptance evidence\n- Checks passed`,
+    ],
+    ["marker after prose", `Draft changes\n\n${comment}\n\nAcceptance evidence`],
+    [
+      "CRLF and horizontal whitespace",
+      `Draft changes\r\n\t <!--\tApp-Builder-Idempotency:\t${marker}\t--> \r\nEvidence`,
+    ],
+    ["identical repeated markers", `${comment}\nEvidence\n${comment}`],
+  ])("verifies the original publication with %s", async (_label, body) => {
+    const observed = await inspect(body);
+    expect(observed.verifiedBuilderOrigin).toEqual({
+      appId: "123",
+      authorId: "900",
+      marker,
+    });
+  });
+
+  it("preserves origin after reconciliation adds a separate operation marker", async () => {
+    const observed = await inspect(`${comment}\n\nAcceptance evidence`, {
+      commitMessage: `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${"e".repeat(64)}\nApp-Builder-Origin: ${marker}`,
+    });
+    expect(observed.verifiedBuilderOrigin).toEqual({ appId: "123", authorId: "900", marker });
+  });
+
+  it.each([
+    ["missing marker", "Draft changes and evidence"],
+    ["missing body", null],
+    [
+      "distinct conflicting markers",
+      `${comment}\n<!-- App-Builder-Idempotency: ${"e".repeat(64)} -->`,
+    ],
+    ["embedded marker", `Evidence mentions ${comment}`],
+    ["trailing prose", `${comment} evidence`],
+    ["partial marker", `<!-- App-Builder-Idempotency: ${marker.slice(0, 20)} -->`],
+    ["malformed comment", `<!-- App-Builder-Idempotency: ${marker} --`],
+  ])("leaves %s unverified", async (_label, body) => {
+    const observed = await inspect(body);
+    expect(observed.verifiedBuilderOrigin).toBeUndefined();
+  });
+
+  it.each([
+    ["another configured app", { appId: 999 }],
+    ["human author", { authorType: "User" }],
+    ["another bot", { authorLogin: "another-app[bot]" }],
+    ["another branch", { headBranch: "app-builder/review-another" }],
+    ["missing commit marker", { commitMessage: "Unrelated commit" }],
+    [
+      "partial commit marker",
+      { commitMessage: `Add app\n\nApp-Builder-Idempotency: ${marker.slice(0, 20)}` },
+    ],
+    [
+      "another commit marker",
+      { commitMessage: `Add app\n\nApp-Builder-Idempotency: ${"e".repeat(64)}` },
+    ],
+  ])("still rejects origin from %s", async (_label, overrides) => {
+    const observed = await inspect(`${comment}\n\nAcceptance evidence`, overrides);
+    expect(observed.verifiedBuilderOrigin).toBeUndefined();
+  });
+});
+
 describe("existing draft update provider", () => {
   it("uses an exact expected branch OID in GitHub's atomic updateRefs mutation", async () => {
     const head = "3".repeat(40);
@@ -1588,7 +1736,9 @@ describe("existing draft reconciliation provider", () => {
       version: 1,
     };
     const calls: { url: string; body: unknown }[] = [];
-    let observedHead = head;
+    const observedHead = head;
+    let liveRef = head;
+    let liveMessage = `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
     // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
@@ -1626,7 +1776,7 @@ describe("existing draft reconciliation provider", () => {
           user: { id: 900, login: "autograph-app-builder[bot]", type: "Bot" },
         });
       if (url.endsWith(`/git/ref/heads/${branchName}`))
-        return json({ node_id: "REF_NODE", object: { sha: observedHead } });
+        return json({ node_id: "REF_NODE", object: { sha: liveRef } });
       if (url.endsWith(`/commits/${head}`))
         return json({
           commit: {
@@ -1639,19 +1789,19 @@ describe("existing draft reconciliation provider", () => {
         return json({ commit: { tree: { sha: baseTree } }, sha: base });
       if (url.endsWith(`/commits/${base}`) || url.endsWith("/commits/refs/heads/main"))
         return json({ commit: { tree: { sha: baseTree } }, sha: base });
-      if (url.endsWith(`/git/commits/${mergeCommit}`))
+      if (url.endsWith(`/git/commits/${liveRef}`))
         return json({
-          message: `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`,
+          message: liveMessage,
           parents: [{ sha: head }, { sha: base }],
           tree: { sha: resolvedTree },
         });
-      if (url.endsWith(`/commits/${mergeCommit}`))
+      if (url.endsWith(`/commits/${liveRef}`))
         return json({
           commit: {
-            message: `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`,
+            message: liveMessage,
             tree: { sha: resolvedTree },
           },
-          sha: mergeCommit,
+          sha: liveRef,
         });
       if (url.endsWith(`/git/trees/${baseTree}`) && method === "GET")
         return json({ tree: [], truncated: false });
@@ -1662,7 +1812,7 @@ describe("existing draft reconciliation provider", () => {
       if (url.endsWith("/repos/withAutograph/example-app") && method === "GET")
         return json({ id: 100, node_id: "REPO_NODE" });
       if (url.endsWith("/graphql") && method === "POST") {
-        observedHead = mergeCommit;
+        liveRef = mergeCommit;
         return json({ data: { updateRefs: { clientMutationId: null } } });
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -1687,14 +1837,32 @@ describe("existing draft reconciliation provider", () => {
       beforeOid: head,
       name: `refs/heads/${branchName}`,
     });
-    const observed = (await provider.inspectExistingDraft({
+    const writePaths = ["/git/blobs", "/git/trees", "/git/commits", "/graphql"];
+    const writes = () =>
+      calls.filter(({ url }) => writePaths.some((suffix) => url.endsWith(suffix)));
+    const completedWrites = writes();
+    const inspection = {
       name: proposal.name,
       number: proposal.pullRequestNumber,
       owner: proposal.owner,
       repositoryId: proposal.repositoryId,
+    };
+    await expect(provider.inspectExistingDraft(inspection)).rejects.toThrow(
+      "pull-request-head-out-of-date",
+    );
+    const observed = (await provider.inspectExistingDraft({
+      ...inspection,
+      reconciliation: proposal,
     })) as ExistingDraftObservation;
+    expect(observed).toMatchObject({ headSha: mergeCommit, headTree: resolvedTree });
     await expect(provider.inspectAppliedDraftReconciliation(proposal, observed)).resolves.toBe(
       true,
     );
+    liveRef = "2".repeat(40);
+    liveMessage = `A different operation\n\nApp-Builder-Origin: ${proposal.originMarker}`;
+    await expect(
+      provider.inspectExistingDraft({ ...inspection, reconciliation: proposal }),
+    ).rejects.toThrow("pull-request-head-out-of-date");
+    expect(writes()).toEqual(completedWrites);
   });
 });

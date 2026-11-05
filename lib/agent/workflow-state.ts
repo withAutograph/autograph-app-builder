@@ -46,6 +46,7 @@ export const UI_PREVIEW_TRANSFER_STATE_KEY =
   "autograph-app-builder.ui-preview-transfer.v1" as const;
 
 export interface AcceptedAppSpec {
+  frameworkUpgrade?: "latest";
   appId: string;
   artifactPath: string;
   /** Legacy accepted snapshots retain their inline content. */

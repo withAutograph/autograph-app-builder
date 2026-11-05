@@ -7,12 +7,14 @@ import {
   builderProvisionRequestSchema,
   builderProvisionResponseSchema,
   initialBuilderProvisionResponse,
+  vercelProvisionDiagnosticSchema,
 } from "./contracts";
 import type { BuilderProvisionRequest } from "./contracts";
 
 const storedRequestSchema = z
   .object({
     appName: z.string().trim().min(1).max(120),
+    deploymentAccess: z.literal("public-app").optional(),
     providers: z
       .object({
         githubInstallationId: z
@@ -45,6 +47,8 @@ const operationStateSchema = z
     attempted: z.boolean(),
     candidates: z.array(z.string().min(1).max(100)),
     failureDetail: z.string().max(2048).optional(),
+    lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
+
     leaseExpiresAt: z.string().datetime({ offset: true }).optional(),
     leaseId: z.string().uuid().optional(),
     nextRetryAt: z.string().datetime({ offset: true }).optional(),
@@ -81,6 +85,16 @@ export interface BuilderProvisionJournalRow {
 }
 
 export interface BuilderProvisionJournalStore {
+  /** Exact owner/app/acquired repository identity; at most two rows establish uniqueness. */
+  findSettledAppRepository?: (input: {
+    authority: BuilderProvisionAuthority;
+    appId: string;
+    repositoryId: string;
+    githubInstallationId: string;
+  }) => Promise<readonly BuilderProvisionJournalRow[]>;
+
+  /** Exact owner/app/acquired repository identity; at most two rows establish uniqueness. */
+
   listDue?: (input: {
     now: Date;
     after?: {
@@ -135,6 +149,9 @@ export const initialBuilderProvisionJournalRecord = (
     },
     request: {
       appName: request.appName,
+      ...(request.deploymentAccess === undefined
+        ? {}
+        : { deploymentAccess: request.deploymentAccess }),
       providers: request.providers,
       repository: request.repository,
       requestId: request.requestId,

@@ -1,5 +1,12 @@
 import type { SessionAnswer } from "./view";
 
+const renderPreviewApprovalDescription = (text: string) =>
+  text === "This approval may incur provider costs." ? (
+    <em>This approval may incur provider costs.</em>
+  ) : (
+    text
+  );
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ApprovalRequest({
   description,
@@ -18,9 +25,14 @@ export function ApprovalRequest({
 }) {
   const readyToBuild = title === "Build this app?";
   const publishDraft = title === "Publish the reviewed changes?";
-  const supportingCopy = readyToBuild
-    ? "This will turn your plan into a working private preview."
-    : description;
+  const previewApproval = title === "Do you approve creating a preview?";
+  const renderApprovalDescription = (text: string) =>
+    previewApproval ? renderPreviewApprovalDescription(text) : text;
+  const supportingCopy =
+    description ??
+    (readyToBuild
+      ? "Build and validate the app shown above in your private workspace. This does not publish or deploy it."
+      : undefined);
   const hint = readyToBuild ? "Keep chatting to refine your app." : "Cancel and return to chat.";
   let defaultPrimaryLabel = "Accept";
   if (readyToBuild) {
@@ -28,14 +40,53 @@ export function ApprovalRequest({
   } else if (publishDraft) {
     defaultPrimaryLabel = "Publish draft PR";
   }
-  const primaryLabel = primaryLabelOverride ?? defaultPrimaryLabel;
+  const primaryLabel = primaryLabelOverride ?? (previewApproval ? "Approve" : defaultPrimaryLabel);
   const secondaryLabel = secondaryLabelOverride ?? (readyToBuild ? "Make changes" : "Cancel");
 
   return (
-    <div className="approval-request">
-      <p className="approval-request__eyebrow">Approval required</p>
-      <h2>{readyToBuild ? "Ready to build your app?" : title}</h2>
-      {supportingCopy ? <p>{supportingCopy}</p> : null}
+    <div className={`approval-request${previewApproval ? " approval-request--preview" : ""}`}>
+      {previewApproval ? (
+        <>
+          <h2 className="approval-request__label">Approval required</h2>
+          <p className="approval-request__supporting-title">{title}</p>
+        </>
+      ) : (
+        <>
+          <p className="approval-request__eyebrow">Approval required</p>
+          <h2>{readyToBuild ? "Ready to build your app?" : title}</h2>
+        </>
+      )}
+      {supportingCopy ? (
+        <div className="approval-request__description">
+          {supportingCopy.split("\n\n").map((section) => {
+            const lines = section.split("\n");
+            const heading = lines[0].endsWith(":") ? lines[0].slice(0, -1) : undefined;
+            const body = heading === undefined ? lines : lines.slice(1);
+            const bullets = body.every((line) => line.startsWith("- "));
+            const content = bullets ? (
+              <ul>
+                {body.map((line) => (
+                  <li key={line}>{renderApprovalDescription(line.slice(2))}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>{renderApprovalDescription(body.join(" "))}</p>
+            );
+            const referenceSection = heading?.includes("(provider ") ?? false;
+            return referenceSection ? (
+              <details key={section}>
+                <summary>{heading}</summary>
+                {content}
+              </details>
+            ) : (
+              <section key={section}>
+                {heading ? <h3>{heading}</h3> : null}
+                {content}
+              </section>
+            );
+          })}
+        </div>
+      ) : null}
       <div className="approval-request__actions">
         <div>
           <button
@@ -46,7 +97,7 @@ export function ApprovalRequest({
           >
             {secondaryLabel}
           </button>
-          <p className="approval-request__hint">{hint}</p>
+          {previewApproval ? null : <p className="approval-request__hint">{hint}</p>}
         </div>
         <button
           type="button"

@@ -2,6 +2,7 @@ import { developmentExecutionEnvironment } from "./execution-environment.mjs";
 import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { registeredAutographToolNames, sha256 } from "../../scripts/portable-release";
@@ -14,7 +15,15 @@ export const DEVELOPMENT_PLUGIN_SELECTOR = `${DEVELOPMENT_PLUGIN_NAME}@${DEVELOP
 export const DEVELOPMENT_MCP_SERVER_NAME = "app-builder-dev";
 export const DEVELOPMENT_VERSION = "0.0.0-development";
 
-const developmentVersion = (port: number) => `${DEVELOPMENT_VERSION}.${port}`;
+const developmentVersion = (port: number, hosted = false) =>
+  `${DEVELOPMENT_VERSION}.${port}${hosted ? ".hosted" : ""}`;
+
+export interface HostedSessionConnection {
+  resourceUrl: string;
+  codexBin: string;
+  nodeBin: string;
+  cwd: string;
+}
 
 export type DevelopmentCodexCommandRunner = (
   args: readonly string[],
@@ -49,6 +58,7 @@ export const developmentPackageFingerprint = async (input: {
   repositoryRoot: string;
   port: number;
   origin?: string;
+  hostedSession?: HostedSessionConnection;
 }) => {
   const repositoryRoot = path.resolve(input.repositoryRoot);
   return sha256(
@@ -56,6 +66,7 @@ export const developmentPackageFingerprint = async (input: {
       icon: sha256(await readFile(path.join(repositoryRoot, "assets/autograph-icon.png"))),
       mcpHandler: sha256(await readFile(path.join(repositoryRoot, "lib/mcp/request-handler.ts"))),
       origin: input.origin,
+      hostedSession: input.hostedSession,
       plugin: sha256(await readFile(path.join(repositoryRoot, ".codex-plugin/plugin.json"))),
       port: input.port,
       skills: await packageInputDigest(path.join(repositoryRoot, "skills")),
@@ -68,6 +79,7 @@ export const createDevelopmentPackage = async (input: {
   outputRoot: string;
   port: number;
   origin?: string;
+  hostedSession?: HostedSessionConnection;
 }) => {
   const repositoryRoot = path.resolve(input.repositoryRoot);
   const outputRoot = path.resolve(input.outputRoot);
@@ -80,8 +92,8 @@ export const createDevelopmentPackage = async (input: {
   // Codex retains an MCP transport by server name across tasks.  Make the
   // local-only transport identity include its loopback port so a fresh
   // development task cannot inherit a connection to an earlier dev server.
-  const mcpServer = `${DEVELOPMENT_MCP_SERVER_NAME}-${input.port}${input.origin === undefined ? "" : "-https"}`;
-  const version = developmentVersion(input.port);
+  const mcpServer = `${DEVELOPMENT_MCP_SERVER_NAME}-${input.port}${input.origin === undefined ? "" : "-https"}${input.hostedSession === undefined ? "" : "-hosted"}`;
+  const version = developmentVersion(input.port, input.hostedSession !== undefined);
   try {
     await mkdir(path.join(pluginRoot, ".codex-plugin"), {
       mode: 0o700,
@@ -107,8 +119,14 @@ export const createDevelopmentPackage = async (input: {
       description: "Local-only Autograph App Builder development package.",
       interface: {
         ...sourceInterface,
-        displayName: "Autograph App Builder (Development)",
-        shortDescription: "Build with local App Builder and Arrusted changes",
+        displayName:
+          input.hostedSession === undefined
+            ? "Autograph App Builder (Development)"
+            : "Autograph App Builder (Existing session)",
+        shortDescription:
+          input.hostedSession === undefined
+            ? "Build with local App Builder and Arrusted changes"
+            : "Access existing hosted sessions through the local native connector",
       },
       mcpServers: "./.mcp.json",
       name: DEVELOPMENT_PLUGIN_NAME,
@@ -117,11 +135,28 @@ export const createDevelopmentPackage = async (input: {
     delete (manifest as { apps?: unknown }).apps;
     const mcp = {
       mcpServers: {
-        [mcpServer]: {
-          oauth_resource: endpoint,
-          type: "http",
-          url: endpoint,
-        },
+        [mcpServer]:
+          input.hostedSession === undefined
+            ? {
+                oauth_resource: endpoint,
+                type: "http",
+                url: endpoint,
+              }
+            : {
+                type: "stdio",
+                command: input.hostedSession.nodeBin,
+                args: [
+                  "--import",
+                  fileURLToPath(import.meta.resolve("tsx")),
+                  path.join(repositoryRoot, "scripts/local-hosted-session-connector.mts"),
+                  "--codex-bin",
+                  input.hostedSession.codexBin,
+                  "--resource-url",
+                  input.hostedSession.resourceUrl,
+                  "--cwd",
+                  input.hostedSession.cwd,
+                ],
+              },
       },
     };
     const handler = await readFile(
@@ -187,6 +222,9 @@ export const createDevelopmentPackage = async (input: {
       format: "autograph-development-package-v2",
       marketplace: DEVELOPMENT_MARKETPLACE_NAME,
       mcpAppPreview: false,
+      ...(input.hostedSession === undefined
+        ? {}
+        : { hostedSessionResource: input.hostedSession.resourceUrl, execution: "hosted" }),
       mcpServer,
       plugin: DEVELOPMENT_PLUGIN_NAME,
       publication: false,
@@ -236,12 +274,23 @@ const disableGlobalDevelopmentPackage = async (codexHome: string) => {
 };
 
 export const registerDevelopmentPackage = async (input: {
-  codexBin: string;
-  codexHome: string;
+  codexBin?: string;
+  codexHome?: string;
+  installPlugin?: boolean;
   marketplaceRoot: string;
   version: string;
   runner?: DevelopmentCodexCommandRunner;
 }) => {
+  if (input.installPlugin === false) {
+    return {
+      marketplaceRoot: input.marketplaceRoot,
+      selector: DEVELOPMENT_PLUGIN_SELECTOR,
+      installed: false,
+    };
+  }
+  if (input.codexBin === undefined || input.codexHome === undefined) {
+    throw new Error("Plugin installation requires the Codex executable and profile root.");
+  }
   const codexBin = path.resolve(input.codexBin);
   const codexHome = path.resolve(input.codexHome);
   const marketplaceRoot = path.resolve(input.marketplaceRoot);

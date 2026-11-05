@@ -1,3 +1,5 @@
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
+import { draftInspectionRecoveryForSession } from "@/lib/agent/prepare-published-draft-repair";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { updatePublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
 import {
@@ -42,6 +44,7 @@ export default defineTool({
     "After separate exact proposal approval, update the same open draft PR with the reviewed merge commit, or verify that this exact approved merge already succeeded and finish its original release recording. Recovery reads no current candidate bytes and never writes Git. Optional recordCurrentEquivalentRelease associates this verified publication only with the exact equivalent current compiled capture, without modifying Git or selecting another release. Fresh publication still requires the exact validated checkout. This never force pushes or deploys.",
   // oxlint-disable-next-line eslint/complexity -- Completion recovery and fresh publication have distinct approval, ownership and candidate preconditions.
   async execute(input, ctx) {
+    ctx.abortSignal?.throwIfAborted();
     const candidate = draftReconciliationState.get();
     if (
       publishedDraftRepairCompletions
@@ -60,7 +63,8 @@ export default defineTool({
       });
     }
 
-    const state = appBuilderWorkflowState.get();
+    const workflow = appBuilderWorkflowState.get();
+    const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
     let completion = draftReconciliationCompletions
       .get()
       .find((entry) => entry.proposal.digest === input.expectedProposalDigest);
@@ -127,7 +131,19 @@ export default defineTool({
       ctx.session.auth,
       draftCompletionInstallation(completion),
     );
-    const inspected = await runtime.inspectAppliedExistingDraftReconciliation({ proposal, review });
+    const recovery = draftInspectionRecoveryForSession({
+      ctx,
+      appId: completion.appId,
+      appSpecDigest: completion.appReview.appSpecDigest,
+      root: completion.root,
+      pullRequestNumber: proposal.pullRequestNumber,
+      priorPublishedProposalDigest: completion.publishedOrigin?.publicationProposalDigest,
+    });
+    const inspected = await runtime.inspectAppliedExistingDraftReconciliation({
+      proposal,
+      review,
+      recovery,
+    });
     const finish = async (
       publication: Parameters<typeof recordPublishedReconciliationForSession>[0]["publication"],
     ) => {
@@ -236,7 +252,12 @@ export default defineTool({
       },
     };
     await assertReconciliationCompletionOwnerForSession(session);
-    const publication = await runtime.reconcileExistingDraft({ contentSource, proposal, review });
+    const publication = await runtime.reconcileExistingDraft({
+      contentSource,
+      proposal,
+      review,
+      recovery,
+    });
     updateExactDraftReconciliation({
       expected: candidate,
       operation: "recording the provider-verified published merge",

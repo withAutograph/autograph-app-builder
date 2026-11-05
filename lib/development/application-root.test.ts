@@ -25,6 +25,11 @@ async function fixture() {
   const runsRoot = path.join(root, "runs");
   await mkdir(repositoryRoot, { mode: 0o700 });
   await mkdir(modulesRoot, { mode: 0o700 });
+  await mkdir(path.join(modulesRoot, "eve"), { mode: 0o700 });
+  await writeFile(
+    path.join(modulesRoot, "eve/package.json"),
+    '{"name":"eve","exports":{"./package.json":"./package.json"}}',
+  );
   await mkdir(runsRoot, { mode: 0o700 });
   await writeFile(path.join(repositoryRoot, "agent.ts"), "export const live = 1;\n");
   await writeFile(path.join(repositoryRoot, ".gitignore"), ".eve\nnode_modules\n");

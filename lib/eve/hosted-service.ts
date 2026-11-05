@@ -1,3 +1,4 @@
+import { continueHostedPreapprovalAuthoring } from "./preapproval-authoring-controller";
 import type { HostedSubmissionVerificationStep } from "./hosted-submission-unknown-error";
 import {
   captureResourceApprovalResponse,
@@ -34,8 +35,12 @@ import {
   nativeRecoveryBindingSchema,
   assertNativeRecoveryReceipt,
 } from "./native-recovery-contract";
-import type { NativeRecoveryDescriptor, NativeRecoveryBinding } from "./native-recovery-contract";
-import { observeNativeRecoveryOperation } from "./native-recovery-observation";
+import type {
+  NativeRecoveryDescriptor,
+  NativeRecoveryBinding,
+  NativeSourceObservation,
+} from "./native-recovery-contract";
+import { observeNativeRecoveryOperation, observeNativeSource } from "./native-recovery-observation";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdtemp, open, rm } from "node:fs/promises";
@@ -93,9 +98,13 @@ import type { InternalEveEvent } from "./public-events";
 import type { MessageStreamEvent } from "eve/client";
 import {
   createPrivateHostedApprovalRecorder,
+  createPrivateHostedApprovalCapture,
   privateHostedApprovalCaptureStateSchema,
+  privateResourceApprovalSessionId,
 } from "./private-hosted-approval";
 import type { PrivateHostedApprovalCaptureState } from "./private-hosted-approval";
+import { runHistoricalApprovalReplay } from "./historical-approval-replay-orchestration";
+import { reconstructNativeApprovalResponse } from "./reconstruct-native-approval-response";
 import type { NativeObservationState } from "./native-observation-state";
 import { nativeObservationStateSchema } from "./native-observation-state";
 import { createHostedApprovalObservationDiagnostic } from "./hosted-approval-observation-diagnostic";
@@ -205,7 +214,12 @@ export interface HostedEveTransport {
     recovery: NativeRecoveryDescriptor;
     sourceHandoffId?: string;
   }) => Promise<NativeRecoveryBinding>;
-  /** Reads the existing terminal owner only; never creates, activates or settles recovery. */
+  /** Read-only current physical owner/lineage inspection for a parked source; never dispatches recovery. */
+  observeSource?: (input: {
+    principal: HostedPrincipal;
+    source: NativeSourceObservation;
+    sourceHandoffId?: string;
+  }) => Promise<void>;
   observeRecovery?: (input: {
     principal: HostedPrincipal;
     operationId: string;
@@ -773,6 +787,7 @@ async function spoolObservedSession(input: {
   privateApprovalCaptureState?: PrivateHostedApprovalCaptureState;
   privateApprovalSessionId: string;
   allowPartialObservation?: boolean;
+  deferPrivateApprovalPersistence?: boolean;
 }): Promise<PagedObservationSpool> {
   let directory: string;
   try {
@@ -784,7 +799,7 @@ async function spoolObservedSession(input: {
     );
   }
   const path = nodePath.join(directory, "events.ndjson");
-  const privateApprovals = createPrivateHostedApprovalRecorder({
+  const recorder = createPrivateHostedApprovalRecorder({
     principal: input.principal,
     sessionId: input.privateApprovalSessionId,
     store: input.store,
@@ -792,6 +807,12 @@ async function spoolObservedSession(input: {
       ? {}
       : { state: input.privateApprovalCaptureState }),
   });
+  const capture = input.deferPrivateApprovalPersistence
+    ? createPrivateHostedApprovalCapture(
+        input.privateApprovalSessionId,
+        input.privateApprovalCaptureState,
+      )
+    : undefined;
   let file: Awaited<ReturnType<typeof open>> | null = null;
   try {
     file = await open(path, "wx", 0o600);
@@ -829,7 +850,7 @@ async function spoolObservedSession(input: {
         hash.update(line);
         eventCount += 1;
       },
-      onPrivateEvent: privateApprovals.observe,
+      onPrivateEvent: capture === undefined ? recorder.observe : capture.observe,
       principal: input.principal,
       sessionId: input.sessionId,
     });
@@ -843,7 +864,7 @@ async function spoolObservedSession(input: {
       eventStartIndex,
       observation,
       path,
-      privateApprovalCaptureState: privateApprovals.snapshot(),
+      privateApprovalCaptureState: capture?.snapshot() ?? recorder.snapshot(),
     };
   } catch (error) {
     if (file !== null) {
@@ -926,7 +947,11 @@ export function createHostedEveSessionService(input: {
   now?: () => number;
   onSubmissionDiagnostic?: HostedSubmissionDiagnosticSink;
   sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
-}): EveSessionService {
+}): EveSessionService & {
+  reconcileOwnerDelivery: (
+    binding: SendObservationBinding & { sessionId: string },
+  ) => Promise<void>;
+} {
   // Presentation reuses private state already captured by this owned read/mutation. It never
   // causes a second checkpoint read or changes the requested public cursor.
   const presentationInputs = new Map<string, PrivateInputState | undefined>();
@@ -1083,7 +1108,12 @@ export function createHostedEveSessionService(input: {
     if (operation.nativeRecovery === undefined || session.version !== 2) {
       return session;
     }
-    const { privateBuildDecision: _storeOwnedDecision, ...comparable } = session;
+    const {
+      privateBuildDecision: _storeOwnedDecision,
+      privateAuthoringDecision: _storeOwnedAuthoring,
+      ...comparable
+    } = session;
+    void _storeOwnedAuthoring;
     void _storeOwnedDecision;
     return comparable as T;
   };
@@ -1188,6 +1218,7 @@ export function createHostedEveSessionService(input: {
     );
   const reconcileSendOperation = async (
     operation: HostedOperationRecord,
+    settle = true,
   ): Promise<EveSessionResult | undefined> => {
     if (operation.sendDelivery === undefined || operation.sessionId === undefined) {
       return undefined;
@@ -1229,6 +1260,9 @@ export function createHostedEveSessionService(input: {
       return projected?.result;
     }
     await assertSendOwner(current);
+    if (!settle) {
+      return result;
+    }
     const settled = await input.store.settleSucceeded({
       nowEpochMs: now(),
       operationId: operation.operationId,
@@ -1246,6 +1280,221 @@ export function createHostedEveSessionService(input: {
     });
     return verified.state === "succeeded" ? verified.result : undefined;
   };
+  // Replay is private and read-only until an authenticated prefix comparison succeeds.
+  // eslint-disable-next-line eslint/func-style -- Reconciliation calls this after all service closures initialize.
+  async function replayNativeApprovalHistory(
+    current: HostedSessionRecord,
+    requestIds: string[],
+  ): Promise<boolean> {
+    const session = toDurableHostedSessionRecord(current);
+    const observeTransport = input.transport.observe;
+    const observeSessionPaged = input.store.observeSessionPaged;
+    if (
+      observeTransport === undefined ||
+      observeSessionPaged === undefined ||
+      input.store.readCheckpointPage === undefined ||
+      session.checkpointRef === undefined
+    ) {
+      return false;
+    }
+    // oxlint-disable-next-line eslint/no-use-before-define -- The reader closure is initialized before reconciliation is invoked.
+    const metadata = await readCheckpointMetadata(session);
+    if (metadata === null) {
+      return false;
+    }
+    const state = metadata.nativeObservationState?.privateInputState ?? metadata.privateInputState;
+    if (state === undefined) {
+      return false;
+    }
+    const requests = [...state.pending, ...state.resolved.map((entry) => entry.batch)].flatMap(
+      (batch) => batch.requests,
+    );
+    if (
+      !requestIds.every((id) =>
+        requests.some(
+          (entry) =>
+            entry.requestId === id &&
+            entry.kind === "tool-approval" &&
+            entry.toolName === "prepare-app-native-target",
+        ),
+      )
+    ) {
+      return false;
+    }
+    const checkpoint = session.checkpointRef;
+    const approvalSessionId =
+      session.nativeRecoveryBinding?.originalAuthoritySessionId ?? session.sessionId;
+    // The store merges receipts under the public session, so a recovered child cannot
+    // publish approvals bound to a different original authority session here.
+    if (approvalSessionId !== session.sessionId) {
+      return false;
+    }
+    const binding = {
+      principal,
+      sessionId: session.sessionId,
+      approvalSessionId,
+      adapterSessionId: session.adapterSessionId,
+      adapterGeneration: session.adapterGeneration,
+    };
+    const replayBinding = {
+      adapterSessionId: session.adapterSessionId,
+      adapterGeneration: session.adapterGeneration,
+      cancellationRevision: session.cancellationRevision ?? 0,
+    };
+    let observation: PagedObservationSpool["observation"] | undefined;
+    const events = async function* events(values: readonly z.infer<typeof publicEveEventSchema>[]) {
+      yield* values;
+    };
+    const assertOwner = async () => {
+      const latest = toDurableHostedSessionRecord(await requireSession(session.sessionId));
+      await assertSendOwner(latest);
+      if (
+        latest.adapterSessionId !== replayBinding.adapterSessionId ||
+        latest.adapterGeneration !== replayBinding.adapterGeneration ||
+        (latest.cancellationRevision ?? 0) !== replayBinding.cancellationRevision ||
+        latest.checkpointDigest !== checkpoint.digest
+      ) {
+        throw new HostedCheckpointObservationConflictError();
+      }
+    };
+    const run = await runHistoricalApprovalReplay({
+      binding,
+      checkpoint,
+      // oxlint-disable-next-line eslint/no-use-before-define -- The reader closure is initialized before reconciliation is invoked.
+      trustedEvents: () => readCheckpointEvents(session),
+      ...(metadata.approvalReplayProgress === undefined
+        ? {}
+        : { progress: metadata.approvalReplayProgress }),
+      assertOwner,
+      observe: async (previous) => {
+        const spool = await spoolObservedSession({
+          adapterSessionId: session.adapterSessionId,
+          allowPartialObservation: true,
+          ...(previous === undefined
+            ? {}
+            : {
+                nativeObservationState: previous.nativeObservationState,
+                privateApprovalCaptureState: previous.privateApprovalCaptureState,
+              }),
+          privateApprovalSessionId: approvalSessionId,
+          principal,
+          sessionId: session.sessionId,
+          store: input.store,
+          transport: observeTransport,
+          deferPrivateApprovalPersistence: true,
+        });
+        try {
+          observation = spool.observation;
+          const native = spool.observation.nativeObservationState;
+          const tail = spool.observation.nativeTailIndex;
+          if (
+            native === undefined ||
+            tail === undefined ||
+            spool.observation.nextNativeIndex === undefined ||
+            spool.observation.observationComplete === undefined
+          ) {
+            throw new HostedSessionReadTimeoutError();
+          }
+          const replayEvents = [...(previous?.events ?? [])];
+          for await (const event of readSpoolEvents(spool)) {
+            replayEvents.push(event);
+          }
+          return {
+            progress: {
+              version: 1 as const,
+              binding,
+              sourceCheckpoint: previous?.sourceCheckpoint ?? checkpoint,
+              events: replayEvents,
+              nativeObservationState: native,
+              privateApprovalCaptureState: spool.privateApprovalCaptureState,
+            },
+            nativeTail: {
+              complete: spool.observation.observationComplete,
+              nextNativeIndex: spool.observation.nextNativeIndex,
+              nativeTailIndex: tail,
+            },
+          };
+        } finally {
+          await rm(spool.directory, { force: true, recursive: true });
+        }
+      },
+      persistPartial: async (progress, expected) => {
+        if (
+          metadata.approvalReplayProgress !== undefined &&
+          isDeepStrictEqual(metadata.approvalReplayProgress, progress)
+        ) {
+          return true;
+        }
+        const stored = await observeSessionPaged({
+          principal,
+          sessionId: session.sessionId,
+          expectedCheckpointDigest: expected.digest,
+          metadata: { ...metadata, approvalReplayProgress: progress },
+          // oxlint-disable-next-line eslint/no-use-before-define -- The reader closure is initialized before reconciliation is invoked.
+          events: readCheckpointEvents(session),
+          stage: session.stage,
+          resumability: session.resumability,
+          nowEpochMs: now(),
+          replayBinding,
+        });
+        return stored.version === 2 && stored.checkpointDigest !== expected.digest;
+      },
+      publishVerified: async (progress, expected) => {
+        if (observation === undefined) {
+          return false;
+        }
+        const {
+          approvalReplayProgress: _replay,
+          coldReadProgress: _cold,
+          inputRequests: _requests,
+          ...retained
+        } = metadata;
+        void _replay;
+        void _cold;
+        void _requests;
+        const publishedMetadata: HostedPagedCheckpointMetadata = {
+          ...retained,
+          capturedAtEpochMs: now(),
+          nativeObservationState: progress.nativeObservationState,
+          privateApprovalCaptureState: progress.privateApprovalCaptureState,
+          status: observation.status,
+          ...(observation.pendingRequests.length === 0
+            ? {}
+            : { inputRequests: observation.pendingRequests }),
+          ...(observation.prototype === undefined ? {} : { prototype: observation.prototype }),
+          ...(observation.prototypeRef === undefined
+            ? {}
+            : { prototypeRef: observation.prototypeRef }),
+          ...(observation.uiPreview === undefined ? {} : { uiPreview: observation.uiPreview }),
+          ...(observation.workingPreview === undefined
+            ? {}
+            : { workingPreview: observation.workingPreview }),
+        };
+        const summary = eveSessionResultSchema.parse({
+          cursor: 0,
+          events: [],
+          sessionId: session.sessionId,
+          status: observation.status,
+        });
+        const stored = await observeSessionPaged({
+          principal,
+          sessionId: session.sessionId,
+          expectedCheckpointDigest: expected.digest,
+          metadata: publishedMetadata,
+          events: events(progress.events),
+          stage: stageForResult(summary),
+          resumability: ["completed", "failed", "cancelled"].includes(summary.status)
+            ? "terminal"
+            : "live",
+          nowEpochMs: now(),
+          replayBinding,
+          verifiedReplayReceipts: progress.privateApprovalCaptureState.receipts,
+        });
+        return stored.version === 2 && stored.checkpointDigest !== expected.digest;
+      },
+    });
+    return run.status === "ready";
+  }
   const reconcileResourceApprovalOperation = async (
     operation: HostedOperationRecord,
     request: unknown,
@@ -1267,14 +1516,46 @@ export function createHostedEveSessionService(input: {
     }
     await assertSendOwner(before);
     // oxlint-disable-next-line eslint/no-use-before-define -- Reconciliation observes only and never dispatches RESPOND again.
-    const result = await readSession({
+    let result = await readSession({
       continueWork: false,
       recoverUnavailable: false,
       cursor: 0,
       limit: 100,
       sessionId: operation.sessionId,
     });
-    const current = toDurableHostedSessionRecord(await requireSession(operation.sessionId));
+    let current = toDurableHostedSessionRecord(await requireSession(operation.sessionId));
+    // oxlint-disable-next-line eslint/no-use-before-define -- The reader closure is initialized before reconciliation is invoked.
+    let metadata = await readCheckpointMetadata(current);
+    const responseIds = new Set(parsed.data.responses.map((entry) => entry.requestId));
+    const observedState =
+      metadata?.nativeObservationState?.privateInputState ?? metadata?.privateInputState;
+    const observedRequests =
+      observedState === undefined
+        ? []
+        : [...observedState.pending, ...observedState.resolved.map((item) => item.batch)].flatMap(
+            (batch) => batch.requests,
+          );
+    const nativeApproval = [
+      ...(operation.resourceApprovalResponse?.approvals ?? []),
+      ...(metadata?.privateApprovalCaptureState?.pendingRequests ?? []),
+      ...(metadata?.privateApprovalCaptureState?.receipts ?? []),
+      ...observedRequests,
+    ].some(
+      (entry) => responseIds.has(entry.requestId) && entry.toolName === "prepare-app-native-target",
+    );
+    const replayed = await replayNativeApprovalHistory(current, [...responseIds]);
+    // A stale native receipt may predate a later cancellation. Even exact retries
+    // must wait for a complete owner-bound history replay before settlement.
+    if (nativeApproval && !replayed) {
+      return undefined;
+    }
+    if (replayed) {
+      current = toDurableHostedSessionRecord(await requireSession(operation.sessionId));
+      // oxlint-disable-next-line eslint/no-use-before-define -- The reader closure is initialized before reconciliation is invoked.
+      metadata = await readCheckpointMetadata(current);
+      // oxlint-disable-next-line eslint/no-use-before-define -- The reader closure is initialized before reconciliation is invoked.
+      result = await resultFromDurableCheckpoint(operation.sessionId, current, 0, 100);
+    }
     const proof = resourceApprovalResponseProofSchema.safeParse({
       adapterGeneration: current.adapterGeneration,
       adapterSessionId: current.adapterSessionId,
@@ -1285,7 +1566,6 @@ export function createHostedEveSessionService(input: {
       return undefined;
     }
     // oxlint-disable-next-line eslint/no-use-before-define -- The initialized checkpoint reader is used only during a service call.
-    const metadata = await readCheckpointMetadata(current);
     if (!isProvedResourceApprovalResponse(operation, current, proof.data, metadata)) {
       return undefined;
     }
@@ -1307,6 +1587,172 @@ export function createHostedEveSessionService(input: {
     });
     return verified.state === "succeeded" ? verified.result : undefined;
   };
+  // GET reconciliation only observes the original response; it never sends a new response.
+  // eslint-disable-next-line eslint/func-style -- Called after session and checkpoint closures initialize.
+  async function reconcileNativeResponsesOnGet(
+    sessionId: string,
+    initialResult: EveSessionResult,
+    requestedCursor: number,
+    requestedLimit: number,
+  ): Promise<EveSessionResult> {
+    let result = initialResult;
+    if (input.store.readUnsettledResponseOperations === undefined) {
+      return result;
+    }
+    let current = toDurableHostedSessionRecord(await requireSession(sessionId));
+    if (current.checkpointRef === undefined || input.store.readCheckpointPage === undefined) {
+      return result;
+    }
+    // oxlint-disable-next-line eslint/no-use-before-define -- The reader closure is initialized before reconciliation is invoked.
+    let metadata = await readCheckpointMetadata(current);
+    let state = metadata?.nativeObservationState?.privateInputState ?? metadata?.privateInputState;
+    if (metadata === null || state === undefined) {
+      return result;
+    }
+    const nativeIds: string[] = [];
+    for (const batch of [...state.pending, ...state.resolved.map((entry) => entry.batch)]) {
+      for (const entry of batch.requests) {
+        if (entry.kind === "tool-approval" && entry.toolName === "prepare-app-native-target") {
+          nativeIds.push(entry.requestId);
+        }
+      }
+    }
+    if (nativeIds.length === 0) {
+      return result;
+    }
+    let cursor: { createdAtEpochMs: number; operationId: string } | undefined;
+    let attemptedReplay = false;
+    let morePages = true;
+    while (morePages) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Sequential reconciliation preserves checkpoint and ownership ordering.
+      const page = await input.store.readUnsettledResponseOperations({
+        principal,
+        sessionId,
+        ...(cursor === undefined ? {} : { cursor }),
+        limit: 100,
+      });
+      for (const raw of page.operations) {
+        const operation = hostedOperationRecordSchema.parse(raw);
+        if (
+          operation.kind !== "respond" ||
+          operation.state !== "submission_unknown" ||
+          operation.sessionId !== sessionId ||
+          operation.internalSessionLimitResponse !== undefined ||
+          tenantKeyFor(operation.principal) !== tenantKeyFor(principal)
+        ) {
+          continue;
+        }
+        if (!attemptedReplay) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Sequential reconciliation preserves checkpoint and ownership ordering.
+          await assertSendOwner(current);
+          attemptedReplay = true;
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Sequential reconciliation preserves checkpoint and ownership ordering.
+          const completed = await replayNativeApprovalHistory(current, [...new Set(nativeIds)]);
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Sequential reconciliation preserves checkpoint and ownership ordering.
+          current = toDurableHostedSessionRecord(await requireSession(sessionId));
+          // oxlint-disable-next-line eslint/no-await-in-loop, eslint/no-use-before-define -- Sequential reconciliation preserves checkpoint and ownership ordering.
+          metadata = await readCheckpointMetadata(current);
+          state =
+            metadata?.nativeObservationState?.privateInputState ?? metadata?.privateInputState;
+          // Stored receipts can predate a conflicting settlement. Only the complete,
+          // current historical replay can authorize reconciliation of an unknown response.
+          if (!completed) {
+            return result;
+          }
+          // oxlint-disable-next-line eslint/no-await-in-loop, eslint/no-use-before-define -- Sequential reconciliation preserves checkpoint and ownership ordering.
+          result = await resultFromDurableCheckpoint(
+            sessionId,
+            current,
+            requestedCursor,
+            requestedLimit,
+          );
+          if (metadata === null || state === undefined) {
+            return result;
+          }
+        }
+        const capture = metadata.privateApprovalCaptureState;
+        if (capture === undefined || current.checkpointDigest === undefined) {
+          continue;
+        }
+        const receipts = current.privateApprovalReceipts ?? [];
+        const targets = new Map<
+          string,
+          { appId: string; operationRef: string; planDigest: string }
+        >();
+        for (const receipt of capture.receipts) {
+          if (receipt.toolName !== "prepare-app-native-target") {
+            continue;
+          }
+          const target = {
+            appId: receipt.toolInput.appId,
+            operationRef: receipt.toolInput.operationRef,
+            planDigest: receipt.toolInput.planDigest,
+          };
+          targets.set(JSON.stringify(target), target);
+        }
+        const candidates: NonNullable<ReturnType<typeof reconstructNativeApprovalResponse>>[] = [];
+        const checkpointDigest = current.checkpointDigest;
+        const currentState = state;
+        for (const target of targets.values()) {
+          const candidate = reconstructNativeApprovalResponse({
+            clientRequestId: operation.clientRequestId,
+            sessionId,
+            ownerUserId: principal.ownerUserId,
+            requestDigest: operation.requestDigest,
+            adapterSessionId: current.adapterSessionId,
+            adapterGeneration: current.adapterGeneration,
+            checkpointDigest,
+            target,
+            state: currentState,
+            capture,
+            receipts,
+          });
+          if (candidate !== undefined) {
+            candidates.push(candidate);
+          }
+        }
+        if (candidates.length !== 1) {
+          continue;
+        }
+        const proof = resourceApprovalResponseProofSchema.parse({
+          adapterSessionId: current.adapterSessionId,
+          adapterGeneration: current.adapterGeneration,
+          checkpointDigest: current.checkpointDigest,
+          request: candidates[0],
+        });
+        if (!isProvedResourceApprovalResponse(operation, current, proof, metadata)) {
+          continue;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop, eslint/no-use-before-define -- Preserve the canonical response page and checkpoint ordering.
+        const responseResult = await resultFromDurableCheckpoint(sessionId, current, 0, 100);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Sequential reconciliation preserves checkpoint and ownership ordering.
+        await assertSendOwner(current);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Sequential reconciliation preserves checkpoint and ownership ordering.
+        await input.store.settleSucceeded({
+          principal,
+          operationId: operation.operationId,
+          requestDigest: operation.requestDigest,
+          result: responseResult,
+          resourceApprovalResolution: proof,
+          nowEpochMs: now(),
+        });
+      }
+      if (page.nextCursor === undefined) {
+        morePages = false;
+        continue;
+      }
+      if (
+        cursor !== undefined &&
+        (page.nextCursor.createdAtEpochMs < cursor.createdAtEpochMs ||
+          (page.nextCursor.createdAtEpochMs === cursor.createdAtEpochMs &&
+            page.nextCursor.operationId <= cursor.operationId))
+      ) {
+        throw new Error("Unsettled response pagination did not advance.");
+      }
+      cursor = page.nextCursor;
+    }
+    return result;
+  }
   const respondOperationId = (clientRequestId: string) =>
     stableId("op", {
       clientRequestId,
@@ -1573,6 +2019,7 @@ export function createHostedEveSessionService(input: {
         if (
           operation.sendDelivery === undefined ||
           operation.internalBuildContinuation !== undefined ||
+          operation.internalAuthoringContinuation !== undefined ||
           (operation.state !== "reserved" && operation.state !== "submission_unknown")
         ) {
           throw new HostedSubmissionUnknownError();
@@ -1726,7 +2173,11 @@ export function createHostedEveSessionService(input: {
         return queued.result;
       }
       const stoppedTurns = inputs === undefined ? [] : sessionLimitCancelledTurns(inputs);
-      if (current.privateBuildDecision !== undefined && inputs !== undefined) {
+      if (
+        (current.privateBuildDecision !== undefined ||
+          current.privateAuthoringDecision !== undefined) &&
+        inputs !== undefined
+      ) {
         for (const resolved of inputs.resolved) {
           if (resolved.stopSettled !== true) {
             continue;
@@ -1740,15 +2191,33 @@ export function createHostedEveSessionService(input: {
             stoppedTurns.push(stop.internalSessionLimitResponse.stoppedBuildTurnId);
           }
         }
-        if (stoppedTurns.includes(current.privateBuildDecision.turnId)) {
+        if (
+          current.privateBuildDecision !== undefined &&
+          stoppedTurns.includes(current.privateBuildDecision.turnId)
+        ) {
           return controlled;
         }
       }
-      return await continueApprovedHostedBuild({
+      const approved = await continueApprovedHostedBuild({
         assertCurrentOwner: assertHostedBuildDecisionOwner,
         now,
         principal,
         result: controlled,
+        sessionId,
+        store: input.store,
+        transport: input.transport,
+      });
+      if (
+        current.privateAuthoringDecision !== undefined &&
+        stoppedTurns.includes(current.privateAuthoringDecision.turnId)
+      ) {
+        return approved;
+      }
+      return await continueHostedPreapprovalAuthoring({
+        assertCurrentOwner: assertHostedBuildDecisionOwner,
+        now,
+        principal,
+        result: approved,
         sessionId,
         store: input.store,
         transport: input.transport,
@@ -2350,6 +2819,10 @@ export function createHostedEveSessionService(input: {
       });
       const { metadata } = page;
       rememberCheckpointInputs(record, metadata);
+      const status =
+        durable.status === "failed" && durable.resumability === "terminal"
+          ? "failed"
+          : metadata.status;
       return eveSessionResultSchema.parse({
         cursor: page.cursor,
         events: page.events,
@@ -2357,16 +2830,13 @@ export function createHostedEveSessionService(input: {
         ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
         ...(metadata.prototypeRef === undefined ? {} : { prototypeRef: metadata.prototypeRef }),
         sessionId,
-        status:
-          metadata.status === "working" && durable.resumability === "checkpoint"
-            ? "waiting"
-            : metadata.status,
+        status: status === "working" && durable.resumability === "checkpoint" ? "waiting" : status,
         ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
         ...(metadata.workingPreview === undefined
           ? {}
           : {
               workingPreview:
-                metadata.status === "failed" || metadata.status === "cancelled"
+                status === "failed" || status === "cancelled"
                   ? null
                   : currentWorkingPreview(metadata.workingPreview),
             }),
@@ -2827,6 +3297,18 @@ export function createHostedEveSessionService(input: {
           const capturedAtEpochMs = now();
           const metadata: HostedPagedCheckpointMetadata = {
             capturedAtEpochMs,
+            ...(checkpointMetadata?.approvalReplayProgress !== undefined &&
+            checkpointMetadata.approvalReplayProgress.binding.sessionId === sessionId &&
+            checkpointMetadata.approvalReplayProgress.binding.adapterSessionId ===
+              session.adapterSessionId &&
+            checkpointMetadata.approvalReplayProgress.binding.adapterGeneration ===
+              session.adapterGeneration &&
+            isDeepStrictEqual(
+              checkpointMetadata.approvalReplayProgress.binding.principal,
+              session.principal,
+            )
+              ? { approvalReplayProgress: checkpointMetadata.approvalReplayProgress }
+              : {}),
             ...(spool.observation.activeTurnId === undefined
               ? {}
               : { activeTurnId: spool.observation.activeTurnId }),
@@ -2871,6 +3353,9 @@ export function createHostedEveSessionService(input: {
             ? "terminal"
             : "live";
           const stage = stageForResult(summary);
+          // An unchanged native checkpoint cannot undo canonical terminal reconciliation.
+          const retainedTerminalFailure =
+            session.status === "failed" && session.resumability === "terminal";
           const unchangedObservation =
             continueWork &&
             explicitSendOperationId === undefined &&
@@ -2884,9 +3369,10 @@ export function createHostedEveSessionService(input: {
             observedNativeState.nextNativeIndex === nativeObservationState.nextNativeIndex &&
             (spool.observation.nativeTailIndex === undefined ||
               observedNativeState.nextNativeIndex === spool.observation.nativeTailIndex + 1) &&
-            session.status === summary.status &&
-            session.resumability === resumability &&
-            session.stage === stage &&
+            (retainedTerminalFailure ||
+              (session.status === summary.status &&
+                session.resumability === resumability &&
+                session.stage === stage)) &&
             (summary.uiPreview?.appId === undefined || session.appId === summary.uiPreview.appId) &&
             isDeepStrictEqual(
               checkpointObservationContent(checkpointMetadata),
@@ -3633,9 +4119,41 @@ export function createHostedEveSessionService(input: {
       }
       return observeSnapshot(sessionId, snapshot);
     },
-    get({ sessionId, cursor, limit }) {
+    async get({ sessionId, cursor, limit }) {
       requireHostedOperationScope(principal, "get");
-      return readSession({ cursor, limit, sessionId });
+      const result = await readSession({ cursor, limit, sessionId });
+      if (result.status === "input_required" && input.transport.observeSource !== undefined) {
+        try {
+          const source = await input.store.getSession(principal, sessionId);
+          if (source !== null) {
+            const durable = toDurableHostedSessionRecord(source);
+            await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(durable);
+            await observeNativeSource({
+              transport: input.transport,
+              checkpointDigest: durable.checkpointDigest,
+              principal,
+              source: {
+                sourcePublicSessionId: sessionId,
+                sourceAdapterSessionId: durable.adapterSessionId,
+                sourceAdapterGeneration: durable.adapterGeneration,
+                cancellationRevision: durable.cancellationRevision ?? 0,
+              },
+              sourceHandoffId: durable.sourceHandoffId,
+            });
+          }
+        } catch {
+          /* Advisory source inspection never changes an authorized GET. */
+        }
+      }
+
+      try {
+        return await reconcileNativeResponsesOnGet(sessionId, result, cursor, limit);
+      } catch {
+        // A failed private reconciliation must never make the already-authorized read fail.
+        // Keep the diagnostic free of session identifiers and approval content.
+        console.warn("[builder:native-approval-recovery] reconciliation failed");
+        return result;
+      }
     },
     async getStart({ clientRequestId, cursor, limit }) {
       requireHostedOperationScope(principal, "get");
@@ -3738,12 +4256,99 @@ export function createHostedEveSessionService(input: {
       return readSession(request);
     }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     respond: respondRequest,
+    async recoverAppliedApprovalResponse({ sessionId, responses }) {
+      requireHostedOperationScope(principal, "respond");
+      let recovered: EveSessionResult | undefined;
+      const validResponses =
+        responses.length > 0 &&
+        new Set(responses.map(({ requestId }) => requestId)).size === responses.length &&
+        responses.every(({ response }) => response.kind === "approve" || response.kind === "deny");
+      if (validResponses) {
+        const session = await requireSession(sessionId);
+        const durable = toDurableHostedSessionRecord(session);
+        let approvalSession = session;
+        if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+          const binding = session.nativeRecoveryBinding;
+          const [source, operation] = await Promise.all([
+            requireSession(binding.originalAuthoritySessionId),
+            input.store.getPrivateOperation?.(principal, binding.operationId),
+          ]);
+          assertRecoveredBuildContinuationChild(
+            binding.originalAuthoritySessionId,
+            binding.logicalSessionId,
+            source,
+            session,
+            operation ?? null,
+          );
+          await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(
+            toDurableHostedSessionRecord(source),
+          );
+          approvalSession = source;
+        }
+        await (input.assertSendDeliveryOwner ?? assertHostedBuildDecisionOwner)(
+          toDurableHostedSessionRecord(approvalSession),
+        );
+        const approvalSessionId = approvalSession.sessionId;
+        const receipts =
+          approvalSession.version === 2 ? (approvalSession.privateApprovalReceipts ?? []) : [];
+        const matched = responses.every(({ requestId, response }) => {
+          const matches = receipts.filter((receipt) => receipt.requestId === requestId);
+          if (matches.length !== 1) {
+            return false;
+          }
+          const receipt = matches[0];
+          return (
+            receipt !== undefined &&
+            // Native target response recovery requires proof of the complete original batch.
+            // This legacy shortcut checks only the IDs supplied by its caller.
+            receipt.toolName !== "prepare-app-native-target" &&
+            privateResourceApprovalSessionId(receipt) === approvalSessionId &&
+            receipt.responderPrincipalId === principal.ownerUserId &&
+            receipt.outcome === (response.kind === "approve" ? "approved" : "cancelled")
+          );
+        });
+        if (matched) {
+          const current = await readSession({
+            continueWork: false,
+            cursor: 0,
+            limit: 100,
+            sessionId,
+          });
+          const latest = toDurableHostedSessionRecord(await requireSession(sessionId));
+          const currentIsStable =
+            latest.adapterSessionId === durable.adapterSessionId &&
+            latest.adapterGeneration === durable.adapterGeneration &&
+            canonical(latest.nativeRecoveryBinding) === canonical(durable.nativeRecoveryBinding) &&
+            current.error === undefined &&
+            (current.status === "working" || current.status === "completed");
+          if (currentIsStable) {
+            const latestApprovalSession = await requireSession(approvalSessionId);
+            const receiptsAreStable =
+              latestApprovalSession.version === approvalSession.version &&
+              (latestApprovalSession.version !== 2 ||
+                approvalSession.version !== 2 ||
+                canonical(latestApprovalSession.privateApprovalReceipts) ===
+                  canonical(approvalSession.privateApprovalReceipts));
+            if (receiptsAreStable) {
+              await (input.assertSendDeliveryOwner ?? assertHostedBuildDecisionOwner)(
+                toDurableHostedSessionRecord(latestApprovalSession),
+              );
+              recovered = current;
+            }
+          }
+        }
+      }
+      return recovered;
+    },
     async send({ observationCursor, ...request }) {
       requireHostedOperationScope(principal, "send");
       let session = await requireSession(request.sessionId);
       const initialBinding = toDurableHostedSessionRecord(session);
       const resumeCancellationRevision =
-        session.status === "cancelled" && input.store.recordCancellationIntent !== undefined
+        (session.status === "cancelled" ||
+          (initialBinding.cancellationRevision ?? 0) >
+            (initialBinding.resumedCancellationRevision ?? 0)) &&
+        input.store.recordCancellationIntent !== undefined
           ? (initialBinding.cancellationRevision ?? 0)
           : undefined;
       const settledResult = await mutate({
@@ -3986,11 +4591,28 @@ export function createHostedEveSessionService(input: {
             }
           }
         }
+        const retainedRecovery =
+          prior === undefined || prior === null
+            ? undefined
+            : hostedOperationRecordSchema.parse(prior).nativeRecovery;
+        const executionTransfer = request.resumeMode !== undefined;
+        const transferKind =
+          request.resumeMode === "recover-idle" ? "idle-checkpoint" : "pending-approval";
+        if (
+          executionTransfer &&
+          retainedRecovery?.executionTransfer === undefined &&
+          (existing.status !==
+            (transferKind === "idle-checkpoint" ? "waiting" : "input_required") ||
+            existing.checkpointDigest === undefined)
+        ) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
         const terminal = ["completed", "failed", "cancelled"].includes(existing.status);
         const interrupted = existing.status === "working" && existing.resumability === "checkpoint";
-        if (terminal || interrupted) {
+        if (terminal || interrupted || executionTransfer) {
           const recoverySource =
-            existing.status === "failed"
+            retainedRecovery ??
+            (existing.status === "failed" || executionTransfer
               ? {
                   version: 1 as const,
                   sourcePublicSessionId: existing.sessionId,
@@ -4002,11 +4624,19 @@ export function createHostedEveSessionService(input: {
                     existing.nativeRecoveryBinding?.originalAuthoritySessionId ??
                     existing.sessionId,
                   parentCancellationRevision: existing.cancellationRevision ?? 0,
+                  ...(executionTransfer && existing.checkpointDigest !== undefined
+                    ? {
+                        executionTransfer: {
+                          kind: transferKind,
+                          sourceCheckpointDigest: existing.checkpointDigest,
+                        },
+                      }
+                    : {}),
                   ...(existing.sourceHandoffId === undefined
                     ? {}
                     : { sourceHandoffId: existing.sourceHandoffId }),
                 }
-              : undefined;
+              : undefined);
           if (recoverySource !== undefined) {
             await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(existing);
           }
@@ -4462,6 +5092,51 @@ export function createHostedEveSessionService(input: {
   // Keep canonical mutation/preflight results complete privately; sanitize every public result.
   return {
     ...service,
+    async reconcileOwnerDelivery(binding) {
+      const reader = input.store.readUnsettledSendAcknowledgements;
+      if (reader === undefined) {
+        return;
+      }
+      let cursor: SendAcknowledgementCursor | undefined;
+      do {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Recheck canonical ownership before each retained ACK page.
+        const current = toDurableHostedSessionRecord(await requireSession(binding.sessionId));
+        if (
+          current.adapterSessionId !== binding.adapterSessionId ||
+          current.adapterGeneration !== binding.adapterGeneration ||
+          (current.cancellationRevision ?? 0) !== binding.cancellationRevision
+        ) {
+          throw new HostedSubmissionUnknownError();
+        }
+        const page = unsettledSendAcknowledgementPageSchema.parse(
+          // oxlint-disable-next-line eslint/no-await-in-loop -- ACK pagination is sequential and performs no delivery.
+          await reader({
+            principal,
+            sessionId: binding.sessionId,
+            cursor,
+            limit: 100,
+          }),
+        );
+        for (const acknowledgement of page.acknowledgements) {
+          const operation = acknowledgement.operation;
+          const marker = operation.sendDelivery;
+          if (
+            marker?.resumeCancellationRevision === binding.cancellationRevision &&
+            acknowledgement.cancellationRevisionAtDispatch === binding.cancellationRevision &&
+            marker.adapterSessionId === binding.adapterSessionId &&
+            marker.adapterGeneration === binding.adapterGeneration
+          ) {
+            // This uses authenticated native delivery proof; ACKs never clear Stop.
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Reconcile retained exact operations in canonical order, without resending.
+            await reconcileSendOperation(operation, false);
+          }
+        }
+        if (page.nextCursor !== undefined && canonical(page.nextCursor) === canonical(cursor)) {
+          throw new HostedSubmissionUnknownError();
+        }
+        cursor = page.nextCursor;
+      } while (cursor !== undefined);
+    },
     cancel: async (request) => present(await service.cancel(request)),
     get: async (request) => present(await service.get(request)),
     getStart: async (request) => present(await service.getStart(request)),

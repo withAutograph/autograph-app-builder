@@ -87,6 +87,7 @@ describe("closed outbound operator action diagnostics", () => {
     const transport = vi.fn<typeof fetch>(async (_url, init) => {
       const headers = new Headers(init?.headers);
       expect(headers.get("x-autograph-execution-observation")).toBe("requested");
+      expect(headers.get("x-autograph-preparation-progress")).toBe("v1");
       return await Promise.resolve(
         Response.json({
           appId: selection.appId,
@@ -106,6 +107,11 @@ describe("closed outbound operator action diagnostics", () => {
   });
 
   it.each([
+    [
+      "plan",
+      (client: ReturnType<typeof createHostedOperatorClient>) =>
+        client.request({ action: "plan", operation: "prepare", selection }),
+    ],
     [
       "bindings",
       (client: ReturnType<typeof createHostedOperatorClient>) =>
@@ -140,6 +146,7 @@ describe("closed outbound operator action diagnostics", () => {
       endpoint: "https://operator.example",
       fetch: vi.fn<typeof fetch>(async (_url, init) => {
         expect(new Headers(init?.headers).has("x-autograph-execution-observation")).toBe(false);
+        expect(new Headers(init?.headers).has("x-autograph-preparation-progress")).toBe(false);
         return await Promise.resolve(Response.json({ private: "payload" }));
       }),
       token: async () => await Promise.resolve("private-bearer"),
@@ -243,6 +250,7 @@ describe("closed outbound operator action diagnostics", () => {
         expect(observationPreference).toBe(
           action === "status" || action === "execute" ? "requested" : null,
         );
+        expect(new Headers(init?.headers).get("x-autograph-preparation-progress")).toBe("v1");
         return await Promise.resolve(Response.json(result));
       });
       const client = createHostedOperatorClient({

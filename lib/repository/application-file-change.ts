@@ -3,18 +3,26 @@ import { z } from "zod";
 import { safeSourcePath } from "./source-path";
 import { runSequentially } from "../async-sequential";
 
-const path = z
+export const applicationFilePathSchema = z
   .string()
   .min(1)
   .refine(
-    (value) => safeSourcePath(value) && !value.includes("\0") && !value.split("/").includes(""),
+    (value) => safeSourcePath(value) && !/\p{Cc}/u.test(value) && !value.split("/").includes(""),
     "File paths must stay inside the repository checkout.",
   );
 
 /** Omitted operation preserves saved submissions from before explicit file operations. */
 export const applicationFileChangeSchema = z.union([
-  z.strictObject({ content: z.string(), operation: z.literal("upsert").optional(), path }),
-  z.strictObject({ content: z.never().optional(), operation: z.literal("delete"), path }),
+  z.strictObject({
+    content: z.string(),
+    operation: z.literal("upsert").optional(),
+    path: applicationFilePathSchema,
+  }),
+  z.strictObject({
+    content: z.never().optional(),
+    operation: z.literal("delete"),
+    path: applicationFilePathSchema,
+  }),
 ]);
 
 export type ApplicationFileChange = z.infer<typeof applicationFileChangeSchema>;

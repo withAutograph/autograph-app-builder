@@ -4,6 +4,9 @@ import {
   sameOperatorPlanExceptExpiry,
 } from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
+import { matchesExternalTrustedSources } from "./hosted-operator-host-protection";
+import type { ExternallyManagedTrustedSources } from "./hosted-operator-host-protection";
+import { withExternallyManagedHostProtection } from "./hosted-operator-native-preview-recovery";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 
 const AUTH_BOOTSTRAP = "auth-bootstrap";
@@ -12,7 +15,34 @@ const GATEWAY_DELIVERY = "gateway-delivery";
 const UNAPPROVED = "operator:unapproved-plan";
 type OperatorRecord = NonNullable<HostedRuntimeJournalRecord["operator"]>;
 
+const sameAppNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan): boolean => {
+  const policy = next.hostProtection;
+  const boundary = prior.deploymentBoundary;
+  if (
+    prior.stage !== "app" ||
+    next.stage !== "app" ||
+    prior.action !== "prepare" ||
+    policy === undefined ||
+    boundary === undefined ||
+    prior.publicGateway === undefined ||
+    prior.gatewayBindings === undefined ||
+    (prior.appTrustedSources === undefined && prior.gatewayBindings.trustedSources === undefined) ||
+    !matchesExternalTrustedSources(
+      policy,
+      boundary.teamId,
+      prior.selection.projectId,
+      prior.publicGateway.projectId,
+    )
+  ) {
+    return false;
+  }
+  return sameOperatorPlanExceptExpiry(withExternallyManagedHostProtection(prior, policy), next);
+};
+
 const sameNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan): boolean => {
+  if (prior.stage === "app") {
+    return sameAppNarrowedPlan(prior, next);
+  }
   const binding = prior.effects.find((effect) => effect.kind === GATEWAY_BINDINGS);
   if (
     prior.stage !== AUTH_BOOTSTRAP ||
@@ -50,12 +80,48 @@ const prerequisitesObserved = (prior: OperatorRecord, bindingId: string): boolea
       prior.receipts.some((receipt) => receipt.effectId === effect.id),
   );
 
+const isPendingAppBindingNarrowing = (
+  record: HostedRuntimeJournalRecord,
+  plan: HostedOperatorPlan,
+  now: number,
+): boolean => {
+  const prior = record.operator;
+  if (prior === undefined || !sameAppNarrowedPlan(prior.plan, plan)) {
+    return false;
+  }
+  const bindingIndex = prior.plan.effects.findIndex((effect) => effect.kind === "bindings");
+  const binding = prior.plan.effects[bindingIndex];
+  if (binding === undefined) {
+    return false;
+  }
+  return [
+    record.status === "pending",
+    record.step === "reserved",
+    record.privateState !== undefined,
+    prior.approvalId !== undefined,
+    record.approvedByCallId !== UNAPPROVED,
+    prior.planDigest === operatorPlanDigest(prior.plan),
+    record.leaseId === undefined ||
+      (record.leaseExpiresAt !== undefined && Date.parse(record.leaseExpiresAt) <= now),
+    prior.pendingEffectId === binding.id,
+    prior.plan.effects.every((effect, index) => {
+      const observed = prior.receipts.some((receipt) => receipt.effectId === effect.id);
+      return index < bindingIndex ? observed : !observed;
+    }),
+    prior.deliveredDeploymentId === undefined,
+    prior.deliveryCandidates?.some((candidate) => candidate.readyState === "READY") !== true,
+  ].every(Boolean);
+};
+
 /** Exact authority narrowing retains the delivery intent and every unresolved attempt. */
 export const isSharedHostProtectionSuccessor = (
   record: HostedRuntimeJournalRecord,
   plan: HostedOperatorPlan,
   now: number,
 ): boolean => {
+  if (record.operator?.plan.stage === "app") {
+    return isPendingAppBindingNarrowing(record, plan, now);
+  }
   const prior = record.operator;
   const binding = prior?.plan.effects.find((effect) => effect.kind === GATEWAY_BINDINGS);
   if (prior === undefined || binding === undefined || !sameNarrowedPlan(prior.plan, plan)) {
@@ -79,8 +145,25 @@ export const isSharedHostProtectionSuccessor = (
 export const createSharedHostProtectionSuccessorPlan = (
   record: HostedRuntimeJournalRecord | undefined,
   now: number,
+  policy?: ExternallyManagedTrustedSources,
 ): HostedOperatorPlan | undefined => {
   const prior = record?.operator;
+  if (record !== undefined && prior?.plan.stage === "app") {
+    if (policy === undefined) {
+      return undefined;
+    }
+    const candidate = withExternallyManagedHostProtection(
+      {
+        ...prior.plan,
+        retention: {
+          ...prior.plan.retention,
+          expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+        },
+      },
+      policy,
+    );
+    return isSharedHostProtectionSuccessor(record, candidate, now) ? candidate : undefined;
+  }
   if (record === undefined || prior?.plan.gatewayBindings?.trustedSources === undefined) {
     return undefined;
   }
@@ -149,7 +232,7 @@ export const isSharedHostProtectionDeliveryProvenance = (
 ): boolean => {
   if (
     provenance.operationRef !== operationRef ||
-    provenance.plan.stage !== AUTH_BOOTSTRAP ||
+    ![AUTH_BOOTSTRAP, "app"].includes(provenance.plan.stage ?? "") ||
     provenance.planDigest !== operatorPlanDigest(provenance.plan)
   ) {
     return false;

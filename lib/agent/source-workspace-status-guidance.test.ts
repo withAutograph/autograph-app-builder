@@ -9,6 +9,7 @@ import type { ToolContext } from "eve/tools";
 
 import sourceStatus from "../../agent/tools/source_status";
 import workspaceStatus from "../../agent/tools/workspace_status";
+import { applicationSourceImportState } from "./application-source-import-state";
 import { appBaselineState } from "./app-baseline-state";
 import type { SelectedAppBaseline } from "./app-baseline-state";
 import { appBuilderWorkflowState, APP_BUILDER_WORKFLOW_VERSION } from "./workflow-state";
@@ -212,6 +213,7 @@ const workflowState = (
 };
 
 describe("source and workspace status guidance", () => {
+  const getImportState = vi.spyOn(applicationSourceImportState, "get");
   const getSourceState = vi.spyOn(sourceWorkflowState, "get");
   const getBaselineState = vi.spyOn(appBaselineState, "get");
   const getWorkflowState = vi.spyOn(appBuilderWorkflowState, "get");
@@ -219,6 +221,9 @@ describe("source and workspace status guidance", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(testCapabilities, "hasTestCapability").mockReturnValue(true);
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- This fixture models the absent application import state.
+    getImportState.mockReturnValue(undefined);
     getSourceState.mockReturnValue(sourceState);
     getBaselineState.mockReturnValue(baseline());
     getWorkflowState.mockReturnValue({ phase: "empty", version: APP_BUILDER_WORKFLOW_VERSION });
