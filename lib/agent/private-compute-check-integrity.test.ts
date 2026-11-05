@@ -84,7 +84,7 @@ describe("frozen private check policy", () => {
             cwd: root,
             env: {
               ...process.env,
-              PATH: `${path.dirname(process.execPath)}:${path.join(os.homedir(), ".local/bin")}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
+              PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}:${path.join(os.homedir(), ".local/bin")}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
               MISE_STATE_DIR: path.join(root, ".mise-state"),
               MISE_TRUSTED_CONFIG_PATHS: root,
             },

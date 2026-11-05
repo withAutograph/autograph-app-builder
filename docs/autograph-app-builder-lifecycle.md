@@ -235,3 +235,14 @@ same-owner `app-runtime` row whose request matches its source target; other
 unreferenced history keeps its existing retention behavior. Explicit authorized
 tenant forget remains separate. A custody pointer cannot survive meaningfully
 while its backing encrypted checkpoint is silently pruned.
+
+### Dispatch-time destination and browser prerequisites
+
+Saved-session destination selection rechecks existing legacy operations after
+reservation and before each provider dispatch. A newly creating, unknown, or
+ready legacy operation blocks the second destination while retaining the saved
+reservation for reconciliation; it does not authorize another provider attempt.
+
+Browser runtime-binding refusal uses the existing bounded failed-check result.
+It never falls back to an unbound Sandbox command. Request cancellation still
+aborts instead of being represented as an ordinary failed browser assertion.

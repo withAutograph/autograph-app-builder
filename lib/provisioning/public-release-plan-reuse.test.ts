@@ -38,14 +38,14 @@ describe("public release intent and prior row reconciliation", () => {
   });
   it("binds each provider-observed prior row to its exact own accepted journal receipt", () => {
     const record = initialPublicReleaseRecord(plan);
-    record.bindings.APP_DATABASE_URL = { state: "applied", acceptedEnvId: "env-owned" };
+    record.bindings.INVOICE_APP_DATABASE_URL = { state: "applied", acceptedEnvId: "env-owned" };
     record.effects = { "bind-production-runtime": "applied", "publish-release-source": "applied" };
     const candidate = publicReleasePlanSchema.parse({
       ...plan,
       runtime: { ...plan.runtime, releaseId: "next" },
     });
     const snapshot = {
-      key: "APP_DATABASE_URL",
+      key: "INVOICE_APP_DATABASE_URL",
       id: "env-owned",
       operationRef: publicReleaseOperationRef(plan),
       sha256: plan.environment[0].sha256,

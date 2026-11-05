@@ -29,7 +29,7 @@ describe("authenticated preview provider mapping", () => {
     expect(await getVercelPreviewProvider("replacement")).toBe(current);
     cleanup.unregister();
   });
-  it("only resumes a stopped provider when requested", async () => {
+  it("observes before resuming and adopts an already running session without another resume", async () => {
     const provider = { name: "owned", status: "stopped" } as Sandbox;
     const cleanup = registerVercelPreviewProvider("stopped", provider);
     expect(await getVercelPreviewProvider("stopped", undefined, false)).toBe(provider);
@@ -37,7 +37,7 @@ describe("authenticated preview provider mapping", () => {
     const resumed = { name: "owned", status: "running" } as Sandbox;
     sdk.get.mockResolvedValue(resumed);
     expect(await getVercelPreviewProvider("stopped", signal)).toBe(resumed);
-    expect(sdk.get).toHaveBeenCalledWith({ name: "owned", resume: true, signal });
+    expect(sdk.get).toHaveBeenCalledWith({ name: "owned", resume: false, signal });
     expect(cleanup.current).toBe(resumed);
     expect(await getVercelPreviewProvider("stopped")).toBe(resumed);
     expect(sdk.get).toHaveBeenCalledOnce();

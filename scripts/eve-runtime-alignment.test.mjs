@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, writeFile, symlink, rm, access } from "node:fs/promises
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { test, vi } from "vitest";
 import { z } from "zod";
 
@@ -19,7 +20,7 @@ const { readActiveDevelopmentRuntimeArtifactsSnapshot } = await import(
 const { Client } = await import("eve/client");
 
 const fixture = async (approval = false) => {
-  const root = await mkdtemp("/private/tmp/builder-owned-runtime-alignment-");
+  const root = await mkdtemp(path.join(tmpdir(), "builder-owned-runtime-alignment-"));
   const app = path.join(root, "application");
   await mkdir(path.join(app, "agent/tools"), { recursive: true });
   await symlink(path.resolve("node_modules"), path.join(app, "node_modules"));

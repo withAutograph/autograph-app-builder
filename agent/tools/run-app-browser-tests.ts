@@ -45,8 +45,21 @@ export const runAppBrowserTests = async (input: {
   };
 }) => {
   const { execution, ...runInput } = input;
-  const runtime =
-    input.runtime ?? (execution ? await resolvePreparedRuntimeExecution(execution) : null);
+  let runtime: PreparedRuntimeExecution | null;
+  try {
+    runtime =
+      input.runtime ?? (execution ? await resolvePreparedRuntimeExecution(execution) : null);
+  } catch (error) {
+    input.signal?.throwIfAborted();
+    // Keep resolution failures inside the shared runner's bounded diagnostics;
+    // a refused binding must never fall back to an unbound browser command.
+    return await runResolvedAppBrowserTests({
+      ...runInput,
+      resolveRuntime: () => {
+        throw error;
+      },
+    });
+  }
   const run = (environment?: Record<string, string>) =>
     runResolvedAppBrowserTests({
       ...runInput,

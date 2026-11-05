@@ -1,6 +1,7 @@
 /* oxlint-disable sonarjs/publicly-writable-directories -- Each disposable fixture is mkdtemp-owned, chmod0700, and removed in finally. */
-import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { Client, ClientSession } from "eve/client";
 import type { InputResponse, MessageStreamEvent } from "eve/client";
@@ -33,7 +34,7 @@ const waiting: MessageStreamEvent = {
   meta: { at: "2026-11-03T00:01:00.000Z", id: "waiting" },
 };
 const fixture = async () => {
-  const root = await mkdtemp("/private/tmp/a469-local-recovery-test-");
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "a469-local-recovery-test-")));
   roots.push(root);
   await chmod(root, 0o700);
   const cycle = path.join(root, "cycle");

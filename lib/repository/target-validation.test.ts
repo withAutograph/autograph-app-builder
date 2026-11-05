@@ -998,7 +998,7 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
         { mode: 0o755 },
       );
       const execute = ({ command, env }: Parameters<SandboxSession["run"]>[0]) => {
-        const result = spawnSync("/bin/sh", ["-c", command], {
+        const result = spawnSync("/bin/bash", ["-c", command], {
           cwd: directory,
           encoding: "utf-8",
           env: {
@@ -1121,7 +1121,7 @@ exit 99
     try {
       // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
       const run = vi.fn(async ({ command }: { command: string }) => {
-        const result = spawnSync("/bin/sh", ["-c", command], {
+        const result = spawnSync("/bin/bash", ["-c", command], {
           cwd: directory,
           encoding: "utf-8",
           env: { ...process.env, PATH: `${directory}:${process.env.PATH ?? ""}` },

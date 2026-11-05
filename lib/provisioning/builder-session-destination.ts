@@ -93,6 +93,7 @@ export const createBuilderSessionDestinationService = <
     });
     const assertCurrent = async () => {
       await deps.assertMember(input.principal);
+      await assertNoLegacyEffects();
       await deps.sessions.attachBuilderDestination?.({
         principal: input.principal,
         sessionId: input.sessionId,

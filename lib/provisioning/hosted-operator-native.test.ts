@@ -66,6 +66,8 @@ describe("separate native operator host", () => {
       { destination: { service: "operator" }, source: "/v1/runtime" },
       { destination: { service: "operator" }, source: "/v1/public-release" },
       { destination: { service: "operator" }, source: "/v1/app-integrations" },
+      { destination: { service: "operator" }, source: "/v1/central-integrations" },
+      { destination: { service: "operator" }, source: "/v1/central-deployment-events" },
     ]);
     expect(readFileSync(path.join(root, "vercel.json"), "utf-8")).toContain("next build");
   });

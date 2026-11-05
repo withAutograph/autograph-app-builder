@@ -337,16 +337,19 @@ it.each(["creating", "unknown", "ready"] as const)(
   },
 );
 
-it("blocks provider dispatch if a legacy attempt starts after the initial read", async () => {
-  const f = await fixture();
-  f.readNativeTarget
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- The first lookup deliberately observes an absent native journal.
-    .mockResolvedValueOnce(undefined)
-    .mockResolvedValue({ record: { stage: "creating" } });
-  await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
-    "Reconcile",
-  );
-  expect(f.execute).not.toHaveBeenCalled();
-  const saved = await readSession(f.sessions);
-  expect(saved.builderDestination).toEqual(destination);
-});
+it.each(["creating", "unknown", "ready"] as const)(
+  "blocks provider dispatch if a legacy %s attempt starts after the initial read",
+  async (stage) => {
+    const f = await fixture();
+    f.readNativeTarget
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- The first lookup deliberately observes an absent native journal.
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValue({ record: { stage } });
+    await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+      "Reconcile",
+    );
+    expect(f.execute).not.toHaveBeenCalled();
+    const saved = await readSession(f.sessions);
+    expect(saved.builderDestination).toEqual(destination);
+  },
+);
