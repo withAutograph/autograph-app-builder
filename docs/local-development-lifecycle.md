@@ -665,3 +665,20 @@ frozen preimages throughout planning. A matching grant can represent an
 unresolved execution and remains blocked; missing or conflicting required
 state is not evidence of an unapplied plan. Existing settled repairs continue
 to require their exact approved base and receipt binding.
+
+### Inspect the current unapplied proposal
+
+`inspect_existing_app` reads the applied Sandbox by default. When reviewing an
+existing-app repair before its Build approval, explicitly select
+`source: "current-proposal"` and supply the current plan's
+`expectedProposalDigest`. This reads only that session's current planned change
+inventory, labels the result `UNAPPLIED`, verifies full proposal and file hashes,
+and reports deletions explicitly. A path absent from that inventory is not read
+from the Sandbox. It cannot recover an older proposal from history.
+
+List without `paths`/`contentPath`; continue with `pathIndex`. Read app-relative
+or exact app-owned repository paths. Large files return a full-file digest and
+UTF-8 byte offset; use `contentPath`, `expectedDigest`, `offsetBytes`, and the same
+`expectedProposalDigest` for every continuation. If the current proposal changes,
+restart from its actual new digest. Reading grants no approval, executes no code,
+and never applies, publishes, acquires or reconfigures a Sandbox.
