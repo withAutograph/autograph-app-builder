@@ -171,7 +171,7 @@ export const decideApprovedBuildContinuation = (input: {
   if (failure.reason === "tooling-prerequisite" && command?.failureClass !== undefined) {
     return approvedBuildDecisionSchema.parse({
       ...base,
-      decision: "blocked",
+      decision: command.failureClass === "native-tool-panic" ? "runnable" : "blocked",
       scope,
       validation: {
         attemptDigest: failure.attemptDigest,

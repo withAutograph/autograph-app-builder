@@ -241,7 +241,7 @@ change acceptance.
 Preserve separate effect approvals and report unavailable deployment/submission
 capabilities as delivery work still required.
 
-For delivery of applied changes, call `validate_app_creation` in the approved
+For reviewed delivery of applied changes, call `validate_app_creation` in the approved
 private checkout after apply succeeds. Published-version restoration may proceed
 first while that candidate's work remains deferred. Applied files are not
 validated files. Successful repository commands establish technical validation,
@@ -320,6 +320,9 @@ follow-up. Missing handoff metadata does not invalidate private app validation.
 Builder source and Preview evidence do not prove protected access or hosted
 Production readiness. Do not restore a retired demo authentication bypass to
 make a walkthrough pass.
+For a private preview, start the applied app directly with `start_app_preview`.
+Do not run lint or repository validation as a prerequisite to startup. Report
+lint separately as advisory for the private preview.
 Use `start_app_preview` for requested local delivery or to exercise
 uncovered behavior, with the repository's actual development command and the
 implemented app's route. For requested hosted delivery of changed source,
@@ -333,6 +336,9 @@ For a private local preview or candidate checks, if the selected app has a
 repository-owned `app:local` task and requires local data, call
 `prepare-app-local-preview` in the same private sandbox before checking product
 behavior. Protected native Preview recovery uses its existing hosted runtime.
+Launch the app's declared development script through its package manager in
+the directory that owns the script. If a bare framework executable fails with
+ENOENT, check that script and directory before retrying in the same checkout.
 Match the development server's listening port to the port supplied to
 `start_app_preview`; a package script may choose another
 port. A page that responds with HTTP 200 can still contain an application error.

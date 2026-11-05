@@ -137,7 +137,7 @@ describe("approved stopped build continuation", () => {
     });
   });
   it.each(["native-tool-panic", "missing-app-task"])(
-    "retains typed %s facts as blocked while an ordinary new user turn remains possible",
+    "retains typed %s facts and allows recovery from a checker panic",
     (failureClass) => {
       contextStorage.run(new ContextContainer(), () => {
         requestPrivateApplyApproval(scope, "approve");
@@ -152,7 +152,7 @@ describe("approved stopped build continuation", () => {
           },
         } as AppBuilderWorkflowState;
         expect(decide(state)).toMatchObject({
-          decision: "blocked",
+          decision: failureClass === "native-tool-panic" ? "runnable" : "blocked",
           validation: {
             exitCode: 134,
             reason: "tooling-prerequisite",

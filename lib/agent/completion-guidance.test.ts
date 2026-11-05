@@ -15,10 +15,10 @@ describe("shared app delivery guidance", () => {
       expect(guidance).toContain("before starting the build");
     }
   });
-  it("continues an applied implementation into validation", () => {
+  it("starts requested private previews before reviewed delivery validation", () => {
     const result = completionGuidance({ phase: "applied" });
     expect(result).toContain("They have not passed repository validation");
-    expect(result).toContain("Call validate_app_creation next");
+    expect(result).toContain("start a requested private preview directly");
   });
 
   it("continues a planned implementation without regenerating its accepted design", () => {
