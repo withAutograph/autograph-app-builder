@@ -734,3 +734,10 @@ original executable mode only when the repository-declared target still has
 the same file identity and bytes. An existing bin must already be an owned,
 regular executable in its package. Other changes to those preimages fail the
 install boundary and remain visible for diagnosis.
+
+A local public read of a recovered session checks the receipt-bound lineage and
+reads its physical histories concurrently, then joins them in receipt order.
+Each read still verifies the canonical history against retained events. When
+neither local continuation decision is runnable, the public read skips the
+additional dispatch preflight. A possible continuation still requires a fresh
+native observation and the existing durable decision and reservation checks.

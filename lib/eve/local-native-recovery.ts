@@ -450,15 +450,23 @@ export const withLocalRecoveredSessions = (
       return {
         state: { sessionId: publicId, streamIndex: options?.streamIndex ?? 0 },
         async snapshot(snapshotOptions) {
-          const { prefix, actual } = await resolve();
-          const snapshot = await actual.snapshot(snapshotOptions);
+          const owners = recovery.lineage(publicId);
+          const snapshots = await Promise.all(
+            owners.map(async (owner) => {
+              const snapshot = await client.sessions.attach(owner).snapshot(snapshotOptions);
+              if (
+                snapshot.session.sessionId !== owner ||
+                snapshot.session.streamIndex !== snapshot.events.length
+              ) {
+                throw unavailable();
+              }
+              return snapshot;
+            }),
+          );
+          const events = snapshots.flatMap((snapshot) => snapshot.events);
           return {
-            ...snapshot,
-            events: [...prefix, ...snapshot.events],
-            session: {
-              sessionId: publicId,
-              streamIndex: prefix.length + snapshot.session.streamIndex,
-            },
+            events,
+            session: { sessionId: publicId, streamIndex: events.length },
           };
         },
         async send(message, sendOptions) {

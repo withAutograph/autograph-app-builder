@@ -17,6 +17,7 @@ import { createLocalEveSessionService } from "./service";
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   await Promise.all(
     roots.splice(0).map(async (root) => {
       await rm(root, { recursive: true, force: true });
@@ -118,6 +119,77 @@ describe("local native terminal recovery authority", () => {
     await f.recovery.recover(f.client, "wrun_original", "retry-explicit-resume", f.post);
     expect(f.post).toHaveBeenCalledTimes(2);
   });
+  it("reads both physical histories concurrently and preserves canonical order", async () => {
+    const f = await fixture();
+    await f.recovery.recover(f.client, "wrun_original", "explicit-resume", f.post);
+    const original = Promise.withResolvers<Awaited<ReturnType<ClientSession["snapshot"]>>>();
+    const successorStarted = Promise.withResolvers<boolean>();
+    f.snapshots.mockImplementation(function snapshot(this: ClientSession) {
+      if (this.state.sessionId === "wrun_original") {
+        return original.promise;
+      }
+      successorStarted.resolve(true);
+      return Promise.resolve({
+        events: [waiting],
+        session: { sessionId: "wrun_recovered", streamIndex: 1 },
+      });
+    });
+    const reading = withLocalRecoveredSessions(f.client, f.recovery)
+      .sessions.attach("wrun_original")
+      .snapshot();
+    await successorStarted.promise;
+    original.resolve({
+      events: [failed],
+      session: { sessionId: "wrun_original", streamIndex: 1 },
+    });
+    expect(await reading).toEqual({
+      events: [failed, waiting],
+      session: { sessionId: "wrun_original", streamIndex: 2 },
+    });
+  });
+
+  it.each([
+    { sessionId: "wrun_foreign", streamIndex: 1 },
+    { sessionId: "wrun_original", streamIndex: 2 },
+  ])("rejects an invalid ancestor snapshot ($sessionId, $streamIndex)", async (malformed) => {
+    const f = await fixture();
+    await f.recovery.recover(f.client, "wrun_original", "explicit-resume", f.post);
+    const session = withLocalRecoveredSessions(f.client, f.recovery).sessions.attach(
+      "wrun_original",
+    );
+    f.snapshots.mockImplementation(function snapshot(this: ClientSession) {
+      return Promise.resolve(
+        this.state.sessionId === "wrun_original"
+          ? { events: [failed], session: malformed }
+          : { events: [waiting], session: { sessionId: "wrun_recovered", streamIndex: 1 } },
+      );
+    });
+    await expect(session.snapshot()).rejects.toThrow("terminal recovery is unavailable");
+  });
+
+  it("validates recovered GET history once when no continuation decision is runnable", async () => {
+    const f = await fixture();
+    for (const [key, value] of Object.entries(f.environment)) {
+      vi.stubEnv(key, value);
+    }
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest uses undefined to clear an inherited variable.
+    vi.stubEnv("APP_BUILDER_DEV_RUNS_ROOT", undefined);
+    await f.recovery.recover(f.client, "wrun_original", "explicit-resume", f.post);
+    f.snapshots.mockClear();
+    const service = createLocalEveSessionService(withLocalRecoveredSessions(f.client, f.recovery), {
+      stateGeneration: f.root,
+      isRecoveredSession: (id) => f.recovery.lineage(id).length > 1,
+    });
+
+    const get = () => service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
+    const first = await get();
+    expect(first).toMatchObject({ sessionId: "wrun_original", status: "waiting", cursor: 3 });
+    expect(f.snapshots).toHaveBeenCalledTimes(2);
+    expect(await get()).toEqual(first);
+    expect(f.snapshots).toHaveBeenCalledTimes(4);
+    expect(f.post).toHaveBeenCalledTimes(2);
+  });
+
   it("recovers only through an explicit public resume and keeps the same public cursor", async () => {
     const f = await fixture();
     const service = createLocalEveSessionService(withLocalRecoveredSessions(f.client, f.recovery), {

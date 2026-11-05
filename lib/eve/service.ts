@@ -907,6 +907,21 @@ export function createLocalEveSessionService(
     consumeSessionResponse(sessionId, response);
   };
 
+  // GET has already reconciled canonical history. A decision is only an
+  // eligibility hint here; the dispatch path still observes native state
+  // and the controller rereads the durable decision.
+  const hasRunnableLocalContinuation = async (sessionId: string) => {
+    const approved = await readLocalBuildDecision(sessionId);
+    if (approved?.decision === "runnable" && approved.scope !== undefined) {
+      return true;
+    }
+    if (!localAuthoringConfigured()) {
+      return false;
+    }
+    const authoring = await readLocalAuthoringDecision(sessionId);
+    return authoring?.decision === "runnable" && authoring.scope !== undefined;
+  };
+
   const continueLocalApprovedWork = async (sessionId: string): Promise<boolean> => {
     if (
       process.env.APP_BUILDER_EXECUTION_MODE !== DEVELOPMENT_MODE ||
@@ -921,6 +936,12 @@ export function createLocalEveSessionService(
       return await pending;
     }
     const work = async () => {
+      if (
+        options.isRecoveredSession?.(sessionId) === true &&
+        !(await hasRunnableLocalContinuation(sessionId))
+      ) {
+        return false;
+      }
       const snapshot = await readLocalSnapshot(sessionId);
       const status = deriveInstalledEveStatus(snapshot.events);
       const inputs = privateInputForEvents(snapshot.events);
