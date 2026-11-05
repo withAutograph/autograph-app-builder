@@ -6,7 +6,7 @@ import { link, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { eveChannel } from "eve/channels/eve";
 import { MessageResponse, isCurrentTurnBoundaryEvent } from "eve/client";
-import type { Client, MessageStreamEvent, InputResponse } from "eve/client";
+import type { Client, ClientSession, MessageStreamEvent, InputResponse } from "eve/client";
 import { z } from "zod";
 import type { LocalSessionClient } from "./service";
 import { readLocalEveCycleBinding } from "./local-cycle-binding";
@@ -403,8 +403,7 @@ export const withLocalRecoveredSessions = (
           }),
         };
       };
-      const control = async (body: LocalRecoveredControlBody) => {
-        const { actual } = await resolve();
+      const control = async (actual: ClientSession, body: LocalRecoveredControlBody) => {
         if (postControl === undefined) {
           throw unavailable();
         }
@@ -473,13 +472,13 @@ export const withLocalRecoveredSessions = (
           const { actual } = await resolve();
           return actual.state.sessionId === publicId
             ? await actual.send(message, sendOptions)
-            : await control({ message, ...sendOptions });
+            : await control(actual, { message, ...sendOptions });
         },
         async respond(input) {
           const { actual } = await resolve();
           return actual.state.sessionId === publicId
             ? await actual.respond(input)
-            : await control({ inputResponses: input });
+            : await control(actual, { inputResponses: input });
         },
         async cancel(cancelOptions) {
           return await client.sessions.attach(publicId).cancel(cancelOptions);

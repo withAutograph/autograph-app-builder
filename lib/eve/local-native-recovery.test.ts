@@ -586,7 +586,13 @@ describe("local native terminal recovery authority", () => {
       "wrun_original",
       { streamIndex: 2 },
     );
+    f.snapshots.mockClear();
     const response = await session.send("New message", { turnPolicy: "queue" });
+    expect(
+      f.snapshots.mock.contexts.map((context) =>
+        context instanceof ClientSession ? context.state.sessionId : null,
+      ),
+    ).toEqual(["wrun_original"]);
     const events: MessageStreamEvent[] = [];
     for await (const event of response) {
       events.push(event);
@@ -599,7 +605,13 @@ describe("local native terminal recovery authority", () => {
     expect(events.map((event) => event.meta.id)).toEqual(["accepted"]);
     await session.cancel();
     expect(cancellations).toEqual(["wrun_original"]);
+    f.snapshots.mockClear();
     const approved = await session.respond([{ requestId: "current-input", optionId: "approve" }]);
+    expect(
+      f.snapshots.mock.contexts.map((context) =>
+        context instanceof ClientSession ? context.state.sessionId : null,
+      ),
+    ).toEqual(["wrun_original"]);
     for await (const event of approved) {
       expect(event.meta.id).toBe("accepted");
     }

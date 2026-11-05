@@ -753,6 +753,9 @@ Each read still verifies the canonical history against retained events. When
 neither local continuation decision is runnable, the public read skips the
 additional dispatch preflight. A possible continuation still requires a fresh
 native observation and the existing durable decision and reservation checks.
+Each recovered message or input response resolves its physical response stream
+once for that request. The logical control endpoint still checks the current
+owner before dispatch.
 
 Private browser results classify the legacy preview-refresh prerequisite only
 from its exact standalone reporter line on a failed test command. Test titles
