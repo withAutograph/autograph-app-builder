@@ -20,7 +20,10 @@ import {
   blockLocalAuthoringContinuation,
   claimLocalAuthoringMessage,
 } from "./local-preapproval-authoring";
-import { authenticatedAuthoringDelivery } from "./preapproval-authoring-runtime";
+import {
+  authenticatedAuthoringDelivery,
+  recordPreapprovalAuthoringDecision,
+} from "./preapproval-authoring-runtime";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -163,6 +166,27 @@ it("does not apply stale turn-specific Stop to the current drafting decision", a
   await contextStorage.run(new ContextContainer(), async () => {
     const f = await fixture();
     await blockLocalAuthoringContinuation("logical", "a-different-turn");
+    await f.receive(f.message);
+    expect(authenticatedAuthoringDelivery.get()?.scopeDigest).toBe(f.decision.scopeDigest);
+  });
+});
+
+it("a delayed native cancellation observation cannot cancel a newer recorded decision", async () => {
+  await contextStorage.run(new ContextContainer(), async () => {
+    const f = await fixture();
+    await recordPreapprovalAuthoringDecision(
+      { session: { id: "logical", turn: { id: "older", sequence: 0 } } } as Pick<
+        HookContext,
+        "session"
+      >,
+      {
+        ...f.decision,
+        turnId: "older",
+        turnSequence: 0,
+        decision: "blocked",
+        reason: "authoring_cancelled",
+      },
+    );
     await f.receive(f.message);
     expect(authenticatedAuthoringDelivery.get()?.scopeDigest).toBe(f.decision.scopeDigest);
   });

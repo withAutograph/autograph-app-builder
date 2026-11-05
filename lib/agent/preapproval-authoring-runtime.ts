@@ -53,7 +53,7 @@ export const recordPreapprovalAuthoringDecision = async (
   if (localAuthoringConfigured()) {
     await recordLocalAuthoringDecision(ctx, parsed);
     if (parsed.reason === "authoring_cancelled") {
-      await blockLocalAuthoringContinuation(ctx.session.id);
+      await blockLocalAuthoringContinuation(ctx.session.id, parsed.turnId);
     }
     return;
   }
