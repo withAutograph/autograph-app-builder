@@ -224,6 +224,7 @@ jobs:
     # prerequisite for accepting an otherwise-valid PR head.
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     steps:
       - name: Require exact Vercel Git deployment
         env:
@@ -232,6 +233,7 @@ jobs:
           EXPECTED_ENVIRONMENT: ${{ github.event_name == 'pull_request' && 'Preview' || 'Production' }}
         run: |
           set -eu
+          # Vercel can queue the main deployment well after the push; keep exact-SHA polling bounded.
           attempt=0
           deployment_id=
           deployment_url=
@@ -260,10 +262,16 @@ jobs:
               esac
             fi
             attempt=$((attempt + 1))
-            sleep 10
+            sleep 30
           done
-          [ -n "$deployment_id" ]
-          [ -n "$deployment_url" ]
+          if [ -z "$deployment_id" ]; then
+            echo "No exact $EXPECTED_ENVIRONMENT deployment record for $EXPECTED_SHA appeared within 45 minutes."
+            exit 1
+          fi
+          if [ -z "$deployment_url" ]; then
+            echo "No successful exact $EXPECTED_ENVIRONMENT deployment for $EXPECTED_SHA appeared within 45 minutes."
+            exit 1
+          fi
           test "$(printf '%s' "$deployment" | jq -r '.sha')" = "$EXPECTED_SHA"
           test "$(printf '%s' "$deployment" | jq -r '.environment')" = "$EXPECTED_ENVIRONMENT"
           case "$deployment_url" in https://*.vercel.app) ;; *) exit 1 ;; esac
