@@ -253,18 +253,21 @@ export const captureLocalPlanningSource = async (
       let offset = 0;
       const digests = new Map<string, string>();
       for (const expected of blobs) {
-        const end = bytes.indexOf(10, offset);
-        if (end === -1) {
+        // Buffer.indexOf narrows its offset to a signed 32-bit integer.
+        // Search from the start of a view to preserve offsets past 2 GiB.
+        const record = bytes.subarray(offset);
+        const headerLength = record.indexOf(10);
+        if (headerLength === -1) {
           throw new Error("The retained original source object stream is incomplete.");
         }
         const header = /^(?<oid>[a-f0-9]{40}) blob (?<size>[0-9]+)$/u.exec(
-          bytes.subarray(offset, end).toString("utf-8"),
+          record.subarray(0, headerLength).toString("utf-8"),
         )?.groups;
         if (header === undefined || header.oid !== expected) {
           throw new Error("The retained original source object identity is invalid.");
         }
         const length = Number(header.size);
-        offset = end + 1;
+        offset += headerLength + 1;
         if (
           !Number.isSafeInteger(length) ||
           offset + length >= bytes.length ||
