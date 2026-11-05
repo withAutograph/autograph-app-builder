@@ -55,8 +55,15 @@ function subscribeToClientSnapshot() {
   };
 }
 
-const renderCursorSetupLink = (url?: string) =>
-  url ? <a href={url}>Add Autograph to Cursor</a> : null;
+const renderCursorSetupLink = (destination: string, url?: string) => {
+  if (destination !== "cursor") {
+    return null;
+  }
+  if (url) {
+    return <a href={url}>Add Autograph to Cursor</a>;
+  }
+  return <p>Cursor connection setup is not available yet.</p>;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
 export function HandoffControls({ initial }: { initial: HandoffControlData }) {
@@ -362,7 +369,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
               Autograph will help {label} connect and continue your saved app. If asked, sign in
               with the same Autograph account and approve the connection.
             </p>
-            {renderCursorSetupLink(installUrl)}
+            {renderCursorSetupLink(destination, installUrl)}
             <p>
               Builder connection address: <code>{data.mcpUrl}</code>
             </p>
