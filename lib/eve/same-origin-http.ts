@@ -1211,6 +1211,17 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
   return active;
 }
 
+const endsTurn = (event: MessageStreamEvent, turnId: string): boolean =>
+  (event.type === "turn.completed" ||
+    event.type === "turn.failed" ||
+    event.type === "turn.cancelled") &&
+  event.data.turnId === turnId;
+
+const isSessionBoundary = (event: MessageStreamEvent): boolean =>
+  event.type === "session.waiting" ||
+  event.type === "session.completed" ||
+  event.type === "session.failed";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function cancellationSettled(
   events: readonly MessageStreamEvent[],
@@ -1381,7 +1392,7 @@ async function readCancellationSettlementIncremental(input: {
 }): Promise<void> {
   const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
   let nextNativeIndex = input.beforeEventCount;
-  let cancelled = false;
+  let turnEnded = false;
   let currentTurnId: string | undefined = input.turnId;
   while (true) {
     if (readSignal.aborted) {
@@ -1417,10 +1428,10 @@ async function readCancellationSettlementIncremental(input: {
       if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
         currentTurnId = undefined;
       }
-      if (event.type === "turn.cancelled" && event.data.turnId === input.turnId) {
-        cancelled = true;
+      if (endsTurn(event, input.turnId)) {
+        turnEnded = true;
       }
-      if (cancelled && event.type === "session.waiting") {
+      if (turnEnded && isSessionBoundary(event)) {
         settled = true;
       }
     }

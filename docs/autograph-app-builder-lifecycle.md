@@ -63,8 +63,9 @@ target checkout or external system is changed.
 
 ### 9. Review and validate locally
 
-After the appropriate authorization, the builder prepares its changes, runs the
-fixed local checks and tests, and presents the ordered result for review.
+Builder implements the agreed changes, checks that they work, and presents the
+result for review. When GitHub storage is selected, the repository can be public
+or private according to the user's selection. Builder asks before taking an action that needs separate authorization.
 
 Validation runs against the selected applied checkout. Ordinary changes in the
 separate host source become input to the next plan. When planning observes no
@@ -124,7 +125,7 @@ against the compiled result before review.
 
 ### 10. Authorize consequential effects separately
 
-Applying changes to an existing checkout, opening a pull request, publishing,
+Writing changes to an external repository, opening a pull request, publishing,
 deploying, changing providers, or creating external resources each requires
 authorization for that specific outcome. Approval for one outcome does not
 authorize another.
