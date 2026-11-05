@@ -73,6 +73,11 @@ describe("frozen private check policy", () => {
     await writeFile(path.join(config, "config.toml"), "# discover app tasks\n");
     const task = path.join(root, profile.checkPolicy.path);
     await writeFile(task, PRIVATE_COMPUTE_CHECK_TASK, { mode: 0o755 });
+    const selectedMise = process.env.APP_BUILDER_DEV_MISE_BIN;
+    const miseDirectory =
+      selectedMise !== undefined && selectedMise !== ""
+        ? path.dirname(selectedMise)
+        : path.join(os.homedir(), ".local/bin");
     const run: Parameters<typeof verifyPrivateComputeCheckIntegrity>[0]["sandbox"]["run"] = async (
       request,
     ) => {
@@ -84,7 +89,7 @@ describe("frozen private check policy", () => {
             cwd: root,
             env: {
               ...process.env,
-              PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}:${path.join(os.homedir(), ".local/bin")}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
+              PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}:${miseDirectory}:/usr/bin:/bin`,
               MISE_STATE_DIR: path.join(root, ".mise-state"),
               MISE_TRUSTED_CONFIG_PATHS: root,
             },
