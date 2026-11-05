@@ -474,7 +474,17 @@ const operatorApprovalDescription = (
     return undefined;
   }
   if (plan.action === "prepare") {
-    return "This approval may incur provider costs.";
+    const { accessSummary, unresolvedAccessSummary } = operatorAccessDescriptions(plan);
+    return [
+      `Prepare a protected Preview for ${plan.selection.appId}.`,
+      ...operatorEffectSummaries(plan),
+      accessSummary,
+      unresolvedAccessSummary,
+      signupApprovalDescription(plan),
+      `${plan.cost.description} This approval may incur provider costs.`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   }
   const effectSummaries = operatorEffectSummaries(plan);
   const signupApproval = signupApprovalDescription(plan);

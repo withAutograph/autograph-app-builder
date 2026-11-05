@@ -301,6 +301,18 @@ describe("tenant-bound GitHub repository access", () => {
     }
   });
 
+  it("accepts an ordinary GitHub repository URL", () => {
+    expect(
+      parseRepositoryReference("https://github.com/withAutograph/arrusted-development/"),
+    ).toEqual(parseRepositoryReference("withAutograph/arrusted-development"));
+    expect(() => parseRepositoryReference("https://github.com.evil.example/owner/repo")).toThrow(
+      "repository-reference-invalid",
+    );
+    expect(() => parseRepositoryReference("https://github.com/owner/repo/tree/main")).toThrow(
+      "repository-reference-invalid",
+    );
+  });
+
   it("rejects malformed repository references", () => {
     expect(() => parseRepositoryReference("selected")).toThrow("repository-reference-invalid");
     expect(() => parseRepositoryReference("owner/repo/extra")).toThrow(
