@@ -1,5 +1,6 @@
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
+import { reviewedDraftCandidateSource } from "./published-draft-repair-source";
 
 export type DraftReviewedWorkflow = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
 
@@ -25,6 +26,43 @@ export const resolveDraftReviewedWorkflow = (
     return undefined;
   }
   const retained = candidate?.reviewedLineage;
+  if (
+    retained !== undefined &&
+    candidate !== null &&
+    [
+      state.sourceReceipt.sourceKind === "fresh-template",
+      retained.sourceReceipt?.sourceKind === "fresh-template",
+      state.githubSource === undefined,
+      retained.githubSource === undefined,
+    ].every(Boolean)
+  ) {
+    const repair =
+      candidate.kind === "published-draft-repair" ? candidate.repair : candidate.publishedOrigin;
+    const matches = [
+      retained.phase === "reviewed",
+      repair !== undefined,
+      sameBinding(state.publishedGitHubDraftProposalDigest, repair?.publicationProposalDigest),
+      sameBinding(retained.reviewReceipt?.digest, candidate.originalReviewDigest),
+      sameBinding(state.appSpec.appId, retained.appSpec?.appId),
+      sameBinding(state.appSpec.digest, retained.appSpec?.digest),
+      sameBinding(state.applyReceipt.digest, retained.applyReceipt?.digest),
+      sameBinding(state.applyReceipt.applyRoot, retained.applyReceipt?.applyRoot),
+      sameBinding(state.sourceReceipt.digest, retained.sourceReceipt?.digest),
+      sameBinding(state.sourceReceipt.contractDigest, retained.sourceReceipt?.contractDigest),
+      sameBinding(state.identityReceipt.digest, retained.identityReceipt?.digest),
+      sameBinding(state.proposal.digest, retained.proposal?.digest),
+      sameBinding(state.workspace.workspaceId, retained.workspace?.workspaceId),
+      sameBinding(state.workspace.workspaceDigest, retained.workspace?.workspaceDigest),
+    ].every(Boolean);
+    if (!matches) {
+      return undefined;
+    }
+    try {
+      return reviewedDraftCandidateSource(retained, candidate) === undefined ? undefined : retained;
+    } catch {
+      return undefined;
+    }
+  }
   if (
     // oxlint-disable-next-line sonarjs/expression-complexity -- All retained review and selected-source prerequisites must be present before binding checks.
     retained === undefined ||

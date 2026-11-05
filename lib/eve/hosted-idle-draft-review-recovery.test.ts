@@ -6,7 +6,10 @@ import { z } from "zod";
 import { createSameOriginEveTransport } from "./same-origin-http";
 import { HostedSessionBusyError, createHostedEveSessionService } from "./hosted-service";
 import type { HostedEveTransport, HostedEngineSnapshot } from "./hosted-service";
-import { createNativeRecoveryBinding } from "./native-recovery-binding";
+import {
+  createNativeDraftReviewedLineageRecovery,
+  createNativeRecoveryBinding,
+} from "./native-recovery-binding";
 import { hostedEveOperationScopes } from "./hosted-auth";
 import {
   InMemoryHostedEveStore,
@@ -15,8 +18,10 @@ import {
   hostedSessionCheckpointDigest,
   hostedSessionCheckpointProgressDigest,
 } from "./hosted-store";
+import type { HostedEveStore } from "./hosted-store";
 import { eveStartInputSchema, eveSendInputSchema, eveSessionResultSchema } from "../mcp/contracts";
 import { resolveDraftReviewedWorkflow } from "../agent/draft-reviewed-lineage";
+import { currentDraftCandidateSource } from "../agent/published-draft-repair";
 import { draftReviewedLineageContextKey } from "./native-recovery-draft-reviewed-lineage";
 import {
   load,
@@ -56,10 +61,26 @@ const fixture = async (
     activeTurn?: boolean;
     pendingApproval?: boolean;
     status?: HostedEngineSnapshot["status"];
+    fresh?: boolean;
+    priorOwnerReview?: boolean;
+    afterCutoffReview?: boolean;
+    beforeCutoffReview?: boolean;
+    malformedBeforeCutoff?: "null" | "unknown-phase";
+    omitPriorReview?: boolean;
+    paginateAncestor?: boolean;
+    priorFault?: string;
+    missingCutoff?: boolean;
   } = {},
 ) => {
   const native = await nativeFixture({
     live: true,
+    fresh: options.fresh,
+    priorOwnerReview: options.priorOwnerReview,
+    afterCutoffReview: options.afterCutoffReview,
+    beforeCutoffReview: options.beforeCutoffReview,
+    malformedBeforeCutoff: options.malformedBeforeCutoff,
+    omitPriorReview: options.omitPriorReview,
+    paginateAncestor: options.paginateAncestor,
     activeTurn: options.activeTurn,
     pendingApproval: options.pendingApproval,
   });
@@ -73,13 +94,21 @@ const fixture = async (
   const status = options.status ?? "waiting";
   const snapshot: HostedEngineSnapshot = { events: [], status };
   const checkpoint = { capturedAtEpochMs: 1000, events: [], status, version: 1 as const };
+  const authorityCheckpoint = { ...checkpoint, status: "waiting" as const };
+  let cutoffSlot = 2;
+  if (options.beforeCutoffReview === true || options.malformedBeforeCutoff !== undefined) {
+    cutoffSlot = 3;
+  }
+  if (options.missingCutoff === true) {
+    cutoffSlot = 9;
+  }
   const source = durableHostedSessionRecordSchema.parse({
     version: 2,
     sessionId: "public-original",
     adapterSessionId: owner,
     adapterGeneration: 2,
     originAdapterSessionId: "physical-ancestor",
-    parentSessionId: "public-ancestor",
+    parentSessionId: "public-authority",
     principal,
     status,
     stage: "planning",
@@ -94,19 +123,24 @@ const fixture = async (
     nativeRecoveryBinding: {
       version: 1,
       operationId: "original-recovery",
-      sourcePublicSessionId: "public-ancestor",
+      sourcePublicSessionId: "public-authority",
       sourceOwnerRunId: "physical-ancestor",
       sourceAdapterGeneration: 1,
       logicalSessionId: logical,
       originalAuthoritySessionId: "public-authority",
       parentCancellationRevision: 0,
+      executionTransfer: {
+        kind: "idle-checkpoint",
+        sourceCheckpointDigest: hostedSessionCheckpointDigest(authorityCheckpoint),
+      },
       ownerRunId: owner,
       provenance: {
         kind: "committed-turn-output",
-        sourceStepId: "original-step",
-        sourceEventId: "original-event",
-        sourceSlot: 1,
+        sourceStepId: "step-prior-cutoff",
+        sourceEventId: `evnt_${String(cutoffSlot).padStart(26, "0")}`,
+        sourceSlot: cutoffSlot,
         checkpointVersion: 1,
+        resumePhase: "await-input",
       },
     },
   });
@@ -120,15 +154,6 @@ const fixture = async (
     requestDigest: `sha256:${"a".repeat(64)}`,
     createdAtEpochMs: 1000,
     updatedAtEpochMs: 1000,
-  });
-  await store.reserveOperation(principal, seed);
-  await store.settleSucceeded({
-    principal,
-    operationId: seed.operationId,
-    requestDigest: seed.requestDigest,
-    nowEpochMs: 1000,
-    session: source,
-    result: { sessionId: source.sessionId, status, cursor: 0, events: [] },
   });
   const authoritySeed = hostedOperationRecordSchema.parse({
     ...seed,
@@ -144,6 +169,11 @@ const fixture = async (
     adapterSessionId: logical,
     adapterGeneration: 1,
     originAdapterSessionId: logical,
+    status: "waiting",
+    resumability: "live",
+    checkpoint: authorityCheckpoint,
+    checkpointDigest: hostedSessionCheckpointDigest(authorityCheckpoint),
+    checkpointProgressDigest: hostedSessionCheckpointProgressDigest(authorityCheckpoint),
   });
   await store.reserveOperation(principal, authoritySeed);
   await store.settleSucceeded({
@@ -152,9 +182,115 @@ const fixture = async (
     requestDigest: authoritySeed.requestDigest,
     nowEpochMs: 1000,
     session: authority,
-    result: { sessionId: authority.sessionId, status, cursor: 0, events: [] },
+    result: { sessionId: authority.sessionId, status: "waiting", cursor: 0, events: [] },
   });
-  const canonical = createNativeRecoveryBinding({ store, assertOwner, now: () => 2000 });
+  const previousBinding = source.nativeRecoveryBinding;
+  if (previousBinding === undefined) {
+    throw new Error("Missing previous recovery binding");
+  }
+  const {
+    ownerRunId: _previousOwner,
+    provenance: _previousProvenance,
+    ...previousDescriptor
+  } = previousBinding;
+  void _previousOwner;
+  void _previousProvenance;
+  const previousOperation = hostedOperationRecordSchema.parse({
+    ...seed,
+    operationId: previousDescriptor.operationId,
+    clientRequestId: "previous-recovery",
+    resumeSessionId: authority.sessionId,
+    nativeRecovery: previousDescriptor,
+  });
+  await store.reserveOperation(principal, previousOperation);
+  await store.commitNativeRecoveryReceipt({
+    principal,
+    descriptor: previousDescriptor,
+    recoveryBinding: previousBinding,
+    nowEpochMs: 1000,
+  });
+  await store.settleSucceeded({
+    principal,
+    operationId: previousOperation.operationId,
+    requestDigest: previousOperation.requestDigest,
+    nowEpochMs: 1000,
+    session: source,
+    result: { sessionId: source.sessionId, status, cursor: 0, events: [] },
+  });
+  const recoveryStore: Pick<
+    HostedEveStore,
+    "getSession" | "getPrivateOperation" | "commitNativeRecoveryReceipt"
+  > = {
+    getSession: async (caller, sessionId) => {
+      const record = await store.getSession(caller, sessionId);
+      if (
+        record !== null &&
+        record.version === 2 &&
+        sessionId === "public-authority" &&
+        options.priorFault === "parent-cancelled"
+      ) {
+        return { ...record, cancellationRevision: 1 };
+      }
+      return record;
+    },
+    getPrivateOperation: async (caller, operationId) => {
+      const record = await store.getPrivateOperation(caller, operationId);
+      if (record === null || operationId !== "original-recovery") {
+        return record;
+      }
+      if (options.priorFault === "missing-operation") {
+        return null;
+      }
+      if (options.priorFault === "unsucceeded-operation") {
+        return { ...record, state: "reserved" };
+      }
+      if (options.priorFault === "foreign-principal") {
+        return { ...record, principal: { ...record.principal, ownerUserId: "foreign" } };
+      }
+      if (options.priorFault === "missing-receipt") {
+        return { ...record, nativeRecoveryReceipt: undefined };
+      }
+      if (record.nativeRecoveryReceipt !== undefined) {
+        if (options.priorFault === "changed-receipt") {
+          return {
+            ...record,
+            nativeRecoveryReceipt: { ...record.nativeRecoveryReceipt, ownerRunId: "foreign" },
+          };
+        }
+        if (options.priorFault === "changed-cutoff") {
+          return {
+            ...record,
+            nativeRecoveryReceipt: {
+              ...record.nativeRecoveryReceipt,
+              provenance: { ...record.nativeRecoveryReceipt.provenance, sourceEventId: "foreign" },
+            },
+          };
+        }
+        if (options.priorFault === "logical-mismatch") {
+          return {
+            ...record,
+            nativeRecoveryReceipt: { ...record.nativeRecoveryReceipt, logicalSessionId: "foreign" },
+          };
+        }
+        if (options.priorFault === "authority-mismatch") {
+          return {
+            ...record,
+            nativeRecoveryReceipt: {
+              ...record.nativeRecoveryReceipt,
+              originalAuthoritySessionId: "foreign",
+            },
+          };
+        }
+      }
+      return record;
+    },
+    commitNativeRecoveryReceipt: store.commitNativeRecoveryReceipt.bind(store),
+  };
+  const canonical = createNativeRecoveryBinding({
+    store: recoveryStore,
+    assertOwner,
+    now: () => 2000,
+  });
   const authorizationFailures: string[] = [];
   let authorizedReads = 0;
   const authorize = canonical.authorize.bind(canonical);
@@ -167,7 +303,13 @@ const fixture = async (
       throw error;
     }
   };
-  const ports = { ...native.ports, ...canonical };
+  const ports = {
+    ...native.ports,
+    ...canonical,
+    applicationStateRecovery: createNativeDraftReviewedLineageRecovery(
+      canonical.authorize.bind(canonical),
+    ),
+  };
   const nativeTransport = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example" },
     workloadIdentity: { token: async () => "controlled-workload-token" },
@@ -206,6 +348,9 @@ const fixture = async (
         .parse(restored[workflowKey]);
       expect(resolveDraftReviewedWorkflow(workflow, candidate)?.reviewReceipt.digest).toBe(
         native.reviewed.reviewReceipt.digest,
+      );
+      expect(currentDraftCandidateSource(workflow, candidate)?.repository.repositoryId).toBe(
+        native.candidate.repositoryId,
       );
       expect(candidate).toEqual({ ...native.candidate, reviewedLineage: native.reviewed });
       sends.push(request.operationId);
@@ -348,6 +493,164 @@ it("the public idle recovery path restores verified original review and latest c
   expect(f.native.starts).toHaveLength(1);
 });
 
+it("the public recovery restores a fresh-template owned publication and selects its latest private candidate", async () => {
+  const f = await fixture({ fresh: true });
+  const child = await publicCall(f.service, "autograph_start", f.request);
+  const restored = restoredSchema.parse(f.native.starts[0]).checkpoint.serializedContext;
+  expect(restored).toEqual({
+    ...f.native.currentContext,
+    [draftReviewedLineageContextKey]: { ...f.native.candidate, reviewedLineage: f.native.reviewed },
+  });
+  expect(f.native.currentContext[workflowKey].sourceReceipt.sourceKind).toBe("fresh-template");
+  expect(f.native.currentContext[workflowKey].githubSource).toBeUndefined();
+  expect(f.native.candidate.unpublished).toBe("actual unchanged edits");
+  const retried = await publicCall(f.service, "autograph_start", f.request);
+  expect(retried.sessionId).toBe(child.sessionId);
+  expect(f.native.starts).toHaveLength(1);
+  f.idle();
+  await f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 100 });
+  const continuation = eveSendInputSchema.parse({
+    sessionId: child.sessionId,
+    clientRequestId: "continue-fresh-owned-draft",
+    message: "Continue the same draft",
+  });
+  await publicCall(f.service, "autograph_send", continuation);
+  await publicCall(f.service, "autograph_send", continuation);
+  expect(f.sends).toHaveLength(1);
+});
+
+it("restores the owned fresh review across a previously committed idle recovery", async () => {
+  const f = await fixture({ fresh: true, priorOwnerReview: true, paginateAncestor: true });
+  const prior = await f.store.getPrivateOperation(principal, "original-recovery");
+  expect(prior).toMatchObject({
+    state: "succeeded",
+    nativeRecoveryReceipt: {
+      ownerRunId: owner,
+      executionTransfer: { kind: "idle-checkpoint" },
+      provenance: { sourceStepId: "step-prior-cutoff", sourceSlot: 2 },
+    },
+  });
+  const predecessor = await f.native.world.events.list({ runId: "physical-ancestor" });
+  expect(predecessor.data).toHaveLength(1);
+  expect(predecessor.hasMore).toBe(true);
+  const child = await publicCall(f.service, "autograph_start", f.request);
+  const restored = restoredSchema.parse(f.native.starts[0]).checkpoint.serializedContext;
+  expect(restored[draftReviewedLineageContextKey]).toEqual({
+    ...f.native.candidate,
+    reviewedLineage: f.native.reviewed,
+  });
+  expect(restored[workflowKey]).toEqual(f.native.currentContext[workflowKey]);
+  expect(await f.store.getSession(principal, child.sessionId)).toMatchObject({
+    parentSessionId: f.source.sessionId,
+  });
+  expect(f.native.starts).toHaveLength(1);
+  expect(await publicCall(f.service, "autograph_start", f.request)).toEqual(child);
+  expect(f.native.starts).toHaveLength(1);
+  f.idle();
+  await f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 100 });
+  const continuation = eveSendInputSchema.parse({
+    sessionId: child.sessionId,
+    clientRequestId: "continue-prior-owned-draft",
+    message: "Continue the same draft",
+  });
+  await publicCall(f.service, "autograph_send", continuation);
+  await publicCall(f.service, "autograph_send", continuation);
+  expect(f.sends).toHaveLength(1);
+});
+
+it("ignores a conflicting predecessor review after the committed native cutoff", async () => {
+  const f = await fixture({ fresh: true, priorOwnerReview: true, afterCutoffReview: true });
+  const predecessor = await f.native.world.events.list({ runId: "physical-ancestor" });
+  expect(predecessor.data).toHaveLength(3);
+  await publicCall(f.service, "autograph_start", f.request);
+  const restored = restoredSchema.parse(f.native.starts[0]).checkpoint.serializedContext;
+  expect(restored[draftReviewedLineageContextKey]).toEqual({
+    ...f.native.candidate,
+    reviewedLineage: f.native.reviewed,
+  });
+});
+
+it.each(["missing-review", "superseding-review", "malformed-review", "unknown-phase"] as const)(
+  "does not manufacture predecessor lineage with %s",
+  async (kind) => {
+    let malformedBeforeCutoff: "null" | "unknown-phase" | undefined;
+    if (kind === "malformed-review") {
+      malformedBeforeCutoff = "null";
+    }
+    if (kind === "unknown-phase") {
+      malformedBeforeCutoff = "unknown-phase";
+    }
+    const f = await fixture({
+      fresh: true,
+      priorOwnerReview: true,
+      omitPriorReview: kind === "missing-review",
+      beforeCutoffReview: kind === "superseding-review",
+      malformedBeforeCutoff,
+    });
+    let visited = false;
+    const visit = f.ports.visitRecoveryPredecessors.bind(f.ports);
+    f.ports.visitRecoveryPredecessors = async (call, visitWindow) => {
+      visited = true;
+      await visit(call, visitWindow);
+    };
+    await publicCall(f.service, "autograph_start", f.request);
+    const restored = restoredSchema.parse(f.native.starts[0]).checkpoint.serializedContext;
+    expect(visited).toBe(true);
+    expect(restored[draftReviewedLineageContextKey]).toEqual(f.native.candidate);
+    expect(
+      currentDraftCandidateSource(f.native.currentContext[workflowKey], f.native.candidate),
+    ).toBeUndefined();
+  },
+);
+
+it.each([
+  "missing-operation",
+  "unsucceeded-operation",
+  "foreign-principal",
+  "missing-receipt",
+  "changed-receipt",
+  "changed-cutoff",
+  "logical-mismatch",
+  "authority-mismatch",
+  "parent-cancelled",
+] as const)("refuses ancestor history with %s without a new native owner", async (priorFault) => {
+  const f = await fixture({ fresh: true, priorOwnerReview: true, priorFault });
+  let visited = false;
+  const visit = f.ports.visitRecoveryPredecessors.bind(f.ports);
+  f.ports.visitRecoveryPredecessors = async (call, visitWindow) => {
+    visited = true;
+    await visit(call, visitWindow);
+  };
+  await expect(f.service.start(f.request)).rejects.toThrow();
+  expect(visited).toBe(true);
+  expect(f.native.starts).toHaveLength(0);
+});
+
+it("refuses a committed predecessor cutoff that cannot be verified in native history", async () => {
+  const f = await fixture({ fresh: true, priorOwnerReview: true, missingCutoff: true });
+  await expect(f.service.start(f.request)).rejects.toThrow();
+  expect(f.native.starts).toHaveLength(0);
+});
+
+it("refuses when owner membership is revoked during a predecessor page read", async () => {
+  const f = await fixture({ fresh: true, priorOwnerReview: true, paginateAncestor: true });
+  const list = f.native.world.events.list.bind(f.native.world.events);
+  let ancestorPages = 0;
+  f.native.world.events.list = async (request) => {
+    const page = await list(request);
+    if (request.runId === "physical-ancestor") {
+      ancestorPages += 1;
+      if (ancestorPages === 2) {
+        f.revoke();
+      }
+    }
+    return page;
+  };
+  await expect(f.service.start(f.request)).rejects.toThrow();
+  expect(ancestorPages).toBeGreaterThanOrEqual(2);
+  expect(f.native.starts).toHaveLength(0);
+});
+
 it.each(["working", "input_required", "cancelled"] as const)(
   "public recovery refuses %s source without invoking native recovery",
   async (status) => {
@@ -394,7 +697,7 @@ it.each(["revoked", "cancelled"] as const)(
   async (variant) => {
     const f = await fixture();
     let recoveredLineage = false;
-    const recover = f.ports.applicationStateRecovery.recover;
+    const recover = f.ports.applicationStateRecovery.recover.bind(f.ports.applicationStateRecovery);
     f.ports.applicationStateRecovery.recover = async (input) => {
       const value = await recover(input);
       expect(value).toEqual(f.native.reviewed);

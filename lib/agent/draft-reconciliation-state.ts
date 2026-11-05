@@ -236,13 +236,24 @@ export const retainCandidateValidationAttempt = (attempt: CandidateValidationAtt
   candidateValidationAttemptHistory.update((current) => [...current, attempt]);
 };
 
+/** Compare the durable JSON value, ignoring object-key order and omitted undefined fields. */
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- The JSON-normalized value is used only for equality, never as a typed candidate.
+const storedDraftCandidate = (candidate: DraftReconciliationCandidate | null): unknown => {
+  const serialized = JSON.stringify(candidate);
+  return JSON.parse(serialized);
+};
+export const samePersistedDraftCandidate = (
+  left: DraftReconciliationCandidate | null,
+  right: DraftReconciliationCandidate | null,
+): boolean => isDeepStrictEqual(storedDraftCandidate(left), storedDraftCandidate(right));
+
 export const updateExactDraftReconciliation = (input: {
   expected: DraftReconciliationCandidate | null;
   operation: string;
   transition: (current: DraftReconciliationCandidate | null) => DraftReconciliationCandidate | null;
 }): void => {
   draftReconciliationState.update((current) => {
-    if (JSON.stringify(current) !== JSON.stringify(input.expected)) {
+    if (!samePersistedDraftCandidate(current, input.expected)) {
       throw new Error(
         `The draft reconciliation changed while Builder was ${input.operation}. Inspect its current state, then retry.`,
       );
