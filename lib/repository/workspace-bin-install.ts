@@ -56,9 +56,7 @@ function capture() {
       }
       if (!exists) continue;
       withFile(target, (fd, stat) => {
-        const mode = statMode(stat);
-        if (!(mode & 0o100) || (mode & 0o7000)) throw Error();
-        targets.set(target, { stat, mode, digest: hash(fd) });
+        targets.set(target, { stat, mode: statMode(stat), digest: hash(fd) });
       });
     }
   }
@@ -73,10 +71,16 @@ function restore(targets) {
       const sameIdentity = (current) => current.dev === before.stat.dev && current.ino === before.stat.ino;
       withFile(file, (fd, stat) => {
         if (!sameIdentity(stat) || hash(fd) !== before.digest) throw Error();
-        if (statMode(stat) === 0o777) fs.fchmodSync(fd, before.mode);
+        if (statMode(stat) === 0o777 && !(before.mode & 0o7000)) {
+          try {
+            fs.fchmodSync(fd, before.mode);
+          } catch {
+            process.stderr.write("Could not preserve original workspace executable permissions.\n");
+          }
+        }
       });
       withFile(file, (fd, stat) => {
-        if (statMode(stat) !== before.mode || !sameIdentity(stat) || hash(fd) !== before.digest) throw Error();
+        if (!sameIdentity(stat) || hash(fd) !== before.digest) throw Error();
       });
     } catch {
       valid = false;

@@ -775,8 +775,9 @@ A prior validated preview reuses available checkout dependencies. Builder
 restores missing dependencies from the frozen lockfile and checks the retained
 source before launching the preview.
 
-Builder's checkout dependency installation preserves the original modes of
-workspace bin files when Bun widens them during installation. Ordinary preview
+Builder's checkout dependency installation attempts to preserve the original
+modes of workspace bin files when Bun widens them. Permission differences
+alone do not change a successful installation result. Ordinary preview
 reconciliation, frozen dependency restoration, validation recovery and the
 UI preview renderer fallback use the same guard as apply. Dependency receipts
 keep the Bun recipe and record the digest of the actual wrapped command.

@@ -31,10 +31,17 @@ it.each([
     mode: 0o777,
     bytes: "original",
   },
-  { change: "chmod 775 packages/owned/cli.js", exit: 1, mode: 0o775, bytes: "original" },
+  { change: "chmod 775 packages/owned/cli.js", exit: 0, mode: 0o775, bytes: "original" },
+  {
+    change: "chmod 777 packages/owned/cli.js",
+    exit: 0,
+    mode: 0o644,
+    bytes: "original",
+    originalMode: 0o644,
+  },
 ])(
   "preserves the owned bin preimage only on known mode drift ($change)",
-  ({ change, exit, mode, bytes }) => {
+  ({ change, exit, mode, bytes, originalMode }) => {
     const root = mkdtempSync(path.join(realpathSync(tmpdir()), "workspace-bin-install-"));
     try {
       const owned = path.join(root, "packages/owned");
@@ -49,7 +56,7 @@ it.each([
         writeFileSync(path.join(directory, "package.json"), JSON.stringify({ bin: "./cli.js" }));
         const target = path.join(directory, "cli.js");
         writeFileSync(target, "original");
-        chmodSync(target, 0o755);
+        chmodSync(target, originalMode ?? 0o755);
       }
       writeFileSync(
         path.join(root, "bun"),
