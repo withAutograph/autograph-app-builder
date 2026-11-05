@@ -58,7 +58,12 @@ reinstalling or upgrading it. If missing, disabled, or outdated, it authorizes
 the agent to perform the required setup itself, subject to native approvals.
 Unavailable tools in an installed plugin trigger supported connection/reload
 recovery, not an assumed upgrade. Only genuinely user-only actions are handed
-back to the user. Successful continuation still requires `autograph_start`;
+back to the user. If Codex opens the prompt in a workspace that disables the
+plugin, recover in the selected workspace. Use supported controls to enable it
+when allowed, or identify the setting the user or workspace administrator must
+change. If the client cannot inspect plugin status, ask the user to check Plugins
+for the selected workspace and resume the same prepared handoff. Installation requires positive evidence that the plugin is
+missing. Successful continuation still requires `autograph_start`;
 the deterministic handoff request ID and normal build approvals are preserved.
 
 Codex setup details display the canonical MCP URL from the authenticated handoff.

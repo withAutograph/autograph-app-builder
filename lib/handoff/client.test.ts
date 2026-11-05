@@ -10,7 +10,11 @@ describe("destination-specific handoff setup", () => {
     expect(prompt).toContain("install or update it automatically");
     expect(prompt).toContain("run the necessary commands yourself");
     expect(prompt).toContain("subject to native client approval requirements");
-    expect(prompt).toContain("enable Autograph App Builder, and reopen this prepared app");
+    expect(prompt).toContain(
+      "Enable Autograph App Builder in this workspace so I can resume your saved app?",
+    );
+    expect(prompt).toContain("Only recommend installation when the plugin is confirmed missing");
+    expect(prompt).toContain("check Autograph App Builder in Codex Plugins for this workspace");
     expect(prompt).toContain("codex mcp login app-builder");
     expect(prompt).toContain("until it reports success");
     expect(prompt).toContain("Do not ask the user to run installation");
