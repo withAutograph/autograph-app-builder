@@ -236,7 +236,9 @@ candidate without replaying the ambiguous original overlay or an earlier
 candidate. The original starter provenance, apply workspace and earlier private
 candidates remain retained. The result identifies the unreplayed original
 review and preserved workspaces; those edits are not claimed as part of the new
-candidate.
+candidate. A prior candidate of the same owned publication remains available for
+inspection even when the newly completed review has a different digest; that
+retention does not authorize replaying its edits or its prior review.
 
 The recovery mode follows subsequent preparation attempts within the same owned
 review lineage. Original app-review content remains available through

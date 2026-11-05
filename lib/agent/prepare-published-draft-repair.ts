@@ -266,10 +266,9 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
   };
 };
 
-const samePublishedOrigin = (
+const samePublishedDraft = (
   previous: DraftReconciliationCandidate,
   repair: ReturnType<typeof createPublishedDraftRepairSource>,
-  reviewDigest: string,
 ): boolean => {
   const origin =
     previous.kind === "published-draft-repair" ? previous.repair : previous.publishedOrigin;
@@ -283,7 +282,6 @@ const samePublishedOrigin = (
       previous.appId === repair.appId,
       previous.repositoryId === repair.draft.repositoryId,
       previous.pullRequestNumber === repair.draft.number,
-      previous.originalReviewDigest === reviewDigest,
     ].every(Boolean)
   );
 };
@@ -374,9 +372,11 @@ const reconciliationPreparationLineage = (
   previous: DraftReconciliationCandidate | null,
   repair: ReturnType<typeof createPublishedDraftRepairSource>,
 ) => {
+  const sameDraft = previous !== null && samePublishedDraft(previous, repair);
   const sameOrigin =
-    previous !== null && samePublishedOrigin(previous, repair, input.state.reviewReceipt.digest);
+    sameDraft && previous.originalReviewDigest === input.state.reviewReceipt.digest;
   const ownedPrevious = sameOrigin ? previous : undefined;
+  const preservedPrevious = sameDraft ? previous : undefined;
   const recoveryMode = input.recovery ?? ownedPrevious?.recoveryMode;
   const reopenCurrent = recoveryMode === "reopen-current-owned-draft";
   const previousCandidate =
@@ -394,7 +394,7 @@ const reconciliationPreparationLineage = (
             sameOrigin &&
             previousCandidate.headSha === repair.draft.headSha,
         };
-  return { ownedPrevious, recoveryMode, reopenCurrent, previousInput };
+  return { ownedPrevious, preservedPrevious, recoveryMode, reopenCurrent, previousInput };
 };
 
 /** Reconcile the owned draft with its live base without changing the accepted starter source. */
@@ -402,7 +402,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   const { state, ctx } = input;
   const previous = structuredClone(draftReconciliationState.get());
   const { access, runtime, owned, repair } = await acquireOwnedPublishedDraft(input, previous);
-  const { ownedPrevious, recoveryMode, reopenCurrent, previousInput } =
+  const { ownedPrevious, preservedPrevious, recoveryMode, reopenCurrent, previousInput } =
     reconciliationPreparationLineage(input, previous, repair);
   const source = await runtime.inspectExistingDraftReconciliationSource({
     repositoryId: owned.draft.repositoryId,
@@ -504,7 +504,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   const publishedReconciliation =
     source.publishedReconciliation ?? ownedPrevious?.publishedReconciliation;
   const preservedWorkspaces = reopenCurrent
-    ? preservedDraftWorkspaces(state, ownedPrevious, prepared.root, preservedCandidateRoot)
+    ? preservedDraftWorkspaces(state, preservedPrevious, prepared.root, preservedCandidateRoot)
     : undefined;
   const candidate = {
     ...preparedCandidate,
