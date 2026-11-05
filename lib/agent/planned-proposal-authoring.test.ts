@@ -411,7 +411,7 @@ describe("declined current-proposal drafting observation", () => {
           abortSignal: new AbortController().signal,
         };
         expect(await policy(input as never)).toBe(
-          mode === "internal-unchanged" ? "not-applicable" : "user-approval",
+          mode === "internal-unchanged" ? "not-applicable" : "approved",
         );
         if (mode === "internal-unchanged") {
           await expect(
