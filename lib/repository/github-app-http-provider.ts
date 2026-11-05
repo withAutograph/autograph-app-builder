@@ -19,6 +19,8 @@ import type {
   DraftPullRequestProposal,
   GitHubDraftPullRequestContent,
 } from "./github-publication";
+import { createGitHubPrDeliveryProvider, GitHubPrEffectRejectedError } from "./github-pr-delivery";
+import type { GitHubPrDeliveryProvider } from "./github-pr-delivery";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
@@ -131,6 +133,7 @@ export interface GitHubPublicationFile {
 
 export interface GitHubAppHttpProvider
   extends GitHubAppInstallationProvider, GitHubTargetAccessProvider {
+  prDelivery: GitHubPrDeliveryProvider;
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
   inspectHistoricalAppSource: (input: {
     repositoryId: string;
@@ -145,12 +148,13 @@ export interface GitHubAppHttpProvider
 
 type Fetch = typeof fetch;
 interface PermissionSnapshot {
+  actions?: "read";
   metadata: "read";
   contents: "read" | "write";
   workflows: "none" | "write";
-  pullRequests: "none" | "write";
+  pullRequests: "none" | "read" | "write";
   administration: "none" | "write";
-  variables: "read";
+  variables: "none" | "read";
 }
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -257,11 +261,12 @@ const canonicalFiles = (
 };
 
 const permissionRequest = (permission: PermissionSnapshot) => ({
-  actions_variables: "read" as const,
+  ...(permission.actions === "read" ? { actions: "read" as const } : {}),
+  ...(permission.variables === "read" ? { actions_variables: "read" as const } : {}),
   contents: permission.contents,
   metadata: "read" as const,
   ...(permission.workflows === "write" ? { workflows: "write" as const } : {}),
-  ...(permission.pullRequests === "write" ? { pull_requests: "write" as const } : {}),
+  ...(permission.pullRequests === "none" ? {} : { pull_requests: permission.pullRequests }),
   ...(permission.administration === "write" ? { administration: "write" as const } : {}),
 });
 
@@ -270,6 +275,7 @@ const normalizedPermissions = (value: unknown): PermissionSnapshot => {
     throw new Error("invalid-response");
   }
   const allowed = new Set([
+    "actions",
     "metadata",
     "contents",
     "workflows",
@@ -280,23 +286,23 @@ const normalizedPermissions = (value: unknown): PermissionSnapshot => {
   if (Object.keys(value).some((key) => !allowed.has(key))) {
     throw new Error("invalid-response");
   }
+  const actions = z.literal("read").optional().parse(value.actions);
   const { metadata } = value;
   const { contents } = value;
   const workflows = value.workflows ?? "none";
-  const pullRequests = value.pull_requests ?? "none";
+  const pullRequests = z.enum(["none", "read", "write"]).parse(value.pull_requests ?? "none");
   const administration = value.administration ?? "none";
-  const variables = value.actions_variables;
+  const variables = z.enum(["none", "read"]).parse(value.actions_variables ?? "none");
   if (
     metadata !== "read" ||
     (contents !== "read" && contents !== "write") ||
     (workflows !== "none" && workflows !== "write") ||
-    (pullRequests !== "none" && pullRequests !== "write") ||
-    (administration !== "none" && administration !== "write") ||
-    variables !== "read"
+    (administration !== "none" && administration !== "write")
   ) {
     throw new Error("invalid-response");
   }
   return {
+    ...(actions === "read" ? { actions } : {}),
     administration,
     contents,
     metadata,
@@ -325,7 +331,7 @@ export const createGitHubAppHttpProvider = (input: {
   });
 
   const github = async (requestInput: {
-    method?: "GET" | "POST";
+    method?: "GET" | "POST" | "PUT";
     path: string;
     authorization: string;
     body?: unknown;
@@ -1143,6 +1149,58 @@ export const createGitHubAppHttpProvider = (input: {
   };
 
   return {
+    prDelivery: createGitHubPrDeliveryProvider(async (ref, operation) => {
+      decimal.parse(ref.repositoryId);
+      name.parse(ref.owner);
+      name.parse(ref.name);
+      if (!Number.isSafeInteger(ref.pullRequestNumber) || ref.pullRequestNumber < 1) {
+        throw new Error("invalid-pull-request-number");
+      }
+      objectId.parse(ref.headSha);
+      const accessToken = await token(
+        {
+          actions: "read",
+          administration: "none",
+          contents: operation === "merge" ? "write" : "read",
+          metadata: "read",
+          pullRequests: operation === "ready" ? "write" : "read",
+          variables: "none",
+          workflows: "none",
+        },
+        [ref.repositoryId],
+      );
+      const repository = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repositories/${ref.repositoryId}`,
+      });
+      if (
+        decimalProperty(repository.body, "id") !== ref.repositoryId ||
+        stringProperty(property(repository.body, "owner"), "login") !== ref.owner ||
+        stringProperty(repository.body, "name") !== ref.name
+      ) {
+        throw new Error("repository-identity-changed");
+      }
+      return async ({ effect, ...requestInput }) => {
+        try {
+          const { body } = await github({
+            ...requestInput,
+            authorization: accessToken,
+            expected: [200],
+          });
+          return body;
+        } catch (error) {
+          const status = providerHttpStatus(error);
+          const accessRejected = status === 401 || status === 403 || status === 404;
+          const mergeRejected =
+            effect === "merge" && (status === 405 || status === 409 || status === 422);
+          if (effect !== undefined && (accessRejected || mergeRejected)) {
+            throw new GitHubPrEffectRejectedError("provider-rejected");
+          }
+          throw error;
+        }
+      };
+    }),
     async acquireRepositoryReadCredential({ repositoryId }) {
       try {
         return { token: await repositoryReadToken(repositoryId) };

@@ -1,3 +1,4 @@
+import type { GitHubPrDeliveryProvider } from "./github-pr-delivery";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
@@ -364,6 +365,7 @@ export interface GitHubTargetSourceResolutionAdapter {
 }
 
 export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter {
+  prDelivery?: GitHubPrDeliveryProvider;
   inspectDestinationFiles?: (input: {
     repository: GitHubRepositoryObservation;
     paths: readonly string[];

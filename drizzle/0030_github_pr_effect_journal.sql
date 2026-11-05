@@ -1,0 +1,20 @@
+CREATE TABLE "hosted_github_pr_effect_journal" (
+  "issuer" text NOT NULL,
+  "audience" text NOT NULL,
+  "workspace_id" text NOT NULL,
+  "owner_user_id" text NOT NULL,
+  "intent_digest" text NOT NULL,
+  "kind" text NOT NULL,
+  "receipt_digest" text NOT NULL,
+  "status" text NOT NULL,
+  "record" jsonb NOT NULL,
+  "created_at" timestamptz NOT NULL,
+  "updated_at" timestamptz NOT NULL,
+  CONSTRAINT "hosted_github_pr_effect_journal_pk" PRIMARY KEY ("issuer", "audience", "workspace_id", "owner_user_id", "intent_digest"),
+  CONSTRAINT "hosted_github_pr_effect_journal_intent_digest_check" CHECK ("intent_digest" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "hosted_github_pr_effect_journal_receipt_digest_check" CHECK ("receipt_digest" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT "hosted_github_pr_effect_journal_kind_check" CHECK ("kind" IN ('pr-ready', 'pr-merge')),
+  CONSTRAINT "hosted_github_pr_effect_journal_status_check" CHECK ("status" IN ('pending', 'failed', 'succeeded')),
+  CONSTRAINT "hosted_github_pr_effect_journal_record_check" CHECK (jsonb_typeof("record") = 'object'),
+  CONSTRAINT "hosted_github_pr_effect_journal_timestamp_check" CHECK ("created_at" <= "updated_at")
+);

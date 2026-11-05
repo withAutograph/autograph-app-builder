@@ -317,6 +317,15 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    coverage is not an acceptance or publication prerequisite. Then call
    `accept_change_set`, seal the proposal, and request ordinary publication approval.
    Preserve the actual destination, source-content and approval protections.
+   After initial publication, use `read_github_pr_delivery` when reporting the
+   current pull request, required checks, or merge. Explain draft deferral as
+   checks starting when the pull request is ready for review. Keep the observed
+   GitHub result separate from authenticated hosted verification.
+   If the user requests a merge and that tool returns an approval input, pass
+   it unchanged to `finish-github-pr-delivery`. Present the exact Ready and
+   merge effects through the native approval. A changed revision requires
+   review and approval of the new candidate. An unresolved effect needs
+   readback of the same pull request before any further action.
    When revising an existing draft pull request, first use
    `prepare_github_draft_pr_reconciliation` to inspect its live base and head
    commits and prepare the private merge candidate. This step determines actual
