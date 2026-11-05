@@ -64,7 +64,8 @@ target checkout or external system is changed.
 ### 9. Review and validate locally
 
 Builder implements the agreed changes, checks that they work, and presents the
-result for review. It asks before taking an action that needs separate authorization.
+result for review. When GitHub storage is selected, the repository can be public
+or private according to the user's selection. Builder asks before taking an action that needs separate authorization.
 
 Validation runs against the selected applied checkout. Ordinary changes in the
 separate host source become input to the next plan. When planning observes no

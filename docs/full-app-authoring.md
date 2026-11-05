@@ -35,7 +35,7 @@ additional calls. Deterministic setup, command execution, paging and receipt
 handling belong to the shared workflow; they should not each require a new model
 judgment. See [model use and cost accounting](builder-model-cost.md).
 
-The current workflow provides private implementation, review and preview, with
+The current workflow provides implementation, review and preview, with
 separately approved publication when requested. Production activation remains a
 protected operator handoff. The fourth phase is the intended delivery contract;
 this documentation does not add an automatic deploy-and-submit operation or
