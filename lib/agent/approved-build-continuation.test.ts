@@ -152,11 +152,11 @@ describe("approved apply and review continuation", () => {
       }));
       // SAFETY: The finish hook reads only the native session and turn identities.
       const ctx = { session: { id: scope.sessionId, turn } } as HookContext;
-      // SAFETY: The completed event body is unused by this handler.
       const complete = hook.events?.["turn.completed"];
       if (!complete) {
         throw new Error("Expected the approved build completion hook.");
       }
+      // SAFETY: The completed event body is unused by this handler.
       await complete({} as never, ctx);
       expect(recordApprovedBuildDecision).toHaveBeenLastCalledWith(
         ctx,
