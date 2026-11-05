@@ -191,12 +191,7 @@ describe("durable handoff controls", () => {
     await render(data);
     expect(container.textContent).toContain("Builder connection address:");
     expect(container.textContent).toContain(data.mcpUrl);
-    expect(container.textContent).toContain(
-      "Before sending, make sure your client uses this address.",
-    );
-    expect(container.textContent).toContain(
-      "The release plugin may use Production; local and Preview handoffs need a connection configured for that environment.",
-    );
+    expect(container.textContent).toContain("continue your saved app");
   });
   it("never reports a launch as continuation, and only polls while visible", async () => {
     vi.useFakeTimers();

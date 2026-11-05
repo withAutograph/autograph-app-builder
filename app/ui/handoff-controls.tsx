@@ -17,7 +17,6 @@ import {
   buildAppHandoffPrompt,
   buildAppHandoffUrl,
   buildCursorInstallUrl,
-  codexInstallCommand,
 } from "../../lib/handoff/client";
 import styles from "./app-builder.module.css";
 import handoffStyles from "./handoff.module.css";
@@ -56,7 +55,10 @@ function subscribeToClientSnapshot() {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+const renderCursorSetupLink = (url?: string) =>
+  url ? <a href={url}>Add Autograph to Cursor</a> : null;
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
 export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   // The instant server shell is visible before browser event handlers exist.
   // Do not expose an enabled action that can silently discard that first click.
@@ -263,43 +265,6 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     statusMessage = "Sign in to continue your saved app.";
   }
 
-  const setupInstructions = (() => {
-    if (destination === "codex") {
-      return (
-        <>
-          <p>
-            Builder connection address: <code>{data.mcpUrl}</code>. Before sending, make sure your
-            client uses this address. The release plugin may use Production; local and Preview
-            handoffs need a connection configured for that environment.
-          </p>
-          <p>
-            Open in Codex starts setup if needed. If Codex says the plugin is disabled, open Plugins
-            in Codex and enable Autograph App Builder. Complete any browser sign-in with the account
-            used here. If the tools are still unavailable, reload Codex and use Open in Codex on
-            this same page to continue your saved app.
-          </p>
-          <pre style={{ whiteSpace: "pre-wrap" }}>
-            <code>{codexInstallCommand}</code>
-          </pre>
-        </>
-      );
-    }
-    if (installUrl) {
-      return (
-        <>
-          <a href={installUrl}>Add Autograph to Cursor</a>
-          <p>Approve the connection in Cursor, then return here and open your prepared prompt.</p>
-        </>
-      );
-    }
-    return (
-      <p>
-        Cursor connection setup is not available in this environment yet. If Autograph is already
-        connected, open the prompt above; otherwise use Codex or return later.
-      </p>
-    );
-  })();
-
   return (
     <section aria-label="Continue your app" className={handoffStyles.controls}>
       <p role="status" aria-live="polite" className={styles.continueStatus}>
@@ -394,11 +359,13 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           <details>
             <summary>Set up Autograph in {label}</summary>
             <p>
-              Connect Autograph using the same account and browser profile as this form. A new
-              client may ask you to allow Autograph once. Your saved GitHub and Vercel connections
-              are reused.
+              Autograph will help {label} connect and continue your saved app. If asked, sign in
+              with the same Autograph account and approve the connection.
             </p>
-            {setupInstructions}
+            {renderCursorSetupLink(installUrl)}
+            <p>
+              Builder connection address: <code>{data.mcpUrl}</code>
+            </p>
           </details>
         </>
       ) : null}
