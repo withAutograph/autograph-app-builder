@@ -20,10 +20,7 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { priorValidatedPrivateArtifact } from "@/lib/agent/prior-validated-private-artifact";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
-import {
-  ensureCheckoutDependencies,
-  verifyRetainedPreviewDependencies,
-} from "@/lib/agent/checkout-dependencies";
+import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
 import { nativeWorkingPreview } from "@/lib/agent/native-working-preview";
 import {
   resolveProtectedRuntimeBindings,
@@ -127,21 +124,6 @@ const resolveNativePreview = async (
   return null;
 };
 
-const priorPreviewLaunch = (
-  command: { executable: string; args: string[] },
-  cwd: string,
-  appDirectory: string,
-) => {
-  if (
-    command.executable !== "bun" ||
-    JSON.stringify(command.args) !== JSON.stringify(["run", "dev"]) ||
-    cwd !== appDirectory
-  ) {
-    throw new Error("Preview the prior validated artifact with bun run dev in its app directory.");
-  }
-  return { command, adjustment: undefined };
-};
-
 export default defineTool({
   description:
     "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. Use artifact=prior-validated to preview the exact last validated local artifact after a newer plan was denied and never ran. A reachable page is not proof of backend product behavior.",
@@ -173,13 +155,10 @@ export default defineTool({
     const selected =
       prior ?? (await runnableSelectedApp({ appId: input.appId, sandbox, state: current }));
     const cwd = resolvePreviewWorkingDirectory(selected.root, input.workingDirectory);
-    const launch =
-      prior === undefined
-        ? resolvePreviewPackageManager(
-            input.command,
-            await sandbox.readTextFile({ path: `${selected.root}/package.json` }),
-          )
-        : priorPreviewLaunch(input.command, cwd, `${selected.root}/apps/${selected.appId}`);
+    const launch = resolvePreviewPackageManager(
+      input.command,
+      await sandbox.readTextFile({ path: `${selected.root}/package.json` }),
+    );
     const evidenceGeneration = currentProductBehaviorGeneration();
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
     prior?.assertCurrent();
@@ -272,7 +251,11 @@ export default defineTool({
             reconcileWorkspace: true,
             sessionId: ctx.session.id,
           })
-        : await verifyRetainedPreviewDependencies(dependencyInput);
+        : await ensureCheckoutDependencies({
+            ...dependencyInput,
+            checkoutIdentity: selected.revision,
+            sessionId: ctx.session.id,
+          });
     let environmentPath = runtime?.environmentPath;
     if (!runtime && (await appDeclaresLocalSetup({ appId, root: selected.root, sandbox }))) {
       const setup = await prepareAppLocalPreview({

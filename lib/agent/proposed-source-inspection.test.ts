@@ -305,21 +305,6 @@ describe("current frozen proposal inspection", () => {
         inspectCurrentProposalSource(input(state), { ...context, abortSignal: abort.signal }),
       ).toThrow();
     }));
-  it("rechecks the exact current state after reading bytes", () =>
-    run(() => {
-      const state = fixture();
-      const original = appBuilderWorkflowState.get.bind(appBuilderWorkflowState);
-      let reads = 0;
-      const spy = vi.spyOn(appBuilderWorkflowState, "get").mockImplementation(() => {
-        reads += 1;
-        return reads < 3 ? original() : { ...state, phase: "identity_resolved" };
-      });
-      try {
-        expect(() => inspectCurrentProposalSource(input(state), context)).toThrow();
-      } finally {
-        spy.mockRestore();
-      }
-    }));
 });
 
 it("routes explicit proposal reads through the real tool without acquiring a Sandbox; default still reads applied bytes", async () => {
@@ -345,7 +330,7 @@ it("routes explicit proposal reads through the real tool without acquiring a San
     }
     expect(
       tool.inputSchema.safeParse({ appId: "example", source: "current-proposal" }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       tool.inputSchema.safeParse({
         appId: "example",
@@ -362,10 +347,19 @@ it("routes explicit proposal reads through the real tool without acquiring a San
     const executeContext = { ...context, callId: "inspection-call" } as ToolContext;
     const proposedInput = {
       source: "current-proposal" as const,
-      ...input(state, ["app/[...view]/page.tsx"]),
+      appId: "example",
+      pathIndex: 0,
+      paths: ["app/[...view]/page.tsx"],
     };
     const proposed = await tool.execute(proposedInput, executeContext);
-    expect(proposed).toMatchObject({ status: "UNAPPLIED", files: [{ content: "proposed bytes" }] });
+    expect(proposed).toMatchObject({
+      status: "UNAPPLIED",
+      proposalDigest: state.proposal.digest,
+      files: [{ content: "proposed bytes" }],
+    });
+    await expect(
+      tool.execute({ ...proposedInput, pathIndex: 1 }, executeContext),
+    ).rejects.toThrow();
     expect(sandboxPort.get).not.toHaveBeenCalled();
     const applied = await tool.execute(
       { appId: "example", pathIndex: 0, paths: ["app/[...view]/page.tsx"] },

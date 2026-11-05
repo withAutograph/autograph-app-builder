@@ -204,6 +204,14 @@ it.each([
     }),
 );
 
+it("keeps the same prior artifact available after unrelated workflow diagnostics change", async () =>
+  await own(async () => {
+    const f = seed();
+    const selected = await priorValidatedPrivateArtifact(f.input);
+    appBuilderWorkflowState.update(() => ({ ...f.current, checkoutDependencyAttempts: [] }));
+    await expect(selected.verifyCurrent()).resolves.toBeUndefined();
+  }));
+
 it("accepts mode-only changes on both workspace bins and rechecks only paths and bytes", async () =>
   await own(async () => {
     const paths = [

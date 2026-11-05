@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type {
-  DependencyAttemptResult,
-  verifyRetainedPreviewDependencies,
-} from "./checkout-dependencies";
+import type { DependencyAttemptResult } from "./checkout-dependencies";
 import startAppPreview from "../../agent/tools/start_app_preview";
 import {
   previewWorkingDirectorySchema,
@@ -70,10 +67,7 @@ vi.mock("./prepared-runtime-execution", () => ({
   resolveProtectedRuntimeBindings: mocks.nativeBindings,
 }));
 vi.mock("./native-working-preview", () => ({ nativeWorkingPreview: mocks.nativePreview }));
-vi.mock("./checkout-dependencies", async (importOriginal) => ({
-  ...(await importOriginal<{
-    verifyRetainedPreviewDependencies: typeof verifyRetainedPreviewDependencies;
-  }>()),
+vi.mock("./checkout-dependencies", () => ({
   ensureCheckoutDependencies: mocks.dependencies,
 }));
 vi.mock("./prior-validated-private-artifact", () => ({
@@ -203,10 +197,10 @@ describe("preview command working directory", () => {
     }
   });
   it.each([true, false])(
-    "only probes retained dependencies for a prior preview (ready: %s)",
+    "runs a repository-declared command for prior preview after dependency setup (ready: %s)",
     async (ready) => {
       const saved = mocks.workflowState;
-      const run = vi.fn().mockResolvedValue({ exitCode: ready ? 0 : 1, stdout: "", stderr: "" });
+      const verifyCurrent = vi.fn().mockResolvedValue(null);
       const assertCurrent = vi.fn(() => {
         expect(mocks.workflowState).toBe(saved);
       });
@@ -217,26 +211,29 @@ describe("preview command working directory", () => {
         validationDigest: "prior-validation",
         reusable: true,
         assertCurrent,
-        verifyCurrent: vi.fn(),
+        verifyCurrent,
       });
       mocks.dependencies.mockClear();
+      mocks.dependencies.mockResolvedValueOnce({
+        status: ready ? "reused" : "installed",
+        attempts: [],
+      });
       mocks.start.mockClear();
       const signal = new AbortController().signal;
       const result = startAppPreview.execute(
         {
           artifact: "prior-validated",
-          command: { args: ["run", "dev"], executable: "bun" },
+          command: { args: ["run", "preview"], executable: "npm" },
           landingPath: "/app",
           port: 3000,
-          workingDirectory: "apps/app",
+          workingDirectory: ".",
         },
         {
           abortSignal: signal,
           callId: "call-prior",
           getSandbox: vi.fn().mockResolvedValue({
             id: "sandbox",
-            run,
-            readTextFile: vi.fn().mockResolvedValue(null),
+            readTextFile: vi.fn().mockResolvedValue('{"packageManager":"pnpm@10.0.0"}'),
           }),
           getToken: vi.fn(),
           requireAuth: (): never => {
@@ -250,23 +247,24 @@ describe("preview command working directory", () => {
           toolName: "start_app_preview",
         },
       );
-      if (ready) {
-        await expect(result).resolves.toMatchObject({
-          dependencies: { status: "reused", attempts: [] },
-        });
-        expect(mocks.start).toHaveBeenCalledOnce();
-      } else {
-        await expect(result).rejects.toMatchObject({
-          code: "retained-preview-dependencies-required",
-        });
-        expect(mocks.start).not.toHaveBeenCalled();
-      }
-      expect(run).toHaveBeenCalledExactlyOnceWith({
-        command: "test -d node_modules/.bin",
-        workingDirectory: "/workspace/repository",
-        abortSignal: signal,
+      await expect(result).resolves.toMatchObject({
+        dependencies: { status: ready ? "reused" : "installed" },
       });
-      expect(mocks.dependencies).not.toHaveBeenCalled();
+      expect(mocks.dependencies).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ root: "/workspace/repository", checkoutIdentity: "prior-apply" }),
+      );
+      expect(mocks.dependencies).not.toHaveBeenCalledWith(
+        expect.objectContaining({ reconcileWorkspace: true }),
+      );
+      const request: unknown = mocks.dependencies.mock.calls[0]?.[0];
+      expect(request).not.toHaveProperty("onAttempt");
+      expect(verifyCurrent).toHaveBeenCalledBefore(mocks.start);
+      expect(mocks.start).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cwd: "/workspace/repository",
+          command: { args: ["run", "preview"], executable: "pnpm" },
+        }),
+      );
       expect(mocks.workflowState).toBe(saved);
     },
   );

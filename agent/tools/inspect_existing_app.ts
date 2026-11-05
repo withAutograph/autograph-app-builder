@@ -335,7 +335,7 @@ export default defineDynamic({
     "step.started": () =>
       defineTool({
         description:
-          "Read regular text files from one existing application after selecting its source. First call without paths or contentPath to list app-owned files; pass the returned nextPathIndex as pathIndex to continue discovery. For paths and contentPath, use app-relative paths such as app/page.tsx or repository-relative paths such as apps/<appId>/app/page.tsx, not absolute /workspace paths. Request a relevant set of paths for content. Content reads return the current availablePathCount and requested bytes without repeating the path index; call without paths or contentPath when the index is needed. Large files return a digest and UTF-8 byte offset; continue with contentPath, offsetBytes, and expectedDigest until no continuation remains. Default source is applied Sandbox files. To inspect only the CURRENT frozen, unapplied existing-app changes, explicitly pass source current-proposal with expectedProposalDigest from the current plan; results are labeled UNAPPLIED and include explicit deletions. This does not read historical drafts or fall back to applied files. Reuse the same proposal digest on every chunk/list continuation. This is read-only and never writes or publishes.",
+          "Read regular text files from one existing application after selecting its source. First call without paths or contentPath to list app-owned files; pass the returned nextPathIndex as pathIndex to continue discovery. For paths and contentPath, use app-relative paths such as app/page.tsx or repository-relative paths such as apps/<appId>/app/page.tsx, not absolute /workspace paths. Request a relevant set of paths for content. Content reads return the current availablePathCount and requested bytes without repeating the path index; call without paths or contentPath when the index is needed. Large files return a digest and UTF-8 byte offset; continue with contentPath, offsetBytes, and expectedDigest until no continuation remains. Default source is applied Sandbox files. To inspect only the CURRENT frozen, unapplied existing-app changes, pass source current-proposal; results are labeled UNAPPLIED and include explicit deletions. This does not read historical drafts or fall back to applied files. Use the returned proposal digest for chunk/list continuation, or supply an expected digest to pin the first read. This is read-only and never writes or publishes.",
         async execute(
           {
             appId,
@@ -350,9 +350,6 @@ export default defineDynamic({
           ctx,
         ) {
           if (source === "current-proposal") {
-            if (expectedProposalDigest === undefined) {
-              throw new Error("Current proposal inspection requires its exact proposal digest.");
-            }
             return inspectCurrentProposalSource(
               {
                 appId,
@@ -440,14 +437,11 @@ export default defineDynamic({
             paths: z.array(z.string().min(1)).default([]),
           })
           .superRefine((input, context) => {
-            if (
-              (input.source === "current-proposal") !==
-              (input.expectedProposalDigest !== undefined)
-            ) {
+            if (input.source !== "current-proposal" && input.expectedProposalDigest !== undefined) {
               context.addIssue({
                 code: "custom",
-                message:
-                  "Current proposal reads require source current-proposal and expectedProposalDigest together.",
+                message: "Only a current-proposal read accepts expectedProposalDigest.",
+                path: ["expectedProposalDigest"],
               });
             }
             if (

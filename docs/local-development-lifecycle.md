@@ -670,8 +670,8 @@ to require their exact approved base and receipt binding.
 
 `inspect_existing_app` reads the applied Sandbox by default. When reviewing an
 existing-app repair before its Build approval, explicitly select
-`source: "current-proposal"` and supply the current plan's
-`expectedProposalDigest`. This reads only that session's current planned change
+`source: "current-proposal"`. The first read returns the proposal digest.
+This reads only that session's current planned change
 inventory, labels the result `UNAPPLIED`, verifies full proposal and file hashes,
 and reports deletions explicitly. A path absent from that inventory is not read
 from the Sandbox. It cannot recover an older proposal from history.
@@ -764,14 +764,13 @@ After a newer existing-app plan was explicitly denied without execution,
 requires the exact prior validated repair base, matching approval history and
 a fresh comparison of source paths and content against the retained apply
 receipt. File permission changes do not affect this comparison. Start this
-preview with the app’s repository-owned `bun run dev` command in its app
-directory. Browser tests use a private preview started for that same apply
+preview with the repository’s actual development command. Browser tests use a private preview started for that same apply
 and validation receipt. Selecting it leaves the newer denied plan and both
 receipts in place and grants no publication authority.
 
-A prior validated preview probes the retained checkout dependency directory
-without reinstalling or changing the saved workflow. If dependencies are
-missing, that preview requires a fresh reviewed Build to restore them.
+A prior validated preview reuses available checkout dependencies. Builder
+restores missing dependencies from the frozen lockfile and checks the retained
+source before launching the preview.
 
 Builder's checkout dependency installation preserves the original modes of
 workspace bin files when Bun widens them during installation. Ordinary preview

@@ -1,6 +1,5 @@
 /* oxlint-disable sonarjs/expression-complexity -- Keep each exact immutable binding comparison visible at the read-only authority boundary. */
 import { createHash } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
 import type { ToolContext } from "eve/tools";
 import { applicationFilePathSchema } from "../repository/application-file-change";
 import {
@@ -14,7 +13,7 @@ import { existingAppRepairHistory } from "./existing-app-repair-planning";
 
 export interface ProposedSourceInspectionInput {
   appId: string;
-  expectedProposalDigest: string;
+  expectedProposalDigest?: string;
   paths: string[];
   contentPath?: string;
   expectedDigest?: string;
@@ -52,18 +51,23 @@ const event = (output: Output) => ({
 });
 
 /** Session-scoped frozen model-authored bytes only. Never acquires or reads a Sandbox. */
+// oxlint-disable-next-line eslint/complexity -- Keep the exact proposal and session checks together before reading draft bytes.
 const bindCurrentProposalSource = (
   input: ProposedSourceInspectionInput,
   ctx: Pick<ToolContext, "session" | "abortSignal">,
 ) => {
-  const current = structuredClone(appBuilderWorkflowState.get());
+  ctx.abortSignal?.throwIfAborted();
+  const current = appBuilderWorkflowState.get();
   const authority = readPrivateApplyAuthority();
   const history = existingAppRepairHistory.get();
   if (
     !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(input.appId) ||
     current.phase !== "planned" ||
     current.appSpec.appId !== input.appId ||
-    current.proposal.digest !== input.expectedProposalDigest ||
+    (input.expectedProposalDigest !== undefined &&
+      current.proposal.digest !== input.expectedProposalDigest) ||
+    (input.expectedProposalDigest === undefined &&
+      (input.pathIndex > 0 || (input.offsetBytes ?? 0) > 0)) ||
     !("iteration" in current.proposal.target) ||
     current.proposal.target.operation !== "iterate-existing-app"
   ) {
@@ -72,40 +76,33 @@ const bindCurrentProposalSource = (
   const { proposal } = current;
   const { digest, ...unsigned } = proposal;
   const target = current.proposal.target;
-  const assertCurrent = () => {
-    ctx.abortSignal?.throwIfAborted();
-    if (
-      !isDeepStrictEqual(appBuilderWorkflowState.get(), current) ||
-      !isDeepStrictEqual(readPrivateApplyAuthority(), authority) ||
-      !isDeepStrictEqual(existingAppRepairHistory.get(), history) ||
-      !ctx.session.id ||
-      proposal.plannedByCallId.length === 0 ||
-      sha256(JSON.stringify(unsigned)) !== digest ||
-      proposal.appSpecDigest !== current.appSpec.digest ||
-      proposal.workspaceDigest !== current.workspace.workspaceDigest ||
-      proposal.sourceReceiptDigest !== current.sourceReceipt.digest ||
-      target.contract.appId !== input.appId ||
-      target.contract.appSpec.sha256 !== current.appSpec.digest ||
-      proposal.contractDigest !== sha256(JSON.stringify(target.contract)) ||
-      sha256(JSON.stringify(target.iteration.changes)) !== target.iteration.digest ||
-      authority.grant?.proposalDigest === digest ||
-      history.some(
-        (entry) => entry.proposalDigest === digest && entry.sessionId !== ctx.session.id,
-      ) ||
-      authority.pending.some(
-        ({ scope }) =>
-          scope.proposalDigest === digest &&
-          (scope.sessionId !== ctx.session.id ||
-            scope.appId !== input.appId ||
-            scope.appSpecDigest !== current.appSpec.digest ||
-            scope.workspaceId !== current.workspace.workspaceId),
-      )
-    ) {
-      throw denied();
-    }
-  };
-  assertCurrent();
-  return { proposal, target, assertCurrent };
+  if (
+    !ctx.session.id ||
+    proposal.plannedByCallId.length === 0 ||
+    sha256(JSON.stringify(unsigned)) !== digest ||
+    proposal.appSpecDigest !== current.appSpec.digest ||
+    proposal.workspaceDigest !== current.workspace.workspaceDigest ||
+    proposal.sourceReceiptDigest !== current.sourceReceipt.digest ||
+    target.contract.appId !== input.appId ||
+    target.contract.appSpec.sha256 !== current.appSpec.digest ||
+    proposal.contractDigest !== sha256(JSON.stringify(target.contract)) ||
+    sha256(JSON.stringify(target.iteration.changes)) !== target.iteration.digest ||
+    authority.grant?.proposalDigest === digest ||
+    history.some(
+      (entry) => entry.proposalDigest === digest && entry.sessionId !== ctx.session.id,
+    ) ||
+    authority.pending.some(
+      ({ scope }) =>
+        scope.proposalDigest === digest &&
+        (scope.sessionId !== ctx.session.id ||
+          scope.appId !== input.appId ||
+          scope.appSpecDigest !== current.appSpec.digest ||
+          scope.workspaceId !== current.workspace.workspaceId),
+    )
+  ) {
+    throw denied();
+  }
+  return { proposal, target };
 };
 
 type Changes = ReturnType<typeof bindCurrentProposalSource>["target"]["iteration"]["changes"];
@@ -278,7 +275,5 @@ export const inspectCurrentProposalSource = (
   ctx: Pick<ToolContext, "session" | "abortSignal">,
 ): Output => {
   const binding = bindCurrentProposalSource(input, ctx);
-  const output = renderCurrentProposalSource(input, binding);
-  binding.assertCurrent();
-  return output;
+  return renderCurrentProposalSource(input, binding);
 };

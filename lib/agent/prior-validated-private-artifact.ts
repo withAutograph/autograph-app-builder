@@ -8,7 +8,7 @@ import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { existingAppRepairHistory } from "./existing-app-repair-planning";
 import { inspectPlannedAuthoringCandidate } from "./planned-proposal-authoring";
 import { readPrivateApplyAuthority } from "./private-apply-authority";
-import { appBuilderWorkflowState, assertExactWorkflowState, sha256 } from "./workflow-state";
+import { appBuilderWorkflowState, sha256 } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 
 const unavailable = () =>
@@ -16,6 +16,30 @@ const unavailable = () =>
 
 const digestMatches = ({ digest, ...unsigned }: { digest: string }) =>
   digest === sha256(JSON.stringify(unsigned));
+
+const selectionBinding = (state: AppBuilderWorkflowState) =>
+  state.phase === "planned"
+    ? {
+        appId: state.appSpec.appId,
+        appSpecDigest: state.appSpec.digest,
+        proposalDigest: state.proposal.digest,
+        sourceReceiptDigest: state.sourceReceipt.digest,
+        workspaceId: state.workspace.workspaceId,
+        workspacePath: state.workspace.workspacePath,
+        workspaceDigest: state.workspace.workspaceDigest,
+        sourceSha: state.workspace.sourceSha,
+        githubSourceDigest: state.githubSource?.digest,
+      }
+    : undefined;
+
+const validationIdentity = (state: AppBuilderWorkflowState) =>
+  state.phase === "validated"
+    ? {
+        proposalDigest: state.proposal.digest,
+        applyDigest: state.applyReceipt.digest,
+        validationDigest: state.validationReceipt.digest,
+      }
+    : undefined;
 
 export const priorValidatedPrivateArtifact = async (input: {
   appId?: string;
@@ -51,11 +75,14 @@ export const priorValidatedPrivateArtifact = async (input: {
     matches.length !== 1 ||
     entry?.sessionId !== sessionId ||
     prior?.phase !== "validated" ||
-    !isDeepStrictEqual(entry.previousWorkflow, prior) ||
+    !isDeepStrictEqual(validationIdentity(entry.previousWorkflow), validationIdentity(prior)) ||
     prior.githubSource !== undefined ||
-    !isDeepStrictEqual(state.appSpec, prior.appSpec) ||
-    !isDeepStrictEqual(state.sourceReceipt, prior.sourceReceipt) ||
-    !isDeepStrictEqual(state.workspace, prior.workspace)
+    state.appSpec.digest !== prior.appSpec.digest ||
+    state.sourceReceipt.digest !== prior.sourceReceipt.digest ||
+    state.workspace.workspaceId !== prior.workspace.workspaceId ||
+    state.workspace.workspacePath !== prior.workspace.workspacePath ||
+    state.workspace.workspaceDigest !== prior.workspace.workspaceDigest ||
+    state.workspace.sourceSha !== prior.workspace.sourceSha
   ) {
     throw unavailable();
   }
@@ -63,11 +90,9 @@ export const priorValidatedPrivateArtifact = async (input: {
   const validation = prior.validationReceipt;
   assertCurrentTargetApplyReceipt(apply);
   const binding = validationBinding(apply, validation.testShards);
+  const approvedScope = { ...denial.scope, proposalDigest: prior.proposal.digest };
   if (
-    !isDeepStrictEqual(authority.grant, {
-      ...denial.scope,
-      proposalDigest: prior.proposal.digest,
-    }) ||
+    !isDeepStrictEqual(authority.grant, approvedScope) ||
     !digestMatches(prior.proposal) ||
     !digestMatches(apply) ||
     !digestMatches(validation) ||
@@ -88,16 +113,29 @@ export const priorValidatedPrivateArtifact = async (input: {
     throw unavailable();
   }
 
+  const selected = selectionBinding(state);
+  const approved = validationIdentity(prior);
   const assertCurrent = () => {
     signal?.throwIfAborted();
-    assertExactWorkflowState(
-      appBuilderWorkflowState.get(),
-      state,
-      "select the prior validated private artifact",
+    const currentAuthority = readPrivateApplyAuthority();
+    const retainedDenial = currentAuthority.terminalDecisions?.some(
+      (row) =>
+        row.evidenceDigest === denial.denialEvidenceDigest &&
+        row.outcome === "denied-not-run" &&
+        isDeepStrictEqual(row.scope, denial.scope),
     );
+    const retained = existingAppRepairHistory
+      .get()
+      .filter((row) => row.proposalDigest === state.proposal.digest);
+    const retainedEntry = retained[0];
     if (
-      !isDeepStrictEqual(readPrivateApplyAuthority(), authority) ||
-      !isDeepStrictEqual(existingAppRepairHistory.get(), history) ||
+      !isDeepStrictEqual(selectionBinding(appBuilderWorkflowState.get()), selected) ||
+      currentAuthority.pending.length !== 0 ||
+      !isDeepStrictEqual(currentAuthority.grant, approvedScope) ||
+      retainedDenial !== true ||
+      retained.length !== 1 ||
+      retainedEntry?.sessionId !== sessionId ||
+      !isDeepStrictEqual(validationIdentity(retainedEntry.approvedBase), approved) ||
       getBuilderSandboxId(sandbox) !== state.workspace.workspaceId
     ) {
       throw unavailable();
