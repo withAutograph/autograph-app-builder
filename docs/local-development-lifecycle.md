@@ -780,3 +780,9 @@ receipt. Builder retains a checkout-local reservation before changing modes.
 If dispatch is uncertain, inspection can confirm restoration or report that
 reconciliation is required. The reservation blocks repeat writes even when
 the tool turn is interrupted before its result is retained.
+
+Builder's checkout dependency installation preserves the original modes of
+workspace bin files when Bun widens them during installation. Ordinary preview
+reconciliation, frozen dependency restoration, validation recovery and the
+UI preview renderer fallback use the same guard as apply. Dependency receipts keep the Bun recipe and record the
+digest of the actual wrapped command.

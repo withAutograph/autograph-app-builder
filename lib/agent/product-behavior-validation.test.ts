@@ -1,3 +1,4 @@
+import { workspaceBinInstallCommand } from "../repository/workspace-bin-install";
 import { createHash } from "node:crypto";
 import { PRIVATE_COMPUTE_CHECK_TASK } from "../sandbox/private-compute-profile";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -926,7 +927,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       expect(sandbox.setNetworkPolicy).toHaveBeenCalledExactlyOnceWith("allow-all");
       expect(sandbox.setNetworkPolicy).toHaveBeenCalledBefore(sandbox.spawn);
       expect(sandbox.spawn).toHaveBeenCalledExactlyOnceWith({
-        command: "bun install",
+        command: workspaceBinInstallCommand("/workspace/repository", false),
         workingDirectory: "/workspace/repository",
       });
       expect(sandbox.spawn).toHaveBeenCalledBefore(mocks.prepare);
