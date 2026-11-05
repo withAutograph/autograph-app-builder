@@ -63,9 +63,8 @@ target checkout or external system is changed.
 
 ### 9. Review and validate locally
 
-Builder prepares changes in its private checkout, runs local checks and tests,
-and presents the result for review. If the plan selects a private compute
-resize, Builder asks for approval of that compute footprint before resizing.
+Builder implements the agreed changes, checks that they work, and presents the
+result for review. It asks before taking an action that needs separate authorization.
 
 Validation runs against the selected applied checkout. Ordinary changes in the
 separate host source become input to the next plan. When planning observes no
