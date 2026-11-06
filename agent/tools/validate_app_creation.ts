@@ -1,3 +1,4 @@
+import { assertApprovedPrivateApplySession } from "@/lib/agent/private-apply-authority";
 import {
   ReviewedCheckRecipeRequiredError,
   prepareValidationPrivateComputeRepair,
@@ -181,10 +182,13 @@ export const createAppValidationTool = (
 ) =>
   defineTool({
     description:
-      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. For persistent apps, run any declared authenticated browser task after that preparation succeeds and report its result separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
+      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Use repairOnly with implementationFiles to update the already approved app in its private checkout without running checks or requesting another Build. Open the updated app with start_app_preview. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. For persistent apps, run any declared authenticated browser task after that preparation succeeds and report its result separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
     // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep the workflow phase, cancellation and original failure receipt branches explicit.
     async execute(input, ctx) {
       const current = appBuilderWorkflowState.get();
+      if (input.repairOnly === true && input.implementationFiles.length === 0) {
+        throw new Error("Supply the app files to repair before opening a working preview.");
+      }
       const candidate = draftReconciliationState.get();
       if (
         input.implementationFiles.length === 0 &&
@@ -205,6 +209,15 @@ export const createAppValidationTool = (
         current.phase !== "reviewed"
       ) {
         throw new Error("Apply the requested changes before running the repository checks.");
+      }
+      if (input.repairOnly === true) {
+        assertApprovedPrivateApplySession({
+          appId: current.appSpec.appId,
+          appSpecDigest: current.appSpec.digest,
+          proposalDigest: current.proposal.digest,
+          sessionId: ctx.session.id,
+          workspaceId: current.workspace.workspaceId,
+        });
       }
       assertExistingAppImplementationFiles(input.implementationFiles, current.proposal.target);
       if (
@@ -278,6 +291,9 @@ export const createAppValidationTool = (
         await applyImplementationFiles(sandbox, relativeApplyRoot, input.implementationFiles);
         await repairComputeCheck?.applyPolicy(sandbox);
         validationPhase(ctx.callId, "implementation_files_written");
+      }
+      if (input.repairOnly === true) {
+        return { status: "repair_applied" as const };
       }
       if (
         !fixture &&
@@ -596,6 +612,7 @@ export const createAppValidationTool = (
     },
     inputSchema: z.object({
       implementationFiles: implementationFilesSchema.default([]),
+      repairOnly: z.boolean().optional(),
     }),
   });
 

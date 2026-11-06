@@ -12,6 +12,13 @@ Preview access follows the provider Sandbox's own expiry; there is no separate t
 
 Public session results distinguish `workingPreview` from fixture `uiPreview`. New startup requests, failed startup, cancellation, and expired access invalidate the current public preview. Explicit invalidation survives checkpoint recovery. Stored receipts remain historical evidence, not permanent availability promises.
 
+For an in-scope source repair, pass the changed files to
+`validate_app_creation` with `repairOnly: true`. Builder checks the original
+Build grant against the current proposal and workspace, applies the files,
+and returns before running repository checks. Start the preview again to
+exercise the updated app. This path does not produce a validation receipt or
+publication authority.
+
 ## Startup ownership and diagnostics
 
 A sandbox-local attempt journal records ownership before the supervisor starts.
