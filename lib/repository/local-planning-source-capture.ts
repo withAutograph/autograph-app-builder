@@ -68,8 +68,9 @@ const assertStableCaptureGeneration = async (
   root: string,
   generation: Awaited<ReturnType<typeof inspectDevelopmentSourceGeneration>>,
   links: readonly [string, string][],
+  inspectSource: typeof inspectDevelopmentSourceGeneration,
 ) => {
-  const current = await inspectDevelopmentSourceGeneration(root);
+  const current = await inspectSource(root);
   const currentLinks: [string, string][] = [];
   for (const name of current.names) {
     const absolute = path.join(root, name);
@@ -106,13 +107,17 @@ const selectedLocalSourcePath = (root: string, name: string) => {
 export const captureLocalPlanningSource = async (
   sourcePath: string,
   originalSourceSha: string,
-  dependencies: { readAuthority?: typeof readLocalOperatorArtifactAuthority } = {},
+  dependencies: {
+    readAuthority?: typeof readLocalOperatorArtifactAuthority;
+    inspectSource?: typeof inspectDevelopmentSourceGeneration;
+  } = {},
 ) => {
   objectId.parse(originalSourceSha);
   const authority = await (dependencies.readAuthority ?? readLocalOperatorArtifactAuthority)();
   const retainedRunsRoot =
     authority === undefined ? undefined : path.join(authority.stateRoot, "runs");
-  const generation = await inspectDevelopmentSourceGeneration(sourcePath);
+  const inspectSource = dependencies.inspectSource ?? inspectDevelopmentSourceGeneration;
+  const generation = await inspectSource(sourcePath);
   const root = generation.sourcePath;
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "app-builder-local-planning-")));
   const gitDir = path.join(directory, "source.git");
@@ -180,7 +185,7 @@ export const captureLocalPlanningSource = async (
     }
     git(["update-index", "-z", "--index-info"], Buffer.from(`${records.join("\0")}\0`));
     const snapshotTree = objectId.parse(git(["write-tree"]));
-    await assertStableCaptureGeneration(root, generation, links);
+    await assertStableCaptureGeneration(root, generation, links, inspectSource);
     // This is a private planning tree, not host Git history. Parent only the
     // actual retained base so an incremental bundle never requires unrelated
     // merged host ancestors that the file-archive candidate does not possess.

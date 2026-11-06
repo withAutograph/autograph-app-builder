@@ -13,8 +13,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
-import * as sourceGeneration from "./development-source-generation";
+import { describe, expect, it } from "vitest";
+import { inspectDevelopmentSourceGeneration } from "./development-source-generation";
 import { captureLocalPlanningSource, reconcileLocalPlanningSource } from "./local-planning-source";
 import { localSourceBaselineManifestSchema } from "./local-source-baseline-contract";
 import { retainPreparedLocalSourceBaseline } from "./local-source-baseline-retention";
@@ -233,24 +233,24 @@ describe("local planning base adoption", () => {
   });
   it("rejects an actually moving source before returning mismatched generation metadata", async () => {
     const f = fixture();
-    const inspect = sourceGeneration.inspectDevelopmentSourceGeneration;
-    const observation = vi
-      .spyOn(sourceGeneration, "inspectDevelopmentSourceGeneration")
-      .mockImplementationOnce(async (root) => {
-        const generation = await inspect(root);
+    let firstObservation = true;
+    const inspectSource: typeof inspectDevelopmentSourceGeneration = async (root) => {
+      const generation = await inspectDevelopmentSourceGeneration(root);
+      if (firstObservation) {
+        firstObservation = false;
         f.write(f.source, "shared.txt", "changed after initial source observation\n");
-        return generation;
-      });
+      }
+      return generation;
+    };
     try {
-      await expect(captureLocalPlanningSource(f.source, f.originalSha)).rejects.toThrow(
-        "local source changed",
-      );
+      await expect(
+        captureLocalPlanningSource(f.source, f.originalSha, { inspectSource }),
+      ).rejects.toThrow("local source changed");
       expect(f.git(f.candidate, "rev-parse", "HEAD")).toBe(f.originalSha);
       expect(readFileSync(path.join(f.candidate, "apps/example/app/page.tsx"), "utf-8")).toBe(
         "saved product\n",
       );
     } finally {
-      observation.mockRestore();
       f.dispose();
     }
   });
