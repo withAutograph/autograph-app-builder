@@ -49,12 +49,7 @@ export async function continueGitHubPrDelivery(
   "use step";
   const { githubPublicationRuntimeForSession } =
     await import("./deployment-github-publication-runtime");
-  const {
-    installationId,
-    proposalDigest,
-    readyAt: approvedReadyAt,
-    ...reviewedTarget
-  } = approval;
+  const { installationId, proposalDigest, readyAt: approvedReadyAt, ...reviewedTarget } = approval;
   delete reviewedTarget.sessionId;
   ctx.abortSignal.throwIfAborted();
   const runtime = await githubPublicationRuntimeForSession(
