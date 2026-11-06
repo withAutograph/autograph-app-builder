@@ -5,7 +5,7 @@ import { initialBuilderProvisionJournalRecord } from "../provisioning/journal";
 import type { BuilderProvisionJournalRow } from "../provisioning/journal";
 import { builderProvisionRequestDigest } from "../provisioning/contracts";
 
-const fixture = () => {
+const fixture = (withoutDestination = false) => {
   const authority = {
     issuer: "https://builder.example/auth",
     audience: "https://builder.example/mcp",
@@ -69,7 +69,16 @@ const fixture = () => {
       return {
         authority,
         appId: "saved-app",
-        destination: { appId: "saved-app", requestId: request.requestId, requestDigest: digest },
+        publicSessionId: "saved-public-session",
+        ...(withoutDestination
+          ? {}
+          : {
+              destination: {
+                appId: "saved-app",
+                requestId: request.requestId,
+                requestDigest: digest,
+              },
+            }),
         owner: { adapterGeneration: epoch },
       };
     },
@@ -91,11 +100,19 @@ const fixture = () => {
 it("selects the saved Builder-created destination without changing starter provenance or performing writes", async () => {
   const f = fixture();
   expect(await f.read()).toEqual({
-    repository: "owner/saved-app",
-    repositoryId: "123",
-    selectedInstallationId: "456",
+    publicSessionId: "saved-public-session",
+    destination: {
+      repository: "owner/saved-app",
+      repositoryId: "123",
+      selectedInstallationId: "456",
+    },
   });
   expect(f.reads()).toBe(2);
+});
+it("retains the public build identity when there is no destination to read", async () => {
+  const f = fixture(true);
+  expect(await f.read()).toEqual({ publicSessionId: "saved-public-session" });
+  expect(f.reads()).toBe(0);
 });
 it.each(["pending", "app", "link"] as const)("refuses %s provisioning receipts", async (kind) => {
   const f = fixture();

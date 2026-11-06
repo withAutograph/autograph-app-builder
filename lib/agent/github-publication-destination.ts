@@ -1,4 +1,5 @@
 import { readBuilderPublicationDestinationForTool } from "./builder-publication-destination";
+import { withBuilderDestinationGuidance } from "../provisioning/builder-destination-guidance";
 
 import type { GitHubPublicationDestinationIdentity } from "./github-publication-runtime";
 import { repositoryAccessReceiptSchema } from "./repository-access-state";
@@ -69,7 +70,9 @@ const assertPublicationDestinationConstraints = (
     destination?: PublicationDestinationSelector;
     githubSource?: ImmutableGitHubSourceReceipt;
   },
-  ownedDestination: Awaited<ReturnType<typeof readBuilderPublicationDestinationForTool>>,
+  ownedDestination: Awaited<
+    ReturnType<typeof readBuilderPublicationDestinationForTool>
+  >["destination"],
 ) => {
   if (ownedDestination !== undefined && input.destination !== undefined) {
     const selectedInstallation =
@@ -104,6 +107,18 @@ const assertPublicationDestinationConstraints = (
   }
 };
 
+const missingDestinationGuidance = (publicSessionId?: string) => {
+  const blocked = {
+    status: "blocked" as const,
+    code: "builder_destination_required" as const,
+    nextAction:
+      "For a new app, choose the destination in the saved build's destination setup in hosted Builder. If the user already chose an existing repository, use that repository's normal connection flow.",
+  };
+  return publicSessionId === undefined
+    ? blocked
+    : withBuilderDestinationGuidance(blocked, publicSessionId);
+};
+
 export const createPublicationTargetResolver =
   <Context extends { session: { id: string } }>(ports: PublicationResolverPorts<Context>) =>
   async (input: {
@@ -115,10 +130,11 @@ export const createPublicationTargetResolver =
     appId: string;
   }): Promise<
     | { kind: "ready"; target: PublicationTarget }
-    | { kind: "missing" }
+    | { kind: "missing"; guidance: ReturnType<typeof missingDestinationGuidance> }
     | { kind: "selection"; access: RepositoryAccessResult }
   > => {
-    const ownedDestination = await ports.readOwnedDestination(input.ctx, input.appId);
+    const ownedSelection = await ports.readOwnedDestination(input.ctx, input.appId);
+    const ownedDestination = ownedSelection.destination;
     assertPublicationDestinationConstraints(input, ownedDestination);
     if (input.githubSource !== undefined && ownedDestination === undefined) {
       return { kind: "ready", target: { githubSource: input.githubSource } };
@@ -142,7 +158,10 @@ export const createPublicationTargetResolver =
             selectedInstallationId: retained.installationId,
           });
     if (destination === undefined) {
-      return { kind: "missing" };
+      return {
+        kind: "missing",
+        guidance: missingDestinationGuidance(ownedSelection.publicSessionId),
+      };
     }
     const access = await ports.resolveAccess(destination, input.ctx);
     if (access.kind === "selection") {
@@ -154,7 +173,7 @@ export const createPublicationTargetResolver =
       if (
         selected.repositoryId !== ownedDestination.repositoryId ||
         selected.installationId !== ownedDestination.selectedInstallationId ||
-        JSON.stringify(current) !== JSON.stringify(ownedDestination)
+        JSON.stringify(current) !== JSON.stringify(ownedSelection)
       ) {
         throw new Error("The saved Builder app destination changed during publication review.");
       }

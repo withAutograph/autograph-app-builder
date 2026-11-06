@@ -343,16 +343,17 @@ Preparation invalidates the previous review and sealed proposal while retaining
 its mutation journal. A pending or potentially partial prior publication must
 be recovered before another destination review.
 
-For a fresh-template app, pass the intended existing repository as
-`destination: { repository: "owner/name", selectedInstallationId? }` to
-`prepare_github_draft_review`. Preparation uses the ordinary session-owned
-GitHub connection flow and observes the actual repository and installation.
-A later refresh can reuse that exact retained destination. It never replaces
-the starter checkout, creates a repository, or fabricates `githubSource`.
-Keep the original source receipt, app files, and validation. An absent
-destination is an internal workflow selection to resolve from the intended
-delivery target; it is not a reason to restart the app or ask the user to
-repair source plumbing.
+Builder reuses the saved app's recorded repository. When a new app still needs
+a destination, `prepare_github_draft_review` returns the same saved build's
+destination setup at `/builds/<session-id>/destination`. Use that setup to choose
+where to store and release the app, then resume the saved build. Publication
+retains its separate approval.
+
+If the user explicitly chose an existing repository for a fresh-template app,
+pass it as `destination: { repository: "owner/name", selectedInstallationId? }`.
+Preparation observes the actual repository and installation through the ordinary
+session-owned GitHub connection. A later refresh can reuse that exact destination.
+Keep the starter checkout, original source receipt, app files and validation.
 
 After accepting the destination diff, fresh-template sealing uses
 `expectedDestinationReviewDigest`; acquired GitHub sources retain
