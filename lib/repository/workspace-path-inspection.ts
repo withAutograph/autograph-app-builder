@@ -58,15 +58,16 @@ export const workspaceInspectionProgram = (input: {
 }): string => String.raw`
 const fs=require("node:fs");const path=require("node:path");
 const input=${JSON.stringify(input)};
+const deniedKind="workspace-path-denied";
 const emit=value=>process.stdout.write(JSON.stringify(value));
 const within=(root,value)=>value===root||value.startsWith(root+path.sep);
 try{
  const root=fs.realpathSync(input.root);
- if(root!==path.resolve(input.root)||fs.lstatSync(input.root).isSymbolicLink()){emit({kind:"workspace-path-denied"});process.exit(0);}
+ if(root!==path.resolve(input.root)||fs.lstatSync(input.root).isSymbolicLink()){emit({kind:deniedKind});process.exit(0);}
  const target=path.resolve(root,input.relativePath);
- if(!within(root,target)){emit({kind:"workspace-path-denied"});process.exit(0);}
+ if(!within(root,target)){emit({kind:deniedKind});process.exit(0);}
  const resolved=fs.realpathSync(target);
- if(!within(root,resolved)){emit({kind:"workspace-path-denied"});process.exit(0);}
+ if(!within(root,resolved)){emit({kind:deniedKind});process.exit(0);}
  const info=fs.statSync(resolved);
  if(!info.isDirectory()){emit({kind:"workspace-entry",path:input.requestedPath,resolvedPath:resolved,entryKind:info.isFile()?"file":"other"});process.exit(0);}
  const directory=fs.opendirSync(resolved);const entries=[];let index=0;let bytes=0;let continuation;
@@ -79,7 +80,7 @@ try{
    entries.push(entry);bytes+=size;index++;
   }
  }finally{directory.closeSync();}
- if(fs.realpathSync(target)!==resolved){emit({kind:"workspace-path-denied"});process.exit(0);}
+ if(fs.realpathSync(target)!==resolved){emit({kind:deniedKind});process.exit(0);}
  emit({kind:"workspace-directory",path:input.requestedPath,resolvedPath:resolved,entries,...(continuation?{continuation}:{})});
 }catch(error){if(error&&error.code==="ENOENT"){emit({kind:"workspace-missing",path:input.requestedPath});}else{process.stderr.write("Workspace entry inspection failed");process.exitCode=1;}}
 `;
@@ -114,6 +115,7 @@ export const inspectWorkspacePath = async (input: {
   }
   input.signal?.throwIfAborted();
   const observed = await input.sandbox.run({
+    abortSignal: input.signal,
     command: workspaceInspectionCommand({
       directoryOffset: input.directoryOffset ?? 0,
       entryBytes,
@@ -121,7 +123,6 @@ export const inspectWorkspacePath = async (input: {
       requestedPath: selected,
       root: WORKSPACE_REPOSITORY_ROOT,
     }),
-    abortSignal: input.signal,
     // Inspection runs only the maintained built-in reader, never inherited app preload hooks.
     env: { NODE_OPTIONS: "" },
   });

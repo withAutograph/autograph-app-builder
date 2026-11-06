@@ -61,12 +61,15 @@ export const publicReleasePrerequisiteResponseSchema = z.strictObject({
   recordedBuilderDestination: recordedBuilderDestinationSchema.optional(),
   status: z.literal("blocked"),
 });
-export const publicReleasePrerequisiteResponse = (error: PublicReleasePrerequisiteError) => ({
-  status: "blocked" as const,
-  code: error.code,
-  nextAction: actions[error.code],
-  ...(error.recordedBuilderDestination === undefined
-    ? {}
-    : { recordedBuilderDestination: error.recordedBuilderDestination }),
-  authenticatedBehavior: "unassessed" as const,
-});
+export const publicReleasePrerequisiteResponse = (error: PublicReleasePrerequisiteError) => {
+  const response = {
+    authenticatedBehavior: "unassessed" as const,
+    code: error.code,
+    nextAction: actions[error.code],
+    status: "blocked" as const,
+  };
+  if (error.recordedBuilderDestination !== undefined) {
+    response.recordedBuilderDestination = error.recordedBuilderDestination;
+  }
+  return response;
+};

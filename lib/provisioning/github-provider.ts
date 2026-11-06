@@ -14,19 +14,24 @@ import { runSequentiallyUntilAsync } from "../async-sequential.ts";
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
+const responseRecordSchema = z.record(z.string(), z.unknown());
+const responseStringSchema = z.string();
+const responseBooleanSchema = z.boolean();
+const responseNumberSchema = z.number();
+const RETRY_AFTER_HEADER = "retry-after";
+const INVALID_RESPONSE = "invalid-response";
+const GIT_OBJECT_HASH = "sha1";
+const USER_TOKEN_INVALID = "credential-unavailable";
 
-const configSchema = z
-  .object({
-    appId: decimal,
-    clientId: z.string().min(1),
-    clientSecret: z.string().min(20),
-    privateKey: z.string().min(1).max(32_768),
-  })
-  .strict();
+const configSchema = z.strictObject({
+  appId: decimal,
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(20),
+  privateKey: z.string().min(1).max(32_768),
+});
 
 export type GitHubProvisioningConfig = z.infer<typeof configSchema>;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readGitHubProvisioningEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ): GitHubProvisioningConfig {
@@ -45,52 +50,53 @@ interface JsonResponse {
   body: unknown;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+type ResponseRecord = z.infer<typeof responseRecordSchema>;
+function record(value: unknown): value is ResponseRecord {
+  return responseRecordSchema.safeParse(value).success;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function property(value: unknown, key: string) {
-  if (!record(value) || !(key in value)) {
-    throw new TypeError("invalid-response");
+function property(value: ResponseRecord, key: string) {
+  if (!(key in value)) {
+    throw new TypeError(INVALID_RESPONSE);
   }
   return value[key];
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function stringProperty(value: unknown, key: string) {
+function stringProperty(value: ResponseRecord, key: string) {
   const result = property(value, key);
-  if (typeof result !== "string") {
-    throw new TypeError("invalid-response");
+  const parsed = responseStringSchema.safeParse(result);
+  if (!parsed.success) {
+    throw new TypeError(INVALID_RESPONSE);
   }
-  return result;
+  return parsed.data;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function decimalProperty(value: unknown, key: string) {
+function decimalProperty(value: ResponseRecord, key: string) {
   const result = property(value, key);
-  return decimal.parse(typeof result === "number" ? String(result) : result);
+  const parsed = z.union([z.string(), z.number()]).parse(result);
+  const normalized = z.number().safeParse(parsed);
+  return decimal.parse(normalized.success ? String(normalized.data) : parsed);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function marker(requestId: string) {
   return `Created by Autograph App Builder request ${requestId}`;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function suffix() {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   return [...randomBytes(6)].map((value) => alphabet[value % alphabet.length]).join("");
 }
 
-// eslint-disable-next-line eslint/func-style -- Shared by the GitHub request boundary.
-function retryAfterMilliseconds(headers: unknown, now: number): number | undefined {
-  if (!record(headers)) {
+function retryAfterMilliseconds(
+  headers: Headers | Record<string, string> | undefined,
+  now: number,
+): number | undefined {
+  if (headers === undefined) {
     return undefined;
   }
-  const raw = headers["retry-after"];
-  if (typeof raw !== "string") {
+  const raw =
+    headers instanceof Headers ? headers.get(RETRY_AFTER_HEADER) : headers[RETRY_AFTER_HEADER];
+  if (raw === null || raw === undefined) {
     return undefined;
   }
   const seconds = Number(raw);
@@ -101,12 +107,13 @@ function retryAfterMilliseconds(headers: unknown, now: number): number | undefin
   return Number.isFinite(date) ? Math.max(0, date - now) : undefined;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function gitBlobSha(bytes: Uint8Array) {
-  return createHash("sha1").update(`blob ${bytes.byteLength}\0`).update(bytes).digest("hex");
+  return createHash(GIT_OBJECT_HASH)
+    .update(`blob ${bytes.byteLength}\0`)
+    .update(bytes)
+    .digest("hex");
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function starterSourceBinding(source: StarterSource) {
   if (source.provenance !== undefined) {
     if (source.provenance.method === "git-clone-v1") {
@@ -169,7 +176,6 @@ export function starterSourceBinding(source: StarterSource) {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function provisionGitHubRepository(input: {
   config: GitHubProvisioningConfig;
   authority: BuilderProvisionAuthority;
@@ -201,7 +207,6 @@ export async function provisionGitHubRepository(input: {
     privateKey: config.privateKey,
   });
 
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function github(args: {
     method?: "GET" | "POST";
     path: string;
@@ -213,12 +218,14 @@ export async function provisionGitHubRepository(input: {
       if (args.method === "POST") {
         await input.renewLease?.();
       }
+      const requestBody: ResponseRecord = {};
+      if (record(args.body)) {
+        Object.assign(requestBody, args.body);
+      }
       const response = await createGitHubTokenOctokit({
         fetch: request,
         token: args.token,
-      }).request(`${args.method ?? "GET"} ${args.path}`, {
-        ...(record(args.body) ? args.body : {}),
-      });
+      }).request(`${args.method ?? "GET"} ${args.path}`, requestBody);
       if (!args.expected.includes(response.status)) {
         throw new Error(`github-status-${response.status}`);
       }
@@ -240,17 +247,17 @@ export async function provisionGitHubRepository(input: {
       if (status === 403) {
         throw new Error("provider-permission-denied", { cause: error });
       }
-      if (typeof status === "number" && args.expected.includes(status)) {
+      const parsedStatus = responseNumberSchema.safeParse(status);
+      if (parsedStatus.success && args.expected.includes(parsedStatus.data)) {
         return {
           body: record(response) ? response.data : undefined,
-          status,
+          status: parsedStatus.data,
         };
       }
       throw new Error("provider-unavailable", { cause: error });
     }
   }
 
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function installationToken() {
     const authentication = await app.octokit.auth({
       installationId: input.installation.installationId,
@@ -279,7 +286,6 @@ export async function provisionGitHubRepository(input: {
     return token;
   }
 
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function verifyInstallation() {
     const { data } = await app.octokit.request("GET /app/installations/{installation_id}", {
       installation_id: Number(input.installation.installationId),
@@ -297,42 +303,46 @@ export async function provisionGitHubRepository(input: {
     }
   }
 
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function refreshUserToken() {
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const credential = await input.credentialStore.read({
         authority: input.authority,
         providerUserId: input.installation.accountId,
       });
-      if (!credential?.active) {
+      if (credential?.active !== true) {
         throw new Error("credential-unavailable");
       }
-      const expires = credential.tokens.accessTokenExpiresAt
-        ? Date.parse(credential.tokens.accessTokenExpiresAt)
-        : undefined;
+      const accessExpiry = credential.tokens.accessTokenExpiresAt;
+      const expires =
+        accessExpiry !== null && accessExpiry !== undefined && accessExpiry !== ""
+          ? Date.parse(accessExpiry)
+          : undefined;
       if (expires === undefined || expires > now() + 60_000) {
         return credential.tokens.accessToken;
       }
+      const currentRefreshToken = credential.tokens.refreshToken;
+      const refreshExpiry = credential.tokens.refreshTokenExpiresAt;
       if (
-        !credential.tokens.refreshToken ||
-        !credential.tokens.refreshTokenExpiresAt ||
-        Date.parse(credential.tokens.refreshTokenExpiresAt) <= now()
+        currentRefreshToken === null ||
+        currentRefreshToken === undefined ||
+        currentRefreshToken === "" ||
+        refreshExpiry === null ||
+        refreshExpiry === undefined ||
+        refreshExpiry === "" ||
+        Date.parse(refreshExpiry) <= now()
       ) {
         throw new Error("credential-unavailable");
       }
       let authentication: unknown;
       try {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         ({ authentication } = await createGitHubOAuthApp({
           clientId: config.clientId,
           clientSecret: config.clientSecret,
           fetch: request,
           redirectUrl: "https://github.com/login/oauth/access_token",
-        }).refreshToken({ refreshToken: credential.tokens.refreshToken }));
+        }).refreshToken({ refreshToken: currentRefreshToken }));
       } catch (error) {
         if (record(error) && error.status === 401) {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await input.credentialStore.deactivate({
             authority: input.authority,
             now: new Date(now()),
@@ -350,7 +360,6 @@ export async function provisionGitHubRepository(input: {
         throw new Error("invalid-response");
       }
       const refreshedAt = now();
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const rotated = await input.credentialStore.rotate({
         authority: input.authority,
         expectedRevision: credential.revision,
@@ -416,7 +425,6 @@ export async function provisionGitHubRepository(input: {
     };
   }
 
-  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function repository(name: string) {
     return await github({
       expected: [200, 404],
@@ -425,7 +433,6 @@ export async function provisionGitHubRepository(input: {
     });
   }
 
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function writeStarter(name: string) {
     const blobs = new Map<string, string>();
     const writeBlob = async (file: (typeof input.source.files)[number]) => {
@@ -443,7 +450,6 @@ export async function provisionGitHubRepository(input: {
     };
     for (let offset = 0; offset < input.source.files.length; offset += 12) {
       const page = input.source.files.slice(offset, offset + 12);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const values = await Promise.all(page.map(writeBlob));
       for (const [path, sha] of values) {
         blobs.set(path, sha);
@@ -488,7 +494,6 @@ export async function provisionGitHubRepository(input: {
     });
   }
 
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function readBack(name: string): Promise<GitHubProvisionResult> {
     const repo = await repository(name);
     if (repo.status !== 200) {
@@ -526,7 +531,6 @@ export async function provisionGitHubRepository(input: {
     if (property(tree.body, "truncated") === true) {
       const queue = [{ path: "", sha: headTree }];
       for (const directory of queue) {
-        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Git tree traversal must discover children before reading them.
         const page = await github({
           expected: [200],
           path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/trees/${directory.sha}`,
@@ -581,11 +585,11 @@ export async function provisionGitHubRepository(input: {
     const repositoryId = decimalProperty(repo.body, "id");
     const owner = stringProperty(property(repo.body, "owner"), "login");
     const resolvedName = stringProperty(repo.body, "name");
-    const isPrivate = property(repo.body, "private");
+    const parsedPrivate = responseBooleanSchema.safeParse(property(repo.body, "private"));
     if (
       owner !== input.installation.accountLogin ||
-      typeof isPrivate !== "boolean" ||
-      isPrivate !== input.private ||
+      !parsedPrivate.success ||
+      parsedPrivate.data !== input.private ||
       stringProperty(repo.body, "default_branch") !== "main"
     ) {
       throw new Error("repository-postcondition");
@@ -609,7 +613,7 @@ export async function provisionGitHubRepository(input: {
       },
       status: "succeeded",
       url: `https://github.com/${owner}/${resolvedName}`,
-      visibility: isPrivate ? "private" : "public",
+      visibility: parsedPrivate.data ? "private" : "public",
     };
   }
 
@@ -621,7 +625,6 @@ export async function provisionGitHubRepository(input: {
           continue;
         }
         uncertainWrite = true;
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect all prior candidates before permitting a new write.
         const observed = await repository(candidate);
         if (observed.status === 404) {
           continue;
@@ -630,7 +633,6 @@ export async function provisionGitHubRepository(input: {
           return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
         }
         try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- Exact readback proves which previous write completed.
           return await readBack(candidate);
         } catch {
           return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
@@ -665,7 +667,6 @@ export async function provisionGitHubRepository(input: {
       if (seen.has(candidate)) {
         continue;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- each candidate must be durably recorded before the next provider operation.
       await input.persistCandidate(candidate);
       seen.add(candidate);
       yield candidate;
@@ -675,13 +676,12 @@ export async function provisionGitHubRepository(input: {
     const result = await runSequentiallyUntilAsync<string, GitHubProvisionResult>(
       candidates(),
       async (candidate) => {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const before = await repository(candidate);
-        const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
+        const absentCandidates = new Set(input.persistedAbsentCandidates);
+        const wasAbsent = absentCandidates.has(candidate);
         if (before.status === 200 && !wasAbsent) {
           return null;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         if (before.status === 404 && !wasAbsent) {
           await input.persistAbsent(candidate);
         }
@@ -690,7 +690,6 @@ export async function provisionGitHubRepository(input: {
             input.installation.accountType === "Organization"
               ? `/orgs/${encodeURIComponent(input.installation.accountLogin)}/repos`
               : "/user/repos";
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const created = await github({
             body: {
               auto_init: false,
@@ -704,7 +703,6 @@ export async function provisionGitHubRepository(input: {
             token,
           });
           if (created.status === 422) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             const recovered = await repository(candidate);
             const recoveredOwned =
               recovered.status === 200 &&
@@ -722,15 +720,12 @@ export async function provisionGitHubRepository(input: {
                 : { code: "provider_validation_failed", retryable: false, status: "failed" };
             }
           } else {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             if (input.installation.accountType === "Organization") {
               token = await installationToken();
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             await writeStarter(candidate);
           }
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const owned = await repository(candidate);
         if (
           owned.status !== 200 ||
@@ -738,18 +733,15 @@ export async function provisionGitHubRepository(input: {
         ) {
           return null;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const main = await github({
           expected: [200, 404, 409],
           path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(candidate)}/commits/main`,
           token,
         });
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         if (main.status !== 200) {
           await writeStarter(candidate);
         }
         try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           return await readBack(candidate);
         } catch {
           return {

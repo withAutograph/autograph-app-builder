@@ -1,7 +1,5 @@
 import { hostedRuntimeTargetSchema } from "./hosted-runtime-journal";
 import { ownedAppResourceSourceSchema } from "./owned-app-resource-source-contract";
-/* oxlint-disable sonarjs/publicly-writable-directories -- mkdtemp creates the sole private owner-only fixture root; no shared socket or existing cluster is used. */
-/* oxlint-disable eslint/no-await-in-loop -- Qualification applies actual table CHECK definitions in order and owns one disposable local cluster. */
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { userInfo } from "node:os";
@@ -10,7 +8,6 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- The production database factory uses the complete Drizzle schema generic.
 import * as databaseSchema from "../db/schema";
 
 import { provisioningJournalRetentionPredicate } from "../db/postgres-hosted-admin";
@@ -329,9 +326,11 @@ describe.skipIf(tools === undefined)(
       let checks = 0;
       await expect(
         store.select({
-          assertCurrent: async () => {
+          assertCurrent: () => {
             checks += 1;
-            checks === 2 ? await Promise.reject(new Error("revoked")) : await Promise.resolve();
+            if (checks === 2) {
+              throw new Error("revoked");
+            }
           },
           authority,
           expectedPublicOrigin: null,

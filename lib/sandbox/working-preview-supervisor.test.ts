@@ -3,7 +3,6 @@ import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -13,6 +12,21 @@ import { createWorkingPreviewAccess } from "./working-preview-access";
 import { previewOwnershipRoot, previewOwnershipSource } from "./working-preview-ownership";
 import { workingPreviewSupervisorSource } from "./working-preview-runtime";
 
+const isTcpAddress = (
+  address: ReturnType<ReturnType<typeof createServer>["address"]>,
+): address is { address: string; family: string; port: number } =>
+  address !== null && typeof address === "object" && "port" in address;
+
+const isFailureRecord = (value: unknown): value is { message: string; stderr: string } => {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+  if (!("message" in value) || !("stderr" in value)) {
+    return false;
+  }
+  return typeof value.message === "string" && typeof value.stderr === "string";
+};
+
 const distinctPreviewPorts = async () => {
   const gateway = createServer();
   const app = createServer();
@@ -21,10 +35,15 @@ const distinctPreviewPorts = async () => {
     await once(gateway, "listening");
     app.listen(0, "127.0.0.1");
     await once(app, "listening");
-    return {
-      appPort: (app.address() as AddressInfo).port,
-      gatewayPort: (gateway.address() as AddressInfo).port,
-    };
+    const appAddress = app.address();
+    const gatewayAddress = gateway.address();
+    if (appAddress === null || !isTcpAddress(appAddress)) {
+      throw new Error("App server did not bind to a TCP port");
+    }
+    if (gatewayAddress === null || !isTcpAddress(gatewayAddress)) {
+      throw new Error("Gateway server did not bind to a TCP port");
+    }
+    return { appPort: appAddress.port, gatewayPort: gatewayAddress.port };
   } finally {
     await Promise.all(
       [gateway, app]
@@ -37,10 +56,10 @@ const distinctPreviewPorts = async () => {
     );
   }
 };
+
 const waitFor = async (condition: () => boolean) => {
   const deadline = Date.now() + 5000;
   while (!condition() && Date.now() < deadline) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Observe this single process without restarting it.
     await delay(25);
   }
   expect(condition()).toBe(true);
@@ -55,7 +74,9 @@ describe("generated working preview supervisor", () => {
     "classifies a %s private runtime environment without exposing its path",
     async (mode, expected) => {
       const directory = await mkdtemp(nodePath.join(tmpdir(), "preview-supervisor-environment-"));
-      const { appPort, gatewayPort } = await distinctPreviewPorts();
+      const ports = await distinctPreviewPorts();
+      const { appPort } = ports;
+      const { gatewayPort } = ports;
       const environmentPath = nodePath.join(directory, "private-environment.json");
       const configurationPath = nodePath.join(directory, "access.json");
       const failurePath = nodePath.join(directory, "failed.json");
@@ -94,10 +115,11 @@ describe("generated working preview supervisor", () => {
         await waitFor(() => existsSync(readyPath));
         await writeFile(configurationPath, access.configuration);
         await waitFor(() => existsSync(failurePath));
-        const failure = JSON.parse(await readFile(failurePath, "utf-8")) as {
-          message: string;
-          stderr: string;
-        };
+        const parsedFailure: unknown = JSON.parse(await readFile(failurePath, "utf-8"));
+        if (!isFailureRecord(parsedFailure)) {
+          throw new Error("Supervisor failure record has an invalid shape");
+        }
+        const failure = parsedFailure;
         expect(failure.message).toBe(expected);
         expect(JSON.stringify(failure)).not.toContain(environmentPath);
         expect(JSON.stringify(failure)).not.toContain("APP_RUNTIME_TEST_VALUE");
@@ -114,7 +136,9 @@ describe("generated working preview supervisor", () => {
 
   it("loads a valid private runtime environment into the actual child process", async () => {
     const directory = await mkdtemp(nodePath.join(tmpdir(), "preview-supervisor-environment-"));
-    const { appPort, gatewayPort } = await distinctPreviewPorts();
+    const ports = await distinctPreviewPorts();
+    const { appPort } = ports;
+    const { gatewayPort } = ports;
     const environmentPath = nodePath.join(directory, "private-environment.json");
     const markerPath = nodePath.join(directory, "child-value");
     const configurationPath = nodePath.join(directory, "access.json");
@@ -164,7 +188,9 @@ describe("generated working preview supervisor", () => {
     "waits for configuration and closes the process group on %s",
     async (mode) => {
       const directory = await mkdtemp(nodePath.join(tmpdir(), "preview-supervisor-"));
-      const { appPort, gatewayPort } = await distinctPreviewPorts();
+      const ports = await distinctPreviewPorts();
+      const { appPort } = ports;
+      const { gatewayPort } = ports;
       const configurationPath = nodePath.join(directory, "access.json");
       const readyPath = nodePath.join(directory, "ready");
       const observedPortPath = nodePath.join(directory, "observed-port");
@@ -182,6 +208,10 @@ describe("generated working preview supervisor", () => {
         gatewayPort,
         origin: "https://preview.example",
       });
+      const portPair: [number, number] = JSON.parse(`[${appPort},${gatewayPort}]`);
+      if (portPair.length !== 2 || !portPair.every(Number.isFinite)) {
+        throw new Error("Unable to validate preview ports");
+      }
       const supervisorPath = nodePath.join(directory, "supervisor.mjs");
       const ownerRoot = nodePath.join(directory, "ownership");
       const ownership = {
@@ -200,7 +230,11 @@ describe("generated working preview supervisor", () => {
         ],
         { stdio: "ignore" },
       );
-      const [initializerCode] = await once(initializer, "exit");
+      let initializerCode: number | null = null;
+      initializer.once("exit", (code) => {
+        initializerCode = code;
+      });
+      await once(initializer, "exit");
       expect(initializerCode).toBe(0);
       await writeFile(
         supervisorPath,

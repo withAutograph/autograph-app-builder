@@ -149,34 +149,28 @@ export const readApprovedRetainedMembershipInspections = async (input: {
   // Each authority lookup and guard may touch the same protected journal.
   for (const candidate of candidates) {
     const { planDigest } = candidate.operator;
-    if (seen.has(planDigest)) {
-      continue;
+    if (!seen.has(planDigest)) {
+      await input.effect.assertCurrent();
+      const approval = await readOriginalMembershipApproval(input, candidate);
+      // Current owner/fence failures are never caught as an old approval denial.
+      await input.effect.assertCurrent();
+      if (matchesOriginalMembershipApproval(approval, candidate)) {
+        const current = await input.readCurrentRecord();
+        const fresh = retainedMembershipInspectionProvenance(
+          current,
+          input.effect.plan,
+          input.organizationId,
+        );
+        if (!fresh.some((entry) => isDeepStrictEqual(entry, candidate))) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+        seen.add(planDigest);
+        approved.push({
+          effect: structuredClone(candidate.effect),
+          plan: structuredClone(candidate.operator.plan),
+        });
+      }
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- This guard touches the same protected journal as the following approval lookup.
-    await input.effect.assertCurrent();
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/server-sequential-independent-await -- Original approval lookup shares the protected journal with its current authority guards.
-    const approval = await readOriginalMembershipApproval(input, candidate);
-    // Current owner/fence failures are never caught as an old approval denial.
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/server-sequential-independent-await -- Recheck the same protected journal after the original approval lookup.
-    await input.effect.assertCurrent();
-    if (!matchesOriginalMembershipApproval(approval, candidate)) {
-      continue;
-    }
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/server-sequential-independent-await -- Re-read the protected journal only after the live guard and original approval complete.
-    const current = await input.readCurrentRecord();
-    const fresh = retainedMembershipInspectionProvenance(
-      current,
-      input.effect.plan,
-      input.organizationId,
-    );
-    if (!fresh.some((entry) => isDeepStrictEqual(entry, candidate))) {
-      throw new HostedOperatorError("reconciliation_required");
-    }
-    seen.add(planDigest);
-    approved.push({
-      effect: structuredClone(candidate.effect),
-      plan: structuredClone(candidate.operator.plan),
-    });
   }
   await input.effect.assertCurrent();
   return approved;

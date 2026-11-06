@@ -23,22 +23,23 @@ export const createHostedOperatorRealmLinkConfig = (
   if (bindings === undefined) {
     throw new HostedOperatorError("operator_unavailable");
   }
-  return {
+  const config = {
     browserOrigin: exactHttpsOrigin(bindings.authBrowserOrigin),
     builderCallbackOrigin: exactHttpsOrigin(bindings.builderCallbackOrigin),
     builderCallbackPath: "/api/hosted-operator/realm-identity",
     identityHandoff: { sender: bindings.sourceWorkload },
     operatorOrigin: exactHttpsOrigin(bindings.operatorOrigin),
     readonlyAttesters: bindings.readonlyAttesters,
-    ...(plan.normalActorProgram === undefined
-      ? {}
-      : {
-          browserSessionCapture: {
-            path: "/api/hosted-operator/realm-browser-session",
-            sender: bindings.sourceWorkload,
-          },
-        }),
   };
+  if (plan.normalActorProgram !== undefined) {
+    Object.assign(config, {
+      browserSessionCapture: {
+        path: "/api/hosted-operator/realm-browser-session",
+        sender: bindings.sourceWorkload,
+      },
+    });
+  }
+  return config;
 };
 
 export const hostedOperatorRealmLinkConfigSha256 = (

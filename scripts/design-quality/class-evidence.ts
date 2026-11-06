@@ -16,7 +16,6 @@ export interface ClassTokenEvidence {
   source: IntrinsicClassSignature["source"];
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function staticClassName(attribute: ts.JsxAttribute): string | undefined {
   const { initializer } = attribute;
   if (!initializer) {
@@ -39,7 +38,6 @@ function staticClassName(attribute: ts.JsxAttribute): string | undefined {
  * These are source candidates, not a CSS provenance claim. A candidate is only
  * useful when the browser sees the exact intrinsic tag and complete class list.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicClassSignature[] {
   const candidates: IntrinsicClassSignature[] = [];
   for (const file of files.filter((sourceFile) => /\.tsx?$/iu.test(sourceFile.path))) {
@@ -63,9 +61,10 @@ export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicC
             candidateAttribute.name.text === "className",
         );
         const value = attribute && staticClassName(attribute);
-        const classes = value
-          ? [...new Set(value.trim().split(/\s+/u).filter(Boolean))].toSorted()
-          : [];
+        const classes =
+          value !== undefined && value !== ""
+            ? [...new Set(value.trim().split(/\s+/u).filter(Boolean))].toSorted()
+            : [];
         if (!classes.length) {
           ts.forEachChild(node, visit);
           return;
@@ -93,7 +92,6 @@ export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicC
  * local `cx("...")` composition convention. These are reviewer candidates,
  * not declaration provenance.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEvidence[] {
   const candidates: ClassTokenEvidence[] = [];
   const add = (source: ts.SourceFile, node: ts.Node, value: string) => {
@@ -120,7 +118,7 @@ export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEviden
     const visit = (node: ts.Node) => {
       if (ts.isJsxAttribute(node) && ts.isIdentifier(node.name) && node.name.text === "className") {
         const value = staticClassName(node);
-        if (value) {
+        if (value !== undefined && value !== "") {
           add(source, node, value);
         }
       }
@@ -146,7 +144,6 @@ const signatureKey = (tag: string, classes: string[]) =>
   `${tag}:${[...classes].toSorted().join(" ")}`;
 
 /** Returns a source only for a unique full DOM signature. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function uniqueIntrinsicSignature(
   signatures: IntrinsicClassSignature[],
   tag: string,
@@ -168,7 +165,6 @@ export interface SignatureAttribution {
  * Generated source alone cannot exclude a shared component using the same DOM
  * shape. Omit the shared inventory and this intentionally returns unknown.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function signatureAttribution(
   generated: IntrinsicClassSignature[],
   shared: IntrinsicClassSignature[] | undefined,
@@ -193,40 +189,39 @@ export function signatureAttribution(
 }
 
 /** Compound, grouped, or stateful selectors deliberately do not prove origin. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function exactClassSelector(selector: string | undefined) {
-  if (!selector || !/^\.[A-Za-z_-][A-Za-z0-9_-]*$/u.test(selector.trim())) {
-    return;
+export function exactClassSelector(selector: string | undefined): string | undefined {
+  if (selector === undefined || selector === "") {
+    return undefined;
   }
-  return selector.trim().slice(1);
+  const trimmed = selector.trim();
+  return /^\.[A-Za-z_-][A-Za-z0-9_-]*$/u.test(trimmed) ? trimmed.slice(1) : undefined;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function generatedSignatureSelector(
   signature: IntrinsicClassSignature | undefined,
   selector: string | undefined,
 ) {
   const className = exactClassSelector(selector);
-  return Boolean(signature && className && signature.classes.includes(className));
+  return (
+    signature !== undefined && className !== undefined && signature.classes.includes(className)
+  );
 }
 
-/** Reads one escaped Tailwind utility token, optionally followed by attribute state. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function escapedTailwindClassToken(selector: string | undefined) {
-  if (!selector?.startsWith(".")) {
-    return;
-  }
+const readSelectorToken = (
+  selector: string,
+  start: number,
+): { index: number; token: string } | null => {
   let token = "";
-  let index = 1;
+  let index = start;
   for (; index < selector.length; index += 1) {
-    const character = selector[index];
-    if (!character) {
-      return;
+    const { [index]: character } = selector;
+    if (character === undefined) {
+      return null;
     }
     if (character === "\\") {
       const escaped = selector[index + 1];
-      if (!escaped) {
-        return;
+      if (escaped === undefined || escaped === "") {
+        return null;
       }
       token += escaped;
       index += 1;
@@ -235,65 +230,72 @@ export function escapedTailwindClassToken(selector: string | undefined) {
     } else if (/[A-Za-z0-9_-]/u.test(character)) {
       token += character;
     } else {
-      return;
+      return null;
     }
   }
-  if (!token) {
-    return;
+  return token === "" ? null : { index, token };
+};
+
+const skipAttributeSelector = (selector: string, start: number): number | null => {
+  let index = start + 1;
+  let quote: string | null = null;
+  for (; index < selector.length; index += 1) {
+    const character = selector[index];
+    if (character === undefined) {
+      return null;
+    }
+    if (character === "\\") {
+      if (index + 1 >= selector.length) {
+        return null;
+      }
+      index += 1;
+    } else if (quote !== null) {
+      if (character === quote) {
+        quote = null;
+      }
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === "]") {
+      return index + 1;
+    } else if (character === "[") {
+      return null;
+    }
   }
+  return null;
+};
+
+/** Reads one escaped Tailwind utility token, optionally followed by attribute state. */
+export function escapedTailwindClassToken(selector: string | undefined): string | undefined {
+  if (selector === undefined || !selector.startsWith(".")) {
+    return undefined;
+  }
+  const parsed = readSelectorToken(selector, 1);
+  if (parsed === null) {
+    return undefined;
+  }
+  let { index } = parsed;
   while (index < selector.length) {
-    if (selector[index] !== "[") {
-      return;
+    const remaining = selector.slice(index);
+    const [character] = remaining;
+    if (character !== "[") {
+      return undefined;
     }
-    index += 1;
-    let quote: string | undefined;
-    let closed = false;
-    for (; index < selector.length; index += 1) {
-      const character = selector[index];
-      if (!character) {
-        return;
-      }
-      if (character === "\\") {
-        if (index + 1 >= selector.length) {
-          return;
-        }
-        index += 1;
-        continue;
-      }
-      if (quote) {
-        if (character === quote) {
-          quote = undefined;
-        }
-        continue;
-      }
-      if (character === '"' || character === "'") {
-        quote = character;
-        continue;
-      }
-      if (character === "]") {
-        closed = true;
-        index += 1;
-        break;
-      }
-      if (character === "[") {
-        return;
-      }
+    const next = skipAttributeSelector(selector, index);
+    if (next === null) {
+      return undefined;
     }
-    if (!closed || quote) {
-      return;
-    }
+    index = next;
   }
-  return token;
+  return parsed.token;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function classTokenAttribution(
   generated: ClassTokenEvidence[],
   shared: ClassTokenEvidence[] | undefined,
   selector: string | undefined,
 ): SignatureAttribution {
   const token = escapedTailwindClassToken(selector);
-  if (!token || !shared) {
+  if (token === undefined || shared === undefined) {
     return { provenance: "unknown" };
   }
   const generatedMatches = generated.filter((candidate) => candidate.token === token);
@@ -302,7 +304,7 @@ export function classTokenAttribution(
     return { provenance: "unknown" };
   }
   const match = generatedMatches[0] ?? sharedMatches[0];
-  if (!match) {
+  if (match === undefined) {
     return { provenance: "unknown" };
   }
   return {

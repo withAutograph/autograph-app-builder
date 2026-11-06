@@ -161,14 +161,11 @@ describe("readReference", () => {
       ],
     });
     expect(result.attributes[0]).toMatchObject({ verdict: "unassessed" });
-    expect(result.implementationDiagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: expect.any(Number),
-          message: expect.stringMatching(/possibly .*undefined/iu),
-        }),
-      ]),
-    );
+    expect(
+      result.implementationDiagnostics.some(({ message }) =>
+        /possibly .*undefined/iu.test(message),
+      ),
+    ).toBe(true);
   });
 
   it("checks concrete JSX nodes against recursive public slots without crediting callbacks or unknowns", async () => {

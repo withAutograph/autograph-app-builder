@@ -21,12 +21,12 @@ describe("Vitest browser failure diagnostics", () => {
 
   it("classifies loopback listener outcomes using only fixed statuses", async () => {
     class FakeSocket {
-      private connectListener: (() => void) | undefined;
-      private errorListener: ((error: Error & { code?: string }) => void) | undefined;
+      private connectListener: (() => void) | null = null;
+      private errorListener: ((error: Error & { code?: string }) => void) | null = null;
 
       destroy(): void {
-        this.connectListener = undefined;
-        this.errorListener = undefined;
+        this.connectListener = null;
+        this.errorListener = null;
       }
 
       once(event: "connect", listener: () => void): this;
@@ -37,7 +37,6 @@ describe("Vitest browser failure diagnostics", () => {
       ): this {
         if (event === "connect") {
           // SAFETY: The overload above pairs "connect" only with a zero-argument listener.
-          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- overload correlation is not retained in the implementation signature.
           this.connectListener = listener as () => void;
         } else {
           this.errorListener = listener;
@@ -98,13 +97,16 @@ describe("Vitest browser failure diagnostics", () => {
     };
     let originalOpenCalls = 0;
     const provider: BrowserProvider = {
-      async close() {},
+      async close() {
+        await Promise.resolve();
+      },
       getCommandsContext() {
         return { page };
       },
       name: "playwright",
       async openPage() {
         originalOpenCalls += 1;
+        await Promise.resolve();
       },
       supportsParallelism: false,
     };
@@ -113,7 +115,7 @@ describe("Vitest browser failure diagnostics", () => {
     const instrumented = attachVitestBrowserFailureDiagnostics(provider, 63_315, {
       async probe(host, port) {
         probes.push([host, port]);
-        return "connection_refused";
+        return await Promise.resolve("connection_refused");
       },
       report(diagnostic) {
         reports.push(diagnostic);

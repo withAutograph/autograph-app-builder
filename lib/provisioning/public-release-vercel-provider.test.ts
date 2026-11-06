@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await -- Test ports implement the same asynchronous boundaries as the actual provider adapters. */
 import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
@@ -134,26 +133,26 @@ const fixture = () => {
     }
     throw new Error("Unexpected provider route");
   });
-  const deps: PublicReleaseVercelDependencies = {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit void fulfillment value.
-    assertCurrent: vi.fn().mockResolvedValue(undefined),
-    readCredential: vi.fn().mockResolvedValue({
-      binding: {
-        active: true,
-        displayName: "Synthetic",
-        installationId: plan.project.installationId,
-        plan: "pro",
-        scopeId: plan.project.teamId,
-        scopeType: "team",
-        slug: "synthetic",
-        updatedAt: new Date(0),
-      },
-      token: "synthetic-private-provider-token",
-    }),
-    readRuntimeBindings: vi.fn().mockResolvedValue([{ key: "INVOICE_APP_DATABASE_URL", value }]),
-    readDeliveredRelease: vi.fn().mockResolvedValue({ releaseId: plan.runtime.releaseId }),
-    fetch: fetcher,
-  };
+  const deps = {} as PublicReleaseVercelDependencies;
+  deps.assertCurrent = vi.fn().mockResolvedValue(undefined);
+  deps.fetch = fetcher;
+  deps.readCredential = vi.fn().mockResolvedValue({
+    binding: {
+      active: true,
+      displayName: "Synthetic",
+      installationId: plan.project.installationId,
+      plan: "pro",
+      scopeId: plan.project.teamId,
+      scopeType: "team",
+      slug: "synthetic",
+      updatedAt: new Date(0),
+    },
+    token: "synthetic-private-provider-token",
+  });
+  deps.readRuntimeBindings = vi
+    .fn()
+    .mockResolvedValue([{ key: "INVOICE_APP_DATABASE_URL", value }]);
+  deps.readDeliveredRelease = vi.fn().mockResolvedValue({ releaseId: plan.runtime.releaseId });
   const context: PublicReleaseEffectContext = {
     bindings: {
       async claim(key) {
@@ -301,7 +300,6 @@ it("does not claim delivery when the public alias points at another project", as
 
 it("keeps deployment readiness pending when the installed app release is unproved", async () => {
   const f = fixture();
-  // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing installed release proof is distinct from a provider-ready result.
   vi.mocked(f.deps.readDeliveredRelease).mockResolvedValue(undefined);
   expect(await f.provider.observe(f.invocation, f.plan)).toEqual({ status: "pending" });
 });
@@ -446,7 +444,6 @@ it("persists the actual adapter rejection with the pending key and never retries
     store: {
       async compareAndSet(prior, record) {
         if (row?.revision !== prior.revision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale durable compare-and-set returns no record.
           return undefined;
         }
         row = { ...row, record, revision: row.revision + 1 };

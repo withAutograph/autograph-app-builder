@@ -110,7 +110,7 @@ describe("native target deployment-owned resource selection", () => {
     const fakeDatabase = {
       insert: () => ({
         values: (value: Row) => ({
-          onConflictDoNothing: async () => {
+          onConflictDoNothing: () => {
             // These are the actual builder_provisioning_journal CHECK constraints.
             expect(value.requestId).toMatch(
               /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
@@ -124,13 +124,13 @@ describe("native target deployment-owned resource selection", () => {
       }),
       select: () => ({
         from: () => ({
-          where: () => ({ limit: async () => (row === undefined ? [] : [row]) }),
+          where: () => ({ limit: () => (row === undefined ? [] : [row]) }),
         }),
       }),
       update: () => ({
         set: (value: Partial<Row>) => ({
           where: () => ({
-            returning: async () => {
+            returning: () => {
               if (row === undefined) {
                 throw new Error("Approval checkpoint update requires a prior insert.");
               }
@@ -142,7 +142,6 @@ describe("native target deployment-owned resource selection", () => {
       }),
     };
     // SAFETY: The checkpoint only calls these three modeled Drizzle chains; this fixture checks their persisted values.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- This narrow in-memory Drizzle stand-in deliberately models only the exercised methods.
     const database = fakeDatabase as unknown as Parameters<
       typeof createNativeTargetApprovalCheckpoint
     >[0];
@@ -208,9 +207,9 @@ describe("native target approval history carrier", () => {
     const controller = new AbortController();
     const transport = createNativeTargetApprovalHistoryTransport({
       appId: "requests-app",
-      assertCanonicalAppOwner: async () => {},
+      assertCanonicalAppOwner: () => {},
       builderOrigin: "https://builder.example",
-      fetch: async (resource, init) => {
+      fetch: (resource, init) => {
         const requested = resource instanceof Request ? resource.url : resource;
         const url = requested instanceof URL ? requested.href : requested;
         calls.push({
@@ -249,7 +248,7 @@ describe("native target approval history carrier", () => {
     expect(() =>
       createNativeTargetApprovalHistoryTransport({
         appId: "requests-app",
-        assertCanonicalAppOwner: async () => {},
+        assertCanonicalAppOwner: () => {},
         builderOrigin: "https://builder.example",
         owner,
         workload: { authorization: null, signal: controller.signal },

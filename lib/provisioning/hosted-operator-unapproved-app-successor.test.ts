@@ -158,12 +158,17 @@ describe("unapproved app successor eligibility", () => {
     completion.plan = operator.plan;
     completion.planDigest = operatorPlanDigest(completion.plan);
     completion.fenceGeneration = 1;
-    completion.receipts = completion.plan.effects.map((effect) => ({
-      effectId: effect.id,
-      observedAt,
-      resourceVersion: "actual-readback",
-      ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-    }));
+    completion.receipts = completion.plan.effects.map((effect) => {
+      const receipt = {
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      };
+      if (effect.kind === "access") {
+        receipt.fenceGeneration = 1;
+      }
+      return receipt;
+    });
     const candidate = {
       ...requiredFixture(operator.gatewayDeliveryCandidates?.[0]),
       deploymentId: "separate-gateway",
@@ -210,10 +215,8 @@ describe("unapproved app successor eligibility", () => {
       },
       normalActorProgram: added,
     });
-    expect(
-      readUnapprovedCapturePredecessor(record, next, Date.parse(observedAt))?.bootstrap.gateway
-        ?.approvalId,
-    ).toBe("gateway-approval");
+    const foundPredecessor = readUnapprovedCapturePredecessor(record, next, Date.parse(observedAt));
+    expect(foundPredecessor?.bootstrap.gateway).toMatchObject({ approvalId: "gateway-approval" });
     requiredFixture(requiredFixture(next.normalActorCapturePredecessor).gateway).approvalId =
       "wrong";
     expect(readUnapprovedCapturePredecessor(record, next, Date.parse(observedAt))).toBeUndefined();

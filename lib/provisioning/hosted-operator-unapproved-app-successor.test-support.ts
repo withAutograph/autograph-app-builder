@@ -110,6 +110,8 @@ const bootstrapPlan = () =>
   });
 
 const operationRef = "00000000-0000-4000-8000-000000000001";
+const gatewayDeliveryId = "gateway-delivery";
+const publicOrigin = "https://apps.example";
 export const observedAt = "2026-10-14T12:00:00Z";
 const sourceWorkload = {
   audience: "https://vercel.com/team",
@@ -145,16 +147,16 @@ const desiredPlan = () =>
       verification: {
         gatewayOrigin: "https://gateway.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
-        publicOrigin: "https://apps.example",
+        publicOrigin,
       },
     },
     effects: [
       ...bootstrapPlan().effects,
       { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
-      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
+      { description: "Gateway delivery", id: gatewayDeliveryId, kind: gatewayDeliveryId },
     ],
     gatewayBindings: {
-      authBrowserOrigin: "https://apps.example",
+      authBrowserOrigin: publicOrigin,
       builderCallbackOrigin: "https://builder.example",
       catalogAppIds: [context.target.appId],
       operatorOrigin: "https://operator.example",
@@ -179,12 +181,12 @@ const desiredPlan = () =>
       appId: context.target.appId,
       memberships: [],
       organizations: [],
-      origin: "https://apps.example",
+      origin: publicOrigin,
       version: 1,
     }),
     publicGateway: {
       branch: context.target.branch,
-      origin: "https://apps.example",
+      origin: publicOrigin,
       projectId: "gateway",
     },
   });
@@ -202,11 +204,11 @@ const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
         runtimeRole: plan.authDatabase.runtimeRole,
         targetDigest: plan.authSchema?.targetDigest,
       },
-      deliveredGatewayDeploymentId: "gateway-delivery",
+      deliveredGatewayDeploymentId: gatewayDeliveryId,
       gatewayDeliveryCandidates: [
         {
           branch: context.target.branch,
-          deploymentId: "gateway-delivery",
+          deploymentId: gatewayDeliveryId,
           operationRef,
           origin: "https://gateway.example",
           projectId: "gateway",
@@ -313,7 +315,7 @@ export const captureFixture = () => {
       { description: "Bind", id: "app-bindings", kind: "bindings" },
       ...authPlan.effects.slice(3),
     ],
-    gatewayDelivery: { ...authPlan.gatewayDelivery, gitRef: undefined },
+    gatewayDelivery: { ...authPlan.gatewayDelivery, gitRef: null },
     normalActorPreparation: normalActorPreparationSchema.strip().parse(preparation),
     stage: "app",
   });

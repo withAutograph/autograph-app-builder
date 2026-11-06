@@ -18,8 +18,9 @@ import nodePath from "node:path";
 import { promisify } from "node:util";
 
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
-import type { SandboxSession } from "eve/sandbox";
+import type { SandboxCommandResult, SandboxRunOptions, SandboxSession } from "eve/sandbox";
 
 import { DEVELOPMENT_DEPENDENCY_CACHE_ROOT } from "../sandbox/development-toolchain";
 
@@ -51,7 +52,40 @@ import {
 } from "./dependency-cache";
 
 const { join } = nodePath;
-const executeFile = promisify(execFile);
+const stringValue = (value: unknown): value is string => typeof value === "string";
+const closureObservationSchema = z.object({
+  nodeModulesDigest: z.string(),
+  workspaceLinks: z.array(
+    z.object({ path: z.string(), sourcePath: z.string(), target: z.string() }),
+  ),
+  workspaceNodeModules: z.array(
+    z.object({ digest: z.string(), nodeModulesPath: z.string(), path: z.string() }),
+  ),
+});
+const executeFile = async (file: string, args: readonly string[], options?: { cwd?: string }) => {
+  const runFile = promisify(execFile);
+  const { stderr, stdout } = await runFile(file, [...args], { ...options, encoding: "utf-8" });
+  return { stderr, stdout };
+};
+interface DependencyManifestFixture {
+  closure?: {
+    archiveBytes?: number;
+    archivePath?: string;
+    archiveSha256?: string;
+    cargoArchiveBytes?: number;
+    cargoArchivePath?: string;
+    cargoArchiveSha256?: string;
+    package?: string;
+    version?: string;
+  };
+  platform?: string;
+  runtime?: { bun?: string; rust?: string };
+  scope?: string;
+  target?: { sha?: string; tree?: string };
+  version?: number;
+}
+type SandboxFixture = Pick<SandboxSession, "run"> &
+  Partial<Pick<SandboxSession, "readTextFile" | "readBinaryFile" | "writeTextFile">>;
 
 const archiveDigest = "a".repeat(64);
 const hostedArchiveDigest = "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
@@ -136,7 +170,6 @@ const developmentManifest = {
   version: 3,
 } as const;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySource?: string }) {
   const contents = new Map([
     [".config/mise/config.toml", "[tools]\nnode = '24.18.0'\n"],
@@ -151,7 +184,7 @@ function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySou
   ]);
   const sourceFiles = [...contents].map(([path, content]) => ({
     mode: "100644" as const,
-    objectId: createHash("sha1").update(content).digest("hex"),
+    objectId: createHash("sha256").update(content).digest("hex").slice(0, 40),
     path,
     sha256: createHash("sha256").update(content).digest("hex"),
   }));
@@ -159,12 +192,14 @@ function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySou
     sourceFiles
       .filter(
         ({ path }) =>
-          path === ".config/mise/config.toml" ||
-          path === ".config/mise/mise.lock" ||
-          path === "package.json" ||
-          path === "bun.lock" ||
-          path === "Cargo.toml" ||
-          path === "Cargo.lock" ||
+          [
+            ".config/mise/config.toml",
+            ".config/mise/mise.lock",
+            "package.json",
+            "bun.lock",
+            "Cargo.toml",
+            "Cargo.lock",
+          ].includes(path) ||
           path.endsWith("/package.json") ||
           path.endsWith("/Cargo.toml"),
       )
@@ -176,24 +211,21 @@ function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySou
 const liveNodeModulesDigest = "a".repeat(64);
 const liveCargoHomeDigest = "b".repeat(64);
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function liveTemplateCacheFixture() {
   let source = liveDependencySourceFixture();
-  let closureState: "cargo-tampered" | "clean" | "missing" | "node-tampered" = "clean";
+  let closureState: "tampered" | "clean" | "missing" = "clean";
   let bootstrapStderr = "";
   const stored = new Map<string, string>();
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const setNetworkPolicy = vi.fn(async () => {});
-  const observation = (tampered?: "cargo" | "node") =>
+  const observation = (tampered = false) =>
     JSON.stringify({
-      cargoHomeDigest: tampered === "cargo" ? "d".repeat(64) : liveCargoHomeDigest,
+      cargoHomeDigest: tampered ? "d".repeat(64) : liveCargoHomeDigest,
       microfrontendsVersion: "2.4.0",
-      nodeModulesDigest: tampered === "node" ? "c".repeat(64) : liveNodeModulesDigest,
+      nodeModulesDigest: tampered ? "c".repeat(64) : liveNodeModulesDigest,
       platform: "linux/x86_64",
       workspaceLinks: [],
       workspaceNodeModules: [],
     });
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const run = vi.fn(async ({ command }: { command: string }) => {
     if (command.includes("uname -s")) {
       return { exitCode: 0, stderr: "", stdout: "linux/x86_64\n" };
@@ -205,12 +237,7 @@ function liveTemplateCacheFixture() {
       if (closureState === "missing") {
         return { exitCode: 1, stderr: "missing closure", stdout: "" };
       }
-      let tamperedCache: "cargo" | "node" | undefined;
-      if (closureState === "node-tampered") {
-        tamperedCache = "node";
-      } else if (closureState === "cargo-tampered") {
-        tamperedCache = "cargo";
-      }
+      const tamperedCache = closureState === "tampered";
       return {
         exitCode: 0,
         stderr: "",
@@ -219,17 +246,14 @@ function liveTemplateCacheFixture() {
     }
     return { exitCode: 0, stderr: "", stdout: "" };
   });
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const writeTextFile = vi.fn(async ({ path, content }: { path: string; content: string }) => {
     stored.set(path, content);
   });
-  const sandbox = {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+  const sandbox: SandboxFixture = {
     readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
       const content = source.contents.get(path.replace(/^repository\//u, ""));
       return content === undefined ? null : Buffer.from(content);
     }),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     readTextFile: vi.fn(async ({ path }: { path: string }) =>
       path === ".app-builder/source-files.json"
         ? JSON.stringify(source.sourceFiles)
@@ -238,7 +262,7 @@ function liveTemplateCacheFixture() {
     run,
     setNetworkPolicy,
     writeTextFile,
-  } as unknown as SandboxSession;
+  };
   return {
     run,
     sandbox,
@@ -258,10 +282,9 @@ function liveTemplateCacheFixture() {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function sandboxFixture(inputManifest: unknown = manifest) {
+function sandboxFixture(inputManifest: DependencyManifestFixture = manifest) {
   const run = vi
-    .fn()
+    .fn<(options: SandboxRunOptions) => Promise<SandboxCommandResult>>()
     .mockResolvedValueOnce({
       exitCode: 0,
       stderr: "",
@@ -277,21 +300,20 @@ function sandboxFixture(inputManifest: unknown = manifest) {
   run.mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
   run.mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
   run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const writeTextFile = vi.fn(async () => {});
-  const sandbox = {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+  const sandbox: SandboxFixture = {
     readTextFile: vi.fn(async () => JSON.stringify({ version: "2.4.0" })),
     run,
     writeTextFile,
-  } as unknown as SandboxSession;
+  };
   return { run, sandbox, writeTextFile };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function hostedExecutionSandbox(inputManifest: unknown = hostedExecutionManifest) {
+function hostedExecutionSandbox(
+  inputManifest: DependencyManifestFixture = hostedExecutionManifest,
+) {
   const run = vi
-    .fn()
+    .fn<(options: SandboxRunOptions) => Promise<SandboxCommandResult>>()
     .mockResolvedValueOnce({
       exitCode: 0,
       stderr: "",
@@ -302,10 +324,9 @@ function hostedExecutionSandbox(inputManifest: unknown = hostedExecutionManifest
       stderr: "",
       stdout: `${hostedArchiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n1356765\n`,
     });
-  return { run, sandbox: { run } as unknown as SandboxSession };
+  return { run, sandbox: { run } };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function writeDependencyTopologyFixture(root: string) {
   const source = join(root, "cache", "source");
   const cargo = join(root, "cache", "cargo-home");
@@ -359,9 +380,8 @@ describe("offline dependency cache", () => {
     const fixture = liveTemplateCacheFixture();
     fixture.setBootstrapStderr("installer progress\n".repeat(20_000));
 
-    await expect(
-      bootstrapLiveTemplateDependencies({ sandbox: fixture.sandbox }),
-    ).resolves.toMatchObject({ contentDigest: expect.any(String) });
+    const result = await bootstrapLiveTemplateDependencies({ sandbox: fixture.sandbox });
+    expect(stringValue(result.contentDigest)).toBe(true);
   });
 
   it("invalidates the live cache key only for declared dependency and runtime inputs", () => {
@@ -423,26 +443,15 @@ describe("offline dependency cache", () => {
         "linux/x86_64",
         fixture.manifestPath,
       ]);
-      const observation = JSON.parse(inspected.stdout) as {
-        nodeModulesDigest: string;
-        workspaceNodeModules: {
-          path: string;
-          nodeModulesPath: string;
-          digest: string;
-        }[];
-        workspaceLinks: {
-          path: string;
-          target: string;
-          sourcePath: string;
-        }[];
-      };
-      expect(observation.workspaceNodeModules).toEqual([
-        expect.objectContaining({
-          nodeModulesPath: fixture.appModules,
-          path: "apps/vendor/node_modules",
-        }),
-      ]);
-      expect(observation.workspaceLinks).toEqual([
+      const observation = closureObservationSchema.parse(JSON.parse(inspected.stdout));
+      const { workspaceNodeModules, workspaceLinks } = observation;
+      expect(workspaceNodeModules).toHaveLength(1);
+      expect(workspaceNodeModules[0]).toMatchObject({
+        nodeModulesPath: fixture.appModules,
+        path: "apps/vendor/node_modules",
+      });
+      expect(stringValue(workspaceNodeModules[0]?.digest)).toBe(true);
+      expect(workspaceLinks).toEqual([
         {
           path: "apps/vendor/node_modules/@autograph/ui",
           sourcePath: "packages/ui",
@@ -537,7 +546,11 @@ describe("offline dependency cache", () => {
         ]),
       ).rejects.toThrow();
     } finally {
-      await executeFile("/bin/chmod", ["-R", "u+w", root]).catch(() => {});
+      try {
+        await executeFile("/bin/chmod", ["-R", "u+w", root]);
+      } catch {
+        // Cleanup proceeds even when restoring permissions is unnecessary.
+      }
       await rm(root, { force: true, recursive: true });
     }
   });
@@ -652,7 +665,7 @@ describe("offline dependency cache", () => {
       sourceSha: "3".repeat(40),
       sourceTree: "4".repeat(40),
     };
-    const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
+    const cache = await inspectDependencyCache(sandboxFixture().sandbox, process.env, target);
 
     expect(dependencyTargetForWorkspace(cache, target)).toEqual(
       expect.objectContaining({
@@ -675,7 +688,7 @@ describe("offline dependency cache", () => {
       sourceSha: "3".repeat(40),
       sourceTree: "4".repeat(40),
     };
-    const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
+    const cache = await inspectDependencyCache(sandboxFixture().sandbox, process.env, target);
 
     expect(() => {
       assertExactDependencyTargetBinding({
@@ -763,24 +776,21 @@ describe("offline dependency cache", () => {
   it("reports a typed live-template miss without falling through to another cache", async () => {
     const target = { sourceSha: "7".repeat(40), sourceTree: "8".repeat(40) };
     const source = liveDependencySourceFixture();
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const run = vi.fn(async () => ({
       exitCode: 0,
       stderr: "",
       stdout: "linux/x86_64\n",
     }));
     const sandbox = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
         const content = source.contents.get(path.replace(/^repository\//u, ""));
         return content === undefined ? null : Buffer.from(content);
       }),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readTextFile: vi.fn(async ({ path }: { path: string }) =>
         path === ".app-builder/source-files.json" ? JSON.stringify(source.sourceFiles) : null,
       ),
       run,
-    } as unknown as SandboxSession;
+    } satisfies SandboxFixture;
 
     await expect(inspectDependencyCache(sandbox, {}, target, true)).rejects.toBeInstanceOf(
       DependencyCacheMissingError,
@@ -809,18 +819,16 @@ describe("offline dependency cache", () => {
       bootstrapVersion: 3,
       closure: {
         cargoHomeDigest: liveCargoHomeDigest,
-        cargoHomePath: expect.stringMatching(
+        cargoHomePath:
           /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/cargo-home$/u,
-        ),
         nodeModulesDigest: liveNodeModulesDigest,
-        nodeModulesPath: expect.stringMatching(
+        nodeModulesPath:
           /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/source\/node_modules$/u,
-        ),
         workspaceLinks: [],
         workspaceNodeModules: [],
       },
       dependencyInputs: originalDependencyInputs,
-      dependencyKey: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      dependencyKey: /^[0-9a-f]{64}$/u,
       scope: "live-template-execution",
       version: 4,
     });
@@ -864,9 +872,7 @@ describe("offline dependency cache", () => {
     expect(fixture.writeTextFile).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        path: expect.stringMatching(
-          /^\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/manifest\.json$/u,
-        ),
+        path: /^\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/manifest\.json$/u,
       }),
     );
     expect(
@@ -974,7 +980,7 @@ describe("offline dependency cache", () => {
       workingDirectory: "/workspace",
     });
     const linkCommand = run.mock.calls
-      .map(([request]) => request.command as string)
+      .map(([request]) => request.command)
       .find((command) => command.includes("test -x") && command.includes(".bin/vp"));
     expect(linkCommand).toBeDefined();
     if (linkCommand === undefined) {
@@ -1014,22 +1020,18 @@ describe("offline dependency cache", () => {
     );
     expect(linkCommand).toContain("\\( -type f -o -type d \\) -perm /222");
     expect(linkCommand).not.toContain("ln -s");
-    expect(writeTextFile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: expect.stringContaining(
-          `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
-        ),
-      }),
+    expect(String(writeTextFile.mock.calls[0]?.[0].content)).toContain(
+      `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
     );
     expect(
       run.mock.calls.some(
         ([request]) =>
-          (request.command as string).includes("@autograph/vite-config") &&
-          (request.command as string).includes("await import"),
+          request.command.includes("@autograph/vite-config") &&
+          request.command.includes("await import"),
       ),
     ).toBe(false);
     const resolutionCommand = run.mock.calls
-      .map(([request]) => request.command as string)
+      .map(([request]) => request.command)
       .find((command) => command.includes('const {match}=require("path-to-regexp")'));
     expect(resolutionCommand).toBeDefined();
     if (resolutionCommand === undefined) {
@@ -1039,9 +1041,9 @@ describe("offline dependency cache", () => {
     expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_VERSION);
     expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION);
     expect(resolutionCommand).toContain('result?.path!=="/vendor"');
-    expect(
-      run.mock.calls.some(([request]) => (request.command as string).includes("cargo metadata")),
-    ).toBe(false);
+    expect(run.mock.calls.some(([request]) => request.command.includes("cargo metadata"))).toBe(
+      false,
+    );
   });
 
   it("does not require Rust for the pinned Vercel Development planning closure", async () => {
@@ -1059,11 +1061,11 @@ describe("offline dependency cache", () => {
       },
     });
 
-    expect(
-      run.mock.calls.some(([request]) => (request.command as string).includes("cargo metadata")),
-    ).toBe(false);
+    expect(run.mock.calls.some(([request]) => request.command.includes("cargo metadata"))).toBe(
+      false,
+    );
     const developmentLinkCommand = run.mock.calls
-      .map(([request]) => request.command as string)
+      .map(([request]) => request.command)
       .find((command) => command.includes("test -x") && command.includes(".bin/vp"));
     expect(developmentLinkCommand).toBeDefined();
     if (developmentLinkCommand === undefined) {
@@ -1076,11 +1078,7 @@ describe("offline dependency cache", () => {
     expect(developmentLinkCommand).toContain("-perm /022");
     expect(developmentLinkCommand).not.toContain("-perm /222");
     expect(developmentLinkCommand).not.toContain("ln -s");
-    expect(writeTextFile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        path: expect.stringContaining(".app-builder/dependency-layouts/"),
-      }),
-    );
+    expect(writeTextFile.mock.calls[0]?.[0].path).toContain(".app-builder/dependency-layouts/");
   });
 
   it("rejects target drift and does not extract", async () => {
@@ -1208,7 +1206,6 @@ describe("linked package dependency views", () => {
       join(candidate, "packages", "local"),
       join(candidate, "apps", "example"),
     ]) {
-      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Build the owned fixture directories before writing their contents.
       await mkdir(directory, { recursive: true });
     }
     const rootManifest = '{"workspaces":["apps/*","packages/*"]}';

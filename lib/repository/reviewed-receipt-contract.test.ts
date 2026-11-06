@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assertExactReviewedChangeSet, stableDigest } from "./local-publication";
 import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
+import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 
 const producedReceipt = () => {
   const hash = "a".repeat(64);
@@ -50,10 +51,14 @@ const producedReceipt = () => {
 describe("review receipt producer and publication verifier", () => {
   it("accepts the actual produced receipt after serialization", () => {
     const receipt = producedReceipt();
-    const serialized = JSON.stringify(receipt);
-    expect(() => {
-      assertExactReviewedChangeSet(JSON.parse(serialized));
-    }).not.toThrow();
+    const serialized: string = JSON.stringify(receipt);
+    const parsed: unknown = JSON.parse(serialized);
+    expect(parsed).toEqual(receipt);
+    if (typeof parsed !== "object" || parsed === null) {
+      throw new Error("Serialized reviewed receipt must be an object");
+    }
+    const verified = parsed as ReviewedChangeSetReceipt;
+    assertExactReviewedChangeSet(verified);
   });
   it("still rejects changed review authority and content digests", () => {
     const receipt = producedReceipt();

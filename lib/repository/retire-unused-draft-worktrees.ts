@@ -41,9 +41,10 @@ const unavailableAdvisory = (): DraftWorktreeRetirementAdvisory => ({
   status: "unavailable",
 });
 
+const quote = (value: string): string => `'${value.replaceAll("'", "'\"'\"'")}'`;
+
 /** Preserve the same failure and cause; reporting must never mask it or change cancellation. */
 export const annotateDraftWorktreeRetirementError = (
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- JavaScript throw values are untrusted; preserve them and annotate only verified Error instances.
   error: unknown,
   advisory: DraftWorktreeRetirementAdvisory,
   signal?: AbortSignal,
@@ -314,7 +315,6 @@ export const retireUnusedDraftWorktrees = async (input: {
   workspaceRoot?: string;
   signal?: AbortSignal;
 }): Promise<DraftWorktreeRetirementAdvisory> => {
-  const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
   try {
     const result = await input.sandbox.run({
       abortSignal: input.signal,

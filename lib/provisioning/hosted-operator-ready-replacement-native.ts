@@ -3,10 +3,34 @@ import { HostedOperatorError, nativeDeliveryGitRef } from "./hosted-operator-con
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { ReadyDeliveryReplacementPredecessor } from "./hosted-operator-ready-delivery-replacement";
+import { readyDeliveryReplacementIntentSchema } from "./hosted-operator-ready-delivery-replacement-intent";
 import { isNativePreviewDeployment } from "./hosted-operator-deployment-delivery";
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 
 const id = z.string().min(1);
+const hasMatchingCredential = (
+  credential:
+    | {
+        binding: {
+          active: boolean;
+          installationId: string;
+          scopeId: string;
+          scopeType: string;
+        };
+      }
+    | null
+    | undefined,
+  target: HostedOperatorContext["target"],
+) => {
+  if (!credential) {
+    return false;
+  }
+  const matchesInstallation =
+    credential.binding.active && credential.binding.installationId === target.installationId;
+  const matchesScope =
+    credential.binding.scopeId === target.scopeId && credential.binding.scopeType === "team";
+  return matchesInstallation && matchesScope && target.scopeType === "team";
+};
 const deployment = z.object({
   customEnvironment: z.unknown().optional(),
   gitSource: z.object({
@@ -23,6 +47,66 @@ const deployment = z.object({
   target: z.string().nullable(),
   url: id,
 });
+const matchesOrigin = (origin: URL, candidateOrigin: string) => {
+  const validBase = origin.origin === candidateOrigin && origin.pathname === "/";
+  const hasNoQueryOrFragment = origin.search === "" && origin.hash === "";
+  const hasNoCredentials = origin.username === "" && origin.password === "";
+  return validBase && hasNoQueryOrFragment && hasNoCredentials;
+};
+const matchesDeliverySource = (
+  native: z.infer<typeof deployment>,
+  previousPlan: HostedOperatorPlan,
+  source: NonNullable<HostedOperatorPlan["delivery"]>,
+  target: "app" | "gateway",
+) => {
+  const matchesRepository = String(native.gitSource.repoId) === source.repoId;
+  const matchesSha = source.gitSha === undefined || native.gitSource.sha === source.gitSha;
+  const matchesRef = native.gitSource.ref === nativeDeliveryGitRef(previousPlan, source, target);
+  return matchesRef && matchesRepository && matchesSha;
+};
+const isReplacementIntent = (value: HostedOperatorPlan["appDeliveryReplacement"]) =>
+  readyDeliveryReplacementIntentSchema.safeParse(value);
+const verifyCandidate = async (
+  candidate: NonNullable<
+    | ReadyDeliveryReplacementPredecessor["appCandidate"]
+    | ReadyDeliveryReplacementPredecessor["gatewayCandidate"]
+  >,
+  source:
+    | NonNullable<HostedOperatorPlan["delivery"]>
+    | NonNullable<HostedOperatorPlan["gatewayDelivery"]>,
+  target: "app" | "gateway",
+  previousPlan: HostedOperatorPlan,
+  ports: {
+    context: HostedOperatorContext;
+    assertCurrent: () => Promise<void>;
+    readCredential: Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCredential"];
+    fetch?: typeof fetch;
+  },
+  request: (
+    path: string,
+  ) => Promise<z.output<typeof deployment> | { accountId: string; id: string }>,
+) => {
+  const project = z
+    .object({ accountId: id, id })
+    .parse(await request(`/v9/projects/${encodeURIComponent(candidate.projectId)}`));
+  const native = deployment.parse(
+    await request(`/v13/deployments/${encodeURIComponent(candidate.deploymentId)}`),
+  );
+  const projectMismatch =
+    project.id !== candidate.projectId || project.accountId !== ports.context.target.scopeId;
+  const deploymentMismatch =
+    native.id !== candidate.deploymentId ||
+    native.projectId !== candidate.projectId ||
+    native.ownerId !== project.accountId;
+  const identityMismatch = projectMismatch || deploymentMismatch;
+  const metadataMismatch =
+    !isNativePreviewDeployment(native) ||
+    !matchesOrigin(new URL(`https://${native.url}`), candidate.origin) ||
+    !matchesDeliverySource(native, previousPlan, source, target);
+  if (identityMismatch || metadataMismatch) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+};
 /** Closed native metadata reads only. This never reads policy or touches an old delivery/alias attempt. */
 export const createReadyReplacementNativeReader = (ports: {
   context: HostedOperatorContext;
@@ -34,14 +118,7 @@ export const createReadyReplacementNativeReader = (ports: {
     await ports.assertCurrent();
     const { target, authority } = ports.context;
     const credential = await ports.readCredential(authority, target.installationId);
-    if (
-      !credential ||
-      !credential.binding.active ||
-      credential.binding.installationId !== target.installationId ||
-      credential.binding.scopeId !== target.scopeId ||
-      credential.binding.scopeType !== "team" ||
-      target.scopeType !== "team"
-    ) {
+    if (!hasMatchingCredential(credential, target)) {
       throw new HostedOperatorError("authorization_required");
     }
     await ports.assertCurrent();
@@ -74,10 +151,12 @@ export const createReadyReplacementNativeReader = (ports: {
         redirect: z.string().nullable().optional(),
       })
       .parse(await request(`/v4/aliases/${encodeURIComponent(alias)}`));
+    const hasRedirect =
+      observed.redirect !== undefined && observed.redirect !== null && observed.redirect !== "";
     if (
       observed.alias.toLowerCase() !== alias ||
       observed.projectId !== gateway.projectId ||
-      (observed.redirect !== undefined && observed.redirect !== null && observed.redirect !== "")
+      hasRedirect
     ) {
       throw new HostedOperatorError("resource_mismatch");
     }
@@ -88,7 +167,11 @@ export const createReadyReplacementNativeReader = (ports: {
       plan: HostedOperatorPlan,
       selectedDeploymentId: string,
     ): Promise<"write" | "applied" | "unknown"> {
-      const predecessor = plan.appDeliveryReplacement?.predecessor.gatewayDeploymentId;
+      const parsedReplacement = isReplacementIntent(plan.appDeliveryReplacement);
+      if (!parsedReplacement.success) {
+        return "unknown";
+      }
+      const predecessor = parsedReplacement.data.predecessor.gatewayDeploymentId;
       if (predecessor === undefined) {
         return "unknown";
       }
@@ -107,43 +190,29 @@ export const createReadyReplacementNativeReader = (ports: {
       >,
     ) {
       const previous = predecessor.originatingOperator;
-      for (const [candidate, source, target] of [
-        [predecessor.appCandidate, previous.plan.delivery, "app"],
-        [predecessor.gatewayCandidate, previous.plan.gatewayDelivery, "gateway"],
-      ] as const) {
-        if (!candidate) {
-          continue;
-        }
-        if (!source) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-        const project = z
-          .object({ accountId: id, id })
-          .parse(await request(`/v9/projects/${encodeURIComponent(candidate.projectId)}`));
-        const native = deployment.parse(
-          await request(`/v13/deployments/${encodeURIComponent(candidate.deploymentId)}`),
-        );
-        const origin = new URL(`https://${native.url}`);
-        if (
-          project.id !== candidate.projectId ||
-          project.accountId !== ports.context.target.scopeId ||
-          native.id !== candidate.deploymentId ||
-          native.projectId !== candidate.projectId ||
-          native.ownerId !== project.accountId ||
-          !isNativePreviewDeployment(native) ||
-          origin.origin !== candidate.origin ||
-          origin.pathname !== "/" ||
-          origin.search !== "" ||
-          origin.hash !== "" ||
-          origin.username !== "" ||
-          origin.password !== "" ||
-          native.gitSource.ref !== nativeDeliveryGitRef(previous.plan, source, target) ||
-          String(native.gitSource.repoId) !== source.repoId ||
-          (source.gitSha !== undefined && native.gitSource.sha !== source.gitSha)
-        ) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-      }
+      const candidateChecks = [
+        predecessor.appCandidate !== undefined && previous.plan.delivery !== undefined
+          ? verifyCandidate(
+              predecessor.appCandidate,
+              previous.plan.delivery,
+              "app",
+              previous.plan,
+              ports,
+              request,
+            )
+          : Promise.resolve(),
+        predecessor.gatewayCandidate !== undefined && previous.plan.gatewayDelivery !== undefined
+          ? verifyCandidate(
+              predecessor.gatewayCandidate,
+              previous.plan.gatewayDelivery,
+              "gateway",
+              previous.plan,
+              ports,
+              request,
+            )
+          : Promise.resolve(),
+      ];
+      await Promise.all(candidateChecks);
       if (
         predecessor.gatewayCandidate &&
         (await readGatewayAlias(plan)) !== predecessor.gatewayCandidate.deploymentId

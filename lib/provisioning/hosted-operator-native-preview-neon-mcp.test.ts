@@ -1,4 +1,3 @@
-/* oxlint-disable promise/avoid-new -- Owned HTTPS fixtures adapt callback server/request APIs to promises. */
 // @vitest-environment node
 import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -101,8 +100,7 @@ const privateMcpBearer = "fixture-private-owner-token";
 const uri = `postgresql://bootstrap_owner:fixture-private-password@${scope.hostname}/neondb?sslmode=require`;
 beforeAll(async () => {
   scratch = await mkdtemp(path.join(tmpdir(), "owned-neon-mcp-"));
-  const certificate = // oxlint-disable-next-line sonarjs/no-os-command-from-path -- System OpenSSL generates only an owned disposable TLS fixture key.
-    spawnSync(
+  const certificate = spawnSync(
       "/usr/bin/openssl",
       [
         "req",
@@ -254,7 +252,6 @@ beforeAll(async () => {
     server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address();
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Node socket API returns a Unix path or a TCP address, not model input.
   if (address === null || typeof address === "string") {
     throw new Error("Owned fixture port failed");
   }
@@ -322,7 +319,6 @@ const fixtureFetch: typeof fetch = async (input, init) => {
       },
     );
     request.on("error", reject);
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- SDK HTTP transport serializes these fixture JSON-RPC bodies as strings.
     if (typeof init?.body === "string") {
       request.write(init.body);
     }
@@ -424,6 +420,20 @@ const fixture = (
       await Promise.resolve();
     },
   };
+  const readerOptions: Parameters<typeof createPreviewNeonMcpReader>[0] = {
+    assertApprovedScope: approved,
+    assertPlanningScope: planning,
+    configuration,
+    diagnosticSink,
+    readCurrentOwnerNativeStore: owner,
+  };
+  if (useLocalPlanningOwner) {
+    readerOptions.assertPlanningOwner = planningOwner;
+  }
+  readerOptions.io = { ...io, ...ioOverrides };
+  if (useLocalApprovedOwner) {
+    readerOptions.assertApprovedOwner = approvedOwner;
+  }
   return {
     approved,
     approvedOwner,
@@ -432,16 +442,7 @@ const fixture = (
     owner,
     planning,
     planningOwner,
-    reader: createPreviewNeonMcpReader({
-      assertApprovedScope: approved,
-      ...(useLocalApprovedOwner ? { assertApprovedOwner: approvedOwner } : {}),
-      assertPlanningScope: planning,
-      assertPlanningOwner: useLocalPlanningOwner ? planningOwner : undefined,
-      configuration,
-      diagnosticSink,
-      io: { ...io, ...ioOverrides },
-      readCurrentOwnerNativeStore: owner,
-    }),
+    reader: createPreviewNeonMcpReader(readerOptions),
   };
 };
 describe("private Neon reader failure diagnostics", () => {

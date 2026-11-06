@@ -3,6 +3,10 @@ import type { validateApplicationSourceArtifact } from "../handoff/application-s
 import type { ApplicationSourceImportReceipt } from "../agent/application-source-import-state";
 
 const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+const sourceImportDirectory = "application-source-import";
+const unsafeSourceStaging = "Unsafe source staging";
+const workspaceRoot = "/workspace";
+const workspacePrefix = `${workspaceRoot}/`;
 
 /** Only repository-owned file operations execute here. Uploaded source is never loaded. */
 export const applicationSourceImportProgram = (input: {
@@ -12,16 +16,17 @@ export const applicationSourceImportProgram = (input: {
   root?: string;
 }) => `
 const fs = require('node:fs'); const path = require('node:path'); const crypto = require('node:crypto');
-const input = JSON.parse(fs.readFileSync(${JSON.stringify(`${input.staging}/plan.json`)}, 'utf8'));
-const root = ${JSON.stringify(input.root ?? "/workspace/repository")};
+const textEncoding = 'utf8';
+const input = JSON.parse(fs.readFileSync(${JSON.stringify(`${input.staging}/plan.json`)}, textEncoding));
+const root = ${JSON.stringify(input.root ?? `${workspaceRoot}/repository`)};
 const target = path.join(root, input.receipt.appRoot);
-const marker = path.join(root, '.app-builder', 'application-source-import-' + input.receipt.reference.appId + '.json');
+const marker = path.join(root, '.app-builder', '${sourceImportDirectory}-' + input.receipt.reference.appId + '.json');
 const reject = () => { throw new Error('Application source import cannot replace occupied or changed source.'); };
 for (const dir of [root, path.join(root, 'apps'), path.join(root, '.app-builder')]) {
  if (fs.existsSync(dir) && (!fs.lstatSync(dir).isDirectory() || fs.lstatSync(dir).isSymbolicLink())) reject();
 }
 if (fs.existsSync(marker)) {
- const prior = JSON.parse(fs.readFileSync(marker, 'utf8'));
+ const prior = JSON.parse(fs.readFileSync(marker, textEncoding));
  if (JSON.stringify(prior) !== JSON.stringify(input.receipt) || !fs.existsSync(target) || !fs.lstatSync(target).isDirectory() || fs.lstatSync(target).isSymbolicLink()) reject();
  process.exit(0);
 }
@@ -32,7 +37,7 @@ for (let i = 0; i < input.files.length; i++) {
  if (!file.path.startsWith(prefix)) reject();
  const relative = file.path.slice(prefix.length);
  if (!relative || relative.split('/').some(p => !p || p === '.' || p === '..') || relative.includes('\\\\')) reject();
- const encoded = fs.readFileSync(path.join(input.staging, String(i) + '.base64'), 'utf8');
+ const encoded = fs.readFileSync(path.join(input.staging, String(i) + '.base64'), textEncoding);
  const bytes = Buffer.from(encoded, 'base64');
  if (bytes.length !== file.bytes || crypto.createHash('sha256').update(bytes).digest('hex') !== file.sha256) reject();
  const destination = path.join(stage, relative); fs.mkdirSync(path.dirname(destination), { recursive: true });
@@ -55,12 +60,12 @@ export const materializeApplicationSource = async (input: {
 }) => {
   input.abortSignal?.throwIfAborted();
   await input.assertCurrent?.();
-  const markerPath = `/workspace/repository/.app-builder/application-source-import-${input.receipt.reference.appId}.json`;
-  const targetPath = `/workspace/repository/${input.receipt.appRoot}`;
+  const markerPath = `${workspaceRoot}/repository/.app-builder/${sourceImportDirectory}-${input.receipt.reference.appId}.json`;
+  const targetPath = `${workspaceRoot}/repository/${input.receipt.appRoot}`;
   const probeProgram = `const fs=require("node:fs");const marker=${JSON.stringify(markerPath)};const target=${JSON.stringify(targetPath)};if(!fs.existsSync(marker))process.exit(3);if(fs.lstatSync(marker).isSymbolicLink()||!fs.lstatSync(marker).isFile()||!fs.existsSync(target)||!fs.lstatSync(target).isDirectory()||fs.lstatSync(target).isSymbolicLink()||JSON.stringify(JSON.parse(fs.readFileSync(marker,"utf8")))!==${JSON.stringify(JSON.stringify(input.receipt))})process.exit(2);`;
   const probe = await input.sandbox.run({
     command: `node -e ${quote(probeProgram)}`,
-    workingDirectory: "/workspace",
+    workingDirectory: workspaceRoot,
   });
   if (probe.exitCode === 0) {
     input.abortSignal?.throwIfAborted();
@@ -72,12 +77,26 @@ export const materializeApplicationSource = async (input: {
       "Application source import has conflicting private state; preserve it for reconciliation.",
     );
   }
-  const staging = `/workspace/.app-builder/application-source-import/${input.receipt.reference.uploadId}`;
+  const staging = `${workspaceRoot}/.app-builder/${sourceImportDirectory}/${input.receipt.reference.uploadId}`;
   // Staging lives outside the repository; every transport write is bounded independently.
-  const preparationProgram = `const fs=require("node:fs"); for(const p of ["/workspace/.app-builder","/workspace/.app-builder/application-source-import",${JSON.stringify(staging)}]) { if(fs.existsSync(p) && (!fs.lstatSync(p).isDirectory() || fs.lstatSync(p).isSymbolicLink())) throw new Error("Unsafe source staging"); fs.mkdirSync(p,{recursive:true,mode:0o700}); } for(const entry of fs.readdirSync(${JSON.stringify(staging)})){ const p=${JSON.stringify(staging)}+"/"+entry; if(!fs.lstatSync(p).isFile() || fs.lstatSync(p).isSymbolicLink()) throw new Error("Unsafe source staging entry"); }`;
+  const stagingDirectory = `${workspaceRoot}/.app-builder/${sourceImportDirectory}`;
+  const unsafeStagingEntry = `${unsafeSourceStaging} entry`;
+  const preparationProgram = [
+    'const fs=require("node:fs"); for(const p of ',
+    JSON.stringify([`${workspaceRoot}/.app-builder`, stagingDirectory, staging]),
+    ") { if(fs.existsSync(p) && (!fs.lstatSync(p).isDirectory() || fs.lstatSync(p).isSymbolicLink())) throw new Error(",
+    JSON.stringify(unsafeSourceStaging),
+    "); fs.mkdirSync(p,{recursive:true,mode:0o700}); } for(const entry of fs.readdirSync(",
+    JSON.stringify(staging),
+    ")){ const p=",
+    JSON.stringify(staging),
+    '+"/"+entry; if(!fs.lstatSync(p).isFile() || fs.lstatSync(p).isSymbolicLink()) throw new Error(',
+    JSON.stringify(unsafeStagingEntry),
+    "); }",
+  ].join("");
   const created = await input.sandbox.run({
     command: `node -e ${quote(preparationProgram)}`,
-    workingDirectory: "/workspace",
+    workingDirectory: workspaceRoot,
   });
   if (created.exitCode !== 0) {
     throw new Error("Application source staging unavailable.");
@@ -86,19 +105,17 @@ export const materializeApplicationSource = async (input: {
     input.abortSignal?.throwIfAborted();
     const encoded = Buffer.from(file.bytes).toString("base64");
     // Append through a trusted program; never interpret source content as shell or code.
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Each ordered file initializes its own bounded transport stream.
     await input.sandbox.writeTextFile({
       content: "",
-      path: `${staging.slice("/workspace/".length)}/${index}.base64`,
+      path: `${staging.slice(workspacePrefix.length)}/${index}.base64`,
     });
     for (let offset = 0; offset < encoded.length; offset += 32_768) {
       input.abortSignal?.throwIfAborted();
       const chunk = encoded.slice(offset, offset + 32_768);
       const encodedPath = `${staging}/${index}.base64`;
-      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Appending chunks to one file must preserve byte order.
       const result = await input.sandbox.run({
         command: `printf '%s' ${quote(chunk)} >> ${quote(encodedPath)}`,
-        workingDirectory: "/workspace",
+        workingDirectory: workspaceRoot,
       });
       if (result.exitCode !== 0) {
         throw new Error("Application source chunk staging failed.");
@@ -112,20 +129,19 @@ export const materializeApplicationSource = async (input: {
   });
   await input.sandbox.writeTextFile({
     content: "",
-    path: `${staging.slice("/workspace/".length)}/plan.json`,
+    path: `${staging.slice(workspacePrefix.length)}/plan.json`,
   });
   for (let offset = 0; offset < plan.length; offset += 8192) {
     const manifestPath = `${staging}/plan.json`;
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Append the manifest in exact transport order.
     const result = await input.sandbox.run({
       command: `printf '%s' ${quote(plan.slice(offset, offset + 8192))} >> ${quote(manifestPath)}`,
-      workingDirectory: "/workspace",
+      workingDirectory: workspaceRoot,
     });
     if (result.exitCode !== 0) {
       throw new Error("Application source manifest staging failed.");
     }
   }
-  const scriptPath = `${staging.slice("/workspace/".length)}/import.cjs`;
+  const scriptPath = `${staging.slice(workspacePrefix.length)}/import.cjs`;
   await input.sandbox.writeTextFile({
     content: applicationSourceImportProgram({
       files: input.validated.artifact.manifest.files,
@@ -136,10 +152,10 @@ export const materializeApplicationSource = async (input: {
   });
   input.abortSignal?.throwIfAborted();
   await input.assertCurrent?.();
-  const absoluteScriptPath = `/workspace/${scriptPath}`;
+  const absoluteScriptPath = `${workspaceRoot}/${scriptPath}`;
   const applied = await input.sandbox.run({
     command: `node ${quote(absoluteScriptPath)}`,
-    workingDirectory: "/workspace",
+    workingDirectory: workspaceRoot,
   });
   input.abortSignal?.throwIfAborted();
   await input.assertCurrent?.();

@@ -10,20 +10,9 @@ import { HOSTED_BUN_VERSION, HOSTED_MISE_VERSION, HOSTED_RUST_VERSION } from "./
 
 describe("hosted validation runtime", () => {
   it("installs Bun, mise, and the pinned Rust toolchain once per sandbox", async () => {
-    // Eve exposes a PromiseLike command, not a native Promise with .catch().
     const requests: Parameters<SandboxSession["run"]>[0][] = [];
-    const run = vi.fn((request: Parameters<SandboxSession["run"]>[0]) => {
-      requests.push(request);
-      const result = Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
-      const thenProperty = String.fromCodePoint(116, 104, 101, 110);
-      return Object.fromEntries([
-        [thenProperty, result.then.bind(result)],
-      ]) as unknown as PromiseLike<{
-        exitCode: number;
-        stdout: string;
-        stderr: string;
-      }>;
-    });
+    const run = vi.fn<SandboxSession["run"]>();
+    run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
     const install = createHostedRuntimeInstaller();
     const sandbox = { id: "sandbox-1", run };
 
@@ -52,7 +41,11 @@ describe("hosted validation runtime", () => {
     const run = vi
       .fn()
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
-      .mockResolvedValueOnce({ exitCode: 1, stderr: "cargo download failed", stdout: "" })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stderr: "cargo download failed",
+        stdout: "",
+      })
       .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
     const install = createHostedRuntimeInstaller();
     const sandbox = { id: "sandbox-2", run };
@@ -75,7 +68,16 @@ describe("hosted validation runtime", () => {
         .mockResolvedValueOnce({ exitCode: 1, stderr: output, stdout: "" }),
     };
 
-    const failure = install(sandbox);
+    let failure: Error;
+    try {
+      await install(sandbox);
+      throw new Error("Expected runtime installation to fail");
+    } catch (error: unknown) {
+      if (!(error instanceof Error) || error.message === "Expected runtime installation to fail") {
+        throw error;
+      }
+      failure = error;
+    }
     await expect(failure).rejects.toThrow("token=[REDACTED]");
     await expect(failure).rejects.toThrow("compiler setup detail ".repeat(120));
   });

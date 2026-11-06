@@ -74,10 +74,25 @@ export interface BranchWorktreePublicationFaultHooks {
 }
 
 interface FileState {
-  kind: "absent" | "regular" | "directory" | "symlink" | "special";
+  kind: FileStateKind;
   mode?: string;
   digest?: string;
 }
+
+type FileStateKind = "absent" | "regular" | "directory" | "symlink" | "special";
+interface FileSystemError extends Error {
+  code?: string;
+}
+const isFileSystemError = (error: Error): error is FileSystemError => "code" in error;
+const isNodeErrorCode = (error: unknown, code: string): boolean =>
+  error instanceof Error && isFileSystemError(error) && error.code === code;
+const unavailableDiagnosticLog = "an unavailable private diagnostic log";
+const exitStatus = (status: number | null): string => `exit ${status}`;
+const publicationInProgressMessage = (stderr: string): string => {
+  const detail = stderr.trim();
+  const suffix = detail === "" ? "." : `: ${detail}`;
+  return `A branch-worktree publication operation is already in progress${suffix}`;
+};
 
 const gitEnvironment = (): NodeJS.ProcessEnv => ({
   GIT_ATTR_NOSYSTEM: "1",
@@ -176,6 +191,8 @@ process.stdin.on("end", () => {
 process.stdin.resume();
 `;
 
+const PUBLICATION_JOURNAL_FAMILIES = ["journals", "staging", "worktrees"] as const;
+
 const gitExecutable = (): string => {
   if (existsSync("/usr/bin/git")) {
     return "/usr/bin/git";
@@ -216,9 +233,7 @@ const startGitDiagnosticCapture = async (): Promise<GitDiagnosticCapture> => {
 
 const redactGitDiagnosticLine = (line: string): string =>
   line
-    // oxlint-disable-next-line eslint/no-control-regex -- Strip terminal escape sequences from Git diagnostics.
     .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
-    // oxlint-disable-next-line eslint/no-control-regex -- Replace control bytes before exposing diagnostics.
     .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, "?")
     .replaceAll(/\b(?:https?|postgres(?:ql)?|redis):\/\/[^\s"'<>]+/giu, "[URL REDACTED]")
     .replaceAll(/\bBearer\s+[^\s"',;]+/giu, "Bearer [REDACTED]")
@@ -246,7 +261,6 @@ const finishGitDiagnosticCapture = async (
   for await (const line of lines) {
     const chunk = `${redactGitDiagnosticLine(line)}\n`;
     if (!sanitizedWriter.write(chunk)) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- respect private diagnostic file backpressure.
       await once(sanitizedWriter, "drain");
     }
   }
@@ -279,7 +293,7 @@ const gitOutput = async (
   if (status !== 0) {
     const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
     throw new Error(
-      `Git ${options.operation ?? args[0] ?? "command"} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+      `Git ${options.operation ?? args[0] ?? "command"} failed for ${root} (${signal ?? exitStatus(status)}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
     );
   }
   await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -338,7 +352,7 @@ const gitNullRecords = async function* gitNullRecords(
       const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
       diagnosticsFinished = true;
       throw new Error(
-        `Git ${operation} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+        `Git ${operation} failed for ${root} (${signal ?? exitStatus(status)}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
       );
     }
     await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -378,9 +392,8 @@ export const hashBranchPublicationSourceBlob = async (
   });
   const hash = createHash("sha256");
   const chunks: Buffer[] = [];
-  const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
+  const closed = once(child, "close");
   child.stderr.pipe(diagnosticCapture.writer);
-  // oxlint-disable-next-line eslint/no-await-in-loop -- hash Git blob data incrementally
   for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
     hash.update(chunk);
     if (collectBytes) {
@@ -391,14 +404,15 @@ export const hashBranchPublicationSourceBlob = async (
   if (status !== 0) {
     const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
     throw new Error(
-      `Git could not read source blob ${objectId} from ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+      `Git could not read source blob ${objectId} from ${root} (${signal ?? exitStatus(status)}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
     );
   }
   await finishGitDiagnosticCapture(diagnosticCapture, false);
-  return {
-    ...(collectBytes ? { bytes: Buffer.concat(chunks) } : {}),
-    digest: hash.digest("hex"),
-  };
+  const digest = hash.digest("hex");
+  if (collectBytes) {
+    return { bytes: Buffer.concat(chunks), digest };
+  }
+  return { digest };
 };
 
 const gitCanonicalPathList = async (
@@ -416,6 +430,21 @@ const gitCanonicalPathList = async (
   return paths.toSorted(compareOverlayPaths);
 };
 
+const isSafePublicationRoot = (
+  state: ReturnType<typeof lstatSync>,
+  canonical: string,
+  resolved: string,
+  uid: number | undefined,
+): boolean => {
+  if (uid === undefined || !state.isDirectory() || state.isSymbolicLink()) {
+    return false;
+  }
+  if (canonical !== resolved || state.uid !== uid) {
+    return false;
+  }
+  return (state.mode & 0o777) === 0o700;
+};
+
 const publicationRoot = (): string => {
   const configured = process.env.APP_BUILDER_BRANCH_WORKTREE_ROOT;
   const testRoot =
@@ -426,7 +455,7 @@ const publicationRoot = (): string => {
     try {
       mkdirSync(testRoot, { mode: 0o700 });
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      if (!isNodeErrorCode(error, "EEXIST")) {
         throw error;
       }
     }
@@ -447,15 +476,7 @@ const publicationRoot = (): string => {
     const state = lstatSync(resolved);
     const canonical = realpathSync(resolved);
     const currentUid = process.geteuid?.();
-    if (
-      currentUid === undefined ||
-      !state.isDirectory() ||
-      state.isSymbolicLink() ||
-      canonical !== resolved ||
-      state.uid !== currentUid ||
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-      (state.mode & 0o777) !== 0o700
-    ) {
+    if (!isSafePublicationRoot(state, canonical, resolved, currentUid)) {
       throw new Error(
         "The publication root must be canonical, owner-only, and owned by the current user.",
       );
@@ -480,10 +501,17 @@ const worktreePath = (identity: string): string =>
 const journalPath = (identity: string): string =>
   pathResolve(publicationRoot(), "journals", `${identity}.json`);
 
+const isPublicationJournal = (value: unknown): value is BranchWorktreePublicationJournal => {
+  if (typeof value !== "object" || value === null || !("status" in value)) {
+    return false;
+  }
+  return value.status === "pending" || value.status === "succeeded" || value.status === "failed";
+};
+
 const assertContainedNoLinkPath = async (
   candidate: string,
   options: {
-    leaf?: "directory" | "regular" | "absent-or-directory" | "absent-or-regular";
+    leaf?: "directory" | "regular" | `absent-or-${"directory" | "regular"}`;
   } = {},
 ): Promise<void> => {
   const root = publicationRoot();
@@ -501,10 +529,9 @@ const assertContainedNoLinkPath = async (
     cursor = pathResolve(cursor, segments[index]);
     let state;
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       state = await lstat(cursor);
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      if (isNodeErrorCode(error, "ENOENT")) {
         if (
           options.leaf === undefined ||
           options.leaf === "absent-or-directory" ||
@@ -542,19 +569,16 @@ const assertContainedNoLinkPath = async (
     if (state.uid !== rootState.uid || state.dev !== rootState.dev) {
       throw new Error("The builder-owned publication path changed owner or filesystem.");
     }
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     if (state.isDirectory() && (state.mode & 0o777) !== 0o700) {
       throw new Error("The builder-owned publication directory is not owner-only.");
     }
     if (
       isLeaf &&
       (options.leaf === "regular" || options.leaf === "absent-or-regular") &&
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       ((state.mode & 0o777) !== 0o600 || state.nlink !== 1)
     ) {
       throw new Error("The builder-owned publication file is not an exclusive owner-only inode.");
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if ((await realpath(cursor)) !== cursor) {
       throw new Error("The builder-owned publication path is not canonical.");
     }
@@ -562,11 +586,13 @@ const assertContainedNoLinkPath = async (
 };
 
 const assertPublicationLayoutSafe = async (): Promise<void> => {
-  await runSequentially(["journals", "staging", "worktrees"] as const, async (family) => {
-    await assertContainedNoLinkPath(pathResolve(publicationRoot(), family), {
-      leaf: "absent-or-directory",
-    });
-  });
+  await Promise.all(
+    PUBLICATION_JOURNAL_FAMILIES.map(async (family) => {
+      await assertContainedNoLinkPath(pathResolve(publicationRoot(), family), {
+        leaf: "absent-or-directory",
+      });
+    }),
+  );
 };
 
 interface PublicationLock {
@@ -584,7 +610,6 @@ const assertOwnedPublicationFileHandle = async (
     !state.isFile() ||
     state.uid !== rootState.uid ||
     state.dev !== rootState.dev ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (state.mode & 0o777) !== 0o600 ||
     state.nlink !== 1
   ) {
@@ -596,7 +621,6 @@ const syncDirectory = async (path: string, builderOwned = false): Promise<void> 
   if (builderOwned) {
     await assertContainedNoLinkPath(path, { leaf: "directory" });
   }
-  // oxlint-disable-next-line eslint/no-bitwise -- Intentional binary open-flag combination.
   const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const stats = await handle.stat();
@@ -623,7 +647,7 @@ const durableDirectory = async (path: string): Promise<void> => {
       await mkdir(cursor, { mode: 0o700 });
       created = true;
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      if (!isNodeErrorCode(error, "EEXIST")) {
         throw error;
       }
     }
@@ -647,13 +671,12 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
       throw new Error("The OS publication lock path is not a regular file.");
     }
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    if (!isNodeErrorCode(error, "ENOENT")) {
       throw error;
     }
     try {
       const handle = await open(
         path,
-        // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
         0o600,
       );
@@ -665,7 +688,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
       }
       await syncDirectory(directory, true);
     } catch (createError: unknown) {
-      if ((createError as NodeJS.ErrnoException).code !== "EEXIST") {
+      if (!isNodeErrorCode(createError, "EEXIST")) {
         throw createError;
       }
       const state = await lstat(path);
@@ -687,7 +710,6 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
   if (helper === undefined) {
     throw new Error("Branch-worktree publication requires the OS flock or lockf utility.");
   }
-  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   const lockHandle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   let lockState: Awaited<ReturnType<typeof lockHandle.stat>>;
   try {
@@ -751,11 +773,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
     const outcome = await terminalPromise;
     clearTimeout(timeout);
     rejectReady(
-      outcome.kind === "error"
-        ? outcome.error
-        : new Error(
-            `A branch-worktree publication operation is already in progress${stderr.trim() === "" ? "." : `: ${stderr.trim()}`}`,
-          ),
+      outcome.kind === "error" ? outcome.error : new Error(publicationInProgressMessage(stderr)),
     );
   })();
   holder.stdout.setEncoding("utf-8");
@@ -775,15 +793,15 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
         cause: terminal.error,
       });
     }
-    return new Error(
-      `The OS publication lock helper exited before release${terminal?.kind === "exit" && terminal.signal !== null ? ` (${terminal.signal})` : "."}`,
-    );
+    const exitDetail =
+      terminal?.kind === "exit" && terminal.signal !== null ? ` (${terminal.signal})` : ".";
+    return new Error(`The OS publication lock helper exited before release${exitDetail}`);
   };
   // This derived promise intentionally races the terminal lease signal.
-  // oxlint-disable-next-line promise/prefer-await-to-then
-  const lost = terminalPromise.then(() => {
+  const lost = (async () => {
+    await terminalPromise;
     throw lockLostError();
-  });
+  })();
   let released = false;
   return {
     assertHeld: () => {
@@ -816,7 +834,6 @@ const atomicWrite = async (path: string, value: string): Promise<void> => {
   await assertContainedNoLinkPath(temporary, { leaf: "absent-or-regular" });
   const handle = await open(
     temporary,
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );
@@ -842,7 +859,6 @@ const createInitialJournal = async (
   await assertContainedNoLinkPath(candidate, { leaf: "absent-or-regular" });
   const handle = await open(
     candidate,
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );
@@ -858,7 +874,11 @@ const createInitialJournal = async (
     await link(candidate, path);
     await syncDirectory(dirname(path), true);
   } finally {
-    await unlink(candidate).catch(() => null);
+    try {
+      await unlink(candidate);
+    } catch {
+      // Candidate may already have been removed.
+    }
     await syncDirectory(dirname(path), true);
   }
 };
@@ -870,17 +890,16 @@ const writeJournal = async (
   await atomicWrite(path, `${JSON.stringify(journal)}\n`);
 };
 
+const resolvePublicationIdentity = (input: BranchWorktreePublicationProposal | string): string =>
+  typeof input === "string" ? input : input.publicationIdentityDigest;
+
 export const readBranchWorktreePublicationJournal = async (
   proposalOrIdentity: BranchWorktreePublicationProposal | string,
 ): Promise<BranchWorktreePublicationJournal | undefined> => {
-  const identity =
-    typeof proposalOrIdentity === "string"
-      ? proposalOrIdentity
-      : proposalOrIdentity.publicationIdentityDigest;
+  const identity = resolvePublicationIdentity(proposalOrIdentity);
   try {
     const path = journalPath(identity);
     await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     let contents: string;
     try {
@@ -889,11 +908,15 @@ export const readBranchWorktreePublicationJournal = async (
     } finally {
       await handle.close();
     }
-    const journal = JSON.parse(contents) as BranchWorktreePublicationJournal;
+    const parsed: unknown = JSON.parse(contents);
+    if (!isPublicationJournal(parsed)) {
+      throw new Error("The durable branch-worktree publication journal has an invalid status.");
+    }
+    const journal = parsed;
     assertCanonicalBranchWorktreeJournal(journal);
     return journal;
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isNodeErrorCode(error, "ENOENT")) {
       return undefined;
     }
     throw new Error("The durable branch-worktree publication journal is unreadable.", {
@@ -907,7 +930,7 @@ const pathExists = async (path: string): Promise<boolean> => {
     await lstat(path);
     return true;
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isNodeErrorCode(error, "ENOENT")) {
       return false;
     }
     throw error;
@@ -979,7 +1002,7 @@ const exactStateMatches = (state: FileState, expected: FileState): boolean =>
 
 const fileDigest = async (path: string): Promise<string> => {
   const hash = createHash("sha256");
-  // oxlint-disable-next-line eslint/no-await-in-loop -- hash file data incrementally
+  // SAFETY: createReadStream yields Buffer chunks from a local file descriptor.
   for await (const chunk of createReadStream(path) as AsyncIterable<Buffer>) {
     hash.update(chunk);
   }
@@ -1004,11 +1027,10 @@ const fileState = async (path: string): Promise<FileState> => {
     return {
       digest: await fileDigest(path),
       kind: "regular",
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
       mode: (info.mode & 0o777).toString(8),
     };
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isNodeErrorCode(error, "ENOENT")) {
       return { kind: "absent" };
     }
     throw error;
@@ -1039,7 +1061,6 @@ const exactTreeEntries = async function* exactTreeEntries(
       throw new Error("The source tree contains an unsafe path.");
     }
     if (mode === "120000") {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- read one blob at a time to bound streamed source memory.
       const { bytes, digest } = await hashBranchPublicationSourceBlob(sourcePath, objectId, true);
       if (bytes === undefined) {
         throw new Error("The source tree symbolic-link blob is unavailable.");
@@ -1061,7 +1082,6 @@ const exactTreeEntries = async function* exactTreeEntries(
       };
       continue;
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- hash one blob at a time to bound streamed source memory.
     const { digest } = await hashBranchPublicationSourceBlob(sourcePath, objectId);
     const fileMode = mode === "100755" ? "755" : "644";
     yield {
@@ -1142,7 +1162,6 @@ const assertOwnedPartialWorktree = async (
     }
     const adminPath = pathResolve(worktreeAdminRoot, entry.name);
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const linkedPathContents = await readFile(pathResolve(adminPath, "gitdir"), "utf-8");
       const linkedPath = linkedPathContents.trim();
       if (pathResolve(linkedPath) === pathResolve(proposal.worktreePath, ".git")) {
@@ -1160,7 +1179,6 @@ const assertOwnedPartialWorktree = async (
   let nextApproved = await approved.next();
   const advanceTo = async (path: string): Promise<void> => {
     while (nextApproved.done !== true && compareOverlayPaths(nextApproved.value.path, path) < 0) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- consume one approved path at a time.
       nextApproved = await approved.next();
     }
   };
@@ -1175,12 +1193,10 @@ const assertOwnedPartialWorktree = async (
       const path = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
       const target = pathResolve(directory, entry.name);
       if (prefix === "" && path === ".git") {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const state = await lstat(target);
         if (!state.isFile() || state.isSymbolicLink()) {
           throw new Error("The partial worktree Git link is unsafe.");
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const match = /^gitdir: (?<gitdir>.+)\n?$/u.exec(await readFile(target, "utf-8"));
         if (
           match === null ||
@@ -1196,18 +1212,14 @@ const assertOwnedPartialWorktree = async (
         throw new Error("The partial worktree contains an unsafe path.");
       }
       if (entry.isDirectory()) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- advance the sorted approved path stream.
         await advanceTo(`${path}/`);
         if (nextApproved.done === true || !nextApproved.value.path.startsWith(`${path}/`)) {
           throw new Error(`The partial worktree contains unapproved directory ${path}.`);
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await visit(target, path);
         continue;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const state = await fileState(target);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- advance the sorted approved path stream.
       await advanceTo(path);
       const approval =
         nextApproved.done === false && nextApproved.value.path === path
@@ -1226,7 +1238,6 @@ const assertOwnedPartialWorktree = async (
   try {
     await visit(proposal.worktreePath, "");
   } finally {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- TypeScript generator return requires an argument.
     await approved.return(undefined);
   }
   if (!exactGitLinkSeen) {
@@ -1349,12 +1360,12 @@ const materializeAtomically = async (
             { env: gitEnvironment(), stdio: ["ignore", "pipe", "pipe"] },
           );
           const hash = createHash("sha256");
+          // SAFETY: ChildProcess close emits exit code and signal in this documented order.
           const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
           child.stderr.pipe(diagnosticCapture.writer);
-          // oxlint-disable-next-line eslint/no-await-in-loop -- stream Git blob bytes into the staged file
+          // SAFETY: Child stdout is a Node readable stream configured to emit byte chunks.
           for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
             hash.update(chunk);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- write each source chunk before reading more
             await handle.writeFile(chunk);
           }
           const [status, signal] = await closed;
@@ -1382,7 +1393,11 @@ const materializeAtomically = async (
     await rename(temporary, target);
     await syncDirectory(dirname(target));
   } finally {
-    await unlink(temporary).catch(() => null);
+    try {
+      await unlink(temporary);
+    } catch {
+      // Temporary staging file may already be absent.
+    }
   }
 };
 
@@ -1397,14 +1412,10 @@ const safeTarget = async (root: string, path: string, createParents: boolean): P
   let cursor = root;
   for (const segment of path.split("/").slice(0, -1)) {
     cursor = pathResolve(cursor, segment);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const state = await fileState(cursor);
     if (state.kind === "absent" && createParents) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await mkdir(cursor, { mode: 0o755 });
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await syncDirectory(dirname(cursor));
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await syncDirectory(cursor);
     } else if (state.kind !== "directory" && state.kind !== "absent") {
       throw new Error("The approved path traverses a non-directory entry.");
@@ -1441,9 +1452,7 @@ const ensureExactBaseMaterialization = async (
   for await (const entry of exactTreeEntries(proposal.sourcePath, proposal.baseSha)) {
     lock.assertHeld();
     const change = changes.get(entry.path);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(proposal.worktreePath, entry.path, true);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const current = await fileState(target);
     if (exactStateMatches(current, entry.state)) {
       continue;
@@ -1454,7 +1463,6 @@ const ensureExactBaseMaterialization = async (
     if (current.kind !== "absent") {
       throw new Error(`The publication worktree conflicts with the exact base at ${entry.path}.`);
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await materializeAtomically(proposal, target, entry);
     lock.assertHeld();
   }
@@ -1483,12 +1491,12 @@ const inspectBranchPublicationSource = async (input: {
     git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]),
     git(canonicalPath, ["rev-parse", "--absolute-git-dir"]),
   ]);
-  const [headSha, headTree, headReference, gitDirectoryPath] = await Promise.all([
-    Promise.resolve(headShaValue.trim()),
-    Promise.resolve(headTreeValue.trim()),
-    Promise.resolve(headReferenceValue.trim()),
-    realpath(gitDirectoryValue.trim()),
-  ]);
+  const [headSha, headTree, headReference, gitDirectoryPath] = [
+    headShaValue.trim(),
+    headTreeValue.trim(),
+    headReferenceValue.trim(),
+    await realpath(gitDirectoryValue.trim()),
+  ];
   const [rootStat, gitDirectoryStat] = await Promise.all([
     stat(canonicalPath),
     stat(gitDirectoryPath),
@@ -1507,13 +1515,10 @@ const inspectBranchPublicationSource = async (input: {
   );
   const statusEntries: { path: string; state: FileState }[] = [];
   for (const path of paths) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- bound concurrent file reads for large repositories.
     statusEntries.push({ path, state: await fileState(pathResolve(canonicalPath, path)) });
   }
   for (const change of input.review.changes) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(canonicalPath, change.path, false);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (!matches(await fileState(target), change.before)) {
       throw new Error(`The source has dirty overlap with approved path ${change.path}.`);
     }
@@ -1654,20 +1659,22 @@ export const writeVerifiedOverlayStream = async (input: {
   const hash = createHash("sha256");
   try {
     while (true) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- consume one provider chunk at a time.
       const result = await reader.read();
       if (result.done) {
         break;
       }
       hash.update(result.value);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- backpressure each staged write.
       await input.write(result.value);
     }
     if (hash.digest("hex") !== input.digest) {
       throw new Error(`The immutable apply overlay is stale for ${input.path}.`);
     }
   } finally {
-    await reader.cancel().catch(() => null);
+    try {
+      await reader.cancel();
+    } catch {
+      // Stream may already be closed.
+    }
     reader.releaseLock();
   }
 };
@@ -1706,7 +1713,11 @@ const writePostimageStream = async (input: {
     await rename(temporary, target);
     await syncDirectory(dirname(target));
   } finally {
-    await unlink(temporary).catch(() => null);
+    try {
+      await unlink(temporary);
+    } catch {
+      // Temporary staging file may already be absent.
+    }
   }
 };
 
@@ -1757,11 +1768,9 @@ export const mergeSortedPublicationPaths = async function* mergeSortedPublicatio
         (leftNext.done === true || compareOverlayPaths(rightNext.value, leftNext.value) < 0)
       ) {
         path = rightNext.value;
-        // oxlint-disable-next-line eslint/no-await-in-loop -- advance one bounded stream record.
         rightNext = await right.next();
       } else if (leftNext.done === false) {
         path = leftNext.value;
-        // oxlint-disable-next-line eslint/no-await-in-loop -- advance one bounded stream record.
         leftNext = await left.next();
       } else {
         break;
@@ -1893,9 +1902,7 @@ const applyRemainingPostimages = async (input: {
   for (let index = 0; index < input.proposal.changes.length; index += 1) {
     input.lock.assertHeld();
     const change = input.proposal.changes[index];
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(input.proposal.worktreePath, change.path, false);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const current = await fileState(target);
     if (matches(current, change.after)) {
       applied.push(change.path);
@@ -1905,25 +1912,19 @@ const applyRemainingPostimages = async (input: {
       throw new Error(`The publication worktree has conflicting bytes or mode for ${change.path}.`);
     }
     if (change.after === undefined) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await unlink(target);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await syncDirectory(dirname(target));
     } else if (input.readOverlayFileStream === undefined) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- legacy provider fallback.
       const bytes = await input.readOverlayFile(change.path);
       if (bytes === null || contentDigest(bytes) !== change.after.digest) {
         throw new Error(`The immutable apply overlay is stale for ${change.path}.`);
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await writePostimage(input.proposal, change.path, bytes, change.after.mode);
     } else {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- one approved path is staged at a time.
       const stream = await input.readOverlayFileStream(change.path);
       if (stream === null) {
         throw new Error(`The immutable apply overlay is stale for ${change.path}.`);
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- verify and atomically publish one staged path.
       await writePostimageStream({
         digest: change.after.digest,
         mode: change.after.mode,
@@ -1933,7 +1934,6 @@ const applyRemainingPostimages = async (input: {
       });
     }
     applied.push(change.path);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await input.hooks?.afterPathMutation?.(change.path, index);
     input.lock.assertHeld();
   }
@@ -1976,7 +1976,6 @@ export const assertBranchPublicationPostimageSequence = async (input: {
         compareOverlayPaths(changes[changeIndex].path, entry.path) < 0
       ) {
         const change = changes[changeIndex];
-        // oxlint-disable-next-line eslint/no-await-in-loop -- compare the next streamed path in order.
         await expectPath(
           change.path,
           change.after === undefined ? { kind: "absent" } : { kind: "regular", ...change.after },
@@ -1996,7 +1995,6 @@ export const assertBranchPublicationPostimageSequence = async (input: {
     }
     while (changeIndex < changes.length) {
       const change = changes[changeIndex];
-      // oxlint-disable-next-line eslint/no-await-in-loop -- compare the next streamed path in order.
       await expectPath(
         change.path,
         change.after === undefined ? { kind: "absent" } : { kind: "regular", ...change.after },
@@ -2030,8 +2028,10 @@ const pendingReceipt = (input: {
     proposalDigest,
     publishedByCallId: input.callId,
     status: "pending" as const,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
   };
+  if (input.recoveryOfDigest !== undefined) {
+    Object.assign(unsigned, { recoveryOfDigest: input.recoveryOfDigest });
+  }
   return { digest: branchJournalDigest(unsigned), ...unsigned };
 };
 
@@ -2054,11 +2054,14 @@ const failureReceipt = (input: {
     proposalDigest,
     publishedByCallId: input.callId,
     reason: input.reason,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
+
     recoveryRequired: true as const,
     status: "failed" as const,
     worktreeCreated: input.worktreeCreated,
   };
+  if (input.recoveryOfDigest !== undefined) {
+    Object.assign(unsigned, { recoveryOfDigest: input.recoveryOfDigest });
+  }
   return { digest: branchJournalDigest(unsigned), ...unsigned };
 };
 
@@ -2079,7 +2082,7 @@ const successReceipt = async (input: {
     ),
     proposalDigest,
     publishedByCallId: input.callId,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
+
     recoveryRequired: false as const,
     status: "succeeded" as const,
     worktreeCreated: true,
@@ -2091,6 +2094,9 @@ const successReceipt = async (input: {
     worktreeRootIdentity: snapshot.rootIdentity,
     worktreeStatusDigest: snapshot.statusDigest,
   };
+  if (input.recoveryOfDigest !== undefined) {
+    Object.assign(unsigned, { recoveryOfDigest: input.recoveryOfDigest });
+  }
   return { digest: branchJournalDigest(unsigned), ...unsigned };
 };
 
@@ -2236,7 +2242,6 @@ const withPublicationLock = async <T>(input: {
   }
 };
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export const publishReviewedChangeSetToBranchWorktree = async (input: {
   proposal: BranchWorktreePublicationProposal;
   sourceReceipt: SourceReceipt;
@@ -2280,7 +2285,6 @@ export const publishReviewedChangeSetToBranchWorktree = async (input: {
   });
 };
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export const recoverBranchWorktreePublication = async (input: {
   proposal: BranchWorktreePublicationProposal;
   sourceReceipt: SourceReceipt;

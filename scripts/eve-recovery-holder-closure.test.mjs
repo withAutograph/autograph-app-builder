@@ -1,4 +1,3 @@
-/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- The installed Eve closure is an internal JavaScript module exercised through explicit synthetic ports. */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -16,6 +15,13 @@ const { recoverTerminalSession, terminalRecoveryActivationToken } = await import
 const { sessionCommandHookToken, sessionInboxHookToken } = await import(
   `${sdk}execution/session-inbox/address.js`
 );
+
+const hookNotFound = "hook-not-found";
+const replacementHookId = "replacement-hook";
+const replacementOwnerRunId = "replacement-owner";
+const noopAsync = async () => {
+  await Promise.resolve();
+};
 
 let sequence = 0;
 const fixture = () => {
@@ -64,12 +70,13 @@ const fixture = () => {
     kind: "terminal-recovery",
   };
   let proof = { kind: "immutable-loser", winnerOwnerRunId };
-  let onProof = async () => {};
-  let onCancel = async () => {};
-  let onDispose = async (_request) => {};
+  let onProof = noopAsync;
+  let onCancel = noopAsync;
+  let onDispose = noopAsync;
   const input = {
     auth,
     async authorizeCurrent() {
+      await Promise.resolve();
       if (currentError !== null) {
         throw new Error(currentError);
       }
@@ -103,28 +110,32 @@ const fixture = () => {
       await onDispose(request);
     },
     async getHook(requestedToken) {
+      await Promise.resolve();
       reads.push({ kind: "token", requestedToken });
       const hook = hooksByToken.get(requestedToken);
       if (hook === undefined) {
-        throw new Error("hook-not-found");
+        throw new Error(hookNotFound);
       }
       return hook;
     },
     async getHookById(requestedHookId) {
+      await Promise.resolve();
       reads.push({ kind: "id", requestedHookId });
       const byId = hooksById.get(requestedHookId);
       if (byId === undefined) {
-        throw new Error("hook-not-found");
+        throw new Error(hookNotFound);
       }
       return byId;
     },
-    isHookNotFound: (error) => error?.message === "hook-not-found",
+    isHookNotFound: (error) => error?.message === hookNotFound,
     async readRun(runId) {
+      await Promise.resolve();
       reads.push({ kind: "run", runId });
       assert.equal(runId, holderOwnerRunId);
       return { runId, status };
     },
     async readRunEntry(runId) {
+      await Promise.resolve();
       reads.push({ kind: "entry", runId });
       assert.equal(runId, holderOwnerRunId);
       return { entry, runId, status };
@@ -395,19 +406,19 @@ it("refuses a changed hook ID or owner without targeting its new holder", async 
       const f = fixture();
       f.setOnProof(() => {
         if (change === "id") {
-          f.setById({ hookId: "replacement-hook", runId: f.holderOwnerRunId });
+          f.setById({ hookId: replacementHookId, runId: f.holderOwnerRunId });
         } else {
           f.setHook({
-            hookId: "replacement-hook",
+            hookId: replacementHookId,
             metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
-            runId: "replacement-owner",
+            runId: replacementOwnerRunId,
           });
         }
       });
       await assert.rejects(f.close());
       assert.equal(
         f.effects.some(
-          (effect) => effect.runId === "replacement-owner" || effect.hookId === "replacement-hook",
+          (effect) => effect.runId === replacementOwnerRunId || effect.hookId === replacementHookId,
         ),
         false,
       );
@@ -475,9 +486,9 @@ it("preserves a replacement hook after the exact loser is cancelled", async () =
   const f = fixture();
   f.setOnCancel(() => {
     f.setHook({
-      hookId: "replacement-hook",
+      hookId: replacementHookId,
       metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
-      runId: "replacement-owner",
+      runId: replacementOwnerRunId,
     });
   });
   await f.close();
@@ -487,7 +498,7 @@ it("preserves a replacement hook after the exact loser is cancelled", async () =
   );
   assert.equal(
     f.effects.some(
-      (effect) => effect.runId === "replacement-owner" || effect.hookId === "replacement-hook",
+      (effect) => effect.runId === replacementOwnerRunId || effect.hookId === replacementHookId,
     ),
     false,
   );
@@ -543,11 +554,14 @@ it("adopts an already committed receipt or a concurrent winner without entering 
       let receipt = phase === "already-committed" ? binding : null;
       const invoked = [];
       const ports = {
-        authorize: async () => {},
+        authorize: noopAsync,
         commitReceipt: () => {
           throw new Error("unexpected-commit");
         },
-        readReceipt: async () => receipt,
+        readReceipt: async () => {
+          await Promise.resolve();
+          return receipt;
+        },
       };
       const dependencies = {
         async closeHolder(input) {
@@ -559,9 +573,9 @@ it("adopts an already committed receipt or a concurrent winner without entering 
           throw new Error("unexpected-collection");
         },
         getHook: () => {
-          throw new Error("hook-not-found");
+          throw new Error(hookNotFound);
         },
-        isHookNotFound: (error) => error?.message === "hook-not-found",
+        isHookNotFound: (error) => error?.message === hookNotFound,
       };
       const result = await recoverTerminalSession(
         { auth: f.auth, descriptor: f.descriptor, ports },

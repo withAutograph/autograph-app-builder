@@ -24,6 +24,24 @@ import { runSequentially } from "../lib/async-sequential";
 const hash = z.string().regex(/^[0-9a-f]{64}$/u);
 const sourceHash = z.string().regex(/^[0-9a-f]{40}$/u);
 const digestRecord = z.record(z.string().min(1), hash);
+const codexManifestSchema = z.strictObject({
+  interface: z
+    .strictObject({ composerIcon: z.string().optional(), logo: z.string().optional() })
+    .optional(),
+  mcpServers: z.literal("./.mcp.json"),
+  name: z.string(),
+  version: z.string(),
+});
+const marketplaceAdapterSchema = z.strictObject({
+  mcpServers: z.strictObject({
+    "app-builder": z.strictObject({
+      oauth: z.strictObject({ callback_url: z.string(), client_id: z.string() }),
+      oauth_resource: z.string(),
+      type: z.literal("http"),
+      url: z.string(),
+    }),
+  }),
+});
 
 export const portableReleaseReceiptSchema = z.strictObject({
   archive: z.strictObject({ name: z.string().min(1), sha256: hash }),
@@ -52,7 +70,6 @@ export const portableReleaseReceiptSchema = z.strictObject({
 
 export type PortableReleaseReceipt = z.infer<typeof portableReleaseReceiptSchema>;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeRelative(path: string) {
   return (
     path !== "" &&
@@ -62,7 +79,6 @@ function safeRelative(path: string) {
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function archiveFiles(archive: Uint8Array) {
   const tar = gunzipSync(archive);
   const files = new Map<string, Uint8Array>();
@@ -102,7 +118,6 @@ export function archiveFiles(archive: Uint8Array) {
   return files;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function regularFile(filePath: string) {
   const info = await lstat(filePath);
   if (!info.isFile() || info.isSymbolicLink()) {
@@ -111,7 +126,6 @@ async function regularFile(filePath: string) {
   return await readFile(filePath);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function git(repositoryRoot: string, ...args: string[]) {
   return execFileSync("/usr/bin/git", args, {
     cwd: repositoryRoot,
@@ -125,7 +139,6 @@ function git(repositoryRoot: string, ...args: string[]) {
   }).trim();
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(actual: Record<string, string>, expected: string[]) {
   const keys = Object.keys(actual).toSorted();
   if (JSON.stringify(keys) !== JSON.stringify([...expected].toSorted())) {
@@ -133,34 +146,38 @@ function exactKeys(actual: Record<string, string>, expected: string[]) {
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function verifyPortableProofArtifact(input: {
-  releaseRoot: string;
-  installRoot: string;
-  repositoryRoot: string;
-}) {
-  const releaseRoot = await realpath(nodePath.resolve(input.releaseRoot));
-  const installRoot = await realpath(nodePath.resolve(input.installRoot));
-  const repositoryRoot = await realpath(nodePath.resolve(input.repositoryRoot));
-  const receiptPath = nodePath.join(releaseRoot, "release-receipt.json");
-  const receiptBytes = await regularFile(receiptPath);
-  const receipt = portableReleaseReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf-8")));
-  if (receipt.version !== AUTOGRAPH_PACKAGE_VERSION) {
-    throw new Error("Release receipt version did not match the package manifest.");
-  }
-  const origin = releaseEndpoint(new URL(receipt.endpoint).origin);
-  if (receipt.endpoint !== `${origin}/mcp`) {
-    throw new Error("Release endpoint must bind the exact /mcp resource.");
-  }
+function verifyMarketplaceAdapter(bytes: Uint8Array, endpoint: string) {
+  const adapter = marketplaceAdapterSchema.parse(JSON.parse(Buffer.from(bytes).toString("utf-8")));
   if (
-    receipt.source.sha !== git(repositoryRoot, "rev-parse", "HEAD") ||
-    receipt.source.tree !== git(repositoryRoot, "rev-parse", "HEAD^{tree}")
+    JSON.stringify(adapter) !==
+    JSON.stringify({
+      mcpServers: {
+        "app-builder": {
+          oauth: { callback_url: codexRedirectUri, client_id: codexClientId },
+          oauth_resource: endpoint,
+          type: "http",
+          url: endpoint,
+        },
+      },
+    })
   ) {
-    throw new Error("Release source SHA/tree did not match the proof checkout.");
+    throw new Error("Codex marketplace adapter must declare exactly one /mcp server.");
   }
-  if (!hasCanonicalFetchRemote(git(repositoryRoot, "remote", "-v"), receipt.source.repository)) {
-    throw new Error("Release source repository was not a configured fetch remote.");
-  }
+}
+
+function parseCodexManifest(bytes: Uint8Array) {
+  return codexManifestSchema.parse(JSON.parse(Buffer.from(bytes).toString("utf-8")));
+}
+
+function codexManifestAssetReferences(manifest: z.infer<typeof codexManifestSchema>) {
+  return new Set(
+    [manifest.interface?.composerIcon, manifest.interface?.logo].flatMap((reference) =>
+      reference === undefined ? [] : [reference],
+    ),
+  );
+}
+
+async function verifyCoreArchive(releaseRoot: string, receipt: PortableReleaseReceipt) {
   const archiveName = `${receipt.name}-${receipt.version}.tar.gz`;
   if (
     receipt.archive.name !== archiveName ||
@@ -178,12 +195,20 @@ export async function verifyPortableProofArtifact(input: {
     if (receipt.coreFiles[path] !== sha256(bytes)) {
       throw new Error(`Archive core digest drifted at ${path}.`);
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const loose = await regularFile(nodePath.join(releaseRoot, path));
     if (sha256(loose) !== receipt.coreFiles[path]) {
       throw new Error(`Loose core file drifted at ${path}.`);
     }
   }
+  return archived;
+}
+
+async function verifyMarketplaceArchive(
+  releaseRoot: string,
+  receipt: PortableReleaseReceipt,
+  archived: Map<string, Uint8Array>,
+  repositoryRoot: string,
+) {
   const marketplaceArchiveName = `${receipt.name}-codex-marketplace-${receipt.version}.tar.gz`;
   if (
     receipt.codexMarketplaceArchive.name !== marketplaceArchiveName ||
@@ -219,28 +244,13 @@ export async function verifyPortableProofArtifact(input: {
   if (!marketplaceAdapterBytes) {
     throw new Error(`Codex marketplace omitted ${marketplaceAdapterPath}.`);
   }
-  const marketplaceAdapter = JSON.parse(Buffer.from(marketplaceAdapterBytes).toString("utf-8"));
-  if (
-    JSON.stringify(marketplaceAdapter) !==
-    JSON.stringify({
-      mcpServers: {
-        "app-builder": {
-          oauth: { callback_url: codexRedirectUri, client_id: codexClientId },
-          oauth_resource: receipt.endpoint,
-          type: "http",
-          url: receipt.endpoint,
-        },
-      },
-    })
-  ) {
-    throw new Error("Codex marketplace adapter must declare exactly one /mcp server.");
-  }
+  verifyMarketplaceAdapter(marketplaceAdapterBytes, receipt.endpoint);
   const codexManifestPath = `${marketplacePrefix}.codex-plugin/plugin.json`;
   const codexManifestBytes = marketplaceFiles.get(codexManifestPath);
   if (!codexManifestBytes) {
     throw new Error(`Codex marketplace omitted ${codexManifestPath}.`);
   }
-  const codexManifest = JSON.parse(Buffer.from(codexManifestBytes).toString("utf-8"));
+  const codexManifest = parseCodexManifest(codexManifestBytes);
   if (
     codexManifest.name !== receipt.name ||
     codexManifest.version !== receipt.version ||
@@ -251,15 +261,8 @@ export async function verifyPortableProofArtifact(input: {
     );
   }
   const codexMarketplaceAssetPaths: string[] = [];
-  for (const reference of new Set([
-    codexManifest.interface?.composerIcon,
-    codexManifest.interface?.logo,
-  ])) {
-    if (
-      typeof reference !== "string" ||
-      !reference.startsWith("./") ||
-      !safeRelative(reference.slice(2))
-    ) {
+  for (const reference of codexManifestAssetReferences(codexManifest)) {
+    if (!reference.startsWith("./") || !safeRelative(reference.slice(2))) {
       throw new Error("Codex marketplace manifest asset reference was not a safe relative path.");
     }
     const path = `${marketplacePrefix}${reference.slice(2)}`;
@@ -282,6 +285,37 @@ export async function verifyPortableProofArtifact(input: {
     }
   }
   exactKeys(receipt.codexMarketplaceAssets, codexMarketplaceAssetPaths);
+}
+
+export async function verifyPortableProofArtifact(input: {
+  releaseRoot: string;
+  installRoot: string;
+  repositoryRoot: string;
+}) {
+  const releaseRoot = await realpath(nodePath.resolve(input.releaseRoot));
+  const installRoot = await realpath(nodePath.resolve(input.installRoot));
+  const repositoryRoot = await realpath(nodePath.resolve(input.repositoryRoot));
+  const receiptPath = nodePath.join(releaseRoot, "release-receipt.json");
+  const receiptBytes = await regularFile(receiptPath);
+  const receipt = portableReleaseReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf-8")));
+  if (receipt.version !== AUTOGRAPH_PACKAGE_VERSION) {
+    throw new Error("Release receipt version did not match the package manifest.");
+  }
+  const origin = releaseEndpoint(new URL(receipt.endpoint).origin);
+  if (receipt.endpoint !== `${origin}/mcp`) {
+    throw new Error("Release endpoint must bind the exact /mcp resource.");
+  }
+  if (
+    receipt.source.sha !== git(repositoryRoot, "rev-parse", "HEAD") ||
+    receipt.source.tree !== git(repositoryRoot, "rev-parse", "HEAD^{tree}")
+  ) {
+    throw new Error("Release source SHA/tree did not match the proof checkout.");
+  }
+  if (!hasCanonicalFetchRemote(git(repositoryRoot, "remote", "-v"), receipt.source.repository)) {
+    throw new Error("Release source repository was not a configured fetch remote.");
+  }
+  const archived = await verifyCoreArchive(releaseRoot, receipt);
+  await verifyMarketplaceArchive(releaseRoot, receipt, archived, repositoryRoot);
   const auxiliaryPaths = [
     "clients/codex.client-harness.json",
     "clients/cursor.client-harness.json",
@@ -290,7 +324,6 @@ export async function verifyPortableProofArtifact(input: {
   ];
   exactKeys(receipt.auxiliaryFiles, auxiliaryPaths);
   for (const path of auxiliaryPaths) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const bytes = await regularFile(nodePath.join(releaseRoot, path));
     if (receipt.auxiliaryFiles[path] !== sha256(bytes)) {
       throw new Error(`Auxiliary file drifted at ${path}.`);
@@ -306,7 +339,6 @@ export async function verifyPortableProofArtifact(input: {
   await runSequentially(["codex", "cursor", "vscode"] as const, async (client) => {
     const clientRoot = nodePath.join(installRoot, client);
     const installedRoot = nodePath.join(clientRoot, receipt.name);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await validateAgentPluginPackage({
       packageKind: "generated-artifact",
       pluginRoot: installedRoot,
@@ -324,7 +356,6 @@ export async function verifyPortableProofArtifact(input: {
         throw new Error(`${client} installed core drifted at ${relativePath}.`);
       }
     });
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const clientHarnessBytes = await regularFile(nodePath.join(clientRoot, "client-harness.json"));
     const harness = z
       .strictObject({
@@ -344,7 +375,6 @@ export async function verifyPortableProofArtifact(input: {
     if (harness.client !== client) {
       throw new Error("Client adapter drifted.");
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const installationReceiptBytes = await regularFile(
       nodePath.join(clientRoot, "installation-receipt.json"),
     );

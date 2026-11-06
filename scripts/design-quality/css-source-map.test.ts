@@ -35,11 +35,12 @@ describe("CSS source-map provenance", () => {
   });
 
   it("fails closed for malformed source fields", () => {
-    expect(
-      originalCssSource({ ...map, sources: [null] } as unknown as typeof map, 0, 0),
-    ).toBeUndefined();
-    expect(
-      originalCssSource({ ...map, sourceRoot: {} } as unknown as typeof map, 0, 0),
-    ).toBeUndefined();
+    const malformedSources = { ...map, sources: [...map.sources] };
+    Reflect.set(malformedSources.sources, 0, null);
+    expect(originalCssSource(malformedSources, 0, 0)).toBeUndefined();
+
+    const malformedSourceRoot = { ...map };
+    Reflect.set(malformedSourceRoot, "sourceRoot", {});
+    expect(originalCssSource(malformedSourceRoot, 0, 0)).toBeUndefined();
   });
 });

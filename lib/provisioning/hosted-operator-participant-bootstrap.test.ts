@@ -260,7 +260,7 @@ const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
 describe("participant bootstrap planning evidence", () => {
   it("requires a completed capture configuration rather than any READY Gateway", () => {
     const desired = desiredPlan();
-    const legacy = hostedOperatorPlanSchema.parse({ ...desired, normalActorProgram: undefined });
+    const legacy = hostedOperatorPlanSchema.parse({ ...desired, normalActorProgram: null });
     const record = completedRecord(legacy);
     const result = inspectParticipantBootstrapPreparation(desired, record);
     expect(result.auth).toBeDefined();
@@ -291,7 +291,7 @@ describe("participant bootstrap planning evidence", () => {
     const before = structuredClone(record);
     expect(inspectParticipantBootstrapPreparation(desired, record).gatewayPrepared).toBe(true);
     expect(record).toEqual(before);
-    record.retainedAuth = undefined;
+    record.retainedAuth = null;
     expect(inspectParticipantBootstrapPreparation(desired, record).gatewayPrepared).toBe(false);
   });
   it("does not reuse a retained hash when the current Gateway row has an unfinished update", () => {
@@ -411,7 +411,7 @@ describe("participant bootstrap planning evidence", () => {
         throw new Error("fixture row missing");
       }
       if (change === "missing-hash") {
-        row.valueSha256 = undefined;
+        row.valueSha256 = null;
       }
       if (change === "pending-write") {
         row.pendingOperationRef = operationRef;
@@ -456,7 +456,7 @@ describe("participant bootstrap planning evidence", () => {
       );
     }
     if (change === "missing-auth") {
-      operator.authPreparation = undefined;
+      operator.authPreparation = null;
     }
     if (change === "different-auth-target") {
       const readiness = operator.authPreparation;
@@ -474,7 +474,7 @@ describe("participant bootstrap planning evidence", () => {
 describe("Realm link configuration codec", () => {
   it("preserves link destinations and binds the sender for owner and participant handoffs", () => {
     const desired = desiredPlan();
-    const ownerPlan = { ...desired, normalActorProgram: undefined };
+    const ownerPlan = { ...desired, normalActorProgram: null };
     const owner = createHostedOperatorRealmLinkConfig(ownerPlan);
     const participant = createHostedOperatorRealmLinkConfig(desired);
     for (const configuration of [owner, participant]) {
@@ -489,8 +489,8 @@ describe("Realm link configuration codec", () => {
     expect(owner.browserSessionCapture).toBeUndefined();
     expect(participant.browserSessionCapture).toMatchObject({
       path: "/api/hosted-operator/realm-browser-session",
+      sender: sourceWorkload,
     });
-    expect(participant.browserSessionCapture?.sender).toEqual(sourceWorkload);
     expect(hostedOperatorRealmLinkConfigSha256(ownerPlan)).not.toBe(
       hostedOperatorRealmLinkConfigSha256(desired),
     );
@@ -737,7 +737,10 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
     const preparation = requiredFixture(record.accountPreparation);
     const retained = requiredFixture(record.retainedAuth);
     const desired = structuredClone(operator.plan);
-    const candidate = requiredFixture(operator.gatewayDeliveryCandidates)[0];
+    const [candidate] = requiredFixture(operator.gatewayDeliveryCandidates);
+    if (candidate === undefined) {
+      throw new Error("Missing fixture candidate");
+    }
     const mutations = {
       "changed-account-plan": () => {
         preparation.accountPlan.contextId = "unapproved-account-plan";
@@ -820,7 +823,7 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
       inspectCompletedParticipantBootstrap(desiredPlan(), completedEnrollmentBootstrap()),
     );
     await expect(
-      assertCompletedParticipantBootstrapApproval(context, selected, async () => ({
+      assertCompletedParticipantBootstrapApproval(context, selected, () => ({
         action: "prepare",
         approvalId: selected.auth.approvalId,
         approved: false,

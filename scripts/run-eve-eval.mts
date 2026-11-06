@@ -9,6 +9,9 @@ import { loadEveEvalOidc } from "./eve-eval-oidc";
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const eveEntry = path.resolve(repositoryRoot, "node_modules/eve/bin/eve.js");
 const args = process.argv.slice(2);
+const generalEnabledProfile = "general-enabled";
+const sandboxProfile = "sandbox";
+const hostedArtifactProfile = "hosted-artifact";
 const liveModelIndex = args.indexOf("--live-model");
 const liveModel = liveModelIndex !== -1;
 if (liveModel) args.splice(liveModelIndex, 1);
@@ -33,10 +36,10 @@ const sourceRoot = option("--gate-a-source-root");
 const miseExecutable = option("--gate-a-mise-executable");
 const vercelExecutable = option("--gate-a-vercel-executable");
 let gateAEvalProfile;
-if (profileName === "general-enabled" || profileName === "general-disabled") {
+if (profileName === generalEnabledProfile || profileName === "general-disabled") {
   gateAEvalProfile = createGateAEvalProfile(
     {
-      localPublication: profileName === "general-enabled" ? "1" : "0",
+      localPublication: profileName === generalEnabledProfile ? "1" : "0",
       profile: "general",
     },
     repositoryRoot,
@@ -51,7 +54,7 @@ if (profileName === "general-enabled" || profileName === "general-disabled") {
     },
     repositoryRoot,
   );
-} else if (profileName === "sandbox" || profileName === "hosted-artifact") {
+} else if (profileName === sandboxProfile || profileName === hostedArtifactProfile) {
   gateAEvalProfile = createGateAEvalProfile(
     {
       image: image ?? null,
@@ -70,14 +73,14 @@ if (
 )
   throw new Error("Fresh Gate A arguments require the fresh profile.");
 if (
-  gateAEvalProfile.profile !== "sandbox" &&
-  gateAEvalProfile.profile !== "hosted-artifact" &&
+  gateAEvalProfile.profile !== sandboxProfile &&
+  gateAEvalProfile.profile !== hostedArtifactProfile &&
   image !== undefined
 )
   throw new Error("The sandbox image requires the sandbox profile.");
 if (
-  gateAEvalProfile.profile !== "sandbox" &&
-  gateAEvalProfile.profile !== "hosted-artifact" &&
+  gateAEvalProfile.profile !== sandboxProfile &&
+  gateAEvalProfile.profile !== hostedArtifactProfile &&
   sourceRoot !== undefined
 )
   throw new Error("The sandbox source root requires the sandbox profile.");
@@ -109,18 +112,21 @@ const sandboxEvaluations = new Set([
   "self-reproduction",
 ]);
 if (
-  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
+  (gateAEvalProfile.profile === sandboxProfile ||
+    gateAEvalProfile.profile === hostedArtifactProfile) &&
   (args[0] === undefined || !sandboxEvaluations.has(args[0]))
 )
   throw new Error("The sandbox Gate A evaluation was invalid.");
 if (
-  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
+  (gateAEvalProfile.profile === sandboxProfile ||
+    gateAEvalProfile.profile === hostedArtifactProfile) &&
   args[0] === "sandbox-identity-planning" &&
   gateAEvalProfile.sourceRoot === null
 )
   throw new Error("The sandbox identity/planning proof requires exact inputs.");
 if (
-  (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
+  (gateAEvalProfile.profile === sandboxProfile ||
+    gateAEvalProfile.profile === hostedArtifactProfile) &&
   args[0] === "sandbox-reviewed-change-set" &&
   gateAEvalProfile.sourceRoot === null
 )
@@ -128,7 +134,7 @@ if (
 if (args.some((argument) => argument.startsWith("--gate-a-")))
   throw new Error("An unknown Gate A argument remained.");
 const realSandbox =
-  gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact";
+  gateAEvalProfile.profile === sandboxProfile || gateAEvalProfile.profile === hostedArtifactProfile;
 if (realSandbox) {
   const locks = await reconcileDeadEveEvalPrewarmLocks(repositoryRoot);
   for (const lock of locks) {
@@ -139,7 +145,7 @@ if (realSandbox) {
     else console.error(`eve eval: preserved prewarm lock ${lock.lock}${owner}: ${lock.reason}`);
   }
 }
-if (liveModel && (gateAEvalProfile.profile !== "sandbox" || args[0] !== "self-reproduction"))
+if (liveModel && (gateAEvalProfile.profile !== sandboxProfile || args[0] !== "self-reproduction"))
   throw new Error("The live model is restricted to the self-reproduction sandbox evaluation.");
 loadEveEvalOidc({ miseExecutable, realSandbox, repositoryRoot, vercelExecutable });
 if (realSandbox) {

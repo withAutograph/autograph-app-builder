@@ -1,15 +1,30 @@
 import { createHmac } from "node:crypto";
 
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { describe, expect, it } from "vitest";
 
-import type * as databaseSchema from "../db/schema";
 import { createGitHubProvisioningWebhookHandler } from "./github-webhook";
+import type {
+  hostedGitHubInstallationBindings,
+  hostedGitHubInstallations,
+  hostedGitHubUserCredentials,
+} from "../db/schema";
 
 const secret = "github-webhook-secret-that-is-long-enough";
+type WebhookBody =
+  | { action: "revoked"; sender: { id: number } }
+  | { action: "deleted"; installation: { id: number } };
+type WebhookTable =
+  | typeof hostedGitHubInstallationBindings
+  | typeof hostedGitHubInstallations
+  | typeof hostedGitHubUserCredentials;
+interface WebhookSchema {
+  hostedGitHubInstallationBindings: typeof hostedGitHubInstallationBindings;
+  hostedGitHubInstallations: typeof hostedGitHubInstallations;
+  hostedGitHubUserCredentials: typeof hostedGitHubUserCredentials;
+}
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function signedRequest(event: string, body: unknown, signatureSecret = secret) {
+function signedRequest(event: string, body: WebhookBody, signatureSecret: string = secret) {
   const bytes = JSON.stringify(body);
   const signature = `sha256=${createHmac("sha256", signatureSecret).update(bytes).digest("hex")}`;
   return new Request("https://builder.example.test/api/github/webhooks", {
@@ -23,33 +38,20 @@ function signedRequest(event: string, body: unknown, signatureSecret = secret) {
   });
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function database() {
   const updates: unknown[] = [];
-  interface FakeDatabase {
-    update: (table: unknown) => {
-      set: () => {
-        where: () => Promise<undefined>;
-      };
+  const value = drizzle.mock<WebhookSchema>();
+  value.update = (table: WebhookTable) => {
+    updates.push(table);
+    return {
+      set: () => ({ where: async () => {} }),
     };
-    transaction: <T>(operation: (transaction: FakeDatabase) => Promise<T>) => Promise<T>;
-  }
-  const value: FakeDatabase = {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async transaction<T>(operation: (transaction: FakeDatabase) => Promise<T>) {
-      return await operation(value);
-    },
-    update(table: unknown) {
-      updates.push(table);
-      return {
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        set: () => ({ where: async () => {} }),
-      };
-    },
   };
+  value.transaction = async (operation) => await operation(value);
   return {
     updates,
-    value: value as unknown as PostgresJsDatabase<typeof databaseSchema>,
+    // SAFETY: The handler exercises only these update, set, where, and transaction chains; each is implemented by this controlled fixture.
+    value,
   };
 }
 

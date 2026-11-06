@@ -180,7 +180,6 @@ describe("normal Auth client", () => {
     await owner.signUp({ email: "owner@example.com", name: "Owner", password });
     const ids: string[] = [];
     for (const slug of ["first", "second"]) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Ordinary organization creation changes this single fixture owner session.
       const response = await auth.handler(
         new Request(`${origin}/api/auth/organization/create`, {
           body: JSON.stringify({ name: slug, slug }),
@@ -195,7 +194,6 @@ describe("normal Auth client", () => {
           method: "POST",
         }),
       );
-      // oxlint-disable-next-line eslint/no-await-in-loop -- The next ordinary creation follows this actual response.
       ids.push(z.object({ id: z.string() }).parse(await response.json()).id);
     }
     const sessions = await Promise.all(
@@ -379,16 +377,22 @@ describe("normal Auth client", () => {
     for (const expected of [
       { code: "transport_failed" },
       { authCode: "INVALID_EMAIL_OR_PASSWORD", code: "auth_rejected", httpStatus: 401 },
-      { authCode: undefined, code: "auth_rejected", httpStatus: 500 },
+      { code: "auth_rejected", httpStatus: 500 },
       { code: "invalid_response" },
     ]) {
       try {
-        // oxlint-disable-next-line no-await-in-loop -- each scripted response belongs to its preceding request.
         await client.signIn({ email: "member@example.com", password });
         throw new Error("Expected sanitized error");
       } catch (error) {
         expect(error).toBeInstanceOf(NormalAuthClientError);
         expect(error).toMatchObject(expected);
+        if (
+          "httpStatus" in expected &&
+          expected.httpStatus === 500 &&
+          error instanceof NormalAuthClientError
+        ) {
+          expect(error.authCode).toBeNull();
+        }
         const serialized = JSON.stringify(error) + String(error);
         for (const value of [
           password,

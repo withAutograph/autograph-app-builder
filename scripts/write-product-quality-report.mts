@@ -22,8 +22,9 @@ import { ARRUSTED_COMPONENT_COMPOSITION_MANIFEST } from "../evals/support/suppor
 const reportRoot = path.resolve(
   process.env.APP_BUILDER_PRODUCT_EVAL_REPORT_DIR ?? ".artifacts/product-quality",
 );
-const vendorEvidenceRoot = path.resolve(reportRoot, "vendor-onboarding");
+const componentPackage = "@autograph/components";
 const vendor = productQualityScenario("vendor-onboarding");
+const vendorEvidenceRoot = path.resolve(reportRoot, vendor.id);
 const prototype = evaluatePrototypeQuality({
   appSpec: vendorOnboardingCompleteAppSpec,
   html: vendorOnboardingPrototype,
@@ -38,12 +39,11 @@ if (policy.status === "unavailable") {
   throw new Error(`Fixture composition policy unavailable: ${policy.reasons.join(" ")}`);
 }
 const composition = auditAppliedAppComposition({
-  appId: vendor.expected.prototype?.appId ?? "vendor-onboarding",
+  appId: vendor.expected.prototype?.appId ?? vendor.id,
   binding: policy.binding,
   files: [
     {
-      content:
-        'import { Button, KpiCard, PageHeader } from "@autograph/components";\nimport { Check } from "@autograph/icons";\nimport "@autograph/design-system/tokens.css";\n\nexport default function Page() {\n  return <><PageHeader title="Vendor Review" /><KpiCard icon={Check} title="Ready" value={3} /><Button>Start Guided Review</Button></>;\n}\n',
+      content: `import { Button, KpiCard, PageHeader } from "${componentPackage}";\nimport { Check } from "@autograph/icons";\nimport "@autograph/design-system/tokens.css";\n\nexport default function Page() {\n  return <><PageHeader title="Vendor Review" /><KpiCard icon={Check} title="Ready" value={3} /><Button>Start Guided Review</Button></>;\n}\n`,
       path: "apps/vendor-onboarding/app/page.tsx",
     },
   ],

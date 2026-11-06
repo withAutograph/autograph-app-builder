@@ -1,5 +1,4 @@
 import { workspaceBinInstallCommand } from "./workspace-bin-install";
-// oxlint-disable eslint/require-await -- Promise-returning sandbox test doubles model asynchronous I/O.
 import { describe, expect, it, vi } from "vitest";
 
 import { sandboxApplyCommandExecutor, executeProposalBoundApply } from "./target-apply";
@@ -7,6 +6,8 @@ import { sandboxApplyCommandExecutor, executeProposalBoundApply } from "./target
 import type { TargetProposal } from "./target-planning";
 import { withImplementationFiles } from "../agent/apply-implementation-files";
 import { createHash } from "node:crypto";
+
+type ApplySandbox = Parameters<Parameters<typeof withImplementationFiles>[0]>[0];
 
 const content = "# Accepted product snapshot\n";
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -51,7 +52,7 @@ describe("direct app creation", () => {
       const calls: string[] = [];
       const installCommand = workspaceBinInstallCommand("/workspace/repository", false);
       const manifestPath = "repository/apps/inventory/package.json";
-      const sandbox = {
+      const sandbox: ApplySandbox = {
         run: vi.fn(async ({ command }: { command: string }) => {
           calls.push(command);
           if (command === installCommand && calls.includes(manifestPath) && exitCode !== 0) {
@@ -76,11 +77,7 @@ describe("direct app creation", () => {
         appId: "inventory",
         applyRoot: "/workspace/repository",
         proposal,
-        // SAFETY: The exercised executor uses only run, setNetworkPolicy, and writeTextFile supplied by this double.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-        sandbox: sandbox as unknown as Parameters<
-          ReturnType<typeof sandboxApplyCommandExecutor>
-        >[0]["sandbox"],
+        sandbox,
       });
       expect(calls.slice(0, 2)).toEqual([
         "repository/.config/app-specs/inventory.cue",
@@ -105,7 +102,7 @@ describe("direct app creation", () => {
     "preserves %s command evidence",
     async (outcome) => {
       const writes: string[] = [];
-      const sandbox = {
+      const sandbox: ApplySandbox = {
         readBinaryFile: vi.fn(async ({ path }: { path: string }) =>
           path.includes("prototype/") ? Buffer.from(content) : null,
         ),
@@ -153,11 +150,7 @@ describe("direct app creation", () => {
           };
         },
         proposal,
-        // SAFETY: This executor uses only the run, network, and write methods supplied by this test double.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-        sandbox: sandbox as unknown as Parameters<
-          ReturnType<typeof sandboxApplyCommandExecutor>
-        >[0]["sandbox"],
+        sandbox,
         snapshotter: async () => ({ files: [], treeDigest: "e".repeat(64) }),
       });
       expect(writes).toEqual(
@@ -211,7 +204,7 @@ describe("direct app creation", () => {
         iteration: { changes: iterationChanges, digest: sha256(JSON.stringify(iterationChanges)) },
         operation: "iterate-existing-app",
       };
-      const sandbox = {
+      const sandbox: ApplySandbox = {
         readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
           if (path.includes("prototype/")) {
             return Buffer.from(content);
@@ -256,11 +249,7 @@ describe("direct app creation", () => {
         },
         executor: sandboxApplyCommandExecutor(),
         proposal: operation === "create" ? proposal : iterationProposal,
-        // SAFETY: This double provides the sandbox methods used by the apply executor and spec snapshot writer.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-        sandbox: sandbox as unknown as Parameters<
-          ReturnType<typeof sandboxApplyCommandExecutor>
-        >[0]["sandbox"],
+        sandbox,
         snapshotter: async () => {
           const snapshot = [...files]
             .filter(([path]) => path.startsWith("repository/"))

@@ -59,7 +59,6 @@ export const createPublicReleaseApprovalCheckpoint = (input: {
     const row = rows.at(0);
     await input.assertCurrentOwner();
     if (row === undefined) {
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing durable checkpoint explicitly starts history at zero.
       return undefined;
     }
     const record = recordSchema.parse(row.record);
@@ -69,11 +68,9 @@ export const createPublicReleaseApprovalCheckpoint = (input: {
     expected = { observation: record.observation, revision: row.revision };
     return structuredClone(record.observation);
   };
-  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Bound intent, adapter cursor, monotone settlements and CAS are one atomic checkpoint guard.
   const save = async (state: PrivateOperatorApprovalObservation) => {
     const parsed = privateOperatorApprovalObservationSchema.parse(state);
     if (
-      // oxlint-disable-next-line sonarjs/expression-complexity -- All immutable cursor ownership fields must match before persistence.
       parsed.adapterSessionId !== input.owner.adapterSessionId ||
       parsed.adapterGeneration !== input.owner.adapterGeneration ||
       parsed.capture.ownerUserId !== authority.ownerUserId ||
@@ -106,7 +103,6 @@ export const createPublicReleaseApprovalCheckpoint = (input: {
               candidate.requestId === entry.requestId && candidate.callId === entry.callId,
           );
           if (
-            // oxlint-disable-next-line sonarjs/expression-complexity -- No completed grant or authenticated cancellation can regress.
             !current ||
             (entry.cancelled && !current.cancelled) ||
             (entry.completedApproved && !current.completedApproved) ||
@@ -173,7 +169,7 @@ export const createPublicReleaseApprovalAuthority =
       plan,
     });
     const state = await checkpoint.read();
-    const transport = createNativeTargetApprovalHistoryTransport({
+    const transportInput = {
       appId: plan.selection.appId,
       assertCanonicalAppOwner: input.authority.assertCanonicalAppOwner,
       builderOrigin: input.builderOrigin,
@@ -188,16 +184,23 @@ export const createPublicReleaseApprovalAuthority =
         authorization: input.request.headers.get("authorization"),
         signal: input.request.signal,
       },
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-    });
+    };
+    if (input.fetch !== undefined) {
+      transportInput.fetch = input.fetch;
+    }
+    const transport = createNativeTargetApprovalHistoryTransport(transportInput);
     const observe = transport.observePrivateHistory;
     if (!observe) {
       throw unavailable();
     }
+    const observation = { save: checkpoint.save };
+    if (state !== undefined) {
+      observation.state = state;
+    }
     const approval = await readPrivatePublicReleaseApproval({
       assertOwner: input.assertCurrentOwner,
       callId,
-      observation: { ...(state === undefined ? {} : { state }), save: checkpoint.save },
+      observation,
       owner: input.owner,
       plan,
       readHistory: async (startIndex, onEvent) =>

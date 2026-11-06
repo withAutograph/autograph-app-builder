@@ -54,9 +54,9 @@ const stream = () =>
     },
   );
 const setup = (authorized = true) => {
-  const ambientToken = vi.fn(async () => "operator-token");
-  const verifyReadAuthority = vi.fn(async () => authorized);
-  const fetchImplementation = vi.fn<typeof fetch>(async () => stream());
+  const ambientToken = vi.fn(() => "operator-token");
+  const verifyReadAuthority = vi.fn(() => authorized);
+  const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValue(stream());
   const observer = createHostedOperatorApprovalObserver({
     builderOrigin: "https://builder.example.test",
     fetchImplementation,
@@ -133,12 +133,11 @@ describe("request-owned approval observation", () => {
   it("does not follow a Builder stream redirect to a foreign host", async () => {
     const f = setup();
     const owned = context();
-    f.fetchImplementation.mockImplementation(
-      async () =>
-        new Response(null, {
-          headers: { location: "https://foreign.example.test/stream" },
-          status: 302,
-        }),
+    f.fetchImplementation.mockResolvedValue(
+      new Response(null, {
+        headers: { location: "https://foreign.example.test/stream" },
+        status: 302,
+      }),
     );
     f.observer.bindWorkload(owned, () => "builder-token", new AbortController().signal);
     await expect(f.observer.forContext(owned)(observation)).rejects.toThrow();
@@ -154,7 +153,7 @@ describe("Builder approval stream credential boundary", () => {
     "https://builder.example.test/eve/v1/session/wrun_1/stream-extra",
     "https://user@builder.example.test/eve/v1/session/wrun_1/stream",
   ])("does not forward stream credentials to %s", async (url) => {
-    const raw = vi.fn<typeof fetch>(async () => stream());
+    const raw = vi.fn<typeof fetch>().mockResolvedValue(stream());
     const guarded = createBuilderApprovalStreamFetch({
       adapterSessionId: "wrun_1",
       fetchImplementation: raw,
@@ -170,7 +169,7 @@ describe("Builder approval stream credential boundary", () => {
   it("preserves request and init semantics while combining cancellation and forcing manual redirects", async () => {
     const requestAbort = new AbortController();
     const deadline = new AbortController();
-    const raw = vi.fn<typeof fetch>(async () => stream());
+    const raw = vi.fn<typeof fetch>().mockResolvedValue(stream());
     const guarded = createBuilderApprovalStreamFetch({
       adapterSessionId: "wrun_1",
       fetchImplementation: raw,

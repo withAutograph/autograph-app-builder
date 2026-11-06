@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/no-useless-undefined -- Explicit undefined models journal CAS absence and valueless coordination promises; these values are supported inputs. */
 import { describe, expect, it, vi } from "vitest";
 import {
   HostedOperatorError,
@@ -120,20 +119,18 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
   const store: HostedRuntimeJournalStore = {
     compareAndSet: async (input) => {
       if (input.expectedRevision !== row.revision) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- The journal CAS contract explicitly returns undefined on a revision conflict.
+        await Promise.resolve();
         return undefined;
       }
       row = {
         record: hostedRuntimeJournalRecordSchema.parse(input.record),
         revision: row.revision + 1,
       };
-      return structuredClone(row);
+      return await Promise.resolve(structuredClone(row));
     },
-    read: async () => structuredClone(row),
-    reserve: async () => structuredClone(row),
-    reserveFenceGeneration: async () => {
-      throw new Error("Fence already allocated");
-    },
+    read: async () => await Promise.resolve(structuredClone(row)),
+    reserve: async () => await Promise.resolve(structuredClone(row)),
+    reserveFenceGeneration: async () => await Promise.reject(new Error("Fence already allocated")),
   };
   const gate = Promise.withResolvers<undefined>();
   const entered = Promise.withResolvers<undefined>();
@@ -146,12 +143,15 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
       if (failure !== undefined) {
         throw failure;
       }
-      return {
+      const result = {
         effectId: input.effect.id,
         observedAt: new Date(now).toISOString(),
         resourceVersion: "owned-readback",
-        ...(input.effect.kind === "access" ? { fenceGeneration: input.fenceGeneration } : {}),
       };
+      if (input.effect.kind === "access") {
+        return { ...result, fenceGeneration: input.fenceGeneration };
+      }
+      return result;
     },
   );
   const assertAuthorized = vi.fn(async () => {});
@@ -160,22 +160,24 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
   const deps: ProtectedHostedOperatorDependencies = {
     assertAuthorized,
     assertCanonicalOwner,
-    authorize: async () => ({ authority, target }),
-    bindings: async () => ({}),
+    authorize: async () => await Promise.resolve({ authority, target }),
+    bindings: async () => await Promise.resolve({}),
     executeEffect,
     now: clock,
-    plan: async () => plan,
-    readApproval: async (input) => ({ ...input, approvalId: "approval", approved: true }),
-    reconcile: async () => ({ status: "absent" }),
+    plan: async () => await Promise.resolve(plan),
+    readApproval: async (input) =>
+      await Promise.resolve({ ...input, approvalId: "approval", approved: true }),
+    reconcile: async () => await Promise.resolve({ status: "absent" }),
     store,
-    verify: async () => ({
-      actors: 1,
-      artifactHash: plan.release.sha256,
-      authenticatedBehavior: "unassessed",
-      manifestSha256: plan.release.sha256,
-      releaseId: plan.release.id,
-      tenants: 1,
-    }),
+    verify: async () =>
+      await Promise.resolve({
+        actors: 1,
+        artifactHash: plan.release.sha256,
+        authenticatedBehavior: "unassessed",
+        manifestSha256: plan.release.sha256,
+        releaseId: plan.release.id,
+        tenants: 1,
+      }),
     withResourceLease: async (_input, run) => {
       const { leaseId } = row.record;
       try {
@@ -183,9 +185,10 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
           const liveExpiry =
             row.record.leaseExpiresAt !== undefined &&
             Date.parse(row.record.leaseExpiresAt) > clock();
-          physicalFence && row.record.leaseId === leaseId && liveExpiry
-            ? await Promise.resolve()
-            : await Promise.reject(new HostedOperatorError("operation_in_progress"));
+          if (!(physicalFence && row.record.leaseId === leaseId && liveExpiry)) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          await Promise.resolve();
         });
       } finally {
         physicalLeaseReleased = true;
@@ -198,28 +201,27 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
     observe = true,
     signal?: AbortSignal,
     progress?: string,
-  ) =>
-    await handler(
+  ) => {
+    let body = { action, operationRef, selection };
+    if (action === "execute") {
+      body = { ...body, callId: "approved-call", planDigest: operatorPlanDigest(plan) };
+    }
+    const headers = new Headers({ "content-type": "application/json" });
+    if (progress !== undefined) {
+      headers.set(OPERATOR_PREPARATION_PROGRESS_HEADER, progress);
+    }
+    if (observe) {
+      headers.set(OPERATOR_EXECUTION_OBSERVATION_HEADER, OPERATOR_EXECUTION_OBSERVATION_PREFERENCE);
+    }
+    return await handler(
       new Request("https://operator.example/v1/runtime", {
-        body: JSON.stringify({
-          action,
-          operationRef,
-          selection,
-          ...(action === "execute"
-            ? { callId: "approved-call", planDigest: operatorPlanDigest(plan) }
-            : {}),
-        }),
-        headers: {
-          "content-type": "application/json",
-          ...(progress === undefined ? {} : { [OPERATOR_PREPARATION_PROGRESS_HEADER]: progress }),
-          ...(observe
-            ? { [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE }
-            : {}),
-        },
+        body: JSON.stringify(body),
+        headers,
         method: "POST",
         signal,
       }),
     );
+  };
   const status = async () => {
     const response = await request("status");
     return operatorPublicResultSchema.parse(await response.json());
@@ -401,13 +403,14 @@ describe("canonical execution observation", () => {
         f.assertCanonicalOwner.mockRejectedValue(new HostedOperatorError("authorization_required"));
       }
       if (lost === "approval") {
-        f.deps.readApproval = async () => ({
-          action: "prepare",
-          approvalId: "approval",
-          approved: false,
-          callId: "approved-call",
-          planDigest: effect.plan.release.sha256,
-        });
+        f.deps.readApproval = async () =>
+          await Promise.resolve({
+            action: "prepare",
+            approvalId: "approval",
+            approved: false,
+            callId: "approved-call",
+            planDigest: effect.plan.release.sha256,
+          });
       }
       if (lost === "fence") {
         f.loseFence();
@@ -469,8 +472,9 @@ describe("canonical execution observation", () => {
       vi.spyOn(f.store, "compareAndSet").mockImplementationOnce(async () => {
         f.assertCanonicalOwner.mockImplementation(async () => {
           rechecked.resolve(undefined);
-          throw new HostedOperatorError("authorization_required");
+          await Promise.reject(new HostedOperatorError("authorization_required"));
         });
+        await Promise.resolve();
         return undefined;
       });
       await vi.advanceTimersByTimeAsync(20_000);
@@ -621,12 +625,13 @@ describe("canonical execution observation", () => {
       f.gate.resolve(undefined);
       await execution;
       expect(f.record.leaseId).toBeUndefined();
+      const settledOutcome =
+        outcome === "prepared"
+          ? { status: "prepared" as const }
+          : { code: outcome, status: "blocked" as const };
       expect(await f.status()).toMatchObject({
         execution: {
-          outcome: {
-            status: outcome === "prepared" ? "prepared" : "blocked",
-            ...(outcome === "prepared" ? {} : { code: outcome }),
-          },
+          outcome: settledOutcome,
           state: "settled",
         },
         status: outcome === "prepared" ? "prepared" : "pending",

@@ -13,6 +13,10 @@ import { executeBuilderProvisioning } from "./service";
 import type { BuilderProvisioningDependencies } from "./service";
 import type { BuilderProvisionRequest, BuilderProvisionResponse } from "./contracts";
 
+const never = () => {
+  throw new Error("Unexpected unused GitHub adapter");
+};
+
 const principal = {
   audience: "https://builder.example/mcp",
   issuer: "https://builder.example/auth",
@@ -114,7 +118,6 @@ const fixture = async () => {
       const row = rows.get(input.requestId);
       if (row === undefined || row.revision !== input.expectedRevision) {
         await Promise.resolve();
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- A lost CAS returns the store's explicit absent result.
         return undefined;
       }
       const next = {
@@ -145,8 +148,7 @@ const fixture = async () => {
   const readNativeTarget = vi.fn<
     Parameters<typeof createBuilderSessionDestinationService>[0]["readNativeTarget"]
   >(
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- This lookup intentionally has no native onboarding journal.
-    async () => undefined,
+    () => undefined,
   );
   const service = createBuilderSessionDestinationService({
     assertMember,
@@ -259,10 +261,6 @@ describe("saved-session destination selection", () => {
 
 it("rechecks the saved epoch after real credential I/O before the Vercel POST", async () => {
   const f = await fixture();
-  const never = async (): Promise<never> => {
-    await Promise.resolve();
-    throw new Error("Unexpected unused GitHub adapter");
-  };
   const credential = vi.fn(async () => {
     await f.sessions.recordCancellationIntent({ nowEpochMs: Date.now(), principal, sessionId });
     return {
@@ -306,12 +304,10 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
     },
   };
   const service = createBuilderSessionDestinationService({
-    sessions: f.sessions,
-    provisioning: dependencies,
-    execute: executeBuilderProvisioning,
     assertMember: f.assertMember,
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- No legacy onboarding is present in this cancellation fixture.
-    readNativeTarget: async () => undefined,
+    execute: executeBuilderProvisioning,
+    provisioning: dependencies,
+    readNativeTarget: () => {},
   });
   const result = await service.select({ expected, principal, request, sessionId });
   expect(credential).toHaveBeenCalledOnce();
@@ -342,7 +338,6 @@ it.each(["creating", "unknown", "ready"] as const)(
   async (stage) => {
     const f = await fixture();
     f.readNativeTarget
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- The first lookup deliberately observes an absent native journal.
       .mockResolvedValueOnce(undefined)
       .mockResolvedValue({ record: { stage } });
     await expect(f.service.select({ expected, principal, request, sessionId })).rejects.toThrow(

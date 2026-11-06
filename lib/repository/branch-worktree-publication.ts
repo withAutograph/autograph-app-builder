@@ -71,32 +71,52 @@ export type BranchWorktreePublicationSuccessReceipt = TerminalFields & {
 
 export type BranchWorktreePublicationFailureReceipt = TerminalFields & {
   status: "failed";
-  reason:
-    | "precondition-failed"
-    | "collision"
-    | "creation-partial"
-    | "apply-partial"
-    | "recovery-conflict";
+  reason: BranchWorktreePublicationFailureReason;
   failureMessage: string;
   recoveryRequired: true;
   digest: string;
 };
 
-export type BranchWorktreePublicationJournal =
-  | BranchWorktreePublicationPendingReceipt
-  | BranchWorktreePublicationSuccessReceipt
-  | BranchWorktreePublicationFailureReceipt;
+type BranchWorktreePublicationFailureReason =
+  | "precondition-failed"
+  | "collision"
+  | "creation-partial"
+  | "apply-partial"
+  | "recovery-conflict";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+type BranchWorktreePublicationStatus = "pending" | "succeeded" | "failed";
+
+export interface BranchWorktreePublicationJournal extends Omit<
+  BranchWorktreePublicationProposal,
+  "digest"
+> {
+  proposalDigest: string;
+  status: BranchWorktreePublicationStatus;
+  publishedByCallId: string;
+  recoveryOfDigest?: string;
+  branchCreated?: boolean;
+  worktreeCreated?: boolean;
+  appliedPaths?: readonly string[];
+  worktreeRootIdentity?: { device: string; inode: string };
+  worktreeGitDirectoryPath?: string;
+  worktreeGitDirectoryIdentity?: { device: string; inode: string };
+  worktreeHeadReference?: string;
+  worktreeIndexFileDigest?: string;
+  worktreeRemoteDigest?: string;
+  worktreeStatusDigest?: string;
+  postconditionDigest?: string;
+  recoveryRequired?: boolean;
+  reason?: BranchWorktreePublicationFailureReceipt["reason"];
+  failureMessage?: string;
+  digest: string;
+}
+
 function canonicalProposal(proposal: BranchWorktreePublicationProposal) {
-  const unsigned = {
-    ...proposal,
-  } as Partial<BranchWorktreePublicationProposal>;
-  delete unsigned.digest;
+  const unsigned = { ...proposal };
+  Reflect.deleteProperty(unsigned, "digest");
   return unsigned;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function branchPublicationIdentity(input: {
   sourceReceiptDigest: string;
   reviewDigest: string;
@@ -104,12 +124,21 @@ export function branchPublicationIdentity(input: {
   return stableDigest(input);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function branchNameForIdentity(identity: string): string {
   return `app-builder/review-${identity}`;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function hasApprovedPathOverlap(
+  approvedPaths: readonly string[],
+  path: string,
+  originalPath: string | undefined,
+): boolean {
+  return approvedPaths.some((approvedPath) => {
+    if (pathsOverlap(approvedPath, path)) return true;
+    return originalPath !== undefined && pathsOverlap(approvedPath, originalPath);
+  });
+}
+
 export function createBranchWorktreePublicationProposal(input: {
   sourceReceipt: SourceReceipt;
   source: DestinationSnapshot;
@@ -128,23 +157,20 @@ export function createBranchWorktreePublicationProposal(input: {
     sourceSha: sourceReceipt.sourceSha,
     sourceTree: sourceReceipt.sourceTree,
   });
-  if (
-    source.canonicalPath !== sourceReceipt.sourcePath ||
-    source.headSha !== sourceReceipt.sourceSha ||
-    source.headTree !== sourceReceipt.sourceTree ||
-    source.contractDigest !== sourceReceipt.contractDigest ||
-    review.sourceSha !== sourceReceipt.sourceSha ||
-    review.sourceTree !== sourceReceipt.sourceTree ||
-    review.repositoryContractDigest !== sourceReceipt.contractDigest
-  ) {
+  const sourceMatchesReceipt =
+    source.canonicalPath === sourceReceipt.sourcePath &&
+    source.headSha === sourceReceipt.sourceSha &&
+    source.headTree === sourceReceipt.sourceTree &&
+    source.contractDigest === sourceReceipt.contractDigest;
+  const reviewMatchesReceipt =
+    review.sourceSha === sourceReceipt.sourceSha &&
+    review.sourceTree === sourceReceipt.sourceTree &&
+    review.repositoryContractDigest === sourceReceipt.contractDigest;
+  if (!sourceMatchesReceipt || !reviewMatchesReceipt) {
     throw new Error("The source checkout is not the exact reviewed existing repository.");
   }
   const overlap = source.dirty.find((entry) =>
-    review.approvedPaths.some(
-      (path) =>
-        pathsOverlap(path, entry.path) ||
-        (entry.originalPath !== undefined && pathsOverlap(path, entry.originalPath)),
-    ),
+    hasApprovedPathOverlap(review.approvedPaths, entry.path, entry.originalPath),
   );
   if (overlap !== undefined) {
     throw new Error(`The source has dirty overlap with approved path ${overlap.path}.`);
@@ -181,7 +207,6 @@ export function createBranchWorktreePublicationProposal(input: {
   return { ...unsigned, digest: stableDigest(unsigned) };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactBranchWorktreeProposal(
   proposal: BranchWorktreePublicationProposal,
 ): void {
@@ -209,11 +234,10 @@ export function assertExactBranchWorktreeProposal(
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function proposalFromBranchJournal(
   journal: BranchWorktreePublicationJournal,
 ): BranchWorktreePublicationProposal {
-  const proposalOnly = { ...journal } as Record<string, unknown>;
+  const proposalFields = { ...journal };
   const { proposalDigest } = journal;
   for (const key of [
     "proposalDigest",
@@ -236,22 +260,17 @@ export function proposalFromBranchJournal(
     "reason",
     "failureMessage",
   ]) {
-    Reflect.deleteProperty(proposalOnly, key);
+    Reflect.deleteProperty(proposalFields, key);
   }
-  return {
-    ...(proposalOnly as Omit<BranchWorktreePublicationProposal, "digest">),
-    digest: proposalDigest,
-  };
+  return { ...proposalFields, digest: proposalDigest };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function branchJournalDigest(
   journal: Omit<BranchWorktreePublicationJournal, "digest">,
 ): string {
   return createHash("sha256").update(JSON.stringify(journal)).digest("hex");
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertCanonicalBranchWorktreeJournal(
   journal: BranchWorktreePublicationJournal,
 ): void {
@@ -262,7 +281,6 @@ export function assertCanonicalBranchWorktreeJournal(
   assertExactBranchWorktreeProposal(proposalFromBranchJournal(journal));
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactBranchWorktreeProposalMatch(
   left: BranchWorktreePublicationProposal,
   right: BranchWorktreePublicationProposal,

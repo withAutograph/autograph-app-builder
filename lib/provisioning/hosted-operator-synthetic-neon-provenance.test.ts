@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await -- provider-reader fixtures intentionally exercise Promise-based APIs. */
 import { describe, expect, it, vi } from "vitest";
 import {
   readNativePreviewNeonProvenance,
@@ -221,13 +220,14 @@ describe("synthetic Neon provenance helper", () => {
             if (value === undefined) {
               throw new Error("Expected an enrolled branch fixture.");
             }
-            return {
-              branch: {
-                ...value.branch,
-                current_state: "archived",
-                ...(id === branchId ? { created_at: "2026-10-09T00:00:00Z" } : {}),
-              },
+            const archivedBranch = {
+              ...value.branch,
+              current_state: "archived",
             };
+            if (id === branchId) {
+              archivedBranch.created_at = "2026-10-09T00:00:00Z";
+            }
+            return { branch: archivedBranch };
           },
           readProject: async () => project(),
           scope: { branchId, projectId: "project-123" },

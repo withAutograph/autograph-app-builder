@@ -9,11 +9,13 @@ import {
   hostedGitHubInstallations,
   hostedGitHubUserCredentials,
 } from "../db/schema";
-import type * as databaseSchema from "../db/schema";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = PostgresJsDatabase<{
+  hostedGitHubInstallationBindings: typeof hostedGitHubInstallationBindings;
+  hostedGitHubInstallations: typeof hostedGitHubInstallations;
+  hostedGitHubUserCredentials: typeof hostedGitHubUserCredentials;
+}>;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function verify(input: { body: Uint8Array; signature: string; secret: string }) {
   if (!/^sha256=[0-9a-f]{64}$/u.test(input.signature)) {
     return false;
@@ -23,19 +25,18 @@ function verify(input: { body: Uint8Array; signature: string; secret: string }) 
 }
 
 const installationEvent = z
-  .object({
+  .looseObject({
     action: z.enum(["deleted", "suspend", "unsuspend"]),
-    installation: z.object({ id: z.number().int().positive() }).passthrough(),
+    installation: z.looseObject({ id: z.number().positive() }),
   })
-  .passthrough();
+  .loose();
 const authorizationEvent = z
-  .object({
+  .looseObject({
     action: z.literal("revoked"),
-    sender: z.object({ id: z.number().int().positive() }).passthrough(),
+    sender: z.looseObject({ id: z.number().positive() }),
   })
-  .passthrough();
+  .loose();
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubProvisioningWebhookHandler(input: {
   database: Database;
   secret: string;
@@ -49,7 +50,8 @@ export function createGitHubProvisioningWebhookHandler(input: {
     }
     const declaredLength = request.headers.get("content-length");
     if (
-      declaredLength &&
+      declaredLength !== null &&
+      declaredLength !== "" &&
       (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > 1024 * 1024)
     ) {
       return new Response(null, { status: 413 });

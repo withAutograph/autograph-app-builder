@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/no-await-in-loop -- Provider pages and observed deployment checkpoints are ordered under one real lease. */
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
@@ -259,23 +258,21 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
 }) => {
   const deliveryDiagnostic = (input: HostedOperatorDeploymentContext) => {
     let stage: OperatorGatewayDeliveryDiagnostic["stage"] = "context";
-    let phase: OperatorGatewayDeliveryDiagnostic["phase"];
-    let method: OperatorGatewayDeliveryDiagnostic["method"];
-    let httpStatus: OperatorGatewayDeliveryDiagnostic["httpStatus"];
-    let providerFailure:
-      | Pick<
-          OperatorGatewayDeliveryDiagnostic,
-          "providerCode" | "providerTerms" | "validationFields"
-        >
-      | undefined;
+    let phase: OperatorGatewayDeliveryDiagnostic["phase"] | null = null;
+    let method: OperatorGatewayDeliveryDiagnostic["method"] | null = null;
+    let httpStatus: OperatorGatewayDeliveryDiagnostic["httpStatus"] | null = null;
+    let providerFailure: Pick<
+      OperatorGatewayDeliveryDiagnostic,
+      "providerCode" | "providerTerms" | "validationFields"
+    > | null;
     let failure: Pick<OperatorGatewayDeliveryDiagnostic, "errorClass" | "publicCode"> = {};
     return {
       at(value: OperatorGatewayDeliveryDiagnostic["stage"]) {
         stage = value;
-        phase = undefined;
-        method = undefined;
-        httpStatus = undefined;
-        providerFailure = undefined;
+        phase = null;
+        method = null;
+        httpStatus = null;
+        providerFailure = null;
       },
       failed(error: Parameters<typeof projectOperatorGatewayDeliveryFailure>[0]) {
         failure = projectOperatorGatewayDeliveryFailure(error);
@@ -285,17 +282,33 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           return;
         }
         try {
+          const gatewayDelivery = {
+            result,
+            stage,
+            ...failure,
+          };
+          if (httpStatus !== null) {
+            gatewayDelivery.httpStatus = httpStatus;
+          }
+          if (method !== null) {
+            gatewayDelivery.method = method;
+          }
+          if (phase !== null) {
+            gatewayDelivery.phase = phase;
+          }
+          if (providerFailure !== null) {
+            Object.assign(gatewayDelivery, providerFailure);
+          }
+          gatewayDelivery.result = result;
+          gatewayDelivery.stage = stage;
+          const completeGatewayDelivery = {
+            ...gatewayDelivery,
+            result,
+            stage,
+          };
           createHostedOperatorConsentDiagnostic(input.target.sessionId)({
             boundary: "operator",
-            gatewayDelivery: {
-              httpStatus,
-              method,
-              phase,
-              result,
-              stage,
-              ...providerFailure,
-              ...failure,
-            },
+            gatewayDelivery: completeGatewayDelivery,
             outcome: result === "applied" ? "verified" : "setup_unavailable",
             phase: "inline",
             stage: "operator_request",
@@ -312,8 +325,8 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       },
       request(value: OperatorGatewayDeliveryDiagnostic["method"]) {
         method = value;
-        httpStatus = undefined;
-        providerFailure = undefined;
+        httpStatus = null;
+        providerFailure = null;
       },
       response(value: number) {
         httpStatus = value;
@@ -434,7 +447,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       await input.assertCurrent();
       await deps.assertAuthorized(input);
     };
-    // oxlint-disable-next-line eslint/complexity -- Preserve provider request order and add only optional diagnostic observations.
     const request = async (
       pathname: string,
       query: Record<string, string> = {},
@@ -523,7 +535,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
       }
     };
-    // oxlint-disable-next-line eslint/complexity -- Keep native source, owner, environment and operation checks in one authoritative readback.
     const readDeployment = async (
       deploymentId: string,
       verifyProject: boolean,
@@ -593,20 +604,25 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         projectName = project.name;
         scopeSlug = team.slug;
       }
-      return {
-        ...(saved?.gatewayAliasAttempted === undefined
-          ? {}
-          : { gatewayAliasAttempted: saved.gatewayAliasAttempted }),
+      const candidate: OperatorDeploymentCandidate = {
         branch: delivery.branch,
         deploymentId: observed.id,
         operationRef: input.operationRef,
         origin: origin.origin,
         projectId: delivery.projectId,
-        ...(projectName === undefined ? {} : { projectName }),
         readyState: observed.readyState,
         repoId: delivery.repoId,
-        ...(scopeSlug === undefined ? {} : { scopeSlug }),
       };
+      if (saved?.gatewayAliasAttempted !== undefined) {
+        candidate.gatewayAliasAttempted = saved.gatewayAliasAttempted;
+      }
+      if (projectName !== undefined) {
+        candidate.projectName = projectName;
+      }
+      if (scopeSlug !== undefined) {
+        candidate.scopeSlug = scopeSlug;
+      }
+      return candidate;
     };
     const readCandidate = async (deploymentId: string, verifyProject = true) =>
       await readDeployment(deploymentId, verifyProject, true);
@@ -641,7 +657,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         rejectedDeploymentIds: [deploymentId],
       });
       // This observed Production result never enters the Preview candidate collection.
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- A rejected deployment explicitly has no Preview candidate.
       return undefined;
     };
     const provesDifferentGatewayAliasTarget = async (deploymentId: string | null) => {
@@ -652,7 +667,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       const observed = await readDeployment(deploymentId, true, false);
       return observed.readyState === "READY";
     };
-    // oxlint-disable-next-line sonarjs/cognitive-complexity -- Complete ordered inventory and journal observations before deciding whether another create is safe.
     const readCandidates = async () => {
       at("reconciliation");
       const ids = new Set<string>();
@@ -700,7 +714,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       }
       const candidates: OperatorDeploymentCandidate[] = [];
       for (const deploymentId of ids) {
-        // oxlint-disable-next-line react-doctor/async-await-in-loop -- Rejection observations update one journal CAS and must remain sequential.
         const candidate = await readCandidateOrRejection(deploymentId);
         if (candidate !== undefined) {
           candidates.push(candidate);
@@ -1102,7 +1115,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
   return {
     async deliver(input: HostedOperatorDeploymentContext) {
       const observation = deliveryDiagnostic(input);
-      // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Preserve ordered reconciliation, durable correction claim and provider creation within the same lease.
       const run = async () => {
         observation.at("context");
         const reader = io(input, observation);
@@ -1166,27 +1178,28 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           await reader.assertCurrent();
         }
         observation.at("deployment_create");
-        const response = z.object({ id }).parse(
-          await reader.request(
-            "/v13/deployments",
-            {},
-            {
-              gitSource: {
-                ref: reader.gitRef,
-                repoId: reader.delivery.repoId,
-                sha: gitSha,
-                type: "github",
-              },
-              meta: reader.expectedMeta,
-              name: project.name,
-              project: project.id,
-              ...((deps.target ?? "app") === "app" &&
-              input.plan.delivery?.projectSettings !== undefined
-                ? { projectSettings: input.plan.delivery.projectSettings }
-                : {}),
-            },
-          ),
-        );
+        const createBody = {
+          gitSource: {
+            ref: reader.gitRef,
+            repoId: reader.delivery.repoId,
+            sha: gitSha,
+            type: "github" as const,
+          },
+          meta: reader.expectedMeta,
+          name: project.name,
+          project: project.id,
+        };
+        if (
+          (deps.target ?? "app") === "app" &&
+          input.plan.delivery?.projectSettings !== undefined
+        ) {
+          Object.assign(createBody, {
+            projectSettings: input.plan.delivery.projectSettings,
+          });
+        }
+        const response = z
+          .object({ id })
+          .parse(await reader.request("/v13/deployments", {}, createBody));
         observation.at("deployment_readback");
         const candidate = await reader.readCandidateOrRejection(response.id);
         if (candidate === undefined) {

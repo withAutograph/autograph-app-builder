@@ -31,6 +31,9 @@ const dependencyInputs = [
   "bun.lock",
   "Cargo.lock",
 ] as const;
+const absentInput = "absent";
+const missingFileCode = "ENOENT";
+const invalidDevelopmentDependencyKeyMessage = "Development dependency key was invalid.";
 
 export const DEVELOPMENT_SOURCE_ARCHIVE_PATH = ".app-builder/development-source.tar.gz";
 /** Development cache state belongs to the local builder and remains writable. */
@@ -70,7 +73,6 @@ export type DevelopmentVercelBootstrapInput = Readonly<{
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function gitEnvironment(): NodeJS.ProcessEnv {
   return {
     GIT_ATTR_NOSYSTEM: "1",
@@ -88,7 +90,6 @@ function gitEnvironment(): NodeJS.ProcessEnv {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function git(sourceRoot: string, args: readonly string[]) {
   return execFileSync(
     "/usr/bin/git",
@@ -97,7 +98,6 @@ function git(sourceRoot: string, args: readonly string[]) {
   ).trim();
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function required(environment: Environment, name: string) {
   const value = environment[name];
   if (value === undefined || value.length === 0) {
@@ -106,7 +106,6 @@ function required(environment: Environment, name: string) {
   return value;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactSourceRoot(sourceRoot: string) {
   if (
     !path.isAbsolute(sourceRoot) ||
@@ -120,7 +119,6 @@ function exactSourceRoot(sourceRoot: string) {
     !info.isDirectory() ||
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o022) !== 0
   ) {
     throw new Error("Development Vercel source root was not owner-bound.");
@@ -128,7 +126,6 @@ function exactSourceRoot(sourceRoot: string) {
   return sourceRoot;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function digestFileOrAbsent(filePath: string) {
   try {
     const info = lstatSync(filePath);
@@ -137,25 +134,23 @@ function digestFileOrAbsent(filePath: string) {
     }
     return sha256(readFileSync(filePath));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return "absent";
+    if (error instanceof Error && "code" in error && error.code === missingFileCode) {
+      return absentInput;
     }
     throw error;
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertInput(input: DevelopmentVercelBootstrapInput) {
-  if (
-    !sha256Pattern.test(input.sourceFingerprint) ||
-    !sha256Pattern.test(input.dependencyKey) ||
-    !gitObjectPattern.test(input.sourceSha) ||
-    !gitObjectPattern.test(input.sourceTree) ||
-    !sha256Pattern.test(input.sourceArchiveSha256) ||
-    Object.values(input.lockfiles).some(
-      (digest) => digest !== "absent" && !sha256Pattern.test(digest),
-    )
-  ) {
+  const hashes = [input.sourceFingerprint, input.dependencyKey, input.sourceArchiveSha256];
+  const gitObjects = [input.sourceSha, input.sourceTree];
+  const invalidHash = hashes.some((hash) => !sha256Pattern.test(hash));
+  const invalidGitObject = gitObjects.some((object) => !gitObjectPattern.test(object));
+  const invalidLockfile = Object.values(input.lockfiles).some(
+    (digest) => digest !== absentInput && !sha256Pattern.test(digest),
+  );
+  const invalidIdentity = [invalidHash, invalidGitObject, invalidLockfile].some(Boolean);
+  if (invalidIdentity) {
     throw new Error("Development Vercel bootstrap identity was invalid.");
   }
 }
@@ -170,6 +165,7 @@ function assertInput(input: DevelopmentVercelBootstrapInput) {
  */
 export const developmentDependencySymlinkScript = String.raw`const fs = require("node:fs");
 const path = require("node:path");
+const developmentRepairTempPattern = "app-builder-development-repair.XXXXXX";
 
 const sourceRoot = fs.realpathSync(process.argv[2]);
 const requestedWorkspaceRoot = process.argv[3];
@@ -265,7 +261,6 @@ const developmentToolchainCase = (architecture: keyof typeof hostedToolchainArti
 };
 
 /** Installs exact tools inside the disposable template, never on the host. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentPinnedToolchainCommand() {
   return `set -euo pipefail
 case "$(uname -m)" in
@@ -364,7 +359,6 @@ printf '%s\n' 'development_toolchain_ready'
 exit 0`;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentPinnedToolchainKey() {
   return sha256(
     JSON.stringify({
@@ -381,7 +375,6 @@ export function developmentPinnedToolchainKey() {
 }
 
 /** Reads only the exact transient Arrusted snapshot selected by `mise run dev`. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readDevelopmentVercelBootstrapInput(
   environment: Environment = process.env,
 ): DevelopmentVercelBootstrapInput {
@@ -393,14 +386,17 @@ export function readDevelopmentVercelBootstrapInput(
     throw new Error("Development Vercel Sandbox binding was not closed.");
   }
   const sourceRoot = exactSourceRoot(required(environment, "REPOSITORY_LOCAL_ROOTS"));
-  const result = {
+  const lockfiles: DevelopmentVercelBootstrapInput["lockfiles"] = {
+    ".config/mise/config.toml": digestFileOrAbsent(
+      path.join(sourceRoot, ".config/mise/config.toml"),
+    ),
+    ".config/mise/mise.lock": digestFileOrAbsent(path.join(sourceRoot, ".config/mise/mise.lock")),
+    "Cargo.lock": digestFileOrAbsent(path.join(sourceRoot, "Cargo.lock")),
+    "bun.lock": digestFileOrAbsent(path.join(sourceRoot, "bun.lock")),
+  };
+  const result: DevelopmentVercelBootstrapInput = {
     dependencyKey: required(environment, "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY"),
-    lockfiles: Object.fromEntries(
-      dependencyInputs.map((inputPath) => [
-        inputPath,
-        digestFileOrAbsent(path.join(sourceRoot, inputPath)),
-      ]),
-    ) as Record<(typeof dependencyInputs)[number], string>,
+    lockfiles,
     sourceFingerprint: required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT"),
     sourceRoot,
     sourceSha: required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_SHA"),
@@ -461,7 +457,6 @@ export function readDevelopmentVercelBootstrapInput(
 }
 
 /** Builds the standard development-execution cache once per dependency key. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelDependencyCommand(input: DevelopmentVercelBootstrapInput) {
   assertInput(input);
   return `set -euo pipefail
@@ -556,10 +551,9 @@ printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
  * tree, then installs the same reusable development cache that template
  * bootstrap creates.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelDependencyRepairCommand(dependencyKey: string) {
   if (!sha256Pattern.test(dependencyKey)) {
-    throw new Error("Development dependency key was invalid.");
+    throw new Error(invalidDevelopmentDependencyKeyMessage);
   }
   return `set -euo pipefail
 test "$(uname -m)" = x86_64
@@ -587,7 +581,7 @@ if (actual !== expected) process.exit(1);
 process.stdout.write(JSON.stringify(lockfiles));
 NODE
 )"
-work="$(mktemp -d /tmp/app-builder-development-repair.XXXXXX)"
+work="$(mktemp -d "/tmp/${developmentRepairTempPattern}")"
 stage='source-staging'
 heartbeat() { while :; do printf 'development_vercel_repair_progress:%s\n' "$stage" >&2; sleep 15; done; }
 heartbeat &
@@ -632,20 +626,18 @@ printf '%s\n' 'development_vercel_repair_ready:${dependencyKey}'`;
 }
 
 /** Agent and skill edits may change Eve's authored key; the provider key may not. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelProviderTemplateKey(dependencyKey: string) {
   if (!sha256Pattern.test(dependencyKey)) {
-    throw new Error("Development dependency key was invalid.");
+    throw new Error(invalidDevelopmentDependencyKeyMessage);
   }
   return `app-builder-development-${dependencyKey}`;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelRevalidationKey(
   input: Pick<DevelopmentVercelBootstrapInput, "dependencyKey">,
 ) {
   if (!sha256Pattern.test(input.dependencyKey)) {
-    throw new Error("Development dependency key was invalid.");
+    throw new Error(invalidDevelopmentDependencyKeyMessage);
   }
   return `autograph-app-builder-vercel-development-v1:${sha256(
     JSON.stringify({
@@ -657,7 +649,6 @@ export function developmentVercelRevalidationKey(
   )}`;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentExecutionArtifactDigest(environment: Environment = process.env) {
   if (
     environment.APP_BUILDER_EXECUTION_MODE !== "development" ||

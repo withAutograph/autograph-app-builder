@@ -8,7 +8,6 @@ import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- The opened control-plane database uses the complete Drizzle schema.
 import type * as databaseSchema from "../db/schema";
 import { builderProvisioningJournals } from "../db/schema";
 import {
@@ -79,6 +78,11 @@ export const nativeTargetDatabaseNames = (appId: string) => {
     runtimeRole: `app_${prefix}_r_${suffix}`,
   };
 };
+
+const artifactContext = (owner: Current, appId: string) => ({
+  authority: owner.authority,
+  target: { appId, sessionId: owner.publicSessionId },
+});
 
 /** Existing per-app pins remain historical; fresh apps require an explicit captured generic capability. */
 export const selectNativeTargetInstaller = (
@@ -166,7 +170,7 @@ export const createNativeTargetApprovalCheckpoint = (
       .from(builderProvisioningJournals)
       .where(predicate)
       .limit(1);
-    const row = rows[0];
+    const [row] = rows;
     if (row === undefined) {
       expected = null;
       return undefined;
@@ -219,7 +223,7 @@ export const createNativeTargetApprovalCheckpoint = (
       .from(builderProvisioningJournals)
       .where(predicate)
       .limit(1);
-    const inserted = rows[0];
+    const [inserted] = rows;
     if (inserted === undefined || inserted.requestDigest !== planDigest) {
       throw mismatch();
     }
@@ -334,7 +338,7 @@ export const createNativeTargetApprovalHistoryTransport = (input: {
       });
       return true;
     },
-    workloadIdentity: { token: async () => carrier.slice(7) },
+    workloadIdentity: { token: () => carrier.slice(7) },
   });
 };
 
@@ -380,10 +384,6 @@ export const createNativeTargetOnboardingDeployment = (input: {
       publicSessionId: historyOwner.sessionId,
     };
   };
-  const artifactContext = (owner: Current, appId: string) => ({
-    authority: owner.authority,
-    target: { appId, sessionId: owner.publicSessionId },
-  });
   const readCapturedRelease = async (
     owner: Current,
     appId: string,
@@ -476,16 +476,23 @@ export const createNativeTargetOnboardingDeployment = (input: {
       selectedConfiguration.sandbox.genericInstallerWorker,
     );
     const { nativeNeon } = selectedConfiguration;
-    return nativeTargetOnboardingPlanSchema.parse({
-      version: 1,
+    const plan = {
+      appDatabase: {
+        resourceId: nativeNeon.configuration.nativeStore.resourceId,
+        ...nativeTargetDatabaseNames(proposal.appId),
+      },
       appId: proposal.appId,
-      ...(proposal.resourceProfileId === undefined
-        ? {}
-        : {
-            resourceProfileAuthorityDigest:
-              nativeTargetResourceProfileAuthorityDigest(selectedConfiguration),
-            resourceProfileId: proposal.resourceProfileId,
-          }),
+      branch: proposal.branch,
+      conflictPolicy: proposal.conflictPolicy,
+      cost: {
+        description:
+          "Vercel Preview usage is billed to the approved team under its current plan; no fixed credit purchase or subscription upgrade is included.",
+        ownership: "current-owner",
+      },
+      nativeNeon: {
+        nativeStore: nativeNeon.configuration.nativeStore,
+        scope: nativeNeon.scope,
+      },
       origin: {
         adapterGeneration: owner.adapterGeneration,
         adapterSessionId: owner.adapterSessionId,
@@ -493,41 +500,31 @@ export const createNativeTargetOnboardingDeployment = (input: {
         publicSessionId: owner.publicSessionId,
         release: source.captured.release,
       },
-      project: {
-        ...proposal.project,
-        protection: nativeTargetRequiredProjectProtection,
-      },
-      branch: proposal.branch,
-      appDatabase: {
-        resourceId: nativeNeon.configuration.nativeStore.resourceId,
-        ...nativeTargetDatabaseNames(proposal.appId),
-      },
       productRoles:
         source.captured.description.backend.kind === "generated-postgres"
           ? source.captured.description.backend.roles
           : [],
-      nativeNeon: {
-        ...(nativeNeon.configuration.syntheticEnrollment === undefined
-          ? {}
-          : {
-              approvalReference:
-                nativeNeon.configuration.syntheticEnrollment.creationApprovalReference,
-            }),
-        nativeStore: nativeNeon.configuration.nativeStore,
-        scope: nativeNeon.scope,
-      },
-      worker,
-      cost: {
-        description:
-          "Vercel Preview usage is billed to the approved team under its current plan; no fixed credit purchase or subscription upgrade is included.",
-        ownership: "current-owner",
+      project: {
+        ...proposal.project,
+        protection: nativeTargetRequiredProjectProtection,
       },
       retention: {
         policy:
           "Retain the dedicated Preview project until explicit authorized deletion; session completion or failure does not delete it. App database cleanup is a separate approved operation.",
       },
-      conflictPolicy: proposal.conflictPolicy,
-    });
+      version: 1,
+      worker,
+    };
+    if (proposal.resourceProfileId !== undefined) {
+      plan.resourceProfileAuthorityDigest =
+        nativeTargetResourceProfileAuthorityDigest(selectedConfiguration);
+      plan.resourceProfileId = proposal.resourceProfileId;
+    }
+    if (nativeNeon.configuration.syntheticEnrollment !== undefined) {
+      plan.nativeNeon.approvalReference =
+        nativeNeon.configuration.syntheticEnrollment.creationApprovalReference;
+    }
+    return nativeTargetOnboardingPlanSchema.parse(plan);
   };
   const readApproval = async (
     owner: Current,
@@ -558,26 +555,33 @@ export const createNativeTargetOnboardingDeployment = (input: {
       },
     );
     const observation = await checkpoint.read();
-    const transport = createNativeTargetApprovalHistoryTransport({
+    const transportInput: Parameters<typeof createNativeTargetApprovalHistoryTransport>[0] = {
       appId: record.appId,
       assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
       builderOrigin: input.builderOrigin,
       owner,
       workload,
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-    });
+    };
+    if (input.fetch !== undefined) {
+      transportInput.fetch = input.fetch;
+    }
+    const transport = createNativeTargetApprovalHistoryTransport(transportInput);
     if (transport.observePrivateHistory === undefined) {
       throw unavailable();
     }
-    const result = await readPrivateNativeTargetApproval({
-      owner,
-      record,
+    const approvalInput: Parameters<typeof readPrivateNativeTargetApproval>[0] = {
+      assertOwner: async () => {
+        await input.owner.assertCanonicalAppOwner({
+          authority: owner.authority,
+          ownerContext: owner.historyOwner,
+          target: { appId: record.appId, sessionId: owner.publicSessionId },
+        });
+      },
       historyOwner: owner.historyOwner,
-      ...(callId === undefined ? {} : { callId }),
       observation: {
-        ...(observation === undefined ? {} : { state: observation }),
         save: checkpoint.save,
       },
+      owner,
       readHistory: async (startIndex, onEvent) =>
         (await transport.observePrivateHistory?.({
           adapterSessionId: owner.adapterSessionId,
@@ -586,14 +590,15 @@ export const createNativeTargetOnboardingDeployment = (input: {
           sessionId: owner.publicSessionId,
           startIndex,
         })) ?? { complete: false, nativeTailIndex: startIndex, nextNativeIndex: startIndex },
-      assertOwner: async () => {
-        await input.owner.assertCanonicalAppOwner({
-          authority: owner.authority,
-          ownerContext: owner.historyOwner,
-          target: { appId: record.appId, sessionId: owner.publicSessionId },
-        });
-      },
-    });
+      record,
+    };
+    if (callId !== undefined) {
+      Object.assign(approvalInput, { callId });
+    }
+    if (observation !== undefined) {
+      Object.assign(approvalInput.observation, { state: observation });
+    }
+    const result = await readPrivateNativeTargetApproval(approvalInput);
     return result.status === "pending" ? null : result.proof;
   };
   return createNativeTargetOnboardingService({
@@ -610,7 +615,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
         // This failure precedes the provider dispatch and is a definite non-creation.
         return { reason: "authorization_denied", status: "rejected" };
       }
-      return await createNativeTargetVercelProject({
+      const projectInput: Parameters<typeof createNativeTargetVercelProject>[0] = {
         acceptProjectId,
         authorizeAttempt,
         installation: credential.binding,
@@ -618,8 +623,11 @@ export const createNativeTargetOnboardingDeployment = (input: {
         protection: plan.project.protection,
         settings: plan.project.projectSettings,
         token: credential.token,
-        ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-      });
+      };
+      if (input.fetch !== undefined) {
+        projectInput.fetch = input.fetch;
+      }
+      return await createNativeTargetVercelProject(projectInput);
     },
     inspectProviderAuthorization: async ({ owner, plan, signal }) =>
       await inspectNativeTargetVercelAuthorization({
@@ -642,15 +650,18 @@ export const createNativeTargetOnboardingDeployment = (input: {
         plan.project.installationId,
         plan.project.teamId,
       );
-      return await observeNativeTargetVercelProject({
+      const observationInput: Parameters<typeof observeNativeTargetVercelProject>[0] = {
         installation: credential.binding,
         name,
         projectId,
         protection: plan.project.protection,
         settings: plan.project.projectSettings,
         token: credential.token,
-        ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-      });
+      };
+      if (input.fetch !== undefined) {
+        observationInput.fetch = input.fetch;
+      }
+      return await observeNativeTargetVercelProject(observationInput);
     },
     readApproval,
     readCapturedRelease,

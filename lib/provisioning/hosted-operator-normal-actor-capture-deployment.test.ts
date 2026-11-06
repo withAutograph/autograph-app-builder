@@ -276,7 +276,7 @@ const fixture = () => {
   const noOp = vi.fn(async () => {
     await Promise.resolve();
   });
-  const capture = { actorKey: "owner", context, link, organizationId: undefined, preparation };
+  const capture = { actorKey: "owner", context, link, organizationId: null, preparation };
   const readPending = vi.fn(async () => await Promise.resolve(capture));
   const readStaging = vi.fn(
     async () =>
@@ -300,19 +300,17 @@ const fixture = () => {
         store: {
           compareAndSet: async () => {
             await Promise.resolve();
-            // oxlint-disable-next-line unicorn/no-useless-undefined -- The actual journal port distinguishes an absent row or lost CAS from a void result.
             return undefined;
           },
           read: async () => {
             await Promise.resolve();
-            // oxlint-disable-next-line unicorn/no-useless-undefined -- The actual journal port distinguishes an absent row or lost CAS from a void result.
             return undefined;
           },
         },
       },
       readPendingNormalActorCapture: readPending,
       readPendingRealmIdentityLinkForStaging: readStaging,
-      resolveRealmIdentityCallbackOwnerContext: vi.fn(async () => {
+      resolveRealmIdentityCallbackOwnerContext: vi.fn(() => {
         throw new Error("unexpected public route");
       }),
     },
@@ -433,7 +431,7 @@ describe("native normal capture deployment assembly", () => {
       actorKey: "different",
       context,
       link,
-      organizationId: undefined,
+      organizationId: null,
       preparation,
     });
     await expect(pending.assertCurrent()).rejects.toThrow(

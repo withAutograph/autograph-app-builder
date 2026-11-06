@@ -1,4 +1,3 @@
-/* oxlint-disable sonarjs/no-identical-functions -- Distinct original-owner and recovered-owner fixtures intentionally assert the same authorization boundary without sharing mutable session state. */
 import { recordRepositoryAccessReceipt } from "../agent/repository-access-state";
 import { initialBuilderProvisionJournalRecord } from "./journal";
 import type { BuilderProvisionJournalRow } from "./journal";
@@ -23,6 +22,7 @@ import {
   toDurableHostedSessionRecord,
 } from "../eve/hosted-store";
 import type { HostedEveStore, HostedSessionRecord } from "../eve/hosted-store";
+import type { NativeRecoveryDescriptor } from "../eve/native-recovery-contract";
 import type { HostedEveTransport } from "../eve/hosted-service";
 import { privateHostedApprovalReceiptSchema } from "../eve/private-hosted-approval";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -46,9 +46,7 @@ import {
 import {
   hostedRuntimeJournalRecordSchema,
   hostedRuntimeTargetSchema,
-  // oxlint-disable-next-line import/consistent-type-specifier-style -- Keep this module in one import declaration.
   type HostedRuntimeJournalStore,
-  // oxlint-disable-next-line import/consistent-type-specifier-style -- Keep this module in one import declaration.
   type HostedRuntimeJournalRecord,
 } from "./hosted-runtime-journal";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
@@ -190,7 +188,6 @@ let keyResolver: Parameters<typeof createHostedOperatorOwnerAuthority>[0]["keyRe
 
 beforeAll(async () => {
   const keys = await generateKeyPair("RS256");
-  // oxlint-disable-next-line eslint/require-await, typescript/promise-function-async -- jose's key resolver interface requires a promise-returning function.
   keyResolver = async () => keys.publicKey;
   token = await new SignJWT({
     environment: workloadPolicy.environment,
@@ -277,7 +274,6 @@ const makeFixture = (
     version: 1,
   });
   const eve: Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts"> = {
-    // oxlint-disable-next-line eslint/require-await -- this in-memory store seam has no asynchronous work.
     getSession: vi.fn(async () => {
       await Promise.resolve();
       return sessionOverride ?? currentSession;
@@ -291,11 +287,9 @@ const makeFixture = (
     },
   };
   const handoffs: Pick<BuilderHandoffStore, "read"> = {
-    // oxlint-disable-next-line eslint/require-await -- this in-memory store seam has no asynchronous work.
     read: vi.fn(async () => (missingHandoff ? undefined : handoff)),
   };
   const membership: HostedWorkspaceMembership = {
-    // oxlint-disable-next-line eslint/require-await -- this in-memory membership seam has no asynchronous work.
     isMember: vi.fn(async () => {
       await Promise.resolve();
       return activeMember;
@@ -319,7 +313,6 @@ const makeFixture = (
       token: "credential-never-exposed",
     };
   });
-  // oxlint-disable-next-line eslint/require-await -- provider response fixture is produced locally.
   const fetch = vi.fn<typeof globalThis.fetch>(async () =>
     Response.json({
       accountId: "team_1",
@@ -736,9 +729,9 @@ const retainedProjectSettingsApprovalFixture = () => {
     version: 1,
   });
   const journal: Pick<HostedRuntimeJournalStore, "read"> = {
-    read: vi.fn(async () => ({ record, revision: 2 })),
+    read: vi.fn(() => ({ record, revision: 2 })),
   };
-  const observe = vi.fn(async () => ({
+  const observe = vi.fn(() => ({
     artifactProjectionRequiresLegacyReadback: false,
     installedEventCount: 0,
     pendingRequests: [],
@@ -900,7 +893,7 @@ const retainedRenewalApprovalFixture = () => {
     approvedByCallId: "operator:unapproved-plan",
     operator: {
       ...unapprovedPrior,
-      pendingEffectId: undefined,
+      pendingEffectId: null,
       plan: renewedPlan,
       planDigest: operatorPlanDigest(renewedPlan),
       receipts: oldOperator.receipts.filter((receipt) =>
@@ -910,9 +903,9 @@ const retainedRenewalApprovalFixture = () => {
     },
   });
   const journal: Pick<HostedRuntimeJournalStore, "read"> = {
-    read: vi.fn(async () => ({ record, revision: 3 })),
+    read: vi.fn(() => ({ record, revision: 3 })),
   };
-  const observe = vi.fn(async () => ({
+  const observe = vi.fn(() => ({
     artifactProjectionRequiresLegacyReadback: false,
     installedEventCount: 0,
     pendingRequests: [],
@@ -1212,12 +1205,21 @@ describe("retained READY replacement private approval lookup", () => {
         sessionId: "foreign-session",
       });
     }
-    if (
-      mismatch === "changed-lineage" &&
-      f.record.operator?.plan.appDeliveryReplacement !== undefined
-    ) {
-      f.record.operator.plan.appDeliveryReplacement.predecessor.appDeploymentId =
-        "unrelated-ready-app";
+    const currentOperator = f.record.operator;
+    if (mismatch === "changed-lineage" && currentOperator !== undefined) {
+      const changedPlan = hostedOperatorPlanSchema.parse({
+        ...structuredClone(currentOperator.plan),
+        appDeliveryReplacement: {
+          predecessor: {
+            appDeploymentId: "unrelated-ready-app",
+            gatewayDeploymentId: "original-ready-gateway",
+            operationRef: currentOperator.operationRef,
+            planDigest: currentOperator.planDigest,
+          },
+          version: 1,
+        },
+      });
+      currentOperator.plan = changedPlan;
     }
     if (mismatch === "changed-current-operation" && f.record.operator !== undefined) {
       f.record.operator.operationRef = "849497e7-38e1-413c-8264-ce0fbd82f242";
@@ -1276,7 +1278,7 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
     source: ReturnType<typeof toDurableHostedSessionRecord>,
     childId: string,
   ) => {
-    const descriptor = {
+    const descriptor: NativeRecoveryDescriptor = {
       logicalSessionId: original.adapterSessionId,
       operationId: `${childId}-operation`,
       originalAuthoritySessionId: original.sessionId,
@@ -1285,8 +1287,10 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
       sourceOwnerRunId: source.adapterSessionId,
       sourcePublicSessionId: source.sessionId,
       version: 1 as const,
-      ...(source.sourceHandoffId === undefined ? {} : { sourceHandoffId: source.sourceHandoffId }),
     };
+    if (source.sourceHandoffId !== undefined) {
+      descriptor.sourceHandoffId = source.sourceHandoffId;
+    }
     const binding = {
       ...descriptor,
       ownerRunId: `${childId}-physical`,
@@ -1318,10 +1322,10 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
       ...source,
       adapterGeneration: 1,
       adapterSessionId: binding.ownerRunId,
-      checkpoint: undefined,
-      checkpointDigest: undefined,
-      checkpointProgressDigest: undefined,
-      checkpointRef: undefined,
+      checkpoint: null,
+      checkpointDigest: null,
+      checkpointProgressDigest: null,
+      checkpointRef: null,
       nativeRecoveryBinding: binding,
       originAdapterSessionId: binding.ownerRunId,
       parentSessionId: source.sessionId,
@@ -1679,7 +1683,6 @@ describe("hosted operator artifact ownership", () => {
       const fixture = makeFixture(kind === "direct" ? directSessionRecord() : undefined);
       const context = contextFor(kind === "direct" ? directOwnerContext : ownerContext);
       for (let page = 0; page < 20; page += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Each simulated publication boundary checks current authority again.
         expect(await fixture.authority.authorizeArtifactRead(request(), context)).toEqual(context);
       }
       expectNoProviderReads(fixture);
@@ -1736,7 +1739,6 @@ describe("hosted operator artifact ownership", () => {
       ];
       const readArtifact = vi.fn();
       for (const mismatch of mismatches) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Each rejected ownership check completes before the next attempt.
         await expect(
           (async () => {
             await fixture.authority.assertArtifactAuthorized(mismatch);
@@ -1786,7 +1788,6 @@ describe("hosted operator artifact ownership", () => {
       { ...handoff, intent: { ...handoff.intent, appId: "foreign-app" } },
     ]) {
       vi.mocked(fixture.handoffs.read).mockResolvedValue(changed);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Each attempt replaces the same canonical store response.
       await expect(fixture.authority.assertArtifactAuthorized(context)).rejects.toThrow();
     }
     expectNoProviderReads(fixture);
@@ -1806,7 +1807,6 @@ describe("hosted operator artifact ownership", () => {
       expect(fixture.fetch).toHaveBeenCalled();
       fixture.fetch.mockClear();
       fixture.listVercelInstallations.mockResolvedValue([]);
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- Absence is the credential reader contract.
       vi.mocked(fixture.readVercelCredential).mockResolvedValue(undefined);
       await expect(fixture.authority.assertPlanningAuthorized(context)).rejects.toThrow();
       expect(fixture.fetch).not.toHaveBeenCalled();
@@ -1897,12 +1897,12 @@ const narrowedGatewayApprovalFixture = () => {
   });
   const narrowed = hostedOperatorPlanSchema.parse({
     ...original,
-    gatewayBindings: { ...original.gatewayBindings, trustedSources: undefined },
+    gatewayBindings: { ...original.gatewayBindings, trustedSources: null },
   });
   retained.prepareReceipt.toolInput.plan = original;
   retained.prepareReceipt.toolInput.planDigest = operatorPlanDigest(original);
   retained.prepareInput.planDigest = operatorPlanDigest(original);
-  retained.record.retainedAuth = undefined;
+  retained.record.retainedAuth = null;
   retained.record.status = "pending";
   retained.record.step = "reserved";
   retained.record.approvedByCallId = "narrowed-call";
@@ -2565,7 +2565,7 @@ describe("hosted operator owner authority", () => {
       undefined,
       readyNativeHandoffTarget(),
     );
-    fixture.fetch.mockImplementation(async () =>
+    fixture.fetch.mockImplementation(() =>
       Response.json({ accountId: "team_1", id: "prj_native", name: "vendor-onboarding" }),
     );
     const nativeSelection = { ...selection, projectId: "prj_native" };
@@ -2817,7 +2817,6 @@ describe("hosted operator owner authority", () => {
       version: 1,
     });
     const journal: Pick<HostedRuntimeJournalStore, "read"> = {
-      // oxlint-disable-next-line eslint/require-await -- this fixture returns the exact in-memory journal row.
       read: vi.fn(async () => ({ record, revision: 1 })),
     };
     const context = await fixture.authority.authorize(request(), selection, ownerContext);
@@ -3070,21 +3069,28 @@ describe("Realm delegation at operator effect boundaries", () => {
           runtimeRole: selectedPlan.authDatabase.runtimeRole,
           targetDigest: "e".repeat(64),
         },
-        identityLink: {
-          audience: "https://builder.example",
-          authResourceId: selectedPlan.authDatabase.resourceId,
-          bootstrapPlanDigest: planDigest,
-          browserOrigin: "https://auth.example",
-          endpointOrigin: "https://gateway.example",
-          expiresAt,
-          issuer: "https://builder.example",
-          nonceSha256: "a".repeat(64),
-          organizationId: null,
-          ownerSessionId: ownerContext.sessionId,
-          ...(expired
-            ? {}
-            : { consumedAt: expiresAt, proofRef: "private-proof", proofSha256: "f".repeat(64) }),
-        },
+        identityLink: (() => {
+          const identityLink = {
+            audience: "https://builder.example",
+            authResourceId: selectedPlan.authDatabase.resourceId,
+            bootstrapPlanDigest: planDigest,
+            browserOrigin: "https://auth.example",
+            endpointOrigin: "https://gateway.example",
+            expiresAt,
+            issuer: "https://builder.example",
+            nonceSha256: "a".repeat(64),
+            organizationId: null,
+            ownerSessionId: ownerContext.sessionId,
+          };
+          if (!expired) {
+            Object.assign(identityLink, {
+              consumedAt: expiresAt,
+              proofRef: "private-proof",
+              proofSha256: "f".repeat(64),
+            });
+          }
+          return identityLink;
+        })(),
         mode: "protected-operator-v1",
         operationRef,
         plan: selectedPlan,
@@ -3424,17 +3430,14 @@ describe("normal Builder destination authority", () => {
 
   it("reads the recorded standard destination with independent project topology readback", async () => {
     const f = makeFixture();
-    f.fetch.mockImplementation(
-      async () =>
-        await Promise.resolve(
-          Response.json({
-            accountId: "team_1",
-            framework: "services",
-            id: selection.projectId,
-            name: "apps-vendor-onboarding",
-            rootDirectory: ".",
-          }),
-        ),
+    f.fetch.mockImplementation(() =>
+      Response.json({
+        accountId: "team_1",
+        framework: "services",
+        id: selection.projectId,
+        name: "apps-vendor-onboarding",
+        rootDirectory: ".",
+      }),
     );
     await expect(read(f)).resolves.toMatchObject({
       installationId: "icfg_1",
@@ -3468,7 +3471,7 @@ describe("normal Builder destination authority", () => {
   it("rejects a destination changed while provider readback was in flight", async () => {
     const f = makeFixture();
     const originalRead = f.handoffs.read;
-    f.fetch.mockImplementation(async () => {
+    f.fetch.mockImplementation(() => {
       f.handoffs.read = async (lookup) => {
         const handoff = await originalRead(lookup);
         if (handoff?.intent.provisioning?.vercel.status !== "succeeded") {
@@ -3485,15 +3488,13 @@ describe("normal Builder destination authority", () => {
           },
         };
       };
-      return await Promise.resolve(
-        Response.json({
-          accountId: "team_1",
-          framework: "services",
-          id: selection.projectId,
-          name: "apps-vendor-onboarding",
-          rootDirectory: ".",
-        }),
-      );
+      return Response.json({
+        accountId: "team_1",
+        framework: "services",
+        id: selection.projectId,
+        name: "apps-vendor-onboarding",
+        rootDirectory: ".",
+      });
     });
     await expect(read(f)).rejects.toMatchObject({ code: "authorization_required" });
   });
@@ -3625,7 +3626,7 @@ describe("attached direct-session standard destination", () => {
           status: "ready",
         },
         confirmedByCallId: "actual-acquisition",
-        current: undefined,
+        current: null,
         sessionId: f.currentSession.adapterSessionId,
       });
       f.currentSession.privateBuildDecision = {
@@ -3678,7 +3679,7 @@ describe("attached direct-session standard destination", () => {
           status: "ready",
         },
         confirmedByCallId: "actual-acquisition",
-        current: undefined,
+        current: null,
         sessionId: f.currentSession.adapterSessionId,
       });
       f.currentSession.privateBuildDecision = {
@@ -3708,19 +3709,26 @@ describe("attached direct-session standard destination", () => {
           target: { appId: selection.appId, sessionId: ownerContext.sessionId },
         },
       );
-    f.fetch.mockImplementation(
-      async () =>
-        await Promise.resolve(
-          Response.json({
-            accountId: "team_1",
-            framework: "services",
-            id: selection.projectId,
-            name: "apps-vendor-onboarding",
-            rootDirectory: ".",
-            ...(revision ? { link: { repoId: 200, type: "github" } } : {}),
-          }),
-        ),
-    );
+    f.fetch.mockImplementation(() => {
+      const project = {
+        accountId: "team_1",
+        framework: "services",
+        id: selection.projectId,
+        name: "apps-vendor-onboarding",
+        rootDirectory: ".",
+      } satisfies {
+        accountId: string;
+        framework: string;
+        id: string;
+        name: string;
+        rootDirectory: string;
+        link?: { repoId: number; type: string };
+      };
+      if (revision) {
+        project.link = { repoId: 200, type: "github" };
+      }
+      return Response.json(project);
+    });
     return { f, findProvisioningForAppRepository, read, readProvisioning, row };
   };
 

@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import pathModule from "node:path";
+import { z } from "zod";
 
 import { parseArgs } from "node:util";
 import {
@@ -22,7 +23,7 @@ import {
   originalPublicStart,
   parsePublicStartFile,
 } from "../evals/support/self-reproduction-public.ts";
-import type { PublicState, Responses } from "../evals/support/self-reproduction-public.ts";
+import type { PublicState } from "../evals/support/self-reproduction-public.ts";
 
 const { isAbsolute, relative, resolve } = pathModule;
 const { values } = parseArgs({
@@ -41,22 +42,30 @@ const { values } = parseArgs({
   },
   strict: true,
 });
-if (values.help) {
+if (values.help === true) {
   console.log(
     "Submit a product brief through public MCP. --endpoint URL --output-dir PATH [--brief-file PATH | --start-file PATH] [--resume] [--responses-file PATH | --message-file PATH] [--timeout-ms 120000] [--poll-ms 2000]. start-file contains an exact existing autograph_start input, including its clientRequestId. Hosted calls may use APP_BUILDER_PUBLIC_MCP_TOKEN from the server-side environment; it is never persisted. Responses file is an array of exact {requestId,response} entries. No approvals are inferred. Resume uses the same original start, session and idempotency keys. Comparison remains separate. Preview capture starts automatically; --no-preview-observation disables it.",
   );
   process.exit(0);
 }
-if (!values.endpoint || !values["output-dir"]) {
+if (
+  values.endpoint === undefined ||
+  values.endpoint.length === 0 ||
+  values["output-dir"] === undefined ||
+  values["output-dir"].length === 0
+) {
   throw new Error("--endpoint and --output-dir are required");
 }
-if (values["message-file"] && !values.resume) {
+const hasMessageFile = (values["message-file"] ?? "").length > 0;
+if (hasMessageFile && !values.resume) {
   throw new Error("--message-file requires --resume");
 }
-if (values["brief-file"] && values["start-file"]) {
+const hasBriefFile = (values["brief-file"] ?? "").length > 0;
+const hasStartFile = (values["start-file"] ?? "").length > 0;
+if (hasBriefFile && hasStartFile) {
   throw new Error("Choose one brief file or exact public start file.");
 }
-if (values.resume && (values["brief-file"] || values["start-file"])) {
+if (values.resume && (hasBriefFile || hasStartFile)) {
   throw new Error(
     "Resume uses the saved original start request; do not replace it with a new brief or start file.",
   );
@@ -94,17 +103,19 @@ if (existsSync(path) !== values.resume) {
   );
 }
 const newState = (endpoint: string): PublicState => {
-  const originalStart = values["start-file"]
-    ? parsePublicStartFile(readFileSync(values["start-file"], "utf-8"))
-    : parsePublicStartFile(
-        JSON.stringify({
-          clientRequestId: randomUUID(),
-          prompt: readFileSync(
-            values["brief-file"] ?? resolve(repo, "evals/self-reproduction/brief.md"),
-            "utf-8",
-          ),
-        }),
-      );
+  const originalStart =
+    (values["start-file"] ?? "").length > 0
+      ? parsePublicStartFile(readFileSync(values["start-file"], "utf-8"))
+      : parsePublicStartFile(
+          JSON.stringify({
+            clientRequestId: randomUUID(),
+            prompt: readFileSync(
+              values["brief-file"] ?? resolve(repo, "evals/self-reproduction/brief.md"),
+              "utf-8",
+            ),
+          }),
+        );
+  // SAFETY: parsePublicStartFile validates the complete public start shape, including clientRequestId.
   return {
     answered: [],
     clientRequestId: originalStart.clientRequestId,
@@ -116,19 +127,43 @@ const newState = (endpoint: string): PublicState => {
     version: 1,
   };
 };
-const state: PublicState = values.resume
-  ? (JSON.parse(readFileSync(path, "utf-8")) as PublicState)
-  : newState(values.endpoint);
+let state: PublicState;
+if (values.resume) {
+  const parsedState: unknown = JSON.parse(readFileSync(path, "utf-8"));
+  const stateSchema = z
+    .object({
+      answered: z.array(z.string()),
+      clientRequestId: z.string(),
+      endpoint: z.string(),
+      originalStart: z.unknown().optional(),
+      outcome: z.string(),
+      prompt: z.string(),
+      startedAt: z.string(),
+      version: z.literal(1),
+    })
+    .loose();
+  const parsed = stateSchema.parse(parsedState);
+  // SAFETY: stateSchema validates all declared PublicState fields; the loose fields preserve optional state metadata.
+  state = {
+    ...parsed,
+    originalStart:
+      parsed.originalStart === undefined
+        ? undefined
+        : parsePublicStartFile(JSON.stringify(parsed.originalStart)),
+  };
+} else {
+  state = newState(values.endpoint);
+}
 state.originalStart = originalPublicStart(state);
 state.startRequestSha256 = createHash("sha256")
   .update(JSON.stringify(state.originalStart))
   .digest("hex");
-if (state.originalStart.prompt !== undefined) {
+if (state.originalStart.prompt !== undefined && state.originalStart.prompt.length > 0) {
   state.promptSha256 = createHash("sha256").update(state.originalStart.prompt).digest("hex");
 }
-if (!state.sourceRevision) {
+if (state.sourceRevision === undefined || state.sourceRevision === "") {
   try {
-    state.sourceRevision = execFileSync("git", ["rev-parse", "HEAD"], {
+    state.sourceRevision = execFileSync("/usr/bin/git", ["rev-parse", "HEAD"], {
       cwd: repo,
       encoding: "utf-8",
     }).trim();
@@ -144,10 +179,11 @@ const observer = values["no-preview-observation"]
   ? undefined
   : createAutomaticPreviewObserver({ outputDir: output, repositoryRoot: repo });
 observer?.observe(state);
-const previewMarkdown = observer
+const hasObserver = observer !== undefined;
+const previewMarkdown = hasObserver
   ? "[Automatic preview observations](preview-observations/index.html) · [Runner ledger](preview-observations/ledger.json)"
   : "Automatic preview observation disabled; browser comparison remains unassessed.";
-const previewHtml = observer
+const previewHtml = hasObserver
   ? '<a href="preview-observations/index.html">Automatic preview observations</a> · <a href="preview-observations/ledger.json">Runner ledger</a>'
   : "Automatic preview observation disabled; browser comparison remains unassessed.";
 observer?.observe(state);
@@ -180,12 +216,13 @@ try {
     timeoutMs,
     { bearerToken: process.env.APP_BUILDER_PUBLIC_MCP_TOKEN },
   );
-  const responses = values["responses-file"]
-    ? (JSON.parse(readFileSync(values["responses-file"], "utf-8")) as Responses)
-    : undefined;
-  const message = values["message-file"]
-    ? readFileSync(values["message-file"], "utf-8")
-    : undefined;
+  const responsesFile = values["responses-file"];
+  const responses: unknown =
+    (responsesFile ?? "").length > 0 ? JSON.parse(readFileSync(responsesFile, "utf-8")) : undefined;
+  const message =
+    (values["message-file"] ?? "").length > 0
+      ? readFileSync(values["message-file"], "utf-8")
+      : undefined;
   await runPublicSession({
     message,
     onObservation: observer?.observe,
@@ -198,10 +235,13 @@ try {
   });
 } catch (error) {
   state.outcome = "blocked_transport_or_contract";
-  state.error = String(sanitizePublicObservation(String(error)));
+  const errorText =
+    error instanceof Error ? error.message : (JSON.stringify(error) ?? "Unknown error");
+  const sanitizedError = sanitizePublicObservation(errorText);
+  state.error = z.string().parse(sanitizedError);
   save();
-  recordPublicObservation(output, { error: String(error) });
-  console.error(sanitizePublicObservation(String(error)));
+  recordPublicObservation(output, { error: errorText });
+  console.error(state.error);
   process.exitCode = 1;
 } finally {
   await observer?.finish();

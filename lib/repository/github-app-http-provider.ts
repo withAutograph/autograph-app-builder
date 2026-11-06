@@ -64,35 +64,24 @@ class GitHubBlobWriteFailureError extends Error {
   }
 }
 
-const providerHttpStatus = (error: unknown): number | undefined => {
-  if (!(error instanceof Error)) {
-    return;
-  }
-  const cause: unknown = error.cause;
-  if (cause === null || typeof cause !== "object" || !("status" in cause)) {
-    return;
-  }
-  const { status } = cause;
-  return typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 599
-    ? status
-    : undefined;
+const providerHttpStatus = (error: Error): number | undefined => {
+  const parsed = z.object({ status: z.number().int().min(400).max(599) }).safeParse(error.cause);
+  return parsed.success ? parsed.data.status : undefined;
 };
 
 const decimal = z.string().regex(/^[1-9]\d*$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const name = z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/u);
 
-const configSchema = z
-  .object({
-    appId: decimal,
-    installationId: decimal,
-    privateKey: z.string().min(1).max(32_768),
-  })
-  .strict();
+const configSchema = z.strictObject({
+  appId: decimal,
+  installationId: decimal,
+  privateKey: z.string().min(1).max(32_768),
+});
 
 export type GitHubAppHttpProviderConfig = z.infer<typeof configSchema>;
 
-const credentialsSchema = configSchema.omit({ installationId: true });
+const credentialsSchema = configSchema.pick({ appId: true, privateKey: true });
 export type GitHubAppHttpProviderCredentials = z.infer<typeof credentialsSchema>;
 
 export const parseGitHubAppHttpProviderCredentials = (
@@ -134,7 +123,20 @@ export interface GitHubPublicationFile {
 export interface GitHubAppHttpProvider
   extends GitHubAppInstallationProvider, GitHubTargetAccessProvider {
   prDelivery: GitHubPrDeliveryProvider;
-  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
+  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<
+    | {
+        archived: boolean;
+        defaultBranch: string;
+        headSha: string;
+        headTree: string;
+        name: string;
+        owner: string;
+        repositoryId: string;
+        repositoryVariableNames: readonly string[];
+        visibility: "private";
+      }
+    | undefined
+  >;
   inspectHistoricalAppSource: (input: {
     repositoryId: string;
     owner: string;
@@ -315,8 +317,31 @@ const normalizedPermissions = (value: unknown): PermissionSnapshot => {
 const requestId = (value: string): string =>
   /^[A-Za-z0-9_-]{1,128}$/u.test(value) ? value : sha256(value).slice(0, 32);
 
+const reconciliationMatchesDraft = (
+  proposal: ExistingDraftReconciliationProposal,
+  draft: ExistingDraftObservation,
+): boolean => {
+  const identityMatches =
+    proposal.repositoryId === draft.repositoryId &&
+    proposal.owner === draft.owner &&
+    proposal.name === draft.name &&
+    proposal.pullRequestNumber === draft.number &&
+    proposal.pullRequestId === draft.pullRequestId;
+  const refsMatch =
+    draft.headRepositoryId === proposal.repositoryId &&
+    draft.baseRepositoryId === proposal.repositoryId &&
+    draft.headBranch === proposal.branchName &&
+    draft.baseBranch === proposal.baseBranch;
+  return (
+    identityMatches &&
+    refsMatch &&
+    draft.draft &&
+    draft.state === "open" &&
+    draft.verifiedBuilderOrigin?.marker === proposal.originMarker
+  );
+};
+
 // Keep provider helpers scoped to the provider factory's contract.
-// oxlint-disable-next-line unicorn/consistent-function-scoping
 export const createGitHubAppHttpProvider = (input: {
   config: GitHubAppHttpProviderConfig;
   fetch?: Fetch;
@@ -349,7 +374,7 @@ export const createGitHubAppHttpProvider = (input: {
       }
       return {
         body: response.data,
-        requestId: requestId((response.headers["x-github-request-id"] ?? "github")),
+        requestId: requestId(response.headers["x-github-request-id"] ?? "github"),
         status: response.status,
       };
     } catch (error) {
@@ -447,7 +472,6 @@ export const createGitHubAppHttpProvider = (input: {
     // one canonical set rather than retaining a page list and a second dedupe copy.
     const ids = new Set<string>();
     for (let page = 1; ; page += 1) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await github({
         authorization: accessToken,
         expected: [200],
@@ -462,7 +486,6 @@ export const createGitHubAppHttpProvider = (input: {
       }
     }
     const canonicalIds = [...ids];
-    // oxlint-disable-next-line unicorn/no-array-sort -- This fresh array is owned here; avoid a full duplicate inventory.
     canonicalIds.sort();
     return canonicalIds;
   };
@@ -494,7 +517,6 @@ export const createGitHubAppHttpProvider = (input: {
     const tree = property(commitData, "tree");
     const variableNames: string[] = [];
     for (let page = 1; ; page += 1) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const variables = await github({
         authorization: accessToken,
         expected: [200],
@@ -597,7 +619,6 @@ export const createGitHubAppHttpProvider = (input: {
       entries.push({
         mode: file.mode,
         path: file.path,
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         sha: await createBlob(
           treeInput.owner,
           treeInput.repositoryName,
@@ -690,7 +711,6 @@ export const createGitHubAppHttpProvider = (input: {
     let treeSha = repository.headTree;
     const segments = path.split("/");
     for (const [index, segment] of segments.entries()) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- traverse immutable Git trees in path order
       const entries = await readTree(treeSha);
       const entry = entries.find((candidate) => stringProperty(candidate, "path") === segment);
       if (entry === undefined) {
@@ -708,7 +728,6 @@ export const createGitHubAppHttpProvider = (input: {
         throw new Error("invalid-response");
       }
       const blobSha = objectId.parse(stringProperty(entry, "sha"));
-      // oxlint-disable-next-line eslint/no-await-in-loop -- read the resolved immutable blob
       const blob = await github({
         authorization: accessToken,
         expected: [200],
@@ -746,7 +765,6 @@ export const createGitHubAppHttpProvider = (input: {
     let treeSha = preimage.headTree;
     let entry: unknown;
     for (const [index, segment] of segments.entries()) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- walk the exact Git tree path before mutation
       const treeResponse = await github({
         authorization: preimage.accessToken,
         expected: [200],
@@ -792,7 +810,6 @@ export const createGitHubAppHttpProvider = (input: {
   };
 
   // Keep the repository projection local to this provider.
-  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const publicRepositorySnapshot = (snapshot: Awaited<ReturnType<typeof repositoryById>>) => ({
     defaultBranch: snapshot.defaultBranch,
     headSha: snapshot.headSha,
@@ -823,23 +840,6 @@ export const createGitHubAppHttpProvider = (input: {
     variables: "read",
     workflows: "write",
   };
-
-  const reconciliationMatchesDraft = (
-    proposal: ExistingDraftReconciliationProposal,
-    draft: ExistingDraftObservation,
-  ): boolean =>
-    proposal.repositoryId === draft.repositoryId &&
-    proposal.owner === draft.owner &&
-    proposal.name === draft.name &&
-    proposal.pullRequestNumber === draft.number &&
-    proposal.pullRequestId === draft.pullRequestId &&
-    draft.headRepositoryId === proposal.repositoryId &&
-    draft.baseRepositoryId === proposal.repositoryId &&
-    draft.draft &&
-    draft.state === "open" &&
-    draft.headBranch === proposal.branchName &&
-    draft.baseBranch === proposal.baseBranch &&
-    draft.verifiedBuilderOrigin?.marker === proposal.originMarker;
 
   const exactReconciliationHead = async (
     proposal: ExistingDraftReconciliationProposal,
@@ -883,12 +883,10 @@ export const createGitHubAppHttpProvider = (input: {
     // Only provider-verified published markers enter this list. An acknowledged current
     // result can support recording retries; an unacknowledged proposal must prove its parent.
     for (const proposal of recovery.reconciliations) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Stop at the first exact result; later GitHub reads are unnecessary once ownership is proven.
       const exact = await exactReconciliationHead(proposal, draft, accessToken);
       if (!exact) {
         continue;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Verify tenant ownership only after this candidate's exact provider readback succeeds.
       if (await recovery.verifyOwnedHead(draft, proposal)) {
         return true;
       }
@@ -947,7 +945,6 @@ export const createGitHubAppHttpProvider = (input: {
     );
   };
 
-  // oxlint-disable-next-line eslint/complexity -- verify the repository, PR, branch, and Builder-authored origin in one read
   const inspectExistingDraft = async (draftRequest: ExistingDraftInspectionRequest) => {
     if (!Number.isSafeInteger(draftRequest.number) || draftRequest.number < 1) {
       throw new Error("invalid-pull-request-number");
@@ -1427,7 +1424,6 @@ export const createGitHubAppHttpProvider = (input: {
       const files = [];
       const readTree = destinationTreeReader(repository, accessToken);
       for (const path of [...new Set(paths)].toSorted(compareOverlayPaths)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- keep scoped destination reads sequential
         const file = await readDestinationPath(repository, path, accessToken, readTree);
         if (file !== null) {
           files.push({ digest: file.digest, mode: file.mode, path });
@@ -1511,7 +1507,7 @@ export const createGitHubAppHttpProvider = (input: {
       if (candidates.length > 1) {
         throw new Error("invalid-response");
       }
-      const [pull] = candidates;
+      const pull = candidates.at(0);
       const exactPull =
         pull !== undefined &&
         stringProperty(pull, "title") === proposal.title &&
@@ -1756,7 +1752,6 @@ export const createGitHubAppHttpProvider = (input: {
         return { code: "reviewed-path-changed", path: conflicts.at(0) ?? "", status: "rejected" };
       }
       for (const change of changes) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each live preimage is checked before any mutation
         const matches = await reviewedPreimageMatches({
           accessToken,
           change: {
@@ -1846,7 +1841,6 @@ export const createGitHubAppHttpProvider = (input: {
         destinationTreeReader(repository, accessToken),
       );
     },
-    // oxlint-disable-next-line eslint/complexity -- verifies identity, both refs, reviewed preimages, exact tree, and atomic ref update
     async reconcileExistingDraft(
       proposal: ExistingDraftReconciliationProposal,
       content: ReconciliationContent,
@@ -1898,7 +1892,6 @@ export const createGitHubAppHttpProvider = (input: {
       }
       const accessToken = await token(draftPermissions, [proposal.repositoryId]);
       for (const change of content.changes) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- verify every base preimage before publishing a merge commit
         const matches = await reviewedPreimageMatches({
           accessToken,
           change: {
@@ -2030,7 +2023,6 @@ export const createGitHubAppHttpProvider = (input: {
       }
       const accessToken = await token(draftPermissions, [proposal.repositoryId]);
       for (const change of content.changes) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- inspect every reviewed preimage before any ref mutation
         const matches = await reviewedPreimageMatches({
           accessToken,
           change: {

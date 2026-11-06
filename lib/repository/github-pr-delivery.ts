@@ -60,7 +60,6 @@ type Request = (input: {
   path: string;
   body?: unknown;
   effect?: "ready" | "merge";
-  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Raw provider payload is parsed at each endpoint boundary.
 }) => Promise<unknown>;
 
 const pullSchema = z.object({
@@ -161,7 +160,6 @@ const pullWindows = async (request: Request, prefix: string, owner: string, head
   for (let page = 1; ; page += 1) {
     const head = encodeURIComponent(`${owner}:${headBranch}`);
     const pulls = z.array(pullWindowSchema).parse(
-      // oxlint-disable-next-line eslint/no-await-in-loop -- GitHub inventory is paginated.
       await request({
         path: `${prefix}/pulls?state=all&head=${head}&per_page=100&page=${page}`,
       }),
@@ -230,7 +228,6 @@ const checkJobs = async (request: Request, prefix: string, runId: number) => {
   const checks: z.infer<typeof jobSchema>[] = [];
   for (let page = 1; ; page += 1) {
     const { jobs } = z.object({ jobs: z.array(jobSchema) }).parse(
-      // oxlint-disable-next-line eslint/no-await-in-loop -- GitHub jobs are paginated.
       await request({
         path: `${prefix}/actions/runs/${runId}/jobs?filter=latest&per_page=100&page=${page}`,
       }),
@@ -265,12 +262,13 @@ const checkReadyRun = async (
       Date.parse(candidate.created_at) >= earliestRunAt;
     return exactHead && readyWorkflow;
   });
+  const [candidate] = candidates;
   const windows = candidates.some((run) => run.pull_requests.length === 0)
     ? await pullWindows(request, prefix, owner, pull.head.ref)
     : [];
   // GitHub lists newest runs first. An unresolved association for the newest
   // plausible run is pending instead of qualifying an older successful run.
-  const run = candidates[0];
+  const run = candidate;
   if (run === undefined || !runMatchesPull(run, pull, windows)) {
     return { checks: "pending", readyAt };
   }
@@ -285,7 +283,8 @@ const checkReadyRun = async (
   ) {
     return { checkRunId: run.id, checks: "pending", readyAt };
   }
-  if (jobs.length !== 1 || jobs[0]?.status !== "completed") {
+  const [job] = jobs;
+  if (jobs.length !== 1 || job?.status !== "completed") {
     return {
       checkRunId: run.id,
       checks: run.status === "completed" ? "failed" : "pending",
@@ -294,7 +293,7 @@ const checkReadyRun = async (
   }
   return {
     checkRunId: run.id,
-    checks: jobs[0].conclusion === "success" ? "passed" : "failed",
+    checks: job.conclusion === "success" ? "passed" : "failed",
     readyAt,
   };
 };
@@ -323,10 +322,10 @@ export const createGitHubPrDeliveryProvider = (
       draft: pull.draft,
       headSha: pull.head.sha,
       state,
-      ...(pull.merged && pull.merge_commit_sha !== null
-        ? { mergeCommitSha: pull.merge_commit_sha }
-        : {}),
     };
+    if (pull.merged && pull.merge_commit_sha !== null) {
+      result.mergeCommitSha = pull.merge_commit_sha;
+    }
     if (
       state !== "closed" &&
       !pull.draft &&

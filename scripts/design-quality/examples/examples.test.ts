@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { z } from "zod";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -19,16 +20,56 @@ import {
 } from "./spend-import-state";
 import type { SpendFixture } from "./spend-import-state";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function fixture<T>(id: string): Promise<T> {
-  return JSON.parse(
-    await readFile(path.resolve(`docs/design-quality-cases/${id}/fixtures.json`), "utf-8"),
-  ) as T;
-}
+type FixtureId = "spend-import-review" | "compensation-planning";
+
+const spendFixtureSchema = z.object({
+  fieldMapping: z.record(z.string(), z.string()),
+  import: z.object({ batchId: z.string(), rows: z.number() }),
+  preview: z.object({ creates: z.number(), needsReview: z.number() }),
+  representativeRows: z.array(
+    z.object({
+      id: z.string(),
+      issue: z.string().optional(),
+      source: z.record(z.string(), z.union([z.string(), z.number()])),
+    }),
+  ),
+  uncertainMatches: z.array(
+    z.object({
+      amount: z.number(),
+      candidates: z.array(z.object({ id: z.string(), label: z.string() })),
+      currency: z.string(),
+      id: z.string(),
+      sourceRef: z.string(),
+      transactionDate: z.string(),
+      vendorRaw: z.string(),
+    }),
+  ),
+});
+
+const compensationFixtureSchema = z.object({
+  comparison: z.object({ bandMidpoint: z.number(), plannedIncrease: z.number() }),
+  proposal: z.object({
+    annualBenefits: z.number(),
+    baseSalary: z.number(),
+    employerTaxRate: z.number(),
+    targetBonus: z.number(),
+  }),
+});
+
+const fixture = async (id: FixtureId): Promise<SpendFixture | CompensationFixture> => {
+  const source = await readFile(
+    path.resolve(`docs/design-quality-cases/${id}/fixtures.json`),
+    "utf-8",
+  );
+  if (id === "spend-import-review") {
+    return spendFixtureSchema.parse(JSON.parse(source));
+  }
+  return compensationFixtureSchema.parse(JSON.parse(source));
+};
 
 describe("spend import example", () => {
   it("derives preview rows and the saved outcome from the edited mapping", async () => {
-    const data = await fixture<SpendFixture>("spend-import-review");
+    const data = await fixture("spend-import-review");
     let state = initialSpendState(data);
     expect(deriveSpendPreview(data, state.mapping)).toMatchObject({
       needsReview: 4,
@@ -58,7 +99,7 @@ describe("spend import example", () => {
   });
 
   it("keeps decision state, counts, visible result, and action availability synchronized", async () => {
-    const data = await fixture<SpendFixture>("spend-import-review");
+    const data = await fixture("spend-import-review");
     let state = initialSpendState(data);
     state = reduceSpendState(state, { type: "preview-requested" });
     state = reduceSpendState(state, { fixture: data, type: "save-requested" });
@@ -83,7 +124,7 @@ describe("spend import example", () => {
 
 describe("compensation planning example", () => {
   it("recalculates current and proposed totals from editable assumptions", async () => {
-    const data = await fixture<CompensationFixture>("compensation-planning");
+    const data = await fixture("compensation-planning");
     let state = initialCompensationState(data);
     expect(calculateCompensation(state.assumptions)).toMatchObject({
       currentTotal: 204_428,
@@ -109,7 +150,7 @@ describe("compensation planning example", () => {
   });
 
   it("requires valid applied assumptions before a planning decision", async () => {
-    const data = await fixture<CompensationFixture>("compensation-planning");
+    const data = await fixture("compensation-planning");
     let state = initialCompensationState(data);
     state = reduceCompensationState(state, { type: "recommend" });
     expect(state.decision).toBe("recommended");

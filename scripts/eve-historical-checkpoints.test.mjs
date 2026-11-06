@@ -1,6 +1,4 @@
 // Controlled SDK ports are asynchronous and carry intentionally opaque fixture values.
-/* eslint-disable require-await, @typescript-eslint/no-unsafe-return, promise/prefer-await-to-callbacks */
-/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- This exercises a private installed SDK module against a controlled World. */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -27,14 +25,19 @@ const event = (runId, slot, stepId, eventType = "step_completed", name = "turnSt
   eventType,
   runId,
 });
-const step = (runId, stepId, output, input) => ({
-  output,
-  runId,
-  status: "completed",
-  stepId,
-  stepName: "turnStep",
-  ...(input === undefined ? {} : { input: { args: [input] } }),
-});
+const step = (runId, stepId, output, input) => {
+  const result = {
+    output,
+    runId,
+    status: "completed",
+    stepId,
+    stepName: "turnStep",
+  };
+  if (input !== undefined) {
+    result.input = { args: [input] };
+  }
+  return result;
+};
 
 const fixture = () => {
   const runId = "prior-owner";
@@ -272,12 +275,13 @@ it("visits an older native handoff parent only after the receipt-bound run has n
   const f = fixture();
   f.steps.set("review", step(f.runId, "review", paired("validated")));
   const parent = "handoff-parent";
-  const older = event(parent, 1, "parent-review");
+  const parentReviewStepId = "parent-review";
+  const older = event(parent, 1, parentReviewStepId);
   const start = event(parent, 2, "parent-handoff", "step_started", "startSessionOwnerStep");
   f.events.push(older, start);
   f.steps.set(
-    "parent-review",
-    step(parent, "parent-review", paired("reviewed", { digest: "native-parent" })),
+    parentReviewStepId,
+    step(parent, parentReviewStepId, paired("reviewed", { digest: "native-parent" })),
   );
   f.options.visitPredecessors = async (visit) => {
     await visit({

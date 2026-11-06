@@ -142,7 +142,6 @@ const sharedHostProtectionPrerequisite = (
     ? createSharedHostProtectionSuccessorPlan(
         record,
         Date.now(),
-        // oxlint-disable-next-line eslint/no-use-before-define -- Called after module initialization; retain canonical application-selection validation.
         selectedApplication(configuration, context).hostProtection,
       )
     : undefined;
@@ -157,6 +156,15 @@ const AUTH_MEMBERSHIP = "auth-membership";
 const AUTH_SIGNUP_POLICY = "auth-signup-policy";
 const OPERATION_IN_PROGRESS = "operation_in_progress";
 const RECONCILIATION_REQUIRED = "reconciliation_required";
+const PREVIEW = "preview";
+const SINGLE_PROJECT_SERVICES = "single-project-services";
+const APP_PREVIEW_BINDING_DESCRIPTION =
+  "Bind app-owned runtime URL and public verification context.";
+const APP_PREVIEW_GATEWAY_BINDING_DESCRIPTION =
+  "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.";
+const APP_OWNED_PREVIEW_BINDING_DESCRIPTION =
+  "Bind only app-owned runtime URL and public verification context.";
+const DATABASE_URL_SUFFIX = "_DATABASE_URL";
 const gatewayDeliverySourceForPlan = (
   configuration: HostedOperatorSourceConfiguration,
   currentPlan?: HostedOperatorPlan,
@@ -169,13 +177,18 @@ const gatewayDeliverySourceForPlan = (
     currentPlan?.stage !== "app" && currentPlan?.gatewayDelivery?.gitRef !== undefined
       ? currentPlan.gatewayDelivery
       : undefined;
-  return {
+  const source = {
     branch: configuration.gateway.branch,
-    ...(frozenBootstrapSource === undefined ? {} : { gitRef: frozenBootstrapSource.gitRef }),
     gitSha: publishedSha ?? frozenBootstrapSource?.gitSha ?? configuration.gateway.gitSha,
     projectId: configuration.gateway.projectId,
     repoId: configuration.gateway.repoId,
   };
+  if (frozenBootstrapSource !== undefined) {
+    const frozenSource = { ...source };
+    frozenSource.gitRef = frozenBootstrapSource.gitRef;
+    return frozenSource;
+  }
+  return source;
 };
 const publishedGatewayDeliverySource = (
   configuration: HostedOperatorSourceConfiguration,
@@ -198,21 +211,26 @@ const frozenGatewayDeliverySource = (
   source: AppGatewayDeliverySource,
 ): AppGatewayDeliverySource => {
   const gitRef = nativeDeliveryGitRef(plan, source, "gateway");
-  return source.gitRef !== undefined || gitRef === source.branch ? source : { ...source, gitRef };
+  if (source.gitRef !== undefined || gitRef === source.branch) {
+    return source;
+  }
+  const frozenSource = { ...source };
+  frozenSource.gitRef = gitRef;
+  return frozenSource;
 };
 const appTrustedSourcesForNewPlan = (
   base: HostedOperatorPlan,
   configuration: HostedOperatorSourceConfiguration,
 ): HostedOperatorPlan["appTrustedSources"] =>
-  configuration.composition === "single-project-services" ||
+  configuration.composition === SINGLE_PROJECT_SERVICES ||
   base.gatewayBindings === undefined ||
   base.deploymentBoundary === undefined
     ? undefined
     : {
         gatewayPreview: {
-          from: "preview",
+          from: PREVIEW,
           projectId: configuration.gateway.workload.projectId,
-          to: "preview",
+          to: PREVIEW,
         },
       };
 const gatewayBindingsForNewAppPlan = (
@@ -232,9 +250,9 @@ const gatewayBindingsForNewAppPlan = (
     trustedSources: {
       ...gatewayBindings.trustedSources,
       appPreview: {
-        from: "preview",
+        from: PREVIEW,
         projectId: appBoundary.projectId,
-        to: "preview",
+        to: PREVIEW,
       },
     },
   };
@@ -581,7 +599,9 @@ const managedContext = (input: HostedOperatorEffectContext) => {
   if (input.checkpointManagedEnvironment === undefined) {
     throw new HostedOperatorError(OPERATION_IN_PROGRESS);
   }
-  return { ...input, checkpointManagedEnvironment: input.checkpointManagedEnvironment };
+  const context = { ...input };
+  context.checkpointManagedEnvironment = input.checkpointManagedEnvironment;
+  return context;
 };
 const deliveryContext = (input: HostedOperatorEffectContext) => {
   const gateway = input.effect.kind === GATEWAY_DELIVERY;
@@ -589,12 +609,15 @@ const deliveryContext = (input: HostedOperatorEffectContext) => {
   if (checkpointDelivery === undefined) {
     throw new HostedOperatorError(OPERATION_IN_PROGRESS);
   }
-  return {
+  const contextWithDelivery = {
     ...input,
-    ...(gateway ? { appDeliveryCandidates: input.deliveryCandidates } : {}),
     checkpointDelivery,
     deliveryCandidates: gateway ? input.gatewayDeliveryCandidates : input.deliveryCandidates,
   };
+  if (gateway) {
+    contextWithDelivery.appDeliveryCandidates = input.deliveryCandidates;
+  }
+  return contextWithDelivery;
 };
 const receipt = (input: HostedOperatorEffectContext, resourceVersion: string) =>
   operatorReceiptSchema.parse({
@@ -750,7 +773,6 @@ const readAppGatewaySourcePlanningContinuation = async (
       });
       if (
         [
-          // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- The authority port must supply an explicit positive approval receipt.
           approval?.approved !== true,
           approval?.approvalId !== original.operator.approvalId,
           approval?.callId !== original.approvedByCallId,
@@ -780,14 +802,12 @@ const readAppGatewaySourcePlanningContinuation = async (
 };
 
 /** Resolve retained bootstrap only for the exact completed additive account successor. */
-// oxlint-disable-next-line eslint/complexity -- Keep the exact account, scope and identity checks together.
 export const readCompletedCaptureBootstrap = (
   desired: HostedOperatorPlan,
   record: HostedRuntimeJournalRecord | undefined,
 ) => {
   const current = record?.operator;
   const account = record?.accountPreparation;
-  /* oxlint-disable sonarjs/expression-complexity -- All retained successor scope checks are conjunctive. */
   if (
     record === undefined ||
     current === undefined ||
@@ -1493,7 +1513,6 @@ export const composeHostedOperatorDependencies = (
     target: "gateway",
   });
 
-  // oxlint-disable-next-line eslint/complexity -- Keep cleanup, fresh Auth, and shared adoption plans at the same authority boundary.
   const plan = async (
     context: HostedOperatorContext & {
       action: "prepare" | "cleanup";
@@ -1501,7 +1520,6 @@ export const composeHostedOperatorDependencies = (
       releaseIntent?: "prepared-preview";
       authSignupPolicy?: HostedOperatorAuthSignupPolicyInput;
     },
-    // oxlint-disable-next-line sonarjs/cognitive-complexity -- Keep all approval stages against the same canonical owner and published-source snapshot.
   ): Promise<HostedOperatorPlan> => {
     const observe = async <T>(stage: OperatorPlanStage, run: () => T | Promise<T>) =>
       await observeOperatorPlanStage(context.target.sessionId, stage, run);
@@ -1671,7 +1689,7 @@ export const composeHostedOperatorDependencies = (
     const prerequisiteGatewaySource = publishedGatewaySource ?? frozenPrerequisiteGatewaySource;
     await selectedForGateway?.assertCurrent?.();
     const existingBootstrap =
-      configuration.composition === "single-project-services"
+      configuration.composition === SINGLE_PROJECT_SERVICES
         ? undefined
         : await readExistingAuthBootstrapPrerequisite(
             current,
@@ -1732,7 +1750,7 @@ export const composeHostedOperatorDependencies = (
           },
           context,
           phase: "bootstrap-planning",
-          ...(configuration.composition === "single-project-services"
+          ...(configuration.composition === SINGLE_PROJECT_SERVICES
             ? {}
             : { resolveGatewayByPublicOrigin: true as const }),
           resolveOperatorByConfiguredOrigin: true,
@@ -1875,7 +1893,7 @@ export const composeHostedOperatorDependencies = (
           maintenanceDatabase: native.maintenanceDatabase,
           role: native.maintenanceRole,
         },
-        ...(configuration.composition === "single-project-services"
+        ...(configuration.composition === SINGLE_PROJECT_SERVICES
           ? { runtimePreparation: "single-project-resources-v1" }
           : {}),
 
@@ -1889,7 +1907,7 @@ export const composeHostedOperatorDependencies = (
           owner: context.authority.ownerUserId,
         },
         deploymentBoundary: {
-          ...(configuration.composition === "single-project-services"
+          ...(configuration.composition === SINGLE_PROJECT_SERVICES
             ? { composition: "single-project-services" }
             : {}),
           app: {
@@ -2563,7 +2581,6 @@ export const composeHostedOperatorDependencies = (
     // Only SELECT-only worker input may use an approved historical ownership marker.
     const prepared = await membershipInput(input);
     // The current capture check must finish before reading historical inspection authority.
-    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- These reads share live capture authority and intentionally stay ordered.
     const historical = await controlPlane.readMembershipInspectionPlan(input);
     const assertMembershipCapture = async () => {
       await controlPlane.assertMembershipCapture(input);
@@ -3180,7 +3197,6 @@ export const composeHostedOperatorDependencies = (
   };
 };
 
-// oxlint-disable-next-line eslint/require-await -- Promise-returning resource adapters reject consent-only setup before any effect.
 const unavailable = async (): Promise<never> => {
   throw new HostedOperatorError("protected_operator_required");
 };

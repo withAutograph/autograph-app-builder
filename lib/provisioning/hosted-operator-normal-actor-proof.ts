@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { completedParticipantBootstrapSchema } from "./hosted-operator-participant-bootstrap";
 import type { CompletedParticipantBootstrap } from "./hosted-operator-participant-bootstrap";
-/* oxlint-disable eslint/no-await-in-loop -- Bounded response reading cancels immediately at the byte limit. */
 import { Cookie, CookieJar } from "tough-cookie";
 import type { JWTVerifyGetKey } from "jose";
 import { z } from "zod";
@@ -66,6 +65,8 @@ const proofSchema = z
   .min(1)
   .max(16_384)
   .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u);
+const proofContentType = "application/vnd.realm-operator-proof+json";
+const emptyCookieHeader = "";
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const cookieHeader = (storage: NormalBrowserStorageState, origin: string, path: string) => {
   const jar = new CookieJar(undefined, {
@@ -169,8 +170,8 @@ const readProof = async ({
     }
     // Browser-session correlation would invoke the separate human capture callback; this nonce is already bound to the approved retained organization candidate.
     const cookie = cookieHeader(storageState, origin, path);
-    observe({ cookiePresent: cookie !== "", stage: "proof_request" });
-    if (cookie === "") {
+    observe({ cookiePresent: cookie !== emptyCookieHeader, stage: "proof_request" });
+    if (cookie === emptyCookieHeader) {
       throw unavailable();
     }
     await assertCurrent();
@@ -178,7 +179,7 @@ const readProof = async ({
       body,
       cache: "no-store",
       headers: {
-        accept: "application/vnd.realm-operator-proof+json",
+        accept: proofContentType,
         "content-type": "application/x-www-form-urlencoded",
         cookie,
         origin,
@@ -188,11 +189,8 @@ const readProof = async ({
       signal: AbortSignal.timeout(20_000),
     });
     const responseFacts = {
-      contentTypeValid:
-        response.headers
-          .get("content-type")
-          ?.startsWith("application/vnd.realm-operator-proof+json") === true,
-      cookiePresent: cookie !== "",
+      contentTypeValid: response.headers.get("content-type")?.startsWith(proofContentType) === true,
+      cookiePresent: cookie !== emptyCookieHeader,
       httpStatus: response.status,
       redirected: response.redirected,
     };
@@ -202,9 +200,7 @@ const readProof = async ({
         response.status === 200,
         !response.redirected,
         response.url === "" || new URL(response.url).origin === origin,
-        response.headers
-          .get("content-type")
-          ?.startsWith("application/vnd.realm-operator-proof+json") === true,
+        response.headers.get("content-type")?.startsWith(proofContentType) === true,
       ].every(Boolean)
     ) {
       throw unavailable();
@@ -367,7 +363,8 @@ export const createHostedOperatorNormalActorProofCollector = (
       const binding = await deps.resolveRealmBinding({ context: input, preparation });
       if (binding.bootstrap !== undefined) {
         completedParticipantBootstrapSchema.parse(binding.bootstrap);
-        assertBootstrapCurrent = binding.assertBootstrapCurrent;
+        const { assertBootstrapCurrent: bootstrapCurrentGuard } = binding;
+        assertBootstrapCurrent = bootstrapCurrentGuard;
         if (assertBootstrapCurrent === undefined) {
           throw mismatch();
         }
@@ -377,25 +374,33 @@ export const createHostedOperatorNormalActorProofCollector = (
       }
       assertRealmBinding(input, preparation, binding);
       observe({ stage: "proof_preparation" });
-      const pending = await journal.prepareOrganizationProof(input, {
-        organizationId: organization.organizationId,
-        ownerActorKey: organization.ownerActorKey,
-        owner: candidate.session,
-        ...(binding.bootstrap === undefined || assertBootstrapCurrent === undefined
-          ? {}
-          : { assertBootstrapCurrent, bootstrap: binding.bootstrap }),
+      const { organizationId, ownerActorKey } = organization;
+      const { session: owner } = candidate;
+      const proofPreparation = {
         binding: {
           audience: binding.audience,
           authResourceId: binding.authResourceId,
           bootstrapPlanDigest: binding.bootstrapPlanDigest,
-          ...(binding.publicRelease === undefined ? {} : { publicRelease: binding.publicRelease }),
-
           browserOrigin: preparation.program.origin,
           endpointOrigin: binding.endpointOrigin,
           issuer: binding.issuer,
           transportSource: binding.transportSource,
         },
-      });
+        organizationId,
+        owner,
+        ownerActorKey,
+      };
+      if (binding.publicRelease !== undefined) {
+        proofPreparation.binding = {
+          ...proofPreparation.binding,
+          publicRelease: binding.publicRelease,
+        };
+      }
+      if (binding.bootstrap !== undefined && assertBootstrapCurrent !== undefined) {
+        proofPreparation.assertBootstrapCurrent = assertBootstrapCurrent;
+        proofPreparation.bootstrap = binding.bootstrap;
+      }
+      const pending = await journal.prepareOrganizationProof(input, proofPreparation);
       observe({ stage: "artifact_context" });
       const artifacts = await deps.ownedArtifacts(input);
       if ("kind" in artifacts.context.authority) {

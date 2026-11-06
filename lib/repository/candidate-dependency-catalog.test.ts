@@ -1,4 +1,3 @@
-/* oxlint-disable sonarjs/no-os-command-from-path, anti-slop/no-unknown-parameters, typescript/no-unsafe-assignment, typescript/no-unsafe-return, typescript/no-unsafe-member-access, typescript/no-unsafe-call, typescript/no-unsafe-argument, typescript/no-unsafe-type-assertion, eslint/require-await -- Controlled filesystem fixtures exercise the fixed server-owned program and synthesize only pinned Bun lock generation. */
 import type { SandboxSession } from "eve/sandbox";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -23,6 +22,13 @@ import {
 } from "./candidate-dependency-catalog";
 
 const roots: string[] = [];
+const stream = (bytes: Uint8Array) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
 afterEach(() => {
   for (const root of roots.splice(0)) {
     rmSync(root, { force: true, recursive: true });
@@ -255,7 +261,6 @@ describe("candidate-bound same-version dependency catalog", () => {
       return path.join(f.root, file);
     };
     // SAFETY: This filesystem adapter implements only the sandbox APIs called by the real helper.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Focused adapter intentionally implements only the exercised sandbox ports.
     const sandbox = {
       removePath: async ({ path: file }: { path: string }) => {
         rmSync(filePath(file), { force: true });
@@ -273,13 +278,6 @@ describe("candidate-bound same-version dependency catalog", () => {
             PATH: path.dirname(process.execPath) + path.delimiter + process.env.PATH,
           },
         });
-        const stream = (bytes: Uint8Array) =>
-          new ReadableStream<Uint8Array>({
-            start(controller) {
-              controller.enqueue(bytes);
-              controller.close();
-            },
-          });
         return {
           stderr: stream(result.stderr),
           stdout: stream(result.stdout),
@@ -311,7 +309,6 @@ describe("candidate-bound same-version dependency catalog", () => {
     });
   });
   it("does not accept paths or commands as package selectors", () => {
-    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Malicious public selectors must be rejected, including absolute paths.
     for (const name of ["../package.json", "a;echo bad", "@scope/../bad", "/tmp/other"]) {
       expect(catalogDependencyName.safeParse(name).success).toBe(false);
     }

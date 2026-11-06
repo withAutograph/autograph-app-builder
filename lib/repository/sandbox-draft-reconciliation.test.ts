@@ -44,17 +44,88 @@ afterEach(() => {
   }
 });
 
-// oxlint-disable-next-line eslint/arrow-body-style -- keeps the path-safety annotation beside the process call.
 const git = (cwd: string, ...args: string[]) => {
-  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- Git is the fixed test fixture executable.
   return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
+};
+
+const executeWorkspaceTool = (cwd: string) =>
+  execFileSync(path.join(cwd, "node_modules/.bin/workspace-probe"), [], {
+    cwd,
+    encoding: "utf-8",
+  }).trim();
+const executeTool = (cwd: string) =>
+  execFileSync(path.join(cwd, "node_modules/.bin/probe"), [], {
+    cwd,
+    encoding: "utf-8",
+  }).trim();
+const importValue = (cwd: string) =>
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      'import { value } from "@fixture/probe"; console.log(value);',
+    ],
+    { cwd, encoding: "utf-8" },
+  ).trim();
+
+const _retireRegistered = async (
+  retireUnused: typeof retireUnusedDraftWorktrees,
+  f: { sandbox: SandboxSession; workspaceRoot: string },
+  retainedRoots: string[] = [],
+) => await retireUnused({ retainedRoots, sandbox: f.sandbox, workspaceRoot: f.workspaceRoot });
+
+const retireRegisteredWithFault = async (
+  retireUnused: typeof retireUnusedDraftWorktrees,
+  f: { sandbox: SandboxSession; workspaceRoot: string },
+  fault: string,
+  setup = "",
+) => {
+  const preload = path.join(f.workspaceRoot, "derived-link-fault.cjs");
+  writeFileSync(
+    preload,
+    `const cp = require("node:child_process");
+const fs = require("node:fs");
+const original = cp.spawn;
+let statuses = 0;
+let references = 0;
+${setup}
+cp.spawn = (command, args, options) => {
+  ${fault}
+  return original(command, args, options);
+};`,
+  );
+  return await retireUnused({
+    retainedRoots: [],
+    sandbox: {
+      run(input) {
+        const result = spawnSync("/bin/sh", ["-c", input.command], {
+          cwd: f.workspaceRoot,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            GIT_CONFIG_GLOBAL: "/dev/null",
+            GIT_CONFIG_NOSYSTEM: "1",
+            HOME: f.workspaceRoot,
+            NODE_OPTIONS: `--require ${preload}`,
+            PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+          },
+        });
+        return {
+          exitCode: result.status ?? 1,
+          stderr: result.stderr,
+          stdout: result.stdout,
+        };
+      },
+    },
+    workspaceRoot: f.workspaceRoot,
+  });
 };
 
 const fixture = (platformConflict = false, dependencyWorkspace = false) => {
   const root = mkdtempSync(path.join(tmpdir(), "builder-draft-merge-"));
   temporary.push(root);
   const remote = path.join(root, "remote.git");
-  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- Git initializes only this temporary test fixture.
   execFileSync("git", ["init", "--bare", "--initial-branch=main", remote]);
   git(root, "clone", remote, "repository");
   const checkout = path.join(root, "repository");
@@ -124,18 +195,14 @@ const fixture = (platformConflict = false, dependencyWorkspace = false) => {
   git(checkout, "config", "--unset", "user.name");
   git(checkout, "config", "--unset", "user.email");
   // SAFETY: The fake implements only SandboxSession methods used by this module.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- focused sandbox fixture.
   const sandbox = {
     id: "fixture-sandbox",
-    // oxlint-disable-next-line eslint/require-await -- mock mirrors asynchronous SandboxSession API.
     async readTextFile(input: { path: string }) {
       return readFileSync(path.join(root, input.path), "utf-8");
     },
-    // oxlint-disable-next-line eslint/require-await -- mock mirrors asynchronous SandboxSession API.
     async removePath(input: { path: string }) {
       rmSync(path.join(root, input.path), { force: true });
     },
-    // oxlint-disable-next-line eslint/require-await -- mock mirrors asynchronous SandboxSession API.
     async run(input: { command: string }) {
       if (input.command.includes("'remote' 'get-url' 'origin'")) {
         return {
@@ -161,11 +228,9 @@ const fixture = (platformConflict = false, dependencyWorkspace = false) => {
         stdout: result.stdout,
       };
     },
-    // oxlint-disable-next-line eslint/require-await -- mock mirrors asynchronous SandboxSession API.
     async writeBinaryFile(input: { path: string; content: Uint8Array }) {
       writeFileSync(path.join(root, input.path), input.content);
     },
-    // oxlint-disable-next-line eslint/require-await -- mock mirrors asynchronous SandboxSession API.
     async writeTextFile(input: { path: string; content: string }) {
       writeFileSync(path.join(root, input.path), input.content);
     },
@@ -382,16 +447,6 @@ describe("isolated draft reconciliation", () => {
       path.join(checkout, "packages/probe/bin.cjs"),
       path.join(closure, ".bin/workspace-probe"),
     );
-    const executeWorkspaceTool = (cwd: string) =>
-      execFileSync(path.join(cwd, "node_modules/.bin/workspace-probe"), [], {
-        cwd,
-        encoding: "utf-8",
-      }).trim();
-    const executeTool = (cwd: string) =>
-      execFileSync(path.join(cwd, "node_modules/.bin/probe"), [], {
-        cwd,
-        encoding: "utf-8",
-      }).trim();
     mkdirSync(externalPackage, { recursive: true });
     mkdirSync(path.join(closure, "@fixture"), { recursive: true });
     writeFileSync(
@@ -408,16 +463,6 @@ describe("isolated draft reconciliation", () => {
     const installedMode = lstatSync(installedSource).mode;
     symlinkSync(path.join(checkout, "packages/probe"), path.join(closure, "@fixture/probe"));
     symlinkSync(closure, path.join(checkout, "node_modules"));
-    const importValue = (cwd: string) =>
-      execFileSync(
-        process.execPath,
-        [
-          "--input-type=module",
-          "--eval",
-          'import { value } from "@fixture/probe"; console.log(value);',
-        ],
-        { cwd, encoding: "utf-8" },
-      ).trim();
     expect(importValue(checkout)).toBe("initial:reused-external-config");
     expect(executeTool(checkout)).toBe("external-cached-tool");
     expect(executeWorkspaceTool(checkout)).toBe("initial-workspace-tool");
@@ -501,7 +546,7 @@ describe("isolated draft reconciliation", () => {
     let largestOutput = 0;
     const sandbox = {
       ...f.sandbox,
-      async readTextFile() {
+      readTextFile() {
         throw new Error("This source reader has no whole-file text transfer capability.");
       },
       async run(input: Parameters<SandboxSession["run"]>[0]) {
@@ -515,7 +560,6 @@ describe("isolated draft reconciliation", () => {
     do {
       const cursor = nextCursor;
       const page: Awaited<ReturnType<typeof readDraftReconciliationCandidateFilePage>> =
-        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- each page continues its predecessor's returned UTF-8 cursor.
         await readDraftReconciliationCandidateFilePage({
           cursor,
           expectedDigest: digest(content),
@@ -526,16 +570,19 @@ describe("isolated draft reconciliation", () => {
       expect(page.cursor).toBe(cursor);
       expect(page.digest).toBe(digest(content));
       expect(page.totalBytes).toBe(Buffer.byteLength(content));
-      expect(Buffer.byteLength(page.content)).toBeLessThanOrEqual(32_768);
-      expect(page).not.toHaveProperty("sourceChanged");
+      const { sourceChanged, content: pageContent } = page;
+      expect(Buffer.byteLength(pageContent)).toBeLessThanOrEqual(32_768);
+      expect(sourceChanged).toBeUndefined();
+      expect(pageContent).toBe(page.content);
       pages.push(page.content);
       if (page.nextCursor !== null) {
         expect(page.nextCursor).toBe(cursor + Buffer.byteLength(page.content));
         expect(page.nextCursor).toBeGreaterThan(cursor);
       }
-      nextCursor = page.nextCursor;
+      ({ nextCursor } = page);
     } while (nextCursor !== null);
-    expect(pages.join("")).toBe(content);
+    const joinedPages = pages.join("");
+    expect(joinedPages).toBe(content);
     expect(largestOutput).toBeLessThanOrEqual(6 * 32_768 + 512);
     await expect(
       replaceDraftReconciliationCandidateText({
@@ -722,7 +769,6 @@ describe("isolated draft reconciliation", () => {
       });
 
       expect(readFileSync(destination)).toEqual(retained);
-      // oxlint-disable-next-line eslint/no-bitwise -- POSIX permission bits establish the restored Git executable mode.
       expect(lstatSync(destination).mode & 0o777).toBe(mode);
       const retainedBlob = git(prepared.root, "rev-parse", `${headSha}:${selected}`);
       expect(git(prepared.root, "--literal-pathspecs", "ls-files", "--stage", "--", selected)).toBe(
@@ -779,7 +825,6 @@ describe("isolated draft reconciliation", () => {
       "apps/demo/retained-link",
       "apps/demo/tests",
     ]) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- verify every rejected mutation against the same preserved candidate.
       await expect(
         restoreDraftReconciliationCandidateFile({ path: unsafe, prepared, sandbox: f.sandbox }),
       ).rejects.toThrow();
@@ -899,7 +944,6 @@ describe("isolated draft reconciliation", () => {
           },
         ],
         contentSource: {
-          // oxlint-disable-next-line eslint/require-await -- a replay must not read the old workspace.
           async readFile() {
             throw new Error("already published files must not be read");
           },
@@ -967,7 +1011,7 @@ describe("isolated draft reconciliation", () => {
             },
           ],
           contentSource: {
-            readFile: async () => ({
+            readFile: () => ({
               bytes: Buffer.from("repaired\n"),
               digest: digest("repaired\n"),
               mode,
@@ -1033,7 +1077,7 @@ describe("isolated draft reconciliation", () => {
       }
       const headSha = git(checkout, "rev-parse", "HEAD");
       git(checkout, "push", "origin", "draft");
-      const readFile = async () => ({
+      const readFile = () => ({
         bytes: Buffer.from(revised),
         digest: digest(revised),
         mode: "100644",
@@ -1113,6 +1157,7 @@ describe("isolated draft reconciliation", () => {
           ],
           contentSource: {
             readFile: async () => {
+              await Promise.resolve();
               throw new Error("must reject before loading the repair");
             },
           },
@@ -1151,7 +1196,6 @@ describe("isolated draft reconciliation", () => {
           },
         ],
         contentSource: {
-          // oxlint-disable-next-line eslint/require-await -- sandbox file sources return promises.
           async readFile() {
             if (!available) {
               throw new Error("source overlay unavailable");
@@ -1699,16 +1743,16 @@ describe("isolated draft reconciliation", () => {
       async run(command: Parameters<SandboxSession["run"]>[0]) {
         const result = await originalRun(command);
         for (const line of git(checkout, "worktree", "list", "--porcelain").split("\n")) {
-          if (!line.startsWith("worktree ")) {
-            continue;
-          }
-          const reportedRoot = line.slice("worktree ".length);
-          const relative = path.relative(realpathSync(f.root), realpathSync(reportedRoot));
-          if (!relative.startsWith(".app-builder/draft-reconcile/")) {
-            continue;
-          }
+          const reportedRoot = line.startsWith("worktree ") ? line.slice("worktree ".length) : "";
+          const relative = reportedRoot
+            ? path.relative(realpathSync(f.root), realpathSync(reportedRoot))
+            : "";
           const root = path.join(f.root, relative);
-          if (attached.has(root)) {
+          if (
+            !reportedRoot ||
+            !relative.startsWith(".app-builder/draft-reconcile/") ||
+            attached.has(root)
+          ) {
             continue;
           }
           const view = path.join(
@@ -1895,45 +1939,8 @@ describe("unused draft worktree retirement", () => {
     fault: string,
     setup = "",
   ) => {
-    const preload = path.join(f.workspaceRoot, "derived-link-fault.cjs");
-    writeFileSync(
-      preload,
-      `const cp = require("node:child_process");
-const fs = require("node:fs");
-const original = cp.spawn;
-let statuses = 0;
-let references = 0;
-${setup}
-cp.spawn = (command, args, options) => {
-  ${fault}
-  return original(command, args, options);
-};`,
-    );
-    return await retireUnusedDraftWorktrees({
-      retainedRoots: [],
-      sandbox: {
-        async run(input) {
-          const result = spawnSync("/bin/sh", ["-c", input.command], {
-            cwd: f.workspaceRoot,
-            encoding: "utf-8",
-            env: {
-              ...process.env,
-              GIT_CONFIG_GLOBAL: "/dev/null",
-              GIT_CONFIG_NOSYSTEM: "1",
-              HOME: f.workspaceRoot,
-              NODE_OPTIONS: `--require ${preload}`,
-              PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
-            },
-          });
-          return {
-            exitCode: result.status ?? 1,
-            stderr: result.stderr,
-            stdout: result.stdout,
-          };
-        },
-      },
-      workspaceRoot: f.workspaceRoot,
-    });
+    const faultSetup = setup;
+    return await retireRegisteredWithFault(retireUnusedDraftWorktrees, f, fault, faultSetup);
   };
 
   it("reports clean retirement and known private or referenced retention without changing eligibility", async () => {
@@ -2051,7 +2058,7 @@ cp.spawn = (command, args, options) => {
       retireUnusedDraftWorktrees({
         retainedRoots: [],
         sandbox: {
-          run: async () => {
+          run: () => {
             throw cancellation;
           },
         },
@@ -2089,7 +2096,7 @@ cp.spawn = (command, args, options) => {
   ])("retains %s alongside an attached dependency view", async (kind) => {
     const f = registeredFixture();
     const links = await attachDependencies(f, true);
-    const selected = links[0];
+    const [selected, secondary] = links;
     if (selected === undefined) {
       throw new Error("Missing fixture dependency link");
     }
@@ -2121,14 +2128,17 @@ cp.spawn = (command, args, options) => {
             "tracked link",
           );
           rmSync(selected.link);
-          target = selected.target;
+          ({ target } = selected);
         }
         symlinkSync(target, selected.link);
       }
     }
     await retire(f, kind === "referenced" ? [f.retiredRoot] : []);
     expect(existsSync(f.retiredRoot)).toBe(true);
-    expect(readlinkSync(path.join(f.retiredRoot, "apps/demo/node_modules"))).toBe(links[1]?.target);
+    const { target: expectedNestedTarget } = secondary ?? {};
+    expect(readlinkSync(path.join(f.retiredRoot, "apps/demo/node_modules"))).toBe(
+      expectedNestedTarget,
+    );
     expect(readFileSync(path.join(selected.target, "fixture-package/private-cache"), "utf-8")).toBe(
       "external dependency bytes\n",
     );
@@ -2187,7 +2197,9 @@ fs.lstatSync = (...args) => {
       `if (args.includes("status") && ++statuses === 3) fs.writeFileSync(${JSON.stringify(link)}, "replacement private bytes");`,
     );
     expect(readFileSync(link, "utf-8")).toBe("replacement private bytes");
-    expect(readlinkSync(path.join(f.retiredRoot, "apps/demo/node_modules"))).toBe(links[1]?.target);
+    const [, nestedLink] = links;
+    const { target: nestedTarget } = nestedLink ?? {};
+    expect(readlinkSync(path.join(f.retiredRoot, "apps/demo/node_modules"))).toBe(nestedTarget);
   });
 
   it("retains a dependency link replaced by a private directory before detachment", async () => {
@@ -2300,7 +2312,6 @@ fs.lstatSync = (...args) => {
     const trackedPath = "apps/demo/tests/journey.spec.ts";
     const hash = git(f.retiredRoot, "rev-parse", `HEAD:${trackedPath}`);
     git(f.retiredRoot, "update-index", "--force-remove", trackedPath);
-    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- Git creates unresolved stages only in this temporary fixture.
     const result = spawnSync("git", ["-C", f.retiredRoot, "update-index", "--index-info"], {
       encoding: "utf-8",
       input: [1, 2, 3].map((stage) => `100644 ${hash} ${stage}\t${trackedPath}\n`).join(""),
@@ -2408,7 +2419,7 @@ cp.spawn = (command, args, options) => {
       await retireUnusedDraftWorktrees({
         retainedRoots: [],
         sandbox: {
-          async run(input) {
+          run(input) {
             const result = spawnSync("/bin/sh", ["-c", input.command], {
               cwd: f.workspaceRoot,
               encoding: "utf-8",
@@ -2439,7 +2450,7 @@ cp.spawn = (command, args, options) => {
     await retireUnusedDraftWorktrees({
       retainedRoots: [],
       sandbox: {
-        run: async () => {
+        run: () => {
           throw new Error("unknown provider outcome");
         },
       },

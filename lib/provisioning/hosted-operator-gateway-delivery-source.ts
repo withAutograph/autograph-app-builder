@@ -20,11 +20,14 @@ export const gatewayDeliverySourceForPlan = (
     currentPlan?.stage !== "app" && currentPlan?.gatewayDelivery?.gitRef !== undefined
       ? currentPlan.gatewayDelivery
       : undefined;
-  return {
+  const source: AppGatewayDeliverySource & { gitSha: string } = {
     branch: configuration.gateway.branch,
-    ...(frozenBootstrapSource === undefined ? {} : { gitRef: frozenBootstrapSource.gitRef }),
     gitSha: publishedSha ?? frozenBootstrapSource?.gitSha ?? configuration.gateway.gitSha,
     projectId: configuration.gateway.projectId,
     repoId: configuration.gateway.repoId,
   };
+  if (frozenBootstrapSource !== undefined) {
+    source.gitRef = frozenBootstrapSource.gitRef;
+  }
+  return source;
 };

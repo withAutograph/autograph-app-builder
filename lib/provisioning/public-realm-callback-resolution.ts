@@ -68,7 +68,6 @@ export const createPublicRealmCallbackResolver =
       receipt: { approvalId: string; approvedByCallId: string },
     ) => Promise<void>;
   }) =>
-  // oxlint-disable-next-line eslint/complexity -- Keep the owner, approved setup, public release, sealed resource, and public key checks conjunctive before exposing a callback transport.
   async (context: HostedOperatorContext, expected?: PublicRealmReleaseBinding) => {
     await deps.assertCurrentOwner(context);
     const rows = await deps.readReleases(context, expected);
@@ -119,7 +118,6 @@ export const createPublicRealmCallbackResolver =
       throw unavailable();
     }
     for (const receipt of receipts) {
-      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Reverify every retained genuine consent without racing its durable native-history checkpoint.
       await deps.assertPublicApproval(context, plan, receipt);
     }
     const runtime = await deps.readRuntime(context);
@@ -283,7 +281,7 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
           sessionId: context.target.sessionId,
         },
       });
-      const scope = {
+      const scopeValues = {
         appId: context.target.appId,
         authority: context.authority,
         projectId: context.target.projectId,
@@ -292,10 +290,11 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
         runtimeOperationRef: plan.runtime.operationRef,
         runtimePlanDigest: plan.runtime.planDigest,
         sessionId: context.target.sessionId,
-        ...(plan.runtime.realmEnrollmentRef === undefined
-          ? {}
-          : { realmEnrollmentRef: plan.runtime.realmEnrollmentRef }),
       };
+      const scope = { ...scopeValues };
+      if (plan.runtime.realmEnrollmentRef !== undefined) {
+        scope.realmEnrollmentRef = plan.runtime.realmEnrollmentRef;
+      }
       if (store.reference(scope) !== plan.runtime.configurationRef) {
         throw unavailable();
       }

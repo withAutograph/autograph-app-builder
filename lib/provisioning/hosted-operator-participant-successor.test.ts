@@ -4,7 +4,6 @@ import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
 import { privateHostedApprovalReceiptSchema } from "../eve/private-hosted-approval";
 import { z } from "zod";
 import { createHash } from "node:crypto";
-/* oxlint-disable eslint/require-await, unicorn/no-useless-undefined -- Controlled authority and CAS ports retain the asynchronous production boundary. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hostedOperatorPlanSchema,
@@ -13,6 +12,7 @@ import {
   HostedOperatorError,
   operatorOwnerContextSchema,
 } from "./hosted-operator-contract";
+import type { normalActorSessionRefSchema } from "./hosted-operator-normal-actor-program";
 import {
   initialNormalActorState,
   normalActorProgramSchema,
@@ -143,6 +143,14 @@ const requireFixture = <T>(value: T | undefined): T => {
   return value;
 };
 
+const unused = async (): Promise<never> => {
+  throw new Error("unexpected account or organization effect");
+};
+
+const unusedResourceWorkerEffect = async (): Promise<never> => {
+  throw new Error("unexpected resource worker effect");
+};
+
 const fixture = async (
   opaqueOrganization?: string,
   timing?: { accountExpiresAt: string; appExpiresAt: string; beforeProposal?: () => void },
@@ -156,16 +164,19 @@ const fixture = async (
   });
   const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
   const state = initialNormalActorState(program, accountOperationRef);
+  const session: z.infer<typeof normalActorSessionRefSchema> = {
+    actorId: "real-owner",
+    expiresAt: "2030-01-01T00:00:00.000Z",
+    origin: program.origin,
+    realmSessionId: "real-session",
+    reference: "33333333-3333-4333-8333-333333333333",
+  };
+  if (opaqueOrganization !== undefined) {
+    session.activeOrganizationId = opaqueOrganization;
+  }
   state.actors[0] = {
     actorKey: "owner",
-    session: {
-      actorId: "real-owner",
-      expiresAt: "2030-01-01T00:00:00.000Z",
-      origin: program.origin,
-      realmSessionId: "real-session",
-      reference: "33333333-3333-4333-8333-333333333333",
-      ...(opaqueOrganization === undefined ? {} : { activeOrganizationId: opaqueOrganization }),
-    },
+    session,
     signup: "complete",
     storageState: {
       cookies: [
@@ -324,12 +335,17 @@ const fixture = async (
     operationRef: "44444444-4444-4444-8444-444444444444",
     plan: appPlan,
     planDigest: operatorPlanDigest(appPlan),
-    receipts: appPlan.effects.map((effect) => ({
-      effectId: effect.id,
-      ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-      observedAt: "2026-10-20T00:00:00.000Z",
-      resourceVersion: "observed",
-    })),
+    receipts: appPlan.effects.map((effect) => {
+      const receipt = {
+        effectId: effect.id,
+        observedAt: "2026-10-20T00:00:00.000Z",
+        resourceVersion: "observed",
+      };
+      if (effect.kind === "access") {
+        return { ...receipt, fenceGeneration: 1 };
+      }
+      return receipt;
+    }),
   };
   const nextProgram = normalActorProgramSchema.parse({
     ...program,
@@ -400,9 +416,6 @@ const fixture = async (
       user: { email: "owner@example.test", id: "real-owner" },
     });
   });
-  const unused = async (): Promise<never> => {
-    throw new Error("unexpected account or organization effect");
-  };
   const dependencies: NormalActorOperationsDependencies = {
     assertCurrentPlan: assertCurrent,
     assertPlanningAuthorized: owner,
@@ -565,12 +578,17 @@ describe("approved additive capture participant state", () => {
         operationRef: currentOperation,
         plan: current,
         planDigest: operatorPlanDigest(current),
-        receipts: current.effects.map((effect) => ({
-          effectId: effect.id,
-          observedAt: "2026-10-29T03:01:00.000Z",
-          resourceVersion: "observed",
-          ...(effect.kind === "access" ? { fenceGeneration: 2 } : {}),
-        })),
+        receipts: current.effects.map((effect) => {
+          const receipt = {
+            effectId: effect.id,
+            observedAt: "2026-10-29T03:01:00.000Z",
+            resourceVersion: "observed",
+          };
+          if (effect.kind === "access") {
+            return { ...receipt, fenceGeneration: 2 };
+          }
+          return receipt;
+        }),
       });
       f.approvals.set("current-app-call", {
         digest: operatorPlanDigest(current),
@@ -873,16 +891,13 @@ describe("approved additive capture participant state", () => {
     f.row.record.leaseExpiresAt = "2030-01-01T00:00:00.000Z";
     requireFixture(f.row.record.operator).fenceGeneration = 2;
     requireFixture(f.row.record.operator).pendingEffectId = "normal-accounts";
-    const unused = async (): Promise<never> => {
-      throw new Error("unexpected resource worker effect");
-    };
     const effect: HostedOperatorWorkerEffectContext = {
       ...f.input,
       assertCurrent: async () => {
         await f.ports.assertMutationAuthority(effect, f.row);
       },
-      bindWorkerContext: unused,
-      checkpoint: unused,
+      bindWorkerContext: unusedResourceWorkerEffect,
+      checkpoint: unusedResourceWorkerEffect,
       checkpointAccountPreparation: async (preparation) => {
         expect(preparation.accountOperationRef).toBe(f.input.operationRef);
       },

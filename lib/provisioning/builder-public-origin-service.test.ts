@@ -37,7 +37,7 @@ const input = {
 };
 const setup = () => {
   let choice: string | undefined;
-  const assertCurrent = vi.fn<() => Promise<void>>().mockImplementation(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readOrigins = vi
     .fn<() => Promise<string[]>>()
     .mockResolvedValue(["https://first.example", "https://second.example"]);
@@ -46,7 +46,7 @@ const setup = () => {
       .fn<BuilderPublicOriginStore["read"]>()
       .mockImplementation(async ({ authority: selected }) => {
         hostedTenantAuthoritySchema.parse(selected);
-        return choice;
+        return await Promise.resolve(choice);
       }),
     select: vi.fn<BuilderPublicOriginStore["select"]>().mockImplementation(async (selection) => {
       await selection.assertCurrent();
@@ -130,11 +130,11 @@ describe("public origin Server Action boundary", () => {
   it("uses current authenticated owner authority and rejects foreign origins before opening data", async () => {
     const select = vi
       .fn<ReturnType<typeof createBuilderPublicOriginService>["select"]>()
-      .mockImplementation(async () => {});
+      .mockResolvedValue();
     const open = vi.fn().mockResolvedValue({ principal, publicOrigins: { select } });
     const refresh = vi.fn<() => void>();
     const action = createBuilderPublicOriginAction({
-      enabled: async () => true,
+      enabled: async () => await Promise.resolve(true),
       open,
       origin: "https://builder.example",
       refresh,
@@ -154,8 +154,8 @@ describe("public origin Server Action boundary", () => {
   it("keeps interrupted metadata writes visible without retrying or publishing", async () => {
     const select = vi.fn().mockRejectedValue(new Error("metadata acknowledgment interrupted"));
     const action = createBuilderPublicOriginAction({
-      enabled: async () => true,
-      open: async () => ({ principal, publicOrigins: { select } }),
+      enabled: async () => await Promise.resolve(true),
+      open: async () => await Promise.resolve({ principal, publicOrigins: { select } }),
       origin: "https://builder.example",
       refresh: vi.fn<() => void>(),
     });

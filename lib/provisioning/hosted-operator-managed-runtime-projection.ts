@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop, sonarjs/no-nested-functions -- Provider readbacks and durable checkpoints retain one current owner fence through ordered effects. */
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
@@ -399,17 +398,20 @@ export const createHostedManagedRuntimeProjection = (deps: {
         });
         await io.guard();
         // The durable marker precedes POST. An uncertain response can only reconcile this exact value.
+        const environmentBody = {
+          comment: io.comment,
+          key,
+          target: ["preview"],
+          type: "encrypted",
+          value,
+        } satisfies Parameters<typeof io.request>[2] & { gitBranch?: string };
+        if (observed.gitBranch !== null) {
+          environmentBody.gitBranch = observed.gitBranch;
+        }
         await io.request(
           `/v10/projects/${encodeURIComponent(plan.gateway.projectId)}/env`,
           "POST",
-          {
-            key,
-            value,
-            type: "encrypted",
-            target: ["preview"],
-            ...(observed.gitBranch === null ? {} : { gitBranch: observed.gitBranch }),
-            comment: io.comment,
-          },
+          environmentBody,
         );
         observed = await io.inspect();
         if (
@@ -441,7 +443,7 @@ export const createHostedManagedRuntimeProjection = (deps: {
       const deliveryContext: HostedOperatorDeploymentContext = {
         ...context,
         assertCurrent: io.guard,
-        checkpoint: async () => {
+        checkpoint: () => {
           throw mismatch();
         },
         checkpointDelivery: async (candidates) => {
@@ -528,10 +530,14 @@ export const createHostedManagedRuntimeProjection = (deps: {
   };
   return {
     publish: async (...args) => {
-      await safe(async () => await implementation.publish(...args));
+      await safe(async () => {
+        await implementation.publish(...args);
+      });
     },
     revoke: async (...args) => {
-      await safe(async () => await implementation.revoke(...args));
+      await safe(async () => {
+        await implementation.revoke(...args);
+      });
     },
   };
 };

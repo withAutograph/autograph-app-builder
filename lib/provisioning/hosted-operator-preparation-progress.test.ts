@@ -123,8 +123,10 @@ describe("recorded preparation progress", () => {
       const record = fixture();
       record.accountPreparation = {
         programDigest: normalActorProgramDigest(program),
-        ...(completed ? { accountsCompletedAt: new Date(now).toISOString() } : {}),
       };
+      if (completed) {
+        record.accountPreparation.accountsCompletedAt = new Date(now).toISOString();
+      }
       expect(readOperatorPreparationProgress(record, now)).toMatchObject({
         accountProgramMatchesPlan: true,
         accountsCompleted: completed,

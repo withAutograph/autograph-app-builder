@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/no-await-in-loop -- Controlled streams and sequential recovery assertions deliberately exercise backpressure. */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vitest";
@@ -36,6 +35,22 @@ const authority = {
 const context = {
   authority,
   target: { appId: wire.worker.scope.appId, sessionId: "saved-session" },
+};
+const key = (owned: OperatorArtifactContext, ref: string, index: number) =>
+  JSON.stringify([owned, ref, index]);
+const readMember = async function* readMember(
+  manifest: ReturnType<typeof tenantExportArtifactManifestSchema.parse>,
+  contents: Uint8Array[],
+  name: string,
+) {
+  const index = manifest.files.findIndex((file) => file.name === name);
+  const bytes = contents.at(index);
+  if (bytes === undefined) {
+    throw new Error("Missing controlled member");
+  }
+  for (let offset = 0; offset < bytes.length; offset += 1301) {
+    yield bytes.subarray(offset, offset + 1301);
+  }
 };
 const dataset = (contents: Uint8Array[], worker: TenantExportWorkerInput = wire.worker) => {
   const files = contents.map((bytes, index) => {
@@ -76,21 +91,12 @@ const dataset = (contents: Uint8Array[], worker: TenantExportWorkerInput = wire.
     version: 1,
   });
   const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
-  const readMember = vi.fn(async function* readMember(name: string) {
-    const index = manifest.files.findIndex((file) => file.name === name);
-    const bytes = contents.at(index);
-    if (bytes === undefined) {
-      throw new Error("Missing controlled member");
-    }
-    for (let offset = 0; offset < bytes.length; offset += 1301) {
-      yield bytes.subarray(offset, offset + 1301);
-    }
-  });
+  const memberReader = vi.fn((name: string) => readMember(manifest, contents, name));
   const source: TenantExportPrivateSource = {
-    readManifest: vi.fn(async () => await Promise.resolve(manifestBytes)),
-    readMember,
+    readManifest: vi.fn(async () => manifestBytes),
+    readMember: memberReader,
   };
-  return { manifest, manifestBytes, readMember, source };
+  return { manifest, manifestBytes, readMember: memberReader, source };
 };
 const fixture = () => {
   const rows = new Map<string, string>();
@@ -103,8 +109,6 @@ const fixture = () => {
       throw new Error("revoked");
     }
   });
-  const key = (owned: OperatorArtifactContext, ref: string, index: number) =>
-    JSON.stringify([owned, ref, index]);
   const store: OperatorArtifactStore = {
     async put(owned, chunk) {
       await current();
@@ -208,7 +212,7 @@ test("zero-row tenant and zero-byte member complete without data chunks", async 
     });
     expect(completion.byteLength).toBe("0");
     expect(completion.rowCount).toBe("0");
-    expect([...f.rows.keys()].some((key) => key.includes("/data/"))).toBe(false);
+    expect([...f.rows.keys()].some((rowId) => rowId.includes("/data/"))).toBe(false);
     const inspected = await f.artifacts.inspect({ context, worker: wire.worker });
     expect(inspected.status).toBe("complete");
   }
@@ -226,7 +230,7 @@ test("same-attempt completion is reconciled before reading source, including los
       worker: wire.worker,
     }),
   ).rejects.toThrow();
-  data.source.readManifest = vi.fn(async () => {
+  data.source.readManifest = vi.fn(() => {
     throw new Error("must not reread");
   });
   const completion = await f.artifacts.publish({
@@ -276,7 +280,7 @@ test("claim/owner loss prevents completion; partial chunks do not become a downl
       worker: wire.worker,
     }),
   ).rejects.toThrow();
-  expect([...f.rows.keys()].some((key) => key.includes("/completion/"))).toBe(false);
+  expect([...f.rows.keys()].some((rowId) => rowId.includes("/completion/"))).toBe(false);
   expect(await f.artifacts.inspect({ context, worker: wire.worker })).toEqual({
     status: "incomplete",
   });
@@ -316,9 +320,11 @@ test("new attempts are isolated and reject different scope, data or manifest byt
     ...worker,
     attemptId: "70000000-0000-4000-8000-000000000007",
   });
-  corrupt.source.readMember = async function* readMember() {
-    yield Buffer.from("tampered\n");
-  };
+  corrupt.source.readMember = () => ({
+    async *[Symbol.asyncIterator]() {
+      yield Buffer.from("tampered\n");
+    },
+  });
   await expect(
     f.artifacts.publish({
       assertCurrent: f.current,
@@ -449,7 +455,7 @@ test("foreign owner, session/app, missing completion and traversal cannot downlo
     target: { ...f.record.target, sessionId: "foreign-session" },
   });
   expect(await readStatus(f.reader(f.request, { exportId: f.worker.exportId }))).toBe(404);
-  f.readCompletion.mockResolvedValue({ ...f.record, completion: undefined, state: "failed" });
+  f.readCompletion.mockResolvedValue({ ...f.record, completion: null, state: "failed" });
   expect(await readStatus(f.reader(f.request, { exportId: f.worker.exportId }))).toBe(404);
 });
 

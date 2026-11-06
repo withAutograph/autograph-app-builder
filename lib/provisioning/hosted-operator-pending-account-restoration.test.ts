@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/no-useless-undefined -- Undefined models journal CAS conflicts explicitly. */
 import { describe, expect, it, vi } from "vitest";
 import {
   HostedOperatorError,
@@ -637,7 +636,7 @@ it.each(["claimed", "unknown", "accepted"] as const)(
   "refuses a current-adapter %s continuation without replay or loss",
   async (status) => {
     const f = setup();
-    f.row.record.realmContinuation = {
+    const continuation = {
       adapterSessionId: required(context.ownerContext).adapterSessionId,
       approvedPlanDigest: required(f.row.record.operator).planDigest,
       claimedAt: observedAt,
@@ -645,8 +644,11 @@ it.each(["claimed", "unknown", "accepted"] as const)(
       nonceSha256: "e".repeat(64),
       operationRef,
       status,
-      ...(status === "accepted" ? { acceptedAt: observedAt, receiverClaimedAt: observedAt } : {}),
     };
+    if (status === "accepted") {
+      Object.assign(continuation, { acceptedAt: observedAt, receiverClaimedAt: observedAt });
+    }
+    f.row.record.realmContinuation = continuation;
     const before = structuredClone(f.row.record);
     await expect(f.run()).rejects.toMatchObject({ code: "operation_in_progress" });
     expect(f.row.record).toEqual(before);
@@ -890,7 +892,7 @@ it.each(["current-account", "old-adapter", "observed", "unrelated"] as const)(
         ownerSessionId: context.target.sessionId,
       };
     }
-    f.row.record.realmIdentityWait = {
+    const identityWait = {
       adapterSessionId:
         classification === "old-adapter"
           ? "private-old-adapter"
@@ -901,8 +903,11 @@ it.each(["current-account", "old-adapter", "observed", "unrelated"] as const)(
       nonceSha256: "c".repeat(64),
       operationRef: accountOperationRef,
       registeredAt: observedAt,
-      ...(classification === "observed" ? { eventId: "f".repeat(64), observedAt } : {}),
     };
+    if (classification === "observed") {
+      Object.assign(identityWait, { eventId: "f".repeat(64), observedAt });
+    }
+    f.row.record.realmIdentityWait = identityWait;
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       await restorePendingAccountPreparation(f.ports, context, f.input, operator.plan, () => now);
@@ -922,7 +927,7 @@ it.each(["old-accepted", "current-accepted", "current-pending", "old-unknown"] a
   async (classification) => {
     const f = setup();
     const accepted = classification.endsWith("accepted");
-    f.row.record.realmContinuation = {
+    const continuation = {
       adapterSessionId: classification.startsWith("old")
         ? "private-displaced-adapter"
         : required(context.ownerContext).adapterSessionId,
@@ -932,8 +937,11 @@ it.each(["old-accepted", "current-accepted", "current-pending", "old-unknown"] a
       nonceSha256: "e".repeat(64),
       operationRef,
       status: accepted ? "accepted" : "unknown",
-      ...(accepted ? { acceptedAt: observedAt, receiverClaimedAt: observedAt } : {}),
     };
+    if (accepted) {
+      Object.assign(continuation, { acceptedAt: observedAt, receiverClaimedAt: observedAt });
+    }
+    f.row.record.realmContinuation = continuation;
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       await restorePendingAccountPreparation(

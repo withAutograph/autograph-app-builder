@@ -1,5 +1,3 @@
-/* oxlint-disable eslint/no-await-in-loop -- Test runtime binding receipt order matches the durable provider contract. */
-/* oxlint-disable eslint/require-await -- Test provider and store adapters return the same Promise contracts as production. */
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createPublicReleaseGitHubProvider } from "./public-release-github-provider";
@@ -29,7 +27,13 @@ const invocation = () => ({
 const fixture = () => {
   let row: PublicReleaseRow | undefined;
   const store: PublicReleaseStore = {
-    // oxlint-disable-next-line eslint/require-await -- Durable store test double.
+    async compareAndSet(previous, record: PublicReleaseRecord) {
+      if (!row || row.revision !== previous.revision) {
+        return undefined;
+      }
+      row = { ...row, record: structuredClone(record), revision: row.revision + 1 };
+      return structuredClone(row);
+    },
     async read(owner, operationRef) {
       return row &&
         owner.ownerUserId === row.record.plan.authority.ownerUserId &&
@@ -37,22 +41,12 @@ const fixture = () => {
         ? structuredClone(row)
         : undefined;
     },
-    // oxlint-disable-next-line eslint/require-await -- Durable store test double.
     async reserve(selected) {
       row ??= {
         operationRef: publicReleaseOperationRef(selected),
         record: initialPublicReleaseRecord(selected),
         revision: 1,
       };
-      return structuredClone(row);
-    },
-    // oxlint-disable-next-line eslint/require-await -- Durable store test double.
-    async compareAndSet(previous, record: PublicReleaseRecord) {
-      if (!row || row.revision !== previous.revision) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS explicitly returns no row under the storage port.
-        return undefined;
-      }
-      row = { ...row, record: structuredClone(record), revision: row.revision + 1 };
       return structuredClone(row);
     },
   };
@@ -70,8 +64,6 @@ const fixture = () => {
       writes.push(effect);
       applied.add(effect);
     }),
-    assertApproved: vi.fn<PublicReleasePorts["assertApproved"]>(async () => {}),
-    assertAuthorized: vi.fn<PublicReleasePorts["assertAuthorized"]>(async () => {}),
     observe: vi.fn().mockResolvedValue({
       deploymentId: "active-native-deployment",
       environment: "production",

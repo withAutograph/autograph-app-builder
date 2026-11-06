@@ -48,18 +48,21 @@ const sealedSchema = z.strictObject({
   tokenTag: id,
 });
 const valuesSchema = z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/u), z.string().min(1));
+const unavailableCode = "public_release_runtime_configuration_unavailable";
+const runtimeConfigurationKind = "public-release-runtime-configuration-v1";
+const normalizedHostname = (hostname: string) => hostname.replace(/-pooler(?=\.)/u, "");
 const recordSchema = z.strictObject({
-  kind: z.literal("public-release-runtime-configuration-v1"),
+  kind: z.literal(runtimeConfigurationKind),
   scope: publicReleaseRuntimeConfigurationScopeSchema,
   sealed: sealedSchema,
 });
 const authResourceSchema = publicRealmResourceSchema.omit({ version: true });
-const unavailable = () => new Error("public_release_runtime_configuration_unavailable");
+const unavailable = () => new Error(unavailableCode);
 const identity = (scope: PublicReleaseRuntimeConfigurationScope) => {
   const hash = createHash("sha256")
     .update(
       JSON.stringify([
-        "public-release-runtime-configuration-v1",
+        runtimeConfigurationKind,
         publicReleaseRuntimeConfigurationScopeSchema.parse(scope),
       ]),
     )
@@ -92,15 +95,14 @@ export const createFreshPublicAuthValues = (input: {
   const production = /^(?<hostname>[a-z0-9.-]+\.neon\.tech)\/[^/]+$/u.exec(
     input.productionDatabaseIdentity,
   );
-  const normalized = (hostname: string) => hostname.replace(/-pooler(?=\.)/u, "");
   if (
-    // oxlint-disable-next-line sonarjs/expression-complexity -- Dedicated restricted runtime and a different normalized production endpoint are mandatory together.
     resource.hostname !== runtime.hostname ||
     resource.database !== decodeURIComponent(runtime.pathname.slice(1)) ||
     resource.runtimeRole !== decodeURIComponent(runtime.username) ||
     resource.runtimeRole === resource.migratorRole ||
     production === null ||
-    normalized(production.groups?.hostname ?? "") === normalized(runtime.hostname) ||
+    normalizedHostname(production.groups?.hostname ?? "") ===
+      normalizedHostname(runtime.hostname) ||
     !["postgres:", "postgresql:"].includes(runtime.protocol) ||
     !runtime.hostname.endsWith(".neon.tech") ||
     runtime.username === "" ||
@@ -155,7 +157,7 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
       eq(builderProvisioningJournals.workspaceId, scope.authority.workspaceId),
       eq(builderProvisioningJournals.ownerUserId, scope.authority.ownerUserId),
       eq(builderProvisioningJournals.requestId, identity(scope).ref),
-      sql`${builderProvisioningJournals.record}->>'kind' = 'public-release-runtime-configuration-v1'`,
+      sql`${builderProvisioningJournals.record}->>'kind' = ${runtimeConfigurationKind}`,
     );
   const read = async (scopeInput: PublicReleaseRuntimeConfigurationScope) => {
     const scope = publicReleaseRuntimeConfigurationScopeSchema.parse(scopeInput);
@@ -176,7 +178,6 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
     await input.assertCurrentOwner();
     const row = rows.at(0);
     if (row === undefined) {
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- An absent sealed runtime config has no current private values.
       return undefined;
     }
     const record = recordSchema.parse(row.record);
@@ -225,7 +226,7 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
             ...scope.authority,
             createdAt: now,
             record: recordSchema.parse({
-              kind: "public-release-runtime-configuration-v1",
+              kind: runtimeConfigurationKind,
               scope,
               sealed,
             }),

@@ -15,15 +15,13 @@ export const sha256 = (value: Uint8Array | string) =>
   createHash("sha256").update(value).digest("hex");
 
 /** Matches one exact canonical fetch remote, allowing Git's optional .git suffix. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function hasCanonicalFetchRemote(remoteOutput: string, expectedRepository: string) {
   return remoteOutput.split("\n").some((line) => {
     const fields = line.trim().split(/\s+/u);
-    if (
-      (fields.length !== 3 && fields.length !== 4) ||
-      fields[2] !== "(fetch)" ||
-      (fields.length === 4 && fields[3] !== "[blob:none]")
-    ) {
+    const hasValidFieldCount = fields.length >= 3 && fields.length <= 4;
+    const hasFetchMarker = fields[2] === "(fetch)";
+    const hasSupportedFilter = fields.length !== 4 || fields[3] === "[blob:none]";
+    if (!hasValidFieldCount || !hasFetchMarker || !hasSupportedFilter) {
       return false;
     }
     const [, remoteUrl] = fields;
@@ -31,41 +29,34 @@ export function hasCanonicalFetchRemote(remoteOutput: string, expectedRepository
   });
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function releaseEndpoint(value: string | undefined) {
-  if (!value) {
+  if (value === undefined || value === "") {
     throw new Error("Usage: --endpoint https://agent.example.com");
   }
   const endpoint = new URL(value);
-  if (
-    endpoint.protocol !== "https:" ||
-    endpoint.username ||
-    endpoint.password ||
-    endpoint.pathname !== "/" ||
-    endpoint.search ||
-    endpoint.hash ||
-    endpoint.hostname.endsWith(".") ||
-    isReservedPublicReleaseHostname(endpoint.hostname) ||
-    value !== endpoint.origin
-  ) {
+  const hasCredentials = endpoint.username !== "" || endpoint.password !== "";
+  const hasSearchOrHash = endpoint.search !== "" || endpoint.hash !== "";
+  const hasExtraUrlParts = endpoint.pathname !== "/" || hasSearchOrHash;
+  const hasInvalidHostname =
+    endpoint.hostname.endsWith(".") || isReservedPublicReleaseHostname(endpoint.hostname);
+  const isInvalidOrigin = endpoint.protocol !== "https:" || value !== endpoint.origin;
+  if (hasCredentials || hasExtraUrlParts || hasInvalidHostname || isInvalidOrigin) {
     throw new Error("Endpoint must be a credential-free, deployed, literal HTTPS origin.");
   }
   return endpoint.origin;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function registeredAutographToolNames(handlerSource: string) {
   const names = [...handlerSource.matchAll(/server\.registerTool\(\s*"(?<name>[^"]+)"/gu)].map(
-    (match) => match[1],
+    (match) => match.groups?.name ?? "",
   );
-  if (
-    names.length !== TOOL_NAMES.length ||
-    new Set(names).size !== names.length ||
-    names.some((name, index) => name !== TOOL_NAMES[index])
-  ) {
+  const hasExpectedCount = names.length === TOOL_NAMES.length;
+  const hasUniqueNames = new Set(names).size === names.length;
+  const hasExpectedOrder = names.every((name, index) => name === TOOL_NAMES[index]);
+  if (!hasExpectedCount || !hasUniqueNames || !hasExpectedOrder) {
     throw new Error(`The MCP handler must register exactly ${TOOL_NAMES.join(", ")} in order.`);
   }
-  return names as unknown as typeof TOOL_NAMES;
+  return [...TOOL_NAMES];
 }
 
 const pad = (value: string, length: number) => Buffer.from(value).subarray(0, length);
@@ -74,7 +65,6 @@ const write = (target: Buffer, offset: number, value: string, length: number) =>
 const octal = (value: number, length: number) => `${value.toString(8).padStart(length - 1, "0")}\0`;
 
 /** Creates a deterministic USTAR archive (sorted files, fixed modes and epoch mtimes). */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deterministicTar(files: ReadonlyMap<string, Uint8Array>) {
   const chunks: Buffer[] = [];
   for (const [name, content] of [...files].toSorted(([a], [b]) => a.localeCompare(b))) {

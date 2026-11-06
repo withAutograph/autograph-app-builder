@@ -76,7 +76,6 @@ const operatorPlanningValidationInvariant = z.enum([
 ]);
 type OperatorPlanningValidationInvariant = z.infer<typeof operatorPlanningValidationInvariant>;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Exact string matching discards untrusted issue messages without coercion.
 const planningCustomInvariant = (message: unknown): OperatorPlanningValidationInvariant => {
   switch (message) {
     case "Realm identity link must match the owned Auth resource, exact issuer and canonical owner session.": {
@@ -101,9 +100,7 @@ const planningCustomInvariant = (message: unknown): OperatorPlanningValidationIn
   }
 };
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- The private descriptor reader leaves parsing to the closed-label projector and never invokes getters.
 const ownDiagnosticValue = (value: unknown, key: string): unknown => {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Never read untrusted accessors, inherited properties or arbitrary exception values.
   if (value === null || typeof value !== "object") {
     return undefined;
   }
@@ -112,7 +109,6 @@ const ownDiagnosticValue = (value: unknown, key: string): unknown => {
 
 /** Project existing issues only; never parse the record again or retain issue text, paths or values. */
 export const projectOperatorPlanningValidationInvariants = (
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This pure diagnostic projector must tolerate arbitrary thrown objects.
   error: unknown,
 ): OperatorPlanningValidationInvariant[] => {
   try {
@@ -120,7 +116,6 @@ export const projectOperatorPlanningValidationInvariants = (
     const length = ownDiagnosticValue(issues, "length");
     if (
       !Array.isArray(issues) ||
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Array length is accepted only from an own data descriptor.
       typeof length !== "number" ||
       !Number.isSafeInteger(length) ||
       length < 1
@@ -136,7 +131,6 @@ export const projectOperatorPlanningValidationInvariants = (
       if (code === "custom") {
         labels.add(planningCustomInvariant(ownDiagnosticValue(issue, "message")));
       } else {
-        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Only the presence of a data issue code is projected, never its contents.
         labels.add(typeof code === "string" ? "schema_shape" : "unknown");
       }
     }
@@ -389,10 +383,8 @@ interface AuthStartupDiagnostic {
 }
 
 /** Project advisory worker metadata without invoking getters or retaining arbitrary values. */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This projection is the untrusted advisory metadata parser and must discard malformed input.
 export const projectAuthStartupDiagnostic = (value: unknown): AuthStartupDiagnostic | undefined => {
   try {
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Inspect only own data descriptors before validating closed fields; never invoke untrusted getters.
     if (value === null || typeof value !== "object") {
       return undefined;
     }
@@ -403,10 +395,11 @@ export const projectAuthStartupDiagnostic = (value: unknown): AuthStartupDiagnos
     }
     const code: unknown = Object.getOwnPropertyDescriptor(value, "domain_code")?.value;
     const parsedCode = authStartupDomainCode.safeParse(code);
-    return {
-      stage: parsedStage.data,
-      ...(parsedCode.success ? { domain_code: parsedCode.data } : {}),
-    };
+    const diagnostic: AuthStartupDiagnostic = { stage: parsedStage.data };
+    if (parsedCode.success) {
+      diagnostic.domain_code = parsedCode.data;
+    }
+    return diagnostic;
   } catch {
     return undefined;
   }
@@ -457,11 +450,9 @@ interface ResourceReadbackDiagnostic {
 
 /** Keep only closed worker failure labels; advisory metadata never changes the result. */
 export const projectResourceReadbackDiagnostic = (
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This projection accepts untrusted advisory metadata and discards arbitrary values.
   value: unknown,
 ): ResourceReadbackDiagnostic | undefined => {
   try {
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Own data descriptors avoid invoking untrusted getters.
     if (value === null || typeof value !== "object") {
       return undefined;
     }
@@ -474,11 +465,14 @@ export const projectResourceReadbackDiagnostic = (
     const parsedReason = resourceReadbackReason.safeParse(reason);
     const sqlStateClass: unknown = Object.getOwnPropertyDescriptor(value, "sqlStateClass")?.value;
     const parsedClass = resourceReadbackSqlStateClass.safeParse(sqlStateClass);
-    return {
-      stage: parsedStage.data,
-      ...(parsedReason.success ? { reason: parsedReason.data } : {}),
-      ...(parsedClass.success ? { sqlStateClass: parsedClass.data } : {}),
-    };
+    const diagnostic: ResourceReadbackDiagnostic = { stage: parsedStage.data };
+    if (parsedReason.success) {
+      diagnostic.reason = parsedReason.data;
+    }
+    if (parsedClass.success) {
+      diagnostic.sqlStateClass = parsedClass.data;
+    }
+    return diagnostic;
   } catch {
     return undefined;
   }
@@ -518,11 +512,14 @@ const operatorExecutionFailure = operatorPlanningFailure
       failure.workerFailure === "readback_unknown" && failure.mode === "inspect"
         ? projectResourceReadbackDiagnostic(resourceReadback)
         : undefined;
-    return {
-      ...failure,
-      ...(projected === undefined ? {} : { authStartup: projected }),
-      ...(readback === undefined ? {} : { resourceReadback: readback }),
-    };
+    const diagnostic = { ...failure };
+    if (projected !== undefined) {
+      diagnostic.authStartup = projected;
+    }
+    if (readback !== undefined) {
+      diagnostic.resourceReadback = readback;
+    }
+    return diagnostic;
   });
 export type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
 
@@ -830,13 +827,10 @@ const gatewayProviderCode = z.enum([
   "VALUE_INVALID_TYPE",
 ]);
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Read untrusted own data descriptors before the closed advisory projection; never invoke getters.
 const ownProviderDetail = (value: unknown, key: string): unknown =>
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Object descriptors require an object; this does not authorize any provider data.
   typeof value === "object" && value !== null
     ? Object.getOwnPropertyDescriptor(value, key)?.value
     : undefined;
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Parse ephemeral provider text here; only literal closed labels leave the caller.
 const providerMessages = (value: unknown): string[] => {
   const message = z.string().safeParse(value);
   return message.success ? [message.data] : [];
@@ -884,7 +878,6 @@ const gatewayValidationField = z.enum([
 ]);
 
 /** Literal observations only: labels are neither provider causes nor permission to retry. */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the parser for untrusted advisory provider metadata; only closed fields are returned.
 export const projectOperatorGatewayProviderFailure = (payload: unknown) => {
   const result: Pick<
     OperatorGatewayBindingsDiagnostic,
@@ -1196,9 +1189,7 @@ export const createHostedOperatorConsentDiagnostic = (
 /** Descriptor-only projection: exception text and arbitrary caller metadata never reach the sink. */
 export const reportOperatorNormalActorProofFailure = (
   sessionId: string,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Advisory metadata is projected from own data descriptors without invoking accessors.
   failure: unknown,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Only closed error classes and an existing public code may leave this boundary.
   error: unknown,
   sink?: HostedOperatorConsentDiagnosticSink,
 ): void => {
@@ -1258,7 +1249,6 @@ export const reportOperatorNormalActorProofFailure = (
 /** Own closed enum descriptors only; exceptions and private session values are never accepted. */
 export const reportOperatorRuntimeIdentityFailure = (
   sessionId: string,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Untrusted advisory metadata is projected from own data descriptors without invoking accessors.
   failure: unknown,
   sink?: HostedOperatorConsentDiagnosticSink,
 ): void => {
@@ -1346,7 +1336,6 @@ type SandboxResumeFailure = Partial<
 
 /** Only the SDK's exported error class and closed HTTP/cancellation metadata may leave resume. */
 const sandboxResumeFailure = (
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- SDK and cancellation rejections are projected without reading exception details.
   error: unknown,
   requestSignal?: AbortSignal,
 ): SandboxResumeFailure => {
@@ -1377,7 +1366,6 @@ const sandboxResumeFailure = (
 export const reportExportPlanningFailure = (
   sessionId: string,
   planStage: ExportPlanningStage,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A rejection boundary must tolerate arbitrary thrown values without inspecting their properties.
   error: unknown,
   sink?: HostedOperatorConsentDiagnosticSink,
 ): void => {
@@ -1413,7 +1401,6 @@ export const reportExportPlanningFailure = (
 export const reportContinuityPlanningFailure = (
   sessionId: string,
   planStage: ContinuityPlanningStage,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This rejection boundary classifies arbitrary thrown values without reading their properties.
   error: unknown,
   sink?: HostedOperatorConsentDiagnosticSink,
   requestSignal?: AbortSignal,
@@ -1531,7 +1518,6 @@ export const observeOperatorPlanStage = async <T>(
 export const reportOperatorExecutionFailure = (
   sessionId: string,
   executionStage: OperatorExecutionStage,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This exception boundary accepts arbitrary thrown values and projects only schema-checked closed diagnostic fields.
   error: unknown,
   sink?: HostedOperatorConsentDiagnosticSink,
   execution?: Pick<
@@ -1603,7 +1589,6 @@ export const reportOperatorExecutionFailure = (
 
 /** Project a swallowed delivery rejection without exposing its message or provider data. */
 export const projectOperatorGatewayDeliveryFailure = (
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Exception boundary accepts arbitrary thrown values and returns closed labels only.
   error: unknown,
 ): Pick<OperatorGatewayDeliveryDiagnostic, "errorClass" | "publicCode"> => {
   const failure: Pick<OperatorGatewayDeliveryDiagnostic, "errorClass" | "publicCode"> = {
@@ -1633,7 +1618,6 @@ export const projectOperatorGatewayDeliveryFailure = (
 export const reportOperatorInventoryReadFailure = (
   sessionId: string,
   descriptor: InventoryReadDescriptor,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Exception boundaries accept arbitrary thrown values and project only closed labels.
   error: unknown,
   sink?: HostedOperatorConsentDiagnosticSink,
 ): void => {
@@ -1704,7 +1688,6 @@ export const observeOperatorExecutionStage = async <T>(
 export const reportOperatorNeonMcpFailure = (
   sessionId: string,
   failurePhase: OperatorNeonMcpFailure["phase"],
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- SDK exceptions are untrusted; only own numeric fields enter closed diagnostic schemas.
   error?: unknown,
   sink?: HostedOperatorConsentDiagnosticSink,
   uriMismatch?: OperatorMaintenanceUriMismatch[],
@@ -1714,12 +1697,10 @@ export const reportOperatorNeonMcpFailure = (
     if (uriMismatch !== undefined) {
       failure.uriMismatch = maintenanceUriMismatchSchema.array().parse(uriMismatch);
     }
-    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep descriptor values untrusted until the closed numeric schemas below parse them.
     const ownValue = (name: string): unknown => {
       try {
         return Object.getOwnPropertyDescriptor(error, name)?.value;
       } catch {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing or hostile descriptors supply no diagnostic value.
         return undefined;
       }
     };
@@ -1750,7 +1731,6 @@ export const reportOperatorNeonMcpFailure = (
 export const reportRuntimePreparationFailure = (
   sessionId: string,
   preparationStage: RuntimePreparationStage,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Untrusted caught exceptions enter only closed classification schemas.
   error: unknown,
   sink?: HostedOperatorConsentDiagnosticSink,
 ): void => {

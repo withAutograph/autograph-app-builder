@@ -12,7 +12,6 @@
 /**
  * @param {(this: unknown, input: RequestInfo | URL, init?: RequestInit) => Promise<Response>} fetchImplementation - The fetch implementation to wrap.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isolateAbortSignalPerFetch(fetchImplementation) {
   /**
    * @param {RequestInfo | URL} input - The request input.
@@ -30,9 +29,10 @@ export function isolateAbortSignalPerFetch(fetchImplementation) {
 }
 
 if (process.env.APP_BUILDER_EVE_EVAL_FETCH_PRELOAD === "1") {
-  if (typeof globalThis.fetch !== "function") {
+  const fetchImplementation = globalThis.fetch;
+  if (fetchImplementation === undefined) {
     throw new TypeError("The Eve eval fetch implementation was unavailable.");
   }
-  globalThis.fetch = isolateAbortSignalPerFetch(globalThis.fetch);
+  globalThis.fetch = isolateAbortSignalPerFetch(fetchImplementation);
   delete process.env.APP_BUILDER_EVE_EVAL_FETCH_PRELOAD;
 }

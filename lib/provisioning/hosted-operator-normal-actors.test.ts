@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await -- Test authority callbacks mirror asynchronous journal ports. */
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { describe, expect, it } from "vitest";
@@ -184,7 +183,7 @@ describe("normal actor preparation", () => {
     const existing = initialNormalActorState(existingProgram, operationRef);
     existing.actors = first.state.actors.map((actor) => ({
       ...actor,
-      credentials: undefined,
+      credentials: null,
       storageState: { cookies: [], origins: [] },
     }));
     const before = local.requests.length;
@@ -242,18 +241,18 @@ describe("normal actor preparation", () => {
       ...local.ports,
       assertMembershipApproved: async () => {},
       // Synthetic signed-proof and fixed-worker boundaries test orchestration, not Gateway/SQL authority.
-      readOrganizationOwnerProof: async (session) => ({
-        actorId: session.actorId,
-        realmSessionId: session.realmSessionId,
-        reference: "isolated-proof-reference",
-        sha256: "a".repeat(64),
-      }),
       prepareOrganization: async ({ owner }) => {
         await local.auth.api.createOrganization({
           body: { name: "One", slug: "one", userId: owner.actorId },
         });
         organizationPrepared = true;
       },
+      readOrganizationOwnerProof: async (session) => ({
+        actorId: session.actorId,
+        realmSessionId: session.realmSessionId,
+        reference: "isolated-proof-reference",
+        sha256: "a".repeat(64),
+      }),
       reconcileOrganization: async () => (organizationPrepared ? "applied" : "absent"),
     };
     await expect(

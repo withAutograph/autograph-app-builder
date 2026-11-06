@@ -4,16 +4,13 @@ import { z } from "zod";
 
 import type { BuilderProvisionAuthority } from "./journal";
 
-const credentialConfigSchema = z
-  .object({
-    key: z.instanceof(Buffer).refine((value) => value.length === 32),
-    keyVersion: z.string().regex(/^[A-Za-z0-9._-]{1,32}$/u),
-  })
-  .strict();
+const credentialConfigSchema = z.strictObject({
+  key: z.instanceof(Buffer).refine((value) => value.length === 32),
+  keyVersion: z.string().regex(/^[A-Za-z0-9._-]{1,32}$/u),
+});
 
 export type GitHubUserCredentialConfig = z.infer<typeof credentialConfigSchema>;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readGitHubUserCredentialEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ): GitHubUserCredentialConfig {
@@ -24,13 +21,12 @@ export function readGitHubUserCredentialEnvironment(
 }
 
 export const githubUserTokenSetSchema = z
-  .object({
+  .strictObject({
     accessToken: z.string().min(20).max(512),
-    accessTokenExpiresAt: z.string().datetime({ offset: true }).optional(),
+    accessTokenExpiresAt: z.iso.datetime({ offset: true }).optional(),
     refreshToken: z.string().min(20).max(512).optional(),
-    refreshTokenExpiresAt: z.string().datetime({ offset: true }).optional(),
+    refreshTokenExpiresAt: z.iso.datetime({ offset: true }).optional(),
   })
-  .strict()
   .superRefine((value, context) => {
     if (
       (value.accessTokenExpiresAt === undefined) !== (value.refreshToken === undefined) ||
@@ -79,7 +75,6 @@ export interface GitHubUserCredentialStore {
   }) => Promise<number>;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function githubCredentialAssociatedData(input: {
   authority: BuilderProvisionAuthority;
   providerUserId: string;
@@ -90,7 +85,6 @@ export function githubCredentialAssociatedData(input: {
   });
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function encryptGitHubUserTokens(input: {
   tokens: GitHubUserTokenSet;
   key: Buffer;
@@ -108,7 +102,6 @@ export function encryptGitHubUserTokens(input: {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function decryptGitHubUserTokens(input: {
   encryptedCredential: string;
   credentialIv: string;
@@ -123,6 +116,7 @@ export function decryptGitHubUserTokens(input: {
   );
   decipher.setAAD(Buffer.from(input.associatedData));
   decipher.setAuthTag(Buffer.from(input.credentialTag, "base64"));
+  // SAFETY: JSON.parse returns unknown and the schema validates its complete shape before use.
   return githubUserTokenSetSchema.parse(
     JSON.parse(
       Buffer.concat([

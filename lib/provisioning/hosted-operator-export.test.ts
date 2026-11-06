@@ -16,7 +16,6 @@ import {
   tenantExportPlannedSchema,
 } from "./hosted-operator-export-transport";
 import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
-/* oxlint-disable eslint/require-await -- Controlled asynchronous dependency ports exercise the real export state machine. */
 import { describe, expect, it, vi } from "vitest";
 import {
   createHostedTenantExportOperations,
@@ -53,6 +52,17 @@ const context: HostedOperatorContext = {
     scopeType: "team",
     sessionId: "saved-session",
   },
+};
+const unavailable = async () => {
+  throw new Error("Controlled dependency must not execute");
+};
+const runtimeRequest = () => new Request("https://operator.test/v1/runtime");
+const requestHeaders = (credential: string) => {
+  const headers = { "content-type": "application/json" };
+  if (credential === "invalid") {
+    return { ...headers, authorization: "Bearer invalid-token" };
+  }
+  return headers;
 };
 const selection = {
   authority,
@@ -162,7 +172,6 @@ const setup = () => {
     store: {
       async compareAndSet(input) {
         if (record?.journal.revision !== input.expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS result is the explicit conflict contract.
           return undefined;
         }
         record = hostedTenantExportExecutionRecordSchema.parse(input.record);
@@ -258,18 +267,19 @@ describe("protected tenant export orchestration", () => {
     async (changed) => {
       const f = setup();
       const planned = await f.operations.plan(context, "customer-one", "original-request");
-      const foreign = {
+      const foreign: HostedOperatorContext = {
         ...context,
-        authority:
-          changed === "owner"
-            ? { ...context.authority, ownerUserId: "another-owner" }
-            : context.authority,
-        target: {
-          ...context.target,
-          ...(changed === "app" ? { appId: "another-app" } : {}),
-          ...(changed === "session" ? { sessionId: "another-session" } : {}),
-        },
+        target: { ...context.target },
       };
+      if (changed === "owner") {
+        foreign.authority = { ...context.authority, ownerUserId: "another-owner" };
+      }
+      if (changed === "app") {
+        foreign.target.appId = "another-app";
+      }
+      if (changed === "session") {
+        foreign.target.sessionId = "another-session";
+      }
       await expect(f.operations.readPlan(foreign, planned.plan.exportId)).rejects.toThrow();
       expect(f.dependencies.readApproval).not.toHaveBeenCalled();
       expect(f.dependencies.runWorker).not.toHaveBeenCalled();
@@ -454,9 +464,6 @@ describe("existing operator transport export dispatch", () => {
       principal: { ...authority, scopes: ["autograph:send"] },
       sessionId: context.target.sessionId,
     };
-    const unavailable = async () => {
-      throw new Error("Preparation must not execute during export");
-    };
     const authorize = vi.fn<ProtectedHostedOperatorDependencies["authorize"]>(
       async (request, requestedSelection, owner) => {
         expect(request.headers.get("authorization")).toBe("Bearer workload-token");
@@ -533,7 +540,6 @@ describe("existing operator transport export dispatch", () => {
     f.dependencies.publish = vi.fn<HostedTenantExportDependencies["publish"]>(
       async (_context, worker, _source, assertCurrent) => {
         for (let page = 0; page < 20; page += 1) {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- Exercise repeated private publication guards under the same exact claim.
           await assertCurrent();
         }
         return completionFor(worker);
@@ -571,9 +577,6 @@ describe("existing operator transport export dispatch", () => {
       const authorizeRead = vi.fn(
         async (_request: Request, selected: HostedOperatorContext) => selected,
       );
-      const unavailable = async () => {
-        throw new Error("No preparation or SQL may execute");
-      };
       const verifyWorkload = createOperatorWorkloadVerifier(
         {
           audience: "https://vercel.com/team",
@@ -618,18 +621,13 @@ describe("existing operator transport export dispatch", () => {
         { ...planned.request, callId: "export-call" },
       ];
       for (const action of actions) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Each rejected ordinary transport action must remain before the private lookup.
         const response = await handler(
           new Request("https://operator.test/v1/runtime", {
             body: JSON.stringify({ ...action, ownerContext }),
-            headers: {
-              "content-type": "application/json",
-              ...(credential === "invalid" ? { authorization: "Bearer invalid-token" } : {}),
-            },
+            headers: requestHeaders(credential),
             method: "POST",
           }),
         );
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Read only this controlled rejection response.
         expect(await response.json()).toMatchObject({
           code: "authorization_required",
           status: "blocked",
@@ -741,8 +739,6 @@ describe("export planning failure boundaries", () => {
     ownerContext,
     selection: { ...context.target, environment: "preview" as const },
   };
-  const request = () => new Request("https://operator.test/v1/runtime");
-
   it.each([
     "dispatcher_workload_verification",
     "dispatcher_owner_authorization",
@@ -794,7 +790,7 @@ describe("export planning failure boundaries", () => {
         store: f.dependencies.store,
         verifyWorkload: stage === "dispatcher_workload_verification" ? reject : async () => {},
       });
-      const outcome = dispatch(request(), input);
+      const outcome = dispatch(runtimeRequest(), input);
       await (stage === "plan_reservation_match"
         ? expect(outcome).rejects.toThrow("resource_mismatch")
         : expect(outcome).rejects.toBe(failure));
@@ -851,7 +847,7 @@ describe("export planning failure boundaries", () => {
         verifyWorkload: async () => {},
       });
       await expect(
-        dispatch(request(), {
+        dispatch(runtimeRequest(), {
           action: "export-status",
           exportId: "40000000-0000-4000-8000-000000000004",
           ownerContext,
@@ -879,14 +875,14 @@ describe("export planning failure boundaries", () => {
       },
     });
     try {
-      await expect(dispatch(request(), input)).rejects.toBe(failure);
+      await expect(dispatch(runtimeRequest(), input)).rejects.toBe(failure);
       const hostileInput = {
         ...input,
         get ownerContext(): typeof ownerContext {
           throw new Error("invalid diagnostic context");
         },
       };
-      await expect(dispatch(request(), hostileInput)).rejects.toBe(failure);
+      await expect(dispatch(runtimeRequest(), hostileInput)).rejects.toBe(failure);
     } finally {
       consoleSink.mockRestore();
     }
@@ -1131,7 +1127,6 @@ describe("incremental canonical export approval history", () => {
     const f = setup();
     const planned = await f.operations.plan(context, "customer-one", "original-request");
     configure(f);
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit missing CAS result models the actual conflict contract.
     vi.spyOn(f.dependencies.store, "compareAndSet").mockResolvedValueOnce(undefined);
     await expect(f.operations.approval(context, planned.request)).rejects.toThrow(
       "operation_in_progress",

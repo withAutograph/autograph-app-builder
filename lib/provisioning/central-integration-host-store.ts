@@ -1,10 +1,8 @@
-/* oxlint-disable eslint/complexity, sonarjs/expression-complexity -- Stored intent, immutable authority and completed effect scopes are checked together before readiness may be returned. */
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 import { builderProvisioningJournals } from "../db/schema";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle database type requires the repository schema namespace.
 import type * as databaseSchema from "../db/schema";
 import type { ReadCentralIntegrationHostReady } from "./app-integration-central-authority";
 import {
@@ -24,6 +22,9 @@ import {
 } from "./central-integration-host-checkpoint";
 
 const phase = z.enum(["idle", "pending", "applied"]);
+const centralHostSetupKind = "central-integration-host-setup-v1";
+const centralHostJournalKind = "central-integration-host-journal-v1";
+const centralInspectorEffect = "authorize-central-inspector";
 const receipt = z.strictObject({
   approvalId: z.string().min(1).optional(),
   approvedAt: z.string().min(1),
@@ -35,7 +36,7 @@ export const centralHostRecordSchema = z
     attempts: z.record(z.string(), centralEffectAttemptSchema).optional(),
     effects: z.record(z.string(), phase),
     executionLease: centralExecutionLeaseSchema.optional(),
-    kind: z.literal("central-integration-host-journal-v1"),
+    kind: z.literal(centralHostJournalKind),
     nativeDeployment: centralNativeDeploymentStateSchema.optional(),
     observation: centralHostReadyReceiptSchema.optional(),
     plan: z.union([centralHostSetupPlanSchema, centralHostCallerPlanSchema]),
@@ -75,7 +76,7 @@ export const centralHostRecordSchema = z
             (attempt.receipt.effect !== effect ||
               !centralEffectReceiptMatches(plan, attempt.receipt, attempt.attemptGeneration))) ||
           (attempt.grantAttempt !== undefined &&
-            !["authorize-central-inspector", "authorize-app-central-caller"].includes(effect)),
+            ![centralInspectorEffect, "authorize-app-central-caller"].includes(effect)),
       )
     ) {
       ctx.addIssue({ code: "custom", message: "Exact effect attempt custody required" });
@@ -83,7 +84,7 @@ export const centralHostRecordSchema = z
     if (
       record.runtimeBindings !== undefined &&
       (record.effects["bind-central-preview-runtime"] === "idle" ||
-        plan.kind !== "central-integration-host-setup-v1" ||
+        plan.kind !== centralHostSetupKind ||
         Object.keys(record.runtimeBindings).some(
           (key) => !plan.environment.some((entry) => entry.key === key),
         ))
@@ -94,7 +95,7 @@ export const centralHostRecordSchema = z
       });
     }
 
-    if (plan.kind === "central-integration-host-setup-v1") {
+    if (plan.kind === centralHostSetupKind) {
       const native = record.nativeDeployment;
       if (
         native === undefined ||
@@ -307,7 +308,7 @@ export const createPostgresCentralHostStore = (database: Database) => {
         .where(
           and(
             or(...owners.map(authorityWhere)),
-            sql`${builderProvisioningJournals.record}->'plan'->>'kind'='central-integration-host-setup-v1'`,
+            sql`${builderProvisioningJournals.record}->'plan'->>'kind'=${centralHostSetupKind}`,
             sql`${builderProvisioningJournals.record}->'plan'->'profile'->>'digest'=${profileDigest}`,
             sql`${builderProvisioningJournals.record}->'plan'->'target'->>'projectId'=${projectId}`,
           ),
@@ -349,7 +350,7 @@ export const createPostgresCentralHostStore = (database: Database) => {
         .where(
           and(
             or(...owners.map(authorityWhere)),
-            sql`${builderProvisioningJournals.record}->'plan'->>'kind'='central-integration-host-setup-v1'`,
+            sql`${builderProvisioningJournals.record}->'plan'->>'kind'=${centralHostSetupKind}`,
             sql`${builderProvisioningJournals.record}->'plan'->'receiver'->>'subscriptionRef'=${subscriptionRef}`,
           ),
         )
@@ -360,16 +361,17 @@ export const createPostgresCentralHostStore = (database: Database) => {
       return rows[0] === undefined ? undefined : parse(rows[0]);
     },
     async reserve(plan: CentralHostRecord["plan"]) {
-      const record = centralHostRecordSchema.parse({
+      const recordInput: z.input<typeof centralHostRecordSchema> = {
         attempts: {},
         effects: Object.fromEntries(plan.effects.map((effect) => [effect, "idle"])),
-        kind: "central-integration-host-journal-v1",
-        plan,
+        kind: centralHostJournalKind,
         planDigest: centralHostPlanDigest(plan),
-        ...(plan.kind === "central-integration-host-setup-v1"
-          ? { nativeDeployment: { status: "empty" } }
-          : {}),
-      });
+      };
+      recordInput.plan = plan;
+      const record = centralHostRecordSchema.parse(recordInput);
+      if (plan.kind === centralHostSetupKind) {
+        record.nativeDeployment = { status: "empty" };
+      }
       const operationRef = centralHostOperationRef(plan);
       const now = new Date();
       const rows = await database
@@ -415,7 +417,6 @@ export const createReadCentralIntegrationHostReady =
     await request.assertCurrentOwner();
     const caller = await input.store.readReadyCaller(request.authority, request.appProjectId);
     if (caller === undefined) {
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- Absence is explicit in the optional readiness port.
       return undefined;
     }
     if (
@@ -433,7 +434,7 @@ export const createReadCentralIntegrationHostReady =
     );
     if (
       setup === undefined ||
-      setup.record.plan.kind !== "central-integration-host-setup-v1" ||
+      setup.record.plan.kind !== centralHostSetupKind ||
       setup.record.planDigest !== caller.record.plan.setup.planDigest ||
       setup.record.nativeDeployment?.status !== "accepted" ||
       setup.record.nativeDeployment.providerDeploymentId !==

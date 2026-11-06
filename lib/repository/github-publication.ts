@@ -34,8 +34,6 @@ import type {
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
 export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
 
-type Digest = string;
-type ObjectId = string;
 export type GitHubRepositorySelection = "all" | "selected";
 export { githubPermissionsFor } from "./github-permissions";
 export type { GitHubOperation } from "./github-permissions";
@@ -50,7 +48,7 @@ export interface GitHubInstallationIdentity {
   repositorySelection: GitHubRepositorySelection;
   selectedRepositoryIds: readonly string[];
   permissions: GitHubPermissions;
-  digest: Digest;
+  digest: string;
 }
 
 export interface GitHubRepositoryObservation {
@@ -60,76 +58,76 @@ export interface GitHubRepositoryObservation {
   name: string;
   visibility: "private";
   defaultBranch: string;
-  headSha: ObjectId;
-  headTree: ObjectId;
-  installationIdentityDigest: Digest;
+  headSha: string;
+  headTree: string;
+  installationIdentityDigest: string;
   releaseGate: {
     name: typeof REPOSITORY_RELEASE_GATE;
     configured: boolean;
   };
-  digest: Digest;
+  digest: string;
 }
 
 export interface ImmutableGitHubSourceReceipt {
   version: typeof GITHUB_PUBLICATION_VERSION;
   repository: GitHubRepositoryObservation;
   resolvedRef: string;
-  resolvedSha: ObjectId;
-  resolvedTree: ObjectId;
-  installationIdentityDigest: Digest;
+  resolvedSha: string;
+  resolvedTree: string;
+  installationIdentityDigest: string;
   resolvedByCallId: string;
-  digest: Digest;
+  digest: string;
 }
 
 export interface FreshRepositoryProposal {
   version: typeof GITHUB_PUBLICATION_VERSION;
-  installationIdentityDigest: Digest;
+  installationIdentityDigest: string;
   destinationOwner: string;
   destinationName: string;
   visibility: "private";
   defaultBranch: "main";
-  sourceReceiptDigest: Digest;
-  sourceSha: ObjectId;
-  sourceTree: ObjectId;
-  contractDigest: Digest;
-  eligibilityDigest: Digest;
-  reviewDigest: Digest;
-  changeSetDigest: Digest;
+  sourceReceiptDigest: string;
+  sourceSha: string;
+  sourceTree: string;
+  contractDigest: string;
+  eligibilityDigest: string;
+  reviewDigest: string;
+  changeSetDigest: string;
   releaseGate: {
     name: typeof REPOSITORY_RELEASE_GATE;
     configured: false;
   };
   initialCommitMessage: "Initialize repository from supported template";
-  idempotencyKey: Digest;
+  idempotencyKey: string;
   intendedOutcome: "create-private-fresh-history-repository";
-  digest: Digest;
+  digest: string;
 }
 
 export interface DraftPullRequestProposal {
   version: typeof GITHUB_PUBLICATION_VERSION;
-  installationIdentityDigest: Digest;
+  installationIdentityDigest: string;
   repositoryId: string;
   owner: string;
   name: string;
   visibility: "private";
   baseBranch: string;
-  baseSha: ObjectId;
-  baseTree: ObjectId;
-  repositoryObservationDigest: Digest;
+  baseSha: string;
+  baseTree: string;
+  repositoryObservationDigest: string;
   releaseGate: {
     name: typeof REPOSITORY_RELEASE_GATE;
     configured: boolean;
   };
-  reviewDigest: Digest;
-  changeSetDigest: Digest;
-  changedContentDigest: Digest;
+  reviewDigest: string;
+  changeSetDigest: string;
+  changedContentDigest: string;
   approvedPaths: readonly string[];
   branchName: string;
   draft: true;
   title: string;
-  idempotencyKey: Digest;
+  idempotencyKey: string;
   intendedOutcome: "publish-reviewed-change-set-as-draft-pull-request";
-  digest: Digest;
+  digest: string;
 }
 
 type MutationKind = "fresh-repository" | "draft-pull-request";
@@ -138,68 +136,68 @@ export interface GitHubMutationPendingReceipt {
   version: typeof GITHUB_PUBLICATION_VERSION;
   kind: MutationKind;
   status: "pending";
-  proposalDigest: Digest;
-  idempotencyKey: Digest;
+  proposalDigest: string;
+  idempotencyKey: string;
   approvedByCallId: string;
-  digest: Digest;
+  digest: string;
 }
 
 export interface GitHubMutationFailureReceipt {
   version: typeof GITHUB_PUBLICATION_VERSION;
   kind: MutationKind;
   status: "failed";
-  proposalDigest: Digest;
-  idempotencyKey: Digest;
+  proposalDigest: string;
+  idempotencyKey: string;
   approvedByCallId: string;
   failureCode: "provider-rejected" | "postcondition-failed";
   providerCode: string;
   recoveryRequired: true;
-  digest: Digest;
+  digest: string;
 }
 
 export interface FreshRepositorySuccessReceipt {
   version: typeof GITHUB_PUBLICATION_VERSION;
   kind: "fresh-repository";
   status: "succeeded";
-  proposalDigest: Digest;
-  idempotencyKey: Digest;
+  proposalDigest: string;
+  idempotencyKey: string;
   approvedByCallId: string;
-  installationIdentityDigest: Digest;
+  installationIdentityDigest: string;
   repository: GitHubRepositoryObservation;
-  initialCommitSha: ObjectId;
-  initialCommitTree: ObjectId;
+  initialCommitSha: string;
+  initialCommitTree: string;
   parentCount: 0;
   freshHistory: true;
   releaseGateAbsent: true;
   recoveredFromPending: boolean;
-  providerReadBackDigest: Digest;
-  digest: Digest;
+  providerReadBackDigest: string;
+  digest: string;
 }
 
 export interface DraftPullRequestSuccessReceipt {
   version: typeof GITHUB_PUBLICATION_VERSION;
   kind: "draft-pull-request";
   status: "succeeded";
-  proposalDigest: Digest;
-  idempotencyKey: Digest;
+  proposalDigest: string;
+  idempotencyKey: string;
   approvedByCallId: string;
-  installationIdentityDigest: Digest;
+  installationIdentityDigest: string;
   repositoryId: string;
   branchName: string;
-  branchSha: ObjectId;
-  branchTree: ObjectId;
+  branchSha: string;
+  branchTree: string;
   pullRequestId: string;
   pullRequestNumber: number;
   draft: true;
   baseBranch: string;
-  baseSha: ObjectId;
-  changeSetDigest: Digest;
-  changedContentDigest: Digest;
+  baseSha: string;
+  changeSetDigest: string;
+  changedContentDigest: string;
   normalizedChangedPaths: readonly string[];
   releaseGateUnchanged: true;
   recoveredFromPending: boolean;
-  providerReadBackDigest: Digest;
-  digest: Digest;
+  providerReadBackDigest: string;
+  digest: string;
 }
 
 export type GitHubMutationReceipt =
@@ -210,10 +208,10 @@ export type GitHubMutationReceipt =
 
 export interface FreshRepositoryReadBack {
   version: typeof GITHUB_PUBLICATION_VERSION;
-  idempotencyKey: Digest;
+  idempotencyKey: string;
   repository: GitHubRepositoryObservation;
-  initialCommit: { sha: ObjectId; tree: ObjectId; parents: readonly [] };
-  digest: Digest;
+  initialCommit: { sha: string; tree: string; parents: readonly [] };
+  digest: string;
 }
 
 interface AbsentBranch {
@@ -222,11 +220,11 @@ interface AbsentBranch {
 interface PresentBranch {
   status: "present";
   branchName: string;
-  branchSha: ObjectId;
-  branchTree: ObjectId;
+  branchSha: string;
+  branchTree: string;
   normalizedChangedPaths: readonly string[];
-  changedContentDigest: Digest;
-  idempotencyKey: Digest;
+  changedContentDigest: string;
+  idempotencyKey: string;
 }
 interface AbsentPullRequest {
   status: "absent";
@@ -238,22 +236,22 @@ interface PresentPullRequest {
   draft: boolean;
   headRepositoryId: string;
   headBranch: string;
-  headSha: ObjectId;
+  headSha: string;
   baseRepositoryId: string;
   baseBranch: string;
-  baseSha: ObjectId;
-  changeSetDigest: Digest;
-  idempotencyKey: Digest;
+  baseSha: string;
+  changeSetDigest: string;
+  idempotencyKey: string;
 }
 
 export interface DraftPublicationReadBack {
   version: typeof GITHUB_PUBLICATION_VERSION;
-  idempotencyKey: Digest;
+  idempotencyKey: string;
   repository: GitHubRepositoryObservation;
   changedPathsSinceBase: readonly string[];
   branch: AbsentBranch | PresentBranch;
   pullRequest: AbsentPullRequest | PresentPullRequest;
-  digest: Digest;
+  digest: string;
 }
 
 export type GitHubMutationAcknowledgement =
@@ -270,14 +268,14 @@ export type GitHubMutationAcknowledgement =
 
 interface GitHubPublicationFileState {
   mode: string;
-  digest: Digest;
+  digest: string;
 }
 
 export interface GitHubFreshRepositoryContentFile {
   path: string;
   mode: "100644" | "100755";
-  objectId: ObjectId;
-  digest: Digest;
+  objectId: string;
+  digest: string;
   bytes: Uint8Array;
 }
 
@@ -307,17 +305,17 @@ export type GitHubPublicationContentChange =
 export interface GitHubFreshRepositoryContent {
   version: 1;
   kind: "fresh-repository-source-tree";
-  sourceSha: ObjectId;
-  sourceTree: ObjectId;
+  sourceSha: string;
+  sourceTree: string;
   files: readonly GitHubFreshRepositoryContentFile[];
 }
 
 export interface GitHubDraftPullRequestContent {
   version: 1;
   kind: "draft-reviewed-change-set";
-  reviewDigest: Digest;
-  changeSetDigest: Digest;
-  changedContentDigest: Digest;
+  reviewDigest: string;
+  changeSetDigest: string;
+  changedContentDigest: string;
   approvedPaths: readonly string[];
   changes: readonly GitHubPublicationContentChange[];
 }
@@ -332,7 +330,7 @@ export interface GitHubFreshRepositoryContentSource {
 export interface GitHubDraftPullRequestContentSource {
   readFile: (path: string) => Promise<{
     mode: string;
-    digest: Digest;
+    digest: string;
     bytes: Uint8Array;
   } | null>;
 }
@@ -449,15 +447,34 @@ export class GitHubOutcomeUnknownError extends Error {
   }
 }
 
-const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+type CanonicalJsonPrimitive = string | number | boolean | null;
+type CanonicalJsonContainer =
+  | readonly CanonicalJsonValue[]
+  | Readonly<Record<string, CanonicalJsonValue>>;
+type CanonicalJsonValue = CanonicalJsonPrimitive | CanonicalJsonContainer;
+const digest = (value: CanonicalJsonValue) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const bytesDigest = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 // Boundary equality should ignore object property insertion order. Digest
 // construction remains schema-ordered through the existing digest().
-const record = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+type JsonRecord = Readonly<Record<string, CanonicalJsonValue>>;
+const record = (value: CanonicalJsonValue): value is JsonRecord =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
 
-const canonicalJson = (value: unknown): string => {
+const sameSortedKeys = (actual: readonly string[], expected: readonly string[]): boolean =>
+  actual.toSorted().join("\0") === expected.toSorted().join("\0");
+
+const containsAsciiControl = (value: string): boolean =>
+  [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127;
+  });
+
+const safeSourcePathValue = (value: CanonicalJsonValue | undefined): value is string =>
+  typeof value === "string" && safeSourcePath(value);
+
+const canonicalJson = (value: CanonicalJsonValue): string => {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(",")}]`;
   }
@@ -503,34 +520,29 @@ const canonicalReviewedChanges = (changes: ReviewedChangeSetReceipt["changes"]) 
     };
   });
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function exactKeys(value: unknown, keys: readonly string[]): boolean {
-  return (
-    record(value) && Object.keys(value).toSorted().join("\0") === [...keys].toSorted().join("\0")
-  );
+function exactKeys(value: CanonicalJsonValue, keys: readonly string[]): boolean {
+  return record(value) && sameSortedKeys(Object.keys(value), keys);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isDigest(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isObjectId(value: unknown): value is string {
   return (
     typeof value === "string" && (/^[0-9a-f]{40}$/u.test(value) || /^[0-9a-f]{64}$/u.test(value))
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isDecimal(value: unknown): value is string {
   return typeof value === "string" && /^[1-9]\d*$/u.test(value);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeName(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
   return (
-    typeof value === "string" &&
     /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u.test(value) &&
     value !== "." &&
     value !== ".." &&
@@ -538,28 +550,28 @@ function safeName(value: unknown): value is string {
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeBranch(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
+  const hasValidBranchLength = value.length > 0 && value.length <= 200;
+  const hasValidBoundaries = !value.startsWith("/") && !value.endsWith("/") && !value.endsWith(".");
+  const hasNoForbiddenSuffix = !value.endsWith(".lock");
+  const hasNoForbiddenSequence = !value.includes("..") && !value.includes("@{");
+  const hasNoForbiddenCharacter = !/[~^:?*[\\\s]/u.test(value) && !containsAsciiControl(value);
+  const hasValidSegments = value
+    .split("/")
+    .every((part) => part.length > 0 && !part.startsWith("."));
   return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 200 &&
-    !value.startsWith("/") &&
-    !value.endsWith("/") &&
-    !value.endsWith(".") &&
-    !value.endsWith(".lock") &&
-    !value.includes("..") &&
-    !value.includes("@{") &&
-    !/[~^:?*[\\\s]/u.test(value) &&
-    ![...value].some((character) => {
-      const code = character.codePointAt(0) ?? 0;
-      return code < 32 || code === 127;
-    }) &&
-    value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
+    hasValidBranchLength &&
+    hasValidBoundaries &&
+    hasNoForbiddenSuffix &&
+    hasNoForbiddenSequence &&
+    hasNoForbiddenCharacter &&
+    hasValidSegments
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeHeadRef(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -568,26 +580,22 @@ function safeHeadRef(value: unknown): value is string {
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalWithoutDigest<T extends { digest: string }>(value: T) {
   const { digest: _digest, ...unsigned } = value;
   void _digest;
   return unsigned;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactDigest(value: { digest: string }, label: string): void {
   if (!isDigest(value.digest) || digest(canonicalWithoutDigest(value)) !== value.digest) {
     throw new Error(`${label} digest is malformed.`);
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pathsOverlap(left: string, right: string): boolean {
   return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalPaths(paths: readonly string[]): readonly string[] {
   if (
     paths.length === 0 ||
@@ -599,7 +607,6 @@ function canonicalPaths(paths: readonly string[]): readonly string[] {
   return [...paths].toSorted(compareOverlayPaths);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalPathsOrEmpty(paths: readonly string[]): readonly string[] {
   if (paths.length === 0) {
     return [];
@@ -607,16 +614,14 @@ function canonicalPathsOrEmpty(paths: readonly string[]): readonly string[] {
   return canonicalPaths(paths);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function releaseGateAbsent(repository: GitHubRepositoryObservation): boolean {
   return (
     repository.releaseGate.name === REPOSITORY_RELEASE_GATE && !repository.releaseGate.configured
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
-  const changeSet = { ...review } as Record<string, unknown>;
+  const changeSet = { ...review };
   delete changeSet.changeSetDigest;
   delete changeSet.reviewedByCallId;
   changeSet.digest = review.changeSetDigest;
@@ -636,12 +641,17 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
       );
     },
   );
+  const pathsAreCanonical =
+    JSON.stringify(canonicalPaths(review.approvedPaths)) === JSON.stringify(review.approvedPaths);
+  const pathsMatchChanges =
+    JSON.stringify(review.approvedPaths) === JSON.stringify(review.changes.map(({ path }) => path));
+  const changesAreCanonical = canonicalJson(review.changes) === canonicalJson(sortedChanges);
   if (
     !isDigest(review.changeSetDigest) ||
     !verifiedChangeSet ||
-    canonicalJson(review.changes) !== canonicalJson(sortedChanges) ||
-    JSON.stringify(canonicalPaths(review.approvedPaths)) !== JSON.stringify(review.approvedPaths) ||
-    JSON.stringify(review.approvedPaths) !== JSON.stringify(review.changes.map(({ path }) => path))
+    !changesAreCanonical ||
+    !pathsAreCanonical ||
+    !pathsMatchChanges
   ) {
     throw new Error("The reviewed change-set receipt is non-canonical.");
   }
@@ -656,81 +666,63 @@ export const assertCanonicalGitHubUpdateReview = (review: DraftUpdateReview): vo
   assertCanonicalReview(review);
 };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function reviewForProposal(
   proposal: FreshRepositoryProposal | ReviewedPublicationBinding,
   review: DraftUpdateReview,
 ): void {
   assertCanonicalGitHubUpdateReview(review);
-  if (
-    proposal.reviewDigest !== review.digest ||
-    proposal.changeSetDigest !== review.changeSetDigest ||
-    ("changedContentDigest" in proposal &&
-      (proposal.changedContentDigest !== review.changedContentDigest ||
-        JSON.stringify(proposal.approvedPaths) !== JSON.stringify(review.approvedPaths)))
-  ) {
+  const baseReviewMismatch =
+    proposal.reviewDigest !== review.digest || proposal.changeSetDigest !== review.changeSetDigest;
+  const contentReviewMismatch =
+    "changedContentDigest" in proposal &&
+    (proposal.changedContentDigest !== review.changedContentDigest ||
+      JSON.stringify(proposal.approvedPaths) !== JSON.stringify(review.approvedPaths));
+  if (baseReviewMismatch || contentReviewMismatch) {
     throw new Error("The publication content review does not match the sealed proposal.");
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function contentManifest(
   changes: readonly GitHubPublicationContentChange[],
 ): ReviewedChangeSetReceipt["changes"] {
   return changes.map((change) => {
     if (change.kind === "added") {
-      return Object.fromEntries([
-        ["path", change.path],
-        ["kind", change.kind],
-        [
-          "after",
-          Object.fromEntries([
-            ["mode", change.after.mode],
-            ["digest", change.after.digest],
-          ]),
-        ],
-      ]) as ReviewedChangeSetReceipt["changes"][number];
+      return {
+        after: { digest: change.after.digest, mode: change.after.mode },
+        kind: change.kind,
+        path: change.path,
+      };
     }
     if (change.kind === "modified") {
-      return Object.fromEntries([
-        ["path", change.path],
-        ["kind", change.kind],
-        ["before", change.before],
-        [
-          "after",
-          Object.fromEntries([
-            ["mode", change.after.mode],
-            ["digest", change.after.digest],
-          ]),
-        ],
-      ]) as ReviewedChangeSetReceipt["changes"][number];
+      return {
+        after: { digest: change.after.digest, mode: change.after.mode },
+        before: change.before,
+        kind: change.kind,
+        path: change.path,
+      };
     }
-    return Object.fromEntries([
-      ["path", change.path],
-      ["kind", change.kind],
-      ["before", change.before],
-    ]) as ReviewedChangeSetReceipt["changes"][number];
+    return { before: change.before, kind: change.kind, path: change.path };
   });
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
+function exactContentFileState(value: CanonicalJsonValue, includeBytes: boolean): boolean {
   const keys = includeBytes
     ? (["mode", "digest", "bytes"] as const)
     : (["mode", "digest"] as const);
   if (!record(value) || !exactKeys(value, keys)) {
     return false;
   }
-  return (
-    (value.mode === "644" || value.mode === "755") &&
-    isDigest(value.digest) &&
-    (!includeBytes || value.bytes instanceof Uint8Array)
-  );
+  if (value.mode !== "644" && value.mode !== "755") {
+    return false;
+  }
+  if (!isDigest(value.digest)) {
+    return false;
+  }
+  return !includeBytes || value.bytes instanceof Uint8Array;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function exactContentChange(change: unknown): boolean {
-  if (!record(change) || typeof change.path !== "string" || !safeSourcePath(change.path)) {
+function exactContentChange(change: CanonicalJsonValue): boolean {
+  if (!record(change) || !safeSourcePathValue(change.path)) {
     return false;
   }
   if (change.kind === "added") {
@@ -752,7 +744,6 @@ function exactContentChange(change: unknown): boolean {
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function gitObjectDigest(
   type: "blob" | "tree",
   content: Uint8Array,
@@ -762,7 +753,6 @@ function gitObjectDigest(
   return createHash(algorithm).update(header).update(content).digest();
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshContentTree(
   files: readonly GitHubFreshRepositoryContentFile[],
   algorithm: "sha1" | "sha256",
@@ -782,7 +772,8 @@ function freshContentTree(
       if (existing?.kind === "file") {
         throw new Error("The fresh repository source manifest overlaps paths.");
       }
-      const child = existing ?? ({ children: new Map(), kind: "directory" } as const);
+      const child: Extract<Node, { kind: "directory" }> =
+        existing?.kind === "directory" ? existing : { children: new Map(), kind: "directory" };
       directory.children.set(segment, child);
       directory = child;
     }
@@ -817,45 +808,55 @@ function freshContentTree(
   return gitObjectDigest("tree", encodeTree(root), algorithm).toString("hex");
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function assertExactGitHubFreshRepositoryContent(input: {
+const validFreshContentBinding = (
+  content: GitHubFreshRepositoryContent,
+  proposal: FreshRepositoryProposal,
+): boolean =>
+  content.version === 1 &&
+  content.kind === "fresh-repository-source-tree" &&
+  content.sourceSha === proposal.sourceSha &&
+  content.sourceTree === proposal.sourceTree &&
+  content.files.length > 0;
+
+const isExactFreshContentFile = (
+  file: GitHubFreshRepositoryContentFile,
+  algorithm: "sha1" | "sha256",
+): boolean =>
+  exactKeys(file, ["path", "mode", "objectId", "digest", "bytes"]) &&
+  safeSourcePath(file.path) &&
+  (file.mode === "100644" || file.mode === "100755") &&
+  isObjectId(file.objectId) &&
+  isDigest(file.digest) &&
+  file.bytes instanceof Uint8Array &&
+  bytesDigest(file.bytes) === file.digest &&
+  gitObjectDigest("blob", file.bytes, algorithm).toString("hex") === file.objectId;
+
+export const assertExactGitHubFreshRepositoryContent = (input: {
   proposal: FreshRepositoryProposal;
   content: GitHubFreshRepositoryContent;
-}): void {
+}): void => {
   const { content, proposal } = input;
   if (
     !exactKeys(content, ["version", "kind", "sourceSha", "sourceTree", "files"]) ||
-    content.version !== 1 ||
-    content.kind !== "fresh-repository-source-tree" ||
-    content.sourceSha !== proposal.sourceSha ||
-    content.sourceTree !== proposal.sourceTree ||
-    !Array.isArray(content.files) ||
-    content.files.length === 0
+    !validFreshContentBinding(content, proposal)
   ) {
     throw new Error("The fresh repository content schema is invalid.");
   }
   const algorithm = proposal.sourceTree.length === 64 ? "sha256" : "sha1";
   const paths = content.files.map((file) => file.path);
+  const hasDuplicatePaths = new Set(paths).size !== paths.length;
+  const containsInvalidFile = content.files.some(
+    (file) => !isExactFreshContentFile(file, algorithm),
+  );
   if (
-    new Set(paths).size !== paths.length ||
-    content.files.some(
-      (file) =>
-        !exactKeys(file, ["path", "mode", "objectId", "digest", "bytes"]) ||
-        !safeSourcePath(file.path) ||
-        (file.mode !== "100644" && file.mode !== "100755") ||
-        !isObjectId(file.objectId) ||
-        !isDigest(file.digest) ||
-        !(file.bytes instanceof Uint8Array) ||
-        bytesDigest(file.bytes) !== file.digest ||
-        gitObjectDigest("blob", file.bytes, algorithm).toString("hex") !== file.objectId,
-    ) ||
+    hasDuplicatePaths ||
+    containsInvalidFile ||
     freshContentTree(content.files, algorithm) !== proposal.sourceTree
   ) {
     throw new Error("The fresh repository content does not match the immutable source tree.");
   }
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactGitHubDraftPullRequestContent(input: {
   proposal: ReviewedPublicationBinding;
   content: GitHubDraftPullRequestContent;
@@ -909,7 +910,6 @@ export function assertExactGitHubDraftPullRequestContent(input: {
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactGitHubPublicationContent(input: {
   proposal: ReviewedPublicationBinding;
   review: DraftUpdateReview;
@@ -937,7 +937,6 @@ export function assertExactGitHubPublicationContent(input: {
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readExactGitHubFreshRepositoryContent(input: {
   proposal: FreshRepositoryProposal;
   source: GitHubFreshRepositoryContentSource;
@@ -962,7 +961,6 @@ export async function readExactGitHubFreshRepositoryContent(input: {
   return content;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readExactGitHubPublicationContent(input: {
   proposal: ReviewedPublicationBinding;
   review: DraftUpdateReview;
@@ -970,61 +968,61 @@ export async function readExactGitHubPublicationContent(input: {
 }): Promise<GitHubDraftPullRequestContent> {
   reviewForProposal(input.proposal, input.review);
   const changes: GitHubPublicationContentChange[] = [];
-  for (const change of input.review.changes) {
-    if (change.kind === "deleted") {
-      if (change.before === undefined) {
-        throw new Error("The reviewed deletion preimage is missing.");
+  const changeResults = await Promise.all(
+    input.review.changes.map(async (change) => {
+      if (change.kind === "deleted") {
+        if (change.before === undefined) {
+          throw new Error("The reviewed deletion preimage is missing.");
+        }
+        return {
+          before: change.before,
+          kind: change.kind,
+          path: change.path,
+        } satisfies GitHubPublicationContentChange;
       }
-      changes.push({
+      if (change.after === undefined) {
+        throw new Error("The reviewed publication postimage is missing.");
+      }
+      let observed: Awaited<ReturnType<typeof input.source.readFile>>;
+      try {
+        observed = await input.source.readFile(change.path);
+      } catch {
+        throw new Error("The approved publication content source failed.");
+      }
+      if (observed === null) {
+        throw new Error(
+          `The approved publication postimage is missing for ${change.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`,
+        );
+      }
+      const bytes = new Uint8Array(observed.bytes);
+      if (
+        observed.mode !== change.after.mode ||
+        observed.digest !== change.after.digest ||
+        bytesDigest(bytes) !== change.after.digest
+      ) {
+        throw new Error(
+          `The approved publication postimage changed for ${change.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`,
+        );
+      }
+      if (change.kind === "added") {
+        return {
+          after: { ...change.after, bytes },
+          kind: change.kind,
+          path: change.path,
+        } satisfies GitHubPublicationContentChange;
+      }
+      if (change.before === undefined) {
+        throw new Error("The reviewed modification preimage is missing.");
+      }
+      return {
+        after: { ...change.after, bytes },
         before: change.before,
         kind: change.kind,
         path: change.path,
-      });
-      continue;
-    }
-    if (change.after === undefined) {
-      throw new Error("The reviewed publication postimage is missing.");
-    }
-    let observed: Awaited<ReturnType<typeof input.source.readFile>>;
-    try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      observed = await input.source.readFile(change.path);
-    } catch {
-      throw new Error("The approved publication content source failed.");
-    }
-    if (observed === null) {
-      throw new Error(
-        `The approved publication postimage is missing for ${change.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`,
-      );
-    }
-    const bytes = new Uint8Array(observed.bytes);
-    if (
-      observed.mode !== change.after.mode ||
-      observed.digest !== change.after.digest ||
-      bytesDigest(bytes) !== change.after.digest
-    ) {
-      throw new Error(
-        `The approved publication postimage changed for ${change.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`,
-      );
-    }
-    if (change.kind === "added") {
-      changes.push({
-        after: { ...change.after, bytes },
-        kind: change.kind,
-        path: change.path,
-      });
-      continue;
-    }
-    if (change.before === undefined) {
-      throw new Error("The reviewed modification preimage is missing.");
-    }
-    changes.push({
-      after: { ...change.after, bytes },
-      before: change.before,
-      kind: change.kind,
-      path: change.path,
-    });
-  }
+      } satisfies GitHubPublicationContentChange;
+    }),
+  );
+  changes.push(...changeResults);
   const content: GitHubDraftPullRequestContent = {
     approvedPaths: input.review.approvedPaths,
     changeSetDigest: input.review.changeSetDigest,
@@ -1042,21 +1040,20 @@ export async function readExactGitHubPublicationContent(input: {
   return content;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertReviewedBinding(
   source: SourceReceiptEvidence,
   review: ReviewedChangeSetReceipt,
 ): void {
   parseSourceReceiptEvidence(source);
   assertCanonicalReview(review);
-  if (
-    source.releaseEnabled ||
+  const sourceBindingMismatch =
     source.digest !== review.sourceReceiptDigest ||
     source.sourceSha !== review.sourceSha ||
-    source.sourceTree !== review.sourceTree ||
+    source.sourceTree !== review.sourceTree;
+  const reviewBindingMismatch =
     source.contractDigest !== review.repositoryContractDigest ||
-    source.eligibilityDigest !== review.eligibilityDigest
-  ) {
+    source.eligibilityDigest !== review.eligibilityDigest;
+  if (source.releaseEnabled || sourceBindingMismatch || reviewBindingMismatch) {
     throw new Error("The reviewed change set is not bound to the exact source receipt.");
   }
 }
@@ -1082,14 +1079,11 @@ const permissionKeys = [
   "variables",
 ] as const;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubInstallationIdentity(
   input: Omit<GitHubInstallationIdentity, "version" | "permissions" | "digest">,
 ): GitHubInstallationIdentity {
   if (
-    (input.operation !== "resolve-existing-source" &&
-      input.operation !== "create-fresh-repository" &&
-      input.operation !== "publish-draft-pull-request") ||
+    !isGitHubOperation(input.operation) ||
     !isDecimal(input.installationId) ||
     !isDecimal(input.accountId) ||
     !safeName(input.accountLogin) ||
@@ -1109,13 +1103,30 @@ export function createGitHubInstallationIdentity(
     operation: input.operation,
     permissions: githubPermissionsFor(input.operation),
     repositorySelection: input.repositorySelection,
-    selectedRepositoryIds: [...input.selectedRepositoryIds].toSorted(),
+    selectedRepositoryIds: input.selectedRepositoryIds.toSorted(compareDecimalIds),
     version: GITHUB_PUBLICATION_VERSION,
   };
   return { ...unsigned, digest: digest(unsigned) };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function isGitHubOperation(value: GitHubOperation): boolean {
+  return (
+    value === "resolve-existing-source" ||
+    value === "create-fresh-repository" ||
+    value === "publish-draft-pull-request"
+  );
+}
+
+function compareDecimalIds(left: string, right: string): number {
+  if (BigInt(left) < BigInt(right)) {
+    return -1;
+  }
+  if (BigInt(left) > BigInt(right)) {
+    return 1;
+  }
+  return 0;
+}
+
 export function assertExactInstallationIdentity(identity: GitHubInstallationIdentity): void {
   if (!exactKeys(identity, installationKeys) || !exactKeys(identity.permissions, permissionKeys)) {
     throw new Error("The GitHub installation identity schema is not closed.");
@@ -1148,30 +1159,37 @@ export const repositoryKeys = [
   "digest",
 ] as const;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createRepositoryObservation(
   input: Omit<GitHubRepositoryObservation, "version" | "digest">,
 ): GitHubRepositoryObservation {
-  if (
-    !isDecimal(input.repositoryId) ||
-    !safeName(input.owner) ||
-    !safeName(input.name) ||
-    input.visibility !== "private" ||
-    !safeBranch(input.defaultBranch) ||
-    !isObjectId(input.headSha) ||
-    !isObjectId(input.headTree) ||
-    !isDigest(input.installationIdentityDigest) ||
-    !exactKeys(input.releaseGate, ["name", "configured"]) ||
-    input.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    typeof input.releaseGate.configured !== "boolean"
-  ) {
+  if (!validRepositoryObservationInput(input)) {
     throw new Error("The repository observation is invalid.");
   }
   const unsigned = { version: GITHUB_PUBLICATION_VERSION, ...input };
   return { ...unsigned, digest: digest(unsigned) };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function validRepositoryObservationInput(
+  input: Omit<GitHubRepositoryObservation, "version" | "digest">,
+): boolean {
+  const releaseGateValid =
+    (exactKeys(input.releaseGate, ["name", "configured"]) &&
+      input.releaseGate.name === REPOSITORY_RELEASE_GATE &&
+      input.releaseGate.configured) ||
+    !input.releaseGate.configured;
+  const repositoryIdentityValid =
+    isDecimal(input.repositoryId) &&
+    safeName(input.owner) &&
+    safeName(input.name) &&
+    input.visibility === "private";
+  const headValid =
+    safeBranch(input.defaultBranch) &&
+    isObjectId(input.headSha) &&
+    isObjectId(input.headTree) &&
+    isDigest(input.installationIdentityDigest);
+  return repositoryIdentityValid && headValid && releaseGateValid;
+}
+
 export function assertExactRepositoryObservation(repository: GitHubRepositoryObservation): void {
   if (!exactKeys(repository, repositoryKeys)) {
     throw new Error("The repository observation schema is not closed.");
@@ -1195,23 +1213,16 @@ export function assertExactRepositoryObservation(repository: GitHubRepositoryObs
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function resolveImmutableExistingSource(input: {
   adapter: GitHubSourceResolutionAdapter;
   expectedInstallationId: string;
   repositoryId: string;
   ref: string;
-  expectedSha: ObjectId;
-  expectedTree: ObjectId;
+  expectedSha: string;
+  expectedTree: string;
   resolvedByCallId: string;
 }): Promise<ImmutableGitHubSourceReceipt> {
-  if (
-    !isDecimal(input.expectedInstallationId) ||
-    !isDecimal(input.repositoryId) ||
-    !safeHeadRef(input.ref) ||
-    !isObjectId(input.expectedSha) ||
-    !isObjectId(input.expectedTree)
-  ) {
+  if (!validImmutableSourceRequest(input)) {
     throw new Error("The immutable source request is invalid.");
   }
   const installation = await input.adapter.inspectInstallation("resolve-existing-source");
@@ -1249,25 +1260,34 @@ export async function resolveImmutableExistingSource(input: {
   return { ...unsigned, digest: digest(unsigned) };
 }
 
+function validImmutableSourceRequest(input: {
+  expectedInstallationId: string;
+  repositoryId: string;
+  ref: string;
+  expectedSha: string;
+  expectedTree: string;
+}): boolean {
+  return (
+    isDecimal(input.expectedInstallationId) &&
+    isDecimal(input.repositoryId) &&
+    safeHeadRef(input.ref) &&
+    isObjectId(input.expectedSha) &&
+    isObjectId(input.expectedTree)
+  );
+}
+
 /** Issues the same immutable source receipt from a tenant-bound, target-scoped proof. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function resolveImmutableExistingSourceWithTargetProof(input: {
   adapter: GitHubTargetSourceResolutionAdapter;
   authority: z.input<typeof hostedTenantAuthoritySchema>;
   expectedInstallationId: string;
   repositoryId: string;
   ref: string;
-  expectedSha: ObjectId;
-  expectedTree: ObjectId;
+  expectedSha: string;
+  expectedTree: string;
   resolvedByCallId: string;
 }): Promise<ImmutableGitHubSourceReceipt> {
-  if (
-    !isDecimal(input.expectedInstallationId) ||
-    !isDecimal(input.repositoryId) ||
-    !safeHeadRef(input.ref) ||
-    !isObjectId(input.expectedSha) ||
-    !isObjectId(input.expectedTree)
-  ) {
+  if (!validImmutableSourceRequest(input)) {
     throw new Error("The immutable source request is invalid.");
   }
   const proof = parseGitHubTargetAccessProof(
@@ -1318,7 +1338,6 @@ const immutableSourceReceiptKeys = [
   "digest",
 ] as const;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactImmutableGitHubSourceReceipt(
   sourceReceipt: ImmutableGitHubSourceReceipt,
 ): void {
@@ -1363,7 +1382,6 @@ export const freshProposalKeys = [
   "digest",
 ] as const;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createFreshRepositoryProposal(input: {
   installation: GitHubInstallationIdentity;
   source: SourceReceiptEvidence;
@@ -1410,7 +1428,6 @@ export function createFreshRepositoryProposal(input: {
   return { ...unsigned, digest: digest(unsigned) };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProposal): void {
   if (
     !exactKeys(proposal, freshProposalKeys) ||
@@ -1473,7 +1490,6 @@ export const draftProposalKeys = [
   "digest",
 ] as const;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeTitle(value: string): boolean {
   return (
     value === value.trim() &&
@@ -1486,7 +1502,6 @@ function safeTitle(value: string): boolean {
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createDraftPullRequestProposal(input: {
   installation: GitHubInstallationIdentity;
   repository: GitHubRepositoryObservation;
@@ -1536,7 +1551,6 @@ export function createDraftPullRequestProposal(input: {
   return { ...unsigned, digest: digest(unsigned) };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestProposal): void {
   if (
     !exactKeys(proposal, draftProposalKeys) ||
@@ -1550,35 +1564,51 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
     repositoryObservationDigest: proposal.repositoryObservationDigest,
     reviewDigest: proposal.reviewDigest,
   });
-  if (
-    proposal.version !== GITHUB_PUBLICATION_VERSION ||
-    !isDecimal(proposal.repositoryId) ||
-    !safeName(proposal.owner) ||
-    !safeName(proposal.name) ||
-    proposal.visibility !== "private" ||
-    !safeBranch(proposal.baseBranch) ||
-    !isObjectId(proposal.baseSha) ||
-    !isObjectId(proposal.baseTree) ||
-    !isDigest(proposal.repositoryObservationDigest) ||
-    proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    typeof proposal.releaseGate.configured !== "boolean" ||
-    !isDigest(proposal.reviewDigest) ||
-    !isDigest(proposal.changeSetDigest) ||
-    !isDigest(proposal.changedContentDigest) ||
-    JSON.stringify(canonicalPaths(proposal.approvedPaths)) !==
-      JSON.stringify(proposal.approvedPaths) ||
-    !safeBranch(proposal.branchName) ||
-    !proposal.draft ||
-    !safeTitle(proposal.title) ||
-    proposal.idempotencyKey !== idempotencyKey ||
-    proposal.branchName !== `app-builder/review-${idempotencyKey.slice(0, 20)}` ||
-    proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
-  ) {
+  if (!validDraftProposalBindings(proposal, idempotencyKey)) {
     throw new Error("The draft pull-request proposal is malformed.");
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function validDraftProposalBindings(
+  proposal: DraftPullRequestProposal,
+  idempotencyKey: string,
+): boolean {
+  const repositoryValid =
+    isDecimal(proposal.repositoryId) &&
+    safeName(proposal.owner) &&
+    safeName(proposal.name) &&
+    proposal.visibility === "private";
+  const baseValid =
+    safeBranch(proposal.baseBranch) &&
+    isObjectId(proposal.baseSha) &&
+    isObjectId(proposal.baseTree) &&
+    isDigest(proposal.repositoryObservationDigest);
+  const reviewValid =
+    isDigest(proposal.reviewDigest) &&
+    isDigest(proposal.changeSetDigest) &&
+    isDigest(proposal.changedContentDigest);
+  const pathsValid =
+    JSON.stringify(canonicalPaths(proposal.approvedPaths)) ===
+    JSON.stringify(proposal.approvedPaths);
+  const branchValid =
+    safeBranch(proposal.branchName) &&
+    proposal.branchName === `app-builder/review-${idempotencyKey.slice(0, 20)}`;
+  return (
+    proposal.version === GITHUB_PUBLICATION_VERSION &&
+    repositoryValid &&
+    baseValid &&
+    proposal.releaseGate.name === REPOSITORY_RELEASE_GATE &&
+    (proposal.releaseGate.configured || !proposal.releaseGate.configured) &&
+    reviewValid &&
+    pathsValid &&
+    branchValid &&
+    proposal.draft &&
+    safeTitle(proposal.title) &&
+    proposal.idempotencyKey === idempotencyKey &&
+    proposal.intendedOutcome === "publish-reviewed-change-set-as-draft-pull-request"
+  );
+}
+
 function assertFreshReadBack(
   readBack: FreshRepositoryReadBack,
   proposal: FreshRepositoryProposal,
@@ -1610,7 +1640,6 @@ function assertFreshReadBack(
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertDraftReadBack(
   readBack: DraftPublicationReadBack,
   proposal: DraftPullRequestProposal,
@@ -1718,125 +1747,145 @@ function assertDraftReadBack(
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function receipt<T extends Omit<GitHubMutationReceipt, "digest">>(
   value: T,
 ): T & { digest: string } {
   return { ...value, digest: digest(value) };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceipt): void {
-  const common = [
-    "version",
-    "kind",
-    "status",
-    "proposalDigest",
-    "idempotencyKey",
-    "approvedByCallId",
-  ];
-  let extra: string[];
+const mutationReceiptKeys = {
+  common: ["version", "kind", "status", "proposalDigest", "idempotencyKey", "approvedByCallId"],
+  draft: [
+    "installationIdentityDigest",
+    "repositoryId",
+    "branchName",
+    "branchSha",
+    "branchTree",
+    "pullRequestId",
+    "pullRequestNumber",
+    "draft",
+    "baseBranch",
+    "baseSha",
+    "changeSetDigest",
+    "changedContentDigest",
+    "normalizedChangedPaths",
+    "releaseGateUnchanged",
+    "recoveredFromPending",
+    "providerReadBackDigest",
+  ],
+  fresh: [
+    "installationIdentityDigest",
+    "repository",
+    "initialCommitSha",
+    "initialCommitTree",
+    "parentCount",
+    "freshHistory",
+    "releaseGateAbsent",
+    "recoveredFromPending",
+    "providerReadBackDigest",
+  ],
+} as const;
+
+const expectedMutationReceiptKeys = (value: GitHubMutationReceipt): readonly string[] => {
   if (value.status === "pending") {
-    extra = [];
-  } else if (value.status === "failed") {
-    extra = ["failureCode", "providerCode", "recoveryRequired"];
-  } else if (value.kind === "fresh-repository") {
-    extra = [
-      "installationIdentityDigest",
-      "repository",
-      "initialCommitSha",
-      "initialCommitTree",
-      "parentCount",
-      "freshHistory",
-      "releaseGateAbsent",
-      "recoveredFromPending",
-      "providerReadBackDigest",
-    ];
-  } else {
-    extra = [
-      "installationIdentityDigest",
-      "repositoryId",
-      "branchName",
-      "branchSha",
-      "branchTree",
-      "pullRequestId",
-      "pullRequestNumber",
-      "draft",
-      "baseBranch",
-      "baseSha",
-      "changeSetDigest",
-      "changedContentDigest",
-      "normalizedChangedPaths",
-      "releaseGateUnchanged",
-      "recoveredFromPending",
-      "providerReadBackDigest",
+    return [...mutationReceiptKeys.common, "digest"];
+  }
+  if (value.status === "failed") {
+    return [
+      ...mutationReceiptKeys.common,
+      "failureCode",
+      "providerCode",
+      "recoveryRequired",
+      "digest",
     ];
   }
-  if (!exactKeys(value, [...common, ...extra, "digest"])) {
+  const variant =
+    value.kind === "fresh-repository" ? mutationReceiptKeys.fresh : mutationReceiptKeys.draft;
+  return [...mutationReceiptKeys.common, ...variant, "digest"];
+};
+
+export const assertCanonicalGitHubMutationReceipt = (value: GitHubMutationReceipt): void => {
+  if (!exactKeys(value, expectedMutationReceiptKeys(value))) {
     throw new Error("GitHub mutation receipt schema is not closed.");
   }
   exactDigest(value, "GitHub mutation receipt");
-  if (
-    value.version !== GITHUB_PUBLICATION_VERSION ||
-    !isDigest(value.proposalDigest) ||
-    !isDigest(value.idempotencyKey) ||
-    typeof value.approvedByCallId !== "string" ||
-    value.approvedByCallId.length === 0 ||
-    (value.kind !== "fresh-repository" && value.kind !== "draft-pull-request")
-  ) {
+  if (!validMutationReceiptHeader(value)) {
     throw new Error("GitHub mutation receipt bindings are invalid.");
   }
   if (value.status === "failed") {
     if (
-      (value.failureCode !== "provider-rejected" && value.failureCode !== "postcondition-failed") ||
+      !isMutationFailureCode(value.failureCode) ||
       !/^[a-z][a-z0-9-]{0,63}$/u.test(value.providerCode) ||
       !value.recoveryRequired
     ) {
       throw new Error("GitHub failure receipt is invalid.");
     }
   } else if (value.status === "succeeded") {
-    if (
-      !isDigest(value.providerReadBackDigest) ||
-      !isDigest(value.installationIdentityDigest) ||
-      (value.kind === "fresh-repository" ? !value.releaseGateAbsent : !value.releaseGateUnchanged)
-    ) {
+    if (!validMutationReadBack(value)) {
       throw new Error("GitHub success receipt read-back binding is invalid.");
     }
     if (value.kind === "fresh-repository") {
       assertExactRepositoryObservation(value.repository);
-      if (
-        value.installationIdentityDigest !== value.repository.installationIdentityDigest ||
-        value.parentCount !== 0 ||
-        !value.freshHistory ||
-        value.initialCommitSha !== value.repository.headSha ||
-        value.initialCommitTree !== value.repository.headTree
-      ) {
+      if (!validFreshSuccessReceipt(value)) {
         throw new Error("Fresh repository success receipt is invalid.");
       }
-    } else if (
-      !isDecimal(value.repositoryId) ||
-      !safeBranch(value.branchName) ||
-      !isObjectId(value.branchSha) ||
-      !isObjectId(value.branchTree) ||
-      !isDecimal(value.pullRequestId) ||
-      !Number.isSafeInteger(value.pullRequestNumber) ||
-      value.pullRequestNumber < 1 ||
-      !value.draft ||
-      !safeBranch(value.baseBranch) ||
-      !isObjectId(value.baseSha) ||
-      !isDigest(value.changeSetDigest) ||
-      !isDigest(value.changedContentDigest) ||
-      JSON.stringify(canonicalPaths(value.normalizedChangedPaths)) !==
-        JSON.stringify(value.normalizedChangedPaths)
-    ) {
+    } else if (!validDraftSuccessReceipt(value)) {
       throw new Error("Draft pull-request success receipt is invalid.");
     }
   } else if (value.status !== "pending") {
     throw new Error("GitHub mutation receipt status is invalid.");
   }
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function validMutationReceiptHeader(value: GitHubMutationReceipt): boolean {
+  return (
+    value.version === GITHUB_PUBLICATION_VERSION &&
+    isDigest(value.proposalDigest) &&
+    isDigest(value.idempotencyKey) &&
+    value.approvedByCallId.length > 0
+  );
+}
+function isMutationFailureCode(value: string): boolean {
+  return value === "provider-rejected" || value === "postcondition-failed";
+}
+function validMutationReadBack(value: GitHubMutationReceipt): boolean {
+  if (value.status !== "succeeded") {
+    return false;
+  }
+  if (!isDigest(value.providerReadBackDigest) || !isDigest(value.installationIdentityDigest)) {
+    return false;
+  }
+  return value.kind === "fresh-repository" ? value.releaseGateAbsent : value.releaseGateUnchanged;
+}
+function validFreshSuccessReceipt(value: FreshRepositorySuccessReceipt): boolean {
+  return (
+    value.installationIdentityDigest === value.repository.installationIdentityDigest &&
+    value.parentCount === 0 &&
+    value.freshHistory &&
+    value.initialCommitSha === value.repository.headSha &&
+    value.initialCommitTree === value.repository.headTree
+  );
+}
+const validDraftSuccessReceipt = (value: DraftPullRequestSuccessReceipt): boolean => {
+  const identityValid =
+    isDecimal(value.repositoryId) &&
+    isDecimal(value.pullRequestId) &&
+    Number.isSafeInteger(value.pullRequestNumber) &&
+    value.pullRequestNumber >= 1;
+  const refsValid =
+    safeBranch(value.branchName) &&
+    safeBranch(value.baseBranch) &&
+    isObjectId(value.branchSha) &&
+    isObjectId(value.branchTree) &&
+    isObjectId(value.baseSha);
+  const reviewValid =
+    isDigest(value.changeSetDigest) &&
+    isDigest(value.changedContentDigest) &&
+    JSON.stringify(canonicalPaths(value.normalizedChangedPaths)) ===
+      JSON.stringify(value.normalizedChangedPaths);
+  return identityValid && refsValid && value.draft && reviewValid;
+};
+
 async function readJournal(
   store: GitHubPublicationReceiptStore,
   proposal: { digest: string; idempotencyKey: string },
@@ -1857,7 +1906,6 @@ async function readJournal(
   return value;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function claimPending(input: {
   store: GitHubPublicationReceiptStore;
   kind: MutationKind;
@@ -1879,7 +1927,6 @@ async function claimPending(input: {
   return pending;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function storeTerminal(
   store: GitHubPublicationReceiptStore,
   pending: GitHubMutationPendingReceipt,
@@ -1891,7 +1938,6 @@ async function storeTerminal(
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshSuccess(input: {
   proposal: FreshRepositoryProposal;
   pending: GitHubMutationPendingReceipt;
@@ -1918,7 +1964,6 @@ function freshSuccess(input: {
   });
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function draftSuccess(input: {
   proposal: DraftPullRequestProposal;
   pending: GitHubMutationPendingReceipt;
@@ -1959,7 +2004,6 @@ function draftSuccess(input: {
 }
 
 /** Settle a retained pending publication only from its exact existing branch and draft PR. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function reconcilePendingDraftPullRequest(input: {
   adapter: Pick<GitHubPublicationAdapter, "inspectDraftPublication">;
   pending: GitHubMutationPendingReceipt;
@@ -1990,7 +2034,6 @@ export async function reconcilePendingDraftPullRequest(input: {
   return success;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function rejectionReceipt(
   kind: MutationKind,
   pending: GitHubMutationPendingReceipt,
@@ -2010,19 +2053,12 @@ function rejectionReceipt(
   });
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function reclaimRejectedDraftPending(
+const reclaimRejectedDraftPending = async (
   store: GitHubPublicationReceiptStore,
   failed: GitHubMutationFailureReceipt,
   approvedByCallId: string,
-): Promise<GitHubMutationPendingReceipt> {
-  if (
-    failed.kind !== "draft-pull-request" ||
-    failed.failureCode !== "provider-rejected" ||
-    (failed.providerCode !== "invalid-publication-material" &&
-      failed.providerCode !== "reviewed-path-changed") ||
-    approvedByCallId === failed.approvedByCallId
-  ) {
+): Promise<GitHubMutationPendingReceipt> => {
+  if (!canReclaimRejectedDraft(failed, approvedByCallId)) {
     throw new Error("The rejected draft publication requires a new approved recovery call.");
   }
   const pending = receipt({
@@ -2037,6 +2073,16 @@ async function reclaimRejectedDraftPending(
     throw new Error("The GitHub journal changed during approved recovery.");
   }
   return pending;
+};
+
+function canReclaimRejectedDraft(failed: GitHubMutationFailureReceipt, callId: string): boolean {
+  return (
+    failed.kind === "draft-pull-request" &&
+    failed.failureCode === "provider-rejected" &&
+    (failed.providerCode === "invalid-publication-material" ||
+      failed.providerCode === "reviewed-path-changed") &&
+    callId !== failed.approvedByCallId
+  );
 }
 
 const publicationRejectionMessage = (
@@ -2058,7 +2104,6 @@ const publicationRejectionMessage = (
   return `GitHub rejected draft pull-request publication with ${acknowledgement.code}; sanitized receipt recorded.`;
 };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function createApprovedFreshRepository(input: {
   adapter: GitHubPublicationAdapter;
   store: GitHubPublicationReceiptStore;
@@ -2165,15 +2210,14 @@ export async function createApprovedFreshRepository(input: {
   return success;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function publishApprovedDraftPullRequest(input: {
+export const publishApprovedDraftPullRequest = async (input: {
   adapter: GitHubPublicationAdapter;
   store: GitHubPublicationReceiptStore;
   proposal: DraftPullRequestProposal;
   review: ReviewedChangeSetReceipt;
   contentSource: GitHubDraftPullRequestContentSource;
   approvedByCallId: string;
-}): Promise<DraftPullRequestSuccessReceipt> {
+}): Promise<DraftPullRequestSuccessReceipt> => {
   assertExactDraftPullRequestProposal(input.proposal);
   reviewForProposal(input.proposal, input.review);
   const prior = await readJournal(input.store, input.proposal, "draft-pull-request");
@@ -2183,12 +2227,7 @@ export async function publishApprovedDraftPullRequest(input: {
     }
     return prior;
   }
-  if (
-    prior?.status === "failed" &&
-    (prior.failureCode !== "provider-rejected" ||
-      (prior.providerCode !== "invalid-publication-material" &&
-        prior.providerCode !== "reviewed-path-changed"))
-  ) {
+  if (prior?.status === "failed" && !canReclaimRejectedDraft(prior, input.approvedByCallId)) {
     throw new Error(
       `The failed GitHub mutation (${prior.providerCode}) requires explicit recovery. Inspect its provider result before another publication attempt.`,
     );
@@ -2293,4 +2332,4 @@ export async function publishApprovedDraftPullRequest(input: {
   }
   await storeTerminal(input.store, pending, success);
   return success;
-}
+};

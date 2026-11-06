@@ -21,8 +21,30 @@ export interface Observation {
 export const evaluatorVersion = 3;
 export const dimensions: Dimension[] = ["component", "api", "styling"];
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function scoreAdherence(
+const scoreDimension = function scoreDimension(unique: Observation[], dimension: Dimension) {
+  const rows = unique.filter((o) => o.dimension === dimension && o.provenance !== "shared");
+  const conforming = rows.filter(
+    (o) => o.verdict === "conforming" && o.provenance === "generated",
+  ).length;
+  const nonconforming = rows.filter(
+    (o) => o.verdict === "nonconforming" && o.provenance === "generated",
+  ).length;
+  const assessed = conforming + nonconforming;
+  const unassessed = rows.length - assessed;
+  return {
+    assessed,
+    browserCount: rows.filter((o) => o.evidence === "browser").length,
+    conforming,
+    coveragePercent: rows.length ? (100 * assessed) / rows.length : null,
+    nonconforming,
+    percent: assessed ? (100 * conforming) / assessed : null,
+    staticCount: rows.filter((o) => o.evidence === "static").length,
+    total: rows.length,
+    unassessed,
+  };
+};
+
+export const scoreAdherence = function scoreAdherence(
   observations: Observation[],
   limitations: string[] = [],
   sourceAvailable = true,
@@ -30,46 +52,11 @@ export function scoreAdherence(
   // Shared-library styles describe the foundation, not authored app compliance.
   // Never deduce conformity from unknown provenance or duplicated observations.
   const unique = [...new Map(observations.map((o) => [o.id, o])).values()];
-  const scores = Object.fromEntries(
-    dimensions.map((dimension) => {
-      const rows = unique.filter((o) => o.dimension === dimension && o.provenance !== "shared");
-      const conforming = rows.filter(
-        (o) => o.verdict === "conforming" && o.provenance === "generated",
-      ).length;
-      const nonconforming = rows.filter(
-        (o) => o.verdict === "nonconforming" && o.provenance === "generated",
-      ).length;
-      const assessed = conforming + nonconforming;
-      const unassessed = rows.length - assessed;
-      return [
-        dimension,
-        {
-          assessed,
-          browserCount: rows.filter((o) => o.evidence === "browser").length,
-          conforming,
-          coveragePercent: rows.length ? (100 * assessed) / rows.length : null,
-          nonconforming,
-          percent: assessed ? (100 * conforming) / assessed : null,
-          staticCount: rows.filter((o) => o.evidence === "static").length,
-          total: rows.length,
-          unassessed,
-        },
-      ];
-    }),
-  ) as Record<
-    Dimension,
-    {
-      conforming: number;
-      nonconforming: number;
-      unassessed: number;
-      assessed: number;
-      total: number;
-      percent: number | null;
-      coveragePercent: number | null;
-      staticCount: number;
-      browserCount: number;
-    }
-  >;
+  const scores = {
+    api: scoreDimension(unique, "api"),
+    component: scoreDimension(unique, "component"),
+    styling: scoreDimension(unique, "styling"),
+  };
   const available = Object.values(scores).filter(
     (d): d is typeof d & { percent: number } => d.percent !== null,
   );
@@ -101,5 +88,5 @@ export function scoreAdherence(
     status,
     version: evaluatorVersion,
   };
-}
+};
 export type Adherence = ReturnType<typeof scoreAdherence>;

@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await, typescript/no-non-null-assertion, anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Synthetic SDK fixtures expose only the proposal methods exercised here; all non-null file reads follow asserted successful proposal creation. */
 import { describe, expect, it, vi } from "vitest";
 import { createHostedOperatorAuthProposal } from "./hosted-operator-auth-proposal";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
@@ -32,8 +31,10 @@ const fixture = (existing = true) => {
     resource,
     schemaPlan: { planDigest: "b".repeat(64), targetDigest: "c".repeat(64) },
     version: 1,
-    ...(existing ? {} : { proposal: "new-empty" }),
   };
+  if (!existing) {
+    frame.proposal = "new-empty";
+  }
   const sandbox = {
     delete: vi.fn(async () => {}),
     runCommand: vi.fn(async ({ cmd }: { cmd: string }) => ({

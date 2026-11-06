@@ -9,7 +9,6 @@ import {
   publicReleaseOperationRef,
 } from "./public-release-contract";
 import { plan as publicPlanFixture } from "./public-release-test-fixture";
-/* oxlint-disable eslint/require-await, eslint/no-await-in-loop -- Synthetic typed private ports run sequentially against one actual in-memory journal. */
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
@@ -181,7 +180,6 @@ const fixture = () => {
   const store: HostedRuntimeJournalStore = {
     async compareAndSet(input) {
       if (row?.revision !== input.expectedRevision) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS failure is the explicit optional-row return contract.
         return undefined;
       }
       row = {
@@ -210,7 +208,6 @@ const fixture = () => {
     },
     async reserveFenceGeneration(input) {
       if (row === undefined) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- The journal CAS reports no allocated row.
         return undefined;
       }
       if (
@@ -219,7 +216,6 @@ const fixture = () => {
         row.record.operator?.operationRef !== input.operationRef ||
         row.record.operator.fenceGeneration !== undefined
       ) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS must not allocate a generation.
         return undefined;
       }
       nextFenceGeneration += 1;
@@ -390,30 +386,29 @@ const boundFixture = async (normal = true) => {
   const request = await prepared(f);
   f.approve();
   await f.client.request(request);
-  const selectedPlan = hostedOperatorPlanSchema.parse({
+  const selectedPlanInput = {
     ...plan,
     access: [],
-    stage: "app",
-    ...(normal
-      ? {
-          normalActorPreparation: {
-            accountApprovalId: "account-approval",
-            accountApprovedByCallId: "account-call",
-            accountOperationRef: "11111111-1111-4111-8111-111111111111",
-            accountPlanDigest: "d".repeat(64),
-            programDigest: normalActorProgramDigest(normalProgram),
-          },
-          normalActorProgram: normalProgram,
-        }
-      : {}),
     delivery: { branch: selection.branch, projectId: selection.projectId, repoId: "repo-app" },
-    gatewayDelivery: { branch: selection.branch, projectId: "prj_gateway", repoId: "repo-gateway" },
     effects: [
       ...plan.effects,
       { description: "App delivery", id: "delivery", kind: "delivery" },
       { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
-  });
+    gatewayDelivery: { branch: selection.branch, projectId: "prj_gateway", repoId: "repo-gateway" },
+    stage: "app",
+  };
+  if (normal) {
+    selectedPlanInput.normalActorPreparation = {
+      accountApprovalId: "account-approval",
+      accountApprovedByCallId: "account-call",
+      accountOperationRef: "11111111-1111-4111-8111-111111111111",
+      accountPlanDigest: "d".repeat(64),
+      programDigest: normalActorProgramDigest(normalProgram),
+    };
+    selectedPlanInput.normalActorProgram = normalProgram;
+  }
+  const selectedPlan = hostedOperatorPlanSchema.parse(selectedPlanInput);
   if (f.row?.record.operator === undefined) {
     throw new Error("Missing prepared journal");
   }
@@ -481,7 +476,6 @@ describe("private normal actor bindings producer", () => {
         delete f.deps.normalActorRuntimeBindings;
       }
       if (failure === "missing result") {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- This optional private port returns unavailable when no actual normal sessions exist.
         f.deps.normalActorRuntimeBindings = async () => undefined;
       }
       if (failure === "missing native preview" && f.base.row?.record.operator !== undefined) {
@@ -725,7 +719,6 @@ describe("normal public application runtime handoff", () => {
     expect(result.status).toBe("passed");
     expect(provider.runCommand).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest's documented asymmetric matcher is intentionally untyped.
         env: expect.objectContaining({
           APP_TEST_BASE_URL: normalProgram.origin,
           APP_TEST_ENTRY_PATH: "/actual-catalog-route",

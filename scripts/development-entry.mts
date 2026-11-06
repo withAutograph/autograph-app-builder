@@ -6,19 +6,17 @@ import { parseDevelopmentArguments } from "../lib/development/local-mode";
 
 const repositoryRoot = path.resolve(".");
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function privateRoot(root: string) {
   await mkdir(root, { mode: 0o700, recursive: true });
   const canonical = await realpath(root);
   const info = await lstat(canonical);
-  if (
-    canonical !== root ||
-    !info.isDirectory() ||
-    info.isSymbolicLink() ||
-    info.uid !== process.getuid?.() ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (info.mode & 0o077) !== 0
-  ) {
+  const modeIsPrivate = info.mode % 0o1000 < 0o100;
+  if (canonical !== root) {
+    throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${root}`);
+  }
+  const hasExpectedOwner = info.uid === process.getuid?.();
+  const isPrivateDirectory = info.isDirectory() && !info.isSymbolicLink() && modeIsPrivate;
+  if (!isPrivateDirectory || !hasExpectedOwner) {
     throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${root}`);
   }
   return canonical;

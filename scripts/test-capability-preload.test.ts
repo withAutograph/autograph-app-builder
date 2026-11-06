@@ -2,10 +2,10 @@ import { generateKeyPairSync } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import path from "node:path";
-import type { Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { z } from "zod";
 
 import { describe, expect, it } from "vitest";
 
@@ -28,28 +28,67 @@ const inspectionSource = `
 `;
 
 const fullCapabilities = ["mock-model", "simulated-target", "simulated-publication"];
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
+const capabilitySchema = z.object({
+  capabilities: z.array(z.string()),
+  id: z.string(),
+  version: z.number(),
+});
+const workerResultSchema = z.object({
+  appRoot: z.string().nullable(),
+  capability: capabilitySchema.nullable(),
+  evaluation: z.string().nullable(),
+  evaluationRunId: z.string().nullable(),
+  eveDev: z.string().nullable(),
+  hasGateAEnvironment: z.boolean(),
+  hasTransportSecret: z.boolean(),
+  nestedAppRoot: z.string().nullable(),
+  nestedCapability: capabilitySchema.nullable(),
+  nestedEveDev: z.string().nullable(),
+  nestedWorkflowBodyTimeout: z.string().nullable(),
+  nestedWorkflowHeadersTimeout: z.string().nullable(),
+  port: z.string().nullable(),
+  sandboxRunId: z.string().nullable(),
+  workflowBaseUrl: z.string().nullable(),
+  workflowBodyTimeout: z.string().nullable(),
+  workflowHeadersTimeout: z.string().nullable(),
+});
+const hostileWorkerResultSchema = z.object({
+  eveDev: z.union([z.string(), z.null(), z.undefined()]).transform((value) => value ?? null),
+});
+const inspectionSchema = z.object({
+  capability: capabilitySchema.nullable(),
+  nodeOptions: z.string().nullable(),
+});
+interface ActiveHandle {
+  constructor: { name: string };
+}
+const activeHandleSchema = z.object({ constructor: z.object({ name: z.string() }) });
+const activeHandlesSchema = z.array(activeHandleSchema);
+const getActiveHandles = () => {
+  const getterValue: unknown = Object.getOwnPropertyDescriptor(process, "_getActiveHandles")?.value;
+  return z.function({ input: [], output: activeHandlesSchema }).parse(getterValue)();
+};
+const isMessagePort = (handle: ActiveHandle) => handle.constructor.name === "MessagePort";
+
+const inspectAmbientPreload = (environment: NodeJS.ProcessEnv) => {
   const result = spawnSync(process.execPath, ["--input-type=module", "--eval", inspectionSource], {
     cwd: repositoryRoot,
     encoding: "utf-8",
     env: environment,
   });
   expect(result.status, result.stderr).toBe(0);
-  return JSON.parse(result.stdout) as {
-    capability: unknown;
-    nodeOptions: string | null;
-  };
-}
+  return inspectionSchema.parse(JSON.parse(result.stdout));
+};
 
 describe("test capability preload", () => {
   it("uses the actual trusted wrapper lineage for this Vitest worker", async () => {
-    const accessor = (process as unknown as Record<symbol, (() => unknown) | undefined>)[
-      Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")
-    ];
-    const capability = accessor?.() as
-      | { id: string; version: number; capabilities: string[] }
-      | undefined;
+    const registryKey = Symbol.for(
+      "withAutograph.autograph-app-builder.test-capability-registry.v2",
+    );
+    const accessorValue: unknown = Object.getOwnPropertyDescriptor(process, registryKey)?.value;
+    const accessorSchema = z.function({ input: [], output: capabilitySchema });
+    const accessor = accessorSchema.safeParse(accessorValue);
+    const capability = accessor.success ? accessor.data() : undefined;
     expect(capability).toMatchObject({
       capabilities: fullCapabilities,
       version: 1,
@@ -77,27 +116,8 @@ describe("test capability preload", () => {
       },
       workerData: { spawnNested: true },
     });
-    const [result] = (await once(worker, "message")) as [
-      {
-        capability: typeof capability;
-        appRoot: string | null;
-        eveDev: string | null;
-        nestedCapability: typeof capability;
-        nestedAppRoot: string | null;
-        nestedEveDev: string | null;
-        nestedWorkflowBodyTimeout: string | null;
-        nestedWorkflowHeadersTimeout: string | null;
-        workflowBaseUrl: string | null;
-        workflowBodyTimeout: string | null;
-        workflowHeadersTimeout: string | null;
-        port: string | null;
-        hasTransportSecret: boolean;
-        sandboxRunId: string | null;
-        evaluation: string | null;
-        evaluationRunId: string | null;
-        hasGateAEnvironment: boolean;
-      },
-    ];
+    const workerMessage = await once(worker, "message");
+    const result = workerResultSchema.parse(workerMessage[0]);
     await worker.terminate();
     expect(result.capability).toMatchObject({ version: 1 });
     expect(result.capability?.id).not.toBe(capability?.id);
@@ -121,24 +141,17 @@ describe("test capability preload", () => {
     for (const hostileEveDev of [undefined, "0", "hostile"]) {
       const environment = { ...process.env, EVE_DEV: hostileEveDev };
       const hostileWorker = new Worker(workerFixture, { env: environment });
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const [hostileResult] = (await once(hostileWorker, "message")) as [{ eveDev: string | null }];
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      const hostileMessage = await once(hostileWorker, "message");
+      const hostileResult = hostileWorkerResultSchema.parse(hostileMessage[0]);
       await hostileWorker.terminate();
       expect(hostileResult.eveDev).toBeNull();
     }
-    // Keep process-inspection helpers scoped to this preload fixture.
-    // oxlint-disable-next-line unicorn/consistent-function-scoping
-    const activeHandles = () =>
-      (process as unknown as { _getActiveHandles: () => readonly unknown[] })._getActiveHandles();
-    // oxlint-disable-next-line unicorn/consistent-function-scoping
-    const isMessagePort = (handle: unknown) =>
-      typeof handle === "object" && handle !== null && handle.constructor.name === "MessagePort";
-    const beforePorts = activeHandles().filter(isMessagePort).length;
+    const beforePorts = getActiveHandles().filter(isMessagePort).length;
     const timeoutWorker = new Worker(timeoutWorkerFixture, { execArgv: [] });
-    const [timeoutExit] = (await once(timeoutWorker, "exit")) as [number];
+    const timeoutExitEvent: unknown[] = await once(timeoutWorker, "exit");
+    const [timeoutExit] = timeoutExitEvent;
     await delay(25);
-    const afterPorts = activeHandles().filter(isMessagePort).length;
+    const afterPorts = getActiveHandles().filter(isMessagePort).length;
     expect(timeoutExit).not.toBe(0);
     expect(afterPorts).toBeLessThanOrEqual(beforePorts);
   }, 30_000);
@@ -173,7 +186,7 @@ describe("test capability preload", () => {
     const result = spawnSync(process.execPath, ["-e", source], {
       cwd: repositoryRoot,
       encoding: "utf-8",
-      env: { ...process.env, NODE_OPTIONS: undefined },
+      env: { ...process.env, NODE_OPTIONS: null },
     });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toBe("false");
@@ -208,13 +221,18 @@ describe("test capability preload", () => {
         env: { NODE_ENV: "test", PATH: "/usr/bin:/bin" },
         stdio: ["ignore", "pipe", "pipe", "pipe"],
       });
-      const authorization = child.stdio[3] as Duplex;
+      const authorization = child.stdio.at(3);
+      if (!authorization || !("write" in authorization)) {
+        throw new TypeError("Child authorization pipe was not created");
+      }
       const authorizationErrors: string[] = [];
       authorization.on("error", (error: NodeJS.ErrnoException) => {
         authorizationErrors.push(error.code ?? error.message);
       });
       const authorizationClosed = Promise.withResolvers<undefined>();
-      authorization.once("close", authorizationClosed.resolve);
+      authorization.once("close", () => {
+        authorizationClosed.resolve();
+      });
       authorization.end(
         `${JSON.stringify({
           publicKey: attackerPublicKey,
@@ -223,12 +241,15 @@ describe("test capability preload", () => {
       );
       let stdout = "";
       let stderr = "";
-      child.stdout?.setEncoding("utf-8").on("data", (chunk) => (stdout += chunk));
-      child.stderr?.setEncoding("utf-8").on("data", (chunk) => (stderr += chunk));
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const [status] = (await once(child, "exit")) as [number | null];
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await authorizationClosed;
+      child.stdout?.setEncoding("utf-8").on("data", (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr?.setEncoding("utf-8").on("data", (chunk) => {
+        stderr += chunk;
+      });
+      const childExit: unknown[] = await once(child, "exit");
+      const [status] = childExit;
+      await authorizationClosed.promise;
       expect(status, stderr).toBe(0);
       expect(stdout).toBe("false");
       expect(authorizationErrors.every((code) => ["ECONNRESET", "EPIPE"].includes(code))).toBe(

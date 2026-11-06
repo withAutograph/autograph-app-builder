@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await, unicorn/no-useless-undefined, typescript/consistent-return -- In-memory CAS is asynchronous and returns undefined for a real lost conditional write. */
 import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
@@ -371,17 +370,17 @@ const captureFixture = async () => {
   const request = (
     phase: "authorize" | "capture",
     extra: Record<string, z.infer<ReturnType<typeof z.json>>> = {},
-  ) =>
-    new Request(`https://builder.example.test${NORMAL_ACTOR_CAPTURE_PATH}`, {
-      body: JSON.stringify({
-        ...body,
-        phase,
-        ...(phase === "capture" ? { normalCookie } : {}),
-        ...extra,
-      }),
+  ) => {
+    const requestBody = { ...body, phase, ...extra };
+    if (phase === "capture") {
+      Object.assign(requestBody, { normalCookie });
+    }
+    return new Request(`https://builder.example.test${NORMAL_ACTOR_CAPTURE_PATH}`, {
+      body: JSON.stringify(requestBody),
       headers: { authorization: "Bearer signed.oidc.token", "content-type": "application/json" },
       method: "POST",
     });
+  };
   return {
     consume() {
       pendingConsumed = true;

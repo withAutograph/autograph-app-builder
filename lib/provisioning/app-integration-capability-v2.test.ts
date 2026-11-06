@@ -14,8 +14,8 @@ it("preserves legacy intent bytes and acquires no destination state", () => {
     canonicalAppIntegrationCapabilityPlanBytes(legacy),
   );
   expect(
-    initialAppIntegrationCapabilityRecord(parsed).effects["prepare-provider-destination"],
-  ).toBeUndefined();
+    "prepare-provider-destination" in initialAppIntegrationCapabilityRecord(parsed).effects,
+  ).toBe(false);
   expect(
     appIntegrationCapabilityPlanSchema.safeParse({
       ...legacy,
@@ -35,8 +35,7 @@ it("freezes the actual resource worker and installed app ingress in new consent"
     }),
   ).not.toBe(appIntegrationCapabilityPlanDigest(plan));
   expect(
-    appIntegrationCapabilityPlanSchema.safeParse({ ...candidate(), resourceWorker: undefined })
-      .success,
+    appIntegrationCapabilityPlanSchema.safeParse({ ...candidate(), resourceWorker: null }).success,
   ).toBe(false);
   expect(
     appIntegrationCapabilityPlanSchema.safeParse({ ...candidate(), machineIngress: [] }).success,

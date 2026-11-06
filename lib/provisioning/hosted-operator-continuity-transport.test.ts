@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await -- Controlled asynchronous ports exercise the real service, dispatcher and client without providers. */
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { createLocalJWKSet, SignJWT } from "jose";
@@ -237,39 +236,50 @@ const setup = () => {
     expect(binding.token()).not.toBe("changed-after-verification");
   };
   const dependencies: HostedContinuityDependencies = {
-    store: {
-      async compareAndSet(input) {
-        if (record?.revision !== input.expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing rows and CAS conflicts are explicit optional store results.
-          return undefined;
+    assertOwner,
+    async assertSetup(ctx, plan) {
+      await assertOwner(ctx);
+      if (
+        !originalApproved ||
+        !isDeepStrictEqual(plan.preparedPlan.release, preparedPlan.release) ||
+        plan.originalSetup.approvalId !== "original-approved"
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+    },
+    projection: {
+      async publish(ctx, current, _capabilities, assertCurrent, checkpoint) {
+        await assertOwner(ctx);
+        await assertCurrent();
+        if (!live || current.current?.state !== "ready") {
+          throw new Error("Published without owned ready runtime");
         }
-        record = continuityRecordSchema.parse(input.record);
-        snapshots.push(read());
-        return read();
+        stats.publishes += 1;
+        await checkpoint({ deliveryAttempted: true });
       },
-      async read(input) {
-        stats.storeReads += 1;
-        if (
-          record === undefined ||
-          record.requestId !== input.intentId ||
-          !isDeepStrictEqual(record.plan.authority, input.authority)
-        ) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing rows and CAS conflicts are explicit optional store results.
-          return undefined;
+      async revoke(ctx, _current, assertCurrent, checkpoint) {
+        await assertOwner(ctx);
+        await assertCurrent();
+        if (live) {
+          throw new Error("Revoked before owned runtime closed");
         }
-        return read();
-      },
-      async reserve(input) {
-        if (record !== undefined) {
-          throw new Error("Duplicate controlled reserve");
-        }
-        stats.reservations += 1;
-        record = continuityRecordSchema.parse(input.record);
-        snapshots.push(read());
-        return read();
+        stats.revokes += 1;
+        await checkpoint([]);
       },
     },
-    assertOwner,
+    async readApproval(ctx, request, callId) {
+      await assertOwner(ctx);
+      if (!approved) {
+        return null;
+      }
+      const receipt = {
+        ...request,
+        approvalId: "continuity-approved",
+        approvedByCallId: callId ?? "approval-call",
+      };
+      receipts.set(request.planDigest, receipt);
+      return receipt;
+    },
     async resolvePlan(ctx, runtime) {
       await assertOwner(ctx);
       expect(runtime).toEqual(logicalRuntime);
@@ -296,45 +306,7 @@ const setup = () => {
         version: 1,
       };
     },
-    async assertSetup(ctx, plan) {
-      await assertOwner(ctx);
-      if (
-        !originalApproved ||
-        !isDeepStrictEqual(plan.preparedPlan.release, preparedPlan.release) ||
-        plan.originalSetup.approvalId !== "original-approved"
-      ) {
-        throw new HostedOperatorError("authorization_required");
-      }
-    },
-    async readApproval(ctx, request, callId) {
-      await assertOwner(ctx);
-      if (!approved) {
-        return null;
-      }
-      const receipt = {
-        ...request,
-        approvalId: "continuity-approved",
-        approvedByCallId: callId ?? "approval-call",
-      };
-      receipts.set(request.planDigest, receipt);
-      return receipt;
-    },
     ...custody,
-    async withResourceLease(input, run) {
-      if (held) {
-        throw new HostedOperatorError("operation_in_progress");
-      }
-      held = true;
-      try {
-        await input.initializeUnderLock?.();
-        const fence = await input.readCurrentFence();
-        return await run(async () => {
-          expect(await input.readCurrentFence()).toEqual(fence);
-        });
-      } finally {
-        held = false;
-      }
-    },
     runtime: {
       async close(ctx) {
         await assertOwner(ctx);
@@ -417,25 +389,50 @@ const setup = () => {
         });
       },
     },
-    projection: {
-      async publish(ctx, current, _capabilities, assertCurrent, checkpoint) {
-        await assertOwner(ctx);
-        await assertCurrent();
-        if (!live || current.current?.state !== "ready") {
-          throw new Error("Published without owned ready runtime");
+    store: {
+      async compareAndSet(input) {
+        if (record?.revision !== input.expectedRevision) {
+          return undefined;
         }
-        stats.publishes += 1;
-        await checkpoint({ deliveryAttempted: true });
+        record = continuityRecordSchema.parse(input.record);
+        snapshots.push(read());
+        return read();
       },
-      async revoke(ctx, _current, assertCurrent, checkpoint) {
-        await assertOwner(ctx);
-        await assertCurrent();
-        if (live) {
-          throw new Error("Revoked before owned runtime closed");
+      async read(input) {
+        stats.storeReads += 1;
+        if (
+          record === undefined ||
+          record.requestId !== input.intentId ||
+          !isDeepStrictEqual(record.plan.authority, input.authority)
+        ) {
+          return undefined;
         }
-        stats.revokes += 1;
-        await checkpoint([]);
+        return read();
       },
+      async reserve(input) {
+        if (record !== undefined) {
+          throw new Error("Duplicate controlled reserve");
+        }
+        stats.reservations += 1;
+        record = continuityRecordSchema.parse(input.record);
+        snapshots.push(read());
+        return read();
+      },
+    },
+    async withResourceLease(input, run) {
+      if (held) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      held = true;
+      try {
+        await input.initializeUnderLock?.();
+        const fence = await input.readCurrentFence();
+        return await run(async () => {
+          expect(await input.readCurrentFence()).toEqual(fence);
+        });
+      } finally {
+        held = false;
+      }
     },
   };
   const operations = createHostedContinuityOperations(dependencies);

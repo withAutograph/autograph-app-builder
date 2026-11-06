@@ -41,7 +41,7 @@ const fixture = (initial: GitHubPrDeliveryObservation, onClaim?: () => void) => 
   const rows = new Map<string, GitHubPrEffectReceipt>();
   const store = {
     compareAndSet: vi.fn(
-      async (key: string, expected: string | undefined, receipt: GitHubPrEffectReceipt) => {
+      (key: string, expected: string | undefined, receipt: GitHubPrEffectReceipt) => {
         if (rows.get(key)?.digest !== expected) {
           return false;
         }
@@ -52,25 +52,29 @@ const fixture = (initial: GitHubPrDeliveryObservation, onClaim?: () => void) => 
         return true;
       },
     ),
-    read: vi.fn(async (key: string) => rows.get(key)),
+    read: vi.fn((key: string) => rows.get(key)),
   };
   const provider = {
-    inspect: vi.fn(async () => initial),
-    markReady: vi.fn(async () => ready),
-    merge: vi.fn(async () => merged),
+    inspect: vi.fn(() => initial),
+    markReady: vi.fn(() => ready),
+    merge: vi.fn(() => merged),
   };
   const execute = async (
     intent: GitHubPrEffectIntent,
     approvedByCallId = "original-approval",
     abortSignal?: AbortSignal,
-  ) =>
-    await executeApprovedGitHubPrEffect({
-      ...(abortSignal === undefined ? {} : { abortSignal }),
+  ) => {
+    const options = {
       approvedByCallId,
       intent,
       provider,
       store,
-    });
+    };
+    if (abortSignal !== undefined) {
+      Object.assign(options, { abortSignal });
+    }
+    return await executeApprovedGitHubPrEffect(options);
+  };
   const reconcile = async (intent: GitHubPrEffectIntent) =>
     await reconcileApprovedGitHubPrEffect({
       approvedByCallId: "recovery-call",
@@ -104,7 +108,7 @@ it("uses the original ready journal to confirm a lost response without a second 
 
 it("claims a single pending intent before concurrent ready calls can write", async () => {
   const { execute, provider, rows } = fixture(draft);
-  provider.markReady.mockImplementation(async () => {
+  provider.markReady.mockImplementation(() => {
     expect([...rows.values()]).toMatchObject([{ status: "pending" }]);
     return ready;
   });
@@ -136,7 +140,7 @@ it("reconciles a lost merge response by readback and preserves the original appr
 it("aborts without reserving an effect when cancellation arrives during inspection", async () => {
   const { execute, provider, store } = fixture(passed);
   const controller = new AbortController();
-  provider.inspect.mockImplementationOnce(async () => {
+  provider.inspect.mockImplementationOnce(() => {
     controller.abort();
     return passed;
   });

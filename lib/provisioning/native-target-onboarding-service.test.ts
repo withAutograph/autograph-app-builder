@@ -106,6 +106,25 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
     subcommand: "protected-generated-app-install",
   },
 });
+const rescopePlan = (prior: typeof plan, profile: string) => {
+  const nextRevision = (prior.resourceSelectionRevision ?? 0) + 1;
+  return nativeTargetOnboardingPlanSchema.parse({
+    ...prior,
+    appDatabase: { ...prior.appDatabase, resourceId: `${profile}-resource` },
+    nativeNeon: {
+      ...prior.nativeNeon,
+      scope: {
+        ...prior.nativeNeon.scope,
+        branchId: `${profile}-branch`,
+        endpointId: `${profile}-endpoint`,
+        hostname: `${profile}.neon.tech`,
+      },
+    },
+    resourceProfileAuthorityDigest: (profile === "scope-b" ? "e" : "f").repeat(64),
+    resourceProfileId: profile,
+    resourceSelectionRevision: nextRevision,
+  });
+};
 const request = () =>
   new Request("https://operator.example/v1/runtime", {
     headers: { authorization: "Bearer verified-builder-token" },
@@ -119,7 +138,10 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
   let existingConfiguredTarget = false;
   let currentOwner = structuredClone(current);
   const events: string[] = [];
-  const authorize = vi.fn(async () => structuredClone(currentOwner));
+  const authorize = vi.fn(async () => {
+    await Promise.resolve();
+    return structuredClone(currentOwner);
+  });
   const createProject = vi.fn(
     async (input: {
       authorizeAttempt: () => Promise<void>;
@@ -144,12 +166,16 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
   const dependencies: NativeTargetOnboardingServiceDependencies = {
     authorize,
     createProject,
-    observeProject: async () => ({
-      projectId: "project-id",
-      reason: "provider_unavailable" as const,
-      status: "uncertain" as const,
-    }),
+    observeProject: async () => {
+      await Promise.resolve();
+      return {
+        projectId: "project-id",
+        reason: "provider_unavailable" as const,
+        status: "uncertain" as const,
+      };
+    },
     readApproval: async (_owner, _record, _callId, workload) => {
+      await Promise.resolve();
       approvals.push(workload);
       return approved
         ? {
@@ -163,40 +189,44 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
           }
         : null;
     },
-    readCapturedRelease: async () => ({
-      description: {
-        app: { id: fixturePlan.appId, routes: [], workspacePath: "apps/requests" },
-        backend: {
-          authorization: "declared-policy",
-          kind: "generated-postgres",
-          release: {
-            artifactHash: `sha256:${fixturePlan.origin.release.schemaSha256}`,
-            directory: "apps/requests",
-            id: fixturePlan.origin.release.id,
+    readCapturedRelease: async () => {
+      await Promise.resolve();
+      return {
+        description: {
+          app: { id: fixturePlan.appId, routes: [], workspacePath: "apps/requests" },
+          backend: {
+            authorization: "declared-policy",
+            kind: "generated-postgres",
+            release: {
+              artifactHash: `sha256:${fixturePlan.origin.release.schemaSha256}`,
+              directory: "apps/requests",
+              id: fixturePlan.origin.release.id,
+            },
+            roles: ["viewer"],
+            runtime: { databaseEnvironment: "DATABASE_URL" },
+            schemaReceipt: null,
           },
-          roles: ["viewer"],
-          runtime: { databaseEnvironment: "DATABASE_URL" },
-          schemaReceipt: null,
+          validation: {
+            browser: null,
+            check: { task: "check" },
+            test: { shards: 1, task: "test" },
+          },
+          version: 1,
         },
-        validation: {
-          browser: null,
-          check: { task: "check" },
-          test: { shards: 1, task: "test" },
-        },
-        version: 1,
-      },
-      release: fixturePlan.origin.release,
-    }),
+        release: fixturePlan.origin.release,
+      };
+    },
     resolvePlan: async () =>
       existingConfiguredTarget
         ? await Promise.reject(new NativeTargetExistingConfiguredTargetError())
-        : await Promise.resolve(fixturePlan),
+        : fixturePlan,
     store,
     verifyWorkload: async () => {
       events.push("workload");
-      workloadAuthorized
-        ? await Promise.resolve()
-        : await Promise.reject(new Error("unauthorized"));
+      if (!workloadAuthorized) {
+        throw new Error("unauthorized");
+      }
+      await Promise.resolve();
     },
   };
   const readCapturedRelease = vi.spyOn(dependencies, "readCapturedRelease");
@@ -298,7 +328,7 @@ describe("protected native target onboarding service", () => {
       teamMatches: true,
     };
     const inspect = vi.fn(
-      async (
+      (
         _input: Parameters<
           NonNullable<NativeTargetOnboardingServiceDependencies["inspectProviderAuthorization"]>
         >[0],
@@ -318,10 +348,13 @@ describe("protected native target onboarding service", () => {
 
   it("does not inspect provider authorization during new planning or approval-history reads", async () => {
     const f = fixture();
-    const inspect = vi.fn(async () => ({
-      failure: "request_failed" as const,
-      status: "unavailable" as const,
-    }));
+    const inspect = vi.fn(async () => {
+      await Promise.resolve();
+      return {
+        failure: "request_failed" as const,
+        status: "unavailable" as const,
+      };
+    });
     f.dependencies.inspectProviderAuthorization = inspect;
     const planned = await f.planOnce();
     await f.send({
@@ -336,6 +369,7 @@ describe("protected native target onboarding service", () => {
   it("discards authorization observations if current owner changes during the GET", async () => {
     const { f, create, retained } = await permissionRejected();
     f.dependencies.inspectProviderAuthorization = async () => {
+      await Promise.resolve();
       f.changeOwner();
       return { status: "observed", statusCode: 200 };
     };
@@ -348,6 +382,7 @@ describe("protected native target onboarding service", () => {
     const { f, create, retained } = await permissionRejected();
     const controller = new AbortController();
     f.dependencies.inspectProviderAuthorization = async () => {
+      await Promise.resolve();
       controller.abort(new Error("cancelled"));
       return { failure: "cancelled", status: "unavailable" };
     };
@@ -368,7 +403,9 @@ describe("protected native target onboarding service", () => {
     const { f, create, retained } = await permissionRejected();
     const controller = new AbortController();
     f.dependencies.inspectProviderAuthorization = async () => {
+      await Promise.resolve();
       f.authorize.mockImplementation(async () => {
+        await Promise.resolve();
         controller.abort(new Error("cancelled during owner recheck"));
         return structuredClone(current);
       });
@@ -545,6 +582,7 @@ describe("protected retained native resource selection", () => {
     f.resolvePlan.mockImplementation(async (_owner, proposal, source) => {
       expect(proposal.resourceProfileId).toBe("isolated-development");
       expect(source.appSpecDigest).toBe(plan.origin.appSpecDigest);
+      await Promise.resolve();
       return selectedProfilePlan();
     });
     const input = { ...f.proposal, resourceProfileId: "isolated-development" };
@@ -665,7 +703,7 @@ describe("exact native preparation invocation approval", () => {
         ["old-request", "old-call", true],
         ["current-request", "current-call", settledCurrent],
       ] as const) {
-        history.push({
+        const requestEvent: MessageStreamEvent = {
           data: {
             requests: [
               {
@@ -686,7 +724,12 @@ describe("exact native preparation invocation approval", () => {
           },
           meta: { at: "2026-10-30T20:00:00.000Z", id: `requested-${requestId}` },
           type: "input.requested",
-        });
+        };
+        const action = requestEvent.data.requests[0]?.action;
+        if (action?.kind === "tool-call" && callId !== undefined) {
+          action.callId = callId;
+        }
+        history.push(requestEvent);
         if (settled) {
           history.push({
             data: {
@@ -705,15 +748,13 @@ describe("exact native preparation invocation approval", () => {
       const approvalCalls: (string | undefined)[] = [];
       f.dependencies.readApproval = async (owner, record, callId) => {
         approvalCalls.push(callId);
-        const result = await readPrivateNativeTargetApproval({
-          owner,
-          record,
-          ...(callId === undefined ? {} : { callId }),
-          historyOwner: owner.historyOwner,
+        const input: Parameters<typeof readPrivateNativeTargetApproval>[0] = {
           assertOwner: async () => {
             await f.authorize();
           },
-          readHistory: async (startIndex, onEvent) => {
+          historyOwner: owner.historyOwner,
+          owner,
+          readHistory: (startIndex, onEvent) => {
             for (const event of history.slice(startIndex)) {
               onEvent(event);
             }
@@ -723,7 +764,12 @@ describe("exact native preparation invocation approval", () => {
               nextNativeIndex: history.length,
             };
           },
-        });
+          record,
+        };
+        if (callId !== undefined) {
+          input.callId = callId;
+        }
+        const result = await readPrivateNativeTargetApproval(input);
         return result.status === "pending" ? null : result.proof;
       };
       const invocation = {
@@ -759,26 +805,9 @@ describe("retired attempt preparation with immutable initial approval", () => {
   it.each(["approved", "pending", "cancelled"] as const)(
     "consumes fresh %s history from the exact revision-seven shape",
     async (outcome) => {
-      const rescope = (prior: typeof plan, profile: string) =>
-        nativeTargetOnboardingPlanSchema.parse({
-          ...prior,
-          appDatabase: { ...prior.appDatabase, resourceId: `${profile}-resource` },
-          nativeNeon: {
-            ...prior.nativeNeon,
-            scope: {
-              ...prior.nativeNeon.scope,
-              branchId: `${profile}-branch`,
-              endpointId: `${profile}-endpoint`,
-              hostname: `${profile}.neon.tech`,
-            },
-          },
-          resourceProfileAuthorityDigest: (profile === "scope-b" ? "e" : "f").repeat(64),
-          resourceProfileId: profile,
-          resourceSelectionRevision: (prior.resourceSelectionRevision ?? 0) + 1,
-        });
       const first = plan;
-      const second = rescope(first, "scope-b");
-      const selected = rescope(second, "scope-c");
+      const second = rescopePlan(first, "scope-b");
+      const selected = rescopePlan(second, "scope-c");
       const f = fixture(true, selected);
       const history: MessageStreamEvent[] = [];
       const freshHistory: MessageStreamEvent[] = [];
@@ -789,15 +818,13 @@ describe("retired attempt preparation with immutable initial approval", () => {
         callId,
         _workload,
       ) => {
-        const result = await readPrivateNativeTargetApproval({
-          owner,
-          record,
-          ...(callId === undefined ? {} : { callId }),
-          historyOwner: owner.historyOwner,
+        const input: Parameters<typeof readPrivateNativeTargetApproval>[0] = {
           assertOwner: async () => {
             await f.authorize();
           },
-          readHistory: async (start, observe) => {
+          historyOwner: owner.historyOwner,
+          owner,
+          readHistory: (start, observe) => {
             for (const event of history.slice(start)) {
               observe(event);
             }
@@ -807,7 +834,12 @@ describe("retired attempt preparation with immutable initial approval", () => {
               nextNativeIndex: history.length,
             };
           },
-        });
+          record,
+        };
+        if (callId !== undefined) {
+          input.callId = callId;
+        }
+        const result = await readPrivateNativeTargetApproval(input);
         return result.status === "pending" ? null : result.proof;
       };
       const registry = createNativeTargetOnboardingRegistry({
@@ -1010,23 +1042,21 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
       let complete = false;
       let writes = 0;
       f.dependencies.readApproval = async (owner, record, callId) => {
-        const result = await readPrivateNativeTargetApproval({
-          owner,
-          record,
-          ...(callId === undefined ? {} : { callId }),
+        const input: Parameters<typeof readPrivateNativeTargetApproval>[0] = {
+          assertOwner: async () => {
+            await f.authorize();
+          },
           historyOwner: owner.historyOwner,
           observation: {
             save: async (next) => {
               writes += 1;
               saved = next;
-              return;
+              await Promise.resolve();
             },
             state: saved,
           },
-          assertOwner: async () => {
-            await f.authorize();
-          },
-          readHistory: async (start, onEvent) => {
+          owner,
+          readHistory: (start, onEvent) => {
             for (const event of history.slice(start)) {
               onEvent(event);
             }
@@ -1036,7 +1066,12 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
               nextNativeIndex: history.length,
             };
           },
-        });
+          record,
+        };
+        if (callId !== undefined) {
+          input.callId = callId;
+        }
+        const result = await readPrivateNativeTargetApproval(input);
         return result.status === "pending" ? null : result.proof;
       };
       const common = { ...f.common, callId: "fresh-call", input: prepared };
@@ -1112,7 +1147,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
     const abort = new AbortController();
     const cancelled = new Error("caller cancelled");
     abort.abort(cancelled);
-    f.dependencies.readApproval = async () => {
+    f.dependencies.readApproval = () => {
       throw new HostedSessionReadTimeoutError();
     };
     await expect(
@@ -1130,7 +1165,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
   it("keeps owner and exact registry checks outside the incomplete-history fallback", async () => {
     const f = fixture();
     const planned = await f.planOnce();
-    const read = vi.fn(async () => {
+    const read = vi.fn(() => {
       throw new HostedSessionReadTimeoutError();
     });
     f.dependencies.readApproval = read;

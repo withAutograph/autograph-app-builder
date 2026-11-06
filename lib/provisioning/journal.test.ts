@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await -- Provider-shaped test ports return promises while external provider effects remain unavailable. */
 import { describe, expect, it } from "vitest";
 
 import { initialBuilderProvisionJournalRecord, updateBuilderProvisionJournal } from "./journal";
@@ -30,16 +29,12 @@ const authority = {
 } satisfies BuilderProvisionAuthority;
 
 // Keep the in-memory journal fixture scoped to these tests.
-// oxlint-disable-next-line unicorn/consistent-function-scoping
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function memoryStore(): BuilderProvisionJournalStore {
   const rows = new Map<string, BuilderProvisionJournalRow>();
   // Keep key serialization local to the in-memory store.
-  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const key = (value: BuilderProvisionAuthority, requestId: string) =>
     JSON.stringify([value, requestId]);
   return {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async compareAndSet(input) {
       const id = key(input.authority, input.requestId);
       const current = rows.get(id);
@@ -54,14 +49,12 @@ function memoryStore(): BuilderProvisionJournalStore {
         updatedAt: input.now,
       };
       rows.set(id, next);
-      return structuredClone(next);
+      structuredClone(next);
     },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async read(input) {
       const row = rows.get(key(input.authority, input.requestId));
       return row ? structuredClone(row) : undefined;
     },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async reserve(input) {
       const id = key(input.authority, input.request.requestId);
       const digest = builderProvisionRequestDigest(input.request);
@@ -99,26 +92,7 @@ describe("builder provisioning journal", () => {
     const secret = "private-credential-and-message";
     let postCount = 0;
     // SAFETY: This exercises only the selected Vercel branch; no GitHub dependency is read.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Only selected Vercel adapters are exercised; unused GitHub dependencies are intentionally absent in this branch fixture.
     const dependencies = {
-      journal: store,
-      // oxlint-disable-next-line eslint/require-await -- Promise-returning credential test double.
-      // oxlint-disable-next-line eslint/require-await -- Promise-returning credential test double.
-      readVercelCredential: async () => ({
-        binding: {
-          active: true,
-          displayName: "Owner",
-          installationId: "icfg_202",
-          plan: "pro",
-          scopeId: "team_1",
-          scopeType: "team",
-          slug: "owner",
-          updatedAt: new Date(),
-        },
-        token: secret,
-      }),
-      // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
-      // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
       fetch: async (_url: string, init?: RequestInit) => {
         if (init?.method === "POST") {
           postCount += 1;
@@ -137,6 +111,20 @@ describe("builder provisioning journal", () => {
           ? Response.json({}, { status: 404 })
           : Response.json({ id: "unproven" });
       },
+      journal: store,
+      readVercelCredential: async () => ({
+        binding: {
+          active: true,
+          displayName: "Owner",
+          installationId: "icfg_202",
+          plan: "pro",
+          scopeId: "team_1",
+          scopeType: "team",
+          slug: "owner",
+          updatedAt: new Date(),
+        },
+        token: secret,
+      }),
     } as unknown as BuilderProvisioningDependencies;
     const result = await executeBuilderProvisioning({
       authority,
@@ -228,10 +216,9 @@ describe("builder provisioning journal", () => {
     };
     const result = await executeBuilderProvisioning({
       authority,
-      request: selected,
       // SAFETY: The fixture provides the real in-memory journal and only terminal token/fetch ports used by this Vercel-only request; GitHub effects are unreachable.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately bounded terminal-port fixture; runtime schemas and journal replay checks remain real.
       dependencies: dependencies as never,
+      request: selected,
     });
     expect(result.vercel).toMatchObject({
       code: "provider_permission_denied",
@@ -244,10 +231,9 @@ describe("builder provisioning journal", () => {
     });
     const retry = await executeBuilderProvisioning({
       authority,
-      request: selected,
       // SAFETY: The fixture provides the real in-memory journal and only terminal token/fetch ports used by this Vercel-only request; GitHub effects are unreachable.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately bounded terminal-port fixture; runtime schemas and journal replay checks remain real.
       dependencies: dependencies as never,
+      request: selected,
     });
     expect(retry.vercel).toMatchObject({ code: "reconciliation_uncertain", status: "failed" });
     const projection = await readBuilderProvisioning({
@@ -317,13 +303,12 @@ describe("builder provisioning journal", () => {
     let collisions = 0;
     const store: BuilderProvisionJournalStore = {
       ...underlying,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async compareAndSet(input) {
         collisions += 1;
         if (collisions <= 9) {
           return;
         }
-        return await underlying.compareAndSet(input);
+        await underlying.compareAndSet(input);
       },
     };
     const updated = await updateBuilderProvisionJournal({

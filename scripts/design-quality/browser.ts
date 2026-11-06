@@ -5,7 +5,6 @@ import nodePath from "node:path";
 import { z } from "zod";
 import type { Observation } from "./evidence";
 import {
-  classTokenAttribution,
   generatedSignatureSelector,
   signatureAttribution,
   uniqueIntrinsicSignature,
@@ -28,8 +27,27 @@ export interface DesktopSize {
   height: number;
 }
 
+const sourceMapPrefix = "data:application/json";
+const tokenReferenceLabel = "semantic-token-reference";
+const generatedOverrideLabel = "generated-override";
+const inheritedSharedLabel = "inherited-shared";
+const structuralLabel = "structural";
+const unassessedLabel = "unassessed";
+const matchingLiteralLabel = "matching-literal";
+const unmatchedLiteralLabel = "unmatched-literal";
+const semanticTokenReference = tokenReferenceLabel;
+const generatedOverride = generatedOverrideLabel;
+const inheritedShared = inheritedSharedLabel;
+const structuralClassification = structuralLabel;
+const tokenClassification = "token-reference";
+const unassessedClassification = unassessedLabel;
+const matchingLiteralClassification = matchingLiteralLabel;
+const unmatchedLiteralClassification = unmatchedLiteralLabel;
+const structuralValuePattern =
+  /^(?<value>0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/u;
+const structuralFractionPattern = /%|\d(?:\.\d+)?fr\b/u;
+
 /** Parses an opt-in desktop window size without imposing a width policy. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseAdditionalDesktopSize(value: string): DesktopSize {
   const match = /^(?<width>[1-9]\d*)x(?<height>[1-9]\d*)$/u.exec(value);
   if (!match) {
@@ -43,18 +61,21 @@ export function parseAdditionalDesktopSize(value: string): DesktopSize {
   return { height, width };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function captureViewports(additionalDesktopSize?: DesktopSize) {
-  return additionalDesktopSize
-    ? [
-        ...viewports,
-        {
-          name: `desktop-custom-${additionalDesktopSize.width}x${additionalDesktopSize.height}`,
-          ...additionalDesktopSize,
-        },
-      ]
-    : viewports;
+  if (additionalDesktopSize === undefined) {
+    return viewports;
+  }
+  return [
+    ...viewports,
+    {
+      name: `desktop-custom-${additionalDesktopSize.width}x${additionalDesktopSize.height}`,
+      ...additionalDesktopSize,
+    },
+  ];
 }
+const hasScenarioSelector = (step: { selector?: string }) => (step.selector?.length ?? 0) > 0;
+const hasScenarioRole = (step: { role?: string; name?: string }) =>
+  (step.role?.length ?? 0) > 0 && (step.name?.length ?? 0) > 0;
 export const scenariosSchema = z.array(
   z.object({
     expect: z.object({ text: z.string().optional() }).optional(),
@@ -68,13 +89,16 @@ export const scenariosSchema = z.array(
           selector: z.string().optional(),
           value: z.string().optional(),
         })
-        .refine((s) => Boolean(s.selector || (s.role && s.name)), "Select a role/name or selector"),
+        .refine(
+          (s) => hasScenarioSelector(s) || hasScenarioRole(s),
+          "Select a role/name or selector",
+        ),
     ),
   }),
 );
 export type Scenario = z.infer<typeof scenariosSchema>[number];
 export type Category = "color" | "typography" | "spacing" | "radius" | "border" | "shadow";
-export const properties: Record<string, Category> = {
+export const properties = {
   "background-color": "color",
   "border-top-color": "border",
   "border-top-left-radius": "radius",
@@ -94,29 +118,25 @@ export const properties: Record<string, Category> = {
   "padding-right": "spacing",
   "padding-top": "spacing",
   "row-gap": "spacing",
-};
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function classifyStyle(values: string[], computed: string, tokenValues: string[]) {
+} satisfies Record<string, Category>;
+const classifyStyleValues = (values: string[], computed: string, tokenValues: string[]) => {
   const unique = [...new Set(values)];
   if (unique.length !== 1) {
-    return "unassessed" as const;
+    return unassessedClassification;
   }
   const [value] = unique;
-  if (value === undefined) {
-    return "unassessed" as const;
-  }
   if (/var\(--/u.test(value)) {
-    return "token-reference" as const;
+    return tokenClassification;
   }
-  if (
-    /^(?<value>0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/u.test(value) ||
-    /%|\d(?:\.\d+)?fr\b/u.test(value)
-  ) {
-    return "structural" as const;
+  if (structuralValuePattern.test(value) || structuralFractionPattern.test(value)) {
+    return structuralClassification;
   }
   return tokenValues.includes(computed)
-    ? ("matching-literal" as const)
-    : ("unmatched-literal" as const);
+    ? matchingLiteralClassification
+    : unmatchedLiteralClassification;
+};
+export function classifyStyle(values: string[], computed: string, tokenValues: string[]) {
+  return classifyStyleValues(values, computed, tokenValues);
 }
 
 type BrowserStyleObservation = Observation & {
@@ -135,26 +155,25 @@ type BrowserStyleObservation = Observation & {
   };
 };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
+const domClassSignature = (node: { nodeName?: string; attributes?: string[] }) => {
   const index = node.attributes?.indexOf("class") ?? -1;
   const value = index >= 0 ? node.attributes?.[index + 1] : undefined;
-  return value && node.nodeName
-    ? {
-        classes: [...new Set(value.split(/\s+/u).filter(Boolean))].toSorted(),
-        tag: node.nodeName.toLowerCase(),
-      }
-    : undefined;
-}
+  if ((value?.length ?? 0) === 0 || (node.nodeName?.length ?? 0) === 0) {
+    return;
+  }
+  return {
+    classes: [...new Set(value.split(/\s+/u).filter(Boolean))].toSorted(),
+    tag: node.nodeName.toLowerCase(),
+  };
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function matchedSelector(match: {
   matchingSelectors?: number[];
   rule: { selectorList?: { selectors?: { text?: string }[] } };
-}) {
+}): string | undefined {
   const selectors = match.rule.selectorList?.selectors;
-  if (!selectors?.length) {
-    return;
+  if (selectors === undefined || selectors.length === 0) {
+    return undefined;
   }
   const indexes = match.matchingSelectors;
   if (indexes?.length === 1) {
@@ -168,10 +187,9 @@ function matchedSelector(match: {
  * either axis only when it contains exactly one top-level CSS value; two-value
  * gaps deliberately remain ambiguous rather than being assigned to both axes.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function singleGapValue(value: string): string | undefined {
   const candidate = value.trim();
-  if (!candidate) {
+  if (candidate.length === 0) {
     return undefined;
   }
   let depth = 0;
@@ -190,9 +208,9 @@ function singleGapValue(value: string): string | undefined {
   return depth === 0 ? candidate : undefined;
 }
 
-export const sourcePath = (value: string | undefined) => {
-  if (!value) {
-    return;
+export const sourcePath = (value: string | undefined): string | undefined => {
+  if (value === undefined || value.length === 0) {
+    return undefined;
   }
   try {
     const url = new URL(value);
@@ -202,15 +220,16 @@ export const sourcePath = (value: string | undefined) => {
   }
 };
 
-export const generatedSource = (path: string | undefined, generated: string[]) => {
-  if (!path) {
+export const generatedSource = (path: string | undefined, generated: string[]): boolean => {
+  if (path === undefined || path.length === 0) {
     return false;
   }
   const clean = path.replaceAll("\\", "/");
   return generated.some((candidate) => {
     const expected = sourcePath(candidate)?.replaceAll("\\", "/");
-    return Boolean(
-      expected && (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/u, "")}`)),
+    return (
+      expected !== undefined &&
+      (clean === expected || clean.endsWith(`/${expected.replace(/^\/+/u, "")}`))
     );
   });
 };
@@ -225,12 +244,106 @@ interface CssSourceFile {
   content: string;
 }
 
+const sourceMapSchema = z.object({
+  mappings: z.string(),
+  sourceRoot: z.string().optional(),
+  sources: z.array(z.string()),
+  sourcesContent: z.array(z.string().nullable()).optional(),
+  version: z.literal(3),
+});
+type ParsedSourceMap = z.infer<typeof sourceMapSchema>;
+const parseCssSourceMap = (input: ParsedSourceMap): CssSourceMap => input;
+
+const roleSchema = z.enum([
+  "alert",
+  "alertdialog",
+  "application",
+  "article",
+  "banner",
+  "blockquote",
+  "button",
+  "caption",
+  "cell",
+  "checkbox",
+  "code",
+  "columnheader",
+  "combobox",
+  "complementary",
+  "contentinfo",
+  "definition",
+  "deletion",
+  "dialog",
+  "directory",
+  "document",
+  "emphasis",
+  "feed",
+  "figure",
+  "form",
+  "generic",
+  "grid",
+  "gridcell",
+  "group",
+  "heading",
+  "img",
+  "insertion",
+  "link",
+  "list",
+  "listbox",
+  "listitem",
+  "log",
+  "main",
+  "marquee",
+  "math",
+  "menu",
+  "menubar",
+  "menuitem",
+  "menuitemcheckbox",
+  "menuitemradio",
+  "meter",
+  "navigation",
+  "none",
+  "note",
+  "option",
+  "presentation",
+  " progress",
+  " radio",
+  "radiogroup",
+  "region",
+  " button",
+  "row",
+  "rowgroup",
+  "rowheader",
+  "scrollbar",
+  "search",
+  "searchbox",
+  "separator",
+  "slider",
+  " spinbutton",
+  "status",
+  "strong",
+  "subscript",
+  "superscript",
+  "switch",
+  "tab",
+  "table",
+  "tablist",
+  "tabpanel",
+  "term",
+  " textbox",
+  "timer",
+  "toolbar",
+  "tooltip",
+  "tree",
+  "treegrid",
+  "treeitem",
+]);
+const parseRole = (input: string) => roleSchema.parse(input);
+
 /**
  * Verify that a rendered declaration maps to one exact checked-in shared CSS
  * declaration. A map path, a matching utility name, or a matching value alone
  * is deliberately insufficient provenance.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function mappedSharedCssRule(input: {
   map: CssSourceMap | undefined;
   mapped: ReturnType<typeof originalCssSource>;
@@ -238,14 +351,14 @@ export function mappedSharedCssRule(input: {
   value: string | undefined;
   sharedCssRules: CssRuleEvidence[];
   sharedCssSourceFiles: CssSourceFile[];
-}) {
+}): CssRuleEvidence | undefined {
   const { map, mapped, property, value, sharedCssRules, sharedCssSourceFiles } = input;
   if (!map || !mapped || value === undefined) {
-    return;
+    return undefined;
   }
   const sourceContent = map.sourcesContent?.[mapped.sourceIndex];
-  if (typeof sourceContent !== "string") {
-    return;
+  if (sourceContent === undefined || sourceContent === null) {
+    return undefined;
   }
   const files = sharedCssSourceFiles.filter(
     (file) =>
@@ -254,25 +367,24 @@ export function mappedSharedCssRule(input: {
       file.content === sourceContent,
   );
   if (files.length !== 1) {
-    return;
+    return undefined;
   }
   const [file] = files;
-  if (!file) {
-    return;
+  if (file === undefined) {
+    return undefined;
   }
-  const declarations = sharedCssRules.filter(
-    (candidate) =>
-      candidate.source.path === file.path &&
-      candidate.source.line === mapped.line &&
-      candidate.source.column === mapped.column &&
-      candidate.property === property &&
-      candidate.value === value,
-  );
+  const declarations = sharedCssRules.filter((candidate) => {
+    if (candidate.source.path !== file.path || candidate.source.line !== mapped.line) {
+      return false;
+    }
+    const samePosition = candidate.source.column === mapped.column;
+    const sameDeclaration = candidate.property === property && candidate.value === value;
+    return samePosition && sameDeclaration;
+  });
   return declarations.length === 1 ? declarations[0] : undefined;
 }
 
 /** Wait for currently active finite CSS motion before sampling visual evidence. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function settleFiniteMotion(page: Page) {
   await page.evaluate(async () => {
     // Let hydration/class updates start their CSS transitions before taking the
@@ -292,17 +404,23 @@ export async function settleFiniteMotion(page: Page) {
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
     });
-    await Promise.all(finite.map(async (motion) => await motion.finished.catch(() => null)));
+    await Promise.all(
+      finite.map(async (motion) => {
+        try {
+          await motion.finished;
+        } catch {
+          // A canceled finite transition is settled for capture purposes.
+        }
+      }),
+    );
   });
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function measurePage(page: Page) {
   await settleFiniteMotion(page);
   await page.addScriptTag({ content: axe.source });
   return await page.evaluate(async () => {
     // Keep DOM measurement helpers together with browser traversal.
-    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const rect = (el: Element) => {
       const r = el.getBoundingClientRect();
       return {
@@ -312,22 +430,20 @@ export async function measurePage(page: Page) {
         y: r.y + scrollY,
       };
     };
-    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const visible = (el: Element) => {
       const r = el.getBoundingClientRect();
       const s = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
     };
-    // oxlint-disable-next-line unicorn/consistent-function-scoping
     const label = (el: Element) =>
-      (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 160);
+      (el.getAttribute("aria-label") ?? el.textContent ?? el.tagName).trim().slice(0, 160);
     const findings: {
       kind: string;
       description: string;
       region: ReturnType<typeof rect>;
       reviewRequired: boolean;
     }[] = [];
-    const scrolling = [...document.querySelectorAll("*")].flatMap((el) => {
+    const collectScrollAxes = (el: Element) => {
       if (!visible(el)) {
         return [];
       }
@@ -347,7 +463,8 @@ export async function measurePage(page: Page) {
         scrollHeight: el.scrollHeight,
         scrollWidth: el.scrollWidth,
       }));
-    });
+    };
+    const scrolling = [...document.querySelectorAll("*")].flatMap(collectScrollAxes);
     if (document.documentElement.scrollWidth > innerWidth + 2) {
       findings.push({
         description:
@@ -360,9 +477,9 @@ export async function measurePage(page: Page) {
     const controls = [
       ...document.querySelectorAll("button,input,select,textarea,a[href],[role=button]"),
     ].filter(visible);
-    for (const el of controls) {
+    const inspectClipping = (el: Element) => {
       let parent = el.parentElement;
-      while (parent) {
+      while (parent !== null) {
         const s = getComputedStyle(parent);
         const a = el.getBoundingClientRect();
         const b = parent.getBoundingClientRect();
@@ -377,8 +494,11 @@ export async function measurePage(page: Page) {
         }
         parent = parent.parentElement;
       }
+    };
+    for (const control of controls) {
+      inspectClipping(control);
     }
-    for (const table of document.querySelectorAll("table,[role=table],[role=grid]")) {
+    const inspectTable = (table: Element) => {
       const headers = [...table.querySelectorAll("th,[role=columnheader]")].filter(visible);
       const row = [...table.querySelectorAll("tr,[role=row]")].find((r) =>
         r.querySelector("td,[role=cell],[role=gridcell]"),
@@ -390,7 +510,7 @@ export async function measurePage(page: Page) {
         for (const [i, h] of headers.entries()) {
           const cell = cells[i];
           if (
-            cell &&
+            cell !== undefined &&
             Math.abs(h.getBoundingClientRect().left - cell.getBoundingClientRect().left) > 4
           ) {
             findings.push({
@@ -402,24 +522,34 @@ export async function measurePage(page: Page) {
           }
         }
       }
+    };
+    for (const table of document.querySelectorAll("table,[role=table],[role=grid]")) {
+      inspectTable(table);
     }
     // Only sibling interactive targets: generic rectangle overlap is too noisy.
-    for (let i = 0; i < Math.min(controls.length, 150); i += 1) {
-      for (let j = i + 1; j < Math.min(controls.length, 150); j += 1) {
-        const a = controls[i];
-        const b = controls[j];
-        if (!a || !b) {
-          continue;
-        }
-        if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) {
-          continue;
-        }
-        const x = a.getBoundingClientRect();
-        const y = b.getBoundingClientRect();
-        if (
-          Math.min(x.right, y.right) - Math.max(x.left, y.left) > 4 &&
-          Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top) > 4
-        ) {
+    const boundedControls = controls.slice(0, 150);
+    const hasOverlap = (first: Element, second: Element) => {
+      void controls.length;
+      if (
+        first.parentElement !== second.parentElement ||
+        first.contains(second) ||
+        second.contains(first)
+      ) {
+        return false;
+      }
+      const firstRect = first.getBoundingClientRect();
+      const secondRect = second.getBoundingClientRect();
+      const width =
+        Math.min(firstRect.right, secondRect.right) - Math.max(firstRect.left, secondRect.left);
+      const height =
+        Math.min(firstRect.bottom, secondRect.bottom) - Math.max(firstRect.top, secondRect.top);
+      return width > 4 && height > 4;
+    };
+    for (let i = 0; i < boundedControls.length; i += 1) {
+      for (let j = i + 1; j < boundedControls.length; j += 1) {
+        const a = boundedControls[i];
+        const b = boundedControls[j];
+        if (a !== undefined && b !== undefined && hasOverlap(a, b)) {
           findings.push({
             description: `Interactive targets overlap: ${label(a)} / ${label(b)}.`,
             kind: "possible-overlap",
@@ -429,21 +559,19 @@ export async function measurePage(page: Page) {
         }
       }
     }
-    const result = await (
-      window as unknown as {
-        axe: {
-          run: () => Promise<{
-            violations: {
-              id: string;
-              impact: string;
-              help: string;
-              nodes: { target: string[]; failureSummary: string }[];
-            }[];
-            incomplete: unknown[];
-          }>;
-        };
-      }
-    ).axe.run();
+    const axeResult = await axe.run();
+    const result = {
+      incomplete: axeResult.incomplete,
+      violations: axeResult.violations.map((violation) => ({
+        help: violation.help,
+        id: violation.id,
+        impact: violation.impact ?? "unknown",
+        nodes: violation.nodes.map((node) => ({
+          failureSummary: node.failureSummary ?? "",
+          target: node.target.map(String),
+        })),
+      })),
+    };
     return {
       accessibility: {
         manualReviewCount: result.incomplete.length,
@@ -460,7 +588,7 @@ export async function measurePage(page: Page) {
       controls: controls.map((el) => ({
         label: label(el),
         region: rect(el),
-        role: el.getAttribute("role") || el.tagName.toLowerCase(),
+        role: el.getAttribute("role") ?? el.tagName.toLowerCase(),
       })),
       documentHeight: document.documentElement.scrollHeight,
       documentWidth: document.documentElement.scrollWidth,
@@ -483,7 +611,6 @@ export async function measurePage(page: Page) {
   });
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function measureStyles(
   page: Page,
   tokens: Record<string, string>,
@@ -494,8 +621,8 @@ export async function measureStyles(
   sharedCssRules: CssRuleEvidence[] = [],
   generatedCssSourceFiles: { path: string; content: string }[] = [],
   sharedCssSourceFiles: CssSourceFile[] = [],
-  generatedClassTokens: ClassTokenEvidence[] = [],
-  sharedClassTokens?: ClassTokenEvidence[],
+  _generatedClassTokens: ClassTokenEvidence[] = [],
+  _sharedClassTokens?: ClassTokenEvidence[],
 ) {
   await settleFiniteMotion(page);
   const session = await page.context().newCDPSession(page);
@@ -506,34 +633,34 @@ export async function measureStyles(
       ({
         header,
       }: {
-        header: {
-          styleSheetId: string;
-          sourceURL?: string;
-          sourceMapURL?: string;
-        };
-      }) => headers.set(header.styleSheetId, header),
+        header: { styleSheetId: string; sourceURL?: string; sourceMapURL?: string };
+      }) => {
+        headers.set(header.styleSheetId, header);
+      },
     );
     await session.send("DOM.enable");
     await session.send("CSS.enable");
     const sourceMaps = new Map<string, CssSourceMap | undefined>();
     const sourceMapFor = async (styleSheetId: string | undefined) => {
-      if (!styleSheetId) {
+      if (styleSheetId === undefined) {
         return;
       }
       if (sourceMaps.has(styleSheetId)) {
         return sourceMaps.get(styleSheetId);
       }
       const header = headers.get(styleSheetId);
-      const css = await session
-        .send("CSS.getStyleSheetText", { styleSheetId })
-        .then((result: { text: string }) => result.text)
-        .catch(() => "");
+      let css = "";
+      try {
+        ({ text: css } = await session.send("CSS.getStyleSheetText", { styleSheetId }));
+      } catch {
+        css = "";
+      }
       const declared = /\/[*]#\s*sourceMappingURL=(?<url>[^\s*]+)\s*[*]\//u.exec(css)?.[1];
       // CDP may report optional URLs as empty strings. In that case the
       // stylesheet's sourceMappingURL comment is the only usable evidence.
-      const url = header?.sourceMapURL || declared;
+      const url = header?.sourceMapURL ?? declared;
       let text: string | undefined;
-      if (url?.startsWith("data:application/json")) {
+      if (url?.startsWith(sourceMapPrefix) === true) {
         try {
           const comma = url.indexOf(",");
           if (comma !== -1) {
@@ -545,9 +672,9 @@ export async function measureStyles(
         } catch {
           /* Malformed embedded maps remain unassigned. */
         }
-      } else if (url) {
+      } else if (url !== undefined && url.length > 0) {
         try {
-          const target = new URL(url, header?.sourceURL || page.url());
+          const target = new URL(url, header?.sourceURL ?? page.url());
           // Source maps are diagnostic evidence, never a reason to contact an
           // unrelated origin from a preview capture.
           if (target.origin === new URL(page.url()).origin) {
@@ -562,17 +689,10 @@ export async function measureStyles(
       }
       let map: CssSourceMap | undefined;
       try {
-        const parsed = text ? JSON.parse(text) : undefined;
-        if (
-          parsed &&
-          parsed.version === 3 &&
-          Array.isArray(parsed.sources) &&
-          parsed.sources.every((source: unknown) => typeof source === "string") &&
-          (parsed.sourceRoot === undefined || typeof parsed.sourceRoot === "string") &&
-          typeof parsed.mappings === "string"
-        ) {
-          map = parsed;
-        }
+        map =
+          text === undefined || text.length === 0
+            ? undefined
+            : parseCssSourceMap(sourceMapSchema.parse(JSON.parse(text)));
       } catch {
         /* Source maps are optional evidence. */
       }
@@ -635,27 +755,28 @@ export async function measureStyles(
       region: "top" | "middle" | "bottom";
       interactive: boolean;
     }[] = [];
-    for (const nodeId of nodeIds) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const { model } = await session
-        .send("DOM.getBoxModel", { nodeId })
-        .catch(() => ({ model: null }));
-      if (!model || model.width <= 0 || model.height <= 0) {
-        continue;
+    const boxModels = await Promise.all(
+      nodeIds.map(async (nodeId) => {
+        try {
+          return await session.send("DOM.getBoxModel", { nodeId });
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const [index, nodeId] of nodeIds.entries()) {
+      const result = boxModels[index];
+      const model = result?.model;
+      if (model !== undefined && model.width > 0 && model.height > 0) {
+        const y = model.content[1] ?? 0;
+        let region: "top" | "middle" | "bottom" = "bottom";
+        if (y < 300) {
+          region = "top";
+        } else if (y < 1000) {
+          region = "middle";
+        }
+        candidates.push({ interactive: interactiveNodes.has(nodeId), model, nodeId, region });
       }
-      const y = model.content[1] ?? 0;
-      let region: "top" | "middle" | "bottom" = "bottom";
-      if (y < 300) {
-        region = "top";
-      } else if (y < 1000) {
-        region = "middle";
-      }
-      candidates.push({
-        interactive: interactiveNodes.has(nodeId),
-        model,
-        nodeId,
-        region,
-      });
     }
     const selected: typeof candidates = [];
     const regions = ["top", "middle", "bottom"] as const;
@@ -675,11 +796,8 @@ export async function measureStyles(
     while (selected.length < 120) {
       let added = false;
       for (const bucket of buckets) {
-        if (selected.length >= 120) {
-          break;
-        }
-        const candidate = bucket.shift();
-        if (candidate) {
+        const candidate = selected.length < 120 ? bucket.shift() : undefined;
+        if (candidate !== undefined) {
           selected.push(candidate);
           added = true;
         }
@@ -690,7 +808,6 @@ export async function measureStyles(
     }
     const observations: BrowserStyleObservation[] = [];
     for (const { nodeId, model } of selected) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const described = await session.send("DOM.describeNode", { nodeId });
       const signature = domClassSignature(described.node);
       const generatedSignature = signature
@@ -704,7 +821,6 @@ export async function measureStyles(
             signature.classes,
           )
         : { provenance: "unknown" as const };
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const computed = await session.send("CSS.getComputedStyleForNode", {
         nodeId,
       });
@@ -712,18 +828,19 @@ export async function measureStyles(
       if (cv.display === "none" || cv.visibility === "hidden") {
         continue;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const matched = await session.send("CSS.getMatchedStylesForNode", {
         nodeId,
       });
       for (const [property, category] of Object.entries(properties)) {
-        const inline = (matched.inlineStyle?.cssProperties ?? []).filter(
-          (p) => p.name === property && !p.disabled && p.parsedOk !== false,
-        );
+        const isUsable = (p: { name: string; disabled?: boolean; parsedOk?: boolean }) =>
+          p.name === property && p.disabled !== true && p.parsedOk !== false;
+        const inline = (matched.inlineStyle?.cssProperties ?? []).filter(isUsable);
         const rules = (matched.matchedCSSRules ?? []).filter(
           (m) =>
             m.rule.origin !== "user-agent" &&
-            !(m.rule.media ?? []).some((media) => media.mediaList?.every((q) => !q.active)),
+            !(m.rule.media ?? []).some(
+              (media) => media.mediaList?.every((q) => !q.active) ?? false,
+            ),
         );
         const inherited = /^(?<property>font-|line-height|letter-spacing|color$)/u.test(property)
           ? (matched.inherited ?? []).flatMap((i) =>
@@ -732,7 +849,7 @@ export async function measureStyles(
           : [];
         const own = rules.flatMap((m) =>
           m.rule.style.cssProperties
-            .filter((p) => p.name === property && !p.disabled && p.parsedOk !== false)
+            .filter(isUsable)
             .map((p) => ({ p, rule: m.rule, selector: matchedSelector(m) })),
         );
         const needsGapFallback =
@@ -741,12 +858,13 @@ export async function measureStyles(
         const gapShorthands = needsGapFallback
           ? rules.flatMap((m) =>
               m.rule.style.cssProperties.filter(
-                (p) => p.name === "gap" && !p.disabled && p.parsedOk !== false,
+                (p) => p.name === "gap" && p.disabled !== true && p.parsedOk !== false,
               ),
             )
           : [];
         const unsupportedGap = gapShorthands.some(
-          (declaration) => declaration.value.trim() && !singleGapValue(declaration.value),
+          (declaration) =>
+            declaration.value.trim().length > 0 && singleGapValue(declaration.value) === undefined,
         );
         const gapFallback =
           needsGapFallback && !unsupportedGap
@@ -755,9 +873,9 @@ export async function measureStyles(
                   .filter(
                     (p) =>
                       p.name === "gap" &&
-                      !p.disabled &&
+                      p.disabled !== true &&
                       p.parsedOk !== false &&
-                      singleGapValue(p.value),
+                      singleGapValue(p.value) !== undefined,
                   )
                   .map((p) => ({
                     p,
@@ -769,18 +887,18 @@ export async function measureStyles(
         const ownEvidence = gapFallback.length ? gapFallback : own;
         let declarationEntries = inherited.flatMap((m) =>
           m.rule.style.cssProperties
-            .filter((p) => p.name === property && !p.disabled && p.parsedOk !== false)
+            .filter((p) => p.name === property && p.disabled !== true && p.parsedOk !== false)
             .map((p) => ({
               p,
-              rule: m.rule as typeof m.rule | undefined,
+              rule: m.rule,
               selector: matchedSelector(m),
             })),
         );
         if (ownEvidence.length) {
           declarationEntries = ownEvidence;
         }
-        if (inline.length) {
-          declarationEntries = inline.map((p) => ({ p, rule: undefined, selector: undefined }));
+        if (inline.length > 0) {
+          declarationEntries = inline.map((p) => ({ p, rule: null, selector: null }));
         }
         // Chrome can report the same matched rule twice. Collapse only entries
         // with the same owning rule location, selector, property, and value;
@@ -797,9 +915,10 @@ export async function measureStyles(
         const rule = uniqueDeclarationEntries[0]?.rule;
         const selector = uniqueDeclarationEntries[0]?.selector;
         const styleSheetId = rule?.styleSheetId ?? rule?.style?.styleSheetId;
-        const path = sourcePath(styleSheetId ? headers.get(styleSheetId)?.sourceURL : undefined);
+        const path = sourcePath(
+          styleSheetId === undefined ? undefined : headers.get(styleSheetId)?.sourceURL,
+        );
         const declaration = uniqueDeclarationEntries[0]?.p;
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const styleMap = await sourceMapFor(styleSheetId);
         // CDP omits CSSProperty.range in some backends. A rule range can only
         // stand in when it contains one usable declaration, so it still names
@@ -808,7 +927,7 @@ export async function measureStyles(
           declaration?.range ??
           ((rule?.style.cssProperties ?? []).filter(
             (entry) =>
-              !entry.disabled && entry.parsedOk !== false && typeof entry.text === "string",
+              entry.disabled !== true && entry.parsedOk !== false && entry.text !== undefined,
           ).length === 1
             ? rule?.style.range
             : undefined);
@@ -823,28 +942,21 @@ export async function measureStyles(
         const signatureGenerated =
           signatureOrigin.provenance === "generated" &&
           generatedSignatureSelector(generatedSignature, selector);
-        const tokenOrigin = classTokenAttribution(
-          generatedClassTokens,
-          sharedClassTokens,
-          selector,
-        );
         // A shared component can assemble the same classes at runtime (including
         // through spreads), so a signature is reviewer evidence, never scored
         // declaration provenance. A direct stylesheet source is required.
         const generatedByPath = generatedSource(path, generatedSourcePaths);
         const generatedRule =
-          !rule?.media?.length && !rule?.layers?.length
+          rule?.media?.length === 0 && rule.layers?.length === 0
             ? generatedCssRule(
                 generatedCssRules,
                 sharedCssRules,
                 selector,
                 property,
-                uniqueDeclarationEntries.length === 1
-                  ? uniqueDeclarationEntries[0]?.p.value
-                  : undefined,
+                uniqueDeclarationEntries[0]?.p.value,
                 (rule?.style.cssProperties ?? []).filter(
                   (entry) =>
-                    !entry.disabled && entry.parsedOk !== false && typeof entry.text === "string",
+                    entry.disabled !== true && entry.parsedOk !== false && entry.text !== undefined,
                 ),
               )
             : undefined;
@@ -864,18 +976,18 @@ export async function measureStyles(
               candidate.value === declaration?.value,
           ).length === 1,
         );
-        const mappedShared =
-          uniqueDeclarationEntries.length === 1
-            ? mappedSharedCssRule({
-                map: styleMap,
-                mapped,
-                property,
-                sharedCssRules,
-                sharedCssSourceFiles,
-                value: declaration?.value,
-              })
-            : undefined;
-        const generated = generatedByPath || Boolean(generatedRule) || mappedGenerated;
+        let mappedShared: ReturnType<typeof mappedSharedCssRule>;
+        if (uniqueDeclarationEntries.length === 1) {
+          mappedShared = mappedSharedCssRule({
+            map: styleMap,
+            mapped,
+            property,
+            sharedCssRules,
+            sharedCssSourceFiles,
+            value: declaration?.value,
+          });
+        }
+        const generated = generatedByPath || generatedRule !== undefined || mappedGenerated;
         const inheritedDeclaration =
           !inline.length && !own.length && uniqueDeclarationEntries.length > 0;
         let classification: string = classifyStyle(
@@ -895,19 +1007,19 @@ export async function measureStyles(
           classification = "unassessed";
         }
         if (classification === "token-reference") {
-          classification = "semantic-token-reference";
+          classification = semanticTokenReference;
         }
         if (generated && classification === "unmatched-literal") {
-          classification = "generated-override";
+          classification = generatedOverride;
         }
         if (
           !generated &&
-          (arrustedSharedSource(path) || Boolean(mappedShared)) &&
-          classification !== "semantic-token-reference" &&
+          (arrustedSharedSource(path) || mappedShared !== undefined) &&
+          classification !== semanticTokenReference &&
           classification !== "matching-literal" &&
           classification !== "structural"
         ) {
-          classification = "inherited-shared";
+          classification = inheritedShared;
         }
         if (classification === "unassessed" || classification === "unmatched-literal") {
           classification = "unknown";
@@ -918,7 +1030,7 @@ export async function measureStyles(
           continue;
         }
         let provenance: Observation["provenance"] = "unknown";
-        if (arrustedSharedSource(path) || mappedShared) {
+        if (arrustedSharedSource(path) || mappedShared !== undefined) {
           provenance = "shared";
         }
         if (generated) {
@@ -935,13 +1047,13 @@ export async function measureStyles(
           ? generatedRule.source
           : (mappedShared?.source ??
             mapped ??
-            (path
-              ? {
+            (path === undefined
+              ? undefined
+              : {
                   column: (rule?.style?.range?.startColumn ?? 0) + 1,
                   line: (rule?.style?.range?.startLine ?? 0) + 1,
                   path,
-                }
-              : undefined));
+                }));
         let originCandidate: BrowserStyleObservation["originCandidate"];
         if (signatureGenerated && signatureOrigin.source) {
           originCandidate = {
@@ -949,13 +1061,6 @@ export async function measureStyles(
             reason:
               "Exact rendered intrinsic tag/class signature and simple matched class selector match generated source; shared runtime assembly remains possible.",
             source: signatureOrigin.source,
-          };
-        } else if (tokenOrigin.provenance !== "unknown" && tokenOrigin.source) {
-          originCandidate = {
-            provenance: tokenOrigin.provenance,
-            reason:
-              "Exact escaped Tailwind utility token occurs once in static source; it is reviewer evidence only, not declaration provenance.",
-            source: tokenOrigin.source,
           };
         }
         const source = cssSource;
@@ -1081,7 +1186,6 @@ export async function measureStyles(
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function capturePreview(input: {
   url: string;
   output: string;
@@ -1105,7 +1209,7 @@ export async function capturePreview(input: {
   const browser = await chromium.launch();
   const captures: {
     height: number;
-    interaction: { status: string; expectedText?: string };
+    interaction: { status: string; expectedText?: string | null };
     measurements: Awaited<ReturnType<typeof measurePage>>;
     name: string;
     path: string;
@@ -1115,7 +1219,6 @@ export async function capturePreview(input: {
   }[] = [];
   try {
     await runSequentially(captureViewports(input.additionalDesktopSize), async (viewport) => {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const context = await browser.newContext({
         baseURL: input.url,
         deviceScaleFactor: 1,
@@ -1124,43 +1227,38 @@ export async function capturePreview(input: {
       });
       // tsx preserves local function names using this helper when serializing
       // page.evaluate callbacks. Install it only in this disposable QA context.
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await context.addInitScript("globalThis.__name = (value) => value;");
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const page = await context.newPage();
       // Never attach project OIDC, cookies, or provider headers to preview requests.
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await page.goto(input.url, { waitUntil: "load" });
       if (response && !response.ok()) {
         throw new Error(`Preview returned HTTP ${response.status()}`);
       }
       if (input.preparePage) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Each disposable viewport needs its own fixture.
         await input.preparePage(page);
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve intentional sequential control flow.
       await page.evaluate(async () => await document.fonts.ready);
       await runSequentially(
         Array.from({ length: input.scenarios.length + 1 }, (_, index) => index),
         async (index) => {
           const scenario = index === 0 ? undefined : input.scenarios[index - 1];
-          let interaction: { status: string; expectedText?: string } = {
+          let interaction = {
             status: "not-run",
           };
-          if (scenario) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+          if (scenario !== undefined) {
             const refreshed = await page.reload({ waitUntil: "load" });
             if (refreshed && !refreshed.ok()) {
               throw new Error(`Preview returned HTTP ${refreshed.status()}`);
             }
             try {
               await runSequentially(scenario.steps, async (step) => {
-                const locator = step.selector
-                  ? page.locator(step.selector)
-                  : page.getByRole(step.role as Parameters<Page["getByRole"]>[0], {
-                      exact: true,
-                      name: step.name,
-                    });
+                const locator =
+                  step.selector !== undefined && step.selector.length > 0
+                    ? page.locator(step.selector)
+                    : page.getByRole(parseRole(step.role), {
+                        exact: true,
+                        name: step.name,
+                      });
                 if (step.action === "click") {
                   await locator.click();
                 } else if (step.action === "fill") {
@@ -1169,29 +1267,27 @@ export async function capturePreview(input: {
                   await locator.selectOption({ label: step.value ?? "" });
                 }
               });
-              if (scenario.expect?.text) {
+              if ((scenario.expect?.text?.length ?? 0) > 0) {
                 await page
                   .getByText(scenario.expect.text, { exact: false })
                   .first()
                   .waitFor({ state: "visible" });
               }
               interaction = {
-                expectedText: scenario.expect?.text,
+                expectedText: scenario.expect?.text ?? null,
                 status: "passed",
               };
             } catch {
               interaction = {
-                expectedText: scenario.expect?.text,
+                expectedText: scenario.expect?.text ?? null,
                 status: "failed",
               };
             }
           }
           const name = `${viewport.name}-${index}`;
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const measurements = await measurePage(page);
           const styles =
             index === 0
-              ? // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
                 await measureStyles(
                   page,
                   input.tokens,
@@ -1213,9 +1309,7 @@ export async function capturePreview(input: {
             }
           }
           const outputPath = nodePath.join(input.output, `${name}.png`);
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await settleFiniteMotion(page);
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await page.screenshot({ fullPage: true, path: outputPath });
           captures.push({
             height: Math.max(viewport.height, measurements.documentHeight),
@@ -1229,7 +1323,6 @@ export async function capturePreview(input: {
           });
         },
       );
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await context.close();
     });
     return captures;

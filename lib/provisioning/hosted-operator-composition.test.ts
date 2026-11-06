@@ -30,17 +30,11 @@ import type {
   HostedOperatorWorkerEffectContext,
 } from "./hosted-operator-service";
 import nativeEntryPoint from "./hosted-operator-function";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused read-only reconciliation boundary spy.
 import * as authReadiness from "./hosted-operator-auth-readiness";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
 import * as authProposal from "./hosted-operator-auth-proposal";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
 import * as planningAuthority from "./hosted-operator-planning-authority";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
 import * as nativePlanning from "./hosted-operator-native-preview-authority";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
 import * as neonReader from "./hosted-operator-native-preview-neon-mcp";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
 import * as providerInventory from "./hosted-operator-provider-inventory";
 import {
   hostedRuntimeJournalRecordSchema,
@@ -69,7 +63,6 @@ import {
   normalActorProgramSchema,
 } from "./hosted-operator-normal-actor-program";
 import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Exercise real composition with only the worker transport stubbed.
 import * as membershipLauncher from "./hosted-operator-sandbox-launcher";
 
 import {
@@ -80,14 +73,11 @@ import {
   operatorPlanDigest,
 } from "./hosted-operator-contract";
 import type { OperatorRequest } from "./hosted-operator-contract";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the provider adapter boundary while exercising real composition context routing.
 import * as deploymentDelivery from "./hosted-operator-deployment-delivery";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Inspect the environment verification context without a provider request.
 import * as gatewayBindingAdapter from "./hosted-operator-gateway-bindings";
 import type { HostedOperatorNormalActorPlanningPorts } from "./hosted-operator-composition";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
 import { appDescriptionSchema } from "../repository/app-description";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy only on the independent verified identity boundary.
 import * as realmIdentity from "./hosted-operator-auth-identity";
 
 const request = () =>
@@ -168,6 +158,11 @@ const authority = {
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
+const independentFixtureReceipt = (input: HostedOperatorEffectContext) => ({
+  effectId: input.effect.id,
+  observedAt: new Date().toISOString(),
+  resourceVersion: "independent-fixture-readback",
+});
 const context: HostedOperatorContext = {
   authority,
   ownerContext: {
@@ -395,7 +390,6 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   };
   const readCapturedRealmIdentity = vi.fn().mockResolvedValue(captured);
   const readCapturedRealmIdentityProof = vi.fn().mockResolvedValue({ link: {}, proof: "proof" });
-  // oxlint-disable-next-line eslint/require-await -- Unused async ports fail immediately if planning reaches an unrelated boundary.
   const unexpectedPort = vi.fn(async (): Promise<never> => {
     throw new Error("Unexpected provider or effect port during planning");
   });
@@ -417,7 +411,10 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   });
   const readCurrentPlanningOwner = vi.fn<
     Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCurrentPlanningOwner"]
-  >(async () => ({ session: structuredClone(planningSession), target: context.target }));
+  >(async () => {
+    await Promise.resolve();
+    return { session: structuredClone(planningSession), target: context.target };
+  });
   const controlPlane = {
     assertPlanningAuthorized: unexpectedPort,
     readCapturedRealmIdentity,
@@ -520,7 +517,6 @@ describe("final verifier entry diagnostics", () => {
     const dependencies = composeHostedOperatorDependencies(
       f.configuration,
       // SAFETY: This fixture stops at inventory; only the preceding ownership and journal ports execute.
-      // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- The scoped fixture implements the reached verifier ports.
       controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
     );
     await expect(dependencies.verify({ ...context, plan })).rejects.toBe(stop);
@@ -539,18 +535,19 @@ describe("final verifier entry diagnostics", () => {
       const f = publicationFixture();
       const error = new TypeError("private-preflight-error");
       const assertAuthorized = vi.fn(async () => {
-        stage === "final_owner_authorization"
-          ? await Promise.reject(error)
-          : await Promise.resolve();
+        if (stage === "final_owner_authorization") {
+          throw error;
+        }
+        await Promise.resolve();
       });
       const read = vi.fn(async () => {
+        await Promise.resolve();
         throw error;
       });
       const controlPlane = { ...f.controlPlane, assertAuthorized, store: { read } };
       const dependencies = composeHostedOperatorDependencies(
         f.configuration,
         // SAFETY: Both fail-fast scenarios reject at these two implemented entry ports, before any other control-plane capability is accessed.
-        // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- The fixture deliberately implements only the entry boundary exercised by this test.
         controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
       );
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -570,7 +567,6 @@ describe("app publication binding at plan renewal", () => {
     const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "initial-repository" });
     const legacyDescription = appDescriptionSchema.parse({
       ...currentSourceDescription,
-      deployment: undefined,
     });
     const plan = await resolveFullPlan(
       bootstrapWithGatewayOrigin("https://gateway.example"),
@@ -910,7 +906,6 @@ describe("configured owner-authorized Preview target metadata", () => {
     const f = publicationFixture();
     const order: string[] = [];
     const consentOwner = {
-      // oxlint-disable-next-line eslint/require-await -- Synthetic async authority ports record their invocation synchronously.
       authorize: vi.fn(async () => {
         order.push("owner");
         if (context.ownerContext === undefined) {
@@ -920,14 +915,13 @@ describe("configured owner-authorized Preview target metadata", () => {
       }),
     };
     const controlPlane = {
-      // oxlint-disable-next-line eslint/require-await -- Synthetic async authority ports record their invocation synchronously.
+      assertPlanningAuthorized: vi.fn(async () => {
+        order.push("revalidate");
+        await Promise.resolve();
+      }),
       authorize: vi.fn(async () => {
         order.push("project");
         return structuredClone(context);
-      }),
-      // oxlint-disable-next-line eslint/require-await -- Synthetic async authority revalidation records its invocation synchronously.
-      assertPlanningAuthorized: vi.fn(async () => {
-        order.push("revalidate");
       }),
     };
     const resolve = createConfiguredPreviewTargetResolver(
@@ -1158,95 +1152,101 @@ const participantResolutionFixture = (captureOnly = false) => {
   return { ...f, accountPlan, base, organizations, ports, preparation, program, state };
 };
 
+const unexpectedCompositionPort: Parameters<
+  typeof composeHostedOperatorDependencies
+>[1]["store"]["read"] = () => {
+  throw new Error("Unexpected control-plane operation in signup guard fixture");
+};
+const unexpectedCompositionCall = (): never => {
+  throw new Error("Unexpected control-plane operation in signup guard fixture");
+};
+
 const unusedCompositionControlPlane = (): Parameters<
   typeof composeHostedOperatorDependencies
 >[1] => {
-  const unexpectedPort = (): never => {
-    throw new Error("Unexpected control-plane operation in signup guard fixture");
-  };
   const store = {
-    compareAndSet: unexpectedPort,
-    read: unexpectedPort,
-    reserve: unexpectedPort,
-    reserveFenceGeneration: unexpectedPort,
+    compareAndSet: unexpectedCompositionPort,
+    read: unexpectedCompositionPort,
+    reserve: unexpectedCompositionPort,
+    reserveFenceGeneration: unexpectedCompositionPort,
   };
   return {
-    acceptRealmContinuationDelivery: unexpectedPort,
-    acknowledgeOwnerRealmIdentityWait: unexpectedPort,
-    assertAuthorized: unexpectedPort,
-    assertCanonicalOwner: unexpectedPort,
-    assertMembershipCapture: unexpectedPort,
-    assertPlanningAuthorized: unexpectedPort,
-    authorize: unexpectedPort,
-    centralIntegrationDeploymentReceiptRequest: unexpectedPort,
-    centralIntegrationHostRequest: unexpectedPort,
-    checkpointOwnedAppResourceSource: unexpectedPort,
-    checkpointSharedAuthAdoption: unexpectedPort,
-    claimRealmContinuationDelivery: unexpectedPort,
-    close: unexpectedPort,
-    consumeOwnerRealmIdentityCallback: unexpectedPort,
-    continuityRequest: unexpectedPort,
-    ensureNormalActorCapture: unexpectedPort,
-    exportRequest: unexpectedPort,
-    isObsoleteRealmAuthWait: unexpectedPort,
-    normalActorAuthIdentityInput: unexpectedPort,
+    acceptRealmContinuationDelivery: unexpectedCompositionCall,
+    acknowledgeOwnerRealmIdentityWait: unexpectedCompositionCall,
+    assertAuthorized: unexpectedCompositionCall,
+    assertCanonicalOwner: unexpectedCompositionCall,
+    assertMembershipCapture: unexpectedCompositionCall,
+    assertPlanningAuthorized: unexpectedCompositionCall,
+    authorize: unexpectedCompositionCall,
+    centralIntegrationDeploymentReceiptRequest: unexpectedCompositionCall,
+    centralIntegrationHostRequest: unexpectedCompositionCall,
+    checkpointOwnedAppResourceSource: unexpectedCompositionCall,
+    checkpointSharedAuthAdoption: unexpectedCompositionCall,
+    claimRealmContinuationDelivery: unexpectedCompositionCall,
+    close: unexpectedCompositionCall,
+    consumeOwnerRealmIdentityCallback: unexpectedCompositionCall,
+    continuityRequest: unexpectedCompositionCall,
+    ensureNormalActorCapture: unexpectedCompositionCall,
+    exportRequest: unexpectedCompositionCall,
+    isObsoleteRealmAuthWait: unexpectedCompositionCall,
+    normalActorAuthIdentityInput: unexpectedCompositionCall,
     normalActorJournalPorts: {
-      assertAccountApproval: unexpectedPort,
-      assertAuthorized: unexpectedPort,
-      assertMutationAuthority: unexpectedPort,
+      assertAccountApproval: unexpectedCompositionCall,
+      assertAuthorized: unexpectedCompositionCall,
+      assertMutationAuthority: unexpectedCompositionCall,
       get keyring() {
-        return unexpectedPort();
+        return unexpectedCompositionCall();
       },
-      now: unexpectedPort,
+      now: unexpectedCompositionCall,
       store,
     },
-    prepareNormalActorAccounts: unexpectedPort,
-    prepareNormalActorCapture: unexpectedPort,
-    prepareNormalActorMemberships: unexpectedPort,
-    prepareRealmIdentityLink: unexpectedPort,
-    prepareResourceCredentials: unexpectedPort,
-    publishAuthPlan: unexpectedPort,
-    readActiveSharedAuth: unexpectedPort,
-    readApproval: unexpectedPort,
-    readApprovedPlan: unexpectedPort,
-    readApprovedPublicAuthBootstrap: unexpectedPort,
-    readAuthPlan: unexpectedPort,
-    readCapturedRealmIdentity: unexpectedPort,
-    readCapturedRealmIdentityProof: unexpectedPort,
-    readCredential: unexpectedPort,
-    readCurrentPlanningOwner: unexpectedPort,
-    readGeneratedRelease: unexpectedPort,
-    readGeneratedSelection: unexpectedPort,
-    readMembershipInspectionPlan: unexpectedPort,
-    readNormalActorOrganizationProofs: unexpectedPort,
-    readNormalActorPreparation: unexpectedPort,
-    readNormalActorRuntimeBindings: unexpectedPort,
-    readOwnedAppResourceSource: unexpectedPort,
-    readPendingNormalActorCapture: unexpectedPort,
-    readPendingRealmIdentityLinkForStaging: unexpectedPort,
-    readRealmContinuationDeliveryClaim: unexpectedPort,
-    readRealmContinuationDeliveryReceipt: unexpectedPort,
-    readRealmContinuationDeliveryStartIndex: unexpectedPort,
-    readRealmContinuationDeliveryTargetRequestId: unexpectedPort,
-    readRealmContinuationPendingBaseline: unexpectedPort,
-    readRealmIdentityLink: unexpectedPort,
-    readRealmIdentityWaitDelivery: unexpectedPort,
-    readResourceBindings: unexpectedPort,
-    readRetirementResourceCredentials: unexpectedPort,
-    readSharedAuthAdoption: unexpectedPort,
-    readSharedGatewayRows: unexpectedPort,
-    reconcileNormalActorMemberships: unexpectedPort,
-    reconcileOwnerRealmContinuation: unexpectedPort,
-    registerOwnerRealmIdentityWait: unexpectedPort,
-    reserveRealmIdentityLink: unexpectedPort,
-    resolveOwnerRealmContinuationContext: unexpectedPort,
-    resolveRealmIdentityCallbackContext: unexpectedPort,
-    resolveRealmIdentityCallbackOwnerContext: unexpectedPort,
+    prepareNormalActorAccounts: unexpectedCompositionCall,
+    prepareNormalActorCapture: unexpectedCompositionCall,
+    prepareNormalActorMemberships: unexpectedCompositionCall,
+    prepareRealmIdentityLink: unexpectedCompositionCall,
+    prepareResourceCredentials: unexpectedCompositionCall,
+    publishAuthPlan: unexpectedCompositionCall,
+    readActiveSharedAuth: unexpectedCompositionCall,
+    readApproval: unexpectedCompositionCall,
+    readApprovedPlan: unexpectedCompositionCall,
+    readApprovedPublicAuthBootstrap: unexpectedCompositionCall,
+    readAuthPlan: unexpectedCompositionCall,
+    readCapturedRealmIdentity: unexpectedCompositionCall,
+    readCapturedRealmIdentityProof: unexpectedCompositionCall,
+    readCredential: unexpectedCompositionCall,
+    readCurrentPlanningOwner: unexpectedCompositionCall,
+    readGeneratedRelease: unexpectedCompositionCall,
+    readGeneratedSelection: unexpectedCompositionCall,
+    readMembershipInspectionPlan: unexpectedCompositionCall,
+    readNormalActorOrganizationProofs: unexpectedCompositionCall,
+    readNormalActorPreparation: unexpectedCompositionCall,
+    readNormalActorRuntimeBindings: unexpectedCompositionCall,
+    readOwnedAppResourceSource: unexpectedCompositionCall,
+    readPendingNormalActorCapture: unexpectedCompositionCall,
+    readPendingRealmIdentityLinkForStaging: unexpectedCompositionCall,
+    readRealmContinuationDeliveryClaim: unexpectedCompositionCall,
+    readRealmContinuationDeliveryReceipt: unexpectedCompositionCall,
+    readRealmContinuationDeliveryStartIndex: unexpectedCompositionCall,
+    readRealmContinuationDeliveryTargetRequestId: unexpectedCompositionCall,
+    readRealmContinuationPendingBaseline: unexpectedCompositionCall,
+    readRealmIdentityLink: unexpectedCompositionCall,
+    readRealmIdentityWaitDelivery: unexpectedCompositionCall,
+    readResourceBindings: unexpectedCompositionCall,
+    readRetirementResourceCredentials: unexpectedCompositionCall,
+    readSharedAuthAdoption: unexpectedCompositionCall,
+    readSharedGatewayRows: unexpectedCompositionCall,
+    reconcileNormalActorMemberships: unexpectedCompositionCall,
+    reconcileOwnerRealmContinuation: unexpectedCompositionCall,
+    registerOwnerRealmIdentityWait: unexpectedCompositionCall,
+    reserveRealmIdentityLink: unexpectedCompositionCall,
+    resolveOwnerRealmContinuationContext: unexpectedCompositionCall,
+    resolveRealmIdentityCallbackContext: unexpectedCompositionCall,
+    resolveRealmIdentityCallbackOwnerContext: unexpectedCompositionCall,
     store,
-    verifyNormalActorAccounts: unexpectedPort,
-    verifyNormalActorMemberships: unexpectedPort,
-    verifySharedAuthAdoption: unexpectedPort,
-    withResourceLease: unexpectedPort,
+    verifyNormalActorAccounts: unexpectedCompositionCall,
+    verifyNormalActorMemberships: unexpectedCompositionCall,
+    verifySharedAuthAdoption: unexpectedCompositionCall,
+    withResourceLease: unexpectedCompositionCall,
   };
 };
 
@@ -1548,10 +1548,12 @@ describe("participant plan resolution", () => {
       vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
         execute: vi.fn<Launcher["execute"]>(async (current) => {
           worker = current;
+          await Promise.resolve();
           throw stop;
         }),
         inspect: vi.fn<Launcher["inspect"]>(async (current) => {
           worker = current;
+          await Promise.resolve();
           const readback: Awaited<ReturnType<Launcher["inspect"]>> = {
             context_digest: "d".repeat(64),
             fence_generation: 1,
@@ -1567,17 +1569,21 @@ describe("participant plan resolution", () => {
         "VERCEL_OIDC_TOKEN",
         `fixture.${Buffer.from(JSON.stringify({ exp: 2_000_000_000 })).toString("base64url")}.fixture`,
       );
-      const dependencies = composeHostedOperatorDependencies(f.configuration, {
+      const controlPlane: Parameters<typeof composeHostedOperatorDependencies>[1] = {
         ...unusedCompositionControlPlane(),
         assertAuthorized: vi.fn(async () => {}),
         assertPlanningAuthorized: f.ports.assertPlanningAuthorized,
         readNormalActorOrganizationProofs: f.ports.readNormalActorOrganizationProofs,
         readNormalActorPreparation: f.ports.readNormalActorPreparation,
-        readResourceBindings: vi.fn(async () => ({
-          appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
-          authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
-        })),
-      });
+        readResourceBindings: vi.fn(async () => {
+          await Promise.resolve();
+          return {
+            appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
+            authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
+          };
+        }),
+      };
+      const dependencies = composeHostedOperatorDependencies(f.configuration, controlPlane);
       await (mode === "inspect"
         ? dependencies.reconcile(input)
         : expect(dependencies.executeEffect(input)).rejects.toBe(stop));
@@ -1599,7 +1605,7 @@ describe("participant plan resolution", () => {
         .mockImplementationOnce(async () => {})
         .mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
       await expect(guard()).rejects.toMatchObject({ code: "authorization_required" });
-      const organization = f.state.organizations[0];
+      const [organization] = f.state.organizations;
       if (organization === undefined) {
         throw new Error("Fixture participant organization missing");
       }
@@ -1615,7 +1621,6 @@ describe("participant plan resolution", () => {
   });
   it("freezes only account effects after actual bootstrap readiness", async () => {
     const f = participantResolutionFixture();
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit optional result argument.
     f.ports.readNormalActorPreparation.mockResolvedValue(undefined);
     const result = await resolveFullPlan(f.base, context, f.configuration, f.ports, {}, true);
     expect(result.stage).toBe("auth-participants");
@@ -1755,7 +1760,6 @@ describe("participant plan resolution", () => {
   });
 });
 
-/* oxlint-disable eslint/require-await, typescript/no-non-null-assertion, anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion, typescript/no-unnecessary-type-assertion, eslint/no-nested-ternary, sonarjs/no-nested-conditional, sonarjs/max-union-size, unicorn/no-useless-undefined -- Synthetic planning fixtures intentionally implement only read-only ports reached by these tests; schema parsers construct the original approved records. */
 // These spies isolate provider inventory while exercising the real workflow plan composition.
 
 const existingAuthRecord = (plan = bootstrapPlan()) =>
@@ -1853,7 +1857,6 @@ describe("retained APP Gateway source planning continuation", () => {
     const dependencies = composeHostedOperatorDependencies(
       f.configuration,
       // SAFETY: The focused planning branch uses only the implemented owner, approval and journal ports.
-      // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Unsupported states stop at the observed ordinary planning boundary.
       controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
     );
     return { ...f, assertCanonicalOwner, dependencies, read, readApproval, row };
@@ -1942,7 +1945,6 @@ describe("retained APP Gateway source planning continuation", () => {
       }));
       const before = structuredClone(f.row);
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Lost-response replay must observe the same saved proposal sequentially.
         const planned = await f.dependencies.plan({
           ...context,
           action: "prepare",
@@ -2138,7 +2140,7 @@ describe("existing populated Auth workflow planning", () => {
       original.retainedAuth = retainedOperatorAuthFromJournal(original);
       original.operator = {
         ...original.operator!,
-        approvalId: undefined,
+        approvalId: null,
         plan: {
           ...original.operator!.plan,
           action: "cleanup",
@@ -2480,14 +2482,17 @@ describe("existing populated Auth workflow planning", () => {
     // The prepared APP plan and provider row describe the same current realm configuration.
     operator.plan.gatewayBindings = configuredBootstrapGatewayBindings(f.configuration);
     operator.planDigest = operatorPlanDigest(operator.plan);
-    operator.receipts = operator.plan.effects.map((effect) => ({
-      effectId: effect.id,
-      observedAt: "2026-10-15T12:00:00Z",
-      resourceVersion: "settled-app-readback",
-      ...(["access", "revoke"].includes(effect.kind)
-        ? { fenceGeneration: operator.fenceGeneration }
-        : {}),
-    }));
+    operator.receipts = operator.plan.effects.map((effect) => {
+      const receipt = {
+        effectId: effect.id,
+        observedAt: "2026-10-15T12:00:00Z",
+        resourceVersion: "settled-app-readback",
+        ...(["access", "revoke"].includes(effect.kind) && {
+          fenceGeneration: operator.fenceGeneration,
+        }),
+      };
+      return receipt;
+    });
     operator.gatewayEnvironment![0].valueSha256 = hostedOperatorRealmLinkConfigSha256(
       operator.plan,
     );
@@ -2637,7 +2642,7 @@ describe("existing populated Auth workflow planning", () => {
     };
     const assertCurrent = vi.fn(async () => {});
     readSelection.mockResolvedValue({
-      approvedScope: undefined,
+      approvedScope: null,
       assertCurrent,
       contextId: "prepared-context",
       currentSpec: {
@@ -2908,7 +2913,7 @@ describe("existing populated Auth workflow planning", () => {
     const selection = vi.mocked(planningAuthority.readOwnedOperatorPlanningSelection);
     selection.mockResolvedValue({
       currentSpec: { appSpecDigest: "new-unvalidated-spec" },
-      selection: undefined,
+      selection: null,
     } as Awaited<ReturnType<typeof planningAuthority.readOwnedOperatorPlanningSelection>>);
     const readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(async () => ({
       action: "prepare" as const,
@@ -2953,11 +2958,7 @@ describe("existing populated Auth workflow planning", () => {
     let approved = false;
     let fence = 1;
     const executed: string[] = [];
-    const receipt = (input: HostedOperatorEffectContext) => ({
-      effectId: input.effect.id,
-      observedAt: new Date().toISOString(),
-      resourceVersion: "independent-fixture-readback",
-    });
+    const receipt = independentFixtureReceipt;
     const store: ProtectedHostedOperatorDependencies["store"] = {
       compareAndSet: async (input) => {
         if (input.expectedRevision !== f.row.revision) {
@@ -3196,13 +3197,11 @@ describe("existing populated Auth workflow planning", () => {
             nonceSha256: "a".repeat(64),
             organizationId: null,
             ownerSessionId: context.target.sessionId,
-            ...(identityState === "consumed"
-              ? {
-                  consumedAt: "2026-10-15T12:00:00Z",
-                  proofRef: "captured-owner-proof",
-                  proofSha256: "b".repeat(64),
-                }
-              : {}),
+            ...(identityState === "consumed" && {
+              consumedAt: "2026-10-15T12:00:00Z",
+              proofRef: "captured-owner-proof",
+              proofSha256: "b".repeat(64),
+            }),
           },
           pendingEffectAttempt: { id: "00000000-0000-4000-8000-000000000002" },
           pendingEffectId: "gateway-bindings",
@@ -3374,7 +3373,7 @@ describe("existing populated Auth workflow planning", () => {
     f.original.retainedAuth = retained;
     f.original.approvedByCallId = "operator:unapproved-plan";
     const operator = f.original.operator!;
-    operator.approvalId = undefined;
+    delete operator.approvalId;
     operator.operationRef = "00000000-0000-4000-8000-000000000002";
     operator.plan = {
       ...operator.plan,
@@ -3418,14 +3417,14 @@ describe("existing populated Auth workflow planning", () => {
       recordedState: "READY",
     },
     {
-      configuredDeploymentId: undefined,
-      expectedDeploymentId: undefined,
+      configuredDeploymentId: null,
+      expectedDeploymentId: null,
       expectedOrigin: "https://gateway.example",
       recordedState: "READY",
     },
     {
-      configuredDeploymentId: undefined,
-      expectedDeploymentId: undefined,
+      configuredDeploymentId: null,
+      expectedDeploymentId: null,
       expectedOrigin: "https://gateway.example",
       recordedState: "BUILDING",
     },
@@ -3639,7 +3638,7 @@ describe("existing populated Auth workflow planning", () => {
       });
       Object.assign(f.controlPlane, { prepareRealmIdentityLink });
       if (nonceState === "pending") {
-        operator.identityLink.consumedAt = undefined;
+        delete operator.identityLink.consumedAt;
       }
       const before = structuredClone(operator.identityLink);
       const invitation = f.dependencies.authIdentityInput!({
@@ -3740,7 +3739,7 @@ describe("retained approved Auth binding selection", () => {
     expect(() =>
       requireFinalResourceBindingPhase(selected, {
         plan: originalPlan,
-        privateState: undefined,
+        privateState: null,
       }),
     ).toThrow();
     row.record.leaseId = "active-delivery-lease";
@@ -3774,8 +3773,8 @@ describe("retained approved Auth binding selection", () => {
     record.retainedAuth = retainedOperatorAuthFromJournal(record);
     record.operator = {
       ...record.operator!,
-      approvalId: undefined,
-      authPreparation: undefined,
+      approvalId: null,
+      authPreparation: null,
       plan: { ...originalPlan, contextId: "replacement" },
     };
     record.operator.planDigest = operatorPlanDigest(record.operator.plan);
@@ -3790,7 +3789,7 @@ describe("retained approved Auth binding selection", () => {
     expect(accepted.record.operator!.planDigest).toBe(operatorPlanDigest(originalPlan));
     expect(row.record.operator!.plan.contextId).toBe("replacement");
     expect(() =>
-      requireFinalResourceBindingPhase(selected, { plan: originalPlan, privateState: undefined }),
+      requireFinalResourceBindingPhase(selected, { plan: originalPlan, privateState: null }),
     ).toThrow();
     expect(() =>
       requireFinalResourceBindingPhase(
@@ -3807,7 +3806,7 @@ describe("retained approved Auth binding selection", () => {
       ),
     ).toThrow();
     const unapproved = structuredClone(selected);
-    unapproved.record.operator!.approvalId = undefined;
+    delete unapproved.record.operator!.approvalId;
     expect(() =>
       requireFinalResourceBindingPhase(unapproved, {
         plan: originalPlan,
@@ -4132,7 +4131,6 @@ describe("retained active schema installation scope", () => {
         { description: "Approved grants", id: "app-access", kind: "access" },
         { description: "Approved bindings", id: "app-bindings", kind: "bindings" },
       ],
-      stage: undefined,
     });
     const prior = hostedOperatorPlanSchema.parse({
       ...desired,
@@ -4272,7 +4270,7 @@ describe("retained active schema installation scope", () => {
             effectId: effect.id,
             observedAt: "2026-10-20T12:00:00Z",
             resourceVersion: "observed-resource",
-            ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
+            ...(effect.kind === "access" && { fenceGeneration: 1 }),
           })),
         },
         privateState: {
@@ -4299,7 +4297,7 @@ describe("retained active schema installation scope", () => {
         config: { tokenKey: Buffer.alloc(32, 1), tokenKeyVersion: "fixture-key" },
         database: "appDatabase",
         plan: f.prior,
-        record: { ...row.record, privateState: undefined },
+        record: { ...row.record, privateState: null },
       });
       row.record.privateState = prepared.privateState;
     }
@@ -4637,10 +4635,10 @@ describe("retained active schema installation scope", () => {
       }
       const plan = hostedOperatorPlanSchema.parse({
         ...f.prior,
-        ...(kind === "database"
-          ? { appDatabase: { ...f.prior.appDatabase, database: "other_database" } }
-          : {}),
-        ...(kind === "app" ? { selection: { ...f.prior.selection, appId: "other-app" } } : {}),
+        ...(kind === "database" && {
+          appDatabase: { ...f.prior.appDatabase, database: "other_database" },
+        }),
+        ...(kind === "app" && { selection: { ...f.prior.selection, appId: "other-app" } }),
       });
       f.session.privateApprovalReceipts = [
         {
@@ -4813,7 +4811,7 @@ it("resolves the completed additive participant successor into its newly approve
       planDigest: operatorPlanDigest(originalApp),
       receipts: originalApp.effects.map((effect) => ({
         effectId: effect.id,
-        ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
+        ...(effect.kind === "access" && { fenceGeneration: 1 }),
         observedAt: "2026-10-20T00:00:00.000Z",
         resourceVersion: "observed",
       })),
@@ -4873,7 +4871,7 @@ it("resolves the completed additive participant successor into its newly approve
     program,
     programDigest: normalActorProgramDigest(program),
   });
-  const qaActor = qa.state.actors[0];
+  const [qaActor] = qa.state.actors;
   if (qaActor?.session === undefined) {
     throw new Error("missing QA session");
   }
