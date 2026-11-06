@@ -40,8 +40,9 @@ export const exerciseCandidateBrowserWorkflows = async (
     const check = (id: string, passed: boolean | null, detail: string) =>
       assertions.push({ detail, id, passed });
     const button = (name: RegExp) => page.getByRole("button", { name }).first();
-    const exists = (locator: ReturnType<Page["locator"]>) => locator.isVisible().catch(() => false);
-    const text = () => page.locator("body").textContent();
+    const exists = async (locator: ReturnType<Page["locator"]>) =>
+      await locator.isVisible().catch(() => false);
+    const text = async () => await page.locator("body").textContent();
     let outcome: CandidateWorkflowOutcome = {
       assertions: [],
       reason: "Candidate workflow did not produce an outcome.",

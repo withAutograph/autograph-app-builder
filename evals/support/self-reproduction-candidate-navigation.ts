@@ -37,7 +37,7 @@ export const exerciseCandidateNavigation = async (
         brief,
         docs,
         page.getByRole("button", { exact: true, name: "Continue to review" }),
-      ].map((control) => control.waitFor({ state: "visible", timeout: 10_000 })),
+      ].map(async (control) => await control.waitFor({ state: "visible", timeout: 10_000 })),
     );
   } catch {
     return observation;

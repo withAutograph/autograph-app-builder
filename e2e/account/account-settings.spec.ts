@@ -13,7 +13,9 @@ import {
 } from "../support/harness";
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("stock account menu updates the profile and signs out", async ({ page }) => {
   await finishOAuth(page, "GitHub");

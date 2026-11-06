@@ -15,16 +15,15 @@ import { requirements } from "./self-reproduction-parity";
 describe("paired capture orchestration", () => {
   it("captures all desktop states separately, records inert controls, and closes contexts", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-test-"));
-    const close = vi.fn(() => Promise.resolve());
-    const newContext = vi.fn(() =>
-      Promise.resolve({
-        close,
-        newPage: () =>
-          Promise.resolve({
-            screenshot: ({ path }: { path: string }) => writeFile(path, "test screenshot bytes"),
-          }),
-      }),
-    );
+    const close = vi.fn(async () => {});
+    const newContext = vi.fn(async () => ({
+      close,
+      newPage: async () =>
+        await Promise.resolve({
+          screenshot: async ({ path }: { path: string }) =>
+            await writeFile(path, "test screenshot bytes"),
+        }),
+    }));
     const adapter: CaptureAdapter = {
       exercise: async (_page, state, capture) => {
         await capture();
@@ -39,7 +38,7 @@ describe("paired capture orchestration", () => {
           passed: state !== "keyboard",
         }));
       },
-      prepare: () => Promise.resolve({ ready: true }),
+      prepare: async () => ({ ready: true }),
     };
     try {
       const result = await captureParity({
@@ -88,7 +87,9 @@ describe("paired capture orchestration", () => {
     };
     try {
       const browser = {
-        newContext: () => Promise.reject(new Error("Browser disconnected")),
+        newContext: async () => {
+          throw new Error("Browser disconnected");
+        },
       } as unknown as Browser;
       const result = await captureParity({
         adapters: { candidate: adapter },
@@ -106,17 +107,15 @@ describe("paired capture orchestration", () => {
   });
   it("owns one browser and writes a side-by-side advisory manifest", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-manifest-"));
-    const closeBrowser = vi.fn(() => Promise.resolve());
-    const closeContext = vi.fn(() => Promise.resolve());
-    const newContext = vi.fn(() =>
-      Promise.resolve({
-        close: closeContext,
-        newPage: () =>
-          Promise.resolve({
-            screenshot: ({ path }: { path: string }) => writeFile(path, "png"),
-          }),
-      }),
-    );
+    const closeBrowser = vi.fn(async () => {});
+    const closeContext = vi.fn(async () => {});
+    const newContext = vi.fn(async () => ({
+      close: closeContext,
+      newPage: async () =>
+        await Promise.resolve({
+          screenshot: async ({ path }: { path: string }) => await writeFile(path, "png"),
+        }),
+    }));
     const adapter: CaptureAdapter = {
       exercise: async (_page, state, capture) => {
         await capture();
@@ -126,12 +125,12 @@ describe("paired capture orchestration", () => {
         }
         return requirement.assertions.map((id) => ({ detail: "Observed.", id, passed: true }));
       },
-      prepare: () => Promise.resolve({ ready: true }),
+      prepare: async () => ({ ready: true }),
     };
     try {
       const result = await runPairedCaptureEvidence({
         adapters: { candidate: adapter, reference: adapter },
-        launch: () => Promise.resolve({ close: closeBrowser, newContext } as unknown as Browser),
+        launch: async () => ({ close: closeBrowser, newContext }) as unknown as Browser,
         outputRoot: root,
       });
       expect(closeBrowser).toHaveBeenCalledOnce();

@@ -58,7 +58,9 @@ function saveInput(draftId: string, brief: string, expectedRevision = 0) {
 }
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("PostgreSQL serializes draft save/archive races without resurrecting a handoff draft", async () => {
   const client = postgres(databaseUrl, { max: 4 });
@@ -115,7 +117,7 @@ test("PostgreSQL keeps one active draft across simultaneous device creation and 
       store.saveActive(saveInput(randomUUID(), "Device B")),
     ]);
     expect(first.row.draftId).toBe(second.row.draftId);
-    expect([first.row.revision, second.row.revision].toSorted()).toEqual([1, 2]);
+    expect([first.row.revision, second.row.revision].toSorted((a, b) => a - b)).toEqual([1, 2]);
     const current = await store.readActive({ authority });
     expect(current?.revision).toBe(2);
     await expect(

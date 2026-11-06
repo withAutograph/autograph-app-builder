@@ -26,20 +26,22 @@ export const exerciseReferenceLifecycle = async (input: {
   const snapshots = new Map<string, HostedEngineSnapshot>();
   const counts = { cancels: 0, sends: 0, starts: 0 };
   const transport: HostedEveTransport = {
-    cancel: ({ adapterSessionId }) => {
+    cancel: async ({ adapterSessionId }) => {
       counts.cancels += 1;
       const value = snapshot("cancelled");
       snapshots.set(adapterSessionId, value);
-      return Promise.resolve(value);
+      return value;
     },
-    get: ({ adapterSessionId }) => {
+    get: async ({ adapterSessionId }) => {
       const value = snapshots.get(adapterSessionId);
       if (!value) {
         throw new Error(`Missing snapshot for ${adapterSessionId}.`);
       }
-      return Promise.resolve(value);
+      return value;
     },
-    respond: () => Promise.reject(new Error("This fixture does not support approval responses.")),
+    respond: async () => {
+      throw new Error("This fixture does not support approval responses.");
+    },
     send: async ({ adapterSessionId, onAccepted }) => {
       counts.sends += 1;
       const deliveryId = randomUUID();
@@ -61,12 +63,12 @@ export const exerciseReferenceLifecycle = async (input: {
       snapshots.set(adapterSessionId, value);
       return value;
     },
-    start: () => {
+    start: async () => {
       counts.starts += 1;
       const adapterSessionId = randomUUID();
       const value = snapshot("working");
       snapshots.set(adapterSessionId, value);
-      return Promise.resolve({ adapterSessionId, snapshot: value });
+      return { adapterSessionId, snapshot: value };
     },
   };
   const service = () =>

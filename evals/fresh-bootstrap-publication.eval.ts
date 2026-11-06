@@ -22,14 +22,16 @@ export default defineEval({
     ]);
     try {
       const destination = path.join(fixture.allowedRoot, "absent");
-      const publication = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.send(`Publish fresh repository bootstrap at ${destination}.`),
+      const publication = await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () => await session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
 
       session.requireInputRequest({ toolName: "publish_fresh_repository" });
       publication.event("input.requested", { count: 1 });
-      const turn1 = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.respondAll("approve"),
+      const turn1 = await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () => await session.respondAll("approve"),
       );
       t.succeeded();
       t.check(turn1.message, includes("one parentless SHA-1 local repository"));

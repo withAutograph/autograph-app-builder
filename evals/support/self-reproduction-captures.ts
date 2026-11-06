@@ -230,7 +230,7 @@ export async function runPairedCaptureEvidence(input: {
   adapters: Partial<Record<(typeof sides)[number], CaptureAdapter>>;
   launch?: () => Promise<Browser>;
 }): Promise<PairedCaptureRun> {
-  const browser = await (input.launch ?? (() => chromium.launch({ headless: true })))();
+  const browser = await (input.launch ?? (async () => await chromium.launch({ headless: true })))();
   let observations: Record<(typeof sides)[number], Observation[]>;
   try {
     observations = await captureParity({
