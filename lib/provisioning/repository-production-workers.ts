@@ -81,6 +81,7 @@ export interface RepositoryProductionWorkerProfile {
     maintenanceRole: string;
   };
   authResource: RepositoryProductionResource;
+  authOperatorRole: string;
   operator: { teamId: string; projectId: string; environment: "production" };
 }
 export interface RepositoryProductionWorkerDependencies {
@@ -97,7 +98,7 @@ export interface RepositoryProductionWorkerDependencies {
   /** Live connected-provider reads; returns credentials only inside this protected closure. */
   readConnections: (context: RepositoryProductionEffectContext) => Promise<{
     maintenanceUrl: string;
-    authMigrator: string;
+    authOperator: string;
     authRuntime: string;
     oidcToken: string;
   }>;
@@ -186,7 +187,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     const connections = await deps.readConnections(context);
     const urls = {
       ...appConnections(row),
-      authMigrator: connections.authMigrator,
+      authOperator: connections.authOperator,
       authRuntime: connections.authRuntime,
     };
     const proof =
@@ -240,6 +241,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       },
       appDatabase: resource,
       authDatabase: deps.profile.authResource,
+      authOperatorRole: deps.profile.authOperatorRole,
       neon: deps.profile.neon,
       release: { id: intent.storage.releaseId, sha256: intent.storage.manifestSha256 },
       installer: {
@@ -353,7 +355,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
         operation === "storage"
           ? connections.maintenanceUrl
           : operation === "membership"
-            ? connections.authMigrator
+            ? connections.authOperator
             : urls.appMigrator,
       ...(operation === "storage" ? { resourceCredentialBytes } : {}),
       ...(operation === "schema" || operation === "access"
@@ -414,6 +416,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       version: 1,
       action: "prepare",
       kind: "repository-production-access-v1",
+      authOperatorRole: deps.profile.authOperatorRole,
       authAppAccess,
       effects: [{ id: "auth-app-invitation", kind: "auth-app-invitation" }],
     };
@@ -446,7 +449,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       operation: "auth-management",
       worker,
       context: workerContext,
-      directDatabaseUrl: connection.authMigrator,
+      directDatabaseUrl: connection.authOperator,
       readOnly,
       runId: readOnly
         ? randomUUID()

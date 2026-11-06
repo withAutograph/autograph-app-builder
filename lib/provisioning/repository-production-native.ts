@@ -371,6 +371,7 @@ export const createRepositoryProductionNativeHandler =
             workers: configuration.workers,
             neon: profile.neon,
             authResource: profile.authResource,
+            authOperatorRole: profile.authOperatorRole,
             operator: {
               teamId: configuration.operator.ownerId,
               projectId: configuration.operator.projectId,

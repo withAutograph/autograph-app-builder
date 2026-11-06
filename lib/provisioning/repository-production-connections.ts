@@ -28,7 +28,10 @@ export type RepositoryProductionConnectionProfile = (
 export const createRepositoryProductionConnectionReader =
   (input: {
     connection: RepositoryProductionConnectionProfile;
-    resources: Pick<RepositoryProductionWorkerProfile, "neon" | "authResource">;
+    resources: Pick<
+      RepositoryProductionWorkerProfile,
+      "neon" | "authResource" | "authOperatorRole"
+    >;
     assertCurrent: () => Promise<void>;
     signal: AbortSignal;
     environment?: Readonly<Record<string, string | undefined>>;
@@ -58,6 +61,14 @@ export const createRepositoryProductionConnectionReader =
       team: input.connection.operator.ownerId,
     });
     await io.verifyOidc(oidcToken, input.connection.operator);
+    const { authOperatorRole, authResource } = input.resources;
+    if (
+      !/^[a-z][a-z0-9_]{0,62}$/u.test(authOperatorRole) ||
+      authOperatorRole === authResource.migratorRole ||
+      authOperatorRole === authResource.runtimeRole
+    ) {
+      throw new Error("repository_production_provider_scope_mismatch");
+    }
     const scope = input.resources.neon;
     const validateUrl = (value: string, database: string, role: string) => {
       try {
@@ -107,23 +118,19 @@ export const createRepositoryProductionConnectionReader =
         scope.maintenanceDatabase,
         scope.maintenanceRole,
       );
-      const migrator = bound(
-        connection.authMigratorEnvironment,
+      const authOperatorUrl = bound(
+        connection.authOperatorEnvironment,
         input.resources.authResource.database,
-        input.resources.authResource.migratorRole,
+        authOperatorRole,
       );
       const runtime = bound(
         connection.authRuntimeEnvironment,
         input.resources.authResource.database,
         input.resources.authResource.runtimeRole,
       );
-      const [maintenanceUrl, authMigrator, authRuntime] = await Promise.all([
+      const [maintenanceUrl, authOperator, authRuntime] = await Promise.all([
         verifyIdentity(maintenance, scope.maintenanceDatabase, scope.maintenanceRole),
-        verifyIdentity(
-          migrator,
-          input.resources.authResource.database,
-          input.resources.authResource.migratorRole,
-        ),
+        verifyIdentity(authOperatorUrl, input.resources.authResource.database, authOperatorRole),
         verifyIdentity(
           runtime,
           input.resources.authResource.database,
@@ -131,7 +138,7 @@ export const createRepositoryProductionConnectionReader =
         ),
       ]);
       await input.assertCurrent();
-      return { maintenanceUrl, authMigrator, authRuntime, oidcToken };
+      return { maintenanceUrl, authOperator, authRuntime, oidcToken };
     }
     const projectPath = `/projects/${encodeURIComponent(scope.projectId)}`;
     const read = async (path: string, query: Record<string, string> = {}) => {
@@ -195,11 +202,11 @@ export const createRepositoryProductionConnectionReader =
       return await verifyIdentity(validateUrl(value.uri, database, role), database, role);
     };
     // Only the protected operator receives these values; app runtimes receive their own restricted URL.
-    const [maintenanceUrl, authMigrator, authRuntime] = await Promise.all([
+    const [maintenanceUrl, authOperator, authRuntime] = await Promise.all([
       uri(scope.maintenanceDatabase, scope.maintenanceRole),
-      uri(input.resources.authResource.database, input.resources.authResource.migratorRole),
+      uri(input.resources.authResource.database, authOperatorRole),
       uri(input.resources.authResource.database, input.resources.authResource.runtimeRole),
     ]);
     await input.assertCurrent();
-    return { maintenanceUrl, authMigrator, authRuntime, oidcToken };
+    return { maintenanceUrl, authOperator, authRuntime, oidcToken };
   };

@@ -22,6 +22,7 @@ const resources: Input["resources"] = {
     maintenanceDatabase: "neondb",
     maintenanceRole: "maintenance",
   },
+  authOperatorRole: "auth_operator",
   authResource: {
     resourceId: "auth-resource",
     database: "auth",
@@ -32,19 +33,22 @@ const resources: Input["resources"] = {
 const secrets = repositoryProductionSecretConnectionSchema.parse({
   kind: "deployment-secrets",
   maintenanceUrlEnvironment: "APP_PRODUCTION_MAINTENANCE",
-  authMigratorEnvironment: "APP_PRODUCTION_AUTH_MIGRATOR",
+  authOperatorEnvironment: "APP_PRODUCTION_AUTH_OPERATOR",
   authRuntimeEnvironment: "APP_PRODUCTION_AUTH_RUNTIME",
 });
 const uri = (database: string, role: string) =>
   `postgresql://${role}:private-fixture-password@${resources.neon.endpoint}/${database}?sslmode=require`;
 type FixtureEnvironment = Record<
-  "APP_PRODUCTION_MAINTENANCE" | "APP_PRODUCTION_AUTH_MIGRATOR" | "APP_PRODUCTION_AUTH_RUNTIME",
+  "APP_PRODUCTION_MAINTENANCE" | "APP_PRODUCTION_AUTH_OPERATOR" | "APP_PRODUCTION_AUTH_RUNTIME",
   string | undefined
 >;
-const fixture = (connection?: RepositoryProductionConnectionProfile) => {
+const fixture = (
+  connection?: RepositoryProductionConnectionProfile,
+  configuredResources: Input["resources"] = resources,
+) => {
   const environment: FixtureEnvironment = {
     APP_PRODUCTION_MAINTENANCE: uri("neondb", "maintenance"),
-    APP_PRODUCTION_AUTH_MIGRATOR: uri("auth", "auth_migrator"),
+    APP_PRODUCTION_AUTH_OPERATOR: uri("auth", "auth_operator"),
     APP_PRODUCTION_AUTH_RUNTIME: uri("auth", "auth_runtime"),
   };
   const io = {
@@ -84,7 +88,7 @@ const fixture = (connection?: RepositoryProductionConnectionProfile) => {
     assertCurrent,
     read: createRepositoryProductionConnectionReader({
       connection: connection ?? { ...secrets, operator },
-      resources,
+      resources: configuredResources,
       environment,
       io,
       fetch: request,
@@ -101,7 +105,7 @@ describe("Production repository connection bindings", () => {
     expect(h.io.verifyOidc).toHaveBeenCalledWith("current-production-oidc", operator);
     expect(h.io.readIdentity).toHaveBeenCalledTimes(3);
     expect(new URL(result.maintenanceUrl).searchParams.get("sslmode")).toBe("verify-full");
-    expect(new URL(result.authMigrator).username).toBe("auth_migrator");
+    expect(new URL(result.authOperator).username).toBe("auth_operator");
     expect(new URL(result.authRuntime).username).toBe("auth_runtime");
     expect(h.io.getToken).not.toHaveBeenCalled();
     expect(h.request).not.toHaveBeenCalled();
@@ -109,7 +113,7 @@ describe("Production repository connection bindings", () => {
 
   it.each([
     "APP_PRODUCTION_MAINTENANCE",
-    "APP_PRODUCTION_AUTH_MIGRATOR",
+    "APP_PRODUCTION_AUTH_OPERATOR",
     "APP_PRODUCTION_AUTH_RUNTIME",
   ] as const)(
     "stops before database reads when %s is missing; never tries another binding",
@@ -119,6 +123,29 @@ describe("Production repository connection bindings", () => {
       await expect(h.read()).rejects.toThrow(
         "repository_production_connection_binding_unavailable",
       );
+      expect(h.io.readIdentity).not.toHaveBeenCalled();
+      expect(h.io.getToken).not.toHaveBeenCalled();
+      expect(h.request).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["auth_migrator", "auth_runtime"])(
+    "rejects an Auth %s credential in the operator binding before SQL or provider effects",
+    async (role) => {
+      const h = fixture();
+      h.environment.APP_PRODUCTION_AUTH_OPERATOR = uri("auth", role);
+      await expect(h.read()).rejects.toThrow("repository_production_provider_scope_mismatch");
+      expect(h.io.readIdentity).not.toHaveBeenCalled();
+      expect(h.io.getToken).not.toHaveBeenCalled();
+      expect(h.request).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["auth_migrator", "auth_runtime", ""])(
+    "rejects a profile that aliases the operator to an invalid role (%s)",
+    async (authOperatorRole) => {
+      const h = fixture(undefined, { ...resources, authOperatorRole });
+      await expect(h.read()).rejects.toThrow("repository_production_provider_scope_mismatch");
       expect(h.io.readIdentity).not.toHaveBeenCalled();
       expect(h.io.getToken).not.toHaveBeenCalled();
       expect(h.request).not.toHaveBeenCalled();
@@ -170,6 +197,7 @@ describe("Production repository connection bindings", () => {
       operator,
     });
     const result = await h.read();
+    expect(new URL(result.authOperator).username).toBe("auth_operator");
     expect(new URL(result.authRuntime).username).toBe("auth_runtime");
     expect(h.io.getToken).toHaveBeenCalledWith(
       "neon/production",
@@ -177,6 +205,13 @@ describe("Production repository connection bindings", () => {
       { forceRefresh: true, vercelToken: "current-production-oidc" },
     );
     expect(h.request.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+    const requestedRoles = h.request.mock.calls.flatMap(([value]) => {
+      const url = new URL(value instanceof Request ? value.url : value);
+      const role = url.searchParams.get("role_name");
+      return role === null ? [] : [role];
+    });
+    expect(requestedRoles).toContain("auth_operator");
+    expect(requestedRoles).not.toContain("auth_migrator");
     expect(h.io.readIdentity).toHaveBeenCalledTimes(3);
   });
 

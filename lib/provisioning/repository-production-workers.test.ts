@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/require-await, unicorn/no-await-expression-member -- Async fixture ports retain rejection semantics; assertions inspect their awaited outcomes directly. */
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createRepositoryProductionWorkers } from "./repository-production-workers";
 import type { RepositoryProductionWorkerDependencies } from "./repository-production-workers";
@@ -19,6 +20,7 @@ const defined = <T>(value: T | undefined): T => {
   return value;
 };
 const planSchema = z.object({
+  authOperatorRole: z.string(),
   authAppAccess: z.object({ request: z.object({ action: z.string() }) }).optional(),
   access: z
     .array(
@@ -31,6 +33,7 @@ const planSchema = z.object({
     )
     .optional(),
   appDatabase: z.json().optional(),
+  authDatabase: z.object({ migratorRole: z.string(), runtimeRole: z.string() }).optional(),
 });
 const planFrom = (bytes: Buffer | undefined) =>
   planSchema.parse(JSON.parse(defined(bytes).toString()));
@@ -140,6 +143,7 @@ const fixture = async (staticApp = false) => {
         maintenanceDatabase: "neondb",
         maintenanceRole: "operator",
       },
+      authOperatorRole: "auth_operator",
       authResource: {
         resourceId: "auth",
         database: "auth",
@@ -166,7 +170,7 @@ const fixture = async (staticApp = false) => {
       ) as GeneratedAppReleaseFiles,
     readConnections: async () => ({
       maintenanceUrl: "postgresql://operator:secret@ep-test.neon.tech/neondb",
-      authMigrator: "postgresql://auth_m:secret@ep-test.neon.tech/auth",
+      authOperator: "postgresql://auth_operator:secret@ep-test.neon.tech/auth",
       authRuntime: "postgresql://auth_r:secret@ep-test.neon.tech/auth",
       oidcToken: "private-token",
     }),
@@ -206,6 +210,42 @@ const fixture = async (staticApp = false) => {
   };
 };
 describe("concrete protected Production worker composition", () => {
+  it("binds the restricted Auth role into approval without changing resource identity or passing the owner credential", async () => {
+    const f = await fixture();
+    await f.workers.apply(f.context);
+    const auth = defined(f.calls.find((call) => call.operation === "auth-management"));
+    const planBytes = defined(auth.startupFiles["operator-plan.json"]);
+    expect(planFrom(planBytes).authOperatorRole).toBe("auth_operator");
+    expect(auth.context.operation.approval_digest).toBe(
+      createHash("sha256").update(planBytes).digest("hex"),
+    );
+    expect(new URL(auth.directDatabaseUrl).username).toBe("auth_operator");
+    expect(auth.context.resource.migrator_role).toBe("auth_m");
+    expect(auth.context.resource.runtime_role).toBe("auth_r");
+    const resource = z
+      .object({ migratorRole: z.string(), runtimeRole: z.string() })
+      .parse(JSON.parse(defined(auth.startupFiles["auth-database-resource.json"]).toString()));
+    expect(resource.migratorRole).toBe("auth_m");
+    expect(resource.runtimeRole).toBe("auth_r");
+    const access = defined(f.calls.find((call) => call.operation === "access" && !call.readOnly));
+    const accessPlan = defined(access.startupFiles["approved-access-plan.json"]);
+    expect(planFrom(accessPlan).authOperatorRole).toBe("auth_operator");
+    expect(planFrom(accessPlan).authDatabase?.migratorRole).toBe("auth_m");
+    expect(access.context.operation.approval_digest).toBe(
+      createHash("sha256").update(accessPlan).digest("hex"),
+    );
+    const connections = z
+      .strictObject({
+        appMigrator: z.string(),
+        appRuntime: z.string(),
+        authOperator: z.string(),
+        authRuntime: z.string(),
+      })
+      .parse(JSON.parse(defined(access.startupFiles["access-connections.json"]).toString()));
+    expect(new URL(connections.authOperator).username).toBe("auth_operator");
+    expect(new URL(connections.authRuntime).username).toBe("auth_r");
+  });
+
   it("joins the verified actor, grants app roles, reads back, then completes the invitation", async () => {
     const f = await fixture();
     await f.workers.apply(f.context);
