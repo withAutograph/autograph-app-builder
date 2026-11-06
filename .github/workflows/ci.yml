@@ -231,15 +231,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           EXPECTED_ENVIRONMENT: ${{ github.event_name == 'pull_request' && 'Preview' || 'Production' }}
+          EXPECTED_VERCEL_PROJECT: autograph-app-builder
         run: |
           set -eu
           # Vercel can queue the main deployment well after the push; keep exact-SHA polling bounded.
           attempt=0
           deployment_id=
           deployment_url=
+          qualified_environment="$EXPECTED_ENVIRONMENT – $EXPECTED_VERCEL_PROJECT"
           while [ "$attempt" -lt 90 ]; do
             deployments="$(gh api -X GET "repos/$GITHUB_REPOSITORY/deployments" -f sha="$EXPECTED_SHA" -f per_page=100)"
-            deployment="$(printf '%s' "$deployments" | jq -c --arg sha "$EXPECTED_SHA" --arg environment "$EXPECTED_ENVIRONMENT" '[.[] | select(.sha == $sha and .environment == $environment)] | sort_by(.created_at, .id) | last // empty')"
+            deployment="$(printf '%s' "$deployments" | jq -c --arg sha "$EXPECTED_SHA" --arg environment "$EXPECTED_ENVIRONMENT" --arg qualified "$qualified_environment" '[.[] | select(.sha == $sha and (.environment == $environment or .environment == $qualified))] | sort_by(.created_at, .id) | last // empty')"
             if [ -n "$deployment" ]; then
               deployment_id="$(printf '%s' "$deployment" | jq -r '.id')"
               statuses="$(gh api "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses")"
@@ -273,7 +275,8 @@ jobs:
             exit 1
           fi
           test "$(printf '%s' "$deployment" | jq -r '.sha')" = "$EXPECTED_SHA"
-          test "$(printf '%s' "$deployment" | jq -r '.environment')" = "$EXPECTED_ENVIRONMENT"
+          actual_environment="$(printf '%s' "$deployment" | jq -r '.environment')"
+          test "$actual_environment" = "$EXPECTED_ENVIRONMENT" || test "$actual_environment" = "$qualified_environment"
           case "$deployment_url" in https://*.vercel.app) ;; *) exit 1 ;; esac
           if [ "$EXPECTED_ENVIRONMENT" = Production ]; then
             curl --fail --silent --show-error --location --max-time 30 "https://new.autograph.so/healthz" > health.json
