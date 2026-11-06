@@ -4,7 +4,10 @@ import path from "node:path";
 import { z } from "zod";
 import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 import type { PreparedRuntimeExecution } from "./prepared-runtime-execution-core";
-import { browserTestSelectionSchema } from "./browser-test-selection";
+import {
+  browserTestSelectionArguments,
+  browserTestSelectionSchema,
+} from "./browser-test-selection";
 import type { BrowserTestSelection } from "./browser-test-selection";
 
 const privatePreviewPrerequisiteLine =
@@ -14,6 +17,8 @@ const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
 export const appBrowserTestCommand = (appId: string): string =>
   `mise run --no-deps app:runtime run ${appIdSchema.parse(appId)} test-e2e`;
+
+const quoteBrowserArgument = (argument: string) => "'" + argument.replaceAll("'", "'\\''") + "'";
 
 const safeOutput = (value: string): string =>
   value
@@ -87,11 +92,13 @@ export const runAppBrowserTests = async (input: {
             : { environment: browserEnvironment }),
         });
       }
-      if (selection !== undefined) {
-        throw new Error(
-          "Focused browser selection requires a prepared runtime with structured argument transport.",
-        );
-      }
+      const privateCommand =
+        selection === undefined
+          ? command
+          : [
+              appBrowserTestCommand(input.appId),
+              ...browserTestSelectionArguments(selection).map(quoteBrowserArgument),
+            ].join(" ");
       const env = {
         ...input.privateBrowserEnvironment,
         APP_RUNTIME_STATE_DIR: path.posix.dirname(
@@ -99,10 +106,10 @@ export const runAppBrowserTests = async (input: {
         ),
       };
       return input.signal === undefined
-        ? await input.sandbox.run({ command, env, workingDirectory: input.root })
+        ? await input.sandbox.run({ command: privateCommand, env, workingDirectory: input.root })
         : await input.sandbox.run({
             abortSignal: input.signal,
-            command,
+            command: privateCommand,
             env,
             workingDirectory: input.root,
           });
