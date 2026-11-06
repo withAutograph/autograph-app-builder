@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import type { SandboxSession } from "eve/sandbox";
 import type { PreparedSandboxWorkspace } from "./supported-template";
 import { samePreparedWorkspaceSourceContext } from "./supported-template";
 
@@ -13,43 +12,6 @@ import {
   inspectCanonicalTemplateSnapshotReceipt,
   inspectExistingRepositorySnapshotReceipt,
 } from "./source-receipt";
-
-interface SandboxStub {
-  id: string;
-  materializeGitSource?: () => Promise<void>;
-  readTextFile?: SandboxSession["readTextFile"];
-  run: SandboxSession["run"];
-  writeTextFile?: SandboxSession["writeTextFile"];
-}
-const resolvedVoid = async () => {
-  await Promise.resolve();
-};
-const asSandboxSession = (stub: SandboxStub): SandboxSession => ({
-  id: stub.id,
-  materializeGitSource: stub.materializeGitSource,
-  readBinaryFile: async ({ path }) => {
-    await stub.readTextFile?.({ path });
-    return null;
-  },
-  readFile: async () => {
-    await resolvedVoid();
-    return new Uint8Array();
-  },
-  readTextFile:
-    stub.readTextFile ??
-    (async () => {
-      await resolvedVoid();
-      return null;
-    }),
-  removePath: resolvedVoid,
-  resolvePath: (path: string) => path,
-  run: stub.run,
-  spawn: () => expect.fail("Unused sandbox port"),
-  writeBinaryFile: resolvedVoid,
-  writeFile: resolvedVoid,
-  writeTextFile: stub.writeTextFile ?? resolvedVoid,
-});
-const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 
 describe("canonical Arrusted source preparation", () => {
   it("uses the provider-created starter checkout once", async () => {
@@ -83,7 +45,7 @@ describe("canonical Arrusted source preparation", () => {
     const receipt = await acquireCanonicalArrustedTemplate({
       callId: "prepare",
       reader: { acquire: async () => await Promise.resolve({ token: "test-token" }) },
-      sandbox: asSandboxSession({
+      sandbox: {
         id: "sandbox",
         readTextFile: async () => await Promise.resolve(null),
         run,
@@ -91,7 +53,7 @@ describe("canonical Arrusted source preparation", () => {
           await Promise.resolve();
           written.push(path);
         },
-      }),
+      } as never,
     });
     expect(receipt.sourceKind).toBe("fresh-template");
     expect(commands.some((command) => command.includes("git clone"))).toBe(false);
@@ -137,7 +99,7 @@ describe("canonical Arrusted source preparation", () => {
     await acquireCanonicalArrustedTemplate({
       callId: "prepare",
       reader: { acquire: async () => await Promise.resolve({ token: "test-token" }) },
-      sandbox: asSandboxSession({
+      sandbox: {
         id: "sandbox",
         materializeGitSource,
         readTextFile: async () => await Promise.resolve(null),
@@ -145,7 +107,7 @@ describe("canonical Arrusted source preparation", () => {
         writeTextFile: async () => {
           await Promise.resolve();
         },
-      }),
+      } as never,
     });
     expect(materializeGitSource).toHaveBeenCalledOnce();
     expect(materializeGitSource).toHaveBeenCalledWith({
@@ -165,7 +127,7 @@ describe("canonical Arrusted source preparation", () => {
       acquireCanonicalArrustedTemplate({
         callId: "prepare",
         reader: { acquire: async () => await Promise.resolve({ token: "test-token" }) },
-        sandbox: asSandboxSession({ id: "sandbox", materializeGitSource, run }),
+        sandbox: { id: "sandbox", materializeGitSource, run } as never,
       }),
     ).rejects.toThrow("occupied");
     expect(materializeGitSource).not.toHaveBeenCalled();
@@ -184,7 +146,7 @@ describe("canonical Arrusted source preparation", () => {
       },
     });
     if (receipt.version !== 4) {
-      expect.fail("Expected cloned source fixture");
+      throw new Error("Expected cloned source fixture");
     }
     const workspace = {
       adapter: "arrusted-development-v0",
@@ -195,17 +157,18 @@ describe("canonical Arrusted source preparation", () => {
       workspaceDigest: "d".repeat(64),
       workspaceId: "sandbox",
       workspacePath: "/workspace/repository",
-    };
+    } as const;
     const run = vi.fn();
 
     await expect(
       inspectCanonicalArrustedSandboxWorkspace({
         receipt,
-        sandbox: asSandboxSession({
+        sandbox: {
           id: "sandbox",
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           readTextFile: vi.fn(async () => JSON.stringify(workspace)),
           run,
-        }),
+        } as never,
       }),
     ).resolves.toEqual(workspace);
     expect(run).not.toHaveBeenCalled();
@@ -233,7 +196,7 @@ describe("connected GitHub workspace inspection", () => {
     workspaceDigest: "c".repeat(64),
     workspaceId: "sandbox",
     workspacePath: "/workspace/repository",
-  };
+  } as const;
 
   it.each([
     ["the selected revision", originalSha, originalTree],
@@ -251,9 +214,9 @@ describe("connected GitHub workspace inspection", () => {
         .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" });
       const observed = await inspectSourceBoundSandboxWorkspace({
         expectedWorkspace: originalWorkspace,
-        githubSource: { repository: { name: "private", owner: "acme" } },
+        githubSource: { repository: { name: "private", owner: "acme" } } as never,
         receipt,
-        sandbox: asSandboxSession({ id: "sandbox", run }),
+        sandbox: { id: "sandbox", run } as never,
       });
       expect(observed).toMatchObject({
         sourceSha: sha,
@@ -275,9 +238,9 @@ describe("connected GitHub workspace inspection", () => {
     await expect(
       inspectSourceBoundSandboxWorkspace({
         expectedWorkspace: originalWorkspace,
-        githubSource: { repository: { name: "private", owner: "acme" } },
+        githubSource: { repository: { name: "private", owner: "acme" } } as never,
         receipt,
-        sandbox: asSandboxSession({ id: "sandbox", run }),
+        sandbox: { id: "sandbox", run } as never,
       }),
     ).rejects.toThrow("does not match the selected GitHub source");
   });
@@ -292,6 +255,7 @@ const legacySourceFixture = () => {
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
   });
+  const digest = (value: string) => createHash("sha256").update(value).digest("hex");
   const manifest = [
     { mode: "100644", objectId: "c".repeat(40), path: "app.txt", sha256: digest("original app") },
   ];
@@ -341,11 +305,7 @@ describe("legacy source-bound writable workspace", () => {
     const expectedWorkspace = { ...observed, eligibilityDigest: "e".repeat(64) };
     expect(samePreparedWorkspaceSourceContext(observed, expectedWorkspace)).toBe(true);
     await expect(
-      inspectSourceBoundSandboxWorkspace({
-        expectedWorkspace,
-        receipt,
-        sandbox: asSandboxSession(sandbox),
-      }),
+      inspectSourceBoundSandboxWorkspace({ expectedWorkspace, receipt, sandbox: sandbox as never }),
     ).resolves.toEqual(observed);
     expect(sandbox.readBinaryFile).not.toHaveBeenCalled();
   });
@@ -363,7 +323,7 @@ describe("legacy source-bound writable workspace", () => {
         inspectSourceBoundSandboxWorkspace({
           expectedWorkspace,
           receipt,
-          sandbox: asSandboxSession(sandbox),
+          sandbox: sandbox as never,
         }),
       ).rejects.toThrow("no longer matches its durable source receipt");
     },
@@ -375,7 +335,7 @@ describe("legacy source-bound writable workspace", () => {
       inspectSourceBoundSandboxWorkspace({
         expectedWorkspace: observed,
         receipt,
-        sandbox: asSandboxSession({ ...sandbox, id: "other" }),
+        sandbox: { ...sandbox, id: "other" } as never,
       }),
     ).rejects.toThrow("does not belong to this session");
   });

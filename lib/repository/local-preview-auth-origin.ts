@@ -59,14 +59,11 @@ const readOwnedLocalOrigin = async <T>(
   input.signal?.throwIfAborted();
   const file = localRuntimeEnvironmentPath(input.root, input.appId);
   const source = localPreviewAuthOriginReadProgram(file, optionalBrowserOrigin);
-  const runOptions: Parameters<typeof input.sandbox.run>[0] = {
+  const result = await input.sandbox.run({
     command: `node -e ${quote(source)}`,
     workingDirectory: input.root,
-  };
-  if (input.signal !== undefined) {
-    runOptions.abortSignal = input.signal;
-  }
-  const result = await input.sandbox.run(runOptions);
+    ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+  });
   input.signal?.throwIfAborted();
   if (result.exitCode !== 0) {
     throw new Error("The owned local Auth origin could not be read for preview reconciliation.");

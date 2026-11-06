@@ -16,8 +16,6 @@ import type { RetainedOperatorAuth } from "./hosted-operator-contract";
 
 import { normalActorAccountPreparationSchema } from "./hosted-operator-normal-actor-journal";
 
-const RESOURCE_READY_STEP = "resource-ready";
-
 export const hostedRuntimeTargetSchema = z.strictObject({
   appId: builderAppIdSchema,
   branch: z
@@ -157,8 +155,8 @@ const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
     "prepared",
     "verified",
     "bound",
-    RESOURCE_READY_STEP,
-    RESOURCE_READY_STEP,
+    "resource-ready",
+    "resource-ready",
     "environment-removed",
     "cleaned",
   ]),
@@ -297,15 +295,18 @@ export const updateHostedRuntimeJournal = async (input: {
   update: (record: HostedRuntimeJournalRecord) => HostedRuntimeJournalRecord;
 }): Promise<HostedRuntimeJournalRow> => {
   for (let attempt = 0; ; attempt += 1) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- CAS retry preserves the entire valid workload.
     const current = await input.store.read(input);
     if (!current) {
       throw new Error("Runtime preparation journal is unavailable.");
     }
     // Mutable ownership and approval must be observed again after a lost CAS.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Each authoritative journal read has its own authorization check.
     await input.beforeUpdate?.(current.record);
     const record = hostedRuntimeJournalRecordSchema.parse(
       input.update(structuredClone(current.record)),
     );
+    // oxlint-disable-next-line eslint/no-await-in-loop -- writes follow their authoritative read.
     const saved = await input.store.compareAndSet({
       ...input,
       expectedRevision: current.revision,
@@ -315,6 +316,7 @@ export const updateHostedRuntimeJournal = async (input: {
     if (saved) {
       return saved;
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- yield under contention without a total retry ceiling.
     await delay(Math.min(250, 5 * 2 ** Math.min(attempt, 6)));
   }
 };

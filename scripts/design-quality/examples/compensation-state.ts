@@ -76,20 +76,9 @@ export const validateCompensation = (input: CompensationAssumptions) => {
   return errors;
 };
 
-export const calculateCompensation = (
-  input: CompensationAssumptions,
-):
-  | {
-      currentTax: number;
-      currentTotal: number;
-      proposedBase: number;
-      proposedMidpointDelta: number;
-      proposedTax: number;
-      proposedTotal: number;
-    }
-  | undefined => {
+export const calculateCompensation = (input: CompensationAssumptions) => {
   if (Object.keys(validateCompensation(input)).length > 0) {
-    return undefined;
+    return;
   }
   const currentTax = Math.round(input.baseSalary * input.employerTaxRate);
   const proposedBase = Math.round(input.baseSalary * (1 + input.plannedIncrease));

@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/expression-complexity, sonarjs/no-nested-conditional -- Preserve the exact frozen v1/v2/v3 destination and ingress guards together; no capability or version is inferred. */
 import { existingPlatformIntegrationPlanReferenceSchema } from "./existing-platform-integration-contract";
 import { integrationProviderDiagnosticSchema } from "./app-integration-provider-diagnostic";
 import {
@@ -32,17 +33,12 @@ export const integrationCapabilityMembershipSchema = z.strictObject({
   organizationId: id,
   role: sqlName,
 });
-const prepareControlDatabaseEffect = "prepare-control-database";
-const installControlSchemaEffect = "install-control-schema";
-const bindServiceMembershipsEffect = "bind-service-memberships";
-const registerCentralAppEffect = "register-central-app";
-const prepareProviderDestinationEffect = "prepare-provider-destination";
 export const integrationCapabilityEffectSchema = z.enum([
-  prepareControlDatabaseEffect,
-  installControlSchemaEffect,
-  bindServiceMembershipsEffect,
-  registerCentralAppEffect,
-  prepareProviderDestinationEffect,
+  "prepare-control-database",
+  "install-control-schema",
+  "bind-service-memberships",
+  "register-central-app",
+  "prepare-provider-destination",
 ]);
 export type IntegrationCapabilityEffect = z.infer<typeof integrationCapabilityEffectSchema>;
 export const appIntegrationCapabilityPlanSchema = z
@@ -78,17 +74,17 @@ export const appIntegrationCapabilityPlanSchema = z
     }),
     effects: z.union([
       z.tuple([
-        z.literal(prepareControlDatabaseEffect),
-        z.literal(installControlSchemaEffect),
-        z.literal(bindServiceMembershipsEffect),
-        z.literal(registerCentralAppEffect),
+        z.literal("prepare-control-database"),
+        z.literal("install-control-schema"),
+        z.literal("bind-service-memberships"),
+        z.literal("register-central-app"),
       ]),
       z.tuple([
-        z.literal(prepareControlDatabaseEffect),
-        z.literal(installControlSchemaEffect),
-        z.literal(bindServiceMembershipsEffect),
-        z.literal(prepareProviderDestinationEffect),
-        z.literal(registerCentralAppEffect),
+        z.literal("prepare-control-database"),
+        z.literal("install-control-schema"),
+        z.literal("bind-service-memberships"),
+        z.literal("prepare-provider-destination"),
+        z.literal("register-central-app"),
       ]),
     ]),
     kind: z.enum([
@@ -169,6 +165,7 @@ export const appIntegrationCapabilityPlanSchema = z
       subject: id,
     }),
   })
+  // oxlint-disable-next-line eslint/complexity -- One refinement compares immutable version, physical resource, captured source and installed ingress authority without rewriting legacy plans.
   .superRefine((plan, context) => {
     const v2 = plan.version >= 2;
     if (
@@ -246,6 +243,7 @@ export const appIntegrationCapabilityPlanSchema = z
     }
     const resources = [plan.runtime.appDatabase, plan.control.database];
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Exact resources, credentials and service scopes jointly define one approved capability.
       new Set(resources.map((resource) => resource.resourceId)).size !== resources.length ||
       new Set(resources.map((resource) => resource.database)).size !== resources.length ||
       new Set(resources.flatMap((resource) => [resource.runtimeRole, resource.migratorRole]))
@@ -267,6 +265,7 @@ const canonical = (value: CanonicalJsonValue): CanonicalJsonValue => {
   if (Array.isArray(value)) {
     return value.map(canonical);
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Canonical serialization branches on an already validated JSON domain.
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.keys(value)

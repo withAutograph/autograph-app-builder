@@ -2,23 +2,11 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 
 import {
   workingPreviewDiagnosticCollectorSource,
   workingPreviewDiagnosticExcerpt,
 } from "./working-preview-diagnostics";
-
-const previewDiagnosticModuleSchema = z.object({
-  appendPreviewDiagnostic: z.function({
-    input: [z.enum(["stdout", "stderr"]), z.string()],
-    output: z.void(),
-  }),
-});
-const previewDiagnosticOutputSchema = z.object({
-  stderr: z.string(),
-  stdout: z.string(),
-});
 
 describe("working preview diagnostics", () => {
   it("keeps bounded independent tails in a private file while the server runs", async () => {
@@ -26,17 +14,13 @@ describe("working preview diagnostics", () => {
     try {
       const diagnosticsPath = nodePath.join(directory, "output.json");
       const source = `${workingPreviewDiagnosticCollectorSource}\nconst launch = ${JSON.stringify({ diagnosticsPath })};\nexport { appendPreviewDiagnostic };`;
-      const collectorUrl = new URL(
-        `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`,
+      const collector = await import(
+        `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
       );
-      const collector = previewDiagnosticModuleSchema.parse(await import(collectorUrl.href));
-      const { appendPreviewDiagnostic } = collector;
-      appendPreviewDiagnostic("stdout", "a".repeat(20_000));
-      appendPreviewDiagnostic("stdout", "latest stdout");
-      appendPreviewDiagnostic("stderr", "Error: missing configuration");
-      const output = previewDiagnosticOutputSchema.parse(
-        JSON.parse(await readFile(diagnosticsPath, "utf-8")),
-      );
+      collector.appendPreviewDiagnostic("stdout", "a".repeat(20_000));
+      collector.appendPreviewDiagnostic("stdout", "latest stdout");
+      collector.appendPreviewDiagnostic("stderr", "Error: missing configuration");
+      const output = JSON.parse(await readFile(diagnosticsPath, "utf-8"));
       expect(Buffer.byteLength(output.stdout)).toBe(4096);
       expect(output.stdout.endsWith("latest stdout")).toBe(true);
       expect(output.stderr).toBe("Error: missing configuration");

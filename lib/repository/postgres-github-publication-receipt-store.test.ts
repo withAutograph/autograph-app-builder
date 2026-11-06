@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
+import type * as databaseSchema from "../db/schema";
 import { hostedGitHubPublicationJournals, hostedGitHubPublicationProposals } from "../db/schema";
 import type { DraftPullRequestProposal, GitHubMutationReceipt } from "./github-publication";
 import { GITHUB_PUBLICATION_VERSION, createRepositoryObservation } from "./github-publication";
@@ -15,6 +17,7 @@ import {
   sameProposalExceptTitle,
 } from "./postgres-github-publication-store";
 
+type Database = PostgresJsDatabase<typeof databaseSchema>;
 const authority = {
   audience: "https://builder.example.test/mcp",
   issuer: "https://builder.example.test/api/auth",
@@ -22,8 +25,9 @@ const authority = {
   workspaceId: "workspace_one",
 } as const;
 
-const sha256 = (value: object) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const sha256 = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pendingReceipt(
   overrides: Partial<Omit<GitHubMutationReceipt, "version" | "kind" | "status" | "digest">> = {},
 ) {
@@ -39,6 +43,7 @@ function pendingReceipt(
   return { ...unsigned, digest: sha256(unsigned) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function journalRow(receipt: GitHubMutationReceipt = pendingReceipt()) {
   return {
     createdAt: new Date("2026-08-27T00:00:00.000Z"),
@@ -52,28 +57,32 @@ function journalRow(receipt: GitHubMutationReceipt = pendingReceipt()) {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function databaseFixture(input: {
   selected?: unknown[];
   inserted?: unknown[];
   updated?: unknown[];
 }) {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const limit = vi.fn(async () => input.selected ?? []);
   const whereSelect = vi.fn(() => ({ limit }));
   const from = vi.fn(() => ({ where: whereSelect }));
   const select = vi.fn(() => ({ from }));
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const returningInsert = vi.fn(async () => input.inserted ?? []);
   const onConflictDoNothing = vi.fn(() => ({ returning: returningInsert }));
   const values = vi.fn(() => ({ onConflictDoNothing }));
   const insert = vi.fn(() => ({ values }));
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const returningUpdate = vi.fn(async () => input.updated ?? []);
   const whereUpdate = vi.fn(() => ({ returning: returningUpdate }));
   const set = vi.fn(() => ({ where: whereUpdate }));
   const update = vi.fn(() => ({ set }));
 
   return {
-    database: { insert, select, update },
+    database: { insert, select, update } as unknown as Database,
     insert,
     limit,
     onConflictDoNothing,

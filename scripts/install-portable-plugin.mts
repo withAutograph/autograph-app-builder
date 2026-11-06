@@ -1,35 +1,25 @@
 import { cp, lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { z } from "zod";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 
-const clients = ["vscode", "cursor", "codex"] as const;
-const clientHarnessSuffix = ".client-harness.json";
-const pluginRoot = "./app-builder";
-const mcpPath = "./app-builder/mcp.json";
-const usage = "Usage: --client vscode|cursor|codex --source RELEASE_ROOT --destination DIRECTORY";
-const clientInstallExistsMessage = "Client install already exists";
-const missingArgumentMessage = "Missing value for";
-const appBuilderDirectory = "app-builder";
-const harnessSchema = z.record(z.string(), z.unknown());
-const releaseSchema = z.object({ archive: z.string() });
-const argument = (name: string): string => {
+const argument = (name: string) => {
   const index = process.argv.indexOf(name);
   if (index === -1) {
-    throw new Error(usage);
+    return;
   }
   const value = process.argv[index + 1];
-  if (value === undefined || value === "" || value.startsWith("--")) {
-    throw new Error(`${missingArgumentMessage} ${name}.`);
+  if (!value || value.startsWith("--")) {
+    throw new Error(`Missing value for ${name}.`);
   }
   return value;
 };
 const client = argument("--client");
 const sourceValue = argument("--source");
 const destinationValue = argument("--destination");
-const selectedClient = clients.find((candidate) => candidate === client);
-if (selectedClient === undefined) {
-  throw new Error(usage);
+if (!sourceValue || !destinationValue || !["vscode", "cursor", "codex"].includes(client ?? "")) {
+  throw new Error(
+    "Usage: --client vscode|cursor|codex --source RELEASE_ROOT --destination DIRECTORY",
+  );
 }
 const source = await realpath(path.resolve(sourceValue));
 const sourceStats = await lstat(source);
@@ -41,51 +31,44 @@ await mkdir(requestedDestination, { mode: 0o700, recursive: true });
 const destination = await realpath(requestedDestination);
 await validateAgentPluginPackage({
   packageKind: "generated-artifact",
-  pluginRoot: path.join(source, appBuilderDirectory),
+  pluginRoot: path.join(source, "app-builder"),
   release: true,
   repositoryRoot: path.resolve("."),
 });
-const clientRoot = path.join(destination, selectedClient);
+const clientRoot = path.join(destination, client as string);
 try {
   await lstat(clientRoot);
-  throw new Error(`${clientInstallExistsMessage}: ${clientRoot}`);
+  throw new Error(`Client install already exists: ${clientRoot}`);
 } catch (error) {
-  if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
     throw error;
   }
 }
 await mkdir(clientRoot, { mode: 0o700 });
-await cp(path.join(source, appBuilderDirectory), path.join(clientRoot, appBuilderDirectory), {
+await cp(path.join(source, "app-builder"), path.join(clientRoot, "app-builder"), {
   recursive: true,
 });
-const harness = harnessSchema.parse(
-  JSON.parse(
-    await readFile(
-      path.join(source, "clients", `${selectedClient}${clientHarnessSuffix}`),
-      "utf-8",
-    ),
-  ),
+const harness = JSON.parse(
+  await readFile(path.join(source, "clients", `${client}.client-harness.json`), "utf-8"),
 );
-harness.pluginRoot = pluginRoot;
-harness.mcp = mcpPath;
+harness.pluginRoot = "./app-builder";
+harness.mcp = "./app-builder/mcp.json";
 await writeFile(
   path.join(clientRoot, "client-harness.json"),
   `${JSON.stringify(harness, null, 2)}\n`,
 );
-const release = releaseSchema.parse(
-  JSON.parse(await readFile(path.join(source, "release-receipt.json"), "utf-8")),
-);
+const release = JSON.parse(await readFile(path.join(source, "release-receipt.json"), "utf-8"));
 await writeFile(
   path.join(clientRoot, "installation-receipt.json"),
   `${JSON.stringify(
     {
-      client: selectedClient,
+      client,
       format: "agent-plugins-offline-installation-v1",
-      pluginRoot,
+      pluginRoot: "./app-builder",
       releaseArchive: release.archive,
     },
     null,
     2,
   )}\n`,
 );
-console.log(`Installed portable ${selectedClient} harness at ${clientRoot}`);
+console.log(`Installed portable ${client} harness at ${clientRoot}`);

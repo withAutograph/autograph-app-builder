@@ -1,10 +1,11 @@
 import { workspaceBinInstallCommand } from "./workspace-bin-install";
 import { developmentExecutionEnvironment } from "../development/execution-environment.mjs";
+/* oxlint-disable eslint/require-await -- Async sandbox and registry fixtures implement Promise-returning I/O ports without real network/process work. */
 import {
   reviewableChanges,
   baselineReviewableChanges,
   changedAppTextPaths,
-} from "../../agent/tools/change-set-status";
+} from "../../agent/tools/change_set_status";
 import { describe, expect, it, vi } from "vitest";
 import type { FrameworkRegistryFetch } from "./framework-upgrade";
 import type { SandboxSession } from "eve/sandbox";
@@ -128,6 +129,7 @@ const fixtureCommandExit = (command: string, existing: boolean) => {
 };
 const sandboxFixture = (ports: FixtureSandboxPorts): SandboxSession =>
   // SAFETY: Each fixture implements the exact SandboxSession I/O members used by the exercised planning/apply path; no real provider authority is manufactured.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Intentional partial external port fixture; absent members fail if the implementation starts using them.
   ports as unknown as SandboxSession;
 
 describe("framework upgrade planning and apply", () => {
@@ -315,7 +317,7 @@ describe("framework upgrade planning and apply", () => {
       }),
     ).rejects.toThrow("does not belong");
     await expect(
-      executeTargetIdentityAndPlanning({ ...input, localSourceReconciliation: null }),
+      executeTargetIdentityAndPlanning({ ...input, localSourceReconciliation: undefined }),
     ).rejects.toThrow();
     expect(
       targetIterationProposalSchema.safeParse({

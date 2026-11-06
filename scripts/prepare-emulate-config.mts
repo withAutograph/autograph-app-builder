@@ -28,10 +28,9 @@ let privateKey: string;
 try {
   privateKey = await readFile(keyPath, "utf-8");
 } catch {
-  privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({
-    format: "pem",
-    type: "pkcs1",
-  });
+  privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
+    .privateKey.export({ format: "pem", type: "pkcs1" })
+    .toString();
   await writeFile(keyPath, privateKey, { mode: 0o600 });
 }
 try {

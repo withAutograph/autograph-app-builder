@@ -6,9 +6,10 @@ import {
   builderProvisionRequestDigest,
   builderProvisionRequestSchema,
   builderProvisionResponseSchema,
+  githubProvisionSuccessSchema,
   initialBuilderProvisionResponse,
+  vercelProvisionSuccessSchema,
 } from "./contracts";
-import { githubProvisionSuccessSchema, vercelProvisionSuccessSchema } from "./contracts-schema";
 import {
   initialBuilderProvisionJournalRecord,
   builderProvisionJournalRecordSchema,
@@ -203,7 +204,7 @@ describe("builder provisioning contracts", () => {
         ...cloned,
         starter: {
           ...cloned.starter,
-          sourceReceiptDigest: null,
+          sourceReceiptDigest: undefined,
         },
       }).success,
     ).toBe(false);

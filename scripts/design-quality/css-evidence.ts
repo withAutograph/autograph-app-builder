@@ -19,42 +19,46 @@ const normal = (value: string) => value.trim();
 const key = (selector: string, property: string, value: string) =>
   `${normal(selector)}\u0000${property}\u0000${normal(value)}`;
 
-const appendSelectorSpace = (output: string, char: string) => {
-  const previous = output.at(-1);
-  if (
-    previous === undefined ||
-    previous === "" ||
-    /[>+~([,:=]/u.test(previous) ||
-    /[>+~),:=]/u.test(char)
-  ) {
-    return `${output}${char}`;
-  }
-  return `${output} ${char}`;
-};
-
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalSelector(value: string) {
   let output = "";
   let pendingSpace = false;
-  let quote: string | null = null;
+  let quote: string | undefined;
   for (let index = 0; index < value.length; index += 1) {
     const char = value.charAt(index);
-    if (quote !== null) {
+    if (quote) {
       output += char;
-      quote = char === quote && value[index - 1] !== "\\" ? null : quote;
-    } else if (char === '"' || char === "'") {
-      output += pendingSpace && output.length > 0 ? ` ${char}` : char;
+      if (char === quote && value[index - 1] !== "\\") {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      if (pendingSpace && output) {
+        output += " ";
+      }
       pendingSpace = false;
       quote = char;
-    } else if (/\s/u.test(char)) {
-      pendingSpace = output.length > 0;
-    } else {
-      output = pendingSpace ? appendSelectorSpace(output, char) : `${output}${char}`;
-      pendingSpace = false;
+      output += char;
+      continue;
     }
+    if (/\s/u.test(char)) {
+      pendingSpace = Boolean(output);
+      continue;
+    }
+    if (pendingSpace) {
+      const previous = output.at(-1);
+      if (previous && !/[>+~([,:=]/u.test(previous) && !/[>+~),:=]/u.test(char)) {
+        output += " ";
+      }
+    }
+    pendingSpace = false;
+    output += char;
   }
   return output.trim();
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ruleSignature(
   selector: string,
   declarations: { prop: string; value: string; important?: boolean }[],
@@ -82,6 +86,7 @@ function ruleSignature(
     .join("\u0001")}`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[] {
   const evidence: CssRuleEvidence[] = [];
   for (const file of files.filter((sourceFile) => /\.css$/iu.test(sourceFile.path))) {
@@ -95,26 +100,28 @@ export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[
       const declarations =
         rule.nodes?.filter((node): node is Declaration => node.type === "decl") ?? [];
       const signature = ruleSignature(rule.selector, declarations);
-      if (signature === undefined || signature === "") {
+      if (!signature) {
         return;
       }
       for (const declaration of declarations) {
         const start = declaration.source?.start;
-        if (start !== undefined) {
-          evidence.push({
-            property: declaration.prop,
-            ruleSignature: signature,
-            selector: canonicalSelector(rule.selector),
-            source: { column: start.column, line: start.line, path: file.path },
-            value: normal(declaration.value),
-          });
+        if (!start) {
+          continue;
         }
+        evidence.push({
+          property: declaration.prop,
+          ruleSignature: signature,
+          selector: canonicalSelector(rule.selector),
+          source: { column: start.column, line: start.line, path: file.path },
+          value: normal(declaration.value),
+        });
       }
     });
   }
   return evidence;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function generatedCssRule(
   generated: CssRuleEvidence[],
   shared: CssRuleEvidence[],
@@ -123,8 +130,8 @@ export function generatedCssRule(
   value: string | undefined,
   declarations: { name: string; value: string; important?: boolean }[],
 ) {
-  if (selector === undefined || selector === "" || value === undefined) {
-    return null;
+  if (!selector || value === undefined) {
+    return;
   }
   const tuple = key(selector, property, value);
   const matchingGenerated = generated.filter(
@@ -138,14 +145,11 @@ export function generatedCssRule(
       value: declaration.value,
     })),
   );
-  const loaded =
-    actual === undefined || actual === ""
-      ? []
-      : matchingGenerated.filter((rule) => rule.ruleSignature === actual);
+  const loaded = actual ? matchingGenerated.filter((rule) => rule.ruleSignature === actual) : [];
   const matchingShared = shared.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,
   );
-  return loaded.length === 1 && matchingGenerated.length === 1 && matchingShared.length === 0
+  return loaded.length === 1 && matchingGenerated.length === 1 && !matchingShared.length
     ? loaded[0]
     : undefined;
 }

@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- The installed Eve prepare path is an internal JavaScript module exercised through explicit synthetic ports. */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -64,12 +65,12 @@ const fixture = (failure) => {
   let holderClosed = false;
   let readyHook;
   const ports = {
-    authorize() {
+    async authorize() {
       if (failure === "source_authorization") {
         throw fault;
       }
     },
-    commitReceipt(input) {
+    async commitReceipt(input) {
       if (failure === "receipt_commit") {
         throw fault;
       }
@@ -78,7 +79,7 @@ const fixture = (failure) => {
       }
       throw new Error("unexpected-commit");
     },
-    readReceipt() {
+    async readReceipt() {
       if (failure === "receipt_read" || (failure === "post_holder_receipt_read" && holderClosed)) {
         throw fault;
       }
@@ -97,7 +98,7 @@ const fixture = (failure) => {
       await input.authorizeOwner(input.binding);
       return { candidate, kind: "candidate" };
     },
-    getHook() {
+    async getHook() {
       if (failure === "initial_ready_lookup" || (failure === "owner_readiness_lookup" && started)) {
         throw fault;
       }
@@ -112,10 +113,10 @@ const fixture = (failure) => {
       assert.equal(handle, candidate);
       return payload;
     },
-    readEntry() {
+    async readEntry() {
       return { checkpoint, kind: "handoff" };
     },
-    reconcile() {
+    async reconcile() {
       return {
         checkpointCore: {
           serializedContext: checkpoint.serializedContext,
@@ -125,7 +126,7 @@ const fixture = (failure) => {
         provenance: { selectedOrigin: payload.candidates[0].origin },
       };
     },
-    start(input) {
+    async start(input) {
       if (failure === "owner_start") {
         throw fault;
       }

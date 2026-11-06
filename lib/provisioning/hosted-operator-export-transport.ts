@@ -23,23 +23,17 @@ import type {
   HostedOperatorContext,
 } from "./hosted-operator-service";
 
-const EXPORT_PLAN_ACTION = "export-plan";
-const EXPORT_APPROVAL_ACTION = "export-approval";
-const EXPORT_READ_ACTION = "export-read";
-const EXPORT_STATUS_ACTION = "export-status";
-const OWNER_ORGANIZATION_SCOPE = "owner-organization";
-
 export const tenantExportTransportRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({
     ...hostedTenantExportRequestSchema.shape,
-    action: z.literal(EXPORT_APPROVAL_ACTION),
+    action: z.literal("export-approval"),
     ownerContext: operatorOwnerContextSchema,
   }),
   z
     .strictObject({
-      action: z.literal(EXPORT_PLAN_ACTION),
+      action: z.literal("export-plan"),
       customerId: z.string().min(1).optional(),
-      customerScope: z.literal(OWNER_ORGANIZATION_SCOPE).optional(),
+      customerScope: z.literal("owner-organization").optional(),
       idempotencyKey: z.string().min(1),
       ownerContext: operatorOwnerContextSchema,
       selection: operatorSelectionSchema,
@@ -49,12 +43,12 @@ export const tenantExportTransportRequestSchema = z.discriminatedUnion("action",
       "Select one export customer scope.",
     ),
   z.strictObject({
-    action: z.literal(EXPORT_READ_ACTION),
+    action: z.literal("export-read"),
     exportId: z.uuid(),
     ownerContext: operatorOwnerContextSchema,
   }),
   z.strictObject({
-    action: z.literal(EXPORT_STATUS_ACTION),
+    action: z.literal("export-status"),
     exportId: z.uuid(),
     ownerContext: operatorOwnerContextSchema,
   }),
@@ -73,9 +67,7 @@ export const tenantExportPlannedSchema = z.strictObject({
 export type TenantExportTransportRequest = z.infer<typeof tenantExportTransportRequestSchema>;
 
 const isArtifactReadAction = (action: TenantExportTransportRequest["action"]) =>
-  action === EXPORT_STATUS_ACTION ||
-  action === EXPORT_READ_ACTION ||
-  action === EXPORT_APPROVAL_ACTION;
+  action === "export-status" || action === "export-read" || action === "export-approval";
 
 const verifiedWorkloadToken = (carrier: string | null) => {
   if (carrier === null || !carrier.startsWith("Bearer ")) {
@@ -115,11 +107,11 @@ export const createTenantExportDispatcher =
       await dependencies.verifyWorkload(frozenWorkloadRequest);
       let selected: z.infer<typeof operatorSelectionSchema>;
       let savedContext: HostedOperatorContext | undefined;
-      if (parsed.action === EXPORT_PLAN_ACTION) {
+      if (parsed.action === "export-plan") {
         selected = parsed.selection;
       } else {
         const exportId =
-          parsed.action === EXPORT_STATUS_ACTION || parsed.action === EXPORT_READ_ACTION
+          parsed.action === "export-status" || parsed.action === "export-read"
             ? parsed.exportId
             : z.uuid().parse(parsed.planRef.split("/").at(-1));
         const saved = await dependencies.store.read({
@@ -147,7 +139,7 @@ export const createTenantExportDispatcher =
       const { operations } = dependencies;
       let result;
       switch (parsed.action) {
-        case EXPORT_PLAN_ACTION: {
+        case "export-plan": {
           const customerId =
             parsed.customerScope === undefined
               ? z.string().parse(parsed.customerId)
@@ -158,15 +150,15 @@ export const createTenantExportDispatcher =
           result = await operations.plan(context, customerId, parsed.idempotencyKey, onPlanStage);
           break;
         }
-        case EXPORT_READ_ACTION: {
+        case "export-read": {
           result = await operations.readPlan(context, parsed.exportId);
           break;
         }
-        case EXPORT_STATUS_ACTION: {
+        case "export-status": {
           result = await operations.status(context, parsed.exportId);
           break;
         }
-        case EXPORT_APPROVAL_ACTION: {
+        case "export-approval": {
           result = await operations.approval(context, {
             action: "export",
             idempotencyKey: parsed.idempotencyKey,
@@ -196,7 +188,7 @@ export const createTenantExportDispatcher =
       return Response.json(result, { headers: { "cache-control": "private, no-store" } });
     } catch (error) {
       try {
-        if (parsed.action === EXPORT_PLAN_ACTION) {
+        if (parsed.action === "export-plan") {
           reportExportPlanningFailure(parsed.ownerContext.sessionId, planStage, error);
         }
       } catch {

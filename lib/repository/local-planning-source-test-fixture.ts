@@ -1,20 +1,10 @@
+/* oxlint-disable eslint/require-await -- Filesystem-backed provider ports run the actual archive/Git/merge programs. */
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { BuilderSandboxSession } from "../sandbox/builder-sandbox";
 import { prepareDevelopmentSandboxWorkspace } from "./supported-template";
-
-const writeFixtureFile = (
-  writeFile: typeof writeFileSync,
-  base: string,
-  file: string,
-  content: string,
-) => {
-  const target = path.join(base, file);
-  mkdirSync(path.dirname(target), { recursive: true });
-  writeFile(target, content);
-};
 
 export const localPlanningSourceArchiveFixture = async () => {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "owned-archive-source-")));
@@ -23,7 +13,9 @@ export const localPlanningSourceArchiveFixture = async () => {
   mkdirSync(source);
   mkdirSync(workspace);
   const write = (base: string, file: string, content: string) => {
-    writeFixtureFile(writeFileSync, base, file, content);
+    const target = path.join(base, file);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, content);
   };
   const git = (...args: string[]) =>
     execFileSync(

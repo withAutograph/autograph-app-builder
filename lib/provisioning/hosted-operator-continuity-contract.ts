@@ -112,8 +112,6 @@ export const continuityApprovalSchema = hostedContinuityRequestSchema.extend({
   approvedByCallId: id,
 });
 export type ContinuityApproval = z.infer<typeof continuityApprovalSchema>;
-const reconciliationRequiredState = "reconciliation-required";
-const expiredState = "expired";
 export const continuityIdentitySchema = z.strictObject({
   appId: id,
   approvalRef: id,
@@ -131,8 +129,8 @@ export const continuityCurrentSchema = continuityIdentitySchema.extend({
     "ready",
     "restarting",
     "revoked",
-    expiredState,
-    reconciliationRequiredState,
+    "expired",
+    "reconciliation-required",
   ]),
 });
 export type ContinuityCurrent = z.infer<typeof continuityCurrentSchema>;
@@ -235,7 +233,7 @@ export const continuityRecordSchema = z
       "revoking",
       "revoked",
       "settled",
-      reconciliationRequiredState,
+      "reconciliation-required",
     ]),
     suiteCommandId: id.optional(),
     suiteDispatched: z.boolean().optional(),
@@ -264,7 +262,7 @@ export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord)
     return false;
   }
   return [
-    ["starting", reconciliationRequiredState].includes(record.state),
+    ["starting", "reconciliation-required"].includes(record.state),
     record.pendingStage === "runtime",
     record.supersededBy === undefined,
     record.cancelled !== true,

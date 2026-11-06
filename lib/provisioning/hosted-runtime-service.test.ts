@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await, sonarjs/publicly-writable-directories, sonarjs/no-hardcoded-passwords -- In-memory fixtures never access these paths and use only synthetic credentials. */
 import { z } from "zod";
 
 import { describe, expect, it, vi } from "vitest";
@@ -114,34 +115,37 @@ const runtimeFiles = (): PrivateRuntimeFiles => ({
 const memoryStore = () => {
   const rows = new Map<string, HostedRuntimeJournalRow>();
   const store: HostedRuntimeJournalStore = {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning journal fixture.
     async compareAndSet(input): Promise<HostedRuntimeJournalRow | undefined> {
       const key = hostedRuntimeIdentity(input.authority, input.target).digest;
       const row = rows.get(key);
       if (row?.revision !== input.expectedRevision) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- explicit absence is the CAS conflict result.
         return undefined;
       }
       const saved = { record: structuredClone(input.record), revision: row.revision + 1 };
       rows.set(key, saved);
       return structuredClone(saved);
     },
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning journal fixture.
     async read(input) {
       return structuredClone(rows.get(hostedRuntimeIdentity(input.authority, input.target).digest));
     },
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning journal fixture.
     async reserve(input) {
       const key = hostedRuntimeIdentity(input.authority, input.target).digest;
-      const record = {
-        approvedByCallId: input.approvedByCallId,
-        kind: "app-runtime",
-        request: input.target,
-        status: "pending",
-        step: "reserved",
-        version: 1,
-      } satisfies HostedRuntimeJournalRecord;
-      if (input.environmentGitBranch !== undefined) {
-        record.environmentGitBranch = input.environmentGitBranch;
-      }
       const row = rows.get(key) ?? {
-        record,
+        record: {
+          approvedByCallId: input.approvedByCallId,
+          ...(input.environmentGitBranch === undefined
+            ? {}
+            : { environmentGitBranch: input.environmentGitBranch }),
+          kind: "app-runtime",
+          request: input.target,
+          status: "pending",
+          step: "reserved",
+          version: 1,
+        } satisfies HostedRuntimeJournalRecord,
         revision: 1,
       };
       rows.set(key, row);
@@ -172,6 +176,7 @@ const providerFixture = (productionBranch?: string) => {
       value: "ep-production.us-east-1.aws.neon.tech/neondb",
     },
   ];
+  // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
   const request = vi.fn<typeof fetch>(async (resource, init) => {
     const url = new URL(resource instanceof Request ? resource.url : resource.toString());
     if (url.pathname === "/v1/storage/stores") {
@@ -245,9 +250,11 @@ describe("durable hosted runtime preparation", () => {
     let files: PrivateRuntimeFiles = {};
     const operations: string[] = [];
     const executor: HostedRuntimeExecutor = {
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning protected filesystem fixture.
       async capture() {
         return files;
       },
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning protected filesystem fixture.
       async restore(saved) {
         files = saved;
       },
@@ -335,6 +342,7 @@ describe("durable hosted runtime preparation", () => {
     const executor: HostedRuntimeExecutor = {
       capture: async () => files,
       restore,
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning repository fixture.
       async run({ operation }) {
         operations.push(operation);
         if (operation === "checkpoint") {
@@ -436,6 +444,7 @@ describe("durable hosted runtime preparation", () => {
       restore: vi.fn(),
       run: vi.fn(),
     } satisfies HostedRuntimeExecutor;
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
     const request = vi.fn<typeof fetch>(async (resource) => {
       const url = new URL(resource instanceof Request ? resource.url : resource.toString());
       if (url.pathname.includes("/env")) {
@@ -747,7 +756,8 @@ it("honors the actual existing reservation when a legacy row wins concurrent cre
   const f = providerFixture(target.branch);
   const store: HostedRuntimeJournalStore = {
     ...memory.store,
-    reserve: async (input) => await memory.store.reserve({ ...input, environmentGitBranch: null }),
+    reserve: async (input) =>
+      await memory.store.reserve({ ...input, environmentGitBranch: undefined }),
   };
   const executor: HostedRuntimeExecutor = {
     capture: async () => runtimeFiles(),

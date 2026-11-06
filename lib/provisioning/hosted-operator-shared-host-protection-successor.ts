@@ -18,21 +18,15 @@ type OperatorRecord = NonNullable<HostedRuntimeJournalRecord["operator"]>;
 const sameAppNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan): boolean => {
   const policy = next.hostProtection;
   const boundary = prior.deploymentBoundary;
-  if (prior.stage !== "app" || next.stage !== "app" || prior.action !== "prepare") {
-    return false;
-  }
   if (
+    prior.stage !== "app" ||
+    next.stage !== "app" ||
+    prior.action !== "prepare" ||
     policy === undefined ||
     boundary === undefined ||
     prior.publicGateway === undefined ||
-    prior.gatewayBindings === undefined
-  ) {
-    return false;
-  }
-  if (prior.appTrustedSources === undefined && prior.gatewayBindings.trustedSources === undefined) {
-    return false;
-  }
-  if (
+    prior.gatewayBindings === undefined ||
+    (prior.appTrustedSources === undefined && prior.gatewayBindings.trustedSources === undefined) ||
     !matchesExternalTrustedSources(
       policy,
       boundary.teamId,
@@ -54,11 +48,9 @@ const sameNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan): 
     prior.stage !== AUTH_BOOTSTRAP ||
     next.stage !== AUTH_BOOTSTRAP ||
     binding === undefined ||
-    prior.gatewayBindings?.trustedSources === undefined
+    prior.gatewayBindings?.trustedSources === undefined ||
+    next.gatewayBindings === undefined
   ) {
-    return false;
-  }
-  if (next.gatewayBindings === undefined) {
     return false;
   }
   if (

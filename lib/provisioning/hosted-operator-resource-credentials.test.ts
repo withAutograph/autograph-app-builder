@@ -213,6 +213,7 @@ describe("owned installed resource bindings", () => {
   });
 });
 
+/* oxlint-disable eslint/require-await -- In-memory owner, lease and journal ports preserve the asynchronous production reader contract. */
 const completedGatewayBindingObservation = (stage: "app" | "auth-bootstrap" = "app") => {
   const operationRef = "00000000-0000-4000-8000-000000000021";
   const bindingEffect = {
@@ -312,7 +313,7 @@ const completedGatewayBindingObservation = (stage: "app" | "auth-bootstrap" = "a
             planDigest: "a".repeat(64),
             targetDigest: "b".repeat(64),
           },
-          delivery: null,
+          delivery: undefined,
           effects: appPlan.effects.filter((effect) =>
             ["resources", "install", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
           ),
@@ -444,7 +445,7 @@ describe.each(["app", "auth-bootstrap"] as const)(
         } else if (invalid === "pending-attempt") {
           delete operator.pendingEffectAttempt;
         } else {
-          effect.privateState = null;
+          effect.privateState = undefined;
         }
         const store = {
           read: async () => ({ record, revision: 1 }),

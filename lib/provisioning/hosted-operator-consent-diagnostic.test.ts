@@ -751,6 +751,7 @@ describe("private operator planning stage observer", () => {
     });
     try {
       for (const diagnosticSink of [sink, undefined]) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Verify each logger failure preserves the original exception.
         await expect(
           observeOperatorPlanStage(
             secret,
@@ -1185,18 +1186,13 @@ it.each([
       mode: "inspect",
       stage: "final_runtime_readiness",
     });
-    const executionFailure = {
+    expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
       errorClass,
       mode: "inspect",
       stage: "final_runtime_readiness",
-    };
-    if (code !== undefined) {
-      executionFailure.code = code;
-    }
-    if (sqlState !== undefined) {
-      executionFailure.sqlState = sqlState;
-    }
-    expect(sink.mock.calls[0]?.[0].executionFailure).toEqual(executionFailure);
+      ...(code === undefined ? {} : { code }),
+      ...(sqlState === undefined ? {} : { sqlState }),
+    });
     expect(Object.getOwnPropertyDescriptor(error, "code")?.value).toBe(priorCode);
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");
@@ -1329,16 +1325,11 @@ it.each([
         preparationFailure: {
           errorClass,
           stage,
+          ...(code === undefined ? {} : { code }),
+          ...(moduleCode === undefined ? {} : { moduleCode }),
         },
       }),
     );
-    const preparationFailure = sink.mock.calls[0]?.[0].preparationFailure;
-    if (code !== undefined) {
-      expect(preparationFailure).toHaveProperty("code", code);
-    }
-    if (moduleCode !== undefined) {
-      expect(preparationFailure).toHaveProperty("moduleCode", moduleCode);
-    }
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");
   },
@@ -1374,9 +1365,9 @@ it.each([
     expected: { stage: "schema_replan" },
     metadata: { domain_code: secret, stage: "schema_replan" },
   },
-  { expected: null, metadata: { domain_code: "migration_contention", stage: secret } },
+  { expected: undefined, metadata: { domain_code: "migration_contention", stage: secret } },
   {
-    expected: null,
+    expected: undefined,
     metadata: Object.defineProperty({}, "stage", {
       get() {
         throw new Error(secret);
@@ -1384,7 +1375,7 @@ it.each([
     }),
   },
   {
-    expected: null,
+    expected: undefined,
     metadata: new Proxy(
       {},
       {
@@ -1412,12 +1403,10 @@ it.each([
         {
           stage: "worker_protocol",
           workerFailure: "startup_rejected",
+          ...(projected === undefined ? {} : { authStartup: projected }),
         },
       ),
     ).rejects.toBe(error);
-    if (projected !== undefined) {
-      expect(sink.mock.calls[0]?.[0].executionFailure).toHaveProperty("authStartup", projected);
-    }
     expect(sink.mock.calls[0]?.[0].executionFailure?.workerFailure).toBe("startup_rejected");
     expect(sink.mock.calls[0]?.[0].executionFailure?.authStartup).toEqual(expected);
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -1715,6 +1704,7 @@ describe("closed normal Auth execution diagnostics", () => {
     });
     for (const error of [revoked.proxy, descriptorTrap, prototypeTrap]) {
       const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Observe each exact hostile original rejection with its own nonthrowing diagnostic sink.
       await expect(
         observeOperatorExecutionStage(
           secret,
@@ -1804,6 +1794,7 @@ describe("closed normal actor journal-change execution marker", () => {
     });
     for (const error of [revoked.proxy, hostile]) {
       const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each exact hostile rejection is observed independently with its own diagnostic sink.
       await expect(
         observeOperatorExecutionStage(
           secret,
@@ -1828,7 +1819,7 @@ describe("closed normal actor journal-change execution marker", () => {
 describe("continuity planning failure diagnostics", () => {
   it("preserves successful values and invokes the existing call once without logging", async () => {
     const result = { private: secret };
-    const run = vi.fn(() => result);
+    const run = vi.fn(async () => result);
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     await expect(observeContinuityPlanningStage(secret, "sandbox_resume", run, sink)).resolves.toBe(
       result,
@@ -1846,7 +1837,7 @@ describe("continuity planning failure diagnostics", () => {
     "retains the original $errorClass rejection with only closed metadata",
     async ({ error, errorClass }) => {
       const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
-      const run = vi.fn(() => {
+      const run = vi.fn(async () => {
         throw error;
       });
       await expect(
@@ -1886,7 +1877,7 @@ describe("continuity planning failure diagnostics", () => {
         observeContinuityPlanningStage(
           secret,
           "sandbox_resume",
-          () => {
+          async () => {
             throw error;
           },
           sink,
@@ -1913,7 +1904,7 @@ describe("continuity planning failure diagnostics", () => {
       observeContinuityPlanningStage(
         secret,
         "sandbox_resume",
-        () => {
+        async () => {
           throw error;
         },
         sink,
@@ -1930,7 +1921,7 @@ describe("continuity planning failure diagnostics", () => {
       observeContinuityPlanningStage(
         secret,
         "sandbox_resume",
-        () => {
+        async () => {
           throw unknown;
         },
         sink,
@@ -2117,7 +2108,7 @@ describe("closed export planning diagnostics", () => {
       });
     }).not.toThrow();
     expect(() => {
-      reportExportPlanningFailure(secret, "release_read", new Error(secret), () => {
+      reportExportPlanningFailure(secret, "release_read", new Error(secret), async () => {
         throw new Error(secret);
       });
     }).not.toThrow();

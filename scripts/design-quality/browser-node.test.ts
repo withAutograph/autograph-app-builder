@@ -17,12 +17,12 @@ it("loads injectable axe source under the production Node ESM and tsx loader", a
     if (!injected) throw new Error('Measurement did not inject axe');
     process.stdout.write('axe-source-injected');
   `;
-  const result = await promisify(execFile)(process.execPath, [
+  const { stdout } = await promisify(execFile)(process.execPath, [
     "--import",
     "tsx",
     "--input-type=module",
     "--eval",
     script,
   ]);
-  expect(result.stdout).toBe("axe-source-injected");
+  expect(stdout).toBe("axe-source-injected");
 });

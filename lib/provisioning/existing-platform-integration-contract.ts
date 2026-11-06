@@ -3,7 +3,6 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
-const dedicatedDevelopment = "dedicated-development";
 /** Existing infrastructure selection is not a central-host setup approval. */
 const id = z.string().min(1);
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
@@ -11,16 +10,6 @@ const role = sqlName.refine((value) => !["postgres", "neondb_owner"].includes(va
 const origin = z.url().refine((value) => {
   const url = new URL(value);
   return url.protocol === "https:" && url.origin === value && !url.username && !url.password;
-});
-const existingPlatformResourceSchema = z.strictObject({
-  database: sqlName,
-  // Historical restricted-resource isolation marker; hosting is deployment.environment below.
-  environment: z.literal("preview"),
-  hostname: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
-  migratorRole: role,
-  port: z.literal(5432),
-  resourceId: id,
-  schema: z.literal("public"),
 });
 const neon = z.strictObject({
   branchId: id,
@@ -46,10 +35,19 @@ export const existingPlatformIntegrationReadySchema = z.strictObject({
   control: z.strictObject({
     centralRuntimeRole: role,
     neon,
-    resource: existingPlatformResourceSchema,
+    resource: z.strictObject({
+      resourceId: id,
+      // Historical restricted-resource isolation marker; hosting is deployment.environment below.
+      environment: z.literal("preview"),
+      hostname: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
+      port: z.literal(5432),
+      database: sqlName,
+      schema: z.literal("public"),
+      migratorRole: role,
+    }),
     schemaSha256: digest,
   }),
-  dataEnvironment: z.literal(dedicatedDevelopment),
+  dataEnvironment: z.literal("dedicated-development"),
   deployment: z.strictObject({
     configurationRef: id,
     configurationSha256: digest,
@@ -82,7 +80,7 @@ export const existingPlatformControlResourceProofSchema = z.strictObject({
   authority: hostedTenantAuthoritySchema,
   centralRuntimeRole: role,
   custody: z.strictObject({ receiptDigest: digest, receiptRef: id }),
-  dataEnvironment: z.literal(dedicatedDevelopment),
+  dataEnvironment: z.literal("dedicated-development"),
   database: sqlName,
   hostname: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
   migratorRole: role,
@@ -116,7 +114,7 @@ export const existingPlatformIntegrationReferenceDigest = (
     .update(JSON.stringify(existingPlatformIntegrationReadySchema.parse(value)))
     .digest("hex");
 export const existingPlatformIntegrationPlanReferenceSchema = z.strictObject({
-  dataEnvironment: z.literal(dedicatedDevelopment),
+  dataEnvironment: z.literal("dedicated-development"),
   hostingEnvironment: z.enum(["preview", "production"]),
   kind: z.literal("existing-platform-integrations-reference-v1"),
   projectId: z.string().min(1),

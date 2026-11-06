@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await -- Faithful controlled asynchronous ports exercise the actual continuity service without provider effects. */
 import { describe, expect, it, vi } from "vitest";
 import { isDeepStrictEqual } from "node:util";
 import { HostedOperatorError, hostedOperatorPlanSchema } from "./hosted-operator-contract";
@@ -237,6 +238,7 @@ const setup = () => {
       async compareAndSet(input) {
         if (rejectCas || row?.revision !== input.expectedRevision) {
           rejectCas = false;
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS absence is the supported conflict result.
           return undefined;
         }
         row = continuityRecordSchema.parse(structuredClone(input.record));
@@ -496,6 +498,7 @@ describe("approved managed app continuity service", () => {
       const saved = await compareAndSet(input);
       if (!responseLost && input.record.locator?.providerSessionId === "resumed-provider-session") {
         responseLost = true;
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- A committed CAS can lose its response.
         return undefined;
       }
       return saved;
@@ -626,6 +629,7 @@ describe("approved managed app continuity service", () => {
     const database = { insert: () => ({ values }) };
     // SAFETY: This controlled terminal database implements every method used by reservation;
     // the actual PostgreSQL adapter still maps and parses the operation's record.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Isolate the existing SQL adapter without opening a database or mocking its implementation.
     const postgresStore = createPostgresContinuityJournalStore(database as never);
     const retain = f.deps.store.reserve;
     f.deps.store.reserve = async (input) =>
@@ -699,16 +703,13 @@ describe("approved managed app continuity service", () => {
     f.approve();
     const result = await f.operations.execute(context, planned.request, "continuity-call");
     expect(result.state).toBe("settled");
-    expect(result.outcome).toMatchObject({ exitCode: 0 });
+    expect(result.outcome?.exitCode).toBe(0);
     expect(f.events.indexOf("close")).toBeLessThan(f.events.indexOf("revoke-owned-rows"));
-    const [started] = vi.mocked(f.deps.runtime.start).mock.calls;
+    const started = vi.mocked(f.deps.runtime.start).mock.calls[0];
     if (started === undefined) {
       throw new Error("Runtime did not start");
     }
-    const caps = started.at(2);
-    if (caps === undefined) {
-      throw new Error("Runtime capabilities were not provided");
-    }
+    const caps = started[2];
     for (const bearer of Object.values(caps)) {
       expect(JSON.stringify(result)).not.toContain(bearer);
       expect(JSON.stringify(f.read())).not.toContain(bearer);
@@ -732,7 +733,7 @@ describe("approved managed app continuity service", () => {
     f.approve();
     const result = await f.operations.execute(context, planned.request, "continuity-call");
     expect(result.state).toBe("settled");
-    expect(result.outcome).toMatchObject({ exitCode: 7 });
+    expect(result.outcome?.exitCode).toBe(7);
   });
   it("retains the same command, attempt and capabilities after uncertain suite completion and reconciles before redispatch", async () => {
     const f = setup();
@@ -985,6 +986,7 @@ describe("continuity recovery preserves frozen plans", () => {
     f.deps.store = {
       compareAndSet: async ({ record, expectedRevision }) => {
         if (rows.get(record.requestId)?.revision !== expectedRevision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflicts explicitly return no row.
           return undefined;
         }
         rows.set(record.requestId, structuredClone(record));

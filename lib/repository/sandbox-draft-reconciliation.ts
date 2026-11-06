@@ -403,6 +403,7 @@ const stageUnpublished = async (
     unpublished.restoreInitialAppSource,
     pendingChanges,
   );
+  // oxlint-disable-next-line react-doctor/async-await-in-loop -- reviewed postimages are staged in deterministic order.
   for (const change of pendingChanges) {
     if (!appPath(input.appId, change.path) && !registration.has(change.path)) {
       throw new Error(
@@ -411,11 +412,13 @@ const stageUnpublished = async (
     }
     const relative = `${root.slice(workspaceRoot.length + 1)}/${change.path}`;
     if (change.kind === "deleted") {
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- preserve reviewed change order.
       await input.sandbox.removePath({ force: true, path: relative });
       continue;
     }
     let file: Awaited<ReturnType<typeof unpublished.contentSource.readFile>>;
     try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- each reviewed postimage is loaded in order.
       file = await unpublished.contentSource.readFile(change.path);
     } catch (error) {
       throw new Error(
@@ -434,10 +437,13 @@ const stageUnpublished = async (
       );
     }
     const directory = relative.slice(0, relative.lastIndexOf("/"));
+    // oxlint-disable-next-line eslint/no-await-in-loop -- the directory must exist before its file.
     await ensureSandboxDirectories(input.sandbox, [directory]);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- stage each validated postimage.
     await input.sandbox.writeBinaryFile({ content: file.bytes, path: relative });
     const filePath = `${root}/${change.path}`;
     const fileMode = file.mode === "755" || file.mode === "100755" ? "755" : "644";
+    // oxlint-disable-next-line eslint/no-await-in-loop -- apply exact reviewed mode.
     await checked(
       input.sandbox,
       `set mode for ${change.path}`,
@@ -604,6 +610,7 @@ const retainedPublicationScope = (input: DraftReconciliationInput, root: string)
   const previous = input.previousCandidate;
   const scope = previous?.publicationScope;
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- All retained candidate and original publication fields must match before reusing merge provenance.
     input.ownedPublication === undefined ||
     previous === undefined ||
     scope === undefined ||
@@ -615,6 +622,7 @@ const retainedPublicationScope = (input: DraftReconciliationInput, root: string)
       input.ownedPublication,
     )
   ) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep optional retained scope explicit on both return branches.
     return undefined;
   }
   assertOwnedPublicationReconciliationScope(scope);
@@ -626,14 +634,11 @@ const outsideCandidateChanges = async (
   root: string,
 ): Promise<boolean> => {
   const dependencyCatalog = retainedDependencyCatalog(input, root);
-  const catalogInput: Pick<PreparedDraftReconciliation, "root" | "appId" | "dependencyCatalog"> = {
+  const catalogPaths = await inspectDependencyCatalog(input.sandbox, {
     appId: input.appId,
     root,
-  };
-  if (dependencyCatalog !== undefined) {
-    catalogInput.dependencyCatalog = dependencyCatalog;
-  }
-  const catalogPaths = await inspectDependencyCatalog(input.sandbox, catalogInput);
+    ...(dependencyCatalog === undefined ? {} : { dependencyCatalog }),
+  });
   if (input.ownedPublication !== undefined) {
     const scope = retainedPublicationScope(input, root);
     if (
@@ -1036,35 +1041,25 @@ const selectCandidateRoot = async (
   const advancedBase = replayEligible && previous.baseSha !== input.baseSha;
   let root = replayEligible && !advancedBase ? previous.root : canonicalRoot;
   let created = await candidateNeedsCreation(input.sandbox, root);
-  let preservedCandidateRoot: string | null = null;
+  let preservedCandidateRoot: string | undefined;
   let replayedAppChanges = false;
   const changedLineage = previous !== undefined && !replayEligible;
   const needsFreshRoot = input.forceFreshCandidate === true || advancedBase || changedLineage;
   if (needsFreshRoot || (!created && (await outsideCandidateChanges(input, root)))) {
-    preservedCandidateRoot = previous?.root ?? (created ? null : root);
+    preservedCandidateRoot = previous?.root ?? (created ? undefined : root);
     root = `${canonicalRoot}-${randomUUID()}`;
     created = true;
     replayedAppChanges = replayEligible && preservedCandidateRoot === previous.root;
     if (advancedBase && (await candidateNeedsCreation(input.sandbox, previous.root))) {
-      preservedCandidateRoot = null;
+      preservedCandidateRoot = undefined;
       replayedAppChanges = false;
     }
   }
-  interface CandidateRootSelection {
-    created: boolean;
-    preservedCandidateRoot?: string;
-    replayedAppChanges?: boolean;
-    root: string;
-  }
-  const selection: CandidateRootSelection = { created, root };
-  if (preservedCandidateRoot !== null) {
-    selection.preservedCandidateRoot = preservedCandidateRoot;
-    selection.replayedAppChanges = replayedAppChanges;
-  }
-  return selection;
+  return { created, preservedCandidateRoot, replayedAppChanges, root };
 };
 
 /** Prepare a private merge candidate. This never updates the GitHub PR branch. */
+/* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity -- Ordered native Git preparation preserves existing candidate recovery and publication provenance. */
 export const prepareDraftReconciliation = async (
   input: DraftReconciliationInput,
 ): Promise<
@@ -1105,6 +1100,7 @@ export const prepareDraftReconciliation = async (
     workspaceRoot,
     canonicalRoot,
   );
+  // oxlint-disable-next-line eslint/no-negated-condition, unicorn/no-negated-condition -- creation has the longer branch and recovery is handled after it.
   if (created) {
     const head = await checked(
       sandbox,
@@ -1210,7 +1206,7 @@ export const prepareDraftReconciliation = async (
   if (input.ownedPublication !== undefined && publicationScope === undefined) {
     throw new Error("Reprepare this owned draft to retain its automatic merge provenance.");
   }
-  if (replayedAppChanges === true && preservedCandidateRoot !== undefined) {
+  if (replayedAppChanges && preservedCandidateRoot !== undefined) {
     await replayCandidateApp(input, preservedCandidateRoot, root);
   }
   await attachCheckoutDependencyView({
@@ -1220,33 +1216,22 @@ export const prepareDraftReconciliation = async (
     workspaceRoot,
   });
   const conflicts = await readCandidateConflicts(input, root);
-  const prepared: PreparedDraftReconciliation & {
-    created: boolean;
-    preservedCandidateRoot?: string;
-    replayedAppChanges?: boolean;
-  } = {
+  return {
     appId: input.appId,
     baseSha: input.baseSha,
     baseTree: await inspectRevision(sandbox, checkout, input.baseSha),
     conflicts,
     created,
+    ...(publicationScope === undefined ? {} : { publicationScope }),
+    ...(!created && retainedDependencyCatalog(input, root) !== undefined
+      ? { dependencyCatalog: retainedDependencyCatalog(input, root) }
+      : {}),
+    ...(preservedCandidateRoot === undefined ? {} : { preservedCandidateRoot, replayedAppChanges }),
     headSha: input.headSha,
     headTree: await inspectRevision(sandbox, checkout, input.headSha),
     root,
     workspaceRoot,
   };
-  if (publicationScope !== undefined) {
-    prepared.publicationScope = publicationScope;
-  }
-  const dependencyCatalog = created ? undefined : retainedDependencyCatalog(input, root);
-  if (dependencyCatalog !== undefined) {
-    prepared.dependencyCatalog = dependencyCatalog;
-  }
-  if (preservedCandidateRoot !== undefined) {
-    prepared.preservedCandidateRoot = preservedCandidateRoot;
-    prepared.replayedAppChanges = replayedAppChanges;
-  }
-  return prepared;
 };
 /* oxlint-enable eslint/complexity, sonarjs/cognitive-complexity */
 

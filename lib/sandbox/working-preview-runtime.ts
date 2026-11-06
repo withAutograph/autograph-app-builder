@@ -2,13 +2,9 @@ import { APIError } from "@vercel/sandbox";
 import type { Command, Sandbox } from "@vercel/sandbox";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { z } from "zod";
 
 import type { PublicWorkingPreview } from "../mcp/contracts";
-import {
-  previewOwnershipOperation as defaultPreviewOwnershipOperation,
-  previewOwnershipSource,
-} from "./working-preview-ownership";
+import { previewOwnershipOperation, previewOwnershipSource } from "./working-preview-ownership";
 import type { PreviewAttempt } from "./working-preview-ownership";
 import {
   workingPreviewDiagnosticCollectorSource,
@@ -31,18 +27,17 @@ export interface WorkingPreviewRuntime {
   priorValidatedArtifact?: { applyDigest: string; validationDigest: string };
 }
 
-const CLEANUP_REQUIRED = "cleanup-required" as const;
-const PREVIOUS_PREVIEW_SUPERVISOR_RUNNING =
-  "The previous preview supervisor is still running; its startup must settle before retrying.";
+const missingRuntimeFile = (error: unknown): null => {
+  if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+    return null;
+  }
+  throw error;
+};
 
-const PreviewCommandFailureSchema = z.object({
-  message: z.string(),
-  response: z.object({ status: z.number() }),
-});
-type PreviewCommandFailure = z.infer<typeof PreviewCommandFailureSchema>;
-
-const isMissingPreviewCommand = (error: PreviewCommandFailure): boolean =>
-  error.response.status === 404 && /command not found or has exited/iu.test(error.message);
+const isMissingPreviewCommand = (error: unknown): boolean =>
+  error instanceof APIError &&
+  error.response.status === 404 &&
+  /command not found or has exited/iu.test(error.message);
 
 const getPriorPreviewCommand = async (
   provider: Sandbox,
@@ -53,12 +48,7 @@ const getPriorPreviewCommand = async (
     return await provider.getCommand(commandId, { signal });
   } catch (error) {
     signal.throwIfAborted();
-    const parsedError = PreviewCommandFailureSchema.safeParse(error);
-    if (
-      error instanceof APIError &&
-      parsedError.success &&
-      isMissingPreviewCommand(parsedError.data)
-    ) {
+    if (isMissingPreviewCommand(error)) {
       return null;
     }
     throw error;
@@ -79,7 +69,7 @@ export const workingPreviewSupervisorSource = (input: {
   observedPortPath?: string;
 }): string => `${
   input.ownership === undefined
-    ? null
+    ? ""
     : `${previewOwnershipSource}
 const supervisorOwnership = ${JSON.stringify(input.ownership)};
 await ownershipOperation({kind:"assert", ...supervisorOwnership});
@@ -88,7 +78,7 @@ await ownershipOperation({kind:"update", attemptId:supervisorOwnership.attemptId
 }${input.gatewaySource}
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync as supervisorReadFileSync, writeFileSync } from "node:fs";
-const launch = ${JSON.stringify({ ...input, gatewaySource: null })};
+const launch = ${JSON.stringify({ ...input, gatewaySource: undefined })};
 ${workingPreviewDiagnosticCollectorSource}
 let stderr = "";
 let banner = "";
@@ -193,7 +183,7 @@ const openApp = async (input: {
   absorbCookies(cookies, launch);
   const location = launch.headers.get("location");
   await launch.body?.cancel();
-  if (launch.status !== 303 || cookies.size === 0 || location === null || location.length === 0) {
+  if (launch.status !== 303 || cookies.size === 0 || !location) {
     input.observe(`Launch HTTP ${launch.status}; expected redirect with access cookie`);
     return false;
   }
@@ -204,6 +194,7 @@ const openApp = async (input: {
       input.observe("Application redirected outside the preview origin");
       return false;
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Follow the application's actual navigation sequentially.
     const response = await input.fetch(url, {
       headers: { cookie: [...cookies.values()].join("; ") },
       redirect: "manual",
@@ -216,63 +207,19 @@ const openApp = async (input: {
     );
     absorbCookies(cookies, response);
     const next = response.headers.get("location");
-    const ready =
-      response.ok && (response.headers.get("content-type")?.includes("text/html") ?? false);
+    const ready = response.ok && response.headers.get("content-type")?.includes("text/html");
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Release the current response before following its redirect.
     await response.body?.cancel();
     if (ready) {
       return true;
     }
-    if (response.status < 300 || response.status >= 400 || next === null || next === "") {
+    if (response.status < 300 || response.status >= 400 || !next) {
       return false;
     }
     url = new URL(next, url);
   }
   input.observe("Application exceeded the readiness redirect limit");
   return false;
-};
-
-const readPreviewFailure = async (input: {
-  path: string;
-  provider: Sandbox;
-  requestSignal: AbortSignal;
-  sessionSignal: AbortSignal;
-}): Promise<string | null> => {
-  try {
-    return await input.provider.fs.readFile(input.path, {
-      encoding: "utf-8",
-      signal: input.requestSignal,
-    });
-  } catch (error) {
-    input.sessionSignal.throwIfAborted();
-    if (
-      input.requestSignal.aborted ||
-      (error instanceof Error && "code" in error && error.code === "ENOENT")
-    ) {
-      return null;
-    }
-    throw error;
-  }
-};
-
-const readPreviewSupervisor = async (input: {
-  commandId: string;
-  provider: Sandbox;
-  signal: AbortSignal;
-}): Promise<Awaited<ReturnType<Sandbox["getCommand"]>> | null> => {
-  try {
-    return await input.provider.getCommand(input.commandId, { signal: input.signal });
-  } catch (error) {
-    input.signal.throwIfAborted();
-    const parsedError = PreviewCommandFailureSchema.safeParse(error);
-    if (
-      error instanceof APIError &&
-      parsedError.success &&
-      isMissingPreviewCommand(parsedError.data)
-    ) {
-      throw new Error("The new preview supervisor is no longer available.", { cause: error });
-    }
-    return null;
-  }
 };
 
 const waitForPreview = async (input: {
@@ -295,11 +242,16 @@ const waitForPreview = async (input: {
     // application keeps the same supervisor; only individual probes time out.
     while (true) {
       input.signal.throwIfAborted();
-      const supervisor = await readPreviewSupervisor({
-        commandId: input.commandId,
-        provider: input.provider,
-        signal: probeSignal(),
-      });
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Observe the existing supervisor without collecting output.
+      const supervisor = await input.provider
+        .getCommand(input.commandId, { signal: probeSignal() })
+        .catch((error: unknown) => {
+          input.signal.throwIfAborted();
+          if (isMissingPreviewCommand(error)) {
+            throw new Error("The new preview supervisor is no longer available.", { cause: error });
+          }
+          return null;
+        });
       if (supervisor !== null && supervisor.exitCode !== null) {
         throw new Error(
           `The application preview supervisor exited with code ${supervisor.exitCode}.`,
@@ -307,6 +259,7 @@ const waitForPreview = async (input: {
       }
       const readinessSignal = probeSignal();
       try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Observe one startup without relaunching it.
         if (await input.check(observe, readinessSignal)) {
           input.signal.throwIfAborted();
           return;
@@ -323,17 +276,22 @@ const waitForPreview = async (input: {
         observe(diagnostic);
       }
       const diagnosticSignal = probeSignal();
-      const failure = await readPreviewFailure({
-        path: input.failurePath,
-        provider: input.provider,
-        requestSignal: diagnosticSignal,
-        sessionSignal: input.signal,
-      });
-      if (failure !== null && failure.length > 0) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Read the same attempt's startup diagnostics.
+      const failure = await input.provider.fs
+        .readFile(input.failurePath, { encoding: "utf-8", signal: diagnosticSignal })
+        .catch((error: unknown) => {
+          input.signal.throwIfAborted();
+          if (diagnosticSignal.aborted) {
+            return null;
+          }
+          return missingRuntimeFile(error);
+        });
+      if (failure) {
         throw new Error(
           `The application server failed to start. ${workingPreviewDiagnosticExcerpt(failure) || "No safe process diagnostic was available."}`,
         );
       }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Wait for this startup, never launch a replacement.
       await delay(500, undefined, { signal: input.signal });
     }
   } catch (error) {
@@ -398,7 +356,9 @@ const reconcilePreviewAttempt = async (
     if (attempt.commandId !== undefined) {
       const prior = await getPriorPreviewCommand(provider, attempt.commandId, signal);
       if (prior?.exitCode === null) {
-        throw new Error(PREVIOUS_PREVIEW_SUPERVISOR_RUNNING);
+        throw new Error(
+          "The previous preview supervisor is still running; its startup must settle before retrying.",
+        );
       }
     }
     if (attempt.supervisorPid !== undefined) {
@@ -411,7 +371,9 @@ const reconcilePreviewAttempt = async (
         signal,
       });
       if (check.exitCode !== 0) {
-        throw new Error(PREVIOUS_PREVIEW_SUPERVISOR_RUNNING);
+        throw new Error(
+          "The previous preview supervisor is still running; its startup must settle before retrying.",
+        );
       }
     }
   }
@@ -430,7 +392,7 @@ const reconcilePreviewAttempt = async (
   } catch (error) {
     await previewOwnershipOperation(
       provider,
-      { kind: "update", ...attemptIdentity(attempt), patch: { status: CLEANUP_REQUIRED } },
+      { kind: "update", ...attemptIdentity(attempt), patch: { status: "cleanup-required" } },
       AbortSignal.timeout(5000),
     );
     throw error;
@@ -441,9 +403,12 @@ const claimPreviewAttempt = async (
   provider: Sandbox,
   attempt: PreviewAttempt,
   signal?: AbortSignal,
-  ownershipOperation = defaultPreviewOwnershipOperation,
 ) => {
-  const current = await ownershipOperation(provider, { kind: "read" }, signal);
+  const current = await previewOwnershipOperation<PreviewAttempt | null>(
+    provider,
+    { kind: "read" },
+    signal,
+  );
   if (current !== null) {
     await reconcilePreviewAttempt(provider, current);
   }
@@ -452,11 +417,12 @@ const claimPreviewAttempt = async (
     { attempt, kind: "claim" },
     signal,
   );
-  if (result.claimed !== true) {
+  if (!result.claimed) {
     throw new Error("Another preview startup owns this sandbox. Wait for that attempt to settle.");
   }
 };
 
+// oxlint-disable-next-line eslint/complexity -- Cleanup independently fences ingress, commands, and the owned lifecycle journal.
 const cleanupPreviewAttempt = async (input: {
   provider: Sandbox;
   attempt: PreviewAttempt;
@@ -467,6 +433,7 @@ const cleanupPreviewAttempt = async (input: {
   launchDispatched: boolean;
   error: unknown;
   onAttempt?: (attempt: PreviewAttempt | null) => void;
+  // oxlint-disable-next-line sonarjs/cognitive-complexity -- Cleanup keeps each independent lease and ownership fence explicit.
 }): Promise<never> => {
   const {
     provider,
@@ -495,19 +462,14 @@ const cleanupPreviewAttempt = async (input: {
     }
   }
   const failure =
-    diagnostic.length > 0 && error instanceof Error
+    diagnostic && error instanceof Error
       ? new Error(`${error.message}\n${diagnostic}`, { cause: error })
       : error;
-  let current: PreviewAttempt | null;
-  try {
-    current = await previewOwnershipOperation<PreviewAttempt | null>(
-      provider,
-      { kind: "read" },
-      AbortSignal.timeout(5000),
-    );
-  } catch {
-    current = null;
-  }
+  const current = await previewOwnershipOperation<PreviewAttempt | null>(
+    provider,
+    { kind: "read" },
+    AbortSignal.timeout(5000),
+  ).catch(() => null);
   const sameAttempt =
     current?.attemptId === attempt.attemptId &&
     current.providerSessionId === attempt.providerSessionId;
@@ -540,10 +502,10 @@ const cleanupPreviewAttempt = async (input: {
         );
         onAttempt?.(null);
       } else {
-        const pending = { ...attempt, status: CLEANUP_REQUIRED };
+        const pending = { ...attempt, status: "cleanup-required" as const };
         await previewOwnershipOperation(
           provider,
-          { kind: "update", ...attemptIdentity(attempt), patch: { status: CLEANUP_REQUIRED } },
+          { kind: "update", ...attemptIdentity(attempt), patch: { status: "cleanup-required" } },
           AbortSignal.timeout(5000),
         );
         onAttempt?.(pending);
@@ -553,9 +515,8 @@ const cleanupPreviewAttempt = async (input: {
     failed.push({ reason: journalError, status: "rejected" });
   }
   if (failed.length > 0) {
-    // SAFETY: Promise rejection reasons may be any value; unknown safely represents each reason.
     throw new AggregateError(
-      [failure, ...failed.map((result) => result.reason as unknown)],
+      [failure, ...failed.map((result) => result.reason)],
       `Preview startup failed and its cleanup was incomplete. ${failure instanceof Error ? failure.message : "Startup did not complete."}`,
       { cause: failure },
     );
@@ -564,6 +525,7 @@ const cleanupPreviewAttempt = async (input: {
 };
 
 /** Runs only in the already-approved user sandbox. A ready receipt is HTTP evidence, not product verification. */
+// oxlint-disable-next-line eslint/complexity -- Native preview startup retains independent owner, cancellation, and ingress boundaries.
 export const startWorkingPreview = async (input: {
   provider: Sandbox;
   sandboxId: string;
@@ -581,11 +543,9 @@ export const startWorkingPreview = async (input: {
   signal?: AbortSignal;
   onAttempt?: (attempt: PreviewAttempt | null) => void;
   assertCurrent?: () => void;
-  ownershipOperation?: typeof defaultPreviewOwnershipOperation;
 }): Promise<WorkingPreviewRuntime> => {
   input.signal?.throwIfAborted();
   const { provider } = input;
-  const ownershipOperation = input.ownershipOperation ?? defaultPreviewOwnershipOperation;
   const expiresAt = sandboxPreviewExpiry(provider);
   const providerLeaseSignal = AbortSignal.timeout(expiresAt - Date.now());
   const signal = AbortSignal.any([
@@ -601,7 +561,7 @@ export const startWorkingPreview = async (input: {
     status: "starting",
   };
   input.assertCurrent?.();
-  await claimPreviewAttempt(provider, attempt, signal, ownershipOperation);
+  await claimPreviewAttempt(provider, attempt, signal);
   input.onAttempt?.(attempt);
   let command: Command | undefined;
   let launchDispatched = false;
@@ -677,20 +637,10 @@ export const startWorkingPreview = async (input: {
     await waitForPreview({
       ...waitOptions,
       check: async (observe, readinessSignal) => {
-        let readinessMarker: string | null;
-        try {
-          readinessMarker = await provider.fs.readFile(readyPath, {
-            encoding: "utf-8",
-            signal: readinessSignal,
-          });
-        } catch (error) {
-          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-            readinessMarker = null;
-          } else {
-            throw error;
-          }
-        }
-        const ready = readinessMarker === "ready";
+        const ready =
+          (await provider.fs
+            .readFile(readyPath, { encoding: "utf-8", signal: readinessSignal })
+            .catch(missingRuntimeFile)) === "ready";
         observe(ready ? "Listener ready" : "Listener readiness marker absent");
         return ready;
       },
@@ -749,7 +699,7 @@ export const startWorkingPreview = async (input: {
     return await cleanupPreviewAttempt({
       attempt,
       command,
-      diagnosticsPath: input.signal?.aborted === true ? undefined : diagnosticsPath,
+      diagnosticsPath: input.signal?.aborted ? undefined : diagnosticsPath,
       error,
       expiresAt,
       launchDispatched,

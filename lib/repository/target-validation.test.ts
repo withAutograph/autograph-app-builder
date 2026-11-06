@@ -3,12 +3,12 @@ import type { AppBuilderWorkflowState } from "../agent/workflow-state";
 import { sourceDeclaredToolchainActivationCommand } from "./source-toolchain";
 import { spawnSync } from "node:child_process";
 
+// oxlint-disable typescript/promise-function-async -- In-memory store fakes return settled Promises.
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
-import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
 
@@ -83,54 +83,20 @@ const apply: TargetApplyReceipt = {
   workspaceDigest: digest("3"),
 };
 
-const sandboxFixture = () => {
-  const run = vi.fn(async () => await Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }));
-  const sandbox: SandboxSession = {
-    id: "sandbox",
-    readBinaryFile: async () => await Promise.resolve(new Uint8Array()),
-    readFile: async () => await Promise.resolve(new ReadableStream<Uint8Array>()),
-    readTextFile: async () => await Promise.resolve(""),
-    removePath: async () => {
-      await Promise.resolve();
-    },
-    resolvePath: (value) => value,
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function sandboxFixture() {
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+  const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "" }));
+  return {
     run,
-    writeBinaryFile: async () => {
-      await Promise.resolve();
-    },
-    writeFile: async () => {
-      await Promise.resolve();
-    },
-    writeTextFile: vi.fn(async () => {
-      await Promise.resolve();
-    }),
+    sandbox: {
+      id: "sandbox",
+      run,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      writeTextFile: vi.fn(async () => {}),
+    } as unknown as SandboxSession,
   };
-  return { run, sandbox };
-};
-
-const sandboxWithCommands = (
-  run: SandboxSession["run"],
-  spawn?: SandboxSession["spawn"],
-): SandboxSession => {
-  const session: SandboxSession = {
-    id: "sandbox",
-    readBinaryFile: async () => await Promise.resolve(new Uint8Array()),
-    readFile: async () => await Promise.resolve(new ReadableStream<Uint8Array>()),
-    readTextFile: async () => await Promise.resolve(""),
-    removePath: async () => {},
-    resolvePath: (value) => value,
-    run,
-    spawn:
-      spawn ??
-      (() => {
-        throw new Error("Unexpected spawn");
-      }),
-    writeBinaryFile: async () => {},
-    writeFile: async () => {},
-    writeTextFile: async () => {},
-  };
-  return session;
-};
+}
 
 const outputStream = (content: string) =>
   new ReadableStream<Uint8Array>({
@@ -147,18 +113,17 @@ const memoryValidationLogStore = (): ValidationLogStore => {
   const chunks = new Map<string, { content: string; digest: string }>();
   const references = new Map<string, ValidationLogReference>();
   return {
-    getChunk: async (key, index) =>
-      await Promise.resolve(chunks.get(`${validationLogKey(key)}:${index}`)),
-    getReference: async (key) => await Promise.resolve(references.get(validationLogKey(key))),
-    publish: async (key, reference) => {
+    getChunk: (key, index) => Promise.resolve(chunks.get(`${validationLogKey(key)}:${index}`)),
+    getReference: (key) => Promise.resolve(references.get(validationLogKey(key))),
+    publish: (key, reference) => {
       references.set(validationLogKey(key), reference);
-      await Promise.resolve();
+      return Promise.resolve();
     },
-    putChunk: async (key, index, content, chunkDigest) => {
+    putChunk: (key, index, content, chunkDigest) => {
       chunks.set(`${validationLogKey(key)}:${index}`, { content, digest: chunkDigest });
-      await Promise.resolve();
+      return Promise.resolve();
     },
-    removeStaged: async () => {},
+    removeStaged: () => Promise.resolve(),
   };
 };
 
@@ -262,7 +227,7 @@ describe("target validation", () => {
     const { sandbox } = sandboxFixture();
     const environment = {
       APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["/private-state/original-predecessor.json"]',
-      OPTIONAL_INPUT: null,
+      OPTIONAL_INPUT: undefined,
     };
     const executor = vi
       .fn<ValidationCommandExecutor>()
@@ -346,9 +311,7 @@ describe("target validation", () => {
           path: "apps/example/test/review.test.ts",
         }),
       );
-      const events = info.mock.calls.map(([entry]) =>
-        z.record(z.string(), z.unknown()).parse(JSON.parse(String(entry))),
-      );
+      const events = info.mock.calls.map(([entry]) => JSON.parse(entry as string));
       expect(events).toEqual([
         expect.objectContaining({
           command: "check-build",
@@ -409,15 +372,14 @@ describe("target validation", () => {
         appId: "example",
         apply,
         attempt: createTargetValidationAttempt(apply, "provider-rejection-timing"),
-        executor: async () => {
-          await Promise.resolve();
+        executor: () => {
           vi.advanceTimersByTime(31);
-          throw new Error("secret=private-value");
+          return Promise.reject(new Error("secret=private-value"));
         },
         sandbox,
       });
       expect(result.ok).toBe(false);
-      expect(JSON.parse(String(warn.mock.calls[0]?.[0]))).toMatchObject({
+      expect(JSON.parse(warn.mock.calls[0]?.[0] as string)).toMatchObject({
         elapsedMs: 31,
         finishedAt: "2026-10-09T12:00:00.031Z",
         phase: "provider_error",
@@ -476,14 +438,15 @@ describe("target validation", () => {
         validationRoot: "/workspace/repository",
       });
       expect(result).toMatchObject({ exitCode: 0, stdout: "checks passed" });
-      const expectedRunTask: Parameters<PreparedRuntimeExecution["runTask"]>[0] = {
-        environment,
-        onChunk,
-        task,
-      };
-      if (shard !== undefined) expectedRunTask.shard = shard;
-      if (alreadyCompiled !== undefined) expectedRunTask.alreadyCompiled = true;
-      expect(runTask).toHaveBeenCalledWith(expect.objectContaining(expectedRunTask));
+      expect(runTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          environment,
+          onChunk,
+          task,
+          ...(shard ? { shard } : {}),
+          ...(alreadyCompiled ? { alreadyCompiled: true } : {}),
+        }),
+      );
     },
   );
   it("links a filtered failure receipt to its complete sanitized durable log", async () => {
@@ -500,23 +463,23 @@ describe("target validation", () => {
       }
     >();
     const store: ValidationLogStore = {
-      getChunk: async (key, index) => await Promise.resolve(chunks.get(`${key.logId}:${index}`)),
-      getReference: async (key) => await Promise.resolve(manifests.get(key.logId)),
-      publish: async (key, reference) => {
+      getChunk: (key, index) => Promise.resolve(chunks.get(`${key.logId}:${index}`)),
+      getReference: (key) => Promise.resolve(manifests.get(key.logId)),
+      publish: (key, reference) => {
         manifests.set(key.logId, reference);
-        await Promise.resolve();
+        return Promise.resolve();
       },
-      putChunk: async (key, index, content, chunkDigest) => {
+      putChunk: (key, index, content, chunkDigest) => {
         chunks.set(`${key.logId}:${index}`, { content, digest: chunkDigest });
-        await Promise.resolve();
+        return Promise.resolve();
       },
-      removeStaged: async (key) => {
+      removeStaged: (key) => {
         manifests.delete(key.logId);
         let index = 0;
         while (chunks.delete(`${key.logId}:${index}`)) {
           index += 1;
         }
-        await Promise.resolve();
+        return Promise.resolve();
       },
     };
     const attempt = createTargetValidationAttempt(apply, "durable-failure");
@@ -524,8 +487,8 @@ describe("target validation", () => {
       appId: "example",
       apply,
       attempt,
-      executor: async () =>
-        await Promise.resolve({
+      executor: () =>
+        Promise.resolve({
           exitCode: 1,
           stderr: "",
           stdout:
@@ -570,6 +533,7 @@ describe("target validation", () => {
       appId: "example",
       apply,
       attempt: createTargetValidationAttempt(apply, "missing-script"),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       executor: async () => ({
         exitCode: 1,
         stderr: "error: task app:check not found\nsecret-test-value",
@@ -619,14 +583,14 @@ describe("target validation", () => {
     expect(result.receipt.commandFailure?.hint).toContain("executable mode");
     // SAFETY: Project the precise trusted workflow fields consumed by the classifier;
     // actual approval retention is exercised in approved-build-continuation.test.ts.
-    const state: AppBuilderWorkflowState = {
+    const state = {
       appSpec: { appId: "example", digest: apply.appSpecDigest },
       applyReceipt: apply,
       phase: "validation_failed",
       proposal: { digest: apply.proposalDigest },
       validationFailure: result.receipt,
       workspace: { workspaceId: "owned-private-workspace" },
-    };
+    } as AppBuilderWorkflowState;
     expect(
       decideApprovedBuildContinuation({
         adapterSessionId: "owned-session",
@@ -780,6 +744,7 @@ describe("target validation", () => {
     const { sandbox } = sandboxFixture();
     const currentApply = { ...apply, digest: "current-worktree" };
     const attempt = createTargetValidationAttempt(currentApply, "validation-call");
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const execute = vi.fn(async () => ({
       exitCode: 0,
       stderr: "",
@@ -818,6 +783,7 @@ describe("target validation", () => {
         version: 1,
         workspaceLinks: [],
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       executor: async () => ({
         exitCode: 1,
         stderr: "repository command failed",
@@ -859,9 +825,10 @@ describe("target validation", () => {
         ok: false,
         receipt: {
           commandFailure: {
-            failureClass: "native-tool-panic",
-            exitCode: 134,
             name: "check-build",
+            exitCode: 134,
+            failureClass: "native-tool-panic",
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest asymmetric matcher checks the safe prerequisite hint.
             hint: expect.stringContaining("repairOnly"),
           },
           reason: "tooling-prerequisite",
@@ -876,8 +843,7 @@ describe("target validation", () => {
       apply,
       attempt: createTargetValidationAttempt(apply, "unknown-134"),
       dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
-      executor: async () =>
-        await Promise.resolve({ exitCode: 134, stderr: "no diagnostic", stdout: "" }),
+      executor: () => Promise.resolve({ exitCode: 134, stderr: "no diagnostic", stdout: "" }),
       sandbox,
     });
     expect(result).toMatchObject({
@@ -894,6 +860,7 @@ describe("target validation", () => {
       appId: "example",
       apply,
       attempt: createTargetValidationAttempt(apply, "provider-error"),
+      // oxlint-disable-next-line eslint/require-await -- model the provider's rejected promise
       executor: async () => {
         throw failure;
       },
@@ -933,6 +900,7 @@ describe("target validation", () => {
       appId: "example",
       apply,
       attempt: createTargetValidationAttempt(apply, "provider-timeout"),
+      // oxlint-disable-next-line eslint/require-await -- model the provider's rejected promise
       executor: async () => {
         throw timeout;
       },
@@ -1048,12 +1016,13 @@ describe("target validation", () => {
   ] as const)(
     "runs the repository-owned validation task once: %s",
     async (command, alreadyCompiled) => {
+      // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
       const run = vi.fn(async () => ({
         exitCode: 1,
         stderr: "Formatting issues found",
         stdout: "",
       }));
-      const sandbox = sandboxWithCommands(run);
+      const sandbox = { run } as unknown as SandboxSession;
 
       const result = await sandboxValidationCommandExecutor({ alreadyCompiled })({
         appId: "example",
@@ -1064,7 +1033,7 @@ describe("target validation", () => {
       });
 
       expect(result.exitCode).toBe(1);
-      const expectedInput: Parameters<SandboxSession["run"]>[0] = {
+      expect(run).toHaveBeenCalledExactlyOnceWith({
         command: `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
 (
@@ -1079,16 +1048,13 @@ cat "$log"
 rm -f "$log"
 exit "$status"`,
         env: {
+          ...(alreadyCompiled ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
           APP_RUNTIME_STATE_DIR: path.posix.dirname(
             localRuntimeEnvironmentPath("/workspace/repository", "example"),
           ),
         },
         workingDirectory: "/workspace/repository",
-      };
-      if (alreadyCompiled === true) {
-        expectedInput.env = { ...expectedInput.env, APP_RUNTIME_ALREADY_COMPILED: "1" };
-      }
-      expect(run).toHaveBeenCalledExactlyOnceWith(expectedInput);
+      });
     },
   );
 
@@ -1144,24 +1110,18 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
       expect(
         execute({ command: `mise run --no-deps app:runtime run example ${runtimeTask}` }).exitCode,
       ).toBe(25);
-      const run = vi.fn(
-        async (input: Parameters<SandboxSession["run"]>[0]) =>
-          await Promise.resolve(execute(input)),
+      const run = vi.fn((input: Parameters<SandboxSession["run"]>[0]) =>
+        Promise.resolve(execute(input)),
       );
-      const spawn = vi.fn(
-        async (input: Parameters<SandboxSession["spawn"]>[0]) =>
-          await Promise.resolve(
-            (() => {
-              const result = execute(input);
-              return {
-                kill: async () => {},
-                stderr: outputStream(result.stderr),
-                stdout: outputStream(result.stdout),
-                wait: async () => await Promise.resolve({ exitCode: result.exitCode }),
-              };
-            })(),
-          ),
-      );
+      const spawn = vi.fn((input: Parameters<SandboxSession["spawn"]>[0]) => {
+        const result = execute(input);
+        return Promise.resolve({
+          kill: () => Promise.resolve(),
+          stderr: outputStream(result.stderr),
+          stdout: outputStream(result.stdout),
+          wait: () => Promise.resolve({ exitCode: result.exitCode }),
+        });
+      });
       const chunks: string[] = [];
       try {
         const result = await sandboxValidationCommandExecutor()({
@@ -1170,15 +1130,15 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
           environment: {
             APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
             APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
-            OPTIONAL_INPUT: null,
+            OPTIONAL_INPUT: undefined,
           },
           onChunk: streaming
-            ? async (_channel, content) => {
+            ? (_channel, content) => {
                 chunks.push(content);
-                await Promise.resolve();
+                return Promise.resolve();
               }
             : undefined,
-          sandbox: sandboxWithCommands(run, spawn),
+          sandbox: { run, spawn } as unknown as SandboxSession,
           validationRoot: directory,
         });
         expect(result.exitCode).toBe(0);
@@ -1300,42 +1260,37 @@ exit 134
   `,
         );
       }
-      const run = vi.fn(
-        async (input: Parameters<SandboxSession["run"]>[0]) =>
-          await Promise.resolve(
-            (() => {
-              const result = spawnSync("/bin/bash", ["-c", input.command], {
-                cwd: directory,
-                encoding: "utf-8",
-                env: {
-                  ...process.env,
-                  ...input.env,
-                  BETTER_AUTH_SECRET: "",
-                  FIXTURE_NODE: process.execPath,
-                  FIXTURE_OUTCOME: scenario.outcome,
-                  FIXTURE_SOURCE_PATH: process.env.PATH ?? "",
-                  PATH: `${directory}:${process.env.PATH ?? ""}`,
-                },
-                timeout: 5000,
-              });
-              if (result.error !== undefined) {
-                throw result.error;
-              }
-              return {
-                exitCode: result.status ?? -1,
-                stderr: result.stderr,
-                stdout: result.stdout,
-              };
-            })(),
-          ),
-      );
+      const run = vi.fn((input: Parameters<SandboxSession["run"]>[0]) => {
+        const result = spawnSync("/bin/bash", ["-c", input.command], {
+          cwd: directory,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            ...input.env,
+            BETTER_AUTH_SECRET: "",
+            FIXTURE_NODE: process.execPath,
+            FIXTURE_OUTCOME: scenario.outcome,
+            FIXTURE_SOURCE_PATH: process.env.PATH ?? "",
+            PATH: `${directory}:${process.env.PATH ?? ""}`,
+          },
+          timeout: 5000,
+        });
+        if (result.error !== undefined) {
+          throw result.error;
+        }
+        return Promise.resolve({
+          exitCode: result.status ?? -1,
+          stderr: result.stderr,
+          stdout: result.stdout,
+        });
+      });
       const command = repositoryDeliveryBuildCommand("example", scenario.alreadyCompiled);
       const result = await sandboxValidationCommandExecutor({
         alreadyCompiled: scenario.alreadyCompiled,
       })({
         appId: "example",
         command,
-        sandbox: sandboxWithCommands(run),
+        sandbox: { run } as unknown as SandboxSession,
         validationRoot: directory,
       });
       expect(run).toHaveBeenCalledOnce();
@@ -1386,28 +1341,23 @@ exit 99
 `,
         { mode: 0o755 },
       );
-      const run = vi.fn(
-        async (input: Parameters<SandboxSession["run"]>[0]) =>
-          await Promise.resolve(
-            (() => {
-              const result = spawnSync("/bin/bash", ["-c", input.command], {
-                cwd: directory,
-                encoding: "utf-8",
-                env: { ...process.env, ...input.env, PATH: `${directory}:/usr/bin:/bin` },
-              });
-              if (result.error) throw result.error;
-              return {
-                exitCode: result.status ?? -1,
-                stderr: result.stderr,
-                stdout: result.stdout,
-              };
-            })(),
-          ),
-      );
+      const run = vi.fn((input: Parameters<SandboxSession["run"]>[0]) => {
+        const result = spawnSync("/bin/bash", ["-c", input.command], {
+          cwd: directory,
+          encoding: "utf-8",
+          env: { ...process.env, ...input.env, PATH: `${directory}:/usr/bin:/bin` },
+        });
+        if (result.error) throw result.error;
+        return Promise.resolve({
+          exitCode: result.status ?? -1,
+          stderr: result.stderr,
+          stdout: result.stdout,
+        });
+      });
       const result = await sandboxValidationCommandExecutor()({
         appId: "example",
         command: repositoryDeliveryBuildCommand("example"),
-        sandbox: sandboxWithCommands(run),
+        sandbox: { run } as unknown as SandboxSession,
         validationRoot: directory,
       });
       expect(result.exitCode).toBe(13);
@@ -1431,6 +1381,7 @@ exit 99
     );
     chmodSync(mise, 0o755);
     try {
+      // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
       const run = vi.fn(async ({ command }: { command: string }) => {
         const result = spawnSync("/bin/bash", ["-c", command], {
           cwd: directory,
@@ -1450,7 +1401,7 @@ exit 99
       const result = await sandboxValidationCommandExecutor()({
         appId: "example",
         command: "mise run --no-deps --skip-tools app:test example 1/1",
-        sandbox: sandboxWithCommands(run),
+        sandbox: { run } as unknown as SandboxSession,
         validationRoot: directory,
       });
       expect(result.exitCode).toBe(17);

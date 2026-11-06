@@ -1,3 +1,5 @@
+/* oxlint-disable sonarjs/no-nested-functions -- Controlled asynchronous lifecycle callbacks retain the same owned test context. */
+/* oxlint-disable eslint/require-await -- Faithful controlled asynchronous ports exercise the actual continuity service without provider effects. */
 import { expect, vi } from "vitest";
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
@@ -120,18 +122,6 @@ export const selection = {
   },
   target: context.target,
   version: 1 as const,
-};
-
-const listen = async (server: Server) => {
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      server.removeListener("error", reject);
-      resolve();
-    });
-  });
-  const address = z.object({ port: z.number() }).parse(server.address());
-  return address.port;
 };
 const makePlan = () =>
   hostedContinuityPlanSchema.parse({
@@ -267,6 +257,8 @@ export const setup = () => {
         row = rows.get(input.record.requestId);
         if (rejectCas || row?.revision !== input.expectedRevision) {
           rejectCas = false;
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS absence is the supported conflict result.
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing workspace is the resolver contract.
           return undefined;
         }
         row = continuityRecordSchema.parse(structuredClone(input.record));
@@ -392,8 +384,22 @@ export const installManagedAcceptanceSuite = (
             runtimeAttemptId: current.runtimeAttemptId,
             sandboxId: current.sandboxId,
           };
+          const listen = async (server: Server) => {
+            // oxlint-disable-next-line promise/avoid-new -- Adapt the owned loopback listener event.
+            await new Promise<void>((resolve, reject) => {
+              server.once("error", reject);
+              // oxlint-disable-next-line sonarjs/no-nested-functions -- Listener completion owns the corresponding error callback cleanup.
+              server.listen(0, "127.0.0.1", () => {
+                server.removeListener("error", reject);
+                resolve();
+              });
+            });
+            const address = z.object({ port: z.number() }).parse(server.address());
+            return address.port;
+          };
           const reservation = createServer();
           const appPort = await listen(reservation);
+          // oxlint-disable-next-line promise/avoid-new -- Release the reserved port before owned launch.
           await new Promise<void>((resolve) => {
             reservation.close(() => {
               resolve();

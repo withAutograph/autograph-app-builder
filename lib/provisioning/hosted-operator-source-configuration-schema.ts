@@ -13,8 +13,6 @@ import {
 } from "./hosted-operator-host-protection";
 
 const id = z.string().min(1);
-const neonResourceBootstrapId = "neon-resource-bootstrap-v1";
-const singleProjectServicesComposition = "single-project-services";
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const httpsOrigin = z.url().refine((value) => {
   const url = new URL(value);
@@ -35,7 +33,7 @@ export const hostedOperatorWorkerDescriptorSchema = z.strictObject({
     "generated-app-access-v1",
     "auth-protected-schema-v1",
     "auth-protected-membership-v1",
-    neonResourceBootstrapId,
+    "neon-resource-bootstrap-v1",
   ]),
   sha256: digest,
   sourceCapture: operatorWorkerSourceCaptureSchema.optional(),
@@ -88,8 +86,8 @@ const sandboxConfigurationFields = {
   integrationResourcesWorker: z
     .strictObject({
       executablePath: id,
-      id: z.literal(neonResourceBootstrapId),
-      operationScope: z.literal(neonResourceBootstrapId),
+      id: z.literal("neon-resource-bootstrap-v1"),
+      operationScope: z.literal("neon-resource-bootstrap-v1"),
       sha256: digest,
       subcommand: z.literal("neon-resource-bootstrap"),
     })
@@ -155,6 +153,8 @@ export const standardDevelopmentRuntimePolicySchema = z
   });
 
 export const hostedOperatorSourceConfigurationSchema = z.strictObject({
+  /** Explicit deployment-owned topology; omitted configurations retain legacy behavior. */
+
   applications: z.record(
     id,
     z.strictObject({
@@ -181,7 +181,8 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   authDatabase: resource,
   builderCallbackOrigin: httpsOrigin,
   catalogAppIds: z.array(id).min(1),
-  composition: z.literal(singleProjectServicesComposition).optional(),
+  /** Explicit deployment-owned topology; omitted configurations retain legacy behavior. */
+  composition: z.literal("single-project-services").optional(),
   gateway: z.strictObject({
     authBrowserOrigin: httpsOrigin,
     branch: id,
@@ -258,7 +259,7 @@ export const validateHostedOperatorSourceConfiguration = (
     Object.values(config.applications).every(
       (app) =>
         app.projectId !== config.operator.projectId &&
-        (config.composition === singleProjectServicesComposition ||
+        (config.composition === "single-project-services" ||
           app.projectId !== config.gateway.projectId),
     ),
     config.sandbox.projectId === config.operator.projectId,
@@ -276,26 +277,24 @@ export const validateHostedOperatorSourceConfiguration = (
     new Set([config.operator.projectId, config.gateway.projectId]).size === 2,
     config.standardRuntime === undefined ||
       [
-        config.composition === singleProjectServicesComposition,
+        config.composition === "single-project-services",
         config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
         config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
       ].every(Boolean),
-    config.composition !== singleProjectServicesComposition ||
-      hasSingleProjectServicesTopology(config),
+    config.composition !== "single-project-services" || hasSingleProjectServicesTopology(config),
     config.standardRuntime === undefined ||
       [
-        config.composition === singleProjectServicesComposition,
+        config.composition === "single-project-services",
         config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
         config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
       ].every(Boolean),
     config.standardRuntime === undefined ||
       [
-        config.composition === singleProjectServicesComposition,
+        config.composition === "single-project-services",
         config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
         config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
       ].every(Boolean),
-    config.composition !== singleProjectServicesComposition ||
-      hasSingleProjectServicesTopology(config),
+    config.composition !== "single-project-services" || hasSingleProjectServicesTopology(config),
   ].every(Boolean);
   if (!ownedConfiguration) {
     throw new Error("Protected operator deployment configuration is unavailable.");

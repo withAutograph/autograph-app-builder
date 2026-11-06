@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/complexity -- Owner verification keeps every durable session, native lineage and cancellation comparison explicit. */
 import type { BuilderProvisionResponse } from "./contracts";
 import type { BuilderProvisionJournalStore } from "./journal";
 import { resolveExistingBuilderDestinationReference } from "./builder-existing-destination";
@@ -151,7 +152,7 @@ const readCurrentOwnedSession = async (
   if (session === null) {
     throw unavailable();
   }
-  const { getSessionByAdapterSessionId, readCurrentBuildSession } = deps.eve;
+  const { readCurrentBuildSession, getSessionByAdapterSessionId } = deps.eve;
   if (sessionVersion !== 2 || readCurrentBuildSession === undefined) {
     return { session, sessionVersion };
   }
@@ -179,7 +180,7 @@ const readCurrentOwnedSession = async (
     if (!linked || binding === undefined) {
       throw unavailable();
     }
-    ({ logicalSessionId } = binding);
+    logicalSessionId = binding.logicalSessionId;
   }
   const current = await readCurrentBuildSession.call(deps.eve, {
     authoritySessionId: original.sessionId,
@@ -374,6 +375,7 @@ const readHandoffOwnerIdentity = async (
   if (!handoff.success) {
     throw unavailable();
   }
+  // oxlint-disable-next-line sonarjs/expression-complexity -- Handoff ID, owner, session, and app form one persisted linkage.
   if (
     handoff.data.handoffId !== owner.sourceHandoffId ||
     handoff.data.sessionId !== owner.sessionId ||
@@ -671,14 +673,11 @@ export const readCanonicalAppOwnerSession = async (
 const standardRepository = (receipt: BuilderProvisionResponse) => {
   const { github } = receipt;
   const { vercel } = receipt;
-  const repositoryMatches =
-    github.status === "succeeded" &&
+  return github.status === "succeeded" &&
     vercel.status === "succeeded" &&
-    github.fullName === vercel.linkedGitHubRepository;
-  if (!repositoryMatches) {
-    return { githubInstallationId: null, repositoryId: null };
-  }
-  return { githubInstallationId: github.installationId, repositoryId: github.repositoryId };
+    github.fullName === vercel.linkedGitHubRepository
+    ? { githubInstallationId: github.installationId, repositoryId: github.repositoryId }
+    : { githubInstallationId: undefined, repositoryId: undefined };
 };
 
 type StandardDestinationDependencies = HostedOperatorAppOwnerDependencies &
@@ -732,6 +731,7 @@ const readDirectStandardBuilderDestination = async (
   await readCanonicalAppOwnerSession(deps, input);
   const reference = await readOwnedStandardBuilderDestinationReference(deps, input);
   if (reference === undefined || deps.readProvisioning === undefined) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absent destination is part of this async result.
     return undefined;
   }
   if (reference.appId !== input.target.appId) {
@@ -753,12 +753,13 @@ const readDirectStandardBuilderDestination = async (
   }
   const project = row.record.response.vercel;
   if (row.state !== "settled" || project.status !== "succeeded") {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- An unfinished journal is never a ready destination.
     return undefined;
   }
   if (project.scope.type !== "team") {
     throw resourceMismatch();
   }
-  const accessInput: Parameters<typeof readOwnerVercelProjectAccess>[0] = {
+  const access = await readOwnerVercelProjectAccess({
     authority: input.authority,
     expectedScope: { ...project.scope, installationId: project.installationId },
     installationId: project.installationId,
@@ -767,14 +768,9 @@ const readDirectStandardBuilderDestination = async (
     requireExpectedRepositoryId: standardRepository(row.record.response).repositoryId,
     requirePublicAppConfiguration: options.requirePublicAppConfiguration,
     requireServicesRoot: true,
-  };
-  if (deps.fetch !== undefined) {
-    accessInput.fetch = deps.fetch;
-  }
-  if (deps.apiOrigin !== undefined) {
-    accessInput.apiOrigin = deps.apiOrigin;
-  }
-  const access = await readOwnerVercelProjectAccess(accessInput);
+    ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+    ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
+  });
   if (access.status !== "ready" || access.project?.id !== project.projectId) {
     throw resourceMismatch();
   }
@@ -795,27 +791,30 @@ const readDirectStandardBuilderDestination = async (
     latestProject.installationId === project.installationId,
     latestProject.scope.id === project.scope.id,
     latestProject.scope.type === project.scope.type,
+    latestProject.scope.id === project.scope.id,
+    latestProject.scope.type === project.scope.type,
   ].every(Boolean);
   if (!unchanged) {
     throw unavailable();
   }
-  const destination = {
-    deploymentAccess: row.record.request.deploymentAccess,
+  return {
+    projectId: project.projectId,
+    teamId: project.scope.id,
     installationId: project.installationId,
     name: access.project.name,
-    productionBranch: access.project.productionBranch,
-    projectId: project.projectId,
-    provisioningDigest: row.requestDigest,
-    provisioningRequestId: row.requestId,
-    repository: project.linkedGitHubRepository,
-    teamId: project.scope.id,
     teamSlug: access.scope.slug,
+    productionBranch: access.project.productionBranch,
+
+    repository: project.linkedGitHubRepository,
+    ...standardRepository(row.record.response),
+    githubInstallationId:
+      row.record.response.github.status === "succeeded"
+        ? row.record.response.github.installationId
+        : undefined,
+    provisioningRequestId: row.requestId,
+    provisioningDigest: row.requestDigest,
+    deploymentAccess: row.record.request.deploymentAccess,
   };
-  if (row.record.response.github.status === "succeeded") {
-    Object.assign(destination, { githubInstallationId: row.record.response.github.installationId });
-  }
-  Object.assign(destination, standardRepository(row.record.response));
-  return destination;
 };
 
 /** Only an existing normal Builder handoff receipt can identify this destination. */
@@ -854,21 +853,16 @@ export const readStandardBuilderDestination = async (
   if (receipt.appId !== input.target.appId || project.scope.type !== "team") {
     throw resourceMismatch();
   }
-  const accessInput: Parameters<typeof readPreparedVercelAccess>[0] = {
+  const access = await readPreparedVercelAccess({
     authority: owner.authority,
     intent: handoff.intent,
     readCredential: deps.readVercelCredential,
     requireExpectedRepositoryId: standardRepository(receipt).repositoryId,
     requirePublicAppConfiguration: options.requirePublicAppConfiguration,
     requireServicesRoot: true,
-  };
-  if (deps.fetch !== undefined) {
-    accessInput.fetch = deps.fetch;
-  }
-  if (deps.apiOrigin !== undefined) {
-    accessInput.apiOrigin = deps.apiOrigin;
-  }
-  const access = await readPreparedVercelAccess(accessInput);
+    ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+    ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
+  });
   if (access.status !== "ready" || access.project?.id !== project.projectId) {
     throw resourceMismatch();
   }
@@ -891,23 +885,22 @@ export const readStandardBuilderDestination = async (
   if (!unchanged) {
     throw unavailable();
   }
-  const destination = {
-    deploymentAccess: receipt.deploymentAccess,
+  return {
+    projectId: project.projectId,
+    teamId: project.scope.id,
     installationId: project.installationId,
     name: access.project.name,
-    productionBranch: access.project.productionBranch,
-    projectId: project.projectId,
-    provisioningDigest: receipt.requestDigest,
-    provisioningRequestId: receipt.requestId,
-    repository: project.linkedGitHubRepository,
-    teamId: project.scope.id,
     teamSlug: access.scope.slug,
+    productionBranch: access.project.productionBranch,
+
+    repository: project.linkedGitHubRepository,
+    ...standardRepository(receipt),
+    githubInstallationId:
+      receipt.github.status === "succeeded" ? receipt.github.installationId : undefined,
+    provisioningRequestId: receipt.requestId,
+    provisioningDigest: receipt.requestDigest,
+    deploymentAccess: receipt.deploymentAccess,
   };
-  if (receipt.github.status === "succeeded") {
-    Object.assign(destination, { githubInstallationId: receipt.github.installationId });
-  }
-  Object.assign(destination, standardRepository(receipt));
-  return destination;
 };
 
 /** Only an existing normal Builder handoff receipt can identify this destination. */
@@ -964,6 +957,7 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
       projectId: input.target.projectId,
       sessionId: input.target.sessionId,
     });
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Approval is accepted only when every terminal receipt binding matches.
     if (
       !sameAuthority(input.authority, owner.authority) ||
       JSON.stringify(current.target) !== JSON.stringify(input.target) ||
@@ -1225,10 +1219,7 @@ const capturePredecessorApprovalCheckpoint = (
       retainedPrepare: true,
     };
   }
-  // SAFETY: both bootstrap fields are validated operator records from the predecessor reader.
-  const original = (
-    [prior.bootstrap.auth, prior.bootstrap.gateway] as readonly (HostedOperatorRecord | undefined)[]
-  ).find(
+  const original = [prior.bootstrap.auth, prior.bootstrap.gateway].find(
     (value) =>
       value?.planDigest === context.planDigest && value.approvedByCallId === context.callId,
   );
@@ -1360,19 +1351,7 @@ export const createHostedOperatorReadApproval =
   ) => {
     const owner = operatorOwnerContextSchema.safeParse(context.ownerContext);
     const row = await input.journal.read(context);
-    const checkpoint: {
-      current:
-        | HostedOperatorRecord
-        | {
-            approvalId?: string;
-            operationRef: string;
-            plan: HostedOperatorPlan;
-            planDigest: string;
-          }
-        | undefined;
-      retainedPrepare: boolean;
-      membershipInspection?: boolean;
-    } = approvalCheckpoint(row?.record, context);
+    const checkpoint = approvalCheckpoint(row?.record, context);
     const { current, retainedPrepare } = checkpoint;
     if (!owner.success || current === undefined) {
       throw unavailable();

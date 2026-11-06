@@ -1,11 +1,9 @@
 import type { SandboxSession } from "eve/sandbox";
 
-type SandboxCommandAuthorization = void;
-
 /** Protect commands while preserving every application/provider capability. */
 export const createAuthorizedSandboxSession = <Session extends SandboxSession>(input: {
   session: Session;
-  authorize?: () => Promise<SandboxCommandAuthorization>;
+  authorize?: () => Promise<unknown>;
 }): Session => ({
   ...input.session,
   async run(options) {

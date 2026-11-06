@@ -19,13 +19,6 @@ const REPOSITORY = /^[A-Za-z0-9_.-]{1,100}$/u;
 const BRANCH =
   /^(?![./])(?!.*(?:\.\.|@\{))(?!.*(?:[/.]|\.lock)$)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/u;
 const SANDBOX_WORKSPACE = "/workspace/repository";
-const SANDBOX_WORKING_DIRECTORY = "/workspace";
-const GITHUB_ORIGIN = "https://github.com";
-const INVALID_REMOTE_MESSAGE =
-  "The GitHub source remote is invalid. Select a GitHub repository with an HTTPS clone URL, then retry.";
-const NO_SANDBOX_DIAGNOSTIC = "The sandbox provider returned no diagnostic output.";
-const NO_COMMAND_DIAGNOSTIC = "The sandbox command returned no diagnostic output.";
-const NO_FAILURE_DIAGNOSTIC = "with no diagnostic output";
 export const SANDBOX_GITHUB_SOURCE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 
 const sandboxFailureDetail = (value: string): string =>
@@ -50,7 +43,7 @@ const sandboxCommandFailure = (
 ): Error => {
   const detail = sandboxFailureDetail(`${result.stderr}\n${result.stdout}`);
   return new Error(
-    `Builder could not ${operation} (exit ${result.exitCode}). ${recovery} Cause: ${detail || NO_COMMAND_DIAGNOSTIC}`,
+    `Builder could not ${operation} (exit ${result.exitCode}). ${recovery} Cause: ${detail || "The sandbox command returned no diagnostic output."}`,
   );
 };
 
@@ -60,20 +53,18 @@ const runSourceSandboxCommand = async (
   command: string,
 ) => {
   try {
-    return await sandbox.run({ command, workingDirectory: SANDBOX_WORKING_DIRECTORY });
+    return await sandbox.run({ command, workingDirectory: "/workspace" });
   } catch (error) {
     const cause = sandboxFailureDetail(error instanceof Error ? error.message : String(error));
-    const causeText = cause || NO_SANDBOX_DIAGNOSTIC;
     throw new Error(
-      `Builder could not ${operation} in the sandbox. Check the sandbox connection and checkout, then retry this session. Cause: ${causeText}`,
+      `Builder could not ${operation} in the sandbox. Check the sandbox connection and checkout, then retry this session. Cause: ${cause || "The sandbox provider returned no diagnostic output."}`,
       { cause: error },
     );
   }
 };
 
 const shellQuote = function shellQuote(value: string) {
-  const escapedQuote = "'\"'\"'";
-  return `'${value.replaceAll("'", escapedQuote)}'`;
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 };
 
 const parseRemote = function parseRemote(input: string) {
@@ -81,23 +72,26 @@ const parseRemote = function parseRemote(input: string) {
   try {
     remote = new URL(input);
   } catch {
-    throw new Error(INVALID_REMOTE_MESSAGE);
+    throw new Error(
+      "The GitHub source remote is invalid. Select a GitHub repository with an HTTPS clone URL, then retry.",
+    );
   }
   const match = /^\/(?<owner>[A-Za-z0-9_.-]{1,100})\/(?<repo>[A-Za-z0-9_.-]{1,100})\.git$/u.exec(
     remote.pathname,
   );
-  const hasUrlDecoration = Boolean(
-    remote.username || remote.password || remote.search || remote.hash,
-  );
-  const owner = match?.groups?.owner;
-  const repository = match?.groups?.repo;
-  const originMismatch = remote.origin !== GITHUB_ORIGIN;
-  const pathPartsMissing = owner === undefined || repository === undefined;
-  if (originMismatch || hasUrlDecoration || pathPartsMissing) {
-    throw new Error(INVALID_REMOTE_MESSAGE);
-  }
-  if (!REPOSITORY.test(owner) || !REPOSITORY.test(repository)) {
-    throw new Error(INVALID_REMOTE_MESSAGE);
+  if (
+    remote.origin !== "https://github.com" ||
+    remote.username !== "" ||
+    remote.password !== "" ||
+    remote.search !== "" ||
+    remote.hash !== "" ||
+    match === null ||
+    !REPOSITORY.test(match[1] ?? "") ||
+    !REPOSITORY.test(match[2] ?? "")
+  ) {
+    throw new Error(
+      "The GitHub source remote is invalid. Select a GitHub repository with an HTTPS clone URL, then retry.",
+    );
   }
   return remote.toString();
 };
@@ -107,59 +101,6 @@ const parseBranch = function parseBranch(input: string) {
     throw new Error("The GitHub source branch is invalid.");
   }
   return input;
-};
-
-const isValidRevision = (value: string | undefined): value is string =>
-  value !== undefined && SHA.test(value);
-
-const doesRevisionMismatch = (
-  sourceSha: string,
-  sourceTree: string,
-  expected: { sourceSha?: string; sourceTree?: string },
-) =>
-  (expected.sourceSha !== undefined && sourceSha !== expected.sourceSha) ||
-  (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree);
-
-const isRepositoryMismatch = (
-  inspection: { remote?: unknown; resolvedRef?: unknown },
-  input: { remote: string; expectedSha: string },
-) =>
-  inspection.remote !== parseRemote(input.remote) || inspection.resolvedRef !== input.expectedSha;
-
-const isCheckoutStateMismatch = (inspection: {
-  detached?: unknown;
-  hasGitmodules?: unknown;
-  gitlinks?: unknown;
-}) => {
-  const { gitlinks } = inspection;
-  const gitlinksMissing = !Array.isArray(gitlinks);
-  const gitlinksPresent = Array.isArray(gitlinks) && gitlinks.length !== 0;
-  return (
-    inspection.detached !== true ||
-    inspection.hasGitmodules !== false ||
-    gitlinksMissing ||
-    gitlinksPresent
-  );
-};
-
-const isManifestMismatch = (
-  inspection: { manifestMatches?: unknown; checksumsMatch?: unknown; workspaceDigest?: unknown },
-  expectedDigest: string,
-) =>
-  inspection.manifestMatches !== true ||
-  inspection.checksumsMatch !== true ||
-  inspection.workspaceDigest !== expectedDigest;
-
-const isSnapshotMismatch = (
-  snapshot: CanonicalTemplateSnapshot,
-  storedSnapshot: CanonicalTemplateSnapshot,
-  input: { expectedSha: string; expectedTree: string },
-) => {
-  const sourceMismatch =
-    snapshot.sourceSha !== input.expectedSha || snapshot.sourceTree !== input.expectedTree;
-  const dirtyPathsPresent = snapshot.dirtyPaths.length !== 0;
-  const contentMismatch = JSON.stringify(snapshot) !== JSON.stringify(storedSnapshot);
-  return sourceMismatch || dirtyPathsPresent || contentMismatch;
 };
 
 export const sandboxGitHubSourceManifestProgram = (
@@ -477,24 +418,24 @@ const inspectSelectedCheckout = (
   expected: { repository: string; sourceSha?: string; sourceTree?: string },
 ) => {
   const [sourceSha, sourceTree, remote] = stdout.trim().split(/\s+/u);
-  const revisionsMissing =
-    sourceSha === undefined || sourceTree === undefined || remote === undefined;
-  const revisionsInvalid = !isValidRevision(sourceSha) || !isValidRevision(sourceTree);
-  if (revisionsMissing || revisionsInvalid) {
+  if (
+    sourceSha === undefined ||
+    sourceTree === undefined ||
+    remote === undefined ||
+    !SHA.test(sourceSha) ||
+    !SHA.test(sourceTree)
+  ) {
     throw new Error(
       "The selected GitHub checkout inspection did not return a commit and tree revision. Check that the provider created a complete Git checkout, then retry this session.",
     );
   }
-  if (sourceSha === undefined || sourceTree === undefined || remote === undefined) {
-    throw new Error("The selected GitHub checkout inspection did not return a complete checkout.");
-  }
-  const expectedRepository = parseRemote(expected.repository);
-  const observedRepository = parseRemote(remote);
-  const revisionMismatch = doesRevisionMismatch(sourceSha, sourceTree, expected);
-  if (observedRepository !== expectedRepository || revisionMismatch) {
-    const expectedRevision = expected.sourceSha === undefined ? "" : ` at ${expected.sourceSha}`;
+  if (
+    parseRemote(remote) !== parseRemote(expected.repository) ||
+    (expected.sourceSha !== undefined && sourceSha !== expected.sourceSha) ||
+    (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree)
+  ) {
     throw new Error(
-      `The sandbox checkout does not match the selected GitHub source. Expected ${expectedRepository}${expectedRevision}; observed ${observedRepository} at ${sourceSha}. Select the intended repository or start a new Builder session for this checkout.`,
+      `The sandbox checkout does not match the selected GitHub source. Expected ${parseRemote(expected.repository)}${expected.sourceSha === undefined ? "" : ` at ${expected.sourceSha}`}; observed ${parseRemote(remote)} at ${sourceSha}. Select the intended repository or start a new Builder session for this checkout.`,
     );
   }
   return { sourceSha, sourceTree };
@@ -508,6 +449,7 @@ const findProviderCheckout = async (
 ): Promise<string> => {
   const failures: string[] = [];
   for (const candidate of paths) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- inspect provider locations in order.
     const result = await runSourceSandboxCommand(
       sandbox,
       `inspect the provider checkout at ${candidate}`,
@@ -518,7 +460,7 @@ const findProviderCheckout = async (
       return candidate;
     }
     failures.push(
-      `${candidate}: ${sandboxFailureDetail(result.stderr || result.stdout) || ["exit", result.exitCode, NO_FAILURE_DIAGNOSTIC].join(" ")}`,
+      `${candidate}: ${sandboxFailureDetail(result.stderr || result.stdout) || `exit ${result.exitCode} with no diagnostic output`}`,
     );
   }
   if (materialize !== undefined) {
@@ -634,7 +576,7 @@ export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHu
   } catch (error) {
     const cause = sandboxFailureDetail(error instanceof Error ? error.message : String(error));
     throw new Error(
-      `Builder could not run selected-source manifest generation in the sandbox. Check that the sandbox, Git, and Node are available, then retry this session. Cause: ${cause || NO_SANDBOX_DIAGNOSTIC}`,
+      `Builder could not run selected-source manifest generation in the sandbox. Check that the sandbox, Git, and Node are available, then retry this session. Cause: ${cause || "The sandbox provider returned no diagnostic output."}`,
       { cause: error },
     );
   }
@@ -647,7 +589,7 @@ export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHu
   }
   let observation: unknown;
   try {
-    observation = JSON.parse(result.stdout);
+    observation = JSON.parse(result.stdout) as unknown;
   } catch (error) {
     throw new Error(
       `The selected GitHub source manifest is not valid JSON. Cause: ${sandboxFailureDetail(error instanceof Error ? error.message : String(error))} Check the manifest command output, then retry this session.`,
@@ -675,6 +617,7 @@ export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHu
 
 // Kept temporarily for stored receipt parsing while the legacy inspection
 // writer is removed from the active source path.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorkspace(input: {
   sandbox: SandboxSession;
   remote: string;
@@ -702,35 +645,38 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
   }
   const result = await input.sandbox.run({
     command: sandboxGitHubSourceReinspectionCommand(input),
-    workingDirectory: SANDBOX_WORKING_DIRECTORY,
+    workingDirectory: "/workspace",
   });
   if (result.exitCode !== 0) {
     throw new Error("The GitHub source workspace could not be verified.");
   }
-  const inspectionSchema = z.strictObject({
-    checksumsMatch: z.unknown().optional(),
-    detached: z.unknown().optional(),
-    gitlinks: z.unknown().optional(),
-    hasGitmodules: z.unknown().optional(),
-    manifestMatches: z.unknown().optional(),
-    remote: z.unknown().optional(),
-    resolvedRef: z.unknown().optional(),
-    snapshot: z.unknown().optional(),
-    workspaceDigest: z.unknown().optional(),
-  });
-  let inspectionObservation: unknown;
-  try {
-    inspectionObservation = JSON.parse(result.stdout);
-  } catch {
-    throw new Error("The GitHub source workspace inspection is not valid JSON.");
-  }
-  const inspection = inspectionSchema.parse(inspectionObservation);
+  const inspection = JSON.parse(result.stdout) as {
+    remote?: unknown;
+    resolvedRef?: unknown;
+    detached?: unknown;
+    hasGitmodules?: unknown;
+    gitlinks?: unknown;
+    manifestMatches?: unknown;
+    checksumsMatch?: unknown;
+    workspaceDigest?: unknown;
+    snapshot?: unknown;
+  };
   const snapshot = parseCanonicalTemplateSnapshot(inspection.snapshot);
-  const repositoryMismatch = isRepositoryMismatch(inspection, input);
-  const checkoutStateMismatch = isCheckoutStateMismatch(inspection);
-  const manifestMismatch = isManifestMismatch(inspection, prepared.workspace.workspaceDigest);
-  const snapshotMismatch = isSnapshotMismatch(snapshot, storedSnapshot, input);
-  if (repositoryMismatch || checkoutStateMismatch || manifestMismatch || snapshotMismatch) {
+  if (
+    inspection.remote !== parseRemote(input.remote) ||
+    inspection.resolvedRef !== input.expectedSha ||
+    inspection.detached !== true ||
+    inspection.hasGitmodules !== false ||
+    !Array.isArray(inspection.gitlinks) ||
+    inspection.gitlinks.length !== 0 ||
+    inspection.manifestMatches !== true ||
+    inspection.checksumsMatch !== true ||
+    inspection.workspaceDigest !== prepared.workspace.workspaceDigest ||
+    snapshot.sourceSha !== input.expectedSha ||
+    snapshot.sourceTree !== input.expectedTree ||
+    snapshot.dirtyPaths.length !== 0 ||
+    JSON.stringify(snapshot) !== JSON.stringify(storedSnapshot)
+  ) {
     throw new Error("The GitHub source workspace drifted.");
   }
   return { snapshot, workspace: prepared.workspace };

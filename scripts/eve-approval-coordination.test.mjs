@@ -1,3 +1,5 @@
+/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- This regression loads the installed compiled Eve internals by package path; their private module declarations are not public exports. */
+/* oxlint-disable sonarjs/no-duplicate-string -- Protocol fixture names deliberately match stored request, call, and event identities. */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -95,7 +97,9 @@ it("settles native approval before dispatch, preserves results and authorizers, 
         response: { optionId, requestId: `request-${name}` },
       })),
     });
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- StepNext intentionally distinguishes a continuation function from a terminal record.
     for (let n = 0; typeof result.next === "function" && n < 5; n += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each SDK step consumes the preceding durable state.
       result = await result.next(result.session);
     }
     return { events, result };
@@ -211,6 +215,7 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   assert.ok(generatedApproved.events.some((e) => e.type === "approval.settled"));
   const generatedDenied = await generatedDecision("cancel");
   assert.deepEqual(getPendingCoordinationBatch(generatedDenied.result.session.state).tasks, []);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Empty coordination must request the next native step, not park indefinitely.
   assert.equal(typeof generatedDenied.result.next, "function");
   const emptyResolution = await resolvePendingCoordination({
     session: generatedDenied.result.session,
@@ -330,7 +335,7 @@ it.each([
       ],
     ]);
     const model = new MockLanguageModelV4({
-      doGenerate: ({ prompt }) => {
+      doGenerate: async ({ prompt }) => {
         requests += 1;
         if (requests === 1) {
           return {
@@ -376,7 +381,7 @@ it.each([
         };
       },
     });
-    const run = createToolLoopHarness({ resolveModel: () => model, tools });
+    const run = createToolLoopHarness({ resolveModel: async () => model, tools });
     const invoke = (session, input) => contextStorage.run(ctx, () => run(session, input));
     const initial = {
       agent: { modelReference: { id: "model", provider: "test" }, system: "", tools: [] },
@@ -410,7 +415,7 @@ it.each([
       abort.abort(new Error("cancelled before replay"));
       const cancelled = createToolLoopHarness({
         abortSignal: abort.signal,
-        resolveModel: () => model,
+        resolveModel: async () => model,
         tools,
       });
       await assert.rejects(
@@ -432,20 +437,17 @@ it.each([
       assert.equal(requests, 1);
       return;
     }
-    const replayInput = {};
-    replayInput.runtimeActionResults = [
-      {
-        callId: "mixed-deferred",
-        kind: "tool-result",
-        output: "deferred-result",
-        toolName: "deferred",
-      },
-    ];
-    if (withInput) {
-      replayInput.context = ["new product context"];
-      replayInput.message = "new product reply";
-    }
-    let completed = await invoke(approved.session, replayInput);
+    let completed = await invoke(approved.session, {
+      ...(withInput ? { context: ["new product context"], message: "new product reply" } : {}),
+      runtimeActionResults: [
+        {
+          callId: "mixed-deferred",
+          kind: "tool-result",
+          output: "deferred-result",
+          toolName: "deferred",
+        },
+      ],
+    });
     assert.equal(executions, optionId === "approve" ? 1 : 0);
     assert.equal(requests, 2);
     if (withInput) {
@@ -544,7 +546,7 @@ it.each([400, 503])(
       ],
     ]);
     const model = new MockLanguageModelV4({
-      doGenerate: ({ prompt }) => {
+      doGenerate: async ({ prompt }) => {
         generatedRequests += 1;
         if (generatedRequests > 1) {
           const parts = prompt.flatMap((message) =>
@@ -577,7 +579,7 @@ it.each([400, 503])(
           warnings: [],
         };
       },
-      doStream: () => {
+      doStream: async () => {
         providerRequests += 1;
         throw new APICallError({
           isRetryable: false,
@@ -589,14 +591,20 @@ it.each([400, 503])(
         });
       },
     });
-    const invoke = (session, input, events) => {
-      const harnessOptions = { tools };
-      harnessOptions.resolveModel = () => model;
-      if (events !== undefined) {
-        harnessOptions.handleEvent = (event) => events.push(event);
-      }
-      return contextStorage.run(ctx, () => createToolLoopHarness(harnessOptions)(session, input));
-    };
+    const invoke = (session, input, events) =>
+      contextStorage.run(ctx, () =>
+        createToolLoopHarness({
+          resolveModel: async () => model,
+          tools,
+          ...(events === undefined
+            ? {}
+            : {
+                handleEvent: async (event) => {
+                  events.push(event);
+                },
+              }),
+        })(session, input),
+      );
     const generated = await invoke(
       {
         agent: { modelReference: { id: "model", provider: "test" }, system: "", tools: [] },
@@ -753,7 +761,7 @@ it.each(["generic", "typed"])(
     const before = JSON.stringify(session.state);
     const run = createToolLoopHarness({
       abortSignal: abort.signal,
-      resolveModel: () => {
+      resolveModel: async () => {
         models += 1;
         throw new Error("must not resolve model");
       },

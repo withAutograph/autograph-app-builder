@@ -9,13 +9,10 @@ import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 
 const RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
-const GATEWAY_BINDINGS_KIND = "gateway-bindings";
 const RENEWED_BINDINGS_DESCRIPTION =
   "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.";
 const RENEWED_GATEWAY_BINDINGS_DESCRIPTION =
   "Bind shared Gateway runtime and allow this app Preview to read the Gateway's public signing keys.";
-const PREVIEW_ENVIRONMENT = `preview`;
-const PROTECTED_OPERATOR_COMMENT_PREFIX = "App Builder protected operator ";
 
 export interface RetentionRenewalDeliveryProvenance {
   approvedByCallId: string;
@@ -29,8 +26,7 @@ export interface RetentionRenewalDeliveryProvenance {
   planDigest: string;
 }
 
-const BINDINGS_KIND = "bindings";
-type BindingKind = typeof BINDINGS_KIND | typeof GATEWAY_BINDINGS_KIND;
+type BindingKind = "bindings" | "gateway-bindings";
 export interface RetentionRenewalBindingProvenance {
   approvedByCallId: string;
   approvalId: string;
@@ -51,8 +47,6 @@ const isFutureAt = (timestamp: number, now: number) =>
 const hasText = (value: string | undefined) => value !== undefined && value.length > 0;
 const isRealApprovalCall = (callId: string) =>
   callId.length > 0 && callId !== UNAPPROVED_PLAN_CALL_ID;
-const isBindingKind = (kind: string): kind is BindingKind =>
-  kind === BINDINGS_KIND || kind === GATEWAY_BINDINGS_KIND;
 const receiptsPrecedePending = (
   operator: HostedOperatorRecord,
   previousEffectIds: Set<string>,
@@ -65,93 +59,41 @@ const receiptsPrecedePending = (
 const hasNoActiveLease = (record: HostedRuntimeJournalRecord, leaseExpiry: number, now: number) =>
   record.leaseId === undefined || (Number.isFinite(leaseExpiry) && leaseExpiry <= now);
 
-interface RenewalSourceFields {
-  appBoundary?: NonNullable<HostedOperatorPlan["deploymentBoundary"]>["app"];
-  gatewayBoundary?: NonNullable<HostedOperatorPlan["deploymentBoundary"]>["gateway"];
-  sourceWorkload?: NonNullable<HostedOperatorPlan["gatewayBindings"]>["sourceWorkload"];
-}
-
-const renewalSourceFields = (prior: HostedOperatorPlan): RenewalSourceFields => {
-  const fields: RenewalSourceFields = {};
-  if (prior.deploymentBoundary?.app !== undefined) {
-    fields.appBoundary = prior.deploymentBoundary.app;
-  }
-  if (prior.deploymentBoundary?.gateway !== undefined) {
-    fields.gatewayBoundary = prior.deploymentBoundary.gateway;
-  }
-  if (prior.gatewayBindings?.sourceWorkload !== undefined) {
-    fields.sourceWorkload = prior.gatewayBindings.sourceWorkload;
-  }
-  return fields;
-};
-
-const isSupportedGatewaySource = (
-  sourceWorkload: NonNullable<HostedOperatorPlan["gatewayBindings"]>["sourceWorkload"],
-  gatewayBoundary: NonNullable<HostedOperatorPlan["deploymentBoundary"]>["gateway"],
-  prior: HostedOperatorPlan,
-) =>
-  sourceWorkload.environment === PREVIEW_ENVIRONMENT &&
-  sourceWorkload.projectId === gatewayBoundary.projectId &&
-  sourceWorkload.ownerId === prior.deploymentBoundary?.teamId;
-
-const isSupportedAppBoundary = (
-  appBoundary: NonNullable<HostedOperatorPlan["deploymentBoundary"]>["app"],
-  prior: HostedOperatorPlan,
-) =>
-  appBoundary.environment === PREVIEW_ENVIRONMENT &&
-  appBoundary.projectId === prior.selection.projectId &&
-  prior.delivery?.projectId === appBoundary.projectId &&
-  prior.delivery.branch === appBoundary.branch;
-
-const isTrustedSourceForRenewal = (
-  trustedSource: NonNullable<HostedOperatorPlan["appTrustedSources"]>["gatewayPreview"] | undefined,
-  projectId: string | undefined,
-) =>
-  trustedSource === undefined ||
-  (trustedSource.from === PREVIEW_ENVIRONMENT &&
-    trustedSource.projectId === projectId &&
-    trustedSource.to === PREVIEW_ENVIRONMENT);
+const renewalSourceFields = (prior: HostedOperatorPlan) => ({
+  appBoundary: prior.deploymentBoundary?.app,
+  gatewayBoundary: prior.deploymentBoundary?.gateway,
+  sourceWorkload: prior.gatewayBindings?.sourceWorkload,
+});
 
 const isSupportedRenewalSource = (prior: HostedOperatorPlan) => {
   const { appBoundary, gatewayBoundary, sourceWorkload } = renewalSourceFields(prior);
-  if (prior.action !== "prepare" || prior.stage !== "app") {
-    return false;
-  }
-  if (prior.delivery === undefined || sourceWorkload === undefined) {
-    return false;
-  }
-  if (appBoundary === undefined || gatewayBoundary === undefined) {
-    return false;
-  }
-  return (
-    isSupportedGatewaySource(sourceWorkload, gatewayBoundary, prior) &&
-    isSupportedAppBoundary(appBoundary, prior)
-  );
+  return [
+    prior.action === "prepare",
+    prior.stage === "app",
+    prior.delivery !== undefined,
+    sourceWorkload !== undefined,
+    appBoundary !== undefined,
+    gatewayBoundary !== undefined,
+    sourceWorkload?.environment === "preview",
+    sourceWorkload?.projectId === gatewayBoundary?.projectId,
+    sourceWorkload?.ownerId === prior.deploymentBoundary?.teamId,
+    appBoundary?.environment === "preview",
+    appBoundary?.projectId === prior.selection.projectId,
+    prior.delivery?.projectId === appBoundary?.projectId,
+    prior.delivery?.branch === appBoundary?.branch,
+  ].every(Boolean);
 };
 
 const hasRenewableBindingsEffect = (prior: HostedOperatorPlan) => {
   const { sourceWorkload } = renewalSourceFields(prior);
-  const bindingCount = prior.effects.filter((effect) => effect.kind === BINDINGS_KIND).length;
+  const bindingCount = prior.effects.filter((effect) => effect.kind === "bindings").length;
   const trustedSource = prior.appTrustedSources?.gatewayPreview;
-  return bindingCount === 1 && isTrustedSourceForRenewal(trustedSource, sourceWorkload?.projectId);
-};
-
-const isRenewablePendingEffect = (
-  pendingEffectId: string | undefined,
-  pending: HostedOperatorPlan["effects"][number] | undefined,
-  plan: HostedOperatorPlan,
-) => {
-  if (pendingEffectId === undefined || pending === undefined) {
-    return false;
-  }
-  if (isBindingKind(pending.kind) || pending.kind === "gateway-delivery") {
-    return true;
-  }
-  return (
-    pending.kind === "delivery" &&
-    plan.hostProtection !== undefined &&
-    plan.appDeliveryReplacement !== undefined
-  );
+  return [
+    bindingCount === 1,
+    trustedSource === undefined || trustedSource.from === "preview",
+    trustedSource === undefined || trustedSource.projectId === sourceWorkload?.projectId,
+    trustedSource === undefined || trustedSource.to === "preview",
+  ].every(Boolean);
 };
 
 const renewalPlanFrom = (prior: HostedOperatorPlan, expiresAt: string) => {
@@ -163,43 +105,44 @@ const renewalPlanFrom = (prior: HostedOperatorPlan, expiresAt: string) => {
   if (sourceWorkload === undefined || gatewayBindings === undefined) {
     return null;
   }
-  const renewedPlan: HostedOperatorPlan = {
+  return hostedOperatorPlanSchema.safeParse({
     ...prior,
+    ...(prior.hostProtection === undefined
+      ? {
+          appTrustedSources: {
+            gatewayPreview: {
+              from: "preview",
+              projectId: sourceWorkload.projectId,
+              to: "preview",
+            },
+          },
+        }
+      : {}),
     effects: prior.effects.map((effect) => {
       if (prior.hostProtection !== undefined) {
         return effect;
       }
-      if (effect.kind === BINDINGS_KIND) {
+      if (effect.kind === "bindings") {
         return { ...effect, description: RENEWED_BINDINGS_DESCRIPTION };
       }
-      if (effect.kind === GATEWAY_BINDINGS_KIND) {
+      if (effect.kind === "gateway-bindings") {
         return { ...effect, description: RENEWED_GATEWAY_BINDINGS_DESCRIPTION };
       }
       return effect;
     }),
     gatewayBindings: {
       ...gatewayBindings,
+      ...(prior.hostProtection === undefined
+        ? {
+            trustedSources: {
+              ...gatewayBindings.trustedSources,
+              appPreview: { from: "preview", projectId: prior.selection.projectId, to: "preview" },
+            },
+          }
+        : {}),
     },
     retention: { ...prior.retention, expiresAt },
-  };
-  if (prior.hostProtection === undefined) {
-    renewedPlan.appTrustedSources = {
-      gatewayPreview: {
-        from: PREVIEW_ENVIRONMENT,
-        projectId: sourceWorkload.projectId,
-        to: PREVIEW_ENVIRONMENT,
-      },
-    };
-    renewedPlan.gatewayBindings.trustedSources = {
-      ...gatewayBindings.trustedSources,
-      appPreview: {
-        from: PREVIEW_ENVIRONMENT,
-        projectId: prior.selection.projectId,
-        to: PREVIEW_ENVIRONMENT,
-      },
-    };
-  }
-  return hostedOperatorPlanSchema.safeParse(renewedPlan);
+  });
 };
 
 const isExactRenewalPlan = (prior: HostedOperatorPlan, candidate: HostedOperatorPlan) => {
@@ -238,7 +181,7 @@ export const isRetentionRenewalBindingProvenance = (
 ): boolean => {
   const priorEffect = provenance.plan.effects.find((effect) => effect.id === effectId);
   const target =
-    kind === BINDINGS_KIND
+    kind === "bindings"
       ? provenance.plan.deploymentBoundary?.app
       : provenance.plan.deploymentBoundary?.gateway;
   return [
@@ -255,7 +198,7 @@ export const isRetentionRenewalBindingProvenance = (
       (row) =>
         row.projectId === target?.projectId &&
         row.branch === target?.branch &&
-        row.comment === `${PROTECTED_OPERATOR_COMMENT_PREFIX}${row.operationRef}`,
+        row.comment === `App Builder protected operator ${row.operationRef}`,
     ),
   ].every(Boolean);
 };
@@ -269,27 +212,22 @@ export const retentionRenewalBindingProvenance = (
   if (current === undefined) {
     return undefined;
   }
-  const match = (current.retainedRenewalOperations ?? []).toReversed().find((retained) => {
+  for (const retained of (current.retainedRenewalOperations ?? []).toReversed()) {
     if (!isValidRenewalProvenance(retained, current.plan, current.operationRef)) {
-      return false;
+      continue;
     }
     const prior = retained.operator;
     const effect = prior.plan.effects.find((candidate) => candidate.id === effectId);
-    return (
-      prior.pendingEffectId === effectId &&
-      prior.pendingEffectAttempt !== undefined &&
-      (effect?.kind === BINDINGS_KIND || effect?.kind === GATEWAY_BINDINGS_KIND)
-    );
-  });
-  if (match !== undefined) {
-    const prior = match.operator;
-    const effect = prior.plan.effects.find((candidate) => candidate.id === effectId);
-    if (effect === undefined || prior.pendingEffectAttempt === undefined) {
-      return undefined;
+    if (
+      prior.pendingEffectId !== effectId ||
+      prior.pendingEffectAttempt === undefined ||
+      (effect?.kind !== "bindings" && effect?.kind !== "gateway-bindings")
+    ) {
+      continue;
     }
     return {
       approvalId: prior.approvalId,
-      approvedByCallId: match.approvedByCallId,
+      approvedByCallId: retained.approvedByCallId,
       effectId,
       kind: effect.kind,
       operationRef: prior.operationRef,
@@ -297,7 +235,7 @@ export const retentionRenewalBindingProvenance = (
       plan: prior.plan,
       planDigest: prior.planDigest,
       rows: structuredClone(
-        (effect.kind === BINDINGS_KIND ? prior.managedEnvironment : prior.gatewayEnvironment) ?? [],
+        (effect.kind === "bindings" ? prior.managedEnvironment : prior.gatewayEnvironment) ?? [],
       ),
     };
   }
@@ -314,18 +252,17 @@ export const isRetentionRenewalSuccessor = (
   if (record === undefined || operator === undefined || !isExactRenewalPlan(operator.plan, plan)) {
     return false;
   }
-  let { pendingEffectId, pendingEffectAttempt } = operator;
+  let { pendingEffectId } = operator;
+  let { pendingEffectAttempt } = operator;
   if (pendingEffectId === undefined) {
     const firstUnreceipted = operator.plan.effects.find(
       (effect) => !operator.receipts.some((receipt) => receipt.effectId === effect.id),
     );
     if (firstUnreceipted !== undefined) {
-      const inherited: RetentionRenewalBindingProvenance | undefined =
-        retentionRenewalBindingProvenance(record, firstUnreceipted.id);
+      const inherited = retentionRenewalBindingProvenance(record, firstUnreceipted.id);
       if (inherited !== undefined) {
-        const { effectId: inheritedEffectId, pendingEffectAttempt: inheritedAttempt } = inherited;
-        pendingEffectId = inheritedEffectId;
-        pendingEffectAttempt = inheritedAttempt;
+        pendingEffectId = inherited.effectId;
+        pendingEffectAttempt = inherited.pendingEffectAttempt;
       }
     }
   }
@@ -349,7 +286,12 @@ export const isRetentionRenewalSuccessor = (
     hasText(operator.approvalId),
     isRealApprovalCall(record.approvedByCallId),
     operator.planDigest === operatorPlanDigest(operator.plan),
-    isRenewablePendingEffect(pendingEffectId, pending, operator.plan),
+    pendingEffectId !== undefined &&
+      pending !== undefined &&
+      (["bindings", "gateway-bindings", "gateway-delivery"].includes(pending.kind) ||
+        (pending.kind === "delivery" &&
+          operator.plan.hostProtection !== undefined &&
+          operator.plan.appDeliveryReplacement !== undefined)),
     pending?.kind === "gateway-delivery" || pendingEffectAttempt !== undefined,
     receiptsPrecedePending(operator, previousEffectIds, receiptIds, pendingEffectId),
     hasNoActiveLease(record, leaseExpiry, now),
@@ -450,9 +392,9 @@ export const retentionRenewalDeliveryProvenance = (
       continue;
     }
     const { approvedByCallId, operator: prior } = retained;
-    const deliveryProvenance: RetentionRenewalDeliveryProvenance = {
-      approvalId: prior.approvalId,
+    provenance.push({
       approvedByCallId,
+      approvalId: prior.approvalId,
       deliveryCandidates: (prior.deliveryCandidates ?? []).filter(
         (candidate) => candidate.operationRef === prior.operationRef,
       ),
@@ -460,16 +402,13 @@ export const retentionRenewalDeliveryProvenance = (
         (candidate) => candidate.operationRef === prior.operationRef,
       ),
       operationRef: prior.operationRef,
+      ...(prior.pendingEffectId === undefined ? {} : { pendingEffectId: prior.pendingEffectId }),
+      ...(prior.pendingEffectAttempt === undefined
+        ? {}
+        : { pendingEffectAttempt: structuredClone(prior.pendingEffectAttempt) }),
       plan: prior.plan,
       planDigest: prior.planDigest,
-    };
-    if (prior.pendingEffectId !== undefined) {
-      deliveryProvenance.pendingEffectId = prior.pendingEffectId;
-    }
-    if (prior.pendingEffectAttempt !== undefined) {
-      deliveryProvenance.pendingEffectAttempt = structuredClone(prior.pendingEffectAttempt);
-    }
-    provenance.push(deliveryProvenance);
+    });
   }
   return provenance;
 };

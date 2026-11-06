@@ -2,7 +2,6 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 
 import { decodeJwt, decodeProtectedHeader } from "jose";
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 
 import {
   createGitHubAppPublicationAdapter,
@@ -24,8 +23,7 @@ import type { GitHubDraftPullRequestContent, FreshRepositoryProposal } from "./g
 import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { NormalizedChangeSet } from "./reviewed-change-set";
 import { compareOverlayPaths } from "./target-apply";
-import type { OverlayChange } from "./target-apply";
-import type { ExistingDraftUpdateProposal } from "./github-draft-update";
+import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 import type {
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
@@ -33,83 +31,12 @@ import type {
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" });
-type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
-interface PermissionRequest {
-  permissions: Record<string, string>;
-}
-type HttpRequest = Request | URL | string;
-
-interface JsonRecord {
-  [key: string]: JsonValue;
-}
-interface GraphqlRequest {
-  query: string;
-  variables: Record<string, string>;
-}
-interface GitCommitRequest {
-  parents: string[];
-  tree: string;
-}
-const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.null(),
-    z.boolean(),
-    z.number(),
-    z.string(),
-    z.array(jsonValueSchema),
-    z.record(z.string(), jsonValueSchema),
-  ]),
-);
-const hash = (value: JsonRecord | JsonValue[]) =>
-  createHash("sha256").update(JSON.stringify(value)).digest("hex");
-const requestUrl = (request: HttpRequest) => {
-  if (request instanceof Request) return request.url;
-  if (request instanceof URL) return request.href;
-  return z.string().parse(request);
-};
-const graphqlRequestSchema = z.object({
-  query: z.string(),
-  variables: z.record(z.string(), z.string()),
-});
-const gitCommitRequestSchema = z.object({ parents: z.array(z.string()), tree: z.string() });
-const graphqlRequest = (body: JsonValue | undefined): GraphqlRequest =>
-  graphqlRequestSchema.parse(jsonValueSchema.parse(body));
-const gitCommitRequest = (body: JsonValue | undefined): GitCommitRequest =>
-  gitCommitRequestSchema.parse(jsonValueSchema.parse(body));
-const parseJsonRecord = (body: string): JsonRecord => {
-  const parsed: unknown = JSON.parse(body);
-  if (
-    parsed === null ||
-    Array.isArray(parsed) ||
-    Object.getPrototypeOf(parsed) !== Object.prototype
-  ) {
-    throw new Error("Expected JSON object request body");
-  }
-  return z.record(z.string(), z.unknown()).parse(parsed);
-};
-const requestJson = (body: BodyInit | null | undefined): JsonRecord | undefined => {
-  if (body === undefined || body === null) return undefined;
-  if (body instanceof URLSearchParams) return parseJsonRecord(body.toString());
-  if (
-    body instanceof Blob ||
-    body instanceof FormData ||
-    body instanceof ArrayBuffer ||
-    ArrayBuffer.isView(body)
-  ) {
-    throw new TypeError("Expected JSON request body");
-  }
-  return parseJsonRecord(z.string().parse(body));
-};
-const permissionRequest = (body: JsonRecord | undefined): PermissionRequest => {
-  if (body === undefined) {
-    throw new Error("Expected permission request body");
-  }
-  return z.object({ permissions: z.record(z.string(), z.string()) }).parse(body);
-};
+const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const sourceSha = "1".repeat(40);
 const sourceTree = "2".repeat(40);
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unicodeDraftMaterial(
   preserveOverlayOrder = false,
   includePreimages = false,
@@ -128,31 +55,33 @@ function unicodeDraftMaterial(
     ]
   )
     .map((path) => {
-      const change: OverlayChange = {
+      const change = {
         after: { digest, mode: "644" },
+        ...(includePreimages
+          ? {
+              before: {
+                digest: createHash("sha256").update(reviewedBeforeBytes).digest("hex"),
+                mode: "644",
+              },
+            }
+          : {}),
         kind: includePreimages ? ("modified" as const) : ("added" as const),
         path,
       };
-      if (includePreimages) {
-        change.before = {
-          digest: createHash("sha256").update(reviewedBeforeBytes).digest("hex"),
-          mode: "644",
-        };
-      }
-      if (preserveOverlayOrder) return change;
-      {
-        const normalizedBase: OverlayChange = {
-          kind: change.kind,
-          path: change.path,
-        };
-        if (change.after !== undefined) {
-          normalizedBase.after = { digest: change.after.digest, mode: change.after.mode };
-        }
-        if (change.before !== undefined) {
-          normalizedBase.before = { digest: change.before.digest, mode: change.before.mode };
-        }
-        return normalizedBase;
-      }
+      return preserveOverlayOrder
+        ? change
+        : (Object.fromEntries([
+            ["path", change.path],
+            ["kind", change.kind],
+            ...(change.before === undefined ? [] : [["before", change.before]]),
+            [
+              "after",
+              Object.fromEntries([
+                ["mode", change.after.mode],
+                ["digest", change.after.digest],
+              ]),
+            ],
+          ]) as typeof change);
     })
     .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
   const unsigned = {
@@ -232,7 +161,7 @@ function unicodeDraftMaterial(
     changes: changes.map((change) => ({
       ...change,
       after: { ...change.after, bytes },
-    })),
+    })) as GitHubDraftPullRequestContent["changes"],
     kind: "draft-reviewed-change-set",
     reviewDigest: review.digest,
     version: 1,
@@ -240,6 +169,7 @@ function unicodeDraftMaterial(
   return { content, proposal };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshProposal(): FreshRepositoryProposal {
   const installationIdentityDigest = "1".repeat(64);
   const sourceReceiptDigest = "2".repeat(64);
@@ -276,7 +206,8 @@ function freshProposal(): FreshRepositoryProposal {
   return { ...unsigned, digest: hash(unsigned) };
 }
 
-function json(value: JsonValue, status = 200, requestId = "REQUEST_1") {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function json(value: unknown, status = 200, requestId = "REQUEST_1") {
   return Response.json(value, {
     headers: {
       "content-type": "application/json",
@@ -286,6 +217,7 @@ function json(value: JsonValue, status = 200, requestId = "REQUEST_1") {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function providerFetch(input?: {
   extraPermission?: boolean;
   fail?: boolean;
@@ -294,11 +226,15 @@ function providerFetch(input?: {
   targetRepositoryId?: string;
 }) {
   const calls: { url: string; init: RequestInit; body: unknown }[] = [];
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const implementation: typeof fetch = async (request, init = {}) => {
-    const url = requestUrl(request);
-    const body = requestJson(init.body);
+    const url = String(request);
+    let body;
+    if (typeof init.body === "string") {
+      body = JSON.parse(init.body) as unknown;
+    }
     calls.push({ body, init, url });
-    if (input?.fail === true) {
+    if (input?.fail) {
       return json({ message: "private-key-material" }, 500);
     }
     if (url.endsWith("/app/installations/456")) {
@@ -309,12 +245,13 @@ function providerFetch(input?: {
       });
     }
     if (url.endsWith("/app/installations/456/access_tokens")) {
-      const requested = permissionRequest(body).permissions;
-      const granted = { ...requested };
-      if (input?.extraPermission === true) granted.issues = "write";
+      const requested = (body as { permissions: Record<string, string> }).permissions;
       return json(
         {
-          permissions: granted,
+          permissions: {
+            ...requested,
+            ...(input?.extraPermission ? { issues: "write" } : {}),
+          },
           token: "ghs_operation_scoped_installation_token",
         },
         201,
@@ -325,11 +262,7 @@ function providerFetch(input?: {
       const repositoryIds = input?.repositoryPages?.[page - 1] ?? [100, 200];
       return json({ repositories: repositoryIds.map((id) => ({ id })) });
     }
-    if (
-      url.endsWith("/repositories/100") &&
-      input?.targetRepositoryId !== undefined &&
-      input.targetRepositoryId !== ""
-    ) {
+    if (url.endsWith("/repositories/100") && input?.targetRepositoryId) {
       return json({ id: Number(input.targetRepositoryId), private: true });
     }
     throw new Error(`Unexpected URL: ${url}`);
@@ -337,6 +270,7 @@ function providerFetch(input?: {
   return { calls, implementation };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createProvider(fetchImplementation: typeof fetch) {
   return createGitHubAppHttpProvider({
     config: {
@@ -355,6 +289,7 @@ const historicalRepository = (id: number) => ({
   owner: { login: "withAutograph" },
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
 function historicalProviderFetch(input?: {
   pull?: {
     baseRepositoryId?: number;
@@ -368,10 +303,11 @@ function historicalProviderFetch(input?: {
   name?: string;
 }) {
   const calls: { method: string; url: string; body: unknown }[] = [];
+  // oxlint-disable-next-line eslint/complexity, eslint/require-await -- Keep this fake HTTP router next to its call log.
   const implementation: typeof fetch = async (request, init = {}) => {
-    const url = requestUrl(request);
+    const url = String(request);
     const method = init.method ?? "GET";
-    const body = requestJson(init.body);
+    const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
     calls.push({ body, method, url });
     if (url.endsWith("/app/installations/456/access_tokens")) {
       return json(
@@ -434,14 +370,15 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const appTreeSha = "f".repeat(40);
     let destinationChanged = false;
     const calls: { url: string; body: unknown; method: string }[] = [];
+    // oxlint-disable-next-line eslint/require-await -- mocked HTTP transport
     const provider = createProvider(async (request, init = {}) => {
-      const url = requestUrl(request);
-      const body = requestJson(init.body);
+      const url = String(request);
+      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
       calls.push({ body, method: init.method ?? "GET", url });
       if (url.endsWith("/access_tokens")) {
         return json(
           {
-            permissions: permissionRequest(body).permissions,
+            permissions: (body as { permissions: Record<string, string> }).permissions,
             token: "ghs_source_only_destination_token",
           },
           201,
@@ -764,15 +701,16 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         throw new Error("Expected JWT expiration and issued-at claims");
       }
       expect(claims.exp - claims.iat).toBe(600);
-      const expectedPermissions = {
-        actions_variables: "read",
-        contents,
-        metadata: "read",
-      };
-      if (administration !== undefined) expectedPermissions.administration = administration;
-      if (pullRequests !== undefined) expectedPermissions.pull_requests = pullRequests;
-      if (workflows === "write") expectedPermissions.workflows = workflows;
-      expect(tokenCall?.body).toEqual({ permissions: expectedPermissions });
+      expect(tokenCall?.body).toEqual({
+        permissions: {
+          actions_variables: "read",
+          ...(administration === undefined ? {} : { administration }),
+          contents,
+          metadata: "read",
+          ...(pullRequests === undefined ? {} : { pull_requests: pullRequests }),
+          ...(workflows === "write" ? { workflows } : {}),
+        },
+      });
       const publicRequestSurface = mock.calls.map(({ url, body }) => ({
         body,
         url,
@@ -837,11 +775,10 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     });
     const adapter = createGitHubAppPublicationAdapter(createProvider(mock.implementation));
 
-    const identity = await adapter.inspectInstallation("resolve-existing-source");
-    expect(identity).toMatchObject({ repositorySelection: "all" });
-    expect(identity.selectedRepositoryIds).toContain("1");
-    expect(identity.selectedRepositoryIds).toContain("500");
-    expect(identity.selectedRepositoryIds).toContain("501");
+    await expect(adapter.inspectInstallation("resolve-existing-source")).resolves.toMatchObject({
+      repositorySelection: "all",
+      selectedRepositoryIds: expect.arrayContaining(["1", "500", "501"]),
+    });
     expect(
       mock.calls.filter(({ url }) => url.includes("/installation/repositories?")),
     ).toHaveLength(6);
@@ -907,6 +844,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
   ])("reports a safe recovery for target access HTTP %i", async (status, guidance) => {
     const adapter = createGitHubTargetAccessAdapter(
       {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async inspectTargetAccess() {
           throw Object.assign(new Error("secret-token https://github.example/private"), {
             status,
@@ -937,10 +875,11 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     async (repositoryId) => {
       const tokenRequests: unknown[] = [];
       const head = "a".repeat(40);
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const request: typeof fetch = async (input, init) => {
-        const url = new URL(requestUrl(input));
+        const url = new URL(String(input));
         if (url.pathname === "/app/installations/456/access_tokens") {
-          const body = permissionRequest(requestJson(init?.body));
+          const body = JSON.parse(String(init?.body)) as { permissions: unknown };
           tokenRequests.push(body);
           return json(
             {
@@ -970,7 +909,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
           expect(new Headers(init?.headers).get("authorization")).toBe(
             "token ghs_delivery_scoped_installation_token",
           );
-          expect(requestJson(init?.body)).toMatchObject({
+          expect(JSON.parse(String(init?.body))).toMatchObject({
             variables: { id: "PR_node" },
           });
           return json({
@@ -1016,7 +955,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const mock = providerFetch();
     const head = "a".repeat(40);
     const request: typeof fetch = async (input, init) => {
-      const url = new URL(requestUrl(input));
+      const url = new URL(String(input));
       if (url.pathname === "/repositories/100") {
         return json(historicalRepository(100));
       }
@@ -1053,6 +992,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
   it("names an existing draft update failure without exposing provider details", async () => {
     const provider = {
       ...createProvider(providerFetch().implementation),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async updateExistingDraft() {
         throw Object.assign(new Error("secret-token https://github.example/private"), {
           status: 409,
@@ -1063,31 +1003,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const { content } = unicodeDraftMaterial();
     let message = "unexpected success";
     try {
-      await adapter.updateExistingDraft(
-        {
-          approvedPaths: [],
-          baseBranch: "main",
-          branchName: "builder",
-          changeSetDigest: "0".repeat(64),
-          changedContentDigest: "0".repeat(64),
-          digest: "0".repeat(64),
-          expectedHeadSha: "0".repeat(40),
-          expectedHeadTree: "0".repeat(40),
-          idempotencyKey: "0".repeat(64),
-          installationIdentityDigest: "0".repeat(64),
-          intendedOutcome: "update-existing-draft-pull-request",
-          name: "example-app",
-          originMarker: "0".repeat(64),
-          owner: "withAutograph",
-          priorPublicationDigest: "0".repeat(64),
-          pullRequestId: "150000",
-          pullRequestNumber: 1500,
-          repositoryId: "100",
-          reviewDigest: "0".repeat(64),
-          version: 1,
-        },
-        content,
-      );
+      await adapter.updateExistingDraft({} as ExistingDraftUpdateProposal, content);
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
@@ -1133,11 +1049,14 @@ describe("GitHub App fixed-origin HTTP provider", () => {
 
   it("round-trips UTF-8 ordered draft material through the HTTP provider", async () => {
     const calls: string[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const implementation: typeof fetch = async (request, init = {}) => {
-      const url = requestUrl(request);
+      const url = String(request);
       calls.push(url);
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const body = permissionRequest(requestJson(init.body));
+        const body = JSON.parse(String(init.body)) as {
+          permissions: Record<string, string>;
+        };
         return json(
           {
             permissions: body.permissions,
@@ -1189,8 +1108,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         installationId: "456",
         privateKey: privateKeyPem,
       },
+      // oxlint-disable-next-line eslint/require-await -- this callback implements fetch with synchronous fixtures.
       fetch: async (request, init = {}) => {
-        const url = requestUrl(request);
+        const url = String(request);
         if (url.endsWith("/repositories/100")) {
           return json({
             default_branch: "main",
@@ -1236,8 +1156,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         installationId: "456",
         privateKey: privateKeyPem,
       },
+      // oxlint-disable-next-line eslint/require-await -- this callback implements fetch with synchronous fixtures.
       fetch: async (request, init = {}) => {
-        const url = requestUrl(request);
+        const url = String(request);
         if (url.endsWith("/repositories/100")) {
           return json({
             default_branch: "main",
@@ -1272,10 +1193,11 @@ describe("GitHub App fixed-origin HTTP provider", () => {
 
   it("reports a GitHub blob rejection with the reviewed path and byte count", async () => {
     const filePath = "apps/demo/limited.tsx";
+    // oxlint-disable-next-line eslint/require-await -- this callback implements fetch with synchronous fixtures.
     const provider = createProvider(async (request, init = {}) => {
-      const url = requestUrl(request);
+      const url = String(request);
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const body = permissionRequest(requestJson(init.body));
+        const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
         return json(
           { permissions: body.permissions, token: "ghs_operation_scoped_token_value" },
           201,
@@ -1329,11 +1251,12 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       if (firstChange === undefined) throw new Error("Expected a reviewed change.");
       const pathSegments = firstChange.path.split("/");
       let treeDepth = 0;
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const implementation: typeof fetch = async (request, init = {}) => {
-        const url = requestUrl(request);
+        const url = String(request);
         calls.push({ method: init.method ?? "GET", url });
         if (url.endsWith("/app/installations/456/access_tokens")) {
-          const body = permissionRequest(requestJson(init.body));
+          const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
           return json(
             { permissions: body.permissions, token: "ghs_operation_scoped_installation_token" },
             201,
@@ -1415,13 +1338,14 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       mode: "644",
     });
     const beforeMode = changedFile.before.mode;
+    // oxlint-disable-next-line eslint/complexity, eslint/require-await -- one focused HTTP test double
     const implementation: typeof fetch = async (request, init = {}) => {
-      const url = requestUrl(request);
+      const url = String(request);
       const method = init.method ?? "GET";
-      const body = requestJson(init.body);
+      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
       calls.push({ body, method, url });
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const tokenRequest = permissionRequest(body);
+        const tokenRequest = body as { permissions: Record<string, string> };
         return json(
           {
             permissions: tokenRequest.permissions,
@@ -1466,11 +1390,11 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         return json({ sha: "f".repeat(40) }, 201);
       }
       if (url.endsWith("/git/trees") && method === "POST") {
-        createdTreeBody = body;
+        createdTreeBody = body as { base_tree?: string };
         return json({ sha: "e".repeat(40) }, 201);
       }
       if (url.endsWith("/git/commits") && method === "POST") {
-        createdCommitBody = body;
+        createdCommitBody = body as { parents: string[]; tree: string };
         return json({ sha: "9".repeat(40) }, 201);
       }
       if (url.endsWith("/git/refs") && method === "POST") {
@@ -1507,12 +1431,13 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const calls: string[] = [];
     const { proposal, content } = unicodeDraftMaterial();
     const branchPaths = content.approvedPaths.toReversed();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const implementation: typeof fetch = async (request, init = {}) => {
-      const url = requestUrl(request);
+      const url = String(request);
       calls.push(url);
       const method = init.method ?? "GET";
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const body = permissionRequest(requestJson(init.body));
+        const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
         return json(
           { permissions: body.permissions, token: "ghs_operation_scoped_installation_token" },
           201,
@@ -1590,13 +1515,14 @@ describe("existing draft publication origin", () => {
     } = {},
   ) => {
     const headBranch = overrides.headBranch ?? branch;
+    // oxlint-disable-next-line eslint/complexity, eslint/require-await -- Controlled provider responses exercise the actual ownership inspection.
     const implementation: typeof fetch = async (request, init = {}) => {
-      const url = requestUrl(request);
+      const url = String(request);
       if (url.endsWith("/app")) {
         return json({ id: overrides.appId ?? 123, slug: "autograph-app-builder" });
       }
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const tokenRequest = permissionRequest(requestJson(init.body));
+        const tokenRequest = JSON.parse(String(init.body)) as { permissions: unknown };
         return json(
           {
             permissions: tokenRequest.permissions,
@@ -1650,12 +1576,12 @@ describe("existing draft publication origin", () => {
       }
       throw new Error(`Unexpected URL: ${url}`);
     };
-    return await createProvider(implementation).inspectExistingDraft({
+    return (await createProvider(implementation).inspectExistingDraft({
       name: "example-app",
       number: 1500,
       owner: "withAutograph",
       repositoryId: "100",
-    });
+    })) as ExistingDraftObservation;
   };
 
   it.each([
@@ -1753,10 +1679,11 @@ describe("existing draft update provider", () => {
       version: 1 as const,
     } satisfies ExistingDraftUpdateProposal;
     const calls: { url: string; body: unknown }[] = [];
+    // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
     const implementation: typeof fetch = async (request, init = {}) => {
-      const url = requestUrl(request);
+      const url = String(request);
       const method = init.method ?? "GET";
-      const body = requestJson(init.body);
+      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
       calls.push({ body, url });
       if (url.endsWith("/app")) {
         return json({ id: 123, slug: "autograph-app-builder" });
@@ -1764,7 +1691,7 @@ describe("existing draft update provider", () => {
       if (url.endsWith("/app/installations/456/access_tokens")) {
         return json(
           {
-            permissions: body?.permissions,
+            permissions: (body as { permissions: unknown }).permissions,
             token: "ghs_operation_scoped_installation_token",
           },
           201,
@@ -1847,7 +1774,10 @@ describe("existing draft update provider", () => {
       requestId: "REQUEST_1",
       status: "accepted",
     });
-    const graphql = graphqlRequest(calls.find(({ url }) => url.endsWith("/graphql"))?.body);
+    const graphql = calls.find(({ url }) => url.endsWith("/graphql"))?.body as {
+      query: string;
+      variables: Record<string, string>;
+    };
     expect(graphql.query).toContain("updateRefs");
     expect(graphql.variables).toEqual({
       afterOid: newCommit,
@@ -1856,12 +1786,12 @@ describe("existing draft update provider", () => {
       repositoryId: "REPO_NODE",
     });
     observedHead = newCommit;
-    const observed = await provider.inspectExistingDraft({
+    const observed = (await provider.inspectExistingDraft({
       name: proposal.name,
       number: proposal.pullRequestNumber,
       owner: proposal.owner,
       repositoryId: proposal.repositoryId,
-    });
+    })) as ExistingDraftObservation;
     expect(observed.verifiedBuilderOrigin).toEqual({
       appId: "123",
       authorId: "900",
@@ -1929,16 +1859,17 @@ describe("existing draft reconciliation provider", () => {
     let merged = false;
     let liveRef = head;
     let liveMessage = `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
+    // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
     const implementation: typeof fetch = async (request, init = {}) => {
-      const url = requestUrl(request);
+      const url = String(request);
       const method = init.method ?? "GET";
-      const body = requestJson(init.body);
+      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
       calls.push({ body, url });
       if (url.endsWith("/app")) return json({ id: 123, slug: "autograph-app-builder" });
       if (url.endsWith("/app/installations/456/access_tokens"))
         return json(
           {
-            permissions: body?.permissions,
+            permissions: (body as { permissions: unknown }).permissions,
             token: "ghs_operation_scoped_installation_token",
           },
           201,
@@ -2012,9 +1943,15 @@ describe("existing draft reconciliation provider", () => {
       requestId: "REQUEST_1",
       status: "accepted",
     });
-    const mergeBody = gitCommitRequest(calls.find(({ url }) => url.endsWith("/git/commits"))?.body);
+    const mergeBody = calls.find(({ url }) => url.endsWith("/git/commits"))?.body as {
+      parents: string[];
+      tree: string;
+    };
     expect(mergeBody).toMatchObject({ parents: [head, base], tree: resolvedTree });
-    const graphql = graphqlRequest(calls.find(({ url }) => url.endsWith("/graphql"))?.body);
+    const graphql = calls.find(({ url }) => url.endsWith("/graphql"))?.body as {
+      query: string;
+      variables: Record<string, string>;
+    };
     expect(graphql.query).toContain("force: false");
     expect(graphql.variables).toMatchObject({
       afterOid: mergeCommit,
@@ -2034,10 +1971,10 @@ describe("existing draft reconciliation provider", () => {
     await expect(provider.inspectExistingDraft(inspection)).rejects.toThrow(
       "pull-request-head-out-of-date",
     );
-    const observed = await provider.inspectExistingDraft({
+    const observed = (await provider.inspectExistingDraft({
       ...inspection,
       reconciliation: proposal,
-    });
+    })) as ExistingDraftObservation;
     expect(observed).toMatchObject({ headSha: mergeCommit, headTree: resolvedTree });
     await expect(provider.inspectAppliedDraftReconciliation(proposal, observed)).resolves.toBe(
       true,

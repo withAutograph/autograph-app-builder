@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await, typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Minimal official SDK fake exercises real transport without allocating compute. */
 import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
@@ -72,11 +73,8 @@ const fixture = (
       if (options.detached !== true) {
         return { exitCode: 0, stdout: async () => `${sha}  /worker/integration\n` };
       }
-      const spool = options.args.at(2);
-      if (spool === undefined) {
-        throw new Error("Missing spool argument");
-      }
-      const request = {
+      const spool = options.args[2];
+      frame(`${spool}/requests/1.json`, {
         app_id: context.app_id,
         approval_digest: context.operation.approval_digest,
         context_digest: digest,
@@ -89,11 +87,8 @@ const fixture = (
         resource_id: context.resource.resource_id,
         tenant_id: null,
         version: 1,
-      };
-      if (mutation) {
-        Object.assign(request, { effect_id: "install-control-schema", sequence: 1 });
-      }
-      frame(`${spool}/requests/1.json`, request);
+        ...(mutation ? { effect_id: "install-control-schema", sequence: 1 } : {}),
+      });
       frame(`${spool}/requests/1.ready`, { frame_id: 1, run_id: runId, version: 1 });
       if (removal) {
         const base = z.record(z.string(), z.unknown()).parse(
@@ -109,19 +104,16 @@ const fixture = (
           [3, "check_fence"],
           [4, "checkpoint_effect"],
         ] as const) {
-          const frameRequest = { ...base, kind };
-          if (kind !== "check_fence") {
-            Object.assign(frameRequest, {
-              effect_id: "fence-app-integration-authority",
-              sequence: 1,
-            });
-          }
-          if (kind === "checkpoint_effect") {
-            Object.assign(frameRequest, {
-              receipt: { readback_sha256: "d".repeat(64), state: "applied" },
-            });
-          }
-          frame(`${spool}/requests/${frameId}.json`, frameRequest);
+          frame(`${spool}/requests/${frameId}.json`, {
+            ...base,
+            kind,
+            ...(kind === "check_fence"
+              ? {}
+              : { effect_id: "fence-app-integration-authority", sequence: 1 }),
+            ...(kind === "checkpoint_effect"
+              ? { receipt: { readback_sha256: "d".repeat(64), state: "applied" } }
+              : {}),
+          });
           if (kind === "checkpoint_effect") {
             frame(`${spool}/requests/${frameId}.json`, {
               context_digest: digest,
@@ -176,19 +168,18 @@ const fixture = (
       return {
         kill: vi.fn(async () => {}),
         logs: async function* logs() {
-          const lifecycleFrames: (readonly [string, number])[] = [
+          for (const [kind, frameId] of [
             ["protected_installer_lifecycle_ready", 1],
             ["protected_installer_frame_ready", 1],
-          ];
-          if (removal) {
-            lifecycleFrames.push(
-              ["protected_installer_frame_ready", 2],
-              ["protected_installer_frame_ready", 3],
-              ["protected_installer_frame_ready", 4],
-            );
-          }
-          lifecycleFrames.push(["protected_installer_lifecycle_ready", 2]);
-          for (const [kind, frameId] of lifecycleFrames) {
+            ...(removal
+              ? ([
+                  ["protected_installer_frame_ready", 2],
+                  ["protected_installer_frame_ready", 3],
+                  ["protected_installer_frame_ready", 4],
+                ] as const)
+              : []),
+            ["protected_installer_lifecycle_ready", 2],
+          ] as const) {
             yield {
               data: `${JSON.stringify({ frame_id: frameId, kind, run_id: runId, version: 1 })}\n`,
               stream: "stdout",

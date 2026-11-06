@@ -3,59 +3,23 @@ import { once } from "node:events";
 import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
-import { z } from "zod";
 
-import {
-  archiveFiles,
-  portableReleaseReceiptSchema,
-  verifyPortableProofArtifact,
-} from "./portable-proof-artifact";
+import { archiveFiles, verifyPortableProofArtifact } from "./portable-proof-artifact";
 import { deterministicGzip, deterministicTar, sha256 } from "./portable-release";
 import { runSequentially } from "../lib/async-sequential";
 
 const { join, resolve: pathResolve } = nodePath;
-const pluginVersionSchema = z.object({ version: z.string() });
-const marketplaceManifestSchema = z.object({
-  name: z.string(),
-  plugins: z.array(
-    z.object({
-      policy: z.object({ authentication: z.string() }),
-      source: z.object({ path: z.string() }),
-    }),
-  ),
-});
-const codexAdapterSchema = z.object({
-  mcpServers: z.record(z.string(), z.object({ oauth_resource: z.string(), url: z.string() })),
-});
-const codexManifestSchema = z.object({
-  interface: z.object({ composerIcon: z.string().optional(), logo: z.string().optional() }),
-});
-const harnessSchema = z.object({ transport: z.object({ url: z.string() }) });
-const releaseReceiptSchema = portableReleaseReceiptSchema.extend({
-  source: z.object({ repository: z.string(), sha: z.string(), tree: z.string() }),
-});
-const marketplaceArchivePrefix = "app-builder-codex-marketplace-";
-const sourceRepository = "https://github.com/withAutograph/autograph-app-builder";
-const receiptFilename = "release-receipt.json";
-const systemPath = "/usr/bin:/bin";
-const constrainedEnvironment = { LC_ALL: "C", NODE_ENV: "test", PATH: systemPath };
-const manifestFilename = ".codex-plugin/plugin.json";
-const appBuilderPluginPath = "./plugins/app-builder";
-
-const waitForClose = async (child: ReturnType<typeof spawn>) => {
-  await once(child, "close");
-  return child.exitCode;
-};
-const archivePrefix = "app-builder-";
-const packageVersion = pluginVersionSchema.parse(
-  JSON.parse(await readFile("plugin.json", "utf-8")),
-).version;
 
 const run = async (script: string, args: string[], expected = 0) => {
   const child = spawn(process.execPath, [...process.execArgv, `scripts/${script}`, ...args], {
     stdio: expected === 0 ? "inherit" : "ignore",
   });
-  const code = await waitForClose(child);
+  const [code] = await Promise.race([
+    once(child, "error").then(([error]) => {
+      throw error;
+    }),
+    once(child, "exit"),
+  ]);
   if (code !== expected) {
     throw new Error(`${script} exited ${code}; expected ${expected}.`);
   }
@@ -64,7 +28,8 @@ const run = async (script: string, args: string[], expected = 0) => {
 const temp = await mkdtemp(join(tmpdir(), "autograph-portable-"));
 try {
   // Keep assertion helpers scoped to this release proof.
-  const expectRejected = async (action: () => Promise<void>, label: string) => {
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
+  const expectRejected = async (action: () => Promise<unknown>, label: string) => {
     try {
       await action();
     } catch {
@@ -106,8 +71,9 @@ try {
   await runSequentially([first, second], async (output) => {
     await run("build-portable-release.mts", ["--endpoint", endpoint, "--output", output]);
   });
-  const archiveName = `${archivePrefix}${packageVersion}.tar.gz`;
-  const marketplaceArchiveName = `${marketplaceArchivePrefix}${packageVersion}.tar.gz`;
+  const portableManifest = JSON.parse(await readFile("plugin.json", "utf-8"));
+  const archiveName = `app-builder-${portableManifest.version}.tar.gz`;
+  const marketplaceArchiveName = `app-builder-codex-marketplace-${portableManifest.version}.tar.gz`;
   const firstArchive = await readFile(join(first, archiveName));
   const secondArchive = await readFile(join(second, archiveName));
   if (!firstArchive.equals(secondArchive)) {
@@ -118,15 +84,13 @@ try {
   if (!firstMarketplaceArchive.equals(secondMarketplaceArchive)) {
     throw new Error("Codex marketplace archive is not reproducible.");
   }
-  const firstReceiptBytes = await readFile(join(first, receiptFilename), "utf-8");
-  const secondReceiptBytes = await readFile(join(second, receiptFilename), "utf-8");
-  const firstReceipt = portableReleaseReceiptSchema.parse(JSON.parse(firstReceiptBytes));
-  const secondReceipt = portableReleaseReceiptSchema.parse(JSON.parse(secondReceiptBytes));
+  const firstReceipt = JSON.parse(await readFile(join(first, "release-receipt.json"), "utf-8"));
+  const secondReceipt = JSON.parse(await readFile(join(second, "release-receipt.json"), "utf-8"));
   if (JSON.stringify(firstReceipt) !== JSON.stringify(secondReceipt)) {
     throw new Error("Portable release receipt is not reproducible.");
   }
   if (
-    firstReceipt.source.repository !== sourceRepository ||
+    firstReceipt.source.repository !== "https://github.com/withAutograph/autograph-app-builder" ||
     !/^[0-9a-f]{40}$/u.test(firstReceipt.source.sha) ||
     !/^[0-9a-f]{40}$/u.test(firstReceipt.source.tree)
   ) {
@@ -135,7 +99,7 @@ try {
   const extracted = join(temp, "extracted");
   await mkdir(extracted);
   execFileSync("/usr/bin/tar", ["-xzf", join(first, archiveName), "-C", extracted], {
-    env: constrainedEnvironment,
+    env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
     stdio: "inherit",
   });
   await run("validate-plugin.mts", [
@@ -147,15 +111,15 @@ try {
   const marketplace = join(temp, "codex-marketplace");
   await mkdir(marketplace);
   execFileSync("/usr/bin/tar", ["-xzf", join(first, marketplaceArchiveName), "-C", marketplace], {
-    env: constrainedEnvironment,
+    env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
     stdio: "inherit",
   });
-  const marketplaceManifest = marketplaceManifestSchema.parse(
-    JSON.parse(await readFile(join(marketplace, ".agents/plugins/marketplace.json"), "utf-8")),
+  const marketplaceManifest = JSON.parse(
+    await readFile(join(marketplace, ".agents/plugins/marketplace.json"), "utf-8"),
   );
   if (
     marketplaceManifest.name !== "autograph" ||
-    marketplaceManifest.plugins?.[0]?.source?.path !== appBuilderPluginPath ||
+    marketplaceManifest.plugins?.[0]?.source?.path !== "./plugins/app-builder" ||
     marketplaceManifest.plugins?.[0]?.policy?.authentication !== "ON_USE"
   ) {
     throw new Error("Codex marketplace manifest must authenticate App Builder on first use.");
@@ -165,31 +129,28 @@ try {
   if (!codexPluginRootStat.isDirectory()) {
     throw new Error("Codex marketplace source path did not resolve to the packaged plugin.");
   }
-  const codexAdapter = codexAdapterSchema.parse(
-    JSON.parse(await readFile(join(codexPluginRoot, ".mcp.json"), "utf-8")),
-  );
+  const codexAdapter = JSON.parse(await readFile(join(codexPluginRoot, ".mcp.json"), "utf-8"));
   if (codexAdapter.mcpServers?.["app-builder"]?.url !== `${endpoint}/mcp`) {
     throw new Error("Codex marketplace did not bind the release endpoint.");
   }
   if (codexAdapter.mcpServers?.["app-builder"]?.oauth_resource !== `${endpoint}/mcp`) {
     throw new Error("Codex marketplace did not bind the OAuth resource.");
   }
-  const codexManifest = codexManifestSchema.parse(
-    JSON.parse(await readFile(join(codexPluginRoot, manifestFilename), "utf-8")),
+  const codexManifest = JSON.parse(
+    await readFile(join(codexPluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
   );
-  const assetReferences = z
-    .array(z.string().startsWith("./"))
-    .parse(
-      [codexManifest.interface?.composerIcon, codexManifest.interface?.logo].filter(
-        (reference) => reference !== undefined,
-      ),
-    );
-  await runSequentially(assetReferences, async (reference) => {
-    const assetStat = await stat(join(codexPluginRoot, reference));
-    if (!assetStat.isFile()) {
-      throw new Error(`Codex marketplace omitted referenced asset ${reference}.`);
-    }
-  });
+  await runSequentially(
+    [codexManifest.interface?.composerIcon, codexManifest.interface?.logo],
+    async (reference) => {
+      if (typeof reference !== "string" || !reference.startsWith("./")) {
+        throw new Error("Codex marketplace asset reference was invalid.");
+      }
+      const assetStat = await stat(join(codexPluginRoot, reference));
+      if (!assetStat.isFile()) {
+        throw new Error(`Codex marketplace omitted referenced asset ${reference}.`);
+      }
+    },
+  );
   const installs = join(temp, "installs");
   await runSequentially(["vscode", "cursor", "codex"], async (client) => {
     await run("install-portable-plugin.mts", [
@@ -210,12 +171,12 @@ try {
 
   const mutateReceipt = async (
     name: string,
-    mutation: (receipt: z.infer<typeof portableReleaseReceiptSchema>) => void,
+    mutation: (receipt: Record<string, unknown>) => void,
   ) => {
     const root = join(temp, `tampered-${name}`);
     await cp(first, root, { recursive: true });
-    const path = join(root, receiptFilename);
-    const receipt = portableReleaseReceiptSchema.parse(JSON.parse(await readFile(path, "utf-8")));
+    const path = join(root, "release-receipt.json");
+    const receipt = JSON.parse(await readFile(path, "utf-8"));
     mutation(receipt);
     await writeFile(path, `${JSON.stringify(receipt, null, 2)}\n`);
     await expectRejected(
@@ -232,35 +193,35 @@ try {
     receipt.unexpected = true;
   });
   await mutateReceipt("source repository drift", (receipt) => {
-    receipt.source.repository = `${sourceRepository}.invalid`;
+    (receipt.source as { repository: string }).repository = "https://github.com/example/wrong";
   });
   await mutateReceipt("source SHA drift", (receipt) => {
-    receipt.source.sha = "0".repeat(40);
+    (receipt.source as { sha: string }).sha = "0".repeat(40);
   });
   await mutateReceipt("source tree drift", (receipt) => {
-    receipt.source.tree = "0".repeat(40);
+    (receipt.source as { tree: string }).tree = "0".repeat(40);
   });
   await mutateReceipt("package version drift", (receipt) => {
     receipt.version = "0.1.0";
   });
   await mutateReceipt("archive basename traversal", (receipt) => {
-    receipt.archive.name = `../${receipt.archive.name}`;
+    const archive = receipt.archive as { name: string };
+    archive.name = `../${archive.name}`;
   });
   await mutateReceipt("marketplace archive digest drift", (receipt) => {
-    receipt.codexMarketplaceArchive.sha256 = "0".repeat(64);
+    const marketplaceArchive = receipt.codexMarketplaceArchive as {
+      sha256: string;
+    };
+    marketplaceArchive.sha256 = "0".repeat(64);
   });
   await mutateReceipt("core digest drift", (receipt) => {
-    const files = receipt.coreFiles;
+    const files = receipt.coreFiles as Record<string, string>;
     const [path] = Object.keys(files);
-    if (!path) throw new Error("Expected core file digest.");
-    // SAFETY: The key came from the parsed non-empty receipt inventory.
     files[path] = "0".repeat(64);
   });
   await mutateReceipt("auxiliary digest drift", (receipt) => {
-    const files = receipt.auxiliaryFiles;
+    const files = receipt.auxiliaryFiles as Record<string, string>;
     const [path] = Object.keys(files);
-    if (!path) throw new Error("Expected auxiliary file digest.");
-    // SAFETY: The key came from the parsed non-empty receipt inventory.
     files[path] = "0".repeat(64);
   });
 
@@ -274,10 +235,8 @@ try {
   }
   const missingAssetArchive = deterministicGzip(deterministicTar(missingAssetFiles));
   await writeFile(missingAssetArchivePath, missingAssetArchive);
-  const missingAssetReceiptPath = join(missingMarketplaceAsset, receiptFilename);
-  const missingAssetReceipt = releaseReceiptSchema.parse(
-    JSON.parse(await readFile(missingAssetReceiptPath, "utf-8")),
-  );
+  const missingAssetReceiptPath = join(missingMarketplaceAsset, "release-receipt.json");
+  const missingAssetReceipt = JSON.parse(await readFile(missingAssetReceiptPath, "utf-8"));
   missingAssetReceipt.codexMarketplaceArchive.sha256 = sha256(missingAssetArchive);
   await writeFile(missingAssetReceiptPath, `${JSON.stringify(missingAssetReceipt, null, 2)}\n`);
   await expectRejected(
@@ -297,10 +256,8 @@ try {
   tamperedAssetFiles.set(missingAssetPath, Buffer.from("tampered manifest-referenced asset"));
   const tamperedAssetArchive = deterministicGzip(deterministicTar(tamperedAssetFiles));
   await writeFile(tamperedAssetArchivePath, tamperedAssetArchive);
-  const tamperedAssetReceiptPath = join(tamperedMarketplaceAsset, receiptFilename);
-  const tamperedAssetReceipt = releaseReceiptSchema.parse(
-    JSON.parse(await readFile(tamperedAssetReceiptPath, "utf-8")),
-  );
+  const tamperedAssetReceiptPath = join(tamperedMarketplaceAsset, "release-receipt.json");
+  const tamperedAssetReceipt = JSON.parse(await readFile(tamperedAssetReceiptPath, "utf-8"));
   tamperedAssetReceipt.codexMarketplaceArchive.sha256 = sha256(tamperedAssetArchive);
   const tamperedAssetFile = tamperedAssetFiles.get(missingAssetPath);
   if (!tamperedAssetFile) {
@@ -323,7 +280,7 @@ try {
     "/usr/bin/git",
     ["clone", "--quiet", "--no-hardlinks", pathResolve("."), checkoutDriftRepository],
     {
-      env: { LC_ALL: "C", NODE_ENV: "test", PATH: systemPath },
+      env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
       stdio: "inherit",
     },
   );
@@ -338,7 +295,7 @@ try {
       "https://github.com/withAutograph/autograph-app-builder.git",
     ],
     {
-      env: { LC_ALL: "C", NODE_ENV: "test", PATH: systemPath },
+      env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
       stdio: "inherit",
     },
   );
@@ -350,10 +307,8 @@ try {
   treeDriftFiles.set(missingAssetPath, treeDriftBytes);
   const treeDriftArchive = deterministicGzip(deterministicTar(treeDriftFiles));
   await writeFile(treeDriftArchivePath, treeDriftArchive);
-  const treeDriftReceiptPath = join(fullyReboundTreeDrift, receiptFilename);
-  const treeDriftReceipt = releaseReceiptSchema.parse(
-    JSON.parse(await readFile(treeDriftReceiptPath, "utf-8")),
-  );
+  const treeDriftReceiptPath = join(fullyReboundTreeDrift, "release-receipt.json");
+  const treeDriftReceipt = JSON.parse(await readFile(treeDriftReceiptPath, "utf-8"));
   treeDriftReceipt.codexMarketplaceArchive.sha256 = sha256(treeDriftArchive);
   treeDriftReceipt.codexMarketplaceAssets[missingAssetPath] = sha256(treeDriftBytes);
   await writeFile(treeDriftReceiptPath, `${JSON.stringify(treeDriftReceipt, null, 2)}\n`);
@@ -385,7 +340,7 @@ try {
   const installedTamper = join(temp, "tampered-installs");
   await cp(installs, installedTamper, { recursive: true });
   const codexHarness = join(installedTamper, "codex", "client-harness.json");
-  const harness = harnessSchema.parse(JSON.parse(await readFile(codexHarness, "utf-8")));
+  const harness = JSON.parse(await readFile(codexHarness, "utf-8"));
   harness.transport.url = "https://wrong.autograph.dev/mcp";
   await writeFile(codexHarness, `${JSON.stringify(harness, null, 2)}\n`);
   await expectRejected(

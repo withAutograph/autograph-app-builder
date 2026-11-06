@@ -11,52 +11,64 @@ import {
 } from "./contracts";
 import type { BuilderProvisionRequest } from "./contracts";
 
-const storedRequestSchema = z.strictObject({
-  appName: z.string().trim().min(1).max(120),
-  deploymentAccess: z.literal("public-app").optional(),
-  providers: z.strictObject({
-    githubInstallationId: z
-      .string()
-      .regex(/^[1-9][0-9]*$/u)
-      .optional(),
-    vercelInstallationId: z.string().min(1).max(256).optional(),
-  }),
-  repository: z.strictObject({
-    name: z
-      .string()
-      .trim()
-      .min(1)
-      .max(100)
-      .regex(/^[A-Za-z0-9._-]+$/u),
-    private: z.boolean(),
-  }),
-  requestId: z.uuid(),
-  version: z.literal(1),
-});
+const storedRequestSchema = z
+  .object({
+    appName: z.string().trim().min(1).max(120),
+    deploymentAccess: z.literal("public-app").optional(),
+    providers: z
+      .object({
+        githubInstallationId: z
+          .string()
+          .regex(/^[1-9][0-9]*$/u)
+          .optional(),
+        vercelInstallationId: z.string().min(1).max(256).optional(),
+      })
+      .strict(),
+    repository: z
+      .object({
+        name: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .regex(/^[A-Za-z0-9._-]+$/u),
+        private: z.boolean(),
+      })
+      .strict(),
+    requestId: z.string().uuid(),
+    version: z.literal(1),
+  })
+  .strict();
 
-const operationStateSchema = z.strictObject({
-  absentCandidates: z.array(z.string().min(1).max(100)),
-  attemptCount: z.number().int().nonnegative().optional(),
-  attempted: z.boolean(),
-  candidates: z.array(z.string().min(1).max(100)),
-  failureDetail: z.string().max(2048).optional(),
-  lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
+const operationStateSchema = z
+  .object({
+    absentCandidates: z.array(z.string().min(1).max(100)),
+    attemptCount: z.number().int().nonnegative().optional(),
+    attempted: z.boolean(),
+    candidates: z.array(z.string().min(1).max(100)),
+    failureDetail: z.string().max(2048).optional(),
+    lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
 
-  leaseExpiresAt: z.iso.datetime({ offset: true }).optional(),
-  leaseId: z.uuid().optional(),
-  nextRetryAt: z.iso.datetime({ offset: true }).optional(),
-  outcomeKnown: z.boolean().optional(),
-});
+    leaseExpiresAt: z.string().datetime({ offset: true }).optional(),
+    leaseId: z.string().uuid().optional(),
+    nextRetryAt: z.string().datetime({ offset: true }).optional(),
+    outcomeKnown: z.boolean().optional(),
+  })
+  .strict();
 
-export const builderProvisionJournalRecordSchema = z.strictObject({
-  operations: z.strictObject({
-    github: operationStateSchema,
-    vercel: operationStateSchema,
-  }),
-  request: storedRequestSchema,
-  response: builderProvisionResponseSchema,
-  version: z.literal(1),
-});
+export const builderProvisionJournalRecordSchema = z
+  .object({
+    operations: z
+      .object({
+        github: operationStateSchema,
+        vercel: operationStateSchema,
+      })
+      .strict(),
+    request: storedRequestSchema,
+    response: builderProvisionResponseSchema,
+    version: z.literal(1),
+  })
+  .strict();
 
 export type BuilderProvisionJournalRecord = z.infer<typeof builderProvisionJournalRecordSchema>;
 export type BuilderProvisionAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
@@ -130,26 +142,24 @@ export const initialBuilderProvisionJournalRecord = (
   now: Date,
 ): BuilderProvisionJournalRecord => {
   const request = builderProvisionRequestSchema.parse(requestInput);
-  const storedRequest = {
-    appName: request.appName,
-    providers: request.providers,
-    repository: request.repository,
-    requestId: request.requestId,
-    version: request.version,
-  };
-  if (request.deploymentAccess !== undefined) {
-    Object.assign(storedRequest, { deploymentAccess: request.deploymentAccess });
-  }
-  const record = {
+  return builderProvisionJournalRecordSchema.parse({
     operations: {
       github: { absentCandidates: [], attempted: false, candidates: [] },
       vercel: { absentCandidates: [], attempted: false, candidates: [] },
     },
-    request: storedRequest,
+    request: {
+      appName: request.appName,
+      ...(request.deploymentAccess === undefined
+        ? {}
+        : { deploymentAccess: request.deploymentAccess }),
+      providers: request.providers,
+      repository: request.repository,
+      requestId: request.requestId,
+      version: request.version,
+    },
     response: initialBuilderProvisionResponse(request, now),
     version: 1,
-  };
-  return builderProvisionJournalRecordSchema.parse(record);
+  });
 };
 
 const operationSettled = (
@@ -171,6 +181,7 @@ export const updateBuilderProvisionJournal = async (input: {
   update: (current: BuilderProvisionJournalRecord) => BuilderProvisionJournalRecord;
 }): Promise<BuilderProvisionJournalRow> => {
   for (let attempt = 0; ; attempt += 1) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const current = await input.store.read({
       authority: input.authority,
       requestId: input.requestId,
@@ -185,6 +196,7 @@ export const updateBuilderProvisionJournal = async (input: {
     next.response.updatedAt = updatedAt.toISOString();
     next.response.status =
       operationSettled(next, "github") && operationSettled(next, "vercel") ? "settled" : "pending";
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const saved = await input.store.compareAndSet({
       authority: input.authority,
       expectedRevision: current.revision,
@@ -196,6 +208,7 @@ export const updateBuilderProvisionJournal = async (input: {
       return saved;
     }
     // Yield under contention rather than exhausting an arbitrary retry budget.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- each retry follows a failed compare-and-set
     await delay(Math.min(250, 5 * 2 ** Math.min(attempt, 6)));
   }
 };

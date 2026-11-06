@@ -14,22 +14,19 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 
 const repositoryRoot = pathModule.resolve(import.meta.dirname, "..");
 const launcher = pathModule.resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
-const mise = pathModule.resolve(process.env.HOME ?? "/", ".local/bin/mise");
-const miseNode = spawnSync(mise, ["which", "node"], {
-  cwd: repositoryRoot,
-  encoding: "utf-8",
-  env: { ...process.env, PATH: "/usr/bin:/bin" },
-});
 const pinnedNode = process.execPath.includes("/mise/installs/")
   ? process.execPath
-  : miseNode.stdout.trim();
+  : spawnSync("mise", ["which", "node"], {
+      cwd: repositoryRoot,
+      encoding: "utf-8",
+    }).stdout.trim();
 const [accountHome] = pinnedNode.split("/.local/share/mise/");
 const pinnedPnpm = pathModule.resolve(accountHome, ".local/share/mise/installs/pnpm/11.7.0/pnpm");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function taskFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const entryPath = pathModule.join(directory, entry);
@@ -37,17 +34,12 @@ function taskFiles(directory: string): string[] {
   });
 }
 
-const lifecycleReceiptSchema = z.object({ executable: z.string(), path: z.string() });
-
 describe("trusted Node launcher", () => {
   it("forwards explicit assembled-test paths without admitting unrelated ambient credentials", () => {
     const environment: NodeJS.ProcessEnv = {
       ...process.env,
-      ARRUSTED_MANAGED_RUNTIME_TEST_ROOT: pathModule.join(
-        repositoryRoot,
-        ".test-controlled-arrusted",
-      ),
-      BUN_BINARY: pathModule.join(repositoryRoot, ".test-controlled-bun"),
+      ARRUSTED_MANAGED_RUNTIME_TEST_ROOT: "/private/tmp/controlled-arrusted",
+      BUN_BINARY: "/private/tmp/controlled-bun",
       UNRELATED_AMBIENT_CREDENTIAL: "must-not-be-forwarded",
     };
     delete environment.NODE_OPTIONS;
@@ -143,7 +135,6 @@ describe("trusted Node launcher", () => {
   });
 
   it("runs a clean frozen pnpm lifecycle with only the exact pinned Node", () => {
-    // SAFETY: mkdtemp creates this fixture root exclusively; every path below is derived from it.
     const scratch = mkdtempSync(pathModule.join(tmpdir(), "trusted-pnpm-lifecycle-"));
     const fixture = pathModule.join(scratch, "fixture");
     const hostile = pathModule.join(scratch, "hostile");
@@ -181,7 +172,6 @@ describe("trusted Node launcher", () => {
     const installed = spawnSync(
       launcher,
       [pinnedPnpm, "install", "--frozen-lockfile", "--offline", "--store-dir", store],
-      // SAFETY: The hostile PATH entry is inside the exclusively created fixture root and exercises sanitization.
       {
         cwd: scratch,
         encoding: "utf-8",
@@ -189,7 +179,10 @@ describe("trusted Node launcher", () => {
       },
     );
     expect(installed.status, `${installed.stdout}\n${installed.stderr}`).toBe(0);
-    const observation = lifecycleReceiptSchema.parse(JSON.parse(readFileSync(receipt, "utf-8")));
+    const observation = JSON.parse(readFileSync(receipt, "utf-8")) as {
+      executable: string;
+      path: string;
+    };
     expect(observation.executable).toBe(pinnedNode);
     expect(observation.path).not.toContain(hostile);
     expect(observation.path.endsWith(`${pathModule.dirname(pinnedNode)}:/usr/bin:/bin`)).toBe(true);
@@ -475,20 +468,21 @@ describe("trusted Node launcher", () => {
     expect(localStart).toContain('"$launcher" "$node_bin" node_modules/next/dist/bin/next dev');
     expect(readFileSync(launcher, "utf-8")).not.toContain("VERCEL_OIDC_TOKEN");
     for (const path of taskFiles(pathModule.resolve(repositoryRoot, ".config/mise/tasks"))) {
-      if (!path.endsWith("/local/start")) {
-        expect(readFileSync(path, "utf-8"), path).not.toContain("local-eve-launcher");
+      if (path.endsWith("/local/start")) {
+        continue;
       }
+      expect(readFileSync(path, "utf-8"), path).not.toContain("local-eve-launcher");
     }
   });
 
   it("requires one explicit canonical source root before starting local services", () => {
     const localStart = pathModule.resolve(repositoryRoot, ".config/mise/tasks/local/start");
     const environment: NodeJS.ProcessEnv = {
-      PATH: process.env.PATH,
+      ...process.env,
       REPOSITORY_LOCAL_ROOTS: "ambient-must-not-authorize",
     };
     delete environment.NODE_OPTIONS;
-    const missing = spawnSync(localStart, ["state", "output"], {
+    const missing = spawnSync(localStart, ["/tmp/state", "/tmp/output"], {
       cwd: repositoryRoot,
       encoding: "utf-8",
       env: environment,
@@ -497,7 +491,7 @@ describe("trusted Node launcher", () => {
     expect(missing.stdout).not.toContain("ambient-must-not-authorize");
     expect(missing.stderr).not.toContain("ambient-must-not-authorize");
 
-    const relative = spawnSync(localStart, ["state", "output", "relative/source"], {
+    const relative = spawnSync(localStart, ["/tmp/state", "/tmp/output", "relative/source"], {
       cwd: repositoryRoot,
       encoding: "utf-8",
       env: environment,
@@ -544,18 +538,17 @@ describe("trusted Node launcher", () => {
     for (const path of taskFiles(pathModule.resolve(repositoryRoot, ".config/mise/tasks"))) {
       const source = readFileSync(path, "utf-8");
       expect(source, path).toMatch(/^#!\/bin\/sh\n/u);
-      const isDesignJudge =
-        path === pathModule.resolve(repositoryRoot, ".config/mise/tasks/eval/design");
-      const invokesNode = /(?<path>mise which (?:node|pnpm)|node_modules\/)/u.test(source);
-      if (isDesignJudge) {
+      if (path === pathModule.resolve(repositoryRoot, ".config/mise/tasks/eval/design")) {
         // The live judge needs the project environment for Vercel OIDC.
         expect(source).toContain(
           'exec "$(mise which node)" --import tsx scripts/eval-design.mts "$@"',
         );
+        continue;
       }
-      if (!isDesignJudge && invokesNode) {
-        expect(source, path).toContain("trusted-node-launcher");
+      if (!/(?<path>mise which (?:node|pnpm)|node_modules\/)/u.test(source)) {
+        continue;
       }
+      expect(source, path).toContain("trusted-node-launcher");
     }
   });
 

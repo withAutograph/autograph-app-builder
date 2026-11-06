@@ -1,24 +1,12 @@
 /** Private, bounded process output only. This is diagnostic evidence, not readiness proof. */
-import { z } from "zod";
-
-const previewDiagnosticPayloadSchema = z.looseObject({
-  message: z.string().optional(),
-  stderr: z.string().optional(),
-  stdout: z.string().optional(),
-});
-const previewDiagnosticStreamSchema = z.enum(["stdout", "stderr"]);
-
 export const workingPreviewDiagnosticCollectorSource = String.raw`
 import * as previewDiagnosticFs from "node:fs";
 const previewDiagnosticTails = { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
 const appendPreviewDiagnostic = (stream, chunk) => {
-  if (launch.diagnosticsPath == null || launch.diagnosticsPath === "") return;
-  const parsedStream = previewDiagnosticStreamSchema.safeParse(stream);
-  if (!parsedStream.success) return;
-  const streamName = parsedStream.data;
+  if (!launch.diagnosticsPath || !(stream in previewDiagnosticTails)) return;
   const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
-  previewDiagnosticTails[streamName] = Buffer.concat([
-    previewDiagnosticTails[streamName], bytes.subarray(Math.max(0, bytes.length - 4096)),
+  previewDiagnosticTails[stream] = Buffer.concat([
+    previewDiagnosticTails[stream], bytes.subarray(Math.max(0, bytes.length - 4096)),
   ]).subarray(-4096);
   try {
     previewDiagnosticFs.writeFileSync(launch.diagnosticsPath, JSON.stringify({
@@ -31,6 +19,7 @@ const appendPreviewDiagnostic = (stream, chunk) => {
 
 const sanitize = (value: string): string =>
   value
+    // oxlint-disable-next-line eslint/no-control-regex -- Strip terminal escape sequences from untrusted process output.
     .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
     .replaceAll(/[^\t\n\r\u0020-\u007E]/gu, "")
     .replaceAll(/\b(?:https?|postgres(?:ql)?|redis):\/\/[^\s"'<>]+/giu, "[URL REDACTED]")
@@ -43,17 +32,21 @@ const sanitize = (value: string): string =>
 
 /** Best-effort common-secret redaction; arbitrary application logging may still contain sensitive text. */
 export const workingPreviewDiagnosticExcerpt = (content: string | null): string => {
-  if (content === null || content === "" || content.length > 65_536) {
+  if (!content || content.length > 65_536) {
     return "";
   }
-  let parsed: z.infer<typeof previewDiagnosticPayloadSchema>;
+  let parsed: unknown;
   try {
-    parsed = previewDiagnosticPayloadSchema.parse(JSON.parse(content));
+    parsed = JSON.parse(content);
   } catch {
     return "";
   }
-  const output = [parsed.message, parsed.stderr, parsed.stdout]
-    .filter((value): value is string => value !== undefined)
+  if (typeof parsed !== "object" || parsed === null) {
+    return "";
+  }
+  const fields = parsed as Record<string, unknown>;
+  const output = [fields.message, fields.stderr, fields.stdout]
+    .filter((value): value is string => typeof value === "string")
     .map((value) => sanitize(value.slice(-8192)))
     .join("\n");
   return output

@@ -2,78 +2,21 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
-import { z } from "zod";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import { evidencePrefix } from "../evals/support/self-reproduction-evidence";
 
 const outputs: string[] = [];
-const privateTempRoot = mkdtempSync(nodePath.join(tmpdir(), "self-reproduction-private-"));
-
-interface SelfReproductionReport {
-  candidate: { provenance: string; status: string };
-  candidateRuntime: { status: string };
-  captures: { files: string[]; label: string; status: string }[];
-  diagnostics: { note: string };
-  generation: { elapsedMs: number; reason: string; status: string };
-  requirements: {
-    reasonCode?: string;
-    requirementId: string;
-    side: string;
-    status: string;
-  }[];
-  revisions: { arrusted: { status: string }; builder: { commit: string } };
-  settings: {
-    configuredModel: string;
-    modelInvocation: string;
-    publication: string;
-    status: string;
-    runtimeIdentity?: unknown;
-  };
-  transcript: { status: string };
-}
-
-const reportSchema = z.object({
-  candidate: z.object({ provenance: z.string(), status: z.string() }),
-  candidateRuntime: z.object({ status: z.string() }),
-  captures: z.array(
-    z.object({ files: z.array(z.string()), label: z.string(), status: z.string() }),
-  ),
-  diagnostics: z.object({ note: z.string() }),
-  generation: z.object({ elapsedMs: z.number(), reason: z.string(), status: z.string() }),
-  requirements: z.array(
-    z.object({
-      reasonCode: z.string().optional(),
-      requirementId: z.string(),
-      side: z.string(),
-      status: z.string(),
-    }),
-  ),
-  revisions: z.object({
-    arrusted: z.object({ status: z.string() }),
-    builder: z.object({ commit: z.string() }),
-  }),
-  settings: z.object({
-    configuredModel: z.string(),
-    modelInvocation: z.string(),
-    publication: z.string(),
-    runtimeIdentity: z.unknown().optional(),
-    status: z.string(),
-  }),
-  transcript: z.object({ status: z.string() }),
-});
-const parseReport = (contents: string): SelfReproductionReport =>
-  reportSchema.parse(JSON.parse(contents));
-
 afterEach(() => {
   for (const output of outputs.splice(0)) {
     rmSync(output, { force: true, recursive: true });
   }
 });
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function run(script: string, reportOnly = false) {
-  const output = mkdtempSync(nodePath.join(privateTempRoot, `report-${outputs.length}-`));
+  const output = mkdtempSync(nodePath.join(tmpdir(), "self-reproduction-report-test-"));
   outputs.push(output);
   const result = spawnSync(
     process.execPath,
@@ -96,12 +39,13 @@ function run(script: string, reportOnly = false) {
         HOME: process.env.HOME,
         NODE_ENV: "test",
         PATH: process.env.PATH,
+        TMPDIR: process.env.TMPDIR,
       },
       timeout: 30_000,
     },
   );
   expect(result.error).toBeUndefined();
-  const report = parseReport(readFileSync(nodePath.join(output, "report.json"), "utf-8"));
+  const report = JSON.parse(readFileSync(nodePath.join(output, "report.json"), "utf-8"));
   // All failure modes must produce the same reviewable bundle.
   for (const path of [
     "report.md",
@@ -125,14 +69,12 @@ function run(script: string, reportOnly = false) {
   }
   expect(existsSync(nodePath.join(output, "runtime-source"))).toBe(false);
   expect(
-    z
-      .object({ arrusted: z.object({ status: z.string() }) })
-      .parse(JSON.parse(readFileSync(nodePath.join(output, "revisions.json"), "utf-8"))).arrusted
-      .status,
+    JSON.parse(readFileSync(nodePath.join(output, "revisions.json"), "utf-8")).arrusted.status,
   ).toBe("unavailable");
   return { output, report, result };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function emit(records: unknown[], verdict = "passed") {
   return `${records
     .map((record) => `console.log(${JSON.stringify(evidencePrefix + JSON.stringify(record))});`)
@@ -267,7 +209,7 @@ describe("native self-reproduction report orchestration", () => {
 });
 
 it("rejects default generation before creating output or launching setup", () => {
-  const parent = mkdtempSync(nodePath.join(privateTempRoot, `entry-${outputs.length}-`));
+  const parent = mkdtempSync(nodePath.join(tmpdir(), "self-reproduction-entry-guard-"));
   outputs.push(parent);
   const output = nodePath.join(parent, "must-not-exist");
   const result = spawnSync(
@@ -280,6 +222,7 @@ it("rejects default generation before creating output or launching setup", () =>
         HOME: process.env.HOME,
         NODE_ENV: "production",
         PATH: process.env.PATH,
+        TMPDIR: process.env.TMPDIR,
       },
       timeout: 30_000,
     },

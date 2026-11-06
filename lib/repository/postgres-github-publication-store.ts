@@ -2,9 +2,10 @@ import { isDeepStrictEqual } from "node:util";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
+
+import type * as databaseSchema from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedGitHubPublicationProposals } from "../db/schema";
-import type { schema as databaseSchema } from "../db/schema";
 import {
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
@@ -20,8 +21,6 @@ import { createPostgresGitHubPublicationReceiptStore } from "./postgres-github-p
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
-
 export type GitHubPublicationProposal = FreshRepositoryProposal | DraftPullRequestProposal;
 
 export interface GitHubPublicationProposalStore {
@@ -29,13 +28,15 @@ export interface GitHubPublicationProposalStore {
   save: (proposal: GitHubPublicationProposal) => Promise<GitHubPublicationProposal>;
 }
 
-const proposalRowSchema = z.strictObject({
-  createdAt: z.date(),
-  idempotencyKey: z.string(),
-  kind: z.enum(["fresh-repository", "draft-pull-request"]),
-  proposal: z.unknown(),
-  proposalDigest: z.string(),
-});
+const proposalRowSchema = z
+  .object({
+    createdAt: z.date(),
+    idempotencyKey: z.string(),
+    kind: z.enum(["fresh-repository", "draft-pull-request"]),
+    proposal: z.unknown(),
+    proposalDigest: z.string(),
+  })
+  .strict();
 
 // Project exactly the closed receipt fields. The database row also contains
 // tenant columns used by the SQL predicate, but those are not proposal data.
@@ -46,14 +47,8 @@ const proposalRowSelection = {
   proposal: hostedGitHubPublicationProposals.proposal,
   proposalDigest: hostedGitHubPublicationProposals.proposalDigest,
 };
-interface GitHubPublicationProposalRow {
-  createdAt: Date;
-  idempotencyKey: string;
-  kind: "fresh-repository" | "draft-pull-request";
-  proposal: JsonValue;
-  proposalDigest: string;
-}
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function proposalKind(
   proposal: GitHubPublicationProposal,
 ): "fresh-repository" | "draft-pull-request" {
@@ -62,58 +57,49 @@ function proposalKind(
     : "draft-pull-request";
 }
 
-const releaseGateName = "REPOSITORY_RELEASE_ENABLED";
-const freshOutcome = "create-private-fresh-history-repository";
-const draftOutcome: DraftPullRequestProposal["intendedOutcome"] =
-  "publish-reviewed-change-set-as-draft-pull-request";
-const storedProposalError = "Stored proposal fields are missing or unexpected.";
+const releaseGateSchema = z
+  .object({ configured: z.boolean(), name: z.literal("REPOSITORY_RELEASE_ENABLED") })
+  .strict();
 
-const releaseGateSchema = z.strictObject({
-  configured: z.boolean(),
-  name: z.literal(releaseGateName),
-});
-
-const storedProposalSchema = z.record(z.string(), z.unknown());
-
-const hasExactStoredKeys = (
-  value: z.infer<typeof storedProposalSchema>,
-  keys: readonly string[],
-): boolean =>
+const hasExactStoredKeys = (value: GitHubPublicationProposal, keys: readonly string[]): boolean =>
   JSON.stringify(Object.keys(value).toSorted()) === JSON.stringify([...keys].toSorted());
 
-function parseProposal(input: JsonValue): GitHubPublicationProposal {
-  const stored = storedProposalSchema.parse(input);
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function parseProposal(input: unknown): GitHubPublicationProposal {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new Error("GitHub publication proposal JSON is malformed.");
+  }
+  const stored = input as GitHubPublicationProposal;
   // PostgreSQL jsonb reorders object keys. Publication v2 digests use the
   // constructor's JSON.stringify order, so restore that exact order after
   // checking the stored object has no missing or extra fields.
-  if (stored.intendedOutcome === freshOutcome) {
+  if (stored.intendedOutcome === "create-private-fresh-history-repository") {
     if (
       !hasExactStoredKeys(stored, freshProposalKeys) ||
       !releaseGateSchema.safeParse(stored.releaseGate).success
     ) {
-      throw new Error(storedProposalError);
+      throw new Error("Stored fresh-repository proposal fields are missing or unexpected.");
     }
+    // oxlint-disable-next-line eslint/sort-keys -- legacy digest depends on constructor field order.
     const proposal: FreshRepositoryProposal = {
-      changeSetDigest: z.string().parse(stored.changeSetDigest),
-      contractDigest: z.string().parse(stored.contractDigest),
-      defaultBranch: z.literal("main").parse(stored.defaultBranch),
-      destinationName: z.string().parse(stored.destinationName),
-      destinationOwner: z.string().parse(stored.destinationOwner),
-      eligibilityDigest: z.string().parse(stored.eligibilityDigest),
-      idempotencyKey: z.string().parse(stored.idempotencyKey),
-      initialCommitMessage: z
-        .literal("Initialize repository from supported template")
-        .parse(stored.initialCommitMessage),
-      installationIdentityDigest: z.string().parse(stored.installationIdentityDigest),
-      intendedOutcome: z.literal(freshOutcome).parse(stored.intendedOutcome),
-      releaseGate: { configured: false, name: releaseGateName },
-      reviewDigest: z.string().parse(stored.reviewDigest),
-      sourceReceiptDigest: z.string().parse(stored.sourceReceiptDigest),
-      sourceSha: z.string().parse(stored.sourceSha),
-      sourceTree: z.string().parse(stored.sourceTree),
-      version: z.literal(2).parse(stored.version),
-      visibility: z.literal("private").parse(stored.visibility),
-      digest: z.string().parse(stored.digest),
+      changeSetDigest: stored.changeSetDigest,
+      contractDigest: stored.contractDigest,
+      defaultBranch: stored.defaultBranch,
+      destinationName: stored.destinationName,
+      destinationOwner: stored.destinationOwner,
+      eligibilityDigest: stored.eligibilityDigest,
+      idempotencyKey: stored.idempotencyKey,
+      initialCommitMessage: stored.initialCommitMessage,
+      installationIdentityDigest: stored.installationIdentityDigest,
+      intendedOutcome: stored.intendedOutcome,
+      releaseGate: { configured: false, name: stored.releaseGate.name },
+      reviewDigest: stored.reviewDigest,
+      sourceReceiptDigest: stored.sourceReceiptDigest,
+      sourceSha: stored.sourceSha,
+      sourceTree: stored.sourceTree,
+      version: stored.version,
+      visibility: stored.visibility,
+      digest: stored.digest,
     };
     assertExactFreshRepositoryProposal(proposal);
     return proposal;
@@ -122,32 +108,10 @@ function parseProposal(input: JsonValue): GitHubPublicationProposal {
     !hasExactStoredKeys(stored, draftProposalKeys) ||
     !releaseGateSchema.safeParse(stored.releaseGate).success
   ) {
-    throw new Error(storedProposalError);
+    throw new Error("Stored draft pull-request proposal fields are missing or unexpected.");
   }
-  const gate = releaseGateSchema.parse(stored.releaseGate);
-  const draft: DraftPullRequestProposal = {
-    approvedPaths: z.array(z.string()).parse(stored.approvedPaths),
-    baseBranch: z.string().parse(stored.baseBranch),
-    baseSha: z.string().parse(stored.baseSha),
-    baseTree: z.string().parse(stored.baseTree),
-    branchName: z.string().parse(stored.branchName),
-    changeSetDigest: z.string().parse(stored.changeSetDigest),
-    changedContentDigest: z.string().parse(stored.changedContentDigest),
-    digest: z.string().parse(stored.digest),
-    draft: z.literal(true).parse(stored.draft),
-    idempotencyKey: z.string().parse(stored.idempotencyKey),
-    installationIdentityDigest: z.string().parse(stored.installationIdentityDigest),
-    intendedOutcome: z.literal(draftOutcome).parse(stored.intendedOutcome),
-    name: z.string().parse(stored.name),
-    owner: z.string().parse(stored.owner),
-    releaseGate: gate,
-    repositoryId: z.string().parse(stored.repositoryId),
-    repositoryObservationDigest: z.string().parse(stored.repositoryObservationDigest),
-    reviewDigest: z.string().parse(stored.reviewDigest),
-    title: z.string().parse(stored.title),
-    version: z.literal(2).parse(stored.version),
-    visibility: z.literal("private").parse(stored.visibility),
-  };
+  const draft = stored;
+  // oxlint-disable-next-line eslint/sort-keys -- legacy digest depends on constructor field order.
   const proposal: DraftPullRequestProposal = {
     approvedPaths: draft.approvedPaths,
     baseBranch: draft.baseBranch,
@@ -175,9 +139,8 @@ function parseProposal(input: JsonValue): GitHubPublicationProposal {
   return proposal;
 }
 
-export function parseGitHubPublicationProposalRow(
-  input: GitHubPublicationProposalRow,
-): GitHubPublicationProposal {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function parseGitHubPublicationProposalRow(input: unknown): GitHubPublicationProposal {
   const row = proposalRowSchema.parse(input);
   const proposal = parseProposal(row.proposal);
   if (
@@ -190,6 +153,7 @@ export function parseGitHubPublicationProposalRow(
   return proposal;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function proposalValues(proposal: GitHubPublicationProposal, now: Date) {
   return {
     createdAt: now,
@@ -220,11 +184,15 @@ export const sameProposalExceptTitle = (
  * mutation journal. Indexed columns are redundant query aids and are rebound to
  * the closed JSON authority every time a row is read.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresGitHubPublicationStores(
   database: Database,
   authorityInput: HostedGitHubTenantAuthority,
   now: () => Date = () => new Date(),
-) {
+): {
+  proposals: GitHubPublicationProposalStore;
+  receipts: GitHubPublicationReceiptStore;
+} {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   const tenantPredicate = and(
     eq(hostedGitHubPublicationProposals.issuer, authority.issuer),
@@ -244,7 +212,7 @@ export function createPostgresGitHubPublicationStores(
       return rows[0] === undefined ? undefined : parseGitHubPublicationProposalRow(rows[0]);
     },
     async save(proposalInput) {
-      const proposal = parseProposal(storedProposalSchema.parse(proposalInput));
+      const proposal = parseProposal(proposalInput);
       const inserted = await database
         .insert(hostedGitHubPublicationProposals)
         .values({ ...authority, ...proposalValues(proposal, now()) })
@@ -270,8 +238,8 @@ export function createPostgresGitHubPublicationStores(
         .limit(1);
       const prior = rows[0] === undefined ? undefined : parseGitHubPublicationProposalRow(rows[0]);
       if (
-        prior?.intendedOutcome === draftOutcome &&
-        proposal.intendedOutcome === draftOutcome &&
+        prior?.intendedOutcome === "publish-reviewed-change-set-as-draft-pull-request" &&
+        proposal.intendedOutcome === "publish-reviewed-change-set-as-draft-pull-request" &&
         sameProposalExceptTitle(prior, proposal)
       ) {
         return prior;
@@ -288,8 +256,5 @@ export function createPostgresGitHubPublicationStores(
     now,
   );
 
-  return { proposals, receipts } satisfies {
-    proposals: GitHubPublicationProposalStore;
-    receipts: GitHubPublicationReceiptStore;
-  };
+  return { proposals, receipts };
 }

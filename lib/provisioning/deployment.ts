@@ -23,6 +23,7 @@ import {
 
 const noStore = { "Cache-Control": "no-store" } as const;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderProvisioningRouteHandler(input: {
   origin: string;
   enabled: () => Promise<boolean>;
@@ -40,33 +41,6 @@ export function createBuilderProvisioningRouteHandler(input: {
   dependencies: Parameters<typeof executeBuilderProvisioning>[0]["dependencies"];
 }) {
   const { origin } = new URL(input.origin);
-  const readProvisioning = async (
-    request: Request,
-    authority: NonNullable<Awaited<ReturnType<typeof input.authorityForRequest>>>,
-  ) => {
-    const url = new URL(request.url);
-    const requestId = z.uuid().parse(url.searchParams.get("requestId"));
-    if (url.searchParams.get("projection") === "1") {
-      const row = await input.dependencies.journal.read({ authority, requestId });
-      return row
-        ? Response.json(
-            builderProvisionProjectionSchema.parse({
-              provisioning: projectBuilderProvisioning(row),
-              revision: row.revision,
-            }),
-            { headers: noStore },
-          )
-        : Response.json({ error: "provisioning_not_found" }, { headers: noStore, status: 404 });
-    }
-    const result = await input.read({
-      authority,
-      journal: input.dependencies.journal,
-      requestId,
-    });
-    return result
-      ? Response.json(result, { headers: noStore })
-      : Response.json({ error: "provisioning_not_found" }, { headers: noStore, status: 404 });
-  };
   return async (request: Request) => {
     try {
       if (new URL(request.url).origin !== origin) {
@@ -80,7 +54,33 @@ export function createBuilderProvisioningRouteHandler(input: {
         );
       }
       if (request.method === "GET") {
-        return await readProvisioning(request, authority);
+        const requestId = z
+          .string()
+          .uuid()
+          .parse(new URL(request.url).searchParams.get("requestId"));
+        if (new URL(request.url).searchParams.get("projection") === "1") {
+          const row = await input.dependencies.journal.read({
+            authority,
+            requestId,
+          });
+          return row
+            ? Response.json(
+                builderProvisionProjectionSchema.parse({
+                  provisioning: projectBuilderProvisioning(row),
+                  revision: row.revision,
+                }),
+                { headers: noStore },
+              )
+            : Response.json({ error: "provisioning_not_found" }, { headers: noStore, status: 404 });
+        }
+        const result = await input.read({
+          authority,
+          journal: input.dependencies.journal,
+          requestId,
+        });
+        return result
+          ? Response.json(result, { headers: noStore })
+          : Response.json({ error: "provisioning_not_found" }, { headers: noStore, status: 404 });
       }
       if (
         request.method !== "POST" ||
@@ -93,7 +93,7 @@ export function createBuilderProvisioningRouteHandler(input: {
         return Response.json({ error: "feature_disabled" }, { headers: noStore, status: 503 });
       }
       const length = request.headers.get("content-length");
-      if (length !== null && length !== "" && (!/^\d+$/u.test(length) || Number(length) > 16_384)) {
+      if (length && (!/^\d+$/u.test(length) || Number(length) > 16_384)) {
         return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
       }
       const body = builderProvisionRequestSchema.parse(await request.json());
@@ -125,6 +125,7 @@ export function createBuilderProvisioningRouteHandler(input: {
 
 let handler: ((request: Request) => Promise<Response>) | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderProvisioningDependencies(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
@@ -157,6 +158,7 @@ export function createBuilderProvisioningDependencies(
   return { database, dependencies, preview };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getBuilderProvisioningDeploymentHandler(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {

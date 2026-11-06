@@ -34,29 +34,21 @@ import { releaseEndpoint, TOOL_NAMES } from "./portable-release";
 
 const execFileAsync = promisify(execFile);
 const repositoryRoot = await realpath(path.resolve("."));
-const releaseProofOptionError = "Release proof arguments must be unique --name value pairs.";
-const fileExistsCode = "EEXIST";
-const projectBindingDirectory = ".vercel";
-const projectBindingPath = "project.json";
-const writeMode = 0o600;
-const builderLabel = "Builder";
-const deploymentOutputDirectory = "output";
-const ignoreWriteError: (error?: Error | null) => void = (error) => {
-  if (error !== undefined && error !== null) {
-    void process.stderr.write(`${error.message}\n`);
-  }
-};
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseArguments(args: readonly string[]) {
   const values = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
     const value = args[index + 1];
-    if (name === undefined || value === undefined || values.has(name)) {
-      throw new Error(releaseProofOptionError);
-    }
-    if (!name.startsWith("--") || value.startsWith("--")) {
-      throw new Error(releaseProofOptionError);
+    if (
+      name === undefined ||
+      value === undefined ||
+      !name.startsWith("--") ||
+      value.startsWith("--") ||
+      values.has(name)
+    ) {
+      throw new Error("Release proof arguments must be unique --name value pairs.");
     }
     values.set(name, value);
   }
@@ -82,6 +74,7 @@ function parseArguments(args: readonly string[]) {
   return parsed;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredExecutable(name: string) {
   const value = process.env[name];
   if (value === undefined || !path.isAbsolute(value)) {
@@ -90,6 +83,7 @@ function requiredExecutable(name: string) {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function run(
   executable: string,
   args: string[],
@@ -105,22 +99,25 @@ async function run(
     env: options.environment ?? process.env,
     maxBuffer: 32 * 1024 * 1024,
   });
-  const shouldCapture = options.capture ?? false;
-  if (!shouldCapture && result.stdout.trim() !== "") {
-    process.stdout.write(result.stdout, ignoreWriteError);
+  if (!options.capture && result.stdout.trim() !== "") {
+    process.stdout.write(result.stdout);
   }
-  if (!shouldCapture && result.stderr.trim() !== "") {
-    process.stderr.write(result.stderr, ignoreWriteError);
+  if (!options.capture && result.stderr.trim() !== "") {
+    process.stderr.write(result.stderr);
   }
   return result.stdout;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function ownerBoundFile(filePath: string, label: string) {
   const info = await lstat(filePath);
-  if (!info.isFile() || info.isSymbolicLink() || info.uid !== (process.getuid?.() ?? -1)) {
-    throw new Error(`${label} must be a current-user-owned regular file.`);
-  }
-  if ((info.mode & 0o022) !== 0) {
+  if (
+    !info.isFile() ||
+    info.isSymbolicLink() ||
+    info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
+    (info.mode & 0o022) !== 0
+  ) {
     throw new Error(`${label} must be a current-user-owned regular file.`);
   }
   return await readFile(filePath);
@@ -128,24 +125,23 @@ async function ownerBoundFile(filePath: string, label: string) {
 
 const args = parseArguments(process.argv.slice(2));
 const endpointOrigin = releaseEndpoint(args.endpoint);
-const builder = await exactCleanGitSource(repositoryRoot, builderLabel);
+const builder = await exactCleanGitSource(repositoryRoot, "Builder");
 const arrusted = await exactCleanGitSource(args.arrustedRoot, "Arrusted");
 if (arrusted.commit !== ARRUSTED_IMAGE_TARGET_SHA || arrusted.tree !== ARRUSTED_IMAGE_TARGET_TREE) {
   throw new Error("Arrusted release source does not match the source-bound image target.");
 }
 const projectBinding = await ownerBoundFile(
-  path.join(repositoryRoot, projectBindingDirectory, projectBindingPath),
+  path.join(repositoryRoot, ".vercel/project.json"),
   "Vercel release project binding",
 );
 const outputParent = await realpath(path.dirname(args.output));
-const canonicalOutput = path.resolve(outputParent, path.basename(args.output));
-if (canonicalOutput !== args.output) {
+if (path.join(outputParent, path.basename(args.output)) !== args.output) {
   throw new Error("Release output must be an absolute canonical child path.");
 }
 try {
   await mkdir(args.output, { mode: 0o700 });
 } catch (error) {
-  if (error instanceof Error && "code" in error && error.code === fileExistsCode) {
+  if ((error as NodeJS.ErrnoException).code === "EEXIST") {
     throw new Error(`Release candidate already exists: ${args.output}`, {
       cause: error,
     });
@@ -267,35 +263,31 @@ try {
     environment: proofEnvironment,
   });
 
-  await mkdir(path.join(temporaryBuilder, projectBindingDirectory), {
+  await mkdir(path.join(temporaryBuilder, ".vercel"), {
     mode: 0o700,
     recursive: true,
   });
-  await writeFile(
-    path.join(temporaryBuilder, projectBindingDirectory, projectBindingPath),
-    projectBinding,
-    {
-      mode: writeMode,
-    },
-  );
+  await writeFile(path.join(temporaryBuilder, ".vercel/project.json"), projectBinding, {
+    mode: 0o600,
+  });
   await run(vercel, ["build", "--prod", "--yes"], {
     cwd: temporaryBuilder,
   });
   const deploymentRoot = path.join(output, "deployment");
-  await mkdir(path.join(deploymentRoot, projectBindingDirectory), {
+  await mkdir(path.join(deploymentRoot, ".vercel"), {
     mode: 0o700,
     recursive: true,
   });
   await cp(
-    path.join(temporaryBuilder, projectBindingDirectory, deploymentOutputDirectory),
-    path.join(deploymentRoot, projectBindingDirectory, deploymentOutputDirectory),
+    path.join(temporaryBuilder, ".vercel/output"),
+    path.join(deploymentRoot, ".vercel/output"),
     {
       recursive: true,
     },
   );
   await copyFile(
-    path.join(temporaryBuilder, projectBindingDirectory, projectBindingPath),
-    path.join(deploymentRoot, projectBindingDirectory, projectBindingPath),
+    path.join(temporaryBuilder, ".vercel/project.json"),
+    path.join(deploymentRoot, ".vercel/project.json"),
   );
 
   const packageReceiptBytes = await readFile(path.join(packageRoot, "release-receipt.json"));
@@ -304,7 +296,7 @@ try {
   const marketplaceArchive = await readFile(
     path.join(packageRoot, portable.receipt.codexMarketplaceArchive.name),
   );
-  const finalBuilder = await exactCleanGitSource(repositoryRoot, builderLabel);
+  const finalBuilder = await exactCleanGitSource(repositoryRoot, "Builder");
   const finalArrusted = await exactCleanGitSource(args.arrustedRoot, "Arrusted");
   if (
     finalBuilder.commit !== builder.commit ||
@@ -387,7 +379,7 @@ try {
     `${JSON.stringify(receipt, null, 2)}\n`,
     {
       flag: "wx",
-      mode: writeMode,
+      mode: 0o600,
     },
   );
   await rm(installRoot, { force: false, recursive: true });

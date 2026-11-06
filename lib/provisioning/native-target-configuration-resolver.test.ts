@@ -5,8 +5,10 @@ import {
   appIntegrationCapabilityOperationRef,
 } from "./app-integration-capability-contract";
 import { appIntegrationCapabilityTransportRequestSchema } from "./app-integration-capability-transport";
+/* oxlint-disable eslint/require-await, typescript/no-non-null-assertion -- These async port fixtures intentionally resolve synchronously; required fixture records are asserted in the tested producer. */
 import { assembleStandardBuilderRuntimeConfiguration } from "./standard-builder-runtime-configuration";
 import { standardDevelopmentRuntimePolicySchema } from "./hosted-operator-source-configuration-schema";
+/* oxlint-disable unicorn/no-useless-undefined -- Explicit absent optional registry rows and void mocks match the read ports. */
 import { describe, expect, it, vi } from "vitest";
 import { capturedGenericWorkerFixture } from "./operator-worker-source-capture.test-fixture";
 import { createNativeTargetConfigurationResolver } from "./native-target-configuration-resolver";
@@ -376,22 +378,20 @@ describe("production native target configuration resolver", () => {
     const fixture = setup();
     const id = "11111111-1111-4111-8111-111111111111";
     const isRead = action.endsWith("read") || action.endsWith("status");
-    const body: ConfigurationFixtureBody = {
+    const body = {
       action,
       ownerContext,
+      ...(isRead
+        ? { [action.startsWith("continuity") ? "intentId" : "exportId"]: id }
+        : {
+            idempotencyKey: "same-operation",
+            planDigest: "a".repeat(64),
+            planRef: action.startsWith("export")
+              ? `_protected-operator/export-plans/${id}`
+              : `private-plan/${id}`,
+            ...(action.endsWith("approval") ? {} : { callId: "approved-call" }),
+          }),
     };
-    if (isRead) {
-      body[action.startsWith("continuity") ? "intentId" : "exportId"] = id;
-    } else {
-      body.idempotencyKey = "same-operation";
-      body.planDigest = "a".repeat(64);
-      body.planRef = action.startsWith("export")
-        ? `_protected-operator/export-plans/${id}`
-        : `private-plan/${id}`;
-      if (!action.endsWith("approval")) {
-        body.callId = "approved-call";
-      }
-    }
     const effective = await fixture.resolve(request(body));
     const reader = action.startsWith("continuity")
       ? fixture.resources.continuity.read
@@ -858,8 +858,8 @@ describe("fresh normal same-project runtime assembly", () => {
         captured: { description: f.description, selection: release },
         destination: {
           ...f.destination,
-          githubInstallationId: null,
-          productionBranch: null,
+          githubInstallationId: undefined,
+          productionBranch: undefined,
         },
         environment: {},
         verifiedPublicOrigin: "https://actual-public.example",
@@ -903,8 +903,8 @@ describe("fresh normal same-project runtime assembly", () => {
         captured: { description: f.description, selection: f.selected },
         destination: {
           ...f.destination,
-          githubInstallationId: null,
-          productionBranch: null,
+          githubInstallationId: undefined,
+          productionBranch: undefined,
         },
         environment: {},
         verifiedPublicOrigin: "https://actual-public.example",
@@ -970,7 +970,7 @@ describe("fresh normal same-project runtime assembly", () => {
       if (failure === "private-delivery") {
         f.readStandardDestination.mockResolvedValue({
           ...f.destination,
-          deploymentAccess: null,
+          deploymentAccess: undefined,
         });
       }
       await expect(f.resolve(request(f.body))).rejects.toThrow();
@@ -1012,6 +1012,7 @@ describe("fresh normal same-project runtime assembly", () => {
 });
 
 describe("normal single-project destination resolution", () => {
+  // oxlint-disable-next-line sonarjs/no-identical-functions -- Retain the existing separately named normal-destination regression scenarios.
   const standard = () => {
     const config = configuration();
     config.composition = "single-project-services";
@@ -1087,6 +1088,7 @@ describe("normal single-project destination resolution", () => {
   });
 });
 describe("fresh normal same-project runtime assembly", () => {
+  // oxlint-disable-next-line sonarjs/no-identical-functions -- Retain the existing separately named fresh-destination regression scenarios.
   const fixture = () => {
     const f = setup();
     const base = configuration();
@@ -1245,7 +1247,7 @@ describe("fresh normal same-project runtime assembly", () => {
       if (failure === "private-delivery") {
         f.readStandardDestination.mockResolvedValue({
           ...f.destination,
-          deploymentAccess: null,
+          deploymentAccess: undefined,
         });
       }
       await expect(f.resolve(request(f.body))).rejects.toThrow();

@@ -10,18 +10,6 @@ export const ARRUSTED_TEMPLATE_REPOSITORY_ID = 1_221_250_267;
 
 const installationIdSchema = z.string().regex(/^[1-9]\d*$/u);
 const tokenSchema = z.string().min(20).max(1024);
-const repositorySchema = z.object({
-  full_name: z.string(),
-  id: z.number().int(),
-  private: z.boolean(),
-});
-const repositoryInventorySchema = z.object({
-  repositories: z.array(repositorySchema),
-  total_count: z.number().int().nonnegative(),
-});
-const permissionSchema = z.record(z.string(), z.string());
-type Repository = z.infer<typeof repositorySchema>;
-type Permissions = z.infer<typeof permissionSchema>;
 
 const requestedPermissions = {
   contents: "read" as const,
@@ -39,25 +27,39 @@ export interface ArrustedTemplateReader {
   }>;
 }
 
-function privateTemplateRepository(repository: Repository) {
-  if (repository.id !== ARRUSTED_TEMPLATE_REPOSITORY_ID) return false;
-  if (repository.full_name !== ARRUSTED_TEMPLATE_FULL_NAME) return false;
-  return repository.private;
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readOnlyReaderPermissions(permissions: Permissions) {
-  if (permissions.contents !== "read") {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function privateTemplateRepository(value: unknown) {
+  if (!record(value)) {
     return false;
   }
-  if (permissions.metadata !== undefined && permissions.metadata !== "read") {
-    return false;
-  }
-  return Object.values(permissions).every((permission) => permission === "read");
+  return (
+    typeof value.id === "number" &&
+    Number.isSafeInteger(value.id) &&
+    value.id === ARRUSTED_TEMPLATE_REPOSITORY_ID &&
+    value.full_name === ARRUSTED_TEMPLATE_FULL_NAME &&
+    value.private === true
+  );
 }
 
-function exactTemplateRepositoryIds(repositoryIds: number[]) {
-  if (repositoryIds.length !== 1) return false;
-  return repositoryIds[0] === ARRUSTED_TEMPLATE_REPOSITORY_ID;
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function readOnlyReaderPermissions(value: unknown) {
+  if (!record(value)) {
+    return false;
+  }
+  if (value.contents !== "read" || (value.metadata !== undefined && value.metadata !== "read")) {
+    return false;
+  }
+  return Object.values(value).every((permission) => permission === "read");
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function exactTemplateRepositoryIds(value: unknown) {
+  return Array.isArray(value) && value.length === 1 && value[0] === ARRUSTED_TEMPLATE_REPOSITORY_ID;
 }
 
 type TemplateReaderFailureStage =
@@ -67,6 +69,7 @@ type TemplateReaderFailureStage =
   | "repository_inventory"
   | "repository_shape";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unavailable(stage?: TemplateReaderFailureStage): never {
   if (stage !== undefined) {
     console.warn(
@@ -83,6 +86,7 @@ function unavailable(stage?: TemplateReaderFailureStage): never {
  * This is deliberately separate from the tenant-selected publishing
  * installation. It accepts only the deployment-owned fixed installation ID.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readDeploymentArrustedTemplateReaderConfig(
   environment: Readonly<Record<string, string | undefined>>,
 ): ArrustedTemplateReaderConfig {
@@ -104,6 +108,7 @@ export function readDeploymentArrustedTemplateReaderConfig(
   return { ...credentials, installationId: installation.data };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createArrustedTemplateReader(input: {
   config: ArrustedTemplateReaderConfig;
   fetch?: typeof fetch;
@@ -135,25 +140,22 @@ export function createArrustedTemplateReader(input: {
       } catch {
         unavailable("token_mint");
       }
-      const parsedAuthentication = z
-        .object({
-          permissions: permissionSchema,
-          repositoryIds: z.array(z.number().int()),
-          repositorySelection: z.enum(["all", "selected"]),
-          token: tokenSchema,
-          type: z.literal("token"),
-        })
-        .safeParse(authentication);
-      if (!parsedAuthentication.success) {
+      const parsedToken = record(authentication)
+        ? tokenSchema.safeParse(authentication.token)
+        : undefined;
+      if (
+        !record(authentication) ||
+        authentication.type !== "token" ||
+        parsedToken === undefined ||
+        !parsedToken.success ||
+        (authentication.repositorySelection !== "all" &&
+          authentication.repositorySelection !== "selected") ||
+        !exactTemplateRepositoryIds(authentication.repositoryIds) ||
+        !readOnlyReaderPermissions(authentication.permissions)
+      ) {
         unavailable("token_shape");
       }
-      if (!exactTemplateRepositoryIds(parsedAuthentication.data.repositoryIds)) {
-        unavailable("token_shape");
-      }
-      if (!readOnlyReaderPermissions(parsedAuthentication.data.permissions)) {
-        unavailable("token_shape");
-      }
-      const { token } = parsedAuthentication.data;
+      const token = parsedToken.data;
 
       let inventory;
       try {
@@ -167,15 +169,14 @@ export function createArrustedTemplateReader(input: {
       } catch {
         unavailable("repository_inventory");
       }
-      const parsedInventory = repositoryInventorySchema.safeParse(inventory.data);
-      if (!parsedInventory.success) {
-        unavailable("repository_shape");
-      }
-      if (parsedInventory.data.total_count !== 1) {
-        unavailable("repository_shape");
-      }
-      const [repository] = parsedInventory.data.repositories;
-      if (repository === undefined || !privateTemplateRepository(repository)) {
+      const data: unknown = inventory.data;
+      if (
+        !record(data) ||
+        data.total_count !== 1 ||
+        !Array.isArray(data.repositories) ||
+        data.repositories.length !== 1 ||
+        !privateTemplateRepository(data.repositories[0])
+      ) {
         unavailable("repository_shape");
       }
       return { token };
@@ -183,6 +184,7 @@ export function createArrustedTemplateReader(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deploymentArrustedTemplateReader(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {

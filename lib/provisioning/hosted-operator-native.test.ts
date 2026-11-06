@@ -152,9 +152,9 @@ describe("separate native operator host", () => {
   });
   it("dispatches public release through its separate canonical authority boundary", async () => {
     const dependencies = deniedDependencies();
-    dependencies.publicReleaseRequest = vi.fn(() => Response.json({ status: "pending" }));
+    dependencies.publicReleaseRequest = vi.fn(async () => Response.json({ status: "pending" }));
     const handler = createHostedOperatorNativeHandler({
-      createDependencies: () => dependencies,
+      createDependencies: async () => dependencies,
     });
     const response = await handler(
       new Request("https://operator.example.test/v1/public-release", {
@@ -168,9 +168,9 @@ describe("separate native operator host", () => {
   });
   it("dispatches public release through its separate canonical authority boundary", async () => {
     const dependencies = deniedDependencies();
-    dependencies.publicReleaseRequest = vi.fn(() => Response.json({ status: "pending" }));
+    dependencies.publicReleaseRequest = vi.fn(async () => Response.json({ status: "pending" }));
     const handler = createHostedOperatorNativeHandler({
-      createDependencies: () => dependencies,
+      createDependencies: async () => dependencies,
     });
     const response = await handler(
       new Request("https://operator.example.test/v1/public-release", {
@@ -184,11 +184,11 @@ describe("separate native operator host", () => {
   });
   it("dispatches optional integration capability through its separate canonical boundary", async () => {
     const dependencies = deniedDependencies();
-    dependencies.appIntegrationCapabilityRequest = vi.fn(() =>
+    dependencies.appIntegrationCapabilityRequest = vi.fn(async () =>
       Response.json({ status: "blocked" }),
     );
     const handler = createHostedOperatorNativeHandler({
-      createDependencies: () => dependencies,
+      createDependencies: async () => dependencies,
     });
     const response = await handler(
       new Request("https://operator.example.test/v1/app-integrations", {
@@ -204,7 +204,7 @@ describe("separate native operator host", () => {
     const dependencies = deniedDependencies();
     Reflect.deleteProperty(dependencies, "store");
     const handler = createHostedOperatorNativeHandler({
-      createDependencies: () => dependencies,
+      createDependencies: async () => await Promise.resolve(dependencies),
     });
     const response = await handler(request());
     expect(response.status).toBe(503);

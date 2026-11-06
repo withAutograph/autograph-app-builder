@@ -7,7 +7,6 @@ import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { Readable } from "node:stream";
 import { createReadStream } from "node:fs";
 import { realpath } from "node:fs/promises";
 import nodePath from "node:path";
@@ -32,9 +31,6 @@ export { inspectDevelopmentSourceGeneration } from "./development-source-generat
 export type { PreparedSourceFile } from "./development-source-generation";
 
 export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
-const MICROFRONTENDS_MANIFEST = "microfrontends.json";
-const PREPARE_INTENT_PATH = ".app-builder/prepare-intent.json";
-const WORKSPACE_REPOSITORY_PATH = "/workspace/repository";
 
 export const SUPPORTED_REPOSITORY_CONTRACT = {
   commands: {
@@ -49,7 +45,7 @@ export const SUPPORTED_REPOSITORY_CONTRACT = {
     ".config/mise/scripts/repository/app-identity.ts",
     ".config/mise/scripts/repository/app-validation.ts",
     ".config/mise/scripts/repository/repository-preflight.ts",
-    MICROFRONTENDS_MANIFEST,
+    "microfrontends.json",
     "package.json",
   ],
   runtime: "nextjs",
@@ -94,9 +90,6 @@ export const SUPPORTED_TEMPLATE_DEPENDENCY_PATHS = [
 export const SUPPORTED_VALIDATION_COMMAND_TEMPLATES =
   SUPPORTED_REPOSITORY_CONTRACT.validationCommands;
 export const SUPPORTED_VALIDATION_TEST_SHARDS = ["1/1"] as const;
-const EMPTY_TEST_COMMAND_ERROR =
-  "The selected app's declared test command must be a non-empty string.";
-const POSITIVE_TEST_SHARD_COUNT = z.number().int().positive();
 
 /** Match repository discovery without executing source-provided command text. */
 export const supportedValidationTestShards = (manifestContent: string): readonly string[] => {
@@ -107,19 +100,17 @@ export const supportedValidationTestShards = (manifestContent: string): readonly
   if (test === undefined) {
     return [];
   }
-  const testCommand = z.string().trim().min(1).safeParse(test);
-  if (!testCommand.success) {
-    throw new Error(EMPTY_TEST_COMMAND_ERROR);
+  if (typeof test !== "string" || test.trim() === "") {
+    throw new Error("The selected app's declared test command must be a non-empty string.");
   }
   const autograph = object.safeParse(manifest.autograph);
   const ci = object.safeParse(autograph.success ? autograph.data.ci : undefined);
   const declared = ci.success ? ci.data.testShards : undefined;
   const shards = declared === undefined ? 1 : declared;
-  const shardCount = POSITIVE_TEST_SHARD_COUNT.safeParse(shards);
-  if (!shardCount.success) {
+  if (typeof shards !== "number" || !Number.isInteger(shards) || shards < 1) {
     throw new Error("The selected app's declared test shard count must be a positive integer.");
   }
-  return Array.from({ length: shardCount.data }, (_, index) => `${index + 1}/${shardCount.data}`);
+  return Array.from({ length: shards }, (_, index) => `${index + 1}/${shards}`);
 };
 
 const expectedCommands = {
@@ -277,6 +268,7 @@ const sha256 = function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
 function fileReadableStream(filePath: string): ReadableStream<Uint8Array> {
   const file = createReadStream(filePath);
   const iterator = file[Symbol.asyncIterator]();
@@ -331,9 +323,8 @@ export const inspectSupportedTemplateDependencyClosure =
       if (match === null || match.groups?.path !== path) {
         throw new Error(`Adapter dependency is not a regular Git blob: ${path}`);
       }
-      const mode = z.enum(["100644", "100755"]).parse(match.groups.mode);
       return {
-        mode,
+        mode: match.groups.mode as DependencyFile["mode"],
         objectId: match.groups.objectId,
         path,
         sha256: (() => {
@@ -350,12 +341,10 @@ export const inspectSupportedTemplateDependencyClosure =
     };
   };
 
-const configurationRecordSchema = z.record(z.string(), z.json());
-type ConfigurationRecord = z.infer<typeof configurationRecordSchema>;
-type JsonPayload = z.infer<typeof z.json>;
-const configurationRecord = (payload: JsonPayload): ConfigurationRecord => {
-  const parsed = configurationRecordSchema.safeParse(payload);
-  return parsed.success ? parsed.data : {};
+const configurationRecord = function configurationRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 };
 
 const checkoutFreeReleaseGate = `set -euo pipefail
@@ -370,7 +359,7 @@ echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
 const repositoryReleasePolicyPath = ".github/workflows/cd.yml" as const;
 
 const supportsReleaseGate = function supportsReleaseGate(workflowSource: string): boolean {
-  let workflow: ConfigurationRecord;
+  let workflow: Record<string, unknown>;
   try {
     workflow = configurationRecord(parseYaml(workflowSource));
   } catch {
@@ -383,23 +372,22 @@ const supportsReleaseGate = function supportsReleaseGate(workflowSource: string)
   const safety = configurationRecord(steps[0]);
   const expectedScopeCondition =
     "needs.template-safety.outputs.enabled == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository";
-  const checks = [
+  return (
     templateSafety.name === "Authorize (Template instance safety)" &&
-      JSON.stringify(templateSafety.permissions) === JSON.stringify({}) &&
-      JSON.stringify(templateSafety.outputs) ===
-        JSON.stringify({ enabled: `\${{ steps.safety.outputs.enabled }}` }) &&
-      steps.length === 1 &&
-      safety.id === "safety" &&
-      safety.name === "Read active repository safety flag" &&
-      JSON.stringify(safety.env) ===
-        JSON.stringify({
-          REPOSITORY_RELEASE_ENABLED: `\${{ vars.REPOSITORY_RELEASE_ENABLED }}`,
-        }) &&
-      safety.run === checkoutFreeReleaseGate &&
-      scope.needs === "template-safety" &&
-      scope.if === expectedScopeCondition,
-  ];
-  return checks.every(Boolean);
+    JSON.stringify(templateSafety.permissions) === JSON.stringify({}) &&
+    JSON.stringify(templateSafety.outputs) ===
+      JSON.stringify({ enabled: `\${{ steps.safety.outputs.enabled }}` }) &&
+    steps.length === 1 &&
+    safety.id === "safety" &&
+    safety.name === "Read active repository safety flag" &&
+    JSON.stringify(safety.env) ===
+      JSON.stringify({
+        REPOSITORY_RELEASE_ENABLED: `\${{ vars.REPOSITORY_RELEASE_ENABLED }}`,
+      }) &&
+    safety.run === checkoutFreeReleaseGate &&
+    scope.needs === "template-safety" &&
+    scope.if === expectedScopeCondition
+  );
 };
 
 export interface RepositoryReleasePolicyObservation {
@@ -487,7 +475,7 @@ export const inspectRepositoryReleasePolicyAtGitSnapshot =
       sourceTree,
       workflow: {
         bytes: gitBytes(input.sourcePath, ["show", `${sourceSha}:${repositoryReleasePolicyPath}`]),
-        mode: z.enum(["100644", "100755"]).parse(match.groups.mode),
+        mode: match.groups.mode as "100644" | "100755",
         objectId: match.groups.objectId,
         status: "present",
       },
@@ -512,16 +500,16 @@ export const assertRepositoryReleasePolicyAtGitSnapshot =
 const declaredNextRuntime = function declaredNextRuntime(
   packageSource: string,
 ): "nextjs" | "unsupported" {
-  let packageManifest: ConfigurationRecord;
+  let packageManifest: Record<string, unknown>;
   try {
-    packageManifest = configurationRecord(JSON.parse(packageSource));
+    packageManifest = configurationRecord(JSON.parse(packageSource) as unknown);
   } catch {
     return "unsupported";
   }
   const dependencies = configurationRecord(packageManifest.dependencies);
   const devDependencies = configurationRecord(packageManifest.devDependencies);
   const next = dependencies.next ?? devDependencies.next;
-  return z.string().trim().min(1).safeParse(next).success ? "nextjs" : "unsupported";
+  return typeof next === "string" && next.trim() !== "" ? "nextjs" : "unsupported";
 };
 
 const declaredMiseTasks = function declaredMiseTasks(source: string): Map<string, number> {
@@ -714,10 +702,8 @@ const within = function within(root: string, candidate: string): boolean {
 export const resolveAllowedRepository = async function resolveAllowedRepository(
   input: string,
 ): Promise<string> {
-  const [candidate, roots] = await Promise.all([
-    realpath(nodePath.resolve(input)),
-    Promise.all(allowedRoots().map(async (root) => await realpath(root))),
-  ]);
+  const candidate = await realpath(nodePath.resolve(input));
+  const roots = await Promise.all(allowedRoots().map(async (root) => await realpath(root)));
   if (!roots.some((root) => within(root, candidate))) {
     throw new Error("The repository path is outside REPOSITORY_LOCAL_ROOTS.");
   }
@@ -830,10 +816,10 @@ const sandboxSourceArchivePath = ".app-builder/source-tree.tar.gz";
 const fixtureSandboxEnabled = () => hasTestCapability("simulated-target");
 
 const exactKeys = function exactKeys(
-  payload: ConfigurationRecord,
+  value: Record<string, unknown>,
   expected: readonly string[],
 ): boolean {
-  const actual = Object.keys(payload);
+  const actual = Object.keys(value);
   const allowed = new Set(expected);
   return actual.length === allowed.size && actual.every((key) => allowed.has(key));
 };
@@ -841,8 +827,7 @@ const exactKeys = function exactKeys(
 const preparedSourceChecksums = function preparedSourceChecksums(
   files: readonly PreparedSourceFile[],
 ): string {
-  const lines = files.map(({ path, sha256: digest }) => `${digest}  repository/${path}`);
-  return `${lines.join("\n")}\n`;
+  return `${files.map(({ path, sha256: digest }) => `${digest}  repository/${path}`).join("\n")}\n`;
 };
 
 /**
@@ -856,7 +841,7 @@ const developmentWorkingTreeArchive = async function developmentWorkingTreeArchi
   paths: readonly string[],
 ): Promise<void> {
   const archiveProcess = spawn(
-    "/usr/bin/tar",
+    "tar",
     ["--create", "--gzip", "--file=-", "--null", "--files-from=-"],
     {
       cwd: sourcePath,
@@ -892,7 +877,13 @@ const developmentWorkingTreeArchive = async function developmentWorkingTreeArchi
   const archiveCompletion = once(archiveProcess, "close");
   try {
     const transfer = sandbox.writeFile({ content: archiveStream, path: sandboxSourceArchivePath });
-    Readable.from(paths.map((path) => `${path}\0`)).pipe(archiveProcess.stdin);
+    for (const path of paths) {
+      if (!archiveProcess.stdin.write(`${path}\0`)) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Respect tar stdin backpressure.
+        await once(archiveProcess.stdin, "drain");
+      }
+    }
+    archiveProcess.stdin.end();
     await transfer;
     await archiveCompletion;
     if (archiveProcess.exitCode !== 0) {
@@ -904,48 +895,79 @@ const developmentWorkingTreeArchive = async function developmentWorkingTreeArchi
   }
 };
 
-const preparedWorkspaceSchema = z.strictObject({
-  adapter: z.literal(SUPPORTED_TEMPLATE_ADAPTER),
-  eligibilityDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-  sourcePath: z.string().refine(nodePath.isAbsolute),
-  sourceSha: z.string().regex(/^[0-9a-f]{40}$/u),
-  sourceTree: z.string().regex(/^[0-9a-f]{40}$/u),
-  workspaceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-  workspaceId: z.string().min(1),
-  workspacePath: z.literal("/workspace/repository"),
-});
-const preparedSourceFileSchema = z.strictObject({
-  mode: z.enum(["100644", "100755"]),
-  objectId: z.string().regex(/^[0-9a-f]{40}$/u),
-  path: z.string().refine(safeSourcePath),
-  sha256: z.string().regex(/^[0-9a-f]{64}$/u),
-});
-const preparedSourceFilesSchema = z.array(preparedSourceFileSchema).min(1);
-
 export const parsePreparedWorkspace = function parsePreparedWorkspace(
-  payload: JsonPayload,
+  input: unknown,
 ): PreparedSandboxWorkspace {
-  const parsed = preparedWorkspaceSchema.safeParse(payload);
-  if (!parsed.success) {
+  if (
+    typeof input !== "object" ||
+    input === null ||
+    Array.isArray(input) ||
+    !exactKeys(input as Record<string, unknown>, [
+      "workspaceId",
+      "workspacePath",
+      "sourcePath",
+      "sourceSha",
+      "sourceTree",
+      "workspaceDigest",
+      "adapter",
+      "eligibilityDigest",
+    ])
+  ) {
     throw new Error("The prepared workspace record is invalid.");
   }
-  return parsed.data;
+  const record = input as Partial<PreparedSandboxWorkspace>;
+  if (
+    typeof record.workspaceId !== "string" ||
+    record.workspaceId === "" ||
+    record.workspacePath !== "/workspace/repository" ||
+    typeof record.sourcePath !== "string" ||
+    !nodePath.isAbsolute(record.sourcePath) ||
+    typeof record.sourceSha !== "string" ||
+    !/^[0-9a-f]{40}$/u.test(record.sourceSha) ||
+    typeof record.sourceTree !== "string" ||
+    !/^[0-9a-f]{40}$/u.test(record.sourceTree) ||
+    typeof record.workspaceDigest !== "string" ||
+    !/^[0-9a-f]{64}$/u.test(record.workspaceDigest) ||
+    record.adapter !== SUPPORTED_TEMPLATE_ADAPTER ||
+    typeof record.eligibilityDigest !== "string" ||
+    !/^[0-9a-f]{64}$/u.test(record.eligibilityDigest)
+  ) {
+    throw new Error("The prepared workspace record is invalid.");
+  }
+  return record as PreparedSandboxWorkspace;
 };
 
 const parsePreparedSourceFiles = function parsePreparedSourceFiles(
-  payload: JsonPayload,
+  input: unknown,
 ): PreparedSourceFile[] {
-  const candidateFiles = preparedSourceFilesSchema.safeParse(payload);
-  if (!candidateFiles.success) {
+  if (!Array.isArray(input) || input.length === 0) {
     throw new Error("The prepared workspace manifest is invalid.");
   }
   const paths = new Set<string>();
-  return candidateFiles.data.map((candidate) => {
-    if (paths.has(candidate.path)) {
+  return input.map((candidate) => {
+    if (
+      typeof candidate !== "object" ||
+      candidate === null ||
+      Array.isArray(candidate) ||
+      !exactKeys(candidate as Record<string, unknown>, ["mode", "objectId", "path", "sha256"])
+    ) {
       throw new Error("The prepared workspace manifest is invalid.");
     }
-    paths.add(candidate.path);
-    return candidate;
+    const file = candidate as Partial<PreparedSourceFile>;
+    if (
+      !["100644", "100755"].includes(file.mode ?? "") ||
+      typeof file.objectId !== "string" ||
+      !/^[0-9a-f]{40}$/u.test(file.objectId) ||
+      typeof file.path !== "string" ||
+      !safeSourcePath(file.path) ||
+      paths.has(file.path) ||
+      typeof file.sha256 !== "string" ||
+      !/^[0-9a-f]{64}$/u.test(file.sha256)
+    ) {
+      throw new Error("The prepared workspace manifest is invalid.");
+    }
+    paths.add(file.path);
+    return file as PreparedSourceFile;
   });
 };
 
@@ -958,7 +980,7 @@ export const readPreparedSandboxWorkspaceRecord = async function readPreparedSan
     return undefined;
   }
   try {
-    return parsePreparedWorkspace(JSON.parse(content));
+    return parsePreparedWorkspace(JSON.parse(content) as unknown);
   } catch (error) {
     throw new Error("The prepared workspace record is invalid.", {
       cause: error,
@@ -983,7 +1005,7 @@ export const readPreparedSandboxSourceManifest = async function readPreparedSand
   }
   let files: PreparedSourceFile[];
   try {
-    files = parsePreparedSourceFiles(JSON.parse(manifestContent));
+    files = parsePreparedSourceFiles(JSON.parse(manifestContent) as unknown);
   } catch (error) {
     throw new Error("The prepared workspace manifest is invalid.", {
       cause: error,
@@ -999,10 +1021,10 @@ const readVerifiedPreparedSandboxBaseline = async function readVerifiedPreparedS
   sandbox: SandboxSession,
   record: PreparedSandboxWorkspace,
 ): Promise<PreparedSourceFile[]> {
-  const [files, checksums] = await Promise.all([
-    readPreparedSandboxSourceManifest(sandbox, record),
-    sandbox.readTextFile({ path: sandboxSourceChecksumsPath }),
-  ]);
+  const files = await readPreparedSandboxSourceManifest(sandbox, record);
+  const checksums = await sandbox.readTextFile({
+    path: sandboxSourceChecksumsPath,
+  });
   if (checksums !== preparedSourceChecksums(files)) {
     throw new Error("The prepared workspace checksum receipt drifted.");
   }
@@ -1018,19 +1040,14 @@ const verifyPreparedSandboxFiles = async (
     return;
   }
   if (fixtureSandboxEnabled()) {
-    const contents = await Promise.all(
-      files.map((file) =>
-        sandbox.readBinaryFile({
-          path: `repository/${file.path}`,
-        }),
-      ),
-    );
-    if (
-      contents.some(
-        (content, index) => content === null || sha256(content) !== files[index]?.sha256,
-      )
-    ) {
-      throw new Error("A prepared workspace file drifted or is missing.");
+    for (const file of files) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      const content = await sandbox.readBinaryFile({
+        path: `repository/${file.path}`,
+      });
+      if (content === null || sha256(content) !== file.sha256) {
+        throw new Error("A prepared workspace file drifted or is missing.");
+      }
     }
     return;
   }
@@ -1095,16 +1112,20 @@ const verifySandboxWorkspaceBoundary = async function verifySandboxWorkspaceBoun
   }
   let observed: unknown;
   try {
-    observed = JSON.parse(normalizedStdout);
+    observed = JSON.parse(normalizedStdout) as unknown;
   } catch {
     throw new Error(`The prepared ${kind} workspace escaped its sandbox boundary.`);
   }
-  const parsedObservation = configurationRecordSchema.safeParse(observed);
   if (
-    !parsedObservation.success ||
-    !exactKeys(parsedObservation.data, Object.keys(developmentWorkspaceInspectionReceipt)) ||
+    typeof observed !== "object" ||
+    observed === null ||
+    Array.isArray(observed) ||
+    !exactKeys(
+      observed as Record<string, unknown>,
+      Object.keys(developmentWorkspaceInspectionReceipt),
+    ) ||
     Object.entries(developmentWorkspaceInspectionReceipt).some(
-      ([key, expected]) => parsedObservation.data[key] !== expected,
+      ([key, expected]) => (observed as Record<string, unknown>)[key] !== expected,
     )
   ) {
     throw new Error(`The prepared ${kind} workspace escaped its sandbox boundary.`);
@@ -1116,15 +1137,15 @@ export const samePreparedWorkspaceSourceContext = function samePreparedWorkspace
   observed: PreparedSandboxWorkspace,
   expected: PreparedSandboxWorkspace,
 ): boolean {
-  return [
+  return (
     observed.workspaceId === expected.workspaceId &&
-      observed.workspacePath === expected.workspacePath &&
-      observed.sourcePath === expected.sourcePath &&
-      observed.sourceSha === expected.sourceSha &&
-      observed.sourceTree === expected.sourceTree &&
-      observed.workspaceDigest === expected.workspaceDigest &&
-      observed.adapter === expected.adapter,
-  ].every(Boolean);
+    observed.workspacePath === expected.workspacePath &&
+    observed.sourcePath === expected.sourcePath &&
+    observed.sourceSha === expected.sourceSha &&
+    observed.sourceTree === expected.sourceTree &&
+    observed.workspaceDigest === expected.workspaceDigest &&
+    observed.adapter === expected.adapter
+  );
 };
 
 const verifyLegacyLiveSandboxWorkspace = async function verifyLegacyLiveSandboxWorkspace(
@@ -1278,7 +1299,7 @@ export const recordPreparedSandboxWorkspace = async function recordPreparedSandb
       null,
       2,
     )}\n`,
-    path: PREPARE_INTENT_PATH,
+    path: ".app-builder/prepare-intent.json",
   });
   const record: PreparedSandboxWorkspace = {
     workspaceId: getBuilderSandboxId(input.sandbox),
@@ -1336,7 +1357,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
   }
 
   const treeProcess = spawn(
-    "/usr/bin/git",
+    "git",
     ["-C", eligibility.sourcePath, "ls-tree", "-rz", "--full-tree", expectedSha],
     { stdio: ["ignore", "pipe", "ignore"] },
   );
@@ -1355,14 +1376,14 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
       const { mode, type, objectId, path } = match.groups ?? {};
       if (
         type !== "blob" ||
-        !z.enum(["100644", "100755"]).safeParse(mode).success ||
+        !["100644", "100755"].includes(mode ?? "") ||
         path === undefined ||
         objectId === undefined ||
         !safeSourcePath(path)
       ) {
         throw new Error("The reviewed Git tree contains an unsupported entry.");
       }
-      treeEntries.push({ mode: z.enum(["100644", "100755"]).parse(mode), objectId, path });
+      treeEntries.push({ mode: mode as "100644" | "100755", objectId, path });
     }
     await once(treeProcess, "close");
     if (treeProcess.exitCode !== 0) {
@@ -1372,18 +1393,18 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     treeProcess.kill();
     throw error;
   }
-  const sourceFiles: PreparedSourceFile[] = await Promise.all(
-    treeEntries.map(async (entry) => {
-      const fileDigest = await digestProcessStdout("/usr/bin/git", [
-        "-C",
-        eligibility.sourcePath,
-        "cat-file",
-        "blob",
-        entry.objectId,
-      ]);
-      return { ...entry, sha256: fileDigest };
-    }),
-  );
+  const sourceFiles: PreparedSourceFile[] = [];
+  for (const entry of treeEntries) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Hash one source blob at a time.
+    const fileDigest = await digestProcessStdout("git", [
+      "-C",
+      eligibility.sourcePath,
+      "cat-file",
+      "blob",
+      entry.objectId,
+    ]);
+    sourceFiles.push({ ...entry, sha256: fileDigest });
+  }
   const intent = {
     callId,
     eligibilityDigest: expectedEligibilityDigest,
@@ -1412,6 +1433,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
         "blob",
         entry.objectId,
       ]);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await sandbox.writeFile({
         content: processStdoutByteStream(command.command, command.args, command.options),
         path: `repository/${entry.path}`,
@@ -1419,7 +1441,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     }
   } else {
     const archiveProcess = spawn(
-      "/usr/bin/git",
+      "git",
       ["-C", eligibility.sourcePath, "archive", "--format=tar.gz", expectedSha],
       { stdio: ["ignore", "pipe", "inherit"] },
     );
@@ -1547,7 +1569,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   });
   if (previousManifest !== null) {
     try {
-      previousFiles = parsePreparedSourceFiles(JSON.parse(previousManifest));
+      previousFiles = parsePreparedSourceFiles(JSON.parse(previousManifest) as unknown);
       previousManifestValid = true;
     } catch {
       previousFiles = [];
@@ -1555,19 +1577,13 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   }
   const previousByPath = new Map(previousFiles.map((file) => [file.path, file]));
   const currentByPath = new Map(sourceFiles.map((file) => [file.path, file]));
-  const changedFiles: PreparedSourceFile[] = [];
-  const deletedPaths: string[] = [];
-  for (const file of sourceFiles) {
+  const deletedPaths = previousFiles
+    .filter((file) => !currentByPath.has(file.path))
+    .map((file) => file.path);
+  const changedFiles = sourceFiles.filter((file) => {
     const previous = previousByPath.get(file.path);
-    if (previous === undefined || previous.sha256 !== file.sha256 || previous.mode !== file.mode) {
-      changedFiles.push(file);
-    }
-  }
-  for (const file of previousFiles) {
-    if (!currentByPath.has(file.path)) {
-      deletedPaths.push(file.path);
-    }
-  }
+    return previous === undefined || previous.sha256 !== file.sha256 || previous.mode !== file.mode;
+  });
   // Without a valid source manifest, overlay the full live source. Do not
   // replace the repository: it also owns generated app files and dependency
   // state that are intentionally outside the source transport.
@@ -1587,7 +1603,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
       null,
       2,
     )}\n`,
-    path: PREPARE_INTENT_PATH,
+    path: ".app-builder/prepare-intent.json",
   });
   if (fullTransfer) {
     await developmentWorkingTreeArchive(sandbox, sourcePath, names);
@@ -1614,6 +1630,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
       await sandbox.removePath({ force: true, path: `repository/${path}` });
     });
     for (const file of changedFiles) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await sandbox.writeFile({
         content: fileReadableStream(nodePath.resolve(sourcePath, file.path)),
         path: `repository/${file.path}`,

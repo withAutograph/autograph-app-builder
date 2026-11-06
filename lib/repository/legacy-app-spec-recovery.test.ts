@@ -332,10 +332,7 @@ const compactionFixture = (transportPath = "prototype/demo/app-spec.md") => {
     appSpecDigest: workflow.appSpec.digest,
     artifactRevision: workflow.appSpec.artifactRevision,
     proposalAppSpec: workflow.proposal.contract.appSpec,
-    readAcceptedContent: async () => {
-      await Promise.resolve();
-      return accepted;
-    },
+    readAcceptedContent: async () => accepted,
     retainedRoots: [workflow.applyRoot, workflow.candidateRoot],
     sandbox: f.input.sandbox,
   };
@@ -372,7 +369,6 @@ describe("current accepted planning input compaction", () => {
       compactAcceptedPlanningInput({
         ...f.input,
         readAcceptedContent: async () => {
-          await Promise.resolve();
           throw failure;
         },
       }),
@@ -381,10 +377,7 @@ describe("current accepted planning input compaction", () => {
     await expect(
       compactAcceptedPlanningInput({
         ...f.input,
-        readAcceptedContent: async () => {
-          await Promise.resolve();
-          return "different content";
-        },
+        readAcceptedContent: async () => "different content",
       }),
     ).rejects.toThrow("planning input was retained");
     expect(readFileSync(f.staleFile, "utf-8")).toBe("derived source copy");
@@ -415,7 +408,7 @@ describe("current accepted planning input compaction", () => {
         const parts: Buffer[] = [];
         for await (const chunk of streamVerifiedPrototypeArtifact({
           artifact,
-          readChunk: (index) => {
+          readChunk: async (index) => {
             expect(existsSync(f.staleFile)).toBe(true);
             return missing && index === 1 ? undefined : chunks[index];
           },
@@ -439,10 +432,7 @@ describe("current accepted planning input compaction", () => {
     "retains a current planning root containing referenced %s working output",
     async () => {
       const f = compactionFixture();
-      const readAcceptedContent = vi.fn(async () => {
-        await Promise.resolve();
-        return accepted;
-      });
+      const readAcceptedContent = vi.fn(async () => accepted);
       await expect(
         compactAcceptedPlanningInput({
           ...f.input,

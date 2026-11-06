@@ -1,3 +1,4 @@
+/* oxlint-disable promise/avoid-new -- Focused owned child/socket fixtures adapt Node events; no provider or application fixture is used. */
 import { createServer, request as httpRequest } from "node:http";
 import type { Server, IncomingHttpHeaders } from "node:http";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
@@ -145,14 +146,13 @@ test("public profiles contain only exact Gateway public keys and capabilities ha
   ).toBe(false);
 });
 
-const processSource = (revision: string) =>
-  `import {writeFileSync} from 'node:fs';writeFileSync(process.env.OBSERVATION_FILE,JSON.stringify({pid:process.pid,value:process.env.APP_FIXTURE_VALUE,revision:${JSON.stringify(revision)},ambient:process.env.MANAGED_HOST_ONLY_SENTINEL}));process.on('SIGTERM',()=>process.exit(0));setInterval(()=>{},1000);`;
-
 const processFixture = async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "managed-owned-process-"));
   const script = path.join(directory, "app.mjs");
   const observation = path.join(directory, "app-observation.json");
-  await writeFile(script, processSource("one"));
+  const source = (revision: string) =>
+    `import {writeFileSync} from 'node:fs';writeFileSync(process.env.OBSERVATION_FILE,JSON.stringify({pid:process.pid,value:process.env.APP_FIXTURE_VALUE,revision:${JSON.stringify(revision)},ambient:process.env.MANAGED_HOST_ONLY_SENTINEL}));process.on('SIGTERM',()=>process.exit(0));setInterval(()=>{},1000);`;
+  await writeFile(script, source("one"));
   const environment = {
     APP_FIXTURE_VALUE: "same-approved-environment",
     OBSERVATION_FILE: observation,
@@ -200,6 +200,7 @@ const processFixture = async () => {
     observation,
     owner,
     script,
+    source,
     supervisor,
   };
 };
@@ -222,7 +223,7 @@ test("owned process replacement retains launch environment and idempotent comman
     expect(stopped.process?.exit?.observedAt).toBeDefined();
     expect(stopped.state).toBe("stopped");
     f.environment.APP_FIXTURE_VALUE = "caller-mutated-after-capture";
-    await writeFile(f.script, processSource("two"));
+    await writeFile(f.script, f.source("two"));
     const next = await f.supervisor.execute({
       commandId: randomUUID(),
       operation: "start-same-environment",
@@ -329,6 +330,7 @@ test("private IPC requires its own capability, rejects arbitrary lifecycle input
   });
   try {
     const socketInfo = await stat(ipc.socketPath);
+    // oxlint-disable-next-line eslint/no-bitwise -- This mask observes the actual Unix socket permission boundary.
     const mode = socketInfo.mode & 0o777;
     expect(mode).toBe(0o600);
     const invalid = createManagedRuntimeIpcClient({

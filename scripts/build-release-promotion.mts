@@ -14,7 +14,7 @@ const gitObject = z.string().regex(/^[0-9a-f]{40}$/u);
 const option = (name: string) => {
   const index = process.argv.indexOf(name);
   const value = index === -1 ? undefined : process.argv[index + 1];
-  if (value === undefined || value.length === 0 || value.startsWith("--")) {
+  if (!value || value.startsWith("--")) {
     throw new Error(`Missing ${name}.`);
   }
   if (process.argv.includes(name, index + 1)) {
@@ -27,13 +27,12 @@ const repositoryRoot = await realpath(path.resolve("."));
 const outputInput = option("--output");
 const endpoint = `${releaseEndpoint(option("--endpoint"))}/mcp`;
 const deploymentUrl = new URL(option("--deployment-url"));
-if (deploymentUrl.protocol !== "https:" || !deploymentUrl.hostname.endsWith(".vercel.app")) {
-  throw new Error("Deployment URL must be one exact provider-owned Vercel origin.");
-}
 if (
+  deploymentUrl.protocol !== "https:" ||
+  !deploymentUrl.hostname.endsWith(".vercel.app") ||
   deploymentUrl.pathname !== "/" ||
-  deploymentUrl.search !== "" ||
-  deploymentUrl.hash.length > 0
+  deploymentUrl.search ||
+  deploymentUrl.hash
 ) {
   throw new Error("Deployment URL must be one exact provider-owned Vercel origin.");
 }
@@ -46,9 +45,7 @@ try {
   await lstat(output);
   throw new Error(`Release output already exists: ${output}`);
 } catch (error) {
-  const code =
-    typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
-  if (code !== "ENOENT") {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
     throw error;
   }
 }
@@ -76,7 +73,7 @@ gitObject.parse(source.sha);
 gitObject.parse(source.tree);
 
 const node = process.env.APP_BUILDER_RELEASE_NODE_BIN;
-if (node === undefined || node.length === 0 || !path.isAbsolute(node)) {
+if (!node || !path.isAbsolute(node)) {
   throw new Error("mise must supply APP_BUILDER_RELEASE_NODE_BIN.");
 }
 const packageRoot = path.join(output, "package");

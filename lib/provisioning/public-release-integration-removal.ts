@@ -44,15 +44,14 @@ export const readPublicReleaseIntegrationRemoval = async (input: {
 }) => {
   const ports = requireIntegrationRemovalPorts(input.ports);
   await input.assertCurrent();
-  const preflightInput: Parameters<typeof ports.readPreflight>[0] = {
-    assertCurrent: input.assertCurrent,
-    invocation: input.invocation,
-    sourceCapability: input.sourceCapability,
-  };
-  if (input.expected !== undefined) {
-    preflightInput.expected = input.expected;
-  }
-  const observed = appIntegrationRemovalSchema.parse(await ports.readPreflight(preflightInput));
+  const observed = appIntegrationRemovalSchema.parse(
+    await ports.readPreflight({
+      invocation: input.invocation,
+      sourceCapability: input.sourceCapability,
+      ...(input.expected === undefined ? {} : { expected: input.expected }),
+      assertCurrent: input.assertCurrent,
+    }),
+  );
   await input.assertCurrent();
   const source = input.sourceCapability;
   const matches = [

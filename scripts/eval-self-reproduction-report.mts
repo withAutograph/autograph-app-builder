@@ -11,12 +11,7 @@ const { values } = parseArgs({
     "source-review-dir": { type: "string" },
   },
 });
-const requiredDirectories = new Set([
-  values["run-dir"],
-  values["source-review-dir"],
-  values["output-dir"],
-]);
-if (requiredDirectories.has(undefined) || requiredDirectories.has("")) {
+if (!values["run-dir"] || !values["source-review-dir"] || !values["output-dir"]) {
   throw new Error(
     "Required: --run-dir PATH --source-review-dir PATH --output-dir NEW_EXTERNAL_PATH",
   );

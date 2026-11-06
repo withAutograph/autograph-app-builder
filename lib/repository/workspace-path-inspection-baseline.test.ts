@@ -1,10 +1,11 @@
+/* oxlint-disable anti-slop/no-module-mocking -- Isolate the independently verified baseline authorization port to test canonical versus alias path projection, without fabricating a native receipt. */
 import { expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 import type { AppBaselineSelection } from "./app-baseline";
 import { inspectWorkspacePath } from "./workspace-path-inspection";
 
 vi.mock("./app-baseline", () => ({
-  readableAppBaselinePaths: (
+  readableAppBaselinePaths: async (
     _sandbox: Pick<SandboxSession, "readTextFile">,
     _selection: AppBaselineSelection | undefined,
     paths: string[],
@@ -16,8 +17,8 @@ vi.mock("./app-baseline", () => ({
 it("retains canonical baseline archive omissions when a directory is addressed through an inside-root alias", async () => {
   const path = "/workspace/repository/schema-alias";
   const sandbox = {
-    readTextFile: vi.fn(() => null),
-    run: vi.fn(() => ({
+    readTextFile: vi.fn(async () => null),
+    run: vi.fn(async () => ({
       exitCode: 0,
       stderr: "",
       stdout: JSON.stringify({
@@ -32,7 +33,7 @@ it("retains canonical baseline archive omissions when a directory is addressed t
     })),
   };
   const result = await inspectWorkspacePath({
-    baseline: null,
+    baseline: undefined,
     metadata: { callId: "read", toolName: "inspect_repository", turnId: "turn" },
     path,
     sandbox,

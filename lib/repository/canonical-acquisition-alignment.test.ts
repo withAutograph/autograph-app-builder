@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await -- Provider-shaped filesystem ports resolve synchronously in this actual Git fixture. */
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,9 +16,6 @@ import { validateApplicationSourceArtifact } from "../handoff/application-source
 
 const remote = "https://github.com/withAutograph/arrusted-development.git";
 const roots: string[] = [];
-const unsupported = async (): Promise<never> => {
-  throw new Error("Unused Sandbox port");
-};
 const git = (root: string, args: readonly string[]) =>
   execFileSync(
     "/usr/bin/git",
@@ -92,6 +90,9 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
   });
   const file = (name: string) =>
     path.join(checkout, name.replace(/^\/workspace\/repository\//u, ""));
+  const unsupported = async (): Promise<never> => {
+    throw new Error("Unused Sandbox port");
+  };
   const sandbox: SandboxSession & {
     id: string;
     materializeGitSource: typeof materializeGitSource;

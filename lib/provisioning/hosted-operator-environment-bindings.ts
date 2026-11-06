@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
+/* oxlint-disable eslint/no-await-in-loop, sonarjs/expression-complexity, sonarjs/no-nested-functions, react-doctor/async-await-in-loop, react-doctor/js-cache-property-access -- Provider effects and durable checkpoints are intentionally sequential. */
 import { z } from "zod";
 import type { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
 import { HostedOperatorError, restrictedOperatorEnvironment } from "./hosted-operator-contract";
@@ -516,6 +517,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       configuredTrustedSource === undefined ? undefined : structuredClone(configuredTrustedSource);
     const observeTrustedSources = async () => {
       if (approvedTrustedSource === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Absent approved policy keeps the legacy path free of provider security requests.
         return undefined;
       }
       const project = trustedProjectSnapshot.parse(
@@ -847,20 +849,17 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
               throw unavailable();
             }
             const gitBranch = await io.previewGitBranch();
-            const body = {
-              comment: io.comment,
-              key,
-              target: ["preview"],
-              type: "encrypted",
-              value,
-            };
-            if (gitBranch !== null) {
-              Object.assign(body, { gitBranch });
-            }
             await io.request(
               `/v10/projects/${encodeURIComponent(io.target.projectId)}/env`,
               "POST",
-              body,
+              {
+                comment: io.comment,
+                ...(gitBranch === null ? {} : { gitBranch }),
+                key,
+                target: ["preview"],
+                type: "encrypted",
+                value,
+              },
             );
           }
           rows = await io.inspect(false, "readback");

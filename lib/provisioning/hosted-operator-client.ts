@@ -49,7 +49,9 @@ import { hostedRuntimeProofSchema } from "./hosted-runtime-journal";
 import { resolveHostedOperatorOwnerContext } from "./hosted-operator-owner-context";
 import {
   OPERATOR_EXECUTION_OBSERVATION_HEADER,
+  OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
   OPERATOR_PREPARATION_PROGRESS_HEADER,
+  OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
 } from "./hosted-operator-execution-observation-protocol";
 import type { OperatorOwnerContext, OperatorRequest } from "./hosted-operator-contract";
 import {
@@ -66,20 +68,13 @@ import {
   sameOperatorSelection,
 } from "./hosted-operator-contract";
 
-const OPERATOR_UNAVAILABLE = "operator_unavailable";
-const HOSTED_OPERATOR_RUNTIME_PATH = "/v1/runtime";
-const OBSERVATION_PREFERENCE = "";
-
 /** Match the protected operator's function duration without changing unrelated fetches. */
-export const createHostedOperatorDispatcher = (factory?: Agent.Options["factory"]) => {
-  const options: Agent.Options = {};
-  options.bodyTimeout = 1_800_000;
-  options.headersTimeout = 1_800_000;
-  if (factory !== undefined) {
-    options.factory = factory;
-  }
-  return new Agent(options);
-};
+export const createHostedOperatorDispatcher = (factory?: Agent.Options["factory"]) =>
+  new Agent({
+    bodyTimeout: 1_800_000,
+    headersTimeout: 1_800_000,
+    ...(factory === undefined ? {} : { factory }),
+  });
 const operatorDispatcher = createHostedOperatorDispatcher();
 
 const bindingSchema = z.strictObject({
@@ -107,6 +102,7 @@ const operatorSuccessSchemas = {
   status: operatorPublicResultSchema,
 } satisfies Record<OperatorRequest["action"], z.ZodType>;
 const operatorResponseDiagnostic = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Each action's closed success schema is applied before diagnostics are projected.
   value: unknown,
   action: OperatorRequest["action"],
 ): Pick<HostedOperatorConsentMetadata, "operatorResponse" | "operatorCode"> & {
@@ -114,17 +110,12 @@ const operatorResponseDiagnostic = (
 } => {
   const blocked = operatorPublicResultSchema.safeParse(value);
   if (blocked.success && blocked.data.status === "blocked") {
-    const diagnostic: Pick<HostedOperatorConsentMetadata, "operatorResponse" | "operatorCode"> & {
-      accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>;
-    } = {
+    return {
       accessClass:
         blocked.data.code === "authorization_required" ? "application_auth_denied" : "other_failed",
       operatorResponse: "blocked",
+      ...(blocked.data.code === undefined ? {} : { operatorCode: blocked.data.code }),
     };
-    if (blocked.data.code !== undefined) {
-      diagnostic.operatorCode = blocked.data.code;
-    }
-    return diagnostic;
   }
   if (operatorSuccessSchemas[action].safeParse(value).success) {
     return { accessClass: "ok" };
@@ -136,7 +127,9 @@ const operatorResponseDiagnostic = (
 };
 
 /** Private execution transport failure; the original error is retained only as cause. */
+// oxlint-disable-next-line unicorn/custom-error-definition -- This private error name is part of the workflow guard contract.
 export class HostedOperatorTransportUnknown extends Error {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Retain only as a non-logged cause for guarded workflow classification.
   constructor(cause: unknown) {
     super("Hosted operator execution transport outcome is unknown", { cause });
     this.name = "HostedOperatorTransportUnknown";
@@ -147,6 +140,7 @@ export const isHostedOperatorTransportUnknown = (
   error: unknown,
 ): error is HostedOperatorTransportUnknown => error instanceof HostedOperatorTransportUnknown;
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Runtime classification uses only Error.name and AbortSignal state.
 const isCancellation = (error: unknown, signal?: AbortSignal) =>
   signal?.aborted === true || (error instanceof Error && error.name === "AbortError");
 /** Server-only client. An unconfigured service never falls back to an installer Sandbox. */
@@ -172,11 +166,12 @@ export const createHostedOperatorClient = (input: {
   if (validEndpoint.includes(false)) {
     throw new HostedOperatorError("protected_operator_required");
   }
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- This is the single request boundary for auth, response, and transport outcomes.
   const send = async (request: OperatorRequest, signal?: AbortSignal) => {
-    const bodyInput = { ...request };
-    if (input.ownerContext !== undefined && input.ownerContext !== null) {
-      Object.assign(bodyInput, { ownerContext: input.ownerContext });
-    }
+    const bodyInput =
+      input.ownerContext === undefined || input.ownerContext === null
+        ? request
+        : { ...request, ownerContext: input.ownerContext };
     const body = operatorRequestSchema.parse(bodyInput);
     const isConsentRequest = body.action === "neon-authorization";
     const diagnosticSessionId =
@@ -193,28 +188,27 @@ export const createHostedOperatorClient = (input: {
       stage: "operator_request",
     });
     const token = await input.token();
-    const headers = {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-      "x-vercel-trusted-oidc-idp-token": token,
-    };
-    if (body.action === "status" || body.action === "execute") {
-      Object.assign(headers, {
-        [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OBSERVATION_PREFERENCE,
-        [OPERATOR_PREPARATION_PROGRESS_HEADER]: OBSERVATION_PREFERENCE,
-      });
-    }
     const options: RequestInit & { dispatcher: Agent } = {
       body: JSON.stringify(body),
       dispatcher: operatorDispatcher,
-      headers,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "x-vercel-trusted-oidc-idp-token": token,
+        ...(body.action === "status" || body.action === "execute"
+          ? {
+              [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+              [OPERATOR_PREPARATION_PROGRESS_HEADER]: OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
+            }
+          : {}),
+      },
       method: "POST",
       redirect: "error",
       signal,
     };
     let response: Response;
     try {
-      response = await (input.fetch ?? fetch)(new URL(HOSTED_OPERATOR_RUNTIME_PATH, url), options);
+      response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
     } catch (error) {
       if (
         (body.action === "execute" || body.action === "status") &&
@@ -272,13 +266,13 @@ export const createHostedOperatorClient = (input: {
           sessionId: diagnosticSessionId,
           signal,
           token,
-          url: new URL(HOSTED_OPERATOR_RUNTIME_PATH, url),
+          url: new URL("/v1/runtime", url),
         });
       }
       throw new HostedOperatorError(
         response.status === 401 || response.status === 403
           ? "authorization_required"
-          : OPERATOR_UNAVAILABLE,
+          : "operator_unavailable",
       );
     }
     let value: unknown;
@@ -319,7 +313,7 @@ export const createHostedOperatorClient = (input: {
     };
     let result: Response;
     try {
-      result = await (input.fetch ?? fetch)(new URL(HOSTED_OPERATOR_RUNTIME_PATH, url), options);
+      result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
     } catch (error) {
       if (body.action === "export" && !isCancellation(error, signal)) {
         throw new HostedOperatorTransportUnknown(error);
@@ -327,7 +321,7 @@ export const createHostedOperatorClient = (input: {
       throw error;
     }
     if (!result.ok) {
-      throw new HostedOperatorError(OPERATOR_UNAVAILABLE);
+      throw new HostedOperatorError("operator_unavailable");
     }
     let value: unknown;
     try {
@@ -340,7 +334,7 @@ export const createHostedOperatorClient = (input: {
     }
     const blocked = operatorPublicResultSchema.safeParse(value);
     if (blocked.success) {
-      throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE);
+      throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
     }
     return value;
   };
@@ -349,6 +343,7 @@ export const createHostedOperatorClient = (input: {
     request: z.input<typeof continuityTransportRequestSchema>,
     resultSchema: z.ZodType<T>,
     signal?: AbortSignal,
+    // oxlint-disable-next-line sonarjs/cognitive-complexity -- Failure-only diagnostics retain the existing cancellation, transport-unknown, and response-validation branches.
   ): Promise<T> => {
     let stage: ContinuityPlanningStage = "client_request_validation";
     try {
@@ -370,7 +365,7 @@ export const createHostedOperatorClient = (input: {
       let result: Response;
       stage = "client_transport";
       try {
-        result = await (input.fetch ?? fetch)(new URL(HOSTED_OPERATOR_RUNTIME_PATH, url), options);
+        result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
       } catch (error) {
         if (body.action === "continuity" && !isCancellation(error, signal)) {
           throw new HostedOperatorTransportUnknown(error);
@@ -383,9 +378,9 @@ export const createHostedOperatorClient = (input: {
           throw new HostedOperatorError("authorization_required");
         }
         if (body.action === "continuity") {
-          throw new HostedOperatorTransportUnknown(new HostedOperatorError(OPERATOR_UNAVAILABLE));
+          throw new HostedOperatorTransportUnknown(new HostedOperatorError("operator_unavailable"));
         }
-        throw new HostedOperatorError(OPERATOR_UNAVAILABLE);
+        throw new HostedOperatorError("operator_unavailable");
       }
       stage = "client_response_decode";
       let value: unknown;
@@ -400,7 +395,7 @@ export const createHostedOperatorClient = (input: {
       stage = "client_response_validation";
       const blocked = operatorPublicResultSchema.safeParse(value);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE, {
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable", {
           continuityReadStage:
             body.action === "continuity-read" || body.action === "continuity-binding-read"
               ? "operator_response"
@@ -467,7 +462,7 @@ export const createHostedOperatorClient = (input: {
       const raw = await send(request, signal);
       const blocked = operatorPublicResultSchema.safeParse(raw);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE);
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
       }
       const value = operatorAuthIdentityInputSchema.parse(raw);
       if (
@@ -485,7 +480,7 @@ export const createHostedOperatorClient = (input: {
       const raw = await send(request, signal);
       const blocked = operatorPublicResultSchema.safeParse(raw);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE);
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
       }
       const value = bindingSchema.parse(raw);
       if (
@@ -567,14 +562,14 @@ export const createHostedOperatorClient = (input: {
         const raw = await send(request, signal);
         const blocked = operatorPublicResultSchema.safeParse(raw);
         if (blocked.success) {
-          throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE);
+          throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
         }
         return neonAuthorizationResultSchema.parse(raw);
       } catch (error) {
         if (error instanceof HostedOperatorError) {
           throw error;
         }
-        throw new HostedOperatorError(OPERATOR_UNAVAILABLE);
+        throw new HostedOperatorError("operator_unavailable");
       }
     },
     ownerContext: input.ownerContext,
@@ -588,11 +583,11 @@ export const createHostedOperatorClient = (input: {
       const result = await sendContinuity(
         {
           action: "continuity-plan",
+          ...recovery,
+          selection,
+          runtime,
           idempotencyKey,
           ownerContext: exportOwner(),
-          ...recovery,
-          runtime,
-          selection,
         },
         continuityPlannedSchema,
         signal,
@@ -616,6 +611,7 @@ export const createHostedOperatorClient = (input: {
     },
     async planTenantExport(
       selection: z.infer<typeof operatorSelectionSchema>,
+      customer: string | { kind: "owner-organization" },
       idempotencyKey: string,
       signal?: AbortSignal,
     ) {
@@ -623,9 +619,13 @@ export const createHostedOperatorClient = (input: {
         await sendExport(
           {
             action: "export-plan",
+            selection,
+            // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This public client accepts its typed raw-ID or semantic-selection union; transport validation remains at the server boundary.
+            ...(typeof customer === "string"
+              ? { customerId: customer }
+              : { customerScope: customer.kind }),
             idempotencyKey,
             ownerContext: exportOwner(),
-            selection,
           },
           signal,
         ),
@@ -705,7 +705,7 @@ export const createHostedOperatorClient = (input: {
       const raw = await send(request, signal);
       const blocked = operatorPublicResultSchema.safeParse(raw);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE);
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
       }
       const selection = operatorSelectionSchema.parse(raw);
       if (selection.appId !== request.appId || selection.sessionId !== request.sessionId) {
@@ -751,6 +751,7 @@ export const createHostedOperatorClient = (input: {
   };
 };
 export const hostedOperatorClientForSession = async (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Eve supplies unknown auth; exactForwardedSessionAuthority parses it at this boundary.
   sessionAuth: unknown,
   adapterSessionId: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,

@@ -18,51 +18,36 @@ export const resolvePublishedAppDelivery = (
     if (source === undefined) {
       throw new HostedOperatorError("app_source_publication_required");
     }
-    let { projectSettings } = application;
-    if (
-      sourceDescription !== undefined &&
-      !(
-        application.projectSettings?.framework === "services" &&
-        application.projectSettings.rootDirectory === "."
-      )
-    ) {
-      projectSettings = sourceDescription.deployment ?? application.projectSettings;
-      if (projectSettings === undefined) {
-        projectSettings = {
-          rootDirectory: sourceDescription.app.workspacePath,
-        };
-      } else {
-        projectSettings = {
-          ...projectSettings,
-          rootDirectory: sourceDescription.app.workspacePath,
-        };
-      }
-    }
-    const delivery: NonNullable<HostedOperatorPlan["delivery"]> = {
+    const projectSettings =
+      sourceDescription === undefined ||
+      (application.projectSettings?.framework === "services" &&
+        application.projectSettings.rootDirectory === ".")
+        ? application.projectSettings
+        : {
+            ...(sourceDescription.deployment ?? application.projectSettings),
+            rootDirectory: sourceDescription.app.workspacePath,
+          };
+    return {
       branch: source.branch,
       gitSha: source.gitSha,
       projectId: application.projectId,
+      ...(projectSettings === undefined ? {} : { projectSettings }),
       repoId: source.repositoryId,
     };
-    if (projectSettings !== undefined) {
-      delivery.projectSettings = projectSettings;
-    }
-    return delivery;
   }
   // Retain the pre-existing explicitly configured caller contract outside hosted release planning.
   if (application.repoId === undefined || application.gitSha === undefined) {
     throw new HostedOperatorError("operator_unavailable");
   }
-  const delivery: NonNullable<HostedOperatorPlan["delivery"]> = {
+  return {
     branch: application.branch,
     gitSha: application.gitSha,
     projectId: application.projectId,
+    ...(application.projectSettings === undefined
+      ? {}
+      : { projectSettings: application.projectSettings }),
     repoId: application.repoId,
   };
-  if (application.projectSettings !== undefined) {
-    delivery.projectSettings = application.projectSettings;
-  }
-  return delivery;
 };
 
 /** Continue normal publication when a selected generated release has no published source yet. */

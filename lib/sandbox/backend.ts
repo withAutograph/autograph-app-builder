@@ -1,14 +1,6 @@
 import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
 import type { HostedDeploymentEnvironment } from "../hosted/deployment-environment";
 
-const VERCEL_PROVIDER = "vercel";
-const LOCAL_DEVELOPMENT_BUNDLE = "local-development";
-const VERCEL_PREVIEW = "vercel-preview";
-const VERCEL_PRODUCTION = "vercel-production";
-const EXECUTION_MODE_VARIABLE = "APP_BUILDER_EXECUTION_MODE";
-const SANDBOX_PROVIDER_VARIABLE = "APP_BUILDER_SANDBOX_PROVIDER";
-const EXECUTION_BUNDLE_VARIABLE = "APP_BUILDER_EXECUTION_BUNDLE";
-
 export type SandboxBackendKind =
   | "fixture-just-bash"
   | "local-just-bash"
@@ -52,22 +44,22 @@ export const sandboxBackendPlan = (input: {
     }
     return {
       blockers: [],
-      kind: deploymentEnvironment === "preview" ? VERCEL_PREVIEW : VERCEL_PRODUCTION,
+      kind: deploymentEnvironment === "preview" ? "vercel-preview" : "vercel-production",
     };
   }
+  const developmentBinding = [
+    environment.APP_BUILDER_EXECUTION_MODE,
+    environment.APP_BUILDER_SANDBOX_PROVIDER,
+    environment.APP_BUILDER_EXECUTION_BUNDLE,
+  ];
   if (
-    environment[EXECUTION_MODE_VARIABLE] === "development" &&
-    environment[SANDBOX_PROVIDER_VARIABLE] === VERCEL_PROVIDER &&
-    environment[EXECUTION_BUNDLE_VARIABLE] === LOCAL_DEVELOPMENT_BUNDLE
+    developmentBinding[0] === "development" &&
+    developmentBinding[1] === "vercel" &&
+    developmentBinding[2] === "local-development"
   ) {
     return { blockers: [], kind: "vercel-development" };
   }
-  const hasExecutionBinding = [
-    environment[EXECUTION_MODE_VARIABLE],
-    environment[SANDBOX_PROVIDER_VARIABLE],
-    environment[EXECUTION_BUNDLE_VARIABLE],
-  ].some((value) => value !== undefined && value !== "");
-  if (hasExecutionBinding) {
+  if (developmentBinding.some((value) => value !== undefined && value !== "")) {
     return {
       blockers: ["Development execution requires the exact local Vercel Sandbox binding."],
       kind: "unsupported-development",
@@ -111,4 +103,4 @@ export const selectSandboxDefinition = <Hosted, Local, NonExecuting>(
 export const isHostedVercelSandboxBackend = (
   kind: SandboxBackendKind,
 ): kind is "vercel-preview" | "vercel-production" =>
-  kind === VERCEL_PREVIEW || kind === VERCEL_PRODUCTION;
+  kind === "vercel-preview" || kind === "vercel-production";

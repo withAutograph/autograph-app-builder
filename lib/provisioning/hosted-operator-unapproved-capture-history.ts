@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/complexity, sonarjs/expression-complexity, sonarjs/cognitive-complexity, unicorn/no-useless-undefined -- Exact predecessor verification returns an explicit absent result. */
 import { isDeepStrictEqual } from "node:util";
 import {
   normalActorPreparationSchema,
@@ -144,13 +145,13 @@ export const readUnapprovedCapturePredecessor = (
       ].every(Boolean) &&
       gateway !== undefined
     ) {
-      const bootstrap = { auth, candidate: gateway };
-      if (gatewayAuthority !== undefined) {
-        Object.assign(bootstrap, { gateway: gatewayAuthority });
-      }
       return {
         account,
-        bootstrap,
+        bootstrap: {
+          auth,
+          candidate: gateway,
+          ...(gatewayAuthority === undefined ? {} : { gateway: gatewayAuthority }),
+        },
         priorOperator: old,
       };
     }

@@ -1,3 +1,5 @@
+/* oxlint-disable sonarjs/no-nested-functions -- Node HTTP and upgrade callbacks retain the same authorized request/socket closure through owned transport cleanup. */
+/* oxlint-disable promise/avoid-new -- Owned Node listener close events require an event-to-Promise adapter. */
 import { createServer, request as upstreamRequest } from "node:http";
 import type { IncomingMessage, OutgoingHttpHeaders } from "node:http";
 import type { Duplex } from "node:stream";
@@ -39,9 +41,6 @@ interface Destroyable {
   destroy: () => void;
 }
 const unavailable = () => new Error("Managed Gateway request unavailable.");
-const denyUpgrade = (socket: Duplex) => {
-  socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
-};
 const incomingHeaders = (request: IncomingMessage) => {
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers)) {
@@ -194,17 +193,14 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       throw unavailable();
     }
     await assertCurrent();
-    const verifiedRequest: VerifiedRequest & { verification: Configuration } = {
-      actors,
+    await input.verification.verifyRequest({
+      verification,
       headers: incomingHeaders(request),
       method: request.method ?? "GET",
       target: request.url ?? "/",
-      verification,
-    };
-    if (body !== undefined) {
-      verifiedRequest.body = body;
-    }
-    await input.verification.verifyRequest(verifiedRequest);
+      ...(body === undefined ? {} : { body }),
+      actors,
+    });
     await assertCurrent();
   };
   const server = createServer((request, response) => {
@@ -264,6 +260,9 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       }
     })();
   });
+  const denyUpgrade = (socket: Duplex) => {
+    socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+  };
   server.on("upgrade", (request, socket, head) => {
     connections.add(socket);
     socket.once("close", () => {
@@ -344,6 +343,7 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
   let closing: Promise<void> | undefined;
   const shutdown = async () => {
     closing ??= new Promise<void>((resolve, reject) => {
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Node server close acknowledgement is retained once and awaited by every owner close call.
       server.close((error) => {
         if (
           error &&

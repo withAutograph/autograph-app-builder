@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await, unicorn/no-useless-undefined, typescript/consistent-return -- In-memory CAS is asynchronous and returns undefined for a real lost conditional write. */
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
@@ -359,7 +360,7 @@ const currentBootstrapFixture = async () => {
     record: hostedRuntimeJournalRecordSchema.parse({
       ...value.row.record,
       approvedByCallId: "bootstrap-call",
-      leaseId: null,
+      leaseId: undefined,
       operator: {
         approvalId: "bootstrap-approval",
         authPreparation: {
@@ -806,7 +807,7 @@ describe("retained actual normal actor journal", () => {
     value.row = {
       record: hostedRuntimeJournalRecordSchema.parse({
         ...value.row.record,
-        leaseId: null,
+        leaseId: undefined,
         operator: { ...value.row.record.operator, identityLink: link },
       }),
       revision: value.row.revision + 1,
@@ -1021,10 +1022,10 @@ describe("retained actual normal actor journal", () => {
     const { writes } = value;
     let selected: Parameters<typeof value.journal.prepareOrganizationProof>[1] = nextInput;
     if (change === "missing-guard") {
-      selected = { ...nextInput, assertBootstrapCurrent: null };
+      selected = { ...nextInput, assertBootstrapCurrent: undefined };
     }
     if (change === "missing-bootstrap") {
-      selected = { ...nextInput, bootstrap: null };
+      selected = { ...nextInput, bootstrap: undefined };
     }
     await expect(value.journal.prepareOrganizationProof(context, selected)).rejects.toThrow();
     expect(value.row).toEqual(before);

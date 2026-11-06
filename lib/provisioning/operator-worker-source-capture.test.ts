@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { verifyOperatorWorkerSourceCapture } from "./operator-worker-source-capture";
-import { bytes, worker } from "./operator-worker-source-capture.test-fixture";
+import { bytes, capture, worker } from "./operator-worker-source-capture.test-fixture";
 
 describe("actual operator worker source capture", () => {
   it("matches the frozen two-repository receipt and selected binary path/hash", async () => {
     const readFile = vi.fn().mockResolvedValue(bytes);
     await verifyOperatorWorkerSourceCapture({ readFile, worker });
-    expect(readFile).toHaveBeenCalledExactlyOnceWith(worker.sourceCapture.catalogPath);
+    expect(readFile).toHaveBeenCalledExactlyOnceWith(capture.catalogPath);
   });
   it.each(["receipt", "source", "worker", "path"])(
     "rejects mismatched %s without accepting claimed metadata",
@@ -23,8 +23,7 @@ describe("actual operator worker source capture", () => {
       }
       await expect(
         verifyOperatorWorkerSourceCapture({
-          readFile: async () =>
-            await Promise.resolve(Buffer.from(kind === "receipt" ? "wrong receipt" : bytes)),
+          readFile: async () => Buffer.from(kind === "receipt" ? "wrong receipt" : bytes),
           worker: changed,
         }),
       ).rejects.toMatchObject({ message: "operator_worker_source_capture_mismatch" });

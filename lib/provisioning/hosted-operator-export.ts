@@ -3,6 +3,7 @@ import type { PrivateOperatorApprovalObservationPort } from "../eve/private-oper
 import { advanceExportPlanningStage } from "./hosted-operator-consent-diagnostic";
 import type { ExportPlanningStageObserver } from "./hosted-operator-consent-diagnostic";
 import { hostedRuntimeTargetSchema } from "./hosted-runtime-journal";
+/* oxlint-disable sonarjs/no-nested-functions -- Physical lease and CAS closures retain one claim and attempt through asynchronous recovery. */
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
@@ -31,9 +32,6 @@ import type {
   TenantExportWorkerInput,
 } from "./hosted-operator-export-contract";
 
-const APP_EXPORT_KIND = "app-export";
-const EXPORT_ACTION = "export";
-
 /** Private execution locator, retained before dispatch; no credentials or output bytes. */
 export const tenantExportWorkerLocatorSchema = z.strictObject({
   commandId: z.string().min(1).optional(),
@@ -45,7 +43,7 @@ export type TenantExportWorkerLocator = z.infer<typeof tenantExportWorkerLocator
 export const hostedTenantExportExecutionRecordSchema = z.strictObject({
   approvalObservation: privateOperatorApprovalObservationSchema.optional(),
   journal: tenantExportJournalRecordSchema,
-  kind: z.literal(APP_EXPORT_KIND),
+  kind: z.literal("app-export"),
   originalTarget: hostedRuntimeTargetSchema,
   workers: z.array(
     z.strictObject({
@@ -194,24 +192,22 @@ const workerFor = (
     version: 1,
   };
 };
-export const tenantExportStatus = (record: TenantExportJournalRecord): TenantExportStatus => {
-  const status = {
+export const tenantExportStatus = (record: TenantExportJournalRecord): TenantExportStatus =>
+  tenantExportStatusSchema.parse({
     exportId: record.plan.exportId,
     planRef: record.plan.planRef,
     state: record.state,
-  };
-  if (record.completion !== undefined) {
-    Object.assign(status, {
-      counts: {
-        byteLength: record.completion.byteLength,
-        fileCount: record.completion.fileCount,
-        rowCount: record.completion.rowCount,
-      },
-      download: { indexPath: `/api/hosted-operator/exports/${record.plan.exportId}` },
-    });
-  }
-  return tenantExportStatusSchema.parse(status);
-};
+    ...(record.completion === undefined
+      ? {}
+      : {
+          counts: {
+            byteLength: record.completion.byteLength,
+            fileCount: record.completion.fileCount,
+            rowCount: record.completion.rowCount,
+          },
+          download: { indexPath: `/api/hosted-operator/exports/${record.plan.exportId}` },
+        }),
+  });
 export const createHostedTenantExportOperations = (deps: HostedTenantExportDependencies) => {
   const now = deps.now ?? (() => new Date());
   const read = async (context: HostedOperatorContext, exportId: string) => {
@@ -244,17 +240,12 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
   };
   const approvalObservation = (
     record: HostedTenantExportExecutionRecord,
-  ): PrivateOperatorApprovalObservationPort => {
-    const observation: PrivateOperatorApprovalObservationPort = {
-      save: async (state) => {
-        await update(record, (value) => ({ ...value, approvalObservation: state }));
-      },
-    };
-    if (record.approvalObservation !== undefined) {
-      observation.state = record.approvalObservation;
-    }
-    return observation;
-  };
+  ): PrivateOperatorApprovalObservationPort => ({
+    ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
+    save: async (state) => {
+      await update(record, (value) => ({ ...value, approvalObservation: state }));
+    },
+  });
   const assertApproval = async (
     context: HostedOperatorContext,
     record: HostedTenantExportExecutionRecord,
@@ -262,7 +253,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
   ) => {
     await deps.assertSetup(context, record.journal.plan);
     const request = {
-      action: EXPORT_ACTION,
+      action: "export" as const,
       idempotencyKey: record.journal.idempotencyKey,
       planDigest: record.journal.planDigest,
       planRef: record.journal.plan.planRef,
@@ -558,7 +549,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
         return {
           plan: prior.journal.plan,
           request: {
-            action: EXPORT_ACTION,
+            action: "export" as const,
             idempotencyKey,
             planDigest: prior.journal.planDigest,
             planRef: prior.journal.plan.planRef,
@@ -597,7 +588,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
             authority: plan.authority,
             fenceGeneration: 0,
             idempotencyKey,
-            kind: APP_EXPORT_KIND,
+            kind: "app-export",
             plan,
             planDigest: tenantExportPlanDigest(plan),
             requestId: exportId,
@@ -606,7 +597,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
             target: plan.target,
             version: 1,
           },
-          kind: APP_EXPORT_KIND,
+          kind: "app-export",
           originalTarget: context.target,
           workers: [],
         },
@@ -621,7 +612,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
       return {
         plan,
         request: {
-          action: EXPORT_ACTION,
+          action: "export" as const,
           idempotencyKey,
           planDigest: record.journal.planDigest,
           planRef: plan.planRef,
@@ -633,7 +624,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
       const current = await read(context, z.uuid().parse(exportId));
       const { plan, planDigest, idempotencyKey } = current.journal;
       const request = parseHostedTenantExportRequestForPlan(
-        { action: EXPORT_ACTION, idempotencyKey, planDigest, planRef: plan.planRef },
+        { action: "export", idempotencyKey, planDigest, planRef: plan.planRef },
         plan,
       );
       return { plan, request, status: tenantExportStatus(current.journal) };

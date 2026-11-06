@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/complexity, sonarjs/expression-complexity -- Keep related authority and receipt compatibility checks together. */
 import { isDeepStrictEqual } from "node:util";
 import { operatorPlanDigest, sameOperatorSelection } from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
@@ -99,8 +100,8 @@ export const inspectUnapprovedAppSuccessor = (
       ? record
       : {
           ...record,
-          leaseExpiresAt: null,
-          leaseId: null,
+          leaseExpiresAt: undefined,
+          leaseId: undefined,
         };
   const bootstrap =
     inspectPlanningParticipantBootstrap(plan, idleRecord) ??

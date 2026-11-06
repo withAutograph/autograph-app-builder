@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- The fixture imports installed compiled Eve internals by private package path. */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -41,7 +42,6 @@ const request = {
 };
 const response = { optionId: "approve", requestId: request.requestId };
 const coordinates = { sequence: 7, stepIndex: 2, turnId: "private-turn" };
-const state = (session) => ({ snapshot: { session } });
 const setup = () => {
   let before = appendPendingInputBatch({
     event: coordinates,
@@ -94,6 +94,7 @@ const setup = () => {
     ],
     state: {},
   };
+  const state = (session) => ({ snapshot: { session } });
   const candidates = [
     {
       kind: "terminal-finalizer-input",
@@ -182,7 +183,7 @@ test("reports exact retained approval lineage, outcome frontier and durable disp
   const unchanged = JSON.stringify(input);
   assert.equal(recordTerminalRecoveryObservation(input), true);
   const summary = logs.at(-1);
-  const [fact] = summary.missingCallFrontier.sample;
+  const fact = summary.missingCallFrontier.sample[0];
   assert.equal(fact.callHash, protocolIdentityHash(call.toolCallId));
   assert.equal(fact.toolNameHash, protocolIdentityHash(call.toolName));
   assert.equal(fact.bindingSample[0].sameCallBytes, true);
@@ -209,7 +210,7 @@ test("does not call missing outcome an execution proof and counts mismatching ac
     optionId: "deny",
   };
   assert.equal(recordTerminalRecoveryObservation(input), true);
-  const [fact] = logs.at(-1).missingCallFrontier.sample;
+  const fact = logs.at(-1).missingCallFrontier.sample[0];
   assert.equal(fact.bindingSample[0].acceptedIncomingResponseMatchCount, 0);
   assert.equal(fact.actionResultCount, 0);
   assert.equal(fact.durableResultStepCount, 0);
@@ -222,7 +223,7 @@ test("reports child without ancestor evidence honestly", () => {
   input.payload.nativeEvents = [];
   input.payload.steps = [];
   assert.equal(recordTerminalRecoveryObservation(input), true);
-  const [fact] = logs.at(-1).missingCallFrontier.sample;
+  const fact = logs.at(-1).missingCallFrontier.sample[0];
   assert.equal(fact.bindingCount, 0);
   assert.equal(fact.frontierUsesWholeStream, true);
   assert.equal(fact.retainedTurnInputCount, 0);
@@ -232,7 +233,7 @@ test("bounded failure samples retain full counts and reject malformed payload on
   const failure = input.payload.nativeEvents.at(-1);
   input.payload.nativeEvents.push(...Array.from({ length: 30 }, () => failure));
   assert.equal(recordTerminalRecoveryObservation(input), true);
-  const [fact] = logs.at(-1).missingCallFrontier.sample;
+  const fact = logs.at(-1).missingCallFrontier.sample[0];
   assert.equal(fact.failedStepOrTurnCount, 31);
   assert.equal(fact.failureSample.length, 12);
   assert.equal(fact.exactMissingCallFailureCount, 31);

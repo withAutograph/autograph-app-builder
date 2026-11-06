@@ -25,12 +25,6 @@ import type {
   HostedOperatorContext,
 } from "./hosted-operator-service";
 
-const CONTINUITY_READ_ACTION = "continuity-read";
-const CONTINUITY_APPROVAL_ACTION = "continuity-approval";
-const CONTINUITY_PLAN_ACTION = "continuity-plan";
-const CONTINUITY_ACTION = "continuity";
-const CONTINUITY_STATUS_ACTION = "continuity-status";
-
 export const continuityTransportRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({
     action: z.literal("continuity-verified-actors"),
@@ -48,17 +42,17 @@ export const continuityTransportRequestSchema = z.discriminatedUnion("action", [
     ownerContext: operatorOwnerContextSchema,
   }),
   z.strictObject({
-    action: z.literal(CONTINUITY_READ_ACTION),
+    action: z.literal("continuity-read"),
     intentId: z.uuid(),
     ownerContext: operatorOwnerContextSchema,
   }),
   z.strictObject({
     ...hostedContinuityRequestSchema.shape,
-    action: z.literal(CONTINUITY_APPROVAL_ACTION),
+    action: z.literal("continuity-approval"),
     ownerContext: operatorOwnerContextSchema,
   }),
   z.strictObject({
-    action: z.literal(CONTINUITY_PLAN_ACTION),
+    action: z.literal("continuity-plan"),
     idempotencyKey: z.string().min(1),
     ownerContext: operatorOwnerContextSchema,
     predecessorIntentId: z.uuid().optional(),
@@ -66,7 +60,7 @@ export const continuityTransportRequestSchema = z.discriminatedUnion("action", [
     selection: operatorSelectionSchema,
   }),
   z.strictObject({
-    action: z.literal(CONTINUITY_STATUS_ACTION),
+    action: z.literal("continuity-status"),
     intentId: z.uuid(),
     ownerContext: operatorOwnerContextSchema,
   }),
@@ -82,7 +76,7 @@ export const continuityPlannedSchema = z.strictObject({
   status: continuityStatusSchema,
 });
 
-export type ContinuityTransportRequest = z.input<typeof continuityTransportRequestSchema>;
+export type ContinuityTransportRequest = z.infer<typeof continuityTransportRequestSchema>;
 
 /** Keep a failed owner-scoped journal read distinct from an unknown execution outcome. */
 const readCanonicalContinuity = async <T>(read: () => Promise<T>, signal: AbortSignal) => {
@@ -144,7 +138,7 @@ export const createContinuityDispatcher =
       await dependencies.verifyWorkload(frozenWorkloadRequest);
       let selected: z.infer<typeof operatorSelectionSchema>;
       let savedContext: HostedOperatorContext | undefined;
-      if (parsed.action === CONTINUITY_PLAN_ACTION) {
+      if (parsed.action === "continuity-plan") {
         selected = parsed.selection;
       } else {
         const intentId =
@@ -152,7 +146,7 @@ export const createContinuityDispatcher =
         const readSaved = () =>
           dependencies.store.read({ authority: parsed.ownerContext.authority, intentId });
         const saved =
-          "intentId" in parsed && parsed.action !== CONTINUITY_STATUS_ACTION
+          "intentId" in parsed && parsed.action !== "continuity-status"
             ? await readCanonicalContinuity(readSaved, request.signal)
             : await readSaved();
         if (saved === undefined) {
@@ -167,12 +161,12 @@ export const createContinuityDispatcher =
       }
       stage = "dispatcher_owner_authorization";
       const artifactRead = [
-        CONTINUITY_STATUS_ACTION,
-        CONTINUITY_READ_ACTION,
+        "continuity-status",
+        "continuity-read",
         "continuity-binding-read",
         "continuity-checkpoints",
         "continuity-verified-actors",
-        CONTINUITY_APPROVAL_ACTION,
+        "continuity-approval",
       ].includes(parsed.action);
       const context =
         artifactRead && savedContext !== undefined
@@ -186,7 +180,7 @@ export const createContinuityDispatcher =
       const { operations } = dependencies;
       let result;
       switch (parsed.action) {
-        case CONTINUITY_PLAN_ACTION: {
+        case "continuity-plan": {
           result = await operations.plan(
             context,
             parsed.runtime,
@@ -219,28 +213,28 @@ export const createContinuityDispatcher =
           );
           break;
         }
-        case CONTINUITY_READ_ACTION: {
+        case "continuity-read": {
           result = await operations.readPlan(context, parsed.intentId);
           break;
         }
-        case CONTINUITY_STATUS_ACTION: {
+        case "continuity-status": {
           result = await operations.status(context, parsed.intentId);
           break;
         }
-        case CONTINUITY_APPROVAL_ACTION: {
+        case "continuity-approval": {
           result = await operations.approval(context, {
-            action: CONTINUITY_ACTION,
+            action: "continuity",
             idempotencyKey: parsed.idempotencyKey,
             planDigest: parsed.planDigest,
             planRef: parsed.planRef,
           });
           break;
         }
-        case CONTINUITY_ACTION: {
+        case "continuity": {
           result = await operations.execute(
             context,
             {
-              action: CONTINUITY_ACTION,
+              action: "continuity",
               idempotencyKey: parsed.idempotencyKey,
               planDigest: parsed.planDigest,
               planRef: parsed.planRef,
@@ -257,7 +251,7 @@ export const createContinuityDispatcher =
       return Response.json(result, { headers: { "cache-control": "private, no-store" } });
     } catch (error) {
       try {
-        if (parsed.action === CONTINUITY_PLAN_ACTION) {
+        if (parsed.action === "continuity-plan") {
           reportContinuityPlanningFailure(parsed.selection.sessionId, stage, error);
         }
       } catch {

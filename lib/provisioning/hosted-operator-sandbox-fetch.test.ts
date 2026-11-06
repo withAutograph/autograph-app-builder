@@ -58,7 +58,7 @@ afterEach(() => {
 
 describe("request-owned Sandbox management fetch", () => {
   it("pins the verified bearer and retains the original URL and unrelated headers/options", async () => {
-    const raw = vi.fn<typeof fetch>(() => response());
+    const raw = vi.fn<typeof fetch>(async () => response());
     const token = vi.fn(() => "verified-builder");
     const adapted = createHostedOperatorSandboxFetch(token, raw);
     const controller = new AbortController();
@@ -93,7 +93,7 @@ describe("request-owned Sandbox management fetch", () => {
   });
 
   it("preserves Request identity/body/signal and native init header replacement semantics", async () => {
-    const raw = vi.fn<typeof fetch>(() => response());
+    const raw = vi.fn<typeof fetch>(async () => response());
     const adapted = createHostedOperatorSandboxFetch(() => "verified-builder", raw);
     const request = new Request(management, {
       body: "unchanged",
@@ -121,7 +121,7 @@ describe("request-owned Sandbox management fetch", () => {
     "https://vercel.com/api/v2/sandboxes/sessions/session/cmd",
     "https://vercel.com/api/v2/sandboxes/sessions/session/fs/read",
   ])("covers the supported management namespace %s", async (url) => {
-    const raw = vi.fn<typeof fetch>(() => response());
+    const raw = vi.fn<typeof fetch>(async () => response());
     const input = new URL(url);
     await createHostedOperatorSandboxFetch(() => "verified-builder", raw)(input);
     expect(raw.mock.calls[0]?.[0]).toBe(input);
@@ -133,6 +133,7 @@ describe("request-owned Sandbox management fetch", () => {
   it.each([
     "https://foreign.test/api/v2/sandboxes/owned-name",
     "https://vercel.com.evil.test/api/v2/sandboxes/owned-name",
+    // oxlint-disable-next-line sonarjs/no-clear-text-protocols -- This rejected destination proves HTTP never receives the verified carrier.
     "http://vercel.com/api/v2/sandboxes/owned-name",
     "https://vercel.com/api/v2/sandboxes-other/owned-name",
     "https://vercel.com/api/v2/sandboxes%2Fowned-name",
@@ -144,7 +145,7 @@ describe("request-owned Sandbox management fetch", () => {
     "wss://runtime.test/interactive",
     "/relative-input",
   ])("leaves foreign or unsupported destinations unchanged: %s", async (input) => {
-    const raw = vi.fn<typeof fetch>(() => response());
+    const raw = vi.fn<typeof fetch>(async () => response());
     const token = vi.fn(() => "verified-builder");
     const init = {
       headers: { authorization: "original-destination-credential" },
@@ -157,7 +158,7 @@ describe("request-owned Sandbox management fetch", () => {
   });
 
   it("keeps concurrent request workloads isolated and resolves only their own live carrier", async () => {
-    const raw = vi.fn<typeof fetch>(() => response());
+    const raw = vi.fn<typeof fetch>(async () => response());
     let first = "first-builder";
     const a = createHostedOperatorSandboxFetch(() => first, raw);
     const b = createHostedOperatorSandboxFetch(() => "second-builder", raw);
@@ -174,7 +175,7 @@ describe("request-owned Sandbox management fetch", () => {
       headers: { location: "https://foreign.test/target" },
       status: 302,
     });
-    const raw = vi.fn<typeof fetch>(() => redirect);
+    const raw = vi.fn<typeof fetch>(async () => redirect);
     const adapted = createHostedOperatorSandboxFetch(() => "verified-builder", raw);
     expect(await adapted(management)).toBe(redirect);
     expect(raw.mock.calls[0]?.[1]?.redirect).toBe("manual");
@@ -190,7 +191,7 @@ describe("request-owned Sandbox management fetch", () => {
     const builder = tokenFor("builder");
     const operator = tokenFor("operator");
     vi.stubEnv("VERCEL_OIDC_TOKEN", operator);
-    const raw = vi.fn<typeof fetch>((input) =>
+    const raw = vi.fn<typeof fetch>(async (input) =>
       requestUrl(input).includes("/fs/read")
         ? new Response("owned bytes", { headers: { "content-type": "application/octet-stream" } })
         : resumed(),
@@ -241,7 +242,7 @@ describe("request-owned Sandbox management fetch", () => {
 
   it("lets the installed SDK surface management redirects as its original APIError status", async () => {
     const raw = vi.fn<typeof fetch>(
-      () =>
+      async () =>
         new Response(null, { headers: { location: "https://foreign.test/target" }, status: 307 }),
     );
     const result = Sandbox.get({

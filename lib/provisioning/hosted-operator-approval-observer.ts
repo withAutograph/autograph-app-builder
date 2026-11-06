@@ -50,14 +50,14 @@ export const createHostedOperatorApprovalObserver = (input: {
   verifyReadAuthority: NonNullable<TransportOptions["verifyReadAuthority"]>;
   fetchImplementation?: typeof fetch;
 }) => {
-  const options: Parameters<typeof createSameOriginEveTransport>[0] = {
+  const options = {
     config: { baseUrl: input.builderOrigin },
     verifyReadAuthority: input.verifyReadAuthority,
     workloadIdentity: input.workloadIdentity,
+    ...(input.fetchImplementation === undefined
+      ? {}
+      : { fetchImplementation: input.fetchImplementation }),
   };
-  if (input.fetchImplementation !== undefined) {
-    options.fetchImplementation = input.fetchImplementation;
-  }
   const ambientTransport = createSameOriginEveTransport(options);
   const ambient = ambientTransport.observe;
   if (ambient === undefined) {

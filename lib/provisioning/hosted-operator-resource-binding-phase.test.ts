@@ -343,10 +343,10 @@ describe("read-only completed resource binding phase", () => {
       throw new Error("fixture operator missing");
     }
     if (change === "approval") {
-      operator.approvalId = null;
+      operator.approvalId = undefined;
     }
     if (change === "fence") {
-      operator.fenceGeneration = null;
+      operator.fenceGeneration = undefined;
     }
     if (change === "pending-effect") {
       operator.pendingEffectId = "gateway-bindings";
@@ -360,8 +360,8 @@ describe("read-only completed resource binding phase", () => {
       operator.receipts = operator.receipts.slice(1);
     }
     if (change === "missing-private-state") {
-      f.row.record.privateState = null;
-      f.input.privateState = null;
+      f.row.record.privateState = undefined;
+      f.input.privateState = undefined;
     }
     if (change === "different-private-state") {
       f.input.privateState = {
@@ -388,7 +388,7 @@ describe("read-only completed resource binding phase", () => {
       f.row.record.step = "planned";
     }
     if (change === "missing-readiness") {
-      operator.authPreparation = null;
+      operator.authPreparation = undefined;
     }
     expect(() => requireFinalResourceBindingPhase(f.row, f.input)).toThrow();
   });
@@ -502,7 +502,7 @@ describe("retained installation metadata resource authority", () => {
         }
         operator.plan = desired;
         operator.planDigest = operatorPlanDigest(desired);
-        operator.approvalId = null;
+        operator.approvalId = undefined;
         operator.receipts = [];
         f.row.record.approvedByCallId = "operator:unapproved-plan";
         f.row.record.status = "pending";

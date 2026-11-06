@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await -- Explicit readonly native port fixtures. */
 import { expect, test, vi } from "vitest";
 import { removal, retained } from "./public-release-integration-removal-test-fixture";
 import { integrationTestAttachment as sourceCapability } from "./app-integration-release-test-fixture";
@@ -38,14 +39,14 @@ test("explicit removal plan preserves two rows without adding integration writes
   expect(publicReleasePlanSchema.safeParse({ ...value, effects: plan.effects }).success).toBe(
     false,
   );
-  expect(publicReleasePlanSchema.safeParse({ ...value, integrationRemoval: null }).success).toBe(
-    false,
-  );
+  expect(
+    publicReleasePlanSchema.safeParse({ ...value, integrationRemoval: undefined }).success,
+  ).toBe(false);
   expect(publicReleasePlanSchema.safeParse({ ...value, purpose: "auth-bootstrap" }).success).toBe(
     false,
   );
   expect(
-    publicReleasePlanSchema.safeParse({ ...value, retainedOptionalBindings: null }).success,
+    publicReleasePlanSchema.safeParse({ ...value, retainedOptionalBindings: undefined }).success,
   ).toBe(false);
 });
 test("stopped preflight is source-bound and read-only; retry carries original frozen intent", async () => {
@@ -60,7 +61,7 @@ test("stopped preflight is source-bound and read-only; retry carries original fr
 });
 test("missing actual stopped observer is actionable rather than successful source removal", async () => {
   await expect(
-    readPublicReleaseIntegrationRemoval({ ...fixture(), ports: null }),
+    readPublicReleaseIntegrationRemoval({ ...fixture(), ports: undefined }),
   ).rejects.toMatchObject({ code: "public_release_integration_removal_required" });
 });
 test.each(["source", "scope", "generation", "configuration"])(

@@ -1,6 +1,7 @@
 import { createNormalActorRuntimeBindings } from "./hosted-operator-normal-actor-runtime-bindings";
 import { createParticipantSuccessorPlan } from "./hosted-operator-participant-successor";
 import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
+/* oxlint-disable eslint/require-await, unicorn/no-useless-undefined -- Local CAS fixture preserves the asynchronous production port contract. */
 import { createHash, randomUUID } from "node:crypto";
 import {
   createHostedOperatorNormalAuthClient,
@@ -253,8 +254,8 @@ const fixture = (captureExisting = false, selectedProgram = program) => {
     return await auth.handler(request);
   };
   const dependencies: NormalActorOperationsDependencies = {
-    assertPlanningAuthorized: assertCurrent,
     journalPorts,
+    assertPlanningAuthorized: assertCurrent,
     assertCurrentPlan: async (input) => {
       await assertCurrent();
       expect(input.plan.selection.appId).toBe(target.appId);
@@ -264,11 +265,7 @@ const fixture = (captureExisting = false, selectedProgram = program) => {
       return localFetch;
     },
     prepareActorCapture: async (input) => {
-      const capture: { actorKey: string; organizationId?: string } = { actorKey: input.actorKey };
-      if (input.organizationId !== undefined) {
-        capture.organizationId = input.organizationId;
-      }
-      captures.push(capture);
+      captures.push({ actorKey: input.actorKey, organizationId: input.organizationId });
       throw new Error("fixture_capture_required");
     },
     // Proof and selected worker ports are local dependency fixtures, not hosted provider or signed proof evidence.
@@ -533,22 +530,12 @@ describe("normal actor operations", () => {
       delete f.row.record.leaseExpiresAt;
       delete operator.pendingEffectId;
       delete operator.pendingEffectAttempt;
-      operator.receipts = operator.plan.effects.map((effect) => {
-        const receipt = {
-          effectId: effect.id,
-          observedAt: new Date(now).toISOString(),
-          resourceVersion: "controlled fixture receipt",
-        } satisfies {
-          effectId: string;
-          observedAt: string;
-          resourceVersion: string;
-          fenceGeneration?: number;
-        };
-        if (effect.kind === "access") {
-          receipt.fenceGeneration = operator.fenceGeneration;
-        }
-        return receipt;
-      });
+      operator.receipts = operator.plan.effects.map((effect) => ({
+        effectId: effect.id,
+        observedAt: new Date(now).toISOString(),
+        resourceVersion: "controlled fixture receipt",
+        ...(effect.kind === "access" ? { fenceGeneration: operator.fenceGeneration } : {}),
+      }));
       f.row.record.status = operator.plan.stage === "app" ? "prepared" : "participants-prepared";
       f.row.record.step = operator.plan.stage === "app" ? "bound" : "reserved";
     };
@@ -796,7 +783,7 @@ describe("normal actor operations", () => {
     expect(signupEmails).toHaveLength(7);
     expect(new Set(signupEmails).size).toBe(7);
     expect(saved.state.actors[0]).toEqual(captureState.actors[0]);
-    expect(f.captures).toEqual([{ actorKey: "owner", organizationId: null }]);
+    expect(f.captures).toEqual([{ actorKey: "owner", organizationId: undefined }]);
     settle();
     expect(createParticipantSuccessorPlan(f.row.record, combined, now)).toBeUndefined();
     const prepared = await f.journal.read(context);
@@ -831,6 +818,7 @@ describe("normal actor operations", () => {
     });
     const fullInput = installPlan(full, "44444444-4444-4444-8444-444444444444", "qa-app-call");
     for (const effect of full.effects.filter((entry) => entry.kind === "auth-membership")) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each selected organization owns a distinct journal fence.
       await f.operations.prepareNormalActorMemberships(worker(full, effect));
     }
     await f.operations.verifyNormalActorMemberships(
@@ -858,6 +846,7 @@ describe("normal actor operations", () => {
     for (const callId of ["capture-call", "app-call", "qa-call", "qa-app-call"]) {
       const approval = requireFixture(approvals.get(callId));
       approvals.delete(callId);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Revoke and restore each independent canonical authority in sequence.
       await expect(runtime(fullInput)).rejects.toMatchObject({ code: "authorization_required" });
       approvals.set(callId, approval);
     }
@@ -1183,7 +1172,7 @@ describe("normal actor operations", () => {
       "fixture_capture_required",
     );
     expect(f.row.record.accountPreparation?.accountApprovalId).toBe("initial-approval");
-    expect(f.captures).toEqual([{ actorKey: "owner", organizationId: null }]);
+    expect(f.captures).toEqual([{ actorKey: "owner", organizationId: undefined }]);
     expect(f.requests).toHaveLength(0);
   });
   it.each(["expired", "different-actor"] as const)(
@@ -1236,7 +1225,7 @@ describe("normal actor operations", () => {
           "fixture_capture_required",
         );
         expect(f.captures.slice(beforeCaptures)).toEqual([
-          { actorKey: "owner", organizationId: null },
+          { actorKey: "owner", organizationId: undefined },
         ]);
         expect(f.requests).toHaveLength(beforeRequests);
       } else {

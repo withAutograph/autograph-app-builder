@@ -355,8 +355,8 @@ describe("approved retention renewal", () => {
         operator: {
           ...originalOperator,
           approvalId: "renewed-approval",
-          pendingEffectAttempt: null,
-          pendingEffectId: null,
+          pendingEffectAttempt: undefined,
+          pendingEffectId: undefined,
           plan: firstPlan,
           planDigest: operatorPlanDigest(firstPlan),
           retainedRenewalOperations: [
@@ -515,12 +515,12 @@ describe("approved retention renewal", () => {
       approvedByCallId: "operator:unapproved-plan",
       operator: {
         ...previousOperator,
-        approvalId: null,
-        deliveredGatewayDeploymentId: null,
+        approvalId: undefined,
+        deliveredGatewayDeploymentId: undefined,
         deliveryCandidates: [],
         gatewayDeliveryCandidates: [],
-        pendingEffectAttempt: null,
-        pendingEffectId: null,
+        pendingEffectAttempt: undefined,
+        pendingEffectId: undefined,
         plan: renewedPlan,
         planDigest: operatorPlanDigest(renewedPlan),
         receipts: previousOperator.receipts.filter((receipt) =>
@@ -680,11 +680,11 @@ describe("approved retention renewal", () => {
       approvedByCallId: "operator:unapproved-plan",
       operator: {
         ...prior.operator,
-        approvalId: null,
+        approvalId: undefined,
         deliveryCandidates: [],
         gatewayDeliveryCandidates: [],
-        pendingEffectAttempt: null,
-        pendingEffectId: null,
+        pendingEffectAttempt: undefined,
+        pendingEffectId: undefined,
         plan: renewedPlan,
         planDigest: operatorPlanDigest(renewedPlan),
         receipts: prior.operator.receipts.filter((receipt) =>

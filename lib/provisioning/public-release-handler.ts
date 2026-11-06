@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/complexity, eslint/no-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions, sonarjs/cognitive-complexity -- Runtime binding, readback, consent checks and source publication must execute sequentially under one target lease. */
 import { isDeepStrictEqual } from "node:util";
 import { PublicReleaseProviderError } from "./public-release-provider-error";
 import {
@@ -79,11 +80,7 @@ export interface PublicReleasePorts {
     plan: PublicReleasePlan,
   ) => Promise<PublicReleaseObservation>;
 }
-const PUBLIC_RELEASE_UNAVAILABLE = "public_release_unavailable";
-const unavailable = () => new Error(PUBLIC_RELEASE_UNAVAILABLE);
-const BIND_PRODUCTION_RUNTIME = "bind-production-runtime" as const;
-const OBSERVE_PRODUCTION = "observe-production" as const;
-const RECONCILIATION_REQUIRED = "reconciliation-required" as const;
+const unavailable = () => new Error("public_release_unavailable");
 const assertCaller = (invocation: PublicReleaseInvocation, plan: PublicReleasePlan) => {
   invocation.signal.throwIfAborted();
   if (
@@ -154,16 +151,13 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
     ) {
       await checkpoint(row, { ...row.record, observation });
     }
-    const delivery = {
-      authenticatedBehavior: "unassessed" as const,
-      observation,
-      operationRef: row.operationRef,
+    return {
       status: observation.status,
+      ...(plan.purpose === undefined ? {} : { purpose: plan.purpose }),
+      operationRef: row.operationRef,
+      observation,
+      authenticatedBehavior: "unassessed" as const,
     };
-    if (plan.purpose !== undefined) {
-      return { ...delivery, purpose: plan.purpose };
-    }
-    return delivery;
   };
   return {
     async observe(invocation: PublicReleaseInvocation, operationRef: string, planDigest: string) {
@@ -172,7 +166,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
       const unfinished = plan.effects.find((effect) => row.record.effects[effect] !== "applied");
       if (unfinished !== undefined) {
         if (row.record.effects[unfinished] === "pending") {
-          return { effect: unfinished, operationRef, status: RECONCILIATION_REQUIRED };
+          return { effect: unfinished, operationRef, status: "reconciliation-required" as const };
         }
         throw unavailable();
       }
@@ -203,117 +197,97 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
         if (!row || row.record.planDigest !== planDigest) {
           throw unavailable();
         }
-        let phase: PublicReleaseEffect | typeof OBSERVE_PRODUCTION = BIND_PRODUCTION_RUNTIME;
+        let phase: PublicReleaseEffect | "observe-production" = "bind-production-runtime";
         try {
           for (const effect of plan.effects) {
             phase = effect;
             await authorize(invocation, plan, true);
-            if (row.record.effects[effect] !== "applied") {
-              const refresh = async () => {
-                const latest = await ports.store.read(invocation.authority, operationRef);
-                if (!latest || latest.record.planDigest !== planDigest) {
-                  throw unavailable();
-                }
-                row = latest;
-                return latest;
-              };
-              const binding = async (key: string) => {
-                await authorize(invocation, plan, true);
-                if (effect !== BIND_PRODUCTION_RUNTIME) {
-                  throw unavailable();
-                }
-                const current = await refresh();
-                const expected = plan.environment.find((entry) => entry.key === key);
-                const state = current.record.bindings[key];
-                if (expected === undefined || state === undefined) {
-                  throw unavailable();
-                }
-                return { current, expected, state };
-              };
-              const saveBinding = async (key: string, state: PublicReleaseBindingState) => {
-                const { current } = await binding(key);
-                row = await checkpoint(current, {
-                  ...current.record,
-                  bindings: { ...current.record.bindings, [key]: state },
-                });
-              };
-              const context: PublicReleaseEffectContext = {
-                bindings: {
-                  claim: async (key) => {
-                    const { state, expected } = await binding(key);
-                    if (state.state !== "idle") {
-                      return state;
-                    }
-                    const next: PublicReleaseBindingState = { state: "pending" };
-                    if (expected.priorBinding !== undefined) {
-                      next.acceptedEnvId = expected.priorBinding.id;
-                    }
-                    await saveBinding(key, next);
-                    return next;
-                  },
-                  read: async () => {
-                    await authorize(invocation, plan, true);
-                    const current = await refresh();
-                    return structuredClone(current.record.bindings);
-                  },
-                  recordAccepted: async (key, id) => {
-                    const { state } = await binding(key);
-                    if (
-                      state.state !== "pending" ||
-                      id === "" ||
-                      (state.acceptedEnvId !== undefined && state.acceptedEnvId !== id)
-                    ) {
-                      throw unavailable();
-                    }
-                    await saveBinding(key, { ...state, acceptedEnvId: id });
-                  },
-                  recordVerified: async (key) => {
-                    const { state } = await binding(key);
-                    if (state.acceptedEnvId === undefined) {
-                      throw unavailable();
-                    }
-                    await saveBinding(key, { ...state, state: "applied" });
-                  },
-                },
-                effect,
-                invocation,
-                operationRef,
-                plan,
-                priorPhase: row.record.effects[effect] ?? "idle",
-              };
-              const reconciled = await ports.reconcileEffect(context);
-              row = await refresh();
-              if (reconciled === "unknown") {
-                return { effect, operationRef, status: RECONCILIATION_REQUIRED };
+            if (row.record.effects[effect] === "applied") {
+              continue;
+            }
+            const refresh = async () => {
+              const latest = await ports.store.read(invocation.authority, operationRef);
+              if (!latest || latest.record.planDigest !== planDigest) {
+                throw unavailable();
               }
+              row = latest;
+              return latest;
+            };
+            const binding = async (key: string) => {
               await authorize(invocation, plan, true);
-              if (reconciled === "applied") {
-                if (
-                  effect === BIND_PRODUCTION_RUNTIME &&
-                  Object.values(row.record.bindings).some((value) => value.state !== "applied")
-                ) {
-                  throw unavailable();
-                }
-                row = await checkpoint(row, {
-                  ...row.record,
-                  effects: { ...row.record.effects, [effect]: "applied" },
-                });
-                continue;
+              if (effect !== "bind-production-runtime") {
+                throw unavailable();
               }
-              row = await checkpoint(row, {
-                ...row.record,
-                effects: { ...row.record.effects, [effect]: "pending" },
+              const current = await refresh();
+              const expected = plan.environment.find((entry) => entry.key === key);
+              const state = current.record.bindings[key];
+              if (expected === undefined || state === undefined) {
+                throw unavailable();
+              }
+              return { current, expected, state };
+            };
+            const saveBinding = async (key: string, state: PublicReleaseBindingState) => {
+              const { current } = await binding(key);
+              row = await checkpoint(current, {
+                ...current.record,
+                bindings: { ...current.record.bindings, [key]: state },
               });
-              await authorize(invocation, plan, true);
-              await ports.applyEffect(context);
-              row = await refresh();
-              await authorize(invocation, plan, true);
-              if ((await ports.reconcileEffect(context)) !== "applied") {
-                return { effect, operationRef, status: RECONCILIATION_REQUIRED };
-              }
-              row = await refresh();
+            };
+            const context: PublicReleaseEffectContext = {
+              bindings: {
+                claim: async (key) => {
+                  const { state, expected } = await binding(key);
+                  if (state.state !== "idle") {
+                    return state;
+                  }
+                  const next: PublicReleaseBindingState = {
+                    state: "pending",
+                    ...(expected.priorBinding === undefined
+                      ? {}
+                      : { acceptedEnvId: expected.priorBinding.id }),
+                  };
+                  await saveBinding(key, next);
+                  return next;
+                },
+                read: async () => {
+                  await authorize(invocation, plan, true);
+                  const current = await refresh();
+                  return structuredClone(current.record.bindings);
+                },
+                recordAccepted: async (key, id) => {
+                  const { state } = await binding(key);
+                  if (
+                    state.state !== "pending" ||
+                    id === "" ||
+                    (state.acceptedEnvId !== undefined && state.acceptedEnvId !== id)
+                  ) {
+                    throw unavailable();
+                  }
+                  await saveBinding(key, { ...state, acceptedEnvId: id });
+                },
+                recordVerified: async (key) => {
+                  const { state } = await binding(key);
+                  if (state.acceptedEnvId === undefined) {
+                    throw unavailable();
+                  }
+                  await saveBinding(key, { ...state, state: "applied" });
+                },
+              },
+              effect,
+              invocation,
+              operationRef,
+              plan,
+              priorPhase: row.record.effects[effect] ?? "idle",
+            };
+            const reconciled = await ports.reconcileEffect(context);
+            row = await refresh();
+            if (reconciled === "unknown") {
+              return { effect, operationRef, status: "reconciliation-required" as const };
+            }
+            await authorize(invocation, plan, true);
+            if (reconciled === "applied") {
               if (
-                effect === BIND_PRODUCTION_RUNTIME &&
+                effect === "bind-production-runtime" &&
                 Object.values(row.record.bindings).some((value) => value.state !== "applied")
               ) {
                 throw unavailable();
@@ -322,10 +296,33 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
                 ...row.record,
                 effects: { ...row.record.effects, [effect]: "applied" },
               });
+              continue;
             }
+            row = await checkpoint(row, {
+              ...row.record,
+              effects: { ...row.record.effects, [effect]: "pending" },
+            });
+            await authorize(invocation, plan, true);
+            await ports.applyEffect(context);
+            row = await refresh();
+            await authorize(invocation, plan, true);
+            if ((await ports.reconcileEffect(context)) !== "applied") {
+              return { effect, operationRef, status: "reconciliation-required" as const };
+            }
+            row = await refresh();
+            if (
+              effect === "bind-production-runtime" &&
+              Object.values(row.record.bindings).some((value) => value.state !== "applied")
+            ) {
+              throw unavailable();
+            }
+            row = await checkpoint(row, {
+              ...row.record,
+              effects: { ...row.record.effects, [effect]: "applied" },
+            });
           }
           await authorize(invocation, plan, true);
-          phase = OBSERVE_PRODUCTION;
+          phase = "observe-production";
           return await observeDelivery(invocation, plan, row, true);
         } catch (error) {
           if (error instanceof PublicReleaseProviderError) {
