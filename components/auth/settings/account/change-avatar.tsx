@@ -48,9 +48,14 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     setIsUploading(true);
 
     try {
-      const resized = (await avatar.resize?.(file, avatar.size, avatar.extension)) || file;
+      const resizedResult = await avatar.resize?.(file, avatar.size, avatar.extension);
+      const resized = resizedResult ?? file;
 
-      const image = (await avatar.upload?.(resized)) || (await fileToAvatarDataUrl(resized));
+      const uploadedImage = await avatar.upload?.(resized);
+      const image =
+        uploadedImage !== null && uploadedImage !== undefined && uploadedImage !== ""
+          ? uploadedImage
+          : await fileToAvatarDataUrl(resized);
 
       updateUser(
         { image },
@@ -77,7 +82,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
       { image: null },
       {
         onSuccess: async () => {
-          if (currentImage) {
+          if (currentImage !== null && currentImage !== undefined && currentImage !== "") {
             setIsDeleting(true);
             try {
               await avatar.delete?.(currentImage);
@@ -136,7 +141,11 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
             <DropdownMenuItem
               variant="destructive"
-              disabled={!session?.user.image}
+              disabled={
+                session?.user.image === null ||
+                session?.user.image === undefined ||
+                session.user.image === ""
+              }
               onClick={() => {
                 handleDelete();
               }}
