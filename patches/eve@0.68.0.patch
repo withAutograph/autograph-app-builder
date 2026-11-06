@@ -1983,7 +1983,7 @@ diff --git a/dist/src/execution/session/recovery-owner-provenance.js b/dist/src/
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.js
-@@ -0,0 +1,463 @@
+@@ -0,0 +1,491 @@
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { isDeepStrictEqual } from "node:util";
 +import {
@@ -2246,6 +2246,34 @@ new file mode 100644
 +    cursor = page.cursor;
 +    cursors.add(cursor);
 +  } while (true);
++  // The current inbox can point to retained runs outside the listing window.
++  // Treat the backward walk only as discovery: the forward pass still proves
++  // each activation, checkpoint, and unique child.
++  if (allowLiveAncestors && world.hooks?.getByToken) {
++    await authorize();
++    const token = sessionInboxHookToken(sessionCommandHookToken(binding.logicalSessionId));
++    let hook;
++    try { hook = await world.hooks.getByToken(token); }
++    catch (error) {
++      if (error?.name !== "HookNotFoundError") throw error;
++    }
++    const seen = new Set();
++    let runId = hook?.runId;
++    while (typeof runId === "string" && runId !== anchor.runId) {
++      if (seen.has(runId)) throw new Error("Native inbox handoff ownership cycle.");
++      seen.add(runId);
++      const run = await runFor(runId);
++      const entry = await entryFor(run);
++      if (run.workflowName !== anchor.workflowName ||
++          entry?.kind !== "handoff" ||
++          entry.sessionId !== binding.logicalSessionId ||
++          entry.streamRunId !== binding.ownerRunId) break;
++      const previous = /^([A-Za-z0-9_-]+):handoff$/.exec(entry.activationToken)?.[1];
++      if (!previous) break;
++      hints.set(runId, run);
++      runId = previous;
++    }
++  }
 +  const childrenFor = async (parent, input) => {
 +    const children = [];
 +    for (const hint of hints.values()) {
