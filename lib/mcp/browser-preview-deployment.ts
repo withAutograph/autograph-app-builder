@@ -8,7 +8,10 @@ import type { HostedEveTransport } from "../eve/hosted-service";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import type { HostedEveStore } from "../eve/hosted-store";
-import { createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
+import {
+  createPostgresHostedEveStore,
+  readCommittedRecoveryReceipt,
+} from "../eve/postgres-hosted-store";
 import { createSameOriginEveTransport } from "../eve/same-origin-http";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
 import { createEveSessionService } from "../eve/service";
@@ -216,7 +219,7 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
     return context?.service;
   };
 
-  return createPrototypePreviewRequestHandler({
+  const preview = createPrototypePreviewRequestHandler({
     resolvePrototype: createServicePrototypePreviewResolver({
       serviceForRequest: input.serviceForRequest ?? defaultServiceForRequest,
     }),
@@ -237,5 +240,40 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
         };
       },
     }),
+  });
+  return Object.assign(preview, {
+    async readRecoveryReceipt(
+      request: Request,
+      selection: { sessionId: string; logicalSessionId: string; ownerRunId: string },
+    ) {
+      const headers = { "cache-control": "no-store" };
+      try {
+        if (adapterMode(input.environment) !== "hosted") {
+          return new Response(null, { status: 404, headers });
+        }
+        const context = await hostedContextForRequest(request);
+        if (context === undefined) return new Response(null, { status: 404, headers });
+        const receipt = await readCommittedRecoveryReceipt(context.database, {
+          principal: context.principal,
+          authoritySessionId: selection.sessionId,
+          logicalSessionId: selection.logicalSessionId,
+          ownerRunId: selection.ownerRunId,
+        });
+        if (receipt === null) return new Response(null, { status: 404, headers });
+        return Response.json(
+          {
+            operationId: receipt.operationId,
+            logicalSessionId: receipt.logicalSessionId,
+            sourceOwnerRunId: receipt.sourceOwnerRunId,
+            ownerRunId: receipt.ownerRunId,
+            checkpointOwnerRunId: receipt.provenance.checkpointOwnerRunId,
+            sourceCheckpointDigest: receipt.executionTransfer?.sourceCheckpointDigest,
+          },
+          { headers },
+        );
+      } catch {
+        return new Response(null, { status: 404, headers });
+      }
+    },
   });
 }

@@ -330,6 +330,47 @@ async function sessionByAdapterSessionId(
   return rows[0] === undefined ? null : parseHostedSessionRow(rows[0]);
 }
 
+/** Read one historical receipt through the same owner and checkpoint checks as continuation. */
+export const readCommittedRecoveryReceipt = async (
+  database: Database,
+  input: {
+    principal: HostedPrincipal;
+    authoritySessionId: string;
+    logicalSessionId: string;
+    ownerRunId: string;
+  },
+) =>
+  await database.transaction(
+    async (transaction) => {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      const authority = await sessionById(transaction, principal, input.authoritySessionId);
+      if (authority === null) {
+        return null;
+      }
+      const child = await sessionByAdapterSessionId(transaction, principal, input.ownerRunId);
+      if (child?.version !== 2 || child.nativeRecoveryBinding === undefined) {
+        return null;
+      }
+      const source = await sessionById(transaction, principal, child.parentSessionId ?? "");
+      // Read the operation on the same transaction connection as the source.
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- One transaction connection serializes these reads.
+      const operation = await operationById(
+        transaction,
+        principal,
+        child.nativeRecoveryBinding.operationId,
+      );
+      assertRecoveredBuildContinuationChild(
+        input.authoritySessionId,
+        input.logicalSessionId,
+        source,
+        child,
+        operation,
+      );
+      return child.nativeRecoveryBinding;
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
+
 /** Resolve only a tenant-owned recovered child with its exact committed native receipt. */
 // oxlint-disable-next-line eslint/func-style -- Keep the tenant-scoped transactional lookup adjacent to other store lookups.
 async function currentBuildSession(

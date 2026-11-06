@@ -20,6 +20,7 @@ import type { ResumeRealmContinuation } from "./realm-continuation-read";
 const providers = vi.hoisted(() => ({
   auth: vi.fn(),
   chunks: vi.fn(),
+  receipt: vi.fn(),
   store: vi.fn(),
   transport: vi.fn(),
   workspace: vi.fn(),
@@ -45,7 +46,10 @@ vi.mock("../auth/preview-oauth-runtime", () => ({
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Prevent opening external PostgreSQL connections.
 vi.mock("./hosted-route", () => ({ openHostedPostgresDatabase: () => ({}) }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Substitute only the external storage implementation; real hosted service and tenant checks remain active.
-vi.mock("../eve/postgres-hosted-store", () => ({ createPostgresHostedEveStore: providers.store }));
+vi.mock("../eve/postgres-hosted-store", () => ({
+  createPostgresHostedEveStore: providers.store,
+  readCommittedRecoveryReceipt: providers.receipt,
+}));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Eve HTTP transport is an external boundary; no provider requests are dispatched.
 vi.mock("../eve/same-origin-http", () => ({ createSameOriginEveTransport: providers.transport }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Chunk storage is external; the real immutable manifest verifier remains active.
@@ -209,6 +213,51 @@ describe("deployment Browser preview route", () => {
       mock.mockReset();
     }
   });
+  it("does not look up a recovery receipt without an authenticated owner", async () => {
+    const fixture = ownedFixture();
+    providers.auth.mockResolvedValue(null);
+    const response = await fixture.handler.readRecoveryReceipt(fixture.request, {
+      sessionId: fixture.publicId,
+      logicalSessionId: "wrun_original",
+      ownerRunId: "wrun_recovered",
+    });
+    expect(response.status).toBe(404);
+    expect(providers.receipt).not.toHaveBeenCalled();
+  });
+
+  it("scopes receipt reads to the authenticated workspace and returns only verification fields", async () => {
+    const fixture = ownedFixture();
+    providers.receipt.mockResolvedValue({
+      operationId: "operation",
+      logicalSessionId: "wrun_original",
+      sourceOwnerRunId: "wrun_source",
+      ownerRunId: "wrun_recovered",
+      provenance: { checkpointOwnerRunId: "wrun_checkpoint", sourceEventId: "private" },
+    });
+    const response = await fixture.handler.readRecoveryReceipt(fixture.request, {
+      sessionId: fixture.publicId,
+      logicalSessionId: "wrun_original",
+      ownerRunId: "wrun_recovered",
+    });
+    expect(providers.receipt).toHaveBeenCalledWith(
+      {},
+      {
+        principal: owner,
+        authoritySessionId: fixture.publicId,
+        logicalSessionId: "wrun_original",
+        ownerRunId: "wrun_recovered",
+      },
+    );
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      operationId: "operation",
+      logicalSessionId: "wrun_original",
+      sourceOwnerRunId: "wrun_source",
+      ownerRunId: "wrun_recovered",
+      checkpointOwnerRunId: "wrun_checkpoint",
+    });
+  });
+
   it("recovers the exact authenticated saved build before reading its artifact", async () => {
     const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
     const fixture = ownedFixture({ resumeRealmContinuation: resume });
