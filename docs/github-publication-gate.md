@@ -345,16 +345,17 @@ Preparation invalidates the previous review and sealed proposal while retaining
 its mutation journal. A pending or potentially partial prior publication must
 be recovered before another destination review.
 
-For a fresh-template app, pass the intended existing repository as
-`destination: { repository: "owner/name", selectedInstallationId? }` to
-`prepare_github_draft_review`. Preparation uses the ordinary session-owned
-GitHub connection flow and observes the actual repository and installation.
-A later refresh can reuse that exact retained destination. It never replaces
-the starter checkout, creates a repository, or fabricates `githubSource`.
-Keep the original source receipt, app files, and validation. An absent
-destination is an internal workflow selection to resolve from the intended
-delivery target; it is not a reason to restart the app or ask the user to
-repair source plumbing.
+Builder reuses the saved app's recorded repository. When a new app still needs
+a destination, `prepare_github_draft_review` returns the same saved build's
+destination setup at `/builds/<session-id>/destination`. Use that setup to choose
+where to store and release the app, then resume the saved build. Publication
+retains its separate approval.
+
+If the user explicitly chose an existing repository for a fresh-template app,
+pass it as `destination: { repository: "owner/name", selectedInstallationId? }`.
+Preparation observes the actual repository and installation through the ordinary
+session-owned GitHub connection. A later refresh can reuse that exact destination.
+Keep the starter checkout, original source receipt, app files and validation.
 
 After accepting the destination diff, fresh-template sealing uses
 `expectedDestinationReviewDigest`; acquired GitHub sources retain
@@ -364,7 +365,7 @@ operations select the verified tenant-owned installation explicitly, preserve
 current membership and provider permission checks, and retain separate
 publication approval and mutation reconciliation.
 
-The final independent source review attempt remains advisory. An unavailable
+Independent source review is optional and advisory. An unavailable
 or interrupted assessment is reported as unassessed and does not block private
 Preview or publication, require another technical validation, or authorize a
 replacement app. See [Product source review](product-source-review.md).
@@ -509,18 +510,26 @@ head and current ready cycle. Builder reads the repository's result without
 repeating affected-code selection. A moved revision is visible but cannot use
 the original review for merge.
 
-With `APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED=1`, an eligible reviewed publication
-can return an input for `finish-github-pr-delivery`. This is a separate native
+When hosted GitHub publication is enabled, an eligible reviewed publication
+can return an input for `finish-github-pr-delivery`. Operators can explicitly
+disable Ready and merge with `APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED=0`. This is a separate native
 approval to mark the PR ready and merge the reviewed revision when required
 checks pass. It is scoped to the current session and repository. The GitHub
 App installation needs Actions read, Pull requests write for Ready, and
 Contents write for merge. The provider requests a repository-scoped token
 attenuated for each operation. GitHub applies its own review and merge policy.
 
-Apply the additive PR effect journal migration before enabling the mutation
-tool. The journal claims each approved effect before sending a write. After
+Apply the additive PR effect journal migration to Builder’s hosted storage
+as part of normal deployment. The journal claims each approved effect before sending a write. After
 an uncertain response, the same operation can observe provider evidence and
 settle its receipt. Pending effects are never replayed blindly. GitHub's merge
 request guards the expected head atomically. Base and ready-cycle changes are
 checked around the request. A merge result and protected hosted app evidence
 remain separate facts.
+
+For an existing repository with native Production delivery, the approved merge
+hands off to the repository's native deploy integration. The PR effect journal
+records GitHub writes in Builder's own storage. This flow has no dependency on
+a Preview app, a managed runtime journal, or synthetic app data. Actual runtime
+bindings are owned by the destination's Production setup. GitHub merge evidence
+and the provider's deployment result are reported separately.

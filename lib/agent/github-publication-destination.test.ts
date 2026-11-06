@@ -69,7 +69,10 @@ const request = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue(owned);
+  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue({
+    publicSessionId: "public-saved",
+    destination: owned,
+  });
   vi.mocked(resolveRepositoryAccessForTool).mockResolvedValue(access("456"));
 });
 it("rechecks normal access and carries the saved installation through existing-app review", async () => {
@@ -99,16 +102,53 @@ it("denies a same-repository revision observed through a different installation"
 });
 it("denies canonical destination drift during revision access readback", async () => {
   vi.mocked(readBuilderPublicationDestinationForTool)
-    .mockResolvedValueOnce(owned)
-    .mockResolvedValueOnce({ ...owned, selectedInstallationId: "999" });
+    .mockResolvedValueOnce({ publicSessionId: "public-saved", destination: owned })
+    .mockResolvedValueOnce({
+      publicSessionId: "public-saved",
+      destination: { ...owned, selectedInstallationId: "999" },
+    });
   await expect(resolvePublicationTargetForTool(request)).rejects.toThrow("destination changed");
 });
 it("retains the ordinary acquired source path for apps without a normal destination", async () => {
-  // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit absent result for this optional destination port.
-  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue(undefined);
+  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue({
+    publicSessionId: "public-saved",
+  });
   expect(await resolvePublicationTargetForTool(request)).toEqual({
     kind: "ready",
     target: { githubSource: source },
   });
   expect(resolveRepositoryAccessForTool).not.toHaveBeenCalled();
+});
+
+it("directs a fresh app to its saved public destination setup before any repository access", async () => {
+  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue({
+    publicSessionId: "public-saved",
+  });
+  expect(
+    await resolvePublicationTargetForTool({ ctx, appId: "app", sourceKind: "fresh-template" }),
+  ).toMatchObject({
+    kind: "missing",
+    guidance: {
+      status: "blocked",
+      code: "builder_destination_required",
+      destinationPath: "/builds/public-saved/destination",
+    },
+  });
+  expect(resolveRepositoryAccessForTool).not.toHaveBeenCalled();
+});
+it("keeps the explicit existing-repository selector for a fresh app with no saved destination", async () => {
+  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue({
+    publicSessionId: "public-saved",
+  });
+  const destination = { repository: "owner/app", selectedInstallationId: "456" };
+  expect(
+    await resolvePublicationTargetForTool({
+      ctx,
+      appId: "app",
+      destination,
+      sourceKind: "fresh-template",
+    }),
+  ).toMatchObject({ kind: "ready", target: { destination: { repositoryId: "123" } } });
+  expect(resolveRepositoryAccessForTool).toHaveBeenCalledOnce();
+  expect(vi.mocked(resolveRepositoryAccessForTool).mock.calls[0]?.[0]).toEqual(destination);
 });

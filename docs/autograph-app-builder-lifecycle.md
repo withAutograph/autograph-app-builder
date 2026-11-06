@@ -51,6 +51,10 @@ source change, keep the current workspace without loading native transport
 history. When reconciling changed source, use the owned transport evidence
 needed to preserve the app's edits and bind the actual workspace.
 
+Ordinary build validation skips authenticated browser preparation and browser
+tasks. Builder can opt into a declared app browser task with `runBrowserTests`
+when that task serves the app’s testing needs.
+
 Private preview and browser checks can use the retained validated artifact
 while a draft remains unapplied. Keep the selected app, owner, workspace and
 artifact identity bound to that action. When identifying retained source for a
@@ -140,6 +144,24 @@ the checks and behavior actually exercised. A release requires the working app
 at the selected destination after the approved effects. A revision delivers
 the requested change to the same app and preserves unaffected content, data,
 and destination.
+
+The default delivery path is a single live app with an internet-reachable
+Production domain. Builder validates the app privately, then prepares the
+approved destination and delivers the reviewed revision through native Git
+delivery. The owner starts with authorized access to the live app. Invitations
+and role changes update access to that same URL, deployment and data.
+
+Hosted Preview and synthetic acceptance runs are optional engineering tools.
+Neither is a prerequisite for initial release. Release preparation verifies
+the actual target and provisions its required database, schema, restricted
+runtime credentials, and owner access through the protected operator.
+Builder derives database details from its managed configuration. After
+provider-owned activation, verify the owner's authenticated workflow on
+the live app. For persistent apps, save an authorized record and read it
+back independently. Record delivery and behavior as separate outcomes.
+
+See [public app release](public-app-release.md) for the target flow and the
+remaining implementation gap.
 
 ## Source documents
 

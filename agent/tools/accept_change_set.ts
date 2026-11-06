@@ -3,6 +3,7 @@ import {
   prepareAppliedProductSourceReview,
   finalizeAppliedProductSourceReview,
 } from "@/lib/agent/review-applied-product-source";
+import { unavailableSourceAssessment } from "@/lib/agent/product-source-review";
 import { currentProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
@@ -30,13 +31,13 @@ const changeSetAcceptanceRuntime: ChangeSetAcceptanceRuntime = {
   prepareSourceReview: prepareAppliedProductSourceReview,
   finalizeSourceReview: finalizeAppliedProductSourceReview,
 };
-/** Internal ports preserve mandatory final source review without public injection. */
+/** Internal ports preserve optional independent source review without public injection. */
 export const createChangeSetAcceptanceTool = (
   runtime: ChangeSetAcceptanceRuntime = changeSetAcceptanceRuntime,
 ) =>
   defineTool({
     description:
-      "Perform the final independent paid source assessment against the original product request and current implementation after repository validation succeeds. Reuse only completed source evidence whose current source and requirements still match. Record the reviewed change summary and return a compact receipt with current-session references; the full receipt stays authoritative in this session. Read its complete product/source evidence through change_set_status view=acceptance. This is internal and never publishes or changes an external repository.",
+      "Record the current change set after repository validation succeeds. Request independent paid source assessment explicitly with runSourceReview. Reuse only completed source evidence whose current source and requirements still match. Record the reviewed change summary and return a compact receipt with current-session references; the full receipt stays authoritative in this session. Read its complete product/source evidence through change_set_status view=acceptance. This is internal and never publishes or changes an external repository.",
     async execute(input, ctx) {
       const state = appBuilderWorkflowState.get();
       if (state.phase !== "validated" && state.phase !== "reviewed") {
@@ -59,7 +60,9 @@ export const createChangeSetAcceptanceTool = (
         sessionId: ctx.session.id,
       };
       const prepared =
-        input.sourceReview === undefined && runtime.prepareSourceReview !== undefined
+        input.runSourceReview === true &&
+        input.sourceReview === undefined &&
+        runtime.prepareSourceReview !== undefined
           ? await runtime.prepareSourceReview(reviewInput)
           : undefined;
       if (prepared !== undefined && "reference" in prepared) {
@@ -80,8 +83,21 @@ export const createChangeSetAcceptanceTool = (
           ...reviewInput,
           reference: input.sourceReview,
         });
-      } else {
+      } else if (input.runSourceReview === true || input.sourceReview !== undefined) {
         sourceAssessment = await runtime.reviewSource(reviewInput);
+      } else {
+        sourceAssessment = unavailableSourceAssessment(
+          {
+            appSpec: state.appSpec.content ?? "",
+            appSpecDigest: state.appSpec.digest,
+            clarifications: [],
+            files: [],
+            omissions: [],
+            originalRequest: "",
+            sourceDigest: observed.treeDigest,
+          },
+          "Independent source assessment was not requested.",
+        );
       }
       ctx.abortSignal?.throwIfAborted();
       const productAcceptance = productAcceptanceObligations(
@@ -155,6 +171,7 @@ export const createChangeSetAcceptanceTool = (
       );
     },
     inputSchema: z.strictObject({
+      runSourceReview: z.boolean().optional(),
       sourceReview: z
         .strictObject({
           appId: z.string().min(1),

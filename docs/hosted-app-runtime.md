@@ -25,6 +25,13 @@ binding result authorizes an effect or proves app acceptance.
 
 ## Normal app destination versus protected Preview onboarding
 
+Normal delivery targets the single live app and its approved resources.
+Use [public app release](public-app-release.md) for the direct delivery
+contract and implementation status. This document describes the optional
+hosted Preview capability, including recovery of already approved Preview
+operations. Its synthetic resources do not become a prerequisite for the
+target live release flow.
+
 The dedicated Preview capability below describes its existing frozen operation
 contract. It does not define the destination for a normal public app release.
 Normal Builder provisioning already creates `apps-<app-id>` as one repository-linked

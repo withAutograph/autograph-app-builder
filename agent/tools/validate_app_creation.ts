@@ -182,7 +182,7 @@ export const createAppValidationTool = (
 ) =>
   defineTool({
     description:
-      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Use repairOnly with implementationFiles to update the already approved app in its private checkout without running checks or requesting another Build. Open the updated app with start_app_preview. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. For persistent apps, run any declared authenticated browser task after that preparation succeeds and report its result separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
+      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Use repairOnly with implementationFiles to update the already approved app in its private checkout without running checks or requesting another Build. Open the updated app with start_app_preview. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. Set runBrowserTests only when authenticated browser testing is wanted for this app. Report those results separately; a runtime block preserves the technical receipt. Independent paid source assessment can be requested at accept_change_set after implementation and technical checks are ready. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
     // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep the workflow phase, cancellation and original failure receipt branches explicit.
     async execute(input, ctx) {
       const current = appBuilderWorkflowState.get();
@@ -197,7 +197,11 @@ export const createAppValidationTool = (
         currentDraftCandidateSource(current, candidate) !== undefined
       ) {
         return await validateDraftReconciliation(
-          { additionalCheckTasks: [], incremental: false, runBrowserTests: false },
+          {
+            additionalCheckTasks: [],
+            incremental: false,
+            runBrowserTests: input.runBrowserTests === true,
+          },
           ctx,
         );
       }
@@ -530,8 +534,9 @@ export const createAppValidationTool = (
         };
       }
       validationPhase(ctx.callId, "validating_persistent_backend");
+      const browserDescription = input.runBrowserTests === true ? description : undefined;
       const preparedBackend = await prepareBackendValidationRuntime(
-        description,
+        browserDescription,
         () => ({
           appId: current.appSpec.appId,
           root: current.applyReceipt.applyRoot,
@@ -548,7 +553,7 @@ export const createAppValidationTool = (
       // A rejected protected reference never falls back to repository-local browser execution.
       const backendValidation =
         preparedBackend.failure ??
-        (await executionPorts.validateBackend(description, {
+        (await executionPorts.validateBackend(browserDescription, {
           appId: current.appSpec.appId,
           root: current.applyReceipt.applyRoot,
           runtime,
@@ -569,12 +574,12 @@ export const createAppValidationTool = (
           clarifications: request.clarifications,
           files: [],
           omissions: [
-            "Current source was not observed or independently assessed during technical validation; final acceptance observes and reviews the current implementation.",
+            "Current source was not observed or independently assessed during technical validation; final acceptance observes the current implementation.",
           ],
           originalRequest: request.original,
           sourceDigest: current.applyReceipt.postTreeDigest,
         },
-        "Independent source assessment is deferred to final change-set acceptance. Complete implementation and technical checks, then call accept_change_set for the final review.",
+        "Independent source assessment can be requested separately during change-set acceptance.",
       );
       validationPhase(ctx.callId, "source_review_deferred", sourceAssessment.status);
       const productionHandoff = await productionReadinessHandoff({
@@ -613,6 +618,7 @@ export const createAppValidationTool = (
     inputSchema: z.object({
       implementationFiles: implementationFilesSchema.default([]),
       repairOnly: z.boolean().optional(),
+      runBrowserTests: z.boolean().optional(),
     }),
   });
 

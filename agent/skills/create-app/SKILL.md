@@ -293,22 +293,17 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    each returned cursor when a repair excerpt is truncated. Inspect the current
    changes with `change_set_status`; final acceptance below records their review.
    Review is neither publication nor proof of working user interactions.
+   Leave `runBrowserTests` unset for ordinary delivery. Set it only when the
+   app calls for its declared authenticated browser task.
    Reuse current executed behavioral evidence for the scenarios it actually
    covers; run additional scenarios only for missing coverage or changed behavior.
    A new tool invocation or business phase alone is not a reason to repeat an
    independent model judgment or an already covered browser test.
-   Successful validation defers independent source assessment until final
-   `accept_change_set`. A deferred or unassessed source assessment is expected;
-   do not repeat validation merely to obtain review. Once the implementation and
-   available behavioral checks are ready, inspect `change_set_status` and call
-   `accept_change_set` to assess current source against the original request and
-   accepted plan. A matching completed application assessment is reused.
-   Interrupted incomplete application-review model work may rerun; do not claim
-   per-step durable recovery. Record the independent assessment truthfully,
-   including findings or unavailable evidence. Source opinions are advisory;
-   do not turn them into an additional publication gate. You may start the private
-   preview to complete missing behavioral checks before final acceptance; keep
-   that incomplete preview explicitly inspectable.
+   After the ordinary build succeeds, inspect `change_set_status` and use
+   `accept_change_set` to record the reviewed source. Leave `runSourceReview`
+   unset for ordinary delivery. An independent assessment is optional and may
+   be requested explicitly when it serves the app's needs. Report any
+   assessment and its findings as advisory evidence.
    Repair cited product contradictions through `validate_app_creation` with
    corrected implementation files, then accept the repaired change set again.
    Read cited findings through `change_set_status` with `view: "acceptance"`,
@@ -326,10 +321,12 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
    do not replace a requested backend outcome with a simulated transition.
-   Use the user's GitHub repository URL or owner/name as the delivery destination.
-   Carry it into `prepare_github_draft_review` for a fresh-template app. Show the
-   resolved repository during review. If access is missing, use the GitHub
-   connection flow for that repository.
+   Use the saved Builder destination for delivery. If a new app has no
+   destination, send the user to the destination setup link returned by
+   `prepare_github_draft_review`, then continue the same saved build. If the user
+   explicitly chose an existing repository, carry that repository into the
+   review and use its ordinary GitHub connection flow if access is missing.
+   Show the resolved repository during review.
    Before initial draft publication, run `prepare_github_draft_review` to bind the
    actual destination snapshot. Inspect its before/after content as needed with
    `change_set_status`, `view: "next-page"`, and the selected `contentSide`.
@@ -417,19 +414,15 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    source through the
    existing publication approval flow without waiting for successful private UI
    startup.
-   Once the publication records its source, continue hosted setup in this
-   session. Use the accepted behavior and backend kind to decide whether the
-   app needs storage. For persistent apps, call `plan-app-hosted-runtime` and
-   continue its exact approved plan through `prepare-app-hosted-runtime`. The
-   protected operator selects storage and installs the checked schema. For a
-   static app, use its native Preview delivery path and skip app database setup.
-   Ask about intended users when access policy needs a product decision. Keep
-   database identifiers, credentials and resource selection inside the operator
-   workflow. If platform setup is unavailable, preserve the session and report
-   the missing capability for the platform operator. Use the saved operation
-   reference to resume an interrupted preparation. Show setup and access
-   verification as separate steps before reporting the app ready. Report actual startup failures and claim a working local or hosted
-   Preview only after exercising that actual app.
+   For a normal release into an existing repository with native Production
+   delivery, continue through the approved PR merge flow once the repository's
+   required checks pass. Native Git delivery owns deployment. Treat optional
+   app tests and private Preview as iteration tools. Use the app's own tasks
+   for any behavior checks that its requirements call for. Report actual build
+   or deployment failures and the provider's observed delivery result.
+   If the app needs managed storage or Auth, use its supported owner-scoped
+   setup and resume any saved operation. Keep provider details inside Builder.
+   Run the hosted Preview setup only when the user asks for a hosted Preview.
    For private local preview or candidate checks, if the repository defines
    `app:local` for the selected app and needs local data, use
    `prepare-app-local-preview` first in the approved sandbox.
@@ -486,7 +479,8 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    when an accepted walkthrough requires actual hosted actors, exercise them
    through the authorized hosted path and report their independent readbacks.
 
-   When validation returns `productionHandoff`, follow
+   When the app needs new Production runtime bindings and validation returns
+   `productionHandoff`, follow
    [Production handoff](../../../docs/production-readiness-handoff.md) for
    reviewed Auth identity, explicit QA access and runtime binding delivery.
    Include its declared app route, roles, and blockers in the result. Keep the
@@ -517,12 +511,21 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    another outcome. Keep internal execution mechanics out of the public
    conversation.
 
-## Normal public app delivery
+## Production delivery
 
-When the requested result is a public app URL with application sign-in, use the
-normal Builder destination and public-release capability. Vercel account sign-in
-is not an app access requirement. Do not start a separate native Preview target,
-acceptance project or Auth project to satisfy this journey.
+For an existing repository with native deployment, including Arrusted, use the
+selected repository's reviewed PR delivery. After the approved merge, report
+the native Production deployment outcome when available. A separate Preview,
+synthetic storage, private browser run, or managed public-release plan is not a
+step in this route. If the app actually needs new runtime bindings, use the
+repository's protected Production setup for those bindings and keep the same
+destination and app identity.
+
+### Builder-created deployment destinations
+
+Use the managed public-release capability for an owned Builder-created
+repository and project. App sign-in uses the application's Auth at its public
+domain. Keep the resource preparation and release in that same project.
 
 - Keep the accepted app and saved session. Use its normal owned provisioned
   destination. If setup reports `builder_destination_required`, direct the user
@@ -556,11 +559,9 @@ acceptance project or Auth project to satisfy this journey.
 - If the release reports pending, use `observe-app-public-release` with the
   same frozen plan to continue reading the native deployment. Preserve the
   operation and its approval while the provider is still working. When ready,
-  open the app's ordinary public URL. Exercise real
-  Better Auth login/logout and a persistent app action before calling the app
-  usable. For integrations, additionally exercise the approved provider
-  lifecycle and independent data/isolation readbacks. Keep all these results
-  separate from source tests, deployment readiness and prototype observations.
+  report the app's ordinary public URL and the observed deployment result.
+  App-owned behavior and integration checks can run when the app calls for
+  them. They are separate from the normal release result.
 - Preserve old protected Preview intents and history. Changed targets and
   exposure require new supported plans and ordinary approvals. Unknown effects
   stay visible and are reconciled through the saved operation; never resend an

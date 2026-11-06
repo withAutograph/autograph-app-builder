@@ -1,5 +1,38 @@
 # Public app release through Builder
 
+## Target delivery contract
+
+The default delivery path is a single live app with an internet-reachable
+Production domain. Builder validates the app privately, then prepares the
+approved destination and delivers the reviewed revision through native Git
+delivery. The owner starts with authorized access to the live app. Invitations
+and role changes update access to that same URL, deployment and data.
+
+Hosted Preview, synthetic acceptance and app behavior checks are optional.
+Run the normal build and native deployment using the approved source and target.
+When an app needs managed storage or Auth, Builder provisions those resources
+through the protected operator and reuses them on revision. Report actual
+provider build or deployment failures. The app owns any additional tests.
+A successful deployment can be reported with its final URL without a separate
+browser walkthrough or persistence exercise.
+
+Before any provider write, bind the approved operation to the saved app,
+repository, reviewed revision, environment, access and material cost.
+Preserve existing publication and merge authorization and GitHub rules.
+Revisions reuse the app's owned resources and verify compatibility before
+deployment. A partial or uncertain operation resumes from the original
+journal and reconciles provider readback before retrying. Sharing alone
+requires no source change or deployment.
+
+## Current implementation and remaining change
+
+The implementation below still requires a verified synthetic runtime
+receipt. Replace that prerequisite with verified preparation of the
+approved live target. Check that the protected operator has valid resource
+ownership and can read back the installed release and access bindings.
+Dropping the receipt predicate alone would leave those facts unproven.
+Keep older frozen operations and receipts scoped to their original effects.
+
 The normal Builder app keeps one owned Services project at the repository root.
 `plan-app-public-release` resolves the current saved app's normal provisioning
 receipt, reviewed published source, independently verified ready synthetic
