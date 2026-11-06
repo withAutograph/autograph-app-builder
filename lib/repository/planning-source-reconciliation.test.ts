@@ -227,16 +227,31 @@ describe("owned planning source reconciliation", () => {
     try {
       f.write("platform.txt", "authored before interruption\n");
       const interrupted = planningSourceReconciliationProgram.replace(
-        "  complete(plan);\n  console.log",
-        "  process.exit(75);\n  console.log",
+        "    writeFileSync(destination, bytes);",
+        '    if (file === "new-platform.txt") throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });\n    writeFileSync(destination, bytes);',
       );
-      expect(f.run(interrupted).status).toBe(75);
+      const failure = f.run(interrupted);
+      expect(failure.status).not.toBe(0);
+      expect(failure.stderr).toContain("ENOSPC");
       expect(f.git("rev-parse", "HEAD")).toBe(f.oldHead);
-      expect(f.run().status).toBe(0);
+      const ref = `refs/app-builder/source-checkpoints/${createHash("sha256").update("session").digest("hex")}`;
+      expect(f.git("show", `${ref}:platform.txt`)).toBe("authored before interruption");
+
+      // Simulate the disk pressure a replay would hit if it rewrote already-correct
+      // files, including ones written before the interruption.
+      const replay = planningSourceReconciliationProgram.replace(
+        "    writeFileSync(destination, bytes);",
+        '    if (file !== "new-platform.txt") throw Object.assign(new Error("unexpected file rewrite: " + file), { code: "ENOSPC" });\n    writeFileSync(destination, bytes);',
+      );
+      const result = f.run(replay);
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
       expect(f.git("rev-parse", "HEAD")).toBe(f.targetSha);
       expect(readFileSync(path.join(f.root, "platform.txt"), "utf-8")).toBe(
         "authored before interruption\n",
       );
+      expect(readFileSync(path.join(f.root, "new-platform.txt"), "utf-8")).toBe("new platform\n");
+      expect(f.git("show", `${ref}:platform.txt`)).toBe("authored before interruption");
     } finally {
       rmSync(f.root, { force: true, recursive: true });
       rmSync(f.stateRoot, { force: true, recursive: true });
