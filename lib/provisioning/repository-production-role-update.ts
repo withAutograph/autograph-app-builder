@@ -67,14 +67,12 @@ export const createRepositoryProductionRoleUpdater =
     }
     await deps.execute(
       context,
-      update.roles.length === 0
-        ? { action: "remove", memberId: actorId, clientRequestId: update.commandId }
-        : {
-            action: "change-role",
-            memberId: actorId,
-            roles: update.roles,
-            clientRequestId: update.commandId,
-          },
+      {
+        action: "change-role",
+        memberId: actorId,
+        roles: update.roles,
+        clientRequestId: update.commandId,
+      },
     );
     await context.assertCurrent();
     return "applied";

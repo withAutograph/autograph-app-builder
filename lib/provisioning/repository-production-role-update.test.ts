@@ -69,6 +69,24 @@ describe("approved creator role revisions", () => {
       },
     ]);
   });
+  it("keeps explicit app admission when an approved revision removes all business roles", async () => {
+    const context = fixture();
+    const revision = context.row.record.creatorRoleUpdate;
+    if (!revision) {
+      throw new Error("Fixture role revision missing");
+    }
+    revision.roles = [];
+    const commands: AppAccessCommand[] = [];
+    const update = createRepositoryProductionRoleUpdater({
+      readMembers: async () => [{ id: "creator" }],
+      execute: async (_context, command) => { commands.push(command); },
+    });
+    expect(await update(context)).toBe("applied");
+    expect(commands).toEqual([{
+      action: "change-role", memberId: "creator", roles: [],
+      clientRequestId: "11111111-1111-4111-a111-111111111111",
+    }]);
+  });
   it("never restores a creator whose access was deliberately removed", async () => {
     const context = fixture();
     const commands: AppAccessCommand[] = [];
