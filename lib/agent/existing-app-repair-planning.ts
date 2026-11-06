@@ -95,6 +95,11 @@ const approvedRepairHistory = (proposalDigest: string, sessionId: string): Repai
   const matches = existingAppRepairHistory
     .get()
     .filter((entry) => entry.proposalDigest === proposalDigest);
+  if (matches.length === 0) {
+    throw new Error(
+      "This proposal has no retained approved predecessor. Reuse the current plan with prepare_app_creation without options. To implement that proposal, use apply_app_creation with the selected compute profile and implementation files. Its normal approval policy presents or reuses Build approval for the exact current proposal. Preserve the saved work if the approval cannot be reconciled.",
+    );
+  }
   const entry = matches[0];
   if (matches.length !== 1 || entry?.sessionId !== sessionId || !settled(entry.approvedBase)) {
     throw new Error(

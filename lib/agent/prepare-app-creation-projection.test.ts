@@ -345,6 +345,22 @@ describe("resume the approved build through the planning tool", () => {
     },
   );
 
+  it("directs missing predecessor history to normal approval without changing the proposal", async () => {
+    await run(async () => {
+      const { planned } = await prepareRecoveryFixture("applied");
+      existingAppRepairHistory.update(() => []);
+      await expect(
+        prepareAppCreationTool.execute({ resumeApprovedBuild: true }, hostedRecoveryContext),
+      ).rejects.toThrow(
+        "Its normal approval policy presents or reuses Build approval for the exact current proposal",
+      );
+      expect(appBuilderWorkflowState.get()).toEqual(planned);
+      expect(ports.execute).not.toHaveBeenCalled();
+      expect(ports.run).not.toHaveBeenCalled();
+      expect(ports.emitProjection).not.toHaveBeenCalled();
+    });
+  });
+
   it.each(["different-app", "pending", "dispatched"] as const)(
     "keeps the repair proposal in place for a %s recovery attempt",
     async (boundary) => {

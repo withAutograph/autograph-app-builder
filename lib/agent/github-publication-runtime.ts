@@ -1,4 +1,7 @@
-import { createGitHubPrEffectIntent } from "../repository/github-pr-effect-journal";
+import {
+  createGitHubPrEffectIntent,
+  githubPrEffectIntentDigest,
+} from "../repository/github-pr-effect-journal";
 import type {
   GitHubPrEffectReceipt,
   GitHubPrEffectStore,
@@ -325,6 +328,7 @@ export interface GitHubPublicationRuntime {
     request: {
       proposalDigest: string;
       reviewedTarget: GitHubPrDeliveryRef;
+      reconciledHeadSha?: string;
       approvedByCallId: string;
       reconcileOnly?: boolean;
       abortSignal?: AbortSignal;
@@ -332,9 +336,14 @@ export interface GitHubPublicationRuntime {
   ) => Promise<GitHubPrEffectReceipt | undefined>;
   inspectPublishedPullRequest?: (
     proposalDigest: string,
+    reconciledHeadSha?: string,
   ) => Promise<
     GitHubPrDeliveryObservation & { reviewedRevision: boolean; reviewedTarget: GitHubPrDeliveryRef }
   >;
+  inspectPublishedReconciliationHead?: (
+    proposalDigest: string,
+    reconciliation: ExistingDraftReconciliationProposal,
+  ) => Promise<string | null>;
   inspectOwnedPublishedDraftRepairSource?: (input: {
     publishedProposalDigest: string;
     appId: string;
@@ -619,7 +628,10 @@ export function composeGitHubPublicationRuntime(input: {
   const { proposals } = input;
   const { receipts } = input;
   const { adoptions } = input;
-  const readPublishedDeliveryTarget = async (proposalDigest: string) => {
+  const readPublishedDeliveryTarget = async (
+    proposalDigest: string,
+    reconciledHeadSha?: string,
+  ) => {
     const proposal = await proposals.read(proposalDigest);
     const receipt = await receipts.read(proposalDigest);
     if (
@@ -639,13 +651,17 @@ export function composeGitHubPublicationRuntime(input: {
     }
     const reviewedTarget = {
       baseBranch: receipt.baseBranch,
-      headSha: receipt.branchSha,
+      headSha: reconciledHeadSha ?? receipt.branchSha,
       name: proposal.name,
       owner: proposal.owner,
       pullRequestNumber: receipt.pullRequestNumber,
       repositoryId: receipt.repositoryId,
     };
-    return { installationIdentityDigest: proposal.installationIdentityDigest, reviewedTarget };
+    return {
+      installationIdentityDigest: proposal.installationIdentityDigest,
+      reviewedTarget,
+      receipt,
+    };
   };
   const ownedDraftRecovery = (
     request: DraftInspectionRecoveryInput | undefined,
@@ -920,7 +936,7 @@ export function composeGitHubPublicationRuntime(input: {
               throw new Error("GitHub pull request delivery is unavailable.");
             }
             const { installationIdentityDigest, reviewedTarget } =
-              await readPublishedDeliveryTarget(request.proposalDigest);
+              await readPublishedDeliveryTarget(request.proposalDigest, request.reconciledHeadSha);
             if (!isDeepStrictEqual(reviewedTarget, request.reviewedTarget)) {
               throw new Error("The approved pull request revision has changed.");
             }
@@ -938,24 +954,91 @@ export function composeGitHubPublicationRuntime(input: {
                 ? { ...common, kind: request.kind }
                 : { ...common, kind: request.kind, readyAt: request.readyAt },
             );
-            const execute =
-              request.reconcileOnly === true
-                ? reconcileApprovedGitHubPrEffect
-                : executeApprovedGitHubPrEffect;
-            return await execute({
+            const effect = {
               approvedByCallId: request.approvedByCallId,
               ...(request.abortSignal === undefined ? {} : { abortSignal: request.abortSignal }),
               intent,
               provider,
               store,
-            });
+            };
+            if (intent.kind === "pr-merge") {
+              return request.reconcileOnly === true
+                ? await reconcileApprovedGitHubPrEffect(effect)
+                : await executeApprovedGitHubPrEffect(effect);
+            }
+            const legacy = await store.read(githubPrEffectIntentDigest(intent));
+            const readyAuthorization: NonNullable<GitHubPrDeliveryRef["readyAuthorization"]> =
+              legacy?.status === "pending" ? "recover-first-ready" : "contents-write";
+            const authorized = { ...effect, intent: { ...intent, readyAuthorization } };
+            if (request.reconcileOnly === true) {
+              return (
+                (await reconcileApprovedGitHubPrEffect(authorized)) ??
+                (await reconcileApprovedGitHubPrEffect(effect))
+              );
+            }
+            // A fresh approval can recover a first Ready with the corrected
+            // credential. The provider checks the live draft and its history.
+            if (
+              legacy !== undefined &&
+              (legacy.status !== "pending" || legacy.approvedByCallId === request.approvedByCallId)
+            ) {
+              return legacy;
+            }
+            return await executeApprovedGitHubPrEffect(authorized);
           },
         }),
-    async inspectPublishedPullRequest(proposalDigest) {
+    async inspectPublishedReconciliationHead(proposalDigest, reconciliation) {
+      const { reviewedTarget, installationIdentityDigest, receipt } =
+        await readPublishedDeliveryTarget(proposalDigest);
+      if (
+        reconciliation.installationIdentityDigest !== installationIdentityDigest ||
+        reconciliation.priorPublicationDigest !== receipt.digest
+      ) {
+        return null;
+      }
+      const draft = await adapter.inspectExistingDraft({
+        name: reviewedTarget.name,
+        number: reviewedTarget.pullRequestNumber,
+        owner: reviewedTarget.owner,
+        repositoryId: reviewedTarget.repositoryId,
+        reconciliation,
+      });
+      if (
+        !isDeepStrictEqual(
+          [
+            draft.baseBranch,
+            draft.headRepositoryId,
+            draft.baseRepositoryId,
+            draft.pullRequestId,
+            draft.verifiedBuilderOrigin?.marker,
+          ],
+          [
+            reviewedTarget.baseBranch,
+            reviewedTarget.repositoryId,
+            reviewedTarget.repositoryId,
+            receipt.pullRequestId,
+            receipt.idempotencyKey,
+          ],
+        )
+      ) {
+        return null;
+      }
+      const applied = await readAppliedOwnedReconciliation({
+        adapter,
+        draft,
+        prior: receipt,
+        candidates: [reconciliation],
+      });
+      return applied === undefined ? null : draft.headSha;
+    },
+    async inspectPublishedPullRequest(proposalDigest, reconciledHeadSha) {
       if (adapter.prDelivery === undefined) {
         throw new Error("GitHub pull request status is unavailable for this session.");
       }
-      const { reviewedTarget } = await readPublishedDeliveryTarget(proposalDigest);
+      const { reviewedTarget } = await readPublishedDeliveryTarget(
+        proposalDigest,
+        reconciledHeadSha,
+      );
       const observation = await adapter.prDelivery.inspect(reviewedTarget);
       return {
         ...observation,

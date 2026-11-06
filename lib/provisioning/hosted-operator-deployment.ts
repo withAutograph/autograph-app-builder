@@ -23,6 +23,7 @@ import {
   createManagedRuntimeExecution,
   observeManagedRuntimePorts,
 } from "../agent/managed-runtime-execution";
+import { createVerifiedActorReadback } from "./hosted-operator-verified-actor-readback";
 import { createHostedContinuityOperations } from "./hosted-operator-continuity";
 import { createPostgresContinuityJournalStore } from "./postgres-hosted-operator-continuity-journal";
 import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-custody";
@@ -38,7 +39,10 @@ import {
   privateHostedApprovalReceiptSchema,
 } from "../eve/private-hosted-approval";
 import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approval";
-import { readActiveAppInstallationCustomerIds } from "./hosted-operator-app-readiness";
+import {
+  readActiveAppInstallationCustomerIds,
+  createHostedOperatorTenantBindingReadback,
+} from "./hosted-operator-app-readiness";
 import type { OperatorAppMetadataScope } from "./hosted-operator-app-readiness";
 import type { HostedSessionRecord } from "../eve/hosted-store";
 import {
@@ -3953,6 +3957,46 @@ export const createHostedOperatorControlPlane = async (input: {
     const continuityRequest = createContinuityDispatcher({
       store: continuityStore,
       operations: continuities,
+      async readVerifiedActors(context, intentId) {
+        const saved = await continuities.readPlan(context, intentId);
+        await continuitySetup(context, saved.plan);
+        const { operator } = await preparedForContinuity(context);
+        const result = await createVerifiedActorReadback(sharedNormalActorDependencies)({
+          ...context,
+          plan: operator.plan,
+          operationRef: operator.operationRef,
+        });
+        await continuitySetup(context, saved.plan);
+        return result;
+      },
+      async readTenantBindings(context, intentId) {
+        const saved = await continuities.readPlan(context, intentId);
+        const assertCurrent = async () => {
+          await continuitySetup(context, saved.plan);
+        };
+        await assertCurrent();
+        const readInstallationScopes = controlPlane.readAppInstallationMetadataScopes;
+        const reader = createHostedOperatorTenantBindingReadback({
+          assertAuthorized: owner.assertAuthorized,
+          ...(readInstallationScopes === undefined
+            ? {}
+            : {
+                readInstallationScopes: (contextInput) =>
+                  readInstallationScopes(contextInput, contextInput.plan),
+              }),
+          readRuntimeUrl: async (contextInput) => {
+            await assertCurrent();
+            const { current, operator } = await preparedForContinuity(context);
+            const bindings = await controlPlane.readResourceBindings({
+              ...contextInput,
+              plan: operator.plan,
+              privateState: current.record.privateState,
+            });
+            return bindings.appDatabase.runtimeUrl;
+          },
+        });
+        return await reader({ ...context, plan: saved.plan.preparedPlan, assertCurrent });
+      },
       verifyWorkload: owner.verifyWorkload,
       authorize: owner.authorize,
       authorizeRead: owner.authorizeArtifactRead,

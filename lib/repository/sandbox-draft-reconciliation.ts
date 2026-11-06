@@ -10,6 +10,7 @@ import {
   assertOwnedPublicationReconciliationScope,
 } from "./github-draft-reconciliation";
 import type { OwnedPublicationReconciliationScope } from "./github-draft-reconciliation";
+import { planApplicationSourceRegistration } from "./application-source-registration";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import { attachCheckoutDependencyView } from "./dependency-cache";
@@ -95,6 +96,8 @@ export interface DraftReconciliationInput {
   ownedPublication?: Pick<OwnedPublicationReconciliationScope, "proposal" | "publication">;
   unpublished?: {
     reviewDigest: string;
+    restoreInitialAppSource?: true;
+    initialSourceRevision?: { sha: string; tree: string };
     /** Exact original publication head, resolved from this workflow's tenant receipt. */
     priorPublishedHeadSha?: string;
     changes: readonly OverlayChange[];
@@ -156,6 +159,8 @@ const candidateNeedsCreation = async (sandbox: SandboxSession, root: string): Pr
 const appPath = (appId: string, path: string) =>
   safeSourcePath(path) && path.startsWith(`apps/${appId}/`);
 
+const initialRegistrationPaths = new Set(["package.json", "bun.lock", "microfrontends.json"]);
+
 const verifyInputs = (input: DraftReconciliationInput) => {
   const fields = [
     [NAME, input.repository.owner],
@@ -171,6 +176,24 @@ const verifyInputs = (input: DraftReconciliationInput) => {
   ] as const;
   if (fields.some(([pattern, value]) => !pattern.test(value))) {
     throw new Error(INVALID_INPUT);
+  }
+  const initialSource = input.unpublished?.initialSourceRevision;
+  if (
+    initialSource !== undefined &&
+    (input.unpublished?.restoreInitialAppSource !== true ||
+      !SHA.test(initialSource.sha) ||
+      !SHA.test(initialSource.tree))
+  ) {
+    throw new Error(INVALID_INPUT);
+  }
+  if (input.unpublished?.restoreInitialAppSource === true) {
+    const manifest = `apps/${input.appId}/package.json`;
+    if (
+      input.ownedPublication === undefined ||
+      input.ownedPublication.proposal.approvedPaths.includes(manifest)
+    ) {
+      throw new Error("Initial source restoration requires an incomplete owned publication.");
+    }
   }
   if (input.ownedPublication !== undefined) {
     assertOwnedPublicationReconciliationOrigin(input.ownedPublication);
@@ -268,8 +291,59 @@ const matchesFileState = (
   if (expected === undefined) {
     return observed === null;
   }
-  const mode = expected.mode === "100755" ? "755" : "644";
+  const mode = expected.mode === "100755" || expected.mode === "755" ? "755" : "644";
   return observed?.digest === expected.digest && observed.mode === mode;
+};
+
+const restoredRegistrationPaths = (
+  restore: true | undefined,
+  changes: readonly OverlayChange[],
+) => {
+  const paths = new Set<string>();
+  if (restore === true) {
+    for (const { path, kind } of changes) {
+      if (initialRegistrationPaths.has(path) && kind !== "deleted") {
+        paths.add(path);
+      }
+    }
+  }
+  return paths;
+};
+
+const initialRecoveryChanges = async (
+  input: DraftReconciliationInput,
+  root: string,
+  unpublished: NonNullable<DraftReconciliationInput["unpublished"]>,
+): Promise<readonly OverlayChange[]> => {
+  const source = unpublished.initialSourceRevision;
+  if (source === undefined) {
+    return unpublished.changes;
+  }
+  const { sandbox, appId } = input;
+  const [tree, originalApp] = await Promise.all([
+    checked(
+      sandbox,
+      "verify original app source tree",
+      git(root, ["rev-parse", `${source.sha}^{tree}`]),
+    ),
+    checked(
+      sandbox,
+      "check original app absence",
+      git(root, ["ls-tree", source.sha, "--", `apps/${appId}`]),
+    ),
+  ]);
+  if (tree !== source.tree || originalApp !== "") {
+    throw new Error("The original Git tree does not match this new app's source receipt.");
+  }
+  return await Promise.all(
+    unpublished.changes.map(async (change) => {
+      if (!initialRegistrationPaths.has(change.path)) {
+        return change;
+      }
+      const before = await currentFileState(sandbox, root, change.path, source.sha);
+      return before === null ? change : { ...change, before, kind: "modified" as const };
+    }),
+  );
 };
 
 const stageUnpublished = async (
@@ -281,31 +355,29 @@ const stageUnpublished = async (
   if (unpublished === undefined || unpublished.changes.length === 0) {
     return;
   }
+  const changes = await initialRecoveryChanges(input, root, unpublished);
   const observed = await Promise.all(
-    unpublished.changes.map(
-      async (change) => await currentFileState(input.sandbox, root, change.path),
-    ),
+    changes.map(async (change) => await currentFileState(input.sandbox, root, change.path)),
   );
-  if (
-    unpublished.changes.every((change, index) =>
-      matchesFileState(observed[index] ?? null, change.after),
-    )
-  ) {
+  if (changes.every((change, index) => matchesFileState(observed[index] ?? null, change.after))) {
     return;
   }
-  const candidates = unpublished.changes.filter(
+  const candidates = changes.filter(
     (change, index) =>
       !matchesFileState(observed[index] ?? null, change.after) &&
       !matchesFileState(observed[index] ?? null, change.before),
   );
   const { priorPublishedHeadSha } = unpublished;
   const observedByPath = new Map(
-    unpublished.changes.map((change, index) => [change.path, observed[index] ?? null]),
+    changes.map((change, index) => [change.path, observed[index] ?? null]),
   );
   const unchangedPublished = new Set<string>();
   if (priorPublishedHeadSha !== undefined) {
     await Promise.all(
       candidates.map(async (change) => {
+        if (!appPath(input.appId, change.path)) {
+          return;
+        }
         const original = await currentFileState(
           input.sandbox,
           root,
@@ -324,12 +396,16 @@ const stageUnpublished = async (
       `Builder cannot replay reviewed change ${changedPreimage.path}: the current draft head matches neither its reviewed starting content nor the complete reviewed result. Reopen the current PR head and review its files again.`,
     );
   }
-  const pendingChanges = unpublished.changes.filter(
+  const pendingChanges = changes.filter(
     (change, index) => !matchesFileState(observed[index] ?? null, change.after),
+  );
+  const registration = restoredRegistrationPaths(
+    unpublished.restoreInitialAppSource,
+    pendingChanges,
   );
   // oxlint-disable-next-line react-doctor/async-await-in-loop -- reviewed postimages are staged in deterministic order.
   for (const change of pendingChanges) {
-    if (!appPath(input.appId, change.path)) {
+    if (!appPath(input.appId, change.path) && !registration.has(change.path)) {
       throw new Error(
         `Builder cannot reconcile unpublished change ${change.path}: it is outside apps/${input.appId}/.`,
       );
@@ -377,7 +453,7 @@ const stageUnpublished = async (
   await checked(
     input.sandbox,
     "stage unpublished app changes",
-    git(root, ["add", "--all", "--", `apps/${input.appId}`]),
+    git(root, ["add", "--all", "--", `apps/${input.appId}`, ...registration]),
   );
   await checked(
     input.sandbox,
@@ -452,7 +528,7 @@ export const nonAppIndexDigest = async (sandbox: SandboxSession, root: string, a
     }
     if (match.groups?.stage !== "0") {
       throw new Error(
-        "A repository owner must resolve non-app merge conflicts before Builder can continue.",
+        `A repository owner must resolve the merge conflict at ${JSON.stringify(match.groups?.path)} before Builder can continue.`,
       );
     }
     return true;
@@ -837,6 +913,82 @@ const replayCandidateApp = async (
   }
 };
 
+const resolveRestoredAppRouteConflict = async (
+  input: DraftReconciliationInput,
+  root: string,
+  workspaceRoot: string,
+) => {
+  const path = "microfrontends.json";
+  const { sandbox, appId, unpublished } = input;
+  if (
+    unpublished?.restoreInitialAppSource !== true ||
+    !unpublished.changes.some((change) => change.path === path)
+  ) {
+    return;
+  }
+  const conflicts = records(
+    await checked(sandbox, "inspect restoration conflicts", git(root, UNMERGED_PATHS)),
+  );
+  if (!conflicts.includes(path)) {
+    return;
+  }
+  const [retained, currentBase] = await Promise.all([
+    checked(sandbox, "read retained app registration", git(root, ["show", `:2:${path}`])),
+    checked(sandbox, "read the current base registration", git(root, ["show", `:3:${path}`])),
+  ]);
+  const plan = await planApplicationSourceRegistration(sandbox, appId, currentBase);
+  const config = z.object({ applications: z.record(z.string(), z.unknown()) });
+  const expected = config.parse(JSON.parse(retained)).applications[appId];
+  const added = config.parse(JSON.parse(plan.proposedBytes)).applications[appId];
+  if (expected === undefined || !isDeepStrictEqual(expected, added)) {
+    throw new Error("The current base cannot reproduce the retained app registration.");
+  }
+  await sandbox.writeTextFile({
+    path: `${root.slice(workspaceRoot.length + 1)}/${path}`,
+    content: plan.proposedBytes,
+  });
+  await checked(sandbox, "stage the restored app registration", git(root, ["add", "--", path]));
+};
+
+const regenerateRestoredAppLockfile = async (input: DraftReconciliationInput, root: string) => {
+  const { sandbox, unpublished, appId } = input;
+  if (
+    unpublished?.initialSourceRevision === undefined ||
+    !unpublished.changes.some(({ path }) => path === "bun.lock")
+  ) {
+    return;
+  }
+  const conflicts = records(
+    await checked(sandbox, "inspect restored dependency conflicts", git(root, UNMERGED_PATHS)),
+  );
+  if (!conflicts.includes("bun.lock") || conflicts.some((path) => path !== "bun.lock")) {
+    return;
+  }
+  // Bun resolves the restored workspace against main's current dependency graph.
+  await checked(
+    sandbox,
+    "restore the current base lockfile for regeneration",
+    git(root, ["restore", "--theirs", "--worktree", "--", "bun.lock"]),
+  );
+  const appManifest = quote(`apps/${appId}/package.json`);
+  const trust = 'MISE_TRUSTED_CONFIG_PATHS="$MISE_TRUSTED_CONFIG_PATHS:"';
+  await checked(
+    sandbox,
+    "regenerate the restored app workspace lockfile",
+    [
+      `cd ${quote(root)}`,
+      "test -f bun.lock && test ! -L bun.lock",
+      `test -f ${appManifest} && test ! -L ${appManifest}`,
+      `${trust}${quote(root)} mise exec -- bun install --lockfile-only --ignore-scripts`,
+    ].join(" && "),
+  );
+  await checked(
+    sandbox,
+    "stage the regenerated app lockfile",
+    git(root, ["add", "--", "bun.lock"]),
+  );
+};
+
 const readCandidateConflicts = async (
   input: DraftReconciliationInput,
   root: string,
@@ -1035,6 +1187,10 @@ export const prepareDraftReconciliation = async (
         );
       }
     }
+  }
+  if (created) {
+    await resolveRestoredAppRouteConflict(input, root, workspaceRoot);
+    await regenerateRestoredAppLockfile(input, root);
   }
   // Capture only a newly created native merge, before replay or any app edits.
   let publicationScope: OwnedPublicationReconciliationScope | undefined;

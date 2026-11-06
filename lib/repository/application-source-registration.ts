@@ -14,13 +14,17 @@ export const applicationSourceRegistrationSchema = z.strictObject({
 const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
 
 /** Invoke the acquired platform's pure planner; no uploaded app module is imported. */
-export const planApplicationSourceRegistration = async (sandbox: SandboxSession, appId: string) => {
+export const planApplicationSourceRegistration = async (
+  sandbox: SandboxSession,
+  appId: string,
+  configBytes?: string,
+) => {
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId)) {
     throw new Error("Invalid imported app identity.");
   }
   const packageName = `@autograph/${appId}`;
   const routes = [`/${appId}`, `/${appId}/:path*`];
-  const source = `import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {planMicrofrontendRegistration} from './packages/platform-microfrontends/src/policy/config-registration.ts';const bytes=readFileSync('microfrontends.json','utf8'); console.log(JSON.stringify(planMicrofrontendRegistration(bytes,{projectName:${JSON.stringify(appId)},packageName:${JSON.stringify(packageName)},routes:${JSON.stringify(routes)},expectedDigest:createHash('sha256').update(bytes).digest('hex')})));`;
+  const source = `import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {planMicrofrontendRegistration} from './packages/platform-microfrontends/src/policy/config-registration.ts';const bytes=${configBytes === undefined ? "readFileSync('microfrontends.json','utf8')" : JSON.stringify(configBytes)}; console.log(JSON.stringify(planMicrofrontendRegistration(bytes,{projectName:${JSON.stringify(appId)},packageName:${JSON.stringify(packageName)},routes:${JSON.stringify(routes)},expectedDigest:createHash('sha256').update(bytes).digest('hex')})));`;
   let result = await sandbox.run({
     command: `bun -e ${quote(source)}`,
     workingDirectory: "/workspace/repository",

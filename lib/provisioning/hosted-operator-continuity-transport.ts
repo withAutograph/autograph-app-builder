@@ -1,6 +1,10 @@
 import { reportContinuityPlanningFailure } from "./hosted-operator-consent-diagnostic";
 import type { ContinuityPlanningStage } from "./hosted-operator-consent-diagnostic";
 import { z } from "zod";
+import { verifiedActorReadbackSchema } from "./hosted-operator-verified-actor-contract";
+import type { z as Zod } from "zod";
+import { appTenantBindingReadbackSchema } from "./hosted-operator-tenant-binding-contract";
+import type { AppTenantBindingReadback } from "./hosted-operator-tenant-binding-contract";
 import {
   operatorOwnerContextSchema,
   operatorSelectionSchema,
@@ -22,6 +26,21 @@ import type {
 } from "./hosted-operator-service";
 
 export const continuityTransportRequestSchema = z.discriminatedUnion("action", [
+  z.strictObject({
+    action: z.literal("continuity-verified-actors"),
+    intentId: z.uuid(),
+    ownerContext: operatorOwnerContextSchema,
+  }),
+  z.strictObject({
+    action: z.literal("continuity-checkpoints"),
+    intentId: z.uuid(),
+    ownerContext: operatorOwnerContextSchema,
+  }),
+  z.strictObject({
+    action: z.literal("continuity-binding-read"),
+    intentId: z.uuid(),
+    ownerContext: operatorOwnerContextSchema,
+  }),
   z.strictObject({
     action: z.literal("continuity-read"),
     intentId: z.uuid(),
@@ -59,11 +78,43 @@ export const continuityPlannedSchema = z.strictObject({
 
 export type ContinuityTransportRequest = z.infer<typeof continuityTransportRequestSchema>;
 
+/** Keep a failed owner-scoped journal read distinct from an unknown execution outcome. */
+const readCanonicalContinuity = async <T>(read: () => Promise<T>, signal: AbortSignal) => {
+  try {
+    return await read();
+  } catch (error) {
+    if (signal.aborted || (error instanceof Error && error.name === "AbortError")) {
+      throw error;
+    }
+    if (error instanceof HostedOperatorError && error.recoveryStage !== undefined) {
+      throw error;
+    }
+    throw new HostedOperatorError(
+      error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+      {
+        cause: error,
+        recoveryStage: "canonical_read",
+        ...(error instanceof HostedOperatorError && error.recoveryProgressAdvanced !== undefined
+          ? { recoveryProgressAdvanced: error.recoveryProgressAdvanced }
+          : {}),
+      },
+    );
+  }
+};
+
 /** The hint locates only a row. Workload and fresh canonical owner verification precede all operations. */
 export const createContinuityDispatcher =
   (dependencies: {
     store: Pick<ContinuityJournalStore, "read">;
     operations: ReturnType<typeof createHostedContinuityOperations>;
+    readVerifiedActors?: (
+      context: HostedOperatorContext,
+      intentId: string,
+    ) => Promise<Zod.infer<typeof verifiedActorReadbackSchema>>;
+    readTenantBindings?: (
+      context: HostedOperatorContext,
+      intentId: string,
+    ) => Promise<AppTenantBindingReadback>;
     verifyWorkload: (request: Request) => Promise<void>;
     bindWorkload: (
       context: HostedOperatorContext,
@@ -76,6 +127,7 @@ export const createContinuityDispatcher =
       context: HostedOperatorContext,
     ) => Promise<HostedOperatorContext>;
   }) =>
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Preserve canonical owner routing for each read and execution action.
   async (request: Request, parsed: ContinuityTransportRequest) => {
     let stage: ContinuityPlanningStage = "dispatcher_workload_verification";
     try {
@@ -90,13 +142,13 @@ export const createContinuityDispatcher =
         selected = parsed.selection;
       } else {
         const intentId =
-          parsed.action === "continuity-status" || parsed.action === "continuity-read"
-            ? parsed.intentId
-            : z.uuid().parse(parsed.planRef.split("/").at(-1));
-        const saved = await dependencies.store.read({
-          authority: parsed.ownerContext.authority,
-          intentId,
-        });
+          "intentId" in parsed ? parsed.intentId : z.uuid().parse(parsed.planRef.split("/").at(-1));
+        const readSaved = () =>
+          dependencies.store.read({ authority: parsed.ownerContext.authority, intentId });
+        const saved =
+          "intentId" in parsed && parsed.action !== "continuity-status"
+            ? await readCanonicalContinuity(readSaved, request.signal)
+            : await readSaved();
         if (saved === undefined) {
           throw new HostedOperatorError("resource_mismatch");
         }
@@ -108,9 +160,14 @@ export const createContinuityDispatcher =
         };
       }
       stage = "dispatcher_owner_authorization";
-      const artifactRead = ["continuity-status", "continuity-read", "continuity-approval"].includes(
-        parsed.action,
-      );
+      const artifactRead = [
+        "continuity-status",
+        "continuity-read",
+        "continuity-binding-read",
+        "continuity-checkpoints",
+        "continuity-verified-actors",
+        "continuity-approval",
+      ].includes(parsed.action);
       const context =
         artifactRead && savedContext !== undefined
           ? await dependencies.authorizeRead(frozenWorkloadRequest, savedContext)
@@ -131,6 +188,28 @@ export const createContinuityDispatcher =
             parsed.predecessorIntentId === undefined
               ? undefined
               : { predecessorIntentId: parsed.predecessorIntentId },
+          );
+          break;
+        }
+        case "continuity-verified-actors": {
+          if (dependencies.readVerifiedActors === undefined) {
+            throw new HostedOperatorError("protected_operator_required");
+          }
+          result = verifiedActorReadbackSchema.parse(
+            await dependencies.readVerifiedActors(context, parsed.intentId),
+          );
+          break;
+        }
+        case "continuity-checkpoints": {
+          result = await operations.checkpoints(context, parsed.intentId);
+          break;
+        }
+        case "continuity-binding-read": {
+          if (dependencies.readTenantBindings === undefined) {
+            throw new HostedOperatorError("protected_operator_required");
+          }
+          result = appTenantBindingReadbackSchema.parse(
+            await dependencies.readTenantBindings(context, parsed.intentId),
           );
           break;
         }

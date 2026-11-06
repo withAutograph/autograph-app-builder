@@ -458,6 +458,24 @@ const setup = () => {
   const dispatcher = createContinuityDispatcher({
     store: dependencies.store,
     operations,
+    readVerifiedActors: async (ctx, intentId) => {
+      await operations.readPlan(ctx, intentId);
+      return { requestCorrelation: "not_established" as const, actors: [] };
+    },
+    readTenantBindings: async (ctx, intentId) => {
+      const saved = await operations.readPlan(ctx, intentId);
+      return {
+        bindings: saved.plan.preparedPlan.access.flatMap((access) =>
+          access.roles.map((role) => ({
+            appId: ctx.target.appId,
+            actorId: access.actorId,
+            organizationId: access.organizationId,
+            role,
+            status: "actor_active" as const,
+          })),
+        ),
+      };
+    },
     verifyWorkload: async (request) => {
       await verifyWorkload(request);
       if (faults.mutateCarrier) {
@@ -636,6 +654,91 @@ it("reads the exact saved continuity intent after the prepared target changes wi
   expect(approval).not.toHaveBeenCalled();
   expect(reserve).not.toHaveBeenCalled();
   expect(cas).not.toHaveBeenCalled();
+  expect(f.stats.starts).toBe(0);
+  expect(f.stats.publishes).toBe(0);
+  expect(f.stats.suiteDispatches).toBe(0);
+});
+
+it.each(["initial", "owner-checked"] as const)(
+  "retains the %s canonical-read failure stage without replaying effects",
+  async (failure) => {
+    const f = setup();
+    const planned = await f.client.planContinuity(
+      preparedPlan.selection,
+      logicalRuntime,
+      "original-intent",
+    );
+    const before = f.record;
+    const originalRead = f.dependencies.store.read.bind(f.dependencies.store);
+    const reads = vi.spyOn(f.dependencies.store, "read");
+    if (failure === "owner-checked") {
+      reads.mockImplementationOnce(originalRead);
+    }
+    reads.mockRejectedValueOnce(new Error("private journal detail"));
+    await expect(f.client.readContinuity(planned.plan.intentId)).rejects.toMatchObject({
+      code: "operator_unavailable",
+      recoveryStage: "canonical_read",
+      message: "operator_unavailable",
+    });
+    expect(f.record).toEqual(before);
+    expect(f.stats.reservations).toBe(1);
+    expect(f.stats.starts).toBe(0);
+    expect(f.stats.publishes).toBe(0);
+    expect(f.stats.suiteDispatches).toBe(0);
+  },
+);
+
+it("reads saved checkpoints and verified actor facts only for the owner without dispatch", async () => {
+  const f = setup();
+  const planned = await f.client.planContinuity(
+    preparedPlan.selection,
+    logicalRuntime,
+    "diagnostic-read",
+  );
+  const before = f.record;
+  const checkpoints = await f.client.readContinuityCheckpoints(planned.plan.intentId);
+  expect(checkpoints.intentId).toBe(planned.plan.intentId);
+  expect(checkpoints.checkpoints.suiteDispatch).toBe("unrecorded");
+  expect(await f.client.readContinuityVerifiedActors(planned.plan.intentId)).toEqual({
+    requestCorrelation: "not_established",
+    actors: [],
+  });
+  expect(f.record).toEqual(before);
+  f.setOwner(false);
+  await expect(f.client.readContinuityCheckpoints(planned.plan.intentId)).rejects.toMatchObject({
+    code: "authorization_required",
+  });
+  await expect(f.client.readContinuityVerifiedActors(planned.plan.intentId)).rejects.toMatchObject({
+    code: "authorization_required",
+  });
+  expect(f.stats.starts).toBe(0);
+  expect(f.stats.publishes).toBe(0);
+  expect(f.stats.suiteDispatches).toBe(0);
+});
+
+it("reads approved binding status through the owner-verified transport without dispatch", async () => {
+  const f = setup();
+  const planned = await f.client.planContinuity(
+    preparedPlan.selection,
+    logicalRuntime,
+    "binding-read",
+  );
+  const before = f.record;
+  const result = await f.client.readContinuityBindings(planned.plan.intentId);
+  expect(result.bindings).toEqual([
+    {
+      appId: target.appId,
+      actorId: "actor",
+      organizationId: "org",
+      role: "ordinary_role",
+      status: "actor_active",
+    },
+  ]);
+  expect(f.record).toEqual(before);
+  f.setOwner(false);
+  await expect(f.client.readContinuityBindings(planned.plan.intentId)).rejects.toMatchObject({
+    code: "authorization_required",
+  });
   expect(f.stats.starts).toBe(0);
   expect(f.stats.publishes).toBe(0);
   expect(f.stats.suiteDispatches).toBe(0);

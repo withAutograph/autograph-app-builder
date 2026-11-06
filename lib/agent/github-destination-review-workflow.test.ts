@@ -1,3 +1,4 @@
+import { initialDraftCandidatePaths } from "../../agent/tools/prepare_github_draft_review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -42,6 +43,61 @@ const binding = createGitHubDestinationReviewBinding({
 });
 
 describe("initial draft destination review workflow", () => {
+  it("includes the complete new app and retained registration after a narrow repair", async () => {
+    const files = (
+      [
+        ["apps/example/package.json", "manifest"],
+        ["apps/example/app/page.tsx", "page"],
+        ["apps/example/app/actions.ts", "repair"],
+        ["apps/example/.next/build.js", "output"],
+        ["apps/unrelated/package.json", "unrelated"],
+        ["microfrontends.json", "new-routes"],
+        ["bun.lock", "new-lock"],
+        ["package.json", "same-root"],
+      ] as const
+    ).map(([path, digest]) => ({ path, digest, mode: "644" }));
+    // SAFETY: This path-selection test supplies all workflow fields the helper reads.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Partial workflow fixture.
+    const input = {
+      observed: { files, treeDigest: "current" },
+      reviewedPaths: ["apps/example/app/actions.ts"],
+      state: {
+        appSpec: { appId: "example" },
+        applyReceipt: { targetReceipt: { topology: { path: "microfrontends.json" } } },
+        sourceReceipt: { sourceKind: "fresh-template" },
+        workspace: {},
+      },
+      sandbox: {},
+    } as never;
+    const original = () =>
+      Promise.resolve(
+        (
+          [
+            ["microfrontends.json", "old-routes"],
+            ["bun.lock", "old-lock"],
+            ["package.json", "same-root"],
+          ] as const
+        ).map(([path, sha256]) => ({
+          path,
+          sha256,
+          mode: "100644" as const,
+          objectId: "blob",
+        })),
+      );
+    const result = await initialDraftCandidatePaths(input, original);
+    expect(result.candidatePaths.toSorted()).toEqual([
+      "apps/example/app/actions.ts",
+      "apps/example/app/page.tsx",
+      "apps/example/package.json",
+      "bun.lock",
+      "microfrontends.json",
+    ]);
+    expect([...result.retainedRegistration]).toEqual([
+      ["microfrontends.json", "old-routes"],
+      ["bun.lock", "old-lock"],
+    ]);
+  });
+
   it("preserves validated bytes and original provenance while invalidating old review authority", () => {
     const original = {
       applyReceipt: { applyRoot: "/workspace/private-validated-app", digest: "apply" },

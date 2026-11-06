@@ -15,7 +15,11 @@ const intentFields = {
   baseBranch: z.string().min(1),
 };
 const intentSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("pr-ready"), ...intentFields }),
+  z.strictObject({
+    kind: z.literal("pr-ready"),
+    ...intentFields,
+    readyAuthorization: z.enum(["contents-write", "recover-first-ready"]).optional(),
+  }),
   z.strictObject({ kind: z.literal("pr-merge"), ...intentFields, readyAt: readyAtSchema }),
 ]);
 

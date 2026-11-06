@@ -14,6 +14,8 @@ import { preparePublishedDraftReconciliation } from "./prepare-published-draft-r
 import { freshFixture, workflowKey } from "../eve/test-support/draft-reviewed-recovery";
 import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
 import type { PublishedDraftRepairSource } from "./published-draft-repair";
+import type { observeNormalizedChangeSet } from "../../agent/tools/change_set_status";
+import type { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import type { OwnedPublicationReconciliationScope } from "../repository/github-draft-reconciliation";
 
 type Fixture = Awaited<ReturnType<typeof freshFixture>>;
@@ -23,7 +25,7 @@ type Candidate = DraftReconciliationCandidate & {
   reviewedLineage: Fixture["reviewed"];
   unpublished: string;
 };
-type Workflow = Fixture["currentContext"][typeof workflowKey];
+type Workflow = Fixture["currentContext"][typeof workflowKey] | Fixture["reviewed"];
 interface Owned {
   draft: PublishedDraftRepairSource["draft"];
   source: PublishedDraftRepairSource["source"];
@@ -118,6 +120,21 @@ vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   preparePublishedDraftRepairCandidate: vi.fn(),
 }));
 
+const retainedSource = vi.hoisted(() => ({
+  observed: vi.fn(),
+  original: vi.fn(),
+}));
+vi.mock("../../agent/tools/change_set_status", async (importOriginal) => ({
+  ...(await importOriginal<{ observeNormalizedChangeSet: typeof observeNormalizedChangeSet }>()),
+  observeNormalizedChangeSet: retainedSource.observed,
+}));
+vi.mock("../repository/supported-template", async (importOriginal) => ({
+  ...(await importOriginal<{
+    readPreparedSandboxSourceManifest: typeof readPreparedSandboxSourceManifest;
+  }>()),
+  readPreparedSandboxSourceManifest: retainedSource.original,
+}));
+
 describe("owned fresh-template draft preparation after review recovery", () => {
   let fixture: Fixture;
   let root: string;
@@ -167,6 +184,70 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  it.each([false, true])(
+    "restores a missing package and registration (starter repository: %s)",
+    async (sameRepository) => {
+      const state = structuredClone(fixture.reviewed);
+      const appRoot = `apps/${state.appSpec.appId}`;
+      retainedSource.original.mockReset();
+      if (sameRepository) {
+        mocks.owned.proposal = {
+          ...mocks.owned.proposal,
+          owner: "withAutograph",
+          name: "arrusted-development",
+        };
+        retainedSource.original.mockRejectedValue(new Error("Prepared manifest missing"));
+      } else {
+        retainedSource.original.mockResolvedValue([
+          { path: "microfrontends.json", mode: "100644", sha256: "starter" },
+        ]);
+      }
+      retainedSource.observed.mockResolvedValue({
+        observed: {
+          treeDigest: "current",
+          files: [
+            { path: `${appRoot}/package.json`, mode: "644", digest: "manifest" },
+            { path: `${appRoot}/app/page.tsx`, mode: "644", digest: "page" },
+            { path: "microfrontends.json", mode: "644", digest: "registered" },
+            { path: "apps/another/app/page.tsx", mode: "644", digest: "other" },
+          ],
+        },
+      });
+      await preparePublishedDraftReconciliation({
+        state,
+        ctx,
+        pullRequestNumber: 42,
+        restoreInitialAppSource: true,
+      });
+      expect(mocks.prepare.mock.calls[0]?.[0]).toMatchObject({
+        forceFreshCandidate: true,
+        ownedPublication: { proposal: mocks.owned.proposal, publication: mocks.owned.publication },
+        unpublished: {
+          restoreInitialAppSource: true,
+          ...(sameRepository
+            ? {
+                initialSourceRevision: {
+                  sha: state.sourceReceipt.sourceSha,
+                  tree: state.sourceReceipt.sourceTree,
+                },
+              }
+            : {}),
+          changes: [
+            { kind: "added", path: `${appRoot}/app/page.tsx` },
+            { kind: "added", path: `${appRoot}/package.json` },
+            sameRepository
+              ? { kind: "added", path: "microfrontends.json" }
+              : {
+                  kind: "modified",
+                  path: "microfrontends.json",
+                  before: { mode: "644", digest: "starter" },
+                },
+          ],
+        },
+      });
+    },
+  );
+
   it("keeps the validated workflow and exact candidate/private edits when normal preparation reuses it", async () => {
     const before = structuredClone(mocks.candidate);
     const workflow = structuredClone(mocks.workflow);
@@ -188,6 +269,75 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     expect(mocks.workflow).toEqual(workflow);
     expect(mocks.workflow.phase).toBe("validated");
   });
+
+  it("retains the old owned candidate for inspection when a fresh review has a different digest", async () => {
+    mocks.workflow = structuredClone(fixture.reviewed);
+    mocks.candidate.originalReviewDigest = "e".repeat(64);
+    const previous = structuredClone(mocks.candidate);
+    mocks.prepare.mockImplementation(async () => ({
+      ...structuredClone(previous),
+      root: `${root}-new`,
+      created: true,
+    }));
+    const result = await preparePublishedDraftReconciliation({
+      state: fixture.reviewed,
+      ctx,
+      pullRequestNumber: 42,
+      recovery: "reopen-current-owned-draft",
+    });
+    expect(mocks.prepare.mock.calls[0][0].previousCandidate).toBeUndefined();
+    expect(result.preservedWorkspaces).toContainEqual({
+      kind: "draft-candidate",
+      root,
+      reviewDigest: previous.originalReviewDigest,
+    });
+    expect(mocks.candidate.preservedWorkspaces).toContainEqual({
+      kind: "draft-candidate",
+      root,
+      reviewDigest: previous.originalReviewDigest,
+    });
+    expect(readFileSync(path.join(root, "candidate.txt"), "utf-8")).toBe(
+      "latest unpublished candidate bytes\n",
+    );
+  });
+
+  it.each(["app", "repository", "pull-request", "publication", "installation"] as const)(
+    "does not expose a candidate with a different %s as preserved work",
+    async (difference) => {
+      mocks.workflow = structuredClone(fixture.reviewed);
+      if (difference === "app") {
+        mocks.candidate.appId = "foreign-app";
+      }
+      if (difference === "repository") {
+        mocks.candidate.repositoryId = "foreign-repository";
+      }
+      if (difference === "pull-request") {
+        mocks.candidate.pullRequestNumber = 99;
+      }
+      if (difference === "publication") {
+        mocks.candidate.publishedOrigin.publicationDigest = "f".repeat(64);
+      }
+      if (difference === "installation") {
+        mocks.candidate.publishedOrigin.installationId = "foreign-installation";
+      }
+      const previous = structuredClone(mocks.candidate);
+      mocks.prepare.mockImplementation(async () => ({
+        ...structuredClone(previous),
+        root: `${root}-new`,
+        created: true,
+      }));
+      const result = await preparePublishedDraftReconciliation({
+        state: fixture.reviewed,
+        ctx,
+        pullRequestNumber: 42,
+        recovery: "reopen-current-owned-draft",
+      });
+      expect(mocks.prepare.mock.calls[0][0].previousCandidate).toBeUndefined();
+      expect(result.preservedWorkspaces).not.toContainEqual(
+        expect.objectContaining({ kind: "draft-candidate", root }),
+      );
+    },
+  );
 
   it.each(["root", "source", "review"] as const)(
     "refuses a %s change during the first ownership read",

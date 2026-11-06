@@ -12,6 +12,7 @@ export interface GitHubPrDeliveryRef {
   pullRequestNumber: number;
   headSha: string;
   baseBranch: string;
+  readyAuthorization?: "contents-write" | "recover-first-ready";
 }
 
 export interface GitHubPrDeliveryObservation {
@@ -201,13 +202,17 @@ const runMatchesPull = (
   return active.length === 1 && active[0]?.number === pull.number;
 };
 
-const readReadyCycle = async (request: Request, pull: z.infer<typeof pullSchema>) => {
+const readReadyHistory = async (request: Request, pull: z.infer<typeof pullSchema>) => {
   const response = await request({
     method: "POST",
     path: "/graphql",
     body: { query: readyQuery, variables: { id: pull.node_id } },
   });
-  const cycle = readySchema.parse(response).data.node;
+  return readySchema.parse(response).data.node;
+};
+
+const readReadyCycle = async (request: Request, pull: z.infer<typeof pullSchema>) => {
+  const cycle = await readReadyHistory(request, pull);
   const readyAt = cycle.timelineItems.nodes[0]?.createdAt;
   if (
     cycle.isDraft ||
@@ -354,7 +359,35 @@ export const createGitHubPrDeliveryProvider = (
       if (!before.result.draft) {
         return before.result;
       }
+      if (ref.readyAuthorization === "recover-first-ready") {
+        const history = await readReadyHistory(request, before.pull);
+        if (
+          !history.isDraft ||
+          history.headRefOid !== ref.headSha ||
+          history.baseRefName !== ref.baseBranch ||
+          history.timelineItems.nodes.length > 0
+        ) {
+          throw new GitHubPrEffectRejectedError("provider-rejected");
+        }
+      }
       assertMutationActive(signal);
+      const payload = await request({
+        method: "POST",
+        path: "/graphql",
+        effect: "ready",
+        body: { query: readyMutation, variables: { id: before.pull.node_id } },
+      });
+      const rejection = z
+        .object({
+          data: z
+            .union([z.null(), z.object({ markPullRequestReadyForReview: z.null() })])
+            .optional(),
+          errors: z.array(z.object({ type: z.literal("FORBIDDEN") })).min(1),
+        })
+        .safeParse(payload);
+      if (rejection.success) {
+        throw new GitHubPrEffectRejectedError("provider-rejected");
+      }
       const response = z
         .object({
           data: z.object({
@@ -363,14 +396,7 @@ export const createGitHubPrDeliveryProvider = (
             }),
           }),
         })
-        .parse(
-          await request({
-            method: "POST",
-            path: "/graphql",
-            effect: "ready",
-            body: { query: readyMutation, variables: { id: before.pull.node_id } },
-          }),
-        );
+        .parse(payload);
       if (response.data.markPullRequestReadyForReview.pullRequest.id !== before.pull.node_id) {
         throw new Error("github-delivery-ready-identity-changed");
       }

@@ -121,6 +121,7 @@ export VERCEL_INTEGRATION_CLIENT_ID=local-vercel-client
 export VERCEL_INTEGRATION_CLIENT_SECRET=local-vercel-client-secret
 export VERCEL_INTEGRATION_TOKEN_KEY=MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
 export VERCEL_INTEGRATION_TOKEN_KEY_VERSION=local-v1
+export VERCEL_INTEGRATION_TOKEN_PREVIOUS_KEYS=""
 export VERCEL_EMULATOR_URL="http://localhost:$emulate_base_port"
 export GITHUB_EMULATOR_URL="http://localhost:$github_emulate_port"
 export EMULATE_PROVIDER_TOKEN=emulate_local_provider_token

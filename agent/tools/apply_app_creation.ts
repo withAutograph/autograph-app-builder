@@ -65,7 +65,7 @@ export default defineTool({
     );
   },
   description:
-    "Build this app in the build workspace, then validate it for review. For a retry of the same proposal, send only repaired files. Omitted paths retain their staged contents, and supplied paths replace them. A new proposal starts a fresh submission. When the plan selects privateCompute, send its exact profile ID so the user can approve the compute footprint before resizing the private execution session. This does not publish, deploy, provision application resources, or change the user's repository.",
+    "Build this app in the build workspace, then validate it for review. When the user asks to prepare a planned private build for review, draft the implementation files in the tool input and submit this call to present the normal Build approval. Preparing that input does not write to the workspace. Wait for the approval decision before any implementation write. For a retry of the same proposal, send only repaired files. Omitted paths retain their staged contents, and supplied paths replace them. A new proposal starts a fresh submission. When the plan selects privateCompute, send its exact profile ID so the user can approve the compute footprint before resizing the private execution session. This does not publish, deploy, provision application resources, or change the user's repository.",
   // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep exact current proposal, internal correction, approval, workspace and implementation scope checks ordered at the effect boundary.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();

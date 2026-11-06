@@ -1,3 +1,5 @@
+import type { appTenantBindingStatusSchema } from "./hosted-operator-tenant-binding-contract";
+import { appTenantBindingReadbackSchema } from "./hosted-operator-tenant-binding-contract";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import postgres from "postgres";
@@ -144,11 +146,58 @@ const actorBindingSchema = z.strictObject({
   role: z.string(),
 });
 
+/** Only an explicit scope mismatch or successfully decoded row establishes an observed state. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Decode the untrusted database envelope at the SQL boundary.
+export const classifyActorBinding = (value: unknown, scope: OperatorAppMetadataScope) => {
+  const scopeDenied = z
+    .object({
+      ok: z.literal(false),
+      error: z.object({
+        code: z.literal("authorization_denied"),
+        details: z.array(z.object({ code: z.literal("scope_mismatch") })).min(1),
+      }),
+    })
+    .safeParse(value);
+  if (scopeDenied.success) {
+    return "principal_scope_denied" as const;
+  }
+  const envelope = z
+    .object({
+      ok: z.literal(true),
+      data: actorBindingSchema
+        .extend({
+          active: z.boolean(),
+          fenceGeneration: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        })
+        .nullable(),
+    })
+    .parse(value);
+  const binding = envelope.data;
+  if (binding === null) {
+    return "actor_absent" as const;
+  }
+  if (
+    binding.appId !== scope.appId ||
+    binding.actorId !== scope.actorId ||
+    binding.organizationId !== scope.organizationId ||
+    binding.role !== scope.role
+  ) {
+    throw reject();
+  }
+  return binding.active && binding.fenceGeneration > 0
+    ? ("actor_active" as const)
+    : ("actor_inactive" as const);
+};
+
 export interface AppRuntimeSnapshotReader {
   /** A closed inactive/missing binding is distinct from unreadable provider metadata. */
   readActiveOrganization?: (
     scope: OperatorAppMetadataScope,
   ) => Promise<z.infer<typeof observationSchema> | null>;
+  /** Reads the approved actor's native binding without conflating principal denial with an absent row. */
+  readActorBinding?: (
+    scope: OperatorAppMetadataScope,
+  ) => Promise<z.infer<typeof appTenantBindingStatusSchema>>;
   readIdentity: () => Promise<z.infer<typeof identitySchema>>;
   readOrganization: (
     scope: OperatorAppMetadataScope,
@@ -172,6 +221,23 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
       "isolation level repeatable read",
       async (tx) => {
         const reader: AppRuntimeSnapshotReader = {
+          readActorBinding: async (scope) => {
+            const rows = await tx.unsafe(
+              "select public.kernel_read_actor_binding($1::jsonb) as binding",
+              [
+                tx.json({
+                  actor_id: scope.actorId,
+                  app_id: scope.appId,
+                  customer_id: scope.organizationId,
+                  role: scope.role,
+                }),
+              ],
+            );
+            if (rows.length !== 1) {
+              throw reject();
+            }
+            return classifyActorBinding(rows[0]?.binding, scope);
+          },
           readIdentity: async () => {
             const rows = await tx.unsafe(IDENTITY_SQL);
             if (rows.length !== 1) {
@@ -371,7 +437,7 @@ export interface AppReadinessDependencies {
 }
 
 const readInstallationReadinessScopes = async (
-  deps: AppReadinessDependencies,
+  deps: Pick<AppReadinessDependencies, "readInstallationScopes">,
   input: AppReadinessInput,
 ) => {
   if (deps.readInstallationScopes === undefined) {
@@ -383,6 +449,77 @@ const canonicalMetadataScopes = (scopes: readonly OperatorAppMetadataScope[]) =>
   scopes
     .map((scope) => JSON.stringify([scope.appId, scope.actorId, scope.organizationId, scope.role]))
     .toSorted();
+
+/** Owner-checked native metadata read. An active row does not prove the request's actor or fence. */
+export const createHostedOperatorTenantBindingReadback =
+  (
+    deps: Pick<
+      AppReadinessDependencies,
+      "assertAuthorized" | "readInstallationScopes" | "readRuntimeUrl" | "readRuntimeSnapshot"
+    >,
+  ) =>
+  async (input: AppReadinessInput) => {
+    const plan = hostedOperatorPlanSchema.parse(input.plan);
+    const { target } = input;
+    if (
+      ![
+        plan.action === "prepare",
+        target.appId === plan.selection.appId,
+        target.branch === plan.selection.branch,
+        target.projectId === plan.selection.projectId,
+        target.sessionId === plan.selection.sessionId,
+        target.environment === plan.selection.environment,
+      ].every(Boolean)
+    ) {
+      throw reject();
+    }
+    const guard = async () => {
+      await input.assertCurrent();
+      await deps.assertAuthorized({ ...input, plan });
+    };
+    await guard();
+    const scopes =
+      plan.access.length > 0
+        ? plan.access.flatMap((access) =>
+            access.roles.map((role) => ({
+              appId: plan.selection.appId,
+              actorId: access.actorId,
+              organizationId: access.organizationId,
+              role,
+            })),
+          )
+        : await readInstallationReadinessScopes(deps, input);
+    const allowedCustomers = new Set(plan.appInstallation?.customerIds);
+    if (
+      scopes.some(
+        (scope) =>
+          scope.appId !== plan.selection.appId ||
+          (plan.access.length === 0 && !allowedCustomers.has(scope.organizationId)),
+      )
+    ) {
+      throw reject();
+    }
+    const runtimeUrl = await deps.readRuntimeUrl({ ...input, plan });
+    assertRuntimeUrl(runtimeUrl, plan);
+    await guard();
+    const bindings: z.infer<typeof appTenantBindingReadbackSchema>["bindings"] = [];
+    await (deps.readRuntimeSnapshot ?? readAppRuntimeSnapshot)(runtimeUrl, async (reader) => {
+      assertIdentity(await reader.readIdentity(), plan);
+      if (reader.readActorBinding === undefined) {
+        throw reject();
+      }
+      for (const scope of scopes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Recheck authority for each scope on the same metadata snapshot.
+        await guard();
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Use the original runtime principal for every approved scope.
+        const status = await reader.readActorBinding(scope);
+        bindings.push({ ...scope, status });
+      }
+      return [];
+    });
+    await guard();
+    return appTenantBindingReadbackSchema.parse({ bindings });
+  };
 
 const readInstalledAppOrganization = async (
   reader: AppRuntimeSnapshotReader,

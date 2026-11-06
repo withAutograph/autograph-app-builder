@@ -1161,7 +1161,7 @@ export const createGitHubAppHttpProvider = (input: {
         {
           actions: "read",
           administration: "none",
-          contents: operation === "merge" ? "write" : "read",
+          contents: operation === "read" ? "read" : "write",
           metadata: "read",
           pullRequests: operation === "ready" ? "write" : "read",
           variables: "none",

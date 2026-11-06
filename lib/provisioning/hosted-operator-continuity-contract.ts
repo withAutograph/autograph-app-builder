@@ -295,6 +295,9 @@ export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord)
   ].every(Boolean);
 };
 
+/** Journal markers are observations only. An unrecorded marker is never proof of no effect. */
+const checkpointMarker = (recorded: boolean) =>
+  recorded ? ("recorded" as const) : ("unrecorded" as const);
 export const continuityStatus = (record: ContinuityRecord) => ({
   intentId: record.requestId,
   planRef: record.plan.planRef,
@@ -328,6 +331,37 @@ export const continuityStatusSchema = z.strictObject({
     })
     .optional(),
 });
+/** A separate opt-in read keeps legacy strict status consumers compatible. */
+export const continuityCheckpointSchema = continuityStatusSchema.extend({
+  checkpoints: z.strictObject({
+    pendingStage: continuityRecordSchema.shape.pendingStage,
+    runtimeLocator: z.enum(["recorded", "unrecorded"]),
+    runtimeDispatch: z.enum(["recorded", "unrecorded"]),
+    runtimeCommand: z.enum(["recorded", "unrecorded"]),
+    publicationAttempt: z.enum(["recorded", "unrecorded"]),
+    publicationCandidate: z.enum(["recorded", "unrecorded"]),
+    environmentWrite: z.enum(["recorded", "unrecorded"]),
+    suiteDispatch: z.enum(["recorded", "unrecorded"]),
+    suiteCommand: z.enum(["recorded", "unrecorded"]),
+    outcome: z.enum(["recorded", "unrecorded"]),
+  }),
+});
+export const continuityCheckpoints = (record: ContinuityRecord) => ({
+  ...continuityStatus(record),
+  checkpoints: {
+    ...(record.pendingStage === undefined ? {} : { pendingStage: record.pendingStage }),
+    runtimeLocator: checkpointMarker(record.locator !== undefined),
+    runtimeDispatch: checkpointMarker(record.locator?.dispatchAttempted === true),
+    runtimeCommand: checkpointMarker(record.locator?.commandId !== undefined),
+    publicationAttempt: checkpointMarker(record.deliveryAttempted === true),
+    publicationCandidate: checkpointMarker(record.deliveryCandidates.length > 0),
+    environmentWrite: checkpointMarker(record.environmentWrites.length > 0),
+    suiteDispatch: checkpointMarker(record.suiteDispatched === true),
+    suiteCommand: checkpointMarker(record.suiteCommandId !== undefined),
+    outcome: checkpointMarker(record.outcome !== undefined),
+  },
+});
+
 export const continuityPlannedSchema = z.strictObject({
   plan: hostedContinuityPlanSchema,
   request: hostedContinuityRequestSchema,

@@ -236,7 +236,21 @@ candidate without replaying the ambiguous original overlay or an earlier
 candidate. The original starter provenance, apply workspace and earlier private
 candidates remain retained. The result identifies the unreplayed original
 review and preserved workspaces; those edits are not claimed as part of the new
-candidate.
+candidate. A prior candidate of the same owned publication remains available for
+inspection even when the newly completed review has a different digest; that
+retention does not authorize replaying its edits or its prior review.
+
+If the first owned draft omitted the new app manifest, use
+`restoreInitialAppSource: true` in the same reconciliation tool. Builder reads
+the retained app and its registration changes against the original starter.
+For a draft in the starter repository, Builder verifies the recorded starter
+commit and tree in Git and reads registration preimages there. Other repositories
+use the prepared starter manifest. Builder stages the exact app bytes and checks
+shared registration preimages before its private merge with the current base.
+If the restored app conflicts with the current Bun lockfile, Builder regenerates
+it from the merged workspace and the current base lockfile. Unresolved shared
+source conflicts report the conflicting path. The resulting draft
+candidate still needs its normal build, review, and approved update.
 
 The recovery mode follows subsequent preparation attempts within the same owned
 review lineage. Original app-review content remains available through
@@ -342,6 +356,12 @@ content with `change_set_status` as needed, then accept the fresh change set.
 Preparation invalidates the previous review and sealed proposal while retaining
 its mutation journal. A pending or potentially partial prior publication must
 be recovered before another destination review.
+A starter-created app's first destination review includes its complete
+app-owned source even when its latest repair diff contains only a few files.
+Builder includes the retained registration and dependency changes against the
+original starter manifest. If the destination has independently changed one of
+those shared files, reconcile that file against the current destination before
+publishing.
 
 Builder reuses the saved app's recorded repository. When a new app still needs
 a destination, `prepare_github_draft_review` returns the same saved build's
@@ -506,21 +526,29 @@ publication receipt. An open draft defers validation. On a ready Arrusted PR,
 the required evidence is a successful canonical `Check` job for the published
 head and current ready cycle. Builder reads the repository's result without
 repeating affected-code selection. A moved revision is visible but cannot use
-the original review for merge.
+the original review for merge. For a published reconciliation, Builder
+checks the retained approved reconciliation against GitHub's current commit
+before offering a new delivery approval for that head. The Ready cycle and
+required Check then bind to that reconciled head.
 
 When hosted GitHub publication is enabled, an eligible reviewed publication
 can return an input for `finish-github-pr-delivery`. Operators can explicitly
 disable Ready and merge with `APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED=0`. This is a separate native
 approval to mark the PR ready and merge the reviewed revision when required
-checks pass. It is scoped to the current session and repository. The GitHub
+checks pass. Eve binds the approval to the current session's tool call. Builder
+checks that session's reviewed proposal before requesting approval and rechecks
+the authorized repository and revision in the delivery step. The GitHub
 App installation needs Actions read, Pull requests write for Ready, and
-Contents write for merge. The provider requests a repository-scoped token
+Contents write for both Ready and merge. The provider requests a repository-scoped token
 attenuated for each operation. GitHub applies its own review and merge policy.
 
 Apply the additive PR effect journal migration to Builder’s hosted storage
 as part of normal deployment. The journal claims each approved effect before sending a write. After
 an uncertain response, the same operation can observe provider evidence and
-settle its receipt. Pending effects are never replayed blindly. GitHub's merge
+settle its receipt. A fresh approval can recover an older, unconfirmed first
+Ready attempt made with the previous read-only Contents token. Builder preserves
+the older receipt, checks that the exact PR is still a draft with no Ready event,
+and journals one attempt with the corrected token. GitHub's merge
 request guards the expected head atomically. Base and ready-cycle changes are
 checked around the request. A merge result and protected hosted app evidence
 remain separate facts.
