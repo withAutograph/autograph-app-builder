@@ -245,8 +245,11 @@ If the first owned draft omitted the new app manifest, use
 the retained app and its registration changes against the original starter.
 For a draft in the starter repository, Builder verifies the recorded starter
 commit and tree in Git and reads registration preimages there. Other repositories
-use the prepared starter manifest. Builder stages the exact app bytes and checks shared registration
-preimages before its private merge with the current base. The resulting draft
+use the prepared starter manifest. Builder stages the exact app bytes and checks
+shared registration preimages before its private merge with the current base.
+If the restored app conflicts with the current Bun lockfile, Builder regenerates
+it from the merged workspace and the current base lockfile. Unresolved shared
+source conflicts report the conflicting path. The resulting draft
 candidate still needs its normal build, review, and approved update.
 
 The recovery mode follows subsequent preparation attempts within the same owned
