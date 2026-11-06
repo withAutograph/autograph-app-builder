@@ -1,14 +1,22 @@
 import { getToken } from "@vercel/connect";
 import { getVercelOidcToken, verifyVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
-import { privateMaintenanceUrl, readSqlIdentity } from "./hosted-operator-native-preview-neon";
+import {
+  privateMaintenanceUrl,
+  readSqlIdentity,
+  scopeSchema,
+} from "./hosted-operator-native-preview-neon";
 import type { RepositoryProductionWorkerProfile } from "./repository-production-workers";
+import type {
+  RepositoryProductionConnectConnection,
+  RepositoryProductionSecretConnection,
+} from "./repository-production-configuration";
 
 /** Workspace-owned provider connection; never selected from an app creator's request. */
-export interface RepositoryProductionConnectionProfile {
-  connector: string;
-  installationId: string;
-  subject: { id: string; issuer: string; type: "user" };
+export type RepositoryProductionConnectionProfile = (
+  | RepositoryProductionConnectConnection
+  | RepositoryProductionSecretConnection
+) & {
   operator: {
     projectId: string;
     ownerId: string;
@@ -16,17 +24,21 @@ export interface RepositoryProductionConnectionProfile {
     audience: string;
     issuer: string;
   };
-}
+};
 export const createRepositoryProductionConnectionReader =
   (input: {
     connection: RepositoryProductionConnectionProfile;
     resources: Pick<RepositoryProductionWorkerProfile, "neon" | "authResource">;
     assertCurrent: () => Promise<void>;
     signal: AbortSignal;
+    environment?: Readonly<Record<string, string | undefined>>;
     fetch?: typeof fetch;
     io?: {
       getOidc: typeof getVercelOidcToken;
-      verifyOidc: typeof verifyVercelOidcToken;
+      verifyOidc: (
+        token: string,
+        options: Parameters<typeof verifyVercelOidcToken>[1],
+      ) => Promise<void>;
       getToken: typeof getToken;
       readIdentity: typeof readSqlIdentity;
     };
@@ -34,7 +46,9 @@ export const createRepositoryProductionConnectionReader =
   async () => {
     const io = input.io ?? {
       getOidc: getVercelOidcToken,
-      verifyOidc: verifyVercelOidcToken,
+      verifyOidc: async (token, options) => {
+        await verifyVercelOidcToken(token, options);
+      },
       getToken,
       readIdentity: readSqlIdentity,
     };
@@ -45,12 +59,86 @@ export const createRepositoryProductionConnectionReader =
     });
     await io.verifyOidc(oidcToken, input.connection.operator);
     const scope = input.resources.neon;
+    const validateUrl = (value: string, database: string, role: string) => {
+      try {
+        return privateMaintenanceUrl(
+          value,
+          scopeSchema.parse({
+            projectId: scope.projectId,
+            branchId: scope.branchId,
+            endpointId: scope.endpointId,
+            hostname: scope.endpoint,
+            maintenanceDatabase: database,
+            maintenanceRole: role,
+          }),
+        );
+      } catch {
+        throw new Error("repository_production_provider_scope_mismatch");
+      }
+    };
+    const verifyIdentity = async (url: string, database: string, role: string) => {
+      await input.assertCurrent();
+      let identity: Awaited<ReturnType<typeof io.readIdentity>>;
+      try {
+        identity = await io.readIdentity(url);
+      } catch {
+        // Driver errors can contain connection values. Keep them inside the credential boundary.
+        throw new Error("repository_production_provider_unavailable");
+      }
+      if (identity.database !== database || identity.role !== role) {
+        throw new Error("repository_production_provider_scope_mismatch");
+      }
+      await input.assertCurrent();
+      return url;
+    };
+    const connection = input.connection;
+    if ("kind" in connection) {
+      const environment = input.environment ?? process.env;
+      const bound = (name: string, database: string, role: string) => {
+        const value = environment[name];
+        if (value === undefined || value === "") {
+          throw new Error("repository_production_connection_binding_unavailable");
+        }
+        return validateUrl(value, database, role);
+      };
+      // Validate every explicit binding before opening any database connection. Never try Connect on failure.
+      const maintenance = bound(
+        connection.maintenanceUrlEnvironment,
+        scope.maintenanceDatabase,
+        scope.maintenanceRole,
+      );
+      const migrator = bound(
+        connection.authMigratorEnvironment,
+        input.resources.authResource.database,
+        input.resources.authResource.migratorRole,
+      );
+      const runtime = bound(
+        connection.authRuntimeEnvironment,
+        input.resources.authResource.database,
+        input.resources.authResource.runtimeRole,
+      );
+      const [maintenanceUrl, authMigrator, authRuntime] = await Promise.all([
+        verifyIdentity(maintenance, scope.maintenanceDatabase, scope.maintenanceRole),
+        verifyIdentity(
+          migrator,
+          input.resources.authResource.database,
+          input.resources.authResource.migratorRole,
+        ),
+        verifyIdentity(
+          runtime,
+          input.resources.authResource.database,
+          input.resources.authResource.runtimeRole,
+        ),
+      ]);
+      await input.assertCurrent();
+      return { maintenanceUrl, authMigrator, authRuntime, oidcToken };
+    }
     const projectPath = `/projects/${encodeURIComponent(scope.projectId)}`;
     const read = async (path: string, query: Record<string, string> = {}) => {
       await input.assertCurrent();
       const token = await io.getToken(
-        input.connection.connector,
-        { installationId: input.connection.installationId, subject: input.connection.subject },
+        connection.connector,
+        { installationId: connection.installationId, subject: connection.subject },
         { forceRefresh: true, vercelToken: oidcToken },
       );
       await input.assertCurrent();
@@ -104,20 +192,7 @@ export const createRepositoryProductionConnectionReader =
           role_name: role,
         }),
       );
-      const url = privateMaintenanceUrl(value.uri, {
-        projectId: scope.projectId,
-        branchId: scope.branchId,
-        endpointId: scope.endpointId,
-        hostname: scope.endpoint,
-        maintenanceDatabase: database,
-        maintenanceRole: role,
-      });
-      const identity = await io.readIdentity(url);
-      if (identity.database !== database || identity.role !== role) {
-        throw new Error("repository_production_provider_scope_mismatch");
-      }
-      await input.assertCurrent();
-      return url;
+      return await verifyIdentity(validateUrl(value.uri, database, role), database, role);
     };
     // Only the protected operator receives these values; app runtimes receive their own restricted URL.
     const [maintenanceUrl, authMigrator, authRuntime] = await Promise.all([

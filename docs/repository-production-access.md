@@ -18,6 +18,36 @@ from a Builder workspace and repository to an organization, native app project,
 public origin, and shared Auth resource. A mapping covers every app in that
 repository; creators do not provide database IDs or connection strings.
 
+Each repository can instead select an explicit deployment-managed Production
+connection in its configuration entry:
+
+```json
+{
+  "connection": {
+    "kind": "deployment-secrets",
+    "maintenanceUrlEnvironment": "ARRUSTED_PRODUCTION_MAINTENANCE_URL",
+    "authMigratorEnvironment": "ARRUSTED_PRODUCTION_AUTH_MIGRATOR_URL",
+    "authRuntimeEnvironment": "ARRUSTED_PRODUCTION_AUTH_RUNTIME_URL"
+  }
+}
+```
+
+These fields name environment variables on the protected Production operator;
+they never contain URL values. The platform operator binds the three approved
+direct Neon credentials there. The shared Auth migrator and runtime bindings
+must use their distinct configured roles, and the maintenance binding must use
+the configured maintenance database and role. Current Production OIDC remains
+required. Every URL must match the configured direct endpoint, database, role
+and TLS policy; read-only SQL verifies the actual database and role before any
+worker receives credentials. Connection values and driver error details stay
+private. This path does not reuse a synthetic Preview connector or credential.
+
+The existing top-level managed Connect configuration remains supported for
+repositories without a per-repository connection. It can be omitted when every
+repository has an explicit deployment binding. An invalid or missing selected
+binding stops setup; it never falls back to another credential. App creators
+continue to provide only the repository and ordinary app requirements.
+
 The operator independently reads the canonical Builder owner and saved
 repository choice, including recovered session lineage. App descriptions and
 compiled releases come from owner-scoped captured artifacts. The normal plan

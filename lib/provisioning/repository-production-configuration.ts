@@ -5,6 +5,24 @@ import { operatorWorkerSourceCaptureSchema } from "./operator-worker-source-capt
 import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
 
 const id = z.string().min(1);
+const environmentName = z.string().regex(/^[A-Z][A-Z0-9_]*$/u);
+export const repositoryProductionSecretConnectionSchema = z.strictObject({
+  kind: z.literal("deployment-secrets"),
+  maintenanceUrlEnvironment: environmentName,
+  authMigratorEnvironment: environmentName,
+  authRuntimeEnvironment: environmentName,
+});
+export type RepositoryProductionSecretConnection = z.infer<
+  typeof repositoryProductionSecretConnectionSchema
+>;
+export const repositoryProductionConnectConnectionSchema = z.strictObject({
+  connector: id,
+  installationId: id,
+  subject: z.strictObject({ id, issuer: z.url(), type: z.literal("user") }),
+});
+export type RepositoryProductionConnectConnection = z.infer<
+  typeof repositoryProductionConnectConnectionSchema
+>;
 const origin = z.url().refine((value) => {
   const url = new URL(value);
   return (
@@ -64,6 +82,7 @@ const repository = z.strictObject({
   repositoryFullName: z.string().regex(/^[^/\s]+\/[^/\s]+$/u),
   organization: z.strictObject({ id, name: id }),
   publicOrigin: origin,
+  connection: repositoryProductionSecretConnectionSchema.optional(),
   authWorkload: workload,
   authResource: z.strictObject({ resourceId: id, database: id, migratorRole: id, runtimeRole: id }),
   neon: z.strictObject({
@@ -89,11 +108,7 @@ export const repositoryProductionConfigurationSchema = z
       }),
     ]),
     workers,
-    connection: z.strictObject({
-      connector: id,
-      installationId: id,
-      subject: z.strictObject({ id, issuer: z.url(), type: z.literal("user") }),
-    }),
+    connection: repositoryProductionConnectConnectionSchema.optional(),
     vercelCredential: z.strictObject({
       authority: hostedTenantAuthoritySchema,
       installationId: id,
@@ -118,6 +133,12 @@ export const repositoryProductionConfigurationSchema = z
       });
     }
     for (const item of config.repositories) {
+      if (item.connection === undefined && config.connection === undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "Each repository needs an explicit Production connection binding.",
+        });
+      }
       if (item.authResource.runtimeRole === item.authResource.migratorRole) {
         context.addIssue({
           code: "custom",

@@ -396,8 +396,12 @@ export const createRepositoryProductionNativeHandler =
           },
           readConnections: (context) =>
             createRepositoryProductionConnectionReader({
-              connection: { ...configuration.connection, operator: configuration.operator },
+              connection: {
+                ...defined(profile.connection ?? configuration.connection),
+                operator: configuration.operator,
+              },
               resources: profile,
+              environment,
               assertCurrent: context.assertCurrent,
               signal: request.signal,
             })(),
