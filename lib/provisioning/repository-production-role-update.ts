@@ -65,15 +65,12 @@ export const createRepositoryProductionRoleUpdater =
     if (!preimage.active) {
       return "skipped";
     }
-    await deps.execute(
-      context,
-      {
-        action: "change-role",
-        memberId: actorId,
-        roles: update.roles,
-        clientRequestId: update.commandId,
-      },
-    );
+    await deps.execute(context, {
+      action: "change-role",
+      memberId: actorId,
+      roles: update.roles,
+      clientRequestId: update.commandId,
+    });
     await context.assertCurrent();
     return "applied";
   };

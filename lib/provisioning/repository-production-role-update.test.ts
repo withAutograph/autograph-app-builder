@@ -79,13 +79,19 @@ describe("approved creator role revisions", () => {
     const commands: AppAccessCommand[] = [];
     const update = createRepositoryProductionRoleUpdater({
       readMembers: async () => [{ id: "creator" }],
-      execute: async (_context, command) => { commands.push(command); },
+      execute: async (_context, command) => {
+        commands.push(command);
+      },
     });
     expect(await update(context)).toBe("applied");
-    expect(commands).toEqual([{
-      action: "change-role", memberId: "creator", roles: [],
-      clientRequestId: "11111111-1111-4111-a111-111111111111",
-    }]);
+    expect(commands).toEqual([
+      {
+        action: "change-role",
+        memberId: "creator",
+        roles: [],
+        clientRequestId: "11111111-1111-4111-a111-111111111111",
+      },
+    ]);
   });
   it("never restores a creator whose access was deliberately removed", async () => {
     const context = fixture();
