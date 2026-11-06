@@ -5,6 +5,8 @@ import { hostedOperatorPlanSchema } from "./hosted-operator-contract";
 import type { OperatorSelection } from "./hosted-operator-contract";
 import {
   createHostedOperatorAppReadiness,
+  createHostedOperatorTenantBindingReadback,
+  classifyActorBinding,
   readActiveAppInstallationCustomerIds,
 } from "./hosted-operator-app-readiness";
 import type {
@@ -598,4 +600,98 @@ it.each([
   }
   await expect(f.verify(f.input)).rejects.toThrow("hosted_app_runtime_readiness_unconfirmed");
   expect(f.input.plan.access).toEqual([]);
+});
+
+it("classifies actor and principal observations without conflating denied scope and missing membership", () => {
+  const scope = {
+    appId: "spend-review",
+    actorId: "actor",
+    organizationId: "org",
+    role: "reviewer",
+  };
+  const row = { ...scope, active: true, fenceGeneration: 3 };
+  expect(
+    classifyActorBinding(
+      { ok: false, error: { code: "authorization_denied", details: [{ code: "scope_mismatch" }] } },
+      scope,
+    ),
+  ).toBe("principal_scope_denied");
+  expect(classifyActorBinding({ ok: true, data: null }, scope)).toBe("actor_absent");
+  expect(classifyActorBinding({ ok: true, data: { ...row, active: false } }, scope)).toBe(
+    "actor_inactive",
+  );
+  expect(classifyActorBinding({ ok: true, data: row }, scope)).toBe("actor_active");
+  expect(() =>
+    classifyActorBinding({ ok: true, data: { ...row, actorId: "foreign" } }, scope),
+  ).toThrow();
+  expect(() =>
+    classifyActorBinding(
+      { ok: false, error: { code: "authorization_denied", details: [{ code: "unknown" }] } },
+      scope,
+    ),
+  ).toThrow();
+});
+
+it("reads only the original plan's approved scopes after owner and runtime identity checks", async () => {
+  const f = fixture();
+  const readActorBinding = vi.fn(async () => "principal_scope_denied" as const);
+  f.reader.readActorBinding = readActorBinding;
+  const input = {
+    ...f.input,
+    plan: {
+      ...plan,
+      access: [
+        {
+          actorId: "synthetic-reviewer",
+          organizationId: "synthetic-org",
+          roles: ["reviewer", "requester"],
+        },
+      ],
+    },
+  };
+  const result = await createHostedOperatorTenantBindingReadback(f.deps)(input);
+  expect(result.bindings).toEqual(
+    ["reviewer", "requester"].map((role) => ({
+      appId: "spend-review",
+      actorId: "synthetic-reviewer",
+      organizationId: "synthetic-org",
+      role,
+      status: "principal_scope_denied",
+    })),
+  );
+  expect(readActorBinding).toHaveBeenCalledTimes(2);
+  expect(f.deps.assertAuthorized).toHaveBeenCalled();
+  expect(f.deps.readReleaseManifest).not.toHaveBeenCalled();
+});
+
+it("refuses a foreign target or unauthorized owner before reading runtime metadata", async () => {
+  const f = fixture();
+  const read = createHostedOperatorTenantBindingReadback(f.deps);
+  await expect(read({ ...f.input, target: { ...target, appId: "foreign" } })).rejects.toThrow();
+  f.deps.assertAuthorized.mockRejectedValueOnce(new Error("owner denied"));
+  await expect(read(f.input)).rejects.toThrow("owner denied");
+  expect(f.deps.readRuntimeUrl).not.toHaveBeenCalled();
+  expect(f.deps.readRuntimeSnapshot).not.toHaveBeenCalled();
+});
+
+it("fails closed when the reader or runtime is unavailable, not as an absent binding", async () => {
+  const f = fixture();
+  const read = createHostedOperatorTenantBindingReadback(f.deps);
+  await expect(read(f.input)).rejects.toThrow();
+  f.reader.readActorBinding = vi.fn(async () => {
+    throw new Error("runtime unavailable");
+  });
+  await expect(read(f.input)).rejects.toThrow("runtime unavailable");
+});
+
+it("withholds partial bindings when owner authorization changes during a snapshot", async () => {
+  const f = fixture();
+  f.reader.readActorBinding = vi.fn(async () => "actor_active" as const);
+  f.deps.assertAuthorized
+    .mockImplementationOnce(() => Promise.resolve())
+    .mockImplementationOnce(() => Promise.resolve())
+    .mockRejectedValueOnce(new Error("owner revoked"));
+  await expect(createHostedOperatorTenantBindingReadback(f.deps)(f.input)).rejects.toThrow(
+    "owner revoked",
+  );
 });

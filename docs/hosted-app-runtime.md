@@ -15,7 +15,13 @@ validation, or an operator-provided blocked result; this stage does not expose
 provider details or prove the underlying
 cause. Unclassified failures remain `operator_unavailable`; the lookup does not
 infer readiness or replay the saved intent. Static apps require no database
-operation.
+operation. `continuity-bindings` uses the saved continuity intent and current
+owner authorization to inspect only its approved tenant/actor/role scopes. It
+rechecks the prepared setup and the native runtime identity before a locking
+metadata read, with no persistent writes. A principal-scope denial, absent
+actor row, inactive row and active row are distinct; unknown reads fail closed.
+An active row does not identify a browser request or prove its fence, and no
+binding result authorizes an effect or proves app acceptance.
 
 ## Normal app destination versus protected Preview onboarding
 

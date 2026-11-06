@@ -15,6 +15,7 @@ const hooks = vi.hoisted(() => ({
   export: vi.fn(),
   readExport: vi.fn(),
   readContinuity: vi.fn(),
+  readContinuityBindings: vi.fn(),
   resolve: vi.fn(),
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
@@ -418,10 +419,31 @@ describe("saved continuity lookup tool", () => {
     hooks.client.mockResolvedValue({
       request: hooks.request,
       readContinuity: hooks.readContinuity,
+      readContinuityBindings: hooks.readContinuityBindings,
       readTenantExport: hooks.readExport,
       resolvePreviewTarget: hooks.resolve,
       sessionId: selection.sessionId,
     });
+  });
+  it("returns owner-scoped binding readback without triggering effects", async () => {
+    const result = {
+      bindings: [
+        {
+          appId: "spend-review",
+          actorId: "actor",
+          organizationId: "org",
+          role: "reviewer",
+          status: "actor_active",
+        },
+      ],
+    };
+    hooks.readContinuityBindings.mockResolvedValueOnce(result);
+    await expect(
+      getTool.execute({ operation: "continuity-bindings", intentId }, toolCtx),
+    ).resolves.toEqual(result);
+    expect(hooks.readContinuityBindings).toHaveBeenCalledWith(intentId, ctx.abortSignal);
+    expect(hooks.request).not.toHaveBeenCalled();
+    expect(hooks.resolve).not.toHaveBeenCalled();
   });
   it("returns the saved continuity intent without resolving or planning a replacement", async () => {
     const saved = {

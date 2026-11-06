@@ -143,8 +143,10 @@ const selectedApp = async (
   // operation. Its canonical app/owner is rechecked before any registration is read.
   await resources.owner.verifyWorkload(request);
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- These actions share the same owner-scoped saved intent resolution.
     input.action === "continuity-status" ||
     input.action === "continuity-read" ||
+    input.action === "continuity-binding-read" ||
     input.action === "continuity-approval" ||
     input.action === "continuity"
   ) {

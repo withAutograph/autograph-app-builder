@@ -23,6 +23,7 @@ import {
   tenantExportStatusSchema,
 } from "./hosted-operator-export-contract";
 import type { HostedTenantExportRequest } from "./hosted-operator-export-contract";
+import { appTenantBindingReadbackSchema } from "./hosted-operator-tenant-binding-contract";
 import { Agent } from "undici";
 import {
   operatorHeaderProbeRequired,
@@ -393,7 +394,10 @@ export const createHostedOperatorClient = (input: {
       const blocked = operatorPublicResultSchema.safeParse(value);
       if (blocked.success) {
         throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable", {
-          continuityReadStage: body.action === "continuity-read" ? "operator_response" : undefined,
+          continuityReadStage:
+            body.action === "continuity-read" || body.action === "continuity-binding-read"
+              ? "operator_response"
+              : undefined,
           recoveryStage: blocked.data.recoveryStage,
           recoveryProgressAdvanced: blocked.data.recoveryProgressAdvanced,
         });
@@ -414,7 +418,10 @@ export const createHostedOperatorClient = (input: {
       } catch {
         /* Diagnostic context lookup must preserve the original failure. */
       }
-      if (request.action === "continuity-read" && !isCancellation(error, signal)) {
+      if (
+        (request.action === "continuity-read" || request.action === "continuity-binding-read") &&
+        !isCancellation(error, signal)
+      ) {
         const diagnostic = continuityReadDiagnosticStageSchema.safeParse(stage);
         if (diagnostic.success) {
           throw new HostedOperatorError(
@@ -505,6 +512,13 @@ export const createHostedOperatorClient = (input: {
         throw new HostedOperatorError("resource_mismatch");
       }
       return result;
+    },
+    async readContinuityBindings(intentId: string, signal?: AbortSignal) {
+      return await sendContinuity(
+        { action: "continuity-binding-read", intentId, ownerContext: exportOwner() },
+        appTenantBindingReadbackSchema,
+        signal,
+      );
     },
     async continuityStatus(intentId: string, signal?: AbortSignal) {
       const result = await sendContinuity(
