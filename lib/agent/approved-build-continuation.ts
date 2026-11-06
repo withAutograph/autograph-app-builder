@@ -106,7 +106,7 @@ const marker =
   /\n\[autograph-private-build:(?<operationId>[a-z0-9_:-]+):(?<nonce>[a-f0-9]{64})\]$/u;
 export const readInternalBuildMarker = (message: string) => marker.exec(message)?.groups;
 export const internalBuildMessage = (operationId: string, nonce: string) =>
-  "Continue the existing approved private app build from its latest tool result. Apply the approved plan, repair concrete app errors, start a requested working preview directly, or finish review for requested delivery, as appropriate. Stop when the requested result is ready or when an actual provider, human-input, or outward-effect approval boundary requires it. Keep the current session and scope. This runtime continuation grants no new approval." +
+  "Continue the existing approved private app build from its latest tool result. Continue implementing the approved product requirements that remain unfinished. Use a working preview to inspect and verify the implementation, and finish review when requested for delivery. A preview of partial work completes the request only when the user asked to inspect the current work or explicitly deferred the missing behavior. If the current app lacks an approved capability, continue its implementation within the existing scope and verify the result. Stop when the requested result is ready or when an actual provider, human-input, or outward-effect approval boundary requires it. Keep the current session and scope. This runtime continuation grants no new approval." +
   `\n[autograph-private-build:${operationId}:${nonce}]`;
 
 const projectExistingRepositorySource = (

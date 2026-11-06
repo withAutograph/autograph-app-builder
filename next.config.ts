@@ -60,7 +60,6 @@ const nextConfig: NextConfig = {
 if (
   process.env.NODE_ENV === "development" &&
   externalDevelopmentEve &&
-  process.env.APP_BUILDER_LOCAL_AUTH_EMULATION !== "1" &&
   !productionNavigationArtifact
 ) {
   nextConfig.turbopack = { root: developmentTurbopackRoot() };
