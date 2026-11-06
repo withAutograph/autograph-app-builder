@@ -211,7 +211,7 @@ describe("private app browser tests", () => {
       .mockResolvedValueOnce({ exitCode: 42, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "[private browser] run passed" });
-    const result = await runAppBrowserTests({
+    const result = await runResolvedAppBrowserTests({
       appId: "spend-review",
       root: "/workspace/repository",
       sandbox: { run },
