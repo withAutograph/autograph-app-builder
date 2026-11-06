@@ -163,8 +163,8 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       }
       throw new HostedOperatorError(code, {
         cause: error,
-        recoveryStage: stage,
         recoveryProgressAdvanced: progress,
+        recoveryStage: stage,
       });
     }
   };
@@ -184,9 +184,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     const changed = change(structuredClone(record));
     changed.revision = record.revision + 1;
     const saved = await deps.store.compareAndSet({
-      record: continuityRecordSchema.parse(changed),
       expectedRevision: record.revision,
       now: now(),
+      record: continuityRecordSchema.parse(changed),
     });
     if (saved === undefined) {
       throw new HostedOperatorError("operation_in_progress");
@@ -198,8 +198,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
   ): PrivateOperatorApprovalObservationPort => ({
     ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
     save: async (state) => {
-      await approvalStage("journal", () =>
-        update(record, (value) => ({ ...value, approvalObservation: state })),
+      await approvalStage(
+        "journal",
+        async () => await update(record, (value) => ({ ...value, approvalObservation: state })),
       );
     },
   });
@@ -244,9 +245,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     await deps.assertSetup(context, record.plan);
     const request = {
       action: "continuity" as const,
-      planRef: record.plan.planRef,
-      planDigest: record.planDigest,
       idempotencyKey: record.idempotencyKey,
+      planDigest: record.planDigest,
+      planRef: record.plan.planRef,
     };
     const approved =
       record.approval ??
@@ -263,97 +264,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     return approved;
   };
   return {
-    async plan(
-      context: HostedOperatorContext,
-      runtime: ContinuityRuntimeSelection,
-      key: string,
-      recovery?: { predecessorIntentId: string },
-    ) {
-      await deps.assertOwner(context);
-      const intentId = intentIdFor(context, z.string().min(1).parse(key));
-      const previous = await deps.store.read({ authority: context.authority, intentId });
-      if (previous !== undefined) {
-        parseContinuityPlanForOwner(previous.plan, context);
-        if (previous.plan.predecessorIntentId !== recovery?.predecessorIntentId) {
-          throw unavailable();
-        }
-        if (recovery !== undefined) {
-          const prior = await read(context, recovery.predecessorIntentId);
-          assertRecoverablePredecessor(prior, intentId);
-          if (prior.supersededBy === undefined) {
-            await update(prior, (value) => supersede(value, intentId));
-          }
-          await assertRecovery(context, previous);
-        }
-        return {
-          plan: previous.plan,
-          request: {
-            action: "continuity" as const,
-            planRef: previous.plan.planRef,
-            planDigest: previous.planDigest,
-            idempotencyKey: previous.idempotencyKey,
-          },
-          status: continuityStatus(previous),
-        };
-      }
-      const predecessor =
-        recovery === undefined ? undefined : await read(context, recovery.predecessorIntentId);
-      if (predecessor !== undefined) {
-        assertRecoverablePredecessor(predecessor, intentId);
-      }
-      const selected = await deps.resolvePlan(context, runtime);
-      const plan = hostedContinuityPlanSchema.parse({
-        ...selected,
-        intentId,
-        ...(predecessor === undefined ? {} : { predecessorIntentId: predecessor.requestId }),
-        planRef: `_protected-operator/continuity-plans/${intentId}`,
-      });
-      await deps.assertSetup(context, plan);
-      const record = await deps.store.reserve({
-        record: continuityRecordSchema.parse({
-          kind: "app-continuity",
-          requestId: intentId,
-          revision: 1,
-          idempotencyKey: key,
-          plan,
-          planDigest: continuityPlanDigest(plan),
-          state: "planned",
-          fence: 0,
-          environmentRows: [],
-          environmentWrites: [],
-          deliveryCandidates: [],
-        }),
-        now: now(),
-      });
-      if (predecessor !== undefined && predecessor.supersededBy !== intentId) {
-        await update(predecessor, (value) => supersede(value, intentId));
-      }
-      return {
-        plan: record.plan,
-        request: {
-          action: "continuity" as const,
-          planRef: record.plan.planRef,
-          planDigest: record.planDigest,
-          idempotencyKey: record.idempotencyKey,
-        },
-        status: continuityStatus(record),
-      };
-    },
-    async readPlan(context: HostedOperatorContext, intentId: string) {
-      const record = await read(context, z.uuid().parse(intentId));
-      const { plan, planDigest, idempotencyKey } = record;
-      const request = parseContinuityRequestForPlan(
-        { action: "continuity", planRef: plan.planRef, planDigest, idempotencyKey },
-        plan,
-      );
-      return { plan, request, status: continuityStatus(record) };
-    },
-    async status(context: HostedOperatorContext, intentId: string) {
-      return continuityStatus(await read(context, z.uuid().parse(intentId)));
-    },
     async approval(context: HostedOperatorContext, request: HostedContinuityRequest) {
       const intentId = z.uuid().parse(request.planRef.split("/").at(-1));
-      let record = await approvalStage("canonical_read", () => read(context, intentId));
+      let record = await approvalStage("canonical_read", async () => await read(context, intentId));
       parseContinuityRequestForPlan(request, record.plan);
       if (request.idempotencyKey !== record.idempotencyKey) {
         throw new HostedOperatorError("resource_mismatch");
@@ -362,12 +275,14 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       if (record.approval !== undefined) {
         return { approved: true };
       }
-      await approvalStage("setup", () => deps.assertSetup(context, record.plan));
-      const receipt = await approvalStage("native_history", () =>
-        deps.readApproval(context, request, undefined, approvalObservation(record)),
+      await approvalStage("setup", async () => await deps.assertSetup(context, record.plan));
+      const receipt = await approvalStage(
+        "native_history",
+        async () =>
+          await deps.readApproval(context, request, undefined, approvalObservation(record)),
       );
       if (receipt === null) {
-        record = await approvalStage("journal", () => read(context, intentId));
+        record = await approvalStage("journal", async () => await read(context, intentId));
         await assertRecovery(context, record);
         const cancelled = record.approvalObservation?.capture.entries.some(
           (entry) => entry.cancelled || entry.completedCancelled,
@@ -435,13 +350,6 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       }
       return await deps.withResourceLease(
         {
-          lockKeys: [
-            JSON.stringify([
-              "hosted_protected_operator_vercel_project_v1",
-              current.plan.gateway.ownerId,
-              current.plan.gateway.projectId,
-            ]),
-          ],
           initializeUnderLock: async () => {
             current = await read(context, intentId);
             if (current.state === "settled" || current.state === "revoked") {
@@ -450,9 +358,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
             await approval(context, current, callId);
             if (current.attemptId === undefined) {
               const capabilities = {
+                lifecycle: randomBytes(32).toString("base64url"),
                 suiteSelector: randomBytes(32).toString("base64url"),
                 transport: randomBytes(32).toString("base64url"),
-                lifecycle: randomBytes(32).toString("base64url"),
               };
               current = await update(current, (value) => {
                 if (
@@ -475,6 +383,13 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
               });
             }
           },
+          lockKeys: [
+            JSON.stringify([
+              "hosted_protected_operator_vercel_project_v1",
+              current.plan.gateway.ownerId,
+              current.plan.gateway.projectId,
+            ]),
+          ],
           readCurrentFence: async () => {
             const latest = await read(context, intentId);
             if (latest.fence !== current.fence || latest.attemptId !== current.attemptId) {
@@ -484,9 +399,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
               await approval(context, latest, callId);
             }
             return {
-              operationRef: intentId,
-              leaseId: latest.attemptId ?? intentId,
               fenceGeneration: latest.fence,
+              leaseId: latest.attemptId ?? intentId,
+              operationRef: intentId,
             };
           },
         },
@@ -540,8 +455,8 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
                   }),
                   isDeepStrictEqual(patch.current, {
                     ...value.current,
-                    providerSessionId: nextSession,
                     leaseExpiresAt: patch.current.leaseExpiresAt,
+                    providerSessionId: nextSession,
                   }),
                   Date.parse(patch.current.leaseExpiresAt) > now().getTime(),
                 ].every(Boolean);
@@ -595,12 +510,12 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
                 await assertFence();
                 current = await update(current, (value) => ({
                   ...value,
-                  state: "reconciliation-required",
-                  pendingStage: "revocation",
                   failure: {
-                    stage: "publication",
                     reason: "runtime-closed-before-publication-completed",
+                    stage: "publication",
                   },
+                  pendingStage: "revocation",
+                  state: "reconciliation-required",
                 }));
               } catch {
                 // Cleanup must still run if the final authority/CAS write fails.
@@ -624,11 +539,11 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
               ...(cancelled ? { cancelled: true, pendingStage: "revocation" as const } : {}),
               ...(publicationFailed
                 ? {
-                    pendingStage: "revocation" as const,
                     failure: {
-                      stage: "publication" as const,
                       reason: "runtime-closed-before-publication-completed" as const,
+                      stage: "publication" as const,
                     },
+                    pendingStage: "revocation" as const,
                   }
                 : {}),
             }));
@@ -671,8 +586,8 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
               await assertCurrent();
               current = await update(current, (value) => ({
                 ...value,
-                state: "publishing",
                 pendingStage: "publication",
+                state: "publishing",
               }));
             }
             if (current.pendingStage === "publication") {
@@ -700,8 +615,8 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
               await assertCurrent();
               current = await update(current, (value) => ({
                 ...value,
-                state: "ready",
                 pendingStage: "suite",
+                state: "ready",
               }));
             }
             if (current.pendingStage === "suite") {
@@ -723,9 +638,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
               await assertCurrent();
               current = await update(current, (value) => ({
                 ...value,
-                outcome: { exitCode: result.exitCode, completedAt: now().toISOString() },
-                state: "revoking",
+                outcome: { completedAt: now().toISOString(), exitCode: result.exitCode },
                 pendingStage: "revocation",
+                state: "revoking",
               }));
             }
             if (current.pendingStage !== "revocation") {
@@ -764,6 +679,94 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
           }
         },
       );
+    },
+    async plan(
+      context: HostedOperatorContext,
+      runtime: ContinuityRuntimeSelection,
+      key: string,
+      recovery?: { predecessorIntentId: string },
+    ) {
+      await deps.assertOwner(context);
+      const intentId = intentIdFor(context, z.string().min(1).parse(key));
+      const previous = await deps.store.read({ authority: context.authority, intentId });
+      if (previous !== undefined) {
+        parseContinuityPlanForOwner(previous.plan, context);
+        if (previous.plan.predecessorIntentId !== recovery?.predecessorIntentId) {
+          throw unavailable();
+        }
+        if (recovery !== undefined) {
+          const prior = await read(context, recovery.predecessorIntentId);
+          assertRecoverablePredecessor(prior, intentId);
+          if (prior.supersededBy === undefined) {
+            await update(prior, (value) => supersede(value, intentId));
+          }
+          await assertRecovery(context, previous);
+        }
+        return {
+          plan: previous.plan,
+          request: {
+            action: "continuity" as const,
+            idempotencyKey: previous.idempotencyKey,
+            planDigest: previous.planDigest,
+            planRef: previous.plan.planRef,
+          },
+          status: continuityStatus(previous),
+        };
+      }
+      const predecessor =
+        recovery === undefined ? undefined : await read(context, recovery.predecessorIntentId);
+      if (predecessor !== undefined) {
+        assertRecoverablePredecessor(predecessor, intentId);
+      }
+      const selected = await deps.resolvePlan(context, runtime);
+      const plan = hostedContinuityPlanSchema.parse({
+        ...selected,
+        intentId,
+        ...(predecessor === undefined ? {} : { predecessorIntentId: predecessor.requestId }),
+        planRef: `_protected-operator/continuity-plans/${intentId}`,
+      });
+      await deps.assertSetup(context, plan);
+      const record = await deps.store.reserve({
+        now: now(),
+        record: continuityRecordSchema.parse({
+          deliveryCandidates: [],
+          environmentRows: [],
+          environmentWrites: [],
+          fence: 0,
+          idempotencyKey: key,
+          kind: "app-continuity",
+          plan,
+          planDigest: continuityPlanDigest(plan),
+          requestId: intentId,
+          revision: 1,
+          state: "planned",
+        }),
+      });
+      if (predecessor !== undefined && predecessor.supersededBy !== intentId) {
+        await update(predecessor, (value) => supersede(value, intentId));
+      }
+      return {
+        plan: record.plan,
+        request: {
+          action: "continuity" as const,
+          idempotencyKey: record.idempotencyKey,
+          planDigest: record.planDigest,
+          planRef: record.plan.planRef,
+        },
+        status: continuityStatus(record),
+      };
+    },
+    async readPlan(context: HostedOperatorContext, intentId: string) {
+      const record = await read(context, z.uuid().parse(intentId));
+      const { plan, planDigest, idempotencyKey } = record;
+      const request = parseContinuityRequestForPlan(
+        { action: "continuity", idempotencyKey, planDigest, planRef: plan.planRef },
+        plan,
+      );
+      return { plan, request, status: continuityStatus(record) };
+    },
+    async status(context: HostedOperatorContext, intentId: string) {
+      return continuityStatus(await read(context, z.uuid().parse(intentId)));
     },
   };
 };

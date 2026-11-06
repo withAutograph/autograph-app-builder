@@ -9,8 +9,8 @@ it("derives closed codes from HTTP and drops unbounded or URL-bearing request re
   ]) {
     expect(
       integrationProviderHttpError(
-        new Response("not parsed", { status: 429, headers: { "x-request-id": reference } }),
+        new Response("not parsed", { headers: { "x-request-id": reference }, status: 429 }),
       ).diagnostic,
-    ).toEqual({ provider: "ampersand", statusCode: 429, code: "rate_limited" });
+    ).toEqual({ code: "rate_limited", provider: "ampersand", statusCode: 429 });
   }
 });

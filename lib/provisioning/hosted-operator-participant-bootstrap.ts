@@ -143,11 +143,11 @@ const matchesAppParticipantBootstrap = (
     account.normalActorProgram === undefined ||
       normalActorProgramDigest(account.normalActorProgram) !== preparation.programDigest,
     !isDeepStrictEqual(operator.plan.normalActorPreparation, {
+      accountApprovalId: preparation.accountApprovalId,
+      accountApprovedByCallId: preparation.accountApprovedByCallId,
       accountOperationRef: preparation.accountOperationRef,
       accountPlanDigest: preparation.accountPlanDigest,
       programDigest: preparation.programDigest,
-      accountApprovalId: preparation.accountApprovalId,
-      accountApprovedByCallId: preparation.accountApprovedByCallId,
     }),
   ].some(Boolean);
 };
@@ -186,7 +186,7 @@ const inspectPlanningGateway = (
   desired: HostedOperatorPlan,
   record: HostedRuntimeJournalRecord,
 ): ParticipantGateway | undefined => {
-  const operator = record.operator;
+  const { operator } = record;
   if (
     operator === undefined ||
     desired.gatewayDelivery === undefined ||
@@ -202,7 +202,7 @@ const inspectPlanningGateway = (
   );
   const current =
     completed?.plan.stage === "app" && currentCandidate !== undefined
-      ? { completion: completed, candidate: currentCandidate }
+      ? { candidate: currentCandidate, completion: completed }
       : undefined;
   const parsedRetained = retainedParticipantGatewaySchema.safeParse(
     record.retainedParticipantGateway,
@@ -294,7 +294,7 @@ const readBootstrapContext = (
   if (auth === undefined || program === undefined || currentProgram === undefined) {
     return undefined;
   }
-  return { record, operator, preparation, auth, program, currentProgram, account, appPlanning };
+  return { account, appPlanning, auth, currentProgram, operator, preparation, program, record };
 };
 
 const inspectParticipantBootstrap = (
@@ -377,7 +377,7 @@ export const retainCompletedParticipantGateway = (
     ? record
     : {
         ...record,
-        retainedParticipantGateway: { completion: selected.gateway, candidate: selected.candidate },
+        retainedParticipantGateway: { candidate: selected.candidate, completion: selected.gateway },
       };
 };
 

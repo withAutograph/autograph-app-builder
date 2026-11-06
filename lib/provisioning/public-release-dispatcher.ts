@@ -33,8 +33,8 @@ export const createPublicReleaseDispatcher =
     // oxlint-disable-next-line anti-slop/no-object-parameters -- The HTTP JSON boundary serializes only closed parsed plan/results or bounded codes.
     const response = (value: object, status = 200) =>
       Response.json(value, {
-        status,
         headers: { "cache-control": "no-store" },
+        status,
       });
     if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/public-release") {
       return response({ code: "not_found" }, 404);
@@ -46,7 +46,7 @@ export const createPublicReleaseDispatcher =
       const input = publicReleaseTransportRequestSchema.parse(await request.json());
       const appId =
         input.action === "public-release-plan" ? input.appId : input.input.plan.selection.appId;
-      const ownerContext = input.ownerContext;
+      const { ownerContext } = input;
       const assertCurrentOwner = async () => {
         request.signal.throwIfAborted();
         await dependencies.owner.assertCanonicalAppOwner({
@@ -57,12 +57,12 @@ export const createPublicReleaseDispatcher =
         request.signal.throwIfAborted();
       };
       await assertCurrentOwner();
-      const ports = await dependencies.createPorts({ request, input, assertCurrentOwner });
+      const ports = await dependencies.createPorts({ assertCurrentOwner, input, request });
       await assertCurrentOwner();
       const invocation = {
         authority: ownerContext.authority,
-        sessionId: ownerContext.sessionId,
         callId: input.callId,
+        sessionId: ownerContext.sessionId,
         signal: request.signal,
       };
       const handler = createPublicReleaseHandler(ports);

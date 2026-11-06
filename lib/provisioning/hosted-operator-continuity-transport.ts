@@ -34,11 +34,11 @@ export const continuityTransportRequestSchema = z.discriminatedUnion("action", [
   }),
   z.strictObject({
     action: z.literal("continuity-plan"),
-    predecessorIntentId: z.uuid().optional(),
-    selection: operatorSelectionSchema,
-    runtime: continuityRuntimeSelectionSchema,
     idempotencyKey: z.string().min(1),
     ownerContext: operatorOwnerContextSchema,
+    predecessorIntentId: z.uuid().optional(),
+    runtime: continuityRuntimeSelectionSchema,
+    selection: operatorSelectionSchema,
   }),
   z.strictObject({
     action: z.literal("continuity-status"),
@@ -103,8 +103,8 @@ export const createContinuityDispatcher =
         selected = { ...saved.plan.target, environment: "preview" };
         savedContext = {
           authority: saved.plan.authority,
-          target: saved.plan.target,
           ownerContext: parsed.ownerContext,
+          target: saved.plan.target,
         };
       }
       stage = "dispatcher_owner_authorization";
@@ -145,9 +145,9 @@ export const createContinuityDispatcher =
         case "continuity-approval": {
           result = await operations.approval(context, {
             action: "continuity",
-            planRef: parsed.planRef,
-            planDigest: parsed.planDigest,
             idempotencyKey: parsed.idempotencyKey,
+            planDigest: parsed.planDigest,
+            planRef: parsed.planRef,
           });
           break;
         }
@@ -156,9 +156,9 @@ export const createContinuityDispatcher =
             context,
             {
               action: "continuity",
-              planRef: parsed.planRef,
-              planDigest: parsed.planDigest,
               idempotencyKey: parsed.idempotencyKey,
+              planDigest: parsed.planDigest,
+              planRef: parsed.planRef,
             },
             parsed.callId,
             request.signal,

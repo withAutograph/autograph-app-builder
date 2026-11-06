@@ -29,9 +29,9 @@ export const createUnapprovedParticipantPlan = (
   void normalActorPreparation;
   void normalActorPredecessor;
   void normalActorCapturePredecessor;
-  const gatewayBindings = candidate.priorOperator.plan.gatewayBindings;
+  const { gatewayBindings } = candidate.priorOperator.plan;
   const trustedSources = gatewayBindings?.trustedSources;
-  const auth = candidate.bootstrap.auth;
+  const { auth } = candidate.bootstrap;
   return hostedOperatorPlanSchema.parse({
     ...base,
     ...(gatewayBindings === undefined
@@ -45,33 +45,33 @@ export const createUnapprovedParticipantPlan = (
                 : undefined,
           },
         }),
-    stage: "auth-participants",
     access: [],
-    normalActorProgram: program,
+    effects: [
+      {
+        description:
+          "Prepare the approved additional participants while preserving the existing account capture.",
+        id: "normal-accounts",
+        kind: "normal-accounts",
+      },
+    ],
     normalActorCapturePredecessor: {
-      preparation: normalActorPreparationSchema.strip().parse(candidate.account),
-      bootstrapOperationRef: auth.operationRef,
-      bootstrapPlanDigest: auth.planDigest,
       bootstrapApprovalId: auth.approvalId,
       bootstrapApprovedByCallId: auth.approvedByCallId,
+      bootstrapOperationRef: auth.operationRef,
+      bootstrapPlanDigest: auth.planDigest,
+      preparation: normalActorPreparationSchema.strip().parse(candidate.account),
       ...(candidate.bootstrap.gateway === undefined
         ? {}
         : {
             gateway: {
-              operationRef: candidate.bootstrap.gateway.operationRef,
-              planDigest: candidate.bootstrap.gateway.planDigest,
               approvalId: candidate.bootstrap.gateway.approvalId,
               approvedByCallId: candidate.bootstrap.gateway.approvedByCallId,
+              operationRef: candidate.bootstrap.gateway.operationRef,
+              planDigest: candidate.bootstrap.gateway.planDigest,
             },
           }),
     },
-    effects: [
-      {
-        id: "normal-accounts",
-        kind: "normal-accounts",
-        description:
-          "Prepare the approved additional participants while preserving the existing account capture.",
-      },
-    ],
+    normalActorProgram: program,
+    stage: "auth-participants",
   });
 };

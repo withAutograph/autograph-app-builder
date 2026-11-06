@@ -26,24 +26,24 @@ import {
 const phase = z.enum(["idle", "pending", "applied"]);
 const receipt = z.strictObject({
   approvalId: z.string().min(1).optional(),
-  approvedByCallId: z.string().min(1),
   approvedAt: z.string().min(1),
+  approvedByCallId: z.string().min(1),
 });
 export const centralHostRecordSchema = z
   .strictObject({
-    kind: z.literal("central-integration-host-journal-v1"),
-    plan: z.union([centralHostSetupPlanSchema, centralHostCallerPlanSchema]),
-    planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-    effects: z.record(z.string(), phase),
     approvalReceipts: z.array(receipt).optional(),
-    executionLease: centralExecutionLeaseSchema.optional(),
     attempts: z.record(z.string(), centralEffectAttemptSchema).optional(),
-    runtimeBindings: z.record(z.string(), centralRuntimeBindingSchema).optional(),
+    effects: z.record(z.string(), phase),
+    executionLease: centralExecutionLeaseSchema.optional(),
+    kind: z.literal("central-integration-host-journal-v1"),
     nativeDeployment: centralNativeDeploymentStateSchema.optional(),
     observation: centralHostReadyReceiptSchema.optional(),
+    plan: z.union([centralHostSetupPlanSchema, centralHostCallerPlanSchema]),
+    planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    runtimeBindings: z.record(z.string(), centralRuntimeBindingSchema).optional(),
   })
   .superRefine((record, ctx) => {
-    const plan = record.plan;
+    const { plan } = record;
     const attempts = record.attempts ?? {};
     if (record.attempts !== undefined) {
       const firstUnfinished = plan.effects.findIndex(
@@ -255,7 +255,7 @@ const parse = (raw: typeof builderProvisioningJournals.$inferSelect): CentralHos
   ) {
     throw fail();
   }
-  return { operationRef: raw.requestId, revision: raw.revision, record };
+  return { operationRef: raw.requestId, record, revision: raw.revision };
 };
 export const createPostgresCentralHostStore = (database: Database) => {
   const read = async (authority: Authority, operationRef: string) => {
@@ -270,42 +270,6 @@ export const createPostgresCentralHostStore = (database: Database) => {
     return selectedRaw === undefined ? undefined : parse(selectedRaw);
   };
   return {
-    read,
-    async reserve(plan: CentralHostRecord["plan"]) {
-      const record = centralHostRecordSchema.parse({
-        kind: "central-integration-host-journal-v1",
-        plan,
-        planDigest: centralHostPlanDigest(plan),
-        effects: Object.fromEntries(plan.effects.map((effect) => [effect, "idle"])),
-        attempts: {},
-        ...(plan.kind === "central-integration-host-setup-v1"
-          ? { nativeDeployment: { status: "empty" } }
-          : {}),
-      });
-      const operationRef = centralHostOperationRef(plan);
-      const now = new Date();
-      const rows = await database
-        .insert(builderProvisioningJournals)
-        .values({
-          ...plan.authority,
-          requestId: operationRef,
-          requestDigest: record.planDigest,
-          record,
-          revision: 1,
-          state: "pending",
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing()
-        .returning();
-      const selectedRaw = rows.at(0);
-      const row =
-        selectedRaw === undefined ? await read(plan.authority, operationRef) : parse(selectedRaw);
-      if (row === undefined || !isDeepStrictEqual(row.record.plan, record.plan)) {
-        throw fail();
-      }
-      return row;
-    },
     async compareAndSet(row: CentralHostRow, raw: CentralHostRecord) {
       const record = centralHostRecordSchema.parse(raw);
       assertCentralHostTransition(row.record, record);
@@ -328,26 +292,6 @@ export const createPostgresCentralHostStore = (database: Database) => {
         .returning();
       const selectedRaw = rows.at(0);
       return selectedRaw === undefined ? undefined : parse(selectedRaw);
-    },
-    async readSetupForSubscription(owners: readonly Authority[], subscriptionRef: string) {
-      if (owners.length === 0) {
-        throw fail();
-      }
-      const rows = await database
-        .select()
-        .from(builderProvisioningJournals)
-        .where(
-          and(
-            or(...owners.map(authorityWhere)),
-            sql`${builderProvisioningJournals.record}->'plan'->>'kind'='central-integration-host-setup-v1'`,
-            sql`${builderProvisioningJournals.record}->'plan'->'receiver'->>'subscriptionRef'=${subscriptionRef}`,
-          ),
-        )
-        .limit(2);
-      if (rows.length > 1) {
-        throw fail();
-      }
-      return rows[0] === undefined ? undefined : parse(rows[0]);
     },
     async findSetupForProfile(
       owners: readonly Authority[],
@@ -374,6 +318,7 @@ export const createPostgresCentralHostStore = (database: Database) => {
       }
       return rows[0] === undefined ? undefined : parse(rows[0]);
     },
+    read,
     async readReadyCaller(authority: Authority, appProjectId: string) {
       const rows = await database
         .select()
@@ -393,6 +338,61 @@ export const createPostgresCentralHostStore = (database: Database) => {
       }
       const selectedRaw = rows.at(0);
       return selectedRaw === undefined ? undefined : parse(selectedRaw);
+    },
+    async readSetupForSubscription(owners: readonly Authority[], subscriptionRef: string) {
+      if (owners.length === 0) {
+        throw fail();
+      }
+      const rows = await database
+        .select()
+        .from(builderProvisioningJournals)
+        .where(
+          and(
+            or(...owners.map(authorityWhere)),
+            sql`${builderProvisioningJournals.record}->'plan'->>'kind'='central-integration-host-setup-v1'`,
+            sql`${builderProvisioningJournals.record}->'plan'->'receiver'->>'subscriptionRef'=${subscriptionRef}`,
+          ),
+        )
+        .limit(2);
+      if (rows.length > 1) {
+        throw fail();
+      }
+      return rows[0] === undefined ? undefined : parse(rows[0]);
+    },
+    async reserve(plan: CentralHostRecord["plan"]) {
+      const record = centralHostRecordSchema.parse({
+        attempts: {},
+        effects: Object.fromEntries(plan.effects.map((effect) => [effect, "idle"])),
+        kind: "central-integration-host-journal-v1",
+        plan,
+        planDigest: centralHostPlanDigest(plan),
+        ...(plan.kind === "central-integration-host-setup-v1"
+          ? { nativeDeployment: { status: "empty" } }
+          : {}),
+      });
+      const operationRef = centralHostOperationRef(plan);
+      const now = new Date();
+      const rows = await database
+        .insert(builderProvisioningJournals)
+        .values({
+          ...plan.authority,
+          createdAt: now,
+          record,
+          requestDigest: record.planDigest,
+          requestId: operationRef,
+          revision: 1,
+          state: "pending",
+          updatedAt: now,
+        })
+        .onConflictDoNothing()
+        .returning();
+      const selectedRaw = rows.at(0);
+      const row =
+        selectedRaw === undefined ? await read(plan.authority, operationRef) : parse(selectedRaw);
+      if (row === undefined || !isDeepStrictEqual(row.record.plan, record.plan)) {
+        throw fail();
+      }
+      return row;
     },
   };
 };

@@ -15,14 +15,14 @@ const targetSchema = z.object({
   }),
 });
 const migrationSchema = z.object({
-  version: z.literal(1),
-  resource: z.json(),
   proposal: z.literal("new-empty").optional(),
+  resource: z.json(),
   schemaPlan: z.looseObject({
     ...targetSchema.shape.schemaPlan.shape,
-    effects: z.array(z.looseObject({ owner: z.string(), sha256: digest, sql: z.string() })),
     beforeSchemaHash: digest,
+    effects: z.array(z.looseObject({ owner: z.string(), sha256: digest, sql: z.string() })),
   }),
+  version: z.literal(1),
 });
 const snapshotSchema = z.object({
   database: z.string(),
@@ -156,9 +156,6 @@ export const createHostedOperatorAuthReadiness = (deps: {
     }
   };
   return {
-    verify: async (input: Input) => await verify(input, true),
-    /** Actual current publication; this never claims the newly approved target is installed. */
-    verifyPublication: async (input: Input) => await verify(input, false),
     async reconcileMigration(supplied: Input, repropose: (input: Input) => Promise<Buffer>) {
       const input = {
         ...supplied,
@@ -169,7 +166,7 @@ export const createHostedOperatorAuthReadiness = (deps: {
       };
       try {
         const observed = await verify(input, true);
-        return { status: "applied" as const, observed };
+        return { observed, status: "applied" as const };
       } catch {
         if (input.plan.authAdoption !== undefined) {
           return { status: "unknown" as const };
@@ -184,15 +181,15 @@ export const createHostedOperatorAuthReadiness = (deps: {
         const frozenBytes = await deps.readAuthPlan(input);
         const frozen = migrationSchema.parse(JSON.parse(frozenBytes.toString("utf-8")));
         const resource = {
-          version: 1,
+          database: input.plan.authDatabase.database,
           environment: "preview",
           hostname: input.plan.neon.endpoint,
-          port: 5432,
-          database: input.plan.authDatabase.database,
-          schema: "public",
-          runtimeRole: input.plan.authDatabase.runtimeRole,
           migratorRole: input.plan.authDatabase.migratorRole,
           neon: { branchId: input.plan.neon.branchId, projectId: input.plan.neon.projectId },
+          port: 5432,
+          runtimeRole: input.plan.authDatabase.runtimeRole,
+          schema: "public",
+          version: 1,
         };
         if (
           frozen.proposal !== undefined ||
@@ -225,7 +222,6 @@ export const createHostedOperatorAuthReadiness = (deps: {
           return { status: "unknown" as const };
         }
         return {
-          status: "retryable" as const,
           resourceVersion: createHash("sha256")
             .update(
               JSON.stringify({
@@ -234,10 +230,14 @@ export const createHostedOperatorAuthReadiness = (deps: {
               }),
             )
             .digest("hex"),
+          status: "retryable" as const,
         };
       } catch {
         return { status: "unknown" as const };
       }
     },
+    verify: async (input: Input) => await verify(input, true),
+    /** Actual current publication; this never claims the newly approved target is installed. */
+    verifyPublication: async (input: Input) => await verify(input, false),
   };
 };

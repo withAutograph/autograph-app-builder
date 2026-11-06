@@ -32,11 +32,11 @@ export const tenantExportTransportRequestSchema = z.discriminatedUnion("action",
   z
     .strictObject({
       action: z.literal("export-plan"),
-      selection: operatorSelectionSchema,
       customerId: z.string().min(1).optional(),
       customerScope: z.literal("owner-organization").optional(),
       idempotencyKey: z.string().min(1),
       ownerContext: operatorOwnerContextSchema,
+      selection: operatorSelectionSchema,
     })
     .refine(
       (input) => (input.customerId === undefined) !== (input.customerScope === undefined),
@@ -124,8 +124,8 @@ export const createTenantExportDispatcher =
         selected = { ...saved.journal.plan.target, environment: "preview" };
         savedContext = {
           authority: saved.journal.authority,
-          target: saved.originalTarget,
           ownerContext: parsed.ownerContext,
+          target: saved.originalTarget,
         };
       }
       planStage = "dispatcher_owner_authorization";
@@ -161,9 +161,9 @@ export const createTenantExportDispatcher =
         case "export-approval": {
           result = await operations.approval(context, {
             action: "export",
-            planRef: parsed.planRef,
-            planDigest: parsed.planDigest,
             idempotencyKey: parsed.idempotencyKey,
+            planDigest: parsed.planDigest,
+            planRef: parsed.planRef,
           });
           break;
         }
@@ -172,9 +172,9 @@ export const createTenantExportDispatcher =
             context,
             {
               action: "export",
-              planRef: parsed.planRef,
-              planDigest: parsed.planDigest,
               idempotencyKey: parsed.idempotencyKey,
+              planDigest: parsed.planDigest,
+              planRef: parsed.planRef,
             },
             parsed.callId,
           );

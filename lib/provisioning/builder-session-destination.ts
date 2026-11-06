@@ -45,15 +45,15 @@ export const createBuilderSessionDestinationService = <
     if (session.builderDestination === undefined && request.deploymentAccess !== "public-app") {
       throw new Error("Review public app delivery before creating its destination.");
     }
-    const appId = session.appId;
+    const { appId } = session;
     const authority = {
-      issuer: input.principal.issuer,
       audience: input.principal.audience,
-      workspaceId: input.principal.workspaceId,
+      issuer: input.principal.issuer,
       ownerUserId: input.principal.ownerUserId,
+      workspaceId: input.principal.workspaceId,
     };
     const assertNoLegacyEffects = async () => {
-      const legacy = await deps.readNativeTarget({ authority, appId });
+      const legacy = await deps.readNativeTarget({ appId, authority });
       if (legacy !== undefined && ["creating", "unknown", "ready"].includes(legacy.record.stage)) {
         throw new Error(
           "Reconcile this app’s existing destination operation before selecting another destination.",
@@ -63,19 +63,19 @@ export const createBuilderSessionDestinationService = <
     await assertNoLegacyEffects();
     const destination = {
       appId: session.appId,
-      requestId: request.requestId,
       requestDigest: builderProvisionRequestDigest(request),
+      requestId: request.requestId,
     };
     // Check visible consent/epoch before reserving even this metadata-only operation.
     attachBuilderDestinationRecord(session, {
-      expected: input.expected,
       destination,
+      expected: input.expected,
       nowEpochMs: (deps.now?.() ?? new Date()).getTime(),
     });
     const row = await deps.provisioning.journal.reserve({
       authority,
-      request,
       now: deps.now?.() ?? new Date(),
+      request,
     });
     if (
       row.requestDigest !== destination.requestDigest ||
@@ -85,21 +85,21 @@ export const createBuilderSessionDestinationService = <
     }
     await deps.assertMember(input.principal);
     await deps.sessions.attachBuilderDestination({
+      destination,
+      expected: input.expected,
+      nowEpochMs: (deps.now?.() ?? new Date()).getTime(),
       principal: input.principal,
       sessionId: input.sessionId,
-      expected: input.expected,
-      destination,
-      nowEpochMs: (deps.now?.() ?? new Date()).getTime(),
     });
     const assertCurrent = async () => {
       await deps.assertMember(input.principal);
       await assertNoLegacyEffects();
       await deps.sessions.attachBuilderDestination?.({
+        destination,
+        expected: input.expected,
+        nowEpochMs: (deps.now?.() ?? new Date()).getTime(),
         principal: input.principal,
         sessionId: input.sessionId,
-        expected: input.expected,
-        destination,
-        nowEpochMs: (deps.now?.() ?? new Date()).getTime(),
       });
     };
     const guardedDependencies = { ...deps.provisioning, assertCurrent };
@@ -107,19 +107,19 @@ export const createBuilderSessionDestinationService = <
     if (request.providers.githubInstallationId !== undefined) {
       const repository = await deps.execute({
         authority,
-        request: { ...request, operation: "github" },
         dependencies: guardedDependencies,
+        request: { ...request, operation: "github" },
       });
       if (repository.github.status !== "succeeded") {
-        return { sessionId: input.sessionId, destination, provisioning: repository };
+        return { destination, provisioning: repository, sessionId: input.sessionId };
       }
     }
     await assertCurrent();
     const provisioning = await deps.execute({
       authority,
-      request,
       dependencies: guardedDependencies,
+      request,
     });
-    return { sessionId: input.sessionId, destination, provisioning };
+    return { destination, provisioning, sessionId: input.sessionId };
   },
 });

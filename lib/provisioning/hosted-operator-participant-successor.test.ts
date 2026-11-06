@@ -40,8 +40,8 @@ import type { HostedRuntimeJournalRow } from "./hosted-runtime-journal";
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -49,56 +49,68 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.com",
   actors: [
-    { actorKey: "owner", email: "owner@example.test", name: "Owner", account: "capture-existing" },
+    { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: target.appId,
+  memberships: [],
+  organizations: [],
+  origin: "https://apps.example.com",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  stage: "auth-participants",
-  action: "prepare",
   access: [],
-  normalActorProgram: program,
-  selection: {
-    appId: target.appId,
-    branch: target.branch,
-    environment: target.environment,
-    projectId: target.projectId,
-    sessionId: target.sessionId,
-  },
+  action: "prepare",
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
+  deploymentBoundary: {
+    app: {
+      branch: target.branch,
+      deploymentId: "dpl_app",
+      environment: "preview",
+      projectId: target.projectId,
+    },
+    authority,
+    gateway: {
+      branch: target.branch,
+      deploymentId: "dpl_gateway",
+      environment: "preview",
+      projectId: "prj_gateway",
+    },
+    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+    teamId: "team",
+    verification: {
+      gatewayOrigin: "https://gateway.example.test",
+      jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+      publicOrigin: program.origin,
+    },
+  },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -109,31 +121,19 @@ const plan = hostedOperatorPlanSchema.parse({
     projectId: "neon-owned",
     source: "synthetic-only",
   },
+  normalActorProgram: program,
+  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
   release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
   retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
-  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
-  deploymentBoundary: {
-    authority,
-    teamId: "team",
-    app: {
-      branch: target.branch,
-      deploymentId: "dpl_app",
-      environment: "preview",
-      projectId: target.projectId,
-    },
-    gateway: {
-      branch: target.branch,
-      deploymentId: "dpl_gateway",
-      environment: "preview",
-      projectId: "prj_gateway",
-    },
-    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
-    verification: {
-      gatewayOrigin: "https://gateway.example.test",
-      jwksUrl: "https://gateway.example.test/_platform/jwks.json",
-      publicOrigin: program.origin,
-    },
+  selection: {
+    appId: target.appId,
+    branch: target.branch,
+    environment: target.environment,
+    projectId: target.projectId,
+    sessionId: target.sessionId,
   },
+  stage: "auth-participants",
+  version: 1,
 });
 
 const requireFixture = <T>(value: T | undefined): T => {
@@ -158,75 +158,75 @@ const fixture = async (
   const state = initialNormalActorState(program, accountOperationRef);
   state.actors[0] = {
     actorKey: "owner",
-    signup: "complete",
     session: {
-      reference: "33333333-3333-4333-8333-333333333333",
       actorId: "real-owner",
-      realmSessionId: "real-session",
-      origin: program.origin,
       expiresAt: "2030-01-01T00:00:00.000Z",
+      origin: program.origin,
+      realmSessionId: "real-session",
+      reference: "33333333-3333-4333-8333-333333333333",
       ...(opaqueOrganization === undefined ? {} : { activeOrganizationId: opaqueOrganization }),
     },
+    signup: "complete",
     storageState: {
       cookies: [
         {
-          name: "__Secure-session",
-          value: "actual-retained-cookie",
           domain: "apps.example.com",
-          path: "/",
           expires: -1,
           httpOnly: true,
-          secure: true,
+          name: "__Secure-session",
+          path: "/",
           sameSite: "Lax",
+          secure: true,
+          value: "actual-retained-cookie",
         },
       ],
       origins: [],
     },
   };
   const preparation = normalActorAccountPreparationSchema.parse({
-    program,
-    programDigest: normalActorProgramDigest(program),
+    accountApprovalId: "original-approval",
+    accountApprovedByCallId: "original-call",
     accountOperationRef,
     accountPlan,
     accountPlanDigest: operatorPlanDigest(accountPlan),
-    accountApprovalId: "original-approval",
-    accountApprovedByCallId: "original-call",
+    accountsCompletedAt: "2026-10-20T00:00:00.000Z",
+    captures: [],
+    program,
+    programDigest: normalActorProgramDigest(program),
     sealedState: encryptNormalActorState({
       ...context,
-      ownerSessionId: target.sessionId,
-      operationRef: accountOperationRef,
-      program,
       config: keyring,
+      operationRef: accountOperationRef,
+      ownerSessionId: target.sessionId,
+      program,
       state,
     }),
-    captures: [],
-    accountsCompletedAt: "2026-10-20T00:00:00.000Z",
   });
   let row: HostedRuntimeJournalRow = {
-    revision: 1,
     record: hostedRuntimeJournalRecordSchema.parse({
-      kind: "app-runtime",
-      version: 1,
-      request: target,
-      approvedByCallId: "original-call",
-      status: "participants-prepared",
-      step: "reserved",
       accountPreparation: preparation,
+      approvedByCallId: "original-call",
+      kind: "app-runtime",
+      operator: {
+        approvalId: "original-approval",
+        mode: "protected-operator-v1",
+        operationRef: accountOperationRef,
+        plan: accountPlan,
+        planDigest: operatorPlanDigest(accountPlan),
+        receipts: [],
+      },
       privateState: {
         encryptedToken: "resource-secret",
         keyVersion: "v1",
         tokenIv: "iv",
         tokenTag: "tag",
       },
-      operator: {
-        mode: "protected-operator-v1",
-        operationRef: accountOperationRef,
-        plan: accountPlan,
-        planDigest: operatorPlanDigest(accountPlan),
-        approvalId: "original-approval",
-        receipts: [],
-      },
+      request: target,
+      status: "participants-prepared",
+      step: "reserved",
+      version: 1,
     }),
+    revision: 1,
   };
   let owned = true;
   const approvals = new Map([
@@ -238,92 +238,92 @@ const fixture = async (
     }
   };
   const ports = createNormalActorJournalAuthority({
-    store: {
-      read: async () => structuredClone(row),
-      compareAndSet: async (input) => {
-        if (input.expectedRevision !== row.revision) {
-          return undefined;
-        }
-        row = {
-          revision: row.revision + 1,
-          record: hostedRuntimeJournalRecordSchema.parse(input.record),
-        };
-        return structuredClone(row);
-      },
-    },
+    assertApprovedOwner: owner,
+    assertCanonicalOwner: owner,
     keyring,
     now: Date.now,
-    assertCanonicalOwner: owner,
-    assertApprovedOwner: owner,
     readApproval: async (input) => {
       const approved = approvals.get(input.callId);
       return approved?.digest === input.planDigest
         ? {
-            approved: true,
             action: input.action,
             approvalId: approved.id,
+            approved: true,
             callId: input.callId,
             planDigest: input.planDigest,
           }
         : null;
     },
+    store: {
+      compareAndSet: async (input) => {
+        if (input.expectedRevision !== row.revision) {
+          return undefined;
+        }
+        row = {
+          record: hostedRuntimeJournalRecordSchema.parse(input.record),
+          revision: row.revision + 1,
+        };
+        return structuredClone(row);
+      },
+      read: async () => structuredClone(row),
+    },
   });
   const journal = createNormalActorJournal(ports);
   const reference = await journal.authorizeCapture(context, {
     actorKey: "owner",
+    expiresAt: "2030-01-01T00:00:00.000Z",
     nonceSha256: "1".repeat(64),
     proofSha256: createHash("sha256").update("verified-capture").digest("hex"),
-    expiresAt: "2030-01-01T00:00:00.000Z",
   });
   const originalSession = requireFixture(state.actors[0].session);
   originalSession.reference = reference;
   await journal.capture(context, {
-    version: 1,
     actorKey: "owner",
     nonceSha256: "1".repeat(64),
-    proofSha256: createHash("sha256").update("verified-capture").digest("hex"),
-    proof: "verified-capture",
-    session: originalSession,
     normalCookie: normalActorCaptureCookieSchema.parse({
       ...requireFixture(state.actors[0].storageState).cookies[0],
       hostOnly: true,
     }),
+    proof: "verified-capture",
+    proofSha256: createHash("sha256").update("verified-capture").digest("hex"),
+    session: originalSession,
+    version: 1,
   });
   await journal.checkpoint(context, state);
   const original = structuredClone(requireFixture(row.record.accountPreparation));
   const appPlan = hostedOperatorPlanSchema.parse({
     ...accountPlan,
+    effects: ["resources", "install", "access", "bindings"].map((kind) => ({
+      description: "Observe approved phase",
+      id: kind,
+      kind,
+    })),
+    normalActorPreparation: normalActorPreparationSchema.strip().parse(original),
     retention: {
       ...accountPlan.retention,
       expiresAt: timing?.appExpiresAt ?? accountPlan.retention.expiresAt,
     },
     stage: "app",
-    effects: ["resources", "install", "access", "bindings"].map((kind) => ({
-      id: kind,
-      kind,
-      description: "Observe approved phase",
-    })),
-    normalActorPreparation: normalActorPreparationSchema.strip().parse(original),
   });
   approvals.set("app-call", { digest: operatorPlanDigest(appPlan), id: "app-approval" });
   row.record.proof = {
     actors: 0,
-    tenants: 1,
     artifactHash: "c".repeat(64),
     authenticatedBehavior: "unassessed",
     manifestSha256: appPlan.release.sha256,
     releaseId: appPlan.release.id,
+    tenants: 1,
   };
   row.record.status = "prepared";
   row.record.step = "bound";
   row.record.approvedByCallId = "app-call";
   row.record.operator = {
+    approvalId: "app-approval",
+    fenceGeneration: 1,
     mode: "protected-operator-v1",
     operationRef: "44444444-4444-4444-8444-444444444444",
     plan: appPlan,
     planDigest: operatorPlanDigest(appPlan),
-    approvalId: "app-approval",
-    fenceGeneration: 1,
     receipts: appPlan.effects.map((effect) => ({
       effectId: effect.id,
       ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
@@ -335,7 +335,7 @@ const fixture = async (
     ...program,
     actors: [
       ...program.actors,
-      { actorKey: "qa", email: "qa@example.test", name: "QA", account: "create-email-password" },
+      { account: "create-email-password", actorKey: "qa", email: "qa@example.test", name: "QA" },
     ],
   });
   timing?.beforeProposal?.();
@@ -344,9 +344,9 @@ const fixture = async (
     throw new Error("missing successor");
   }
   const predecessor = {
-    preparation: original,
     approvedByCallId: row.record.approvedByCallId,
     operator: structuredClone(row.record.operator),
+    preparation: original,
     proof: row.record.proof,
   };
   row.record.participantPreparationHistory = [predecessor];
@@ -363,11 +363,11 @@ const fixture = async (
   row.record.approvedByCallId = "operator:unapproved-plan";
   const input = {
     ...context,
-    plan: nextPlan,
-    operationRef,
-    planDigest: operatorPlanDigest(nextPlan),
-    callId: "successor-call",
     approvalId: "successor-approval",
+    callId: "successor-call",
+    operationRef,
+    plan: nextPlan,
+    planDigest: operatorPlanDigest(nextPlan),
   };
   const assertCurrent = async () => {
     await owner();
@@ -391,50 +391,50 @@ const fixture = async (
     expect(new URL(request.url).searchParams.get("disableRefresh")).toBe("true");
     expect(request.headers.get("cookie")).toContain("actual-retained-cookie");
     return Response.json({
-      user: { id: "real-owner", email: "owner@example.test" },
       session: {
+        activeOrganizationId: opaqueOrganization ?? null,
+        expiresAt: "2030-01-01T00:00:00.000Z",
         id: "real-session",
         userId: "real-owner",
-        expiresAt: "2030-01-01T00:00:00.000Z",
-        activeOrganizationId: opaqueOrganization ?? null,
       },
+      user: { email: "owner@example.test", id: "real-owner" },
     });
   });
   const unused = async (): Promise<never> => {
     throw new Error("unexpected account or organization effect");
   };
   const dependencies: NormalActorOperationsDependencies = {
-    journalPorts: ports,
-    assertPlanningAuthorized: owner,
     assertCurrentPlan: assertCurrent,
-    normalRealmFetch: async () => fetchSession,
-    prepareActorCapture: unused,
+    assertPlanningAuthorized: owner,
     collectOrganizationOwnerProof: unused,
     executeOrganization: unused,
     inspectOrganization: unused,
+    journalPorts: ports,
+    normalRealmFetch: async () => fetchSession,
+    prepareActorCapture: unused,
   };
   return {
-    journal,
-    ports,
-    original,
-    predecessor,
-    state,
-    input,
     approvals,
-    fetchSession,
-    operations: createHostedOperatorNormalActorOperations(dependencies),
     approve() {
       approvals.set(input.callId, { digest: input.planDigest, id: input.approvalId });
       row.record.approvedByCallId = input.callId;
       requireFixture(row.record.operator).approvalId = input.approvalId;
     },
+    fetchSession,
+    input,
+    journal,
+    operations: createHostedOperatorNormalActorOperations(dependencies),
+    original,
+    ports,
+    predecessor,
+    reference,
     revokeOwner() {
       owned = false;
     },
     get row() {
       return row;
     },
-    reference,
+    state,
   };
 };
 
@@ -461,8 +461,8 @@ describe("approved additive capture participant state", () => {
     const current = {
       ...f.row.record,
       accountPreparation: f.original,
-      operator: f.predecessor.operator,
       approvedByCallId: f.predecessor.approvedByCallId,
+      operator: f.predecessor.operator,
       status: "prepared" as const,
       step: "bound" as const,
     };
@@ -496,25 +496,25 @@ describe("approved additive capture participant state", () => {
       }
       prepared.state.actors[1] = {
         actorKey: "qa",
-        signup: "complete",
         session: {
-          reference: "66666666-6666-4666-8666-666666666666",
           actorId: "qa-actor",
-          realmSessionId: "qa-session",
-          origin: program.origin,
           expiresAt: "2030-01-01T00:00:00.000Z",
+          origin: program.origin,
+          realmSessionId: "qa-session",
+          reference: "66666666-6666-4666-8666-666666666666",
         },
+        signup: "complete",
         storageState: {
           cookies: [
             {
-              name: "__Secure-session",
-              value: "qa-cookie",
               domain: "apps.example.com",
-              path: "/",
               expires: -1,
               httpOnly: true,
-              secure: true,
+              name: "__Secure-session",
+              path: "/",
               sameSite: "Lax",
+              secure: true,
+              value: "qa-cookie",
             },
           ],
           origins: [],
@@ -529,12 +529,12 @@ describe("approved additive capture participant state", () => {
       f.fetchSession.mockImplementation(async (url, init) => {
         if (new Request(url, init).headers.get("cookie")?.includes("qa-cookie") === true) {
           return Response.json({
-            user: { id: "qa-actor", email: "qa@example.test" },
             session: {
+              expiresAt: "2030-01-01T00:00:00.000Z",
               id: "qa-session",
               userId: "qa-actor",
-              expiresAt: "2030-01-01T00:00:00.000Z",
             },
+            user: { email: "qa@example.test", id: "qa-actor" },
           });
         }
         return await originalFetch(url, init);
@@ -544,27 +544,27 @@ describe("approved additive capture participant state", () => {
       void normalActorPredecessor;
       const current = hostedOperatorPlanSchema.parse({
         ...base,
-        stage: "app",
-        retention: { ...base.retention, expiresAt: "2026-10-30T22:19:00.000Z" },
+        effects: ["resources", "install", "access", "bindings"].map((kind) => ({
+          description: "Approved current phase",
+          id: kind,
+          kind,
+        })),
         normalActorPreparation: normalActorPreparationSchema
           .strip()
           .parse(f.row.record.accountPreparation),
-        effects: ["resources", "install", "access", "bindings"].map((kind) => ({
-          id: kind,
-          kind,
-          description: "Approved current phase",
-        })),
+        retention: { ...base.retention, expiresAt: "2026-10-30T22:19:00.000Z" },
+        stage: "app",
       });
       const currentOperation = "77777777-7777-4777-8777-777777777777";
       f.row.record.status = "prepared";
       f.row.record.step = "bound";
       f.row.record.approvedByCallId = "current-app-call";
       Object.assign(requireFixture(f.row.record.operator), {
+        approvalId: "current-app-approval",
+        fenceGeneration: 2,
         operationRef: currentOperation,
         plan: current,
         planDigest: operatorPlanDigest(current),
-        approvalId: "current-app-approval",
-        fenceGeneration: 2,
         receipts: current.effects.map((effect) => ({
           effectId: effect.id,
           observedAt: "2026-10-29T03:01:00.000Z",
@@ -573,8 +573,8 @@ describe("approved additive capture participant state", () => {
         })),
       });
       f.approvals.set("current-app-call", {
-        id: "current-app-approval",
         digest: operatorPlanDigest(current),
+        id: "current-app-approval",
       });
       clock.mockReturnValue(
         Date.parse(
@@ -598,107 +598,105 @@ describe("approved additive capture participant state", () => {
           const qa = new Request(url, init).headers.get("cookie")?.includes("qa-cookie") === true;
           const actorId = qa ? "qa-actor" : "real-owner";
           return Response.json({
-            user: { id: actorId, email: qa ? "qa@example.test" : "owner@example.test" },
             session: {
+              expiresAt: "2026-10-29T22:19:00.000Z",
               id: qa ? "qa-session" : "real-session",
               userId: actorId,
-              expiresAt: "2026-10-29T22:19:00.000Z",
             },
+            user: { email: qa ? "qa@example.test" : "owner@example.test", id: actorId },
           });
         });
       }
       const ownerContext = operatorOwnerContextSchema.parse({
-        kind: "direct",
+        adapterGeneration: 1,
+        adapterSessionId: "adapter",
         authority,
+        kind: "direct",
         principal: { ...authority, scopes: ["autograph:send"] },
         sessionId: target.sessionId,
-        adapterSessionId: "adapter",
-        adapterGeneration: 1,
       });
       const scopes = [
         {
-          callId: f.original.accountApprovedByCallId,
           approvalId: f.original.accountApprovalId,
+          callId: f.original.accountApprovedByCallId,
           operationRef: f.original.accountOperationRef,
           plan: f.original.accountPlan,
         },
         {
-          callId: f.predecessor.approvedByCallId,
           approvalId: f.predecessor.operator.approvalId,
+          callId: f.predecessor.approvedByCallId,
           operationRef: f.predecessor.operator.operationRef,
           plan: f.predecessor.operator.plan,
         },
         {
-          callId: f.input.callId,
           approvalId: f.input.approvalId,
+          callId: f.input.callId,
           operationRef: f.input.operationRef,
           plan: f.input.plan,
         },
         {
-          callId: "current-app-call",
           approvalId: "current-app-approval",
+          callId: "current-app-call",
           operationRef: currentOperation,
           plan: current,
         },
       ];
       const readApproval = createHostedOperatorReadApproval({
-        journal: f.ports.store,
         eve: {
           getSession: async () =>
             durableHostedSessionRecordSchema.parse({
-              version: 2,
-              sessionId: target.sessionId,
-              appId: target.appId,
-              principal: ownerContext.principal,
               adapterGeneration: 1,
               adapterSessionId: "adapter",
-              originAdapterSessionId: "adapter",
+              appId: target.appId,
               createdAtEpochMs: 100,
-              updatedAtEpochMs: 100,
               lastProgressAtEpochMs: 100,
-              resumability: "live",
-              stage: "ready",
-              status: "waiting",
-              title: "Controlled clock-boundary authority",
+              originAdapterSessionId: "adapter",
+              principal: ownerContext.principal,
               privateApprovalReceipts: scopes.map((scope, sequence) =>
                 privateHostedApprovalReceiptSchema.parse({
                   callId: scope.callId,
-                  requestId: scope.approvalId,
                   format: "autograph-hosted-approval-v1",
                   outcome: f.approvals.has(scope.callId) ? "approved" : "cancelled",
+                  requestId: scope.approvalId,
                   responderPrincipalId: authority.ownerUserId,
                   sequence,
-                  turnId: "",
-                  toolName: "prepare-app-hosted-runtime",
                   toolInput: {
                     appId: target.appId,
                     branch: target.branch,
-                    projectId: target.projectId,
                     environment: target.environment,
                     operationRef: scope.operationRef,
                     plan: scope.plan,
                     planDigest: operatorPlanDigest(scope.plan),
+                    projectId: target.projectId,
                   },
+                  toolName: "prepare-app-hosted-runtime",
+                  turnId: "",
                 }),
               ),
+              resumability: "live",
+              sessionId: target.sessionId,
+              stage: "ready",
+              status: "waiting",
+              title: "Controlled clock-boundary authority",
+              updatedAtEpochMs: 100,
+              version: 2,
             }),
           recordPrivateApprovalReceipts: async () => {},
         },
+        journal: f.ports.store,
         observe: async () => {
           throw new HostedOperatorError("authorization_required");
         },
       });
       const canonical = createNormalActorJournalAuthority({
-        store: f.ports.store,
+        assertApprovedOwner: f.ports.assertAuthorized,
+        assertCanonicalOwner: f.ports.assertAuthorized,
         keyring: f.ports.keyring,
         now: Date.now,
-        assertCanonicalOwner: f.ports.assertAuthorized,
-        assertApprovedOwner: f.ports.assertAuthorized,
         readApproval,
+        store: f.ports.store,
       });
       const runtime = createNormalActorRuntimeBindings({
-        journalPorts: canonical,
-        normalRealmFetch: async () => f.fetchSession,
         assertCurrentPlan: async (input) => {
           if (
             input.operationRef !== currentOperation ||
@@ -711,28 +709,30 @@ describe("approved additive capture participant state", () => {
             { ...context, ownerContext },
             {
               ...prepared.preparation,
+              accountApprovalId: "current-app-approval",
+              accountApprovedByCallId: "current-app-call",
               accountOperationRef: currentOperation,
               accountPlan: current,
               accountPlanDigest: operatorPlanDigest(current),
-              accountApprovalId: "current-app-approval",
-              accountApprovedByCallId: "current-app-call",
             },
           );
         },
+        journalPorts: canonical,
+        normalRealmFetch: async () => f.fetchSession,
       });
       if (outcome === "valid") {
         const projection = await runtime({
           ...context,
+          operationRef: currentOperation,
           ownerContext,
           plan: current,
-          operationRef: currentOperation,
         });
         expect(projection?.identities.actors).toHaveLength(2);
         const retained = await f.journal.read(context);
         expect(retained?.state.actors[0]).toEqual(f.state.actors[0]);
       } else {
         await expect(
-          runtime({ ...context, ownerContext, plan: current, operationRef: currentOperation }),
+          runtime({ ...context, operationRef: currentOperation, ownerContext, plan: current }),
         ).rejects.toMatchObject({
           code:
             outcome === "expired actual session"
@@ -760,16 +760,16 @@ describe("approved additive capture participant state", () => {
     );
     expect(f.row.record.privateState).toEqual(before.privateState);
     expect(await f.journal.readCapture(context, f.reference)).toMatchObject({
-      proof: "verified-capture",
       normalCookie: { value: "actual-retained-cookie" },
+      proof: "verified-capture",
     });
     expect(() =>
       decryptNormalActorState({
         authority,
-        ownerSessionId: target.sessionId,
-        operationRef: f.input.operationRef,
-        program: requireFixture(f.input.plan.normalActorProgram),
         config: f.ports.keyring,
+        operationRef: f.input.operationRef,
+        ownerSessionId: target.sessionId,
+        program: requireFixture(f.input.plan.normalActorProgram),
         sealed: f.original.sealedState,
       }),
     ).toThrow();
@@ -795,13 +795,13 @@ describe("approved additive capture participant state", () => {
     f.approve();
     f.fetchSession.mockImplementation(async () =>
       Response.json({
-        user: { id: "real-owner", email: "owner@example.test" },
         session: {
+          activeOrganizationId: "changed-outside-program",
+          expiresAt: "2030-01-01T00:00:00.000Z",
           id: "real-session",
           userId: "real-owner",
-          expiresAt: "2030-01-01T00:00:00.000Z",
-          activeOrganizationId: "changed-outside-program",
         },
+        user: { email: "owner@example.test", id: "real-owner" },
       }),
     );
     const before = structuredClone(f.row.record.accountPreparation);
@@ -821,13 +821,13 @@ describe("approved additive capture participant state", () => {
       const response = await existingFetch(url, init);
       const value = z
         .object({
-          user: z.object({ id: z.string(), email: z.string() }),
           session: z.object({
+            activeOrganizationId: z.string().nullable().optional(),
+            expiresAt: z.string(),
             id: z.string(),
             userId: z.string(),
-            expiresAt: z.string(),
-            activeOrganizationId: z.string().nullable().optional(),
           }),
+          user: z.object({ email: z.string(), id: z.string() }),
         })
         .parse(await response.json());
       return Response.json({
@@ -848,7 +848,7 @@ describe("approved additive capture participant state", () => {
         const body = z.object({ email: z.email() }).parse(await request.json());
         signups.push(body.email);
         return Response.json(
-          { user: { id: "qa-actor", email: "qa@example.test" } },
+          { user: { email: "qa@example.test", id: "qa-actor" } },
           {
             headers: {
               "set-cookie": "__Secure-session=qa-cookie; Path=/; Secure; HttpOnly; SameSite=Lax",
@@ -858,13 +858,13 @@ describe("approved additive capture participant state", () => {
       }
       if (request.headers.get("cookie")?.includes("qa-cookie") === true) {
         return Response.json({
-          user: { id: "qa-actor", email: "qa@example.test" },
           session: {
+            activeOrganizationId: null,
+            expiresAt: "2030-01-01T00:00:00.000Z",
             id: "qa-session",
             userId: "qa-actor",
-            expiresAt: "2030-01-01T00:00:00.000Z",
-            activeOrganizationId: null,
           },
+          user: { email: "qa@example.test", id: "qa-actor" },
         });
       }
       return await originalFetch(url, init);
@@ -878,19 +878,19 @@ describe("approved additive capture participant state", () => {
     };
     const effect: HostedOperatorWorkerEffectContext = {
       ...f.input,
-      effect: requireFixture(f.input.plan.effects[0]),
-      leaseId: f.row.record.leaseId,
-      fenceGeneration: 2,
-      workerAttemptId: "account-worker",
-      workerCheckpoints: [],
       assertCurrent: async () => {
         await f.ports.assertMutationAuthority(effect, f.row);
       },
-      checkpoint: unused,
       bindWorkerContext: unused,
+      checkpoint: unused,
       checkpointAccountPreparation: async (preparation) => {
         expect(preparation.accountOperationRef).toBe(f.input.operationRef);
       },
+      effect: requireFixture(f.input.plan.effects[0]),
+      fenceGeneration: 2,
+      leaseId: f.row.record.leaseId,
+      workerAttemptId: "account-worker",
+      workerCheckpoints: [],
     };
     const completed = await f.operations.prepareNormalActorAccounts(effect);
     expect(completed.actors.every((actor) => actor.signup === "complete")).toBe(true);
@@ -947,12 +947,12 @@ describe("approved additive capture participant state", () => {
     if (changed === "foreign session") {
       f.fetchSession.mockResolvedValue(
         Response.json({
-          user: { id: "foreign", email: "owner@example.test" },
           session: {
+            expiresAt: "2030-01-01T00:00:00.000Z",
             id: "foreign-session",
             userId: "foreign",
-            expiresAt: "2030-01-01T00:00:00.000Z",
           },
+          user: { email: "owner@example.test", id: "foreign" },
         }),
       );
     }
@@ -964,12 +964,12 @@ describe("approved additive capture participant state", () => {
           requireFixture(f.row.record.operator).planDigest = "f".repeat(64);
         }
         return Response.json({
-          user: { id: "real-owner", email: "owner@example.test" },
           session: {
+            expiresAt: "2030-01-01T00:00:00.000Z",
             id: "real-session",
             userId: "real-owner",
-            expiresAt: "2030-01-01T00:00:00.000Z",
           },
+          user: { email: "owner@example.test", id: "real-owner" },
         });
       });
     }
@@ -1025,45 +1025,45 @@ describe("approved additive capture participant state", () => {
       f.approve();
       await f.operations.ensureNormalActorCapture(f.input);
       const ownerContext = operatorOwnerContextSchema.parse({
-        kind: "direct",
+        adapterGeneration: 1,
+        adapterSessionId: "adapter",
         authority,
+        kind: "direct",
         principal: { ...authority, scopes: ["autograph:send"] },
         sessionId: target.sessionId,
-        adapterSessionId: "adapter",
-        adapterGeneration: 1,
       });
       const receipts = [
         {
           callId: f.original.accountApprovedByCallId,
           id: f.original.accountApprovalId,
-          plan: f.original.accountPlan,
           operationRef: f.original.accountOperationRef,
+          plan: f.original.accountPlan,
         },
         {
           callId: f.predecessor.approvedByCallId,
           id: f.predecessor.operator.approvalId,
-          plan: f.predecessor.operator.plan,
           operationRef: f.predecessor.operator.operationRef,
+          plan: f.predecessor.operator.plan,
         },
       ].map((entry, sequence) =>
         privateHostedApprovalReceiptSchema.parse({
           callId: entry.callId,
-          requestId: entry.id,
           format: "autograph-hosted-approval-v1",
           outcome: "approved",
+          requestId: entry.id,
           responderPrincipalId: authority.ownerUserId,
           sequence,
-          turnId: "",
-          toolName: "prepare-app-hosted-runtime",
           toolInput: {
             appId: target.appId,
             branch: target.branch,
-            projectId: target.projectId,
             environment: target.environment,
             operationRef: entry.operationRef,
             plan: entry.plan,
             planDigest: operatorPlanDigest(entry.plan),
+            projectId: target.projectId,
           },
+          toolName: "prepare-app-hosted-runtime",
+          turnId: "",
         }),
       );
       const first = requireFixture(receipts[0]);
@@ -1082,40 +1082,40 @@ describe("approved additive capture participant state", () => {
         requireFixture(f.row.record.operator).plan.appDatabase.database = "foreign_database";
       }
       const session = durableHostedSessionRecordSchema.parse({
-        version: 2,
-        sessionId: target.sessionId,
-        appId: target.appId,
-        principal: ownerContext.principal,
         adapterGeneration: 1,
         adapterSessionId: "adapter",
-        originAdapterSessionId: "adapter",
+        appId: target.appId,
         createdAtEpochMs: 100,
-        updatedAtEpochMs: 100,
         lastProgressAtEpochMs: 100,
+        originAdapterSessionId: "adapter",
+        principal: ownerContext.principal,
+        privateApprovalReceipts: receipts,
         resumability: "live",
+        sessionId: target.sessionId,
         stage: "ready",
         status: "waiting",
         title: "Controlled actor authority",
-        privateApprovalReceipts: receipts,
+        updatedAtEpochMs: 100,
+        version: 2,
       });
       const readApproval = createHostedOperatorReadApproval({
-        journal: f.ports.store,
         eve: { getSession: async () => session, recordPrivateApprovalReceipts: async () => {} },
+        journal: f.ports.store,
         observe: async () => {
           throw new HostedOperatorError("authorization_required");
         },
       });
       const input = {
         ...context,
-        ownerContext,
         action: "prepare" as const,
         callId: f.original.accountApprovedByCallId,
+        ownerContext,
         planDigest: f.original.accountPlanDigest,
       };
       if (changed === "valid") {
         await expect(readApproval(input)).resolves.toMatchObject({
-          approved: true,
           approvalId: f.original.accountApprovalId,
+          approved: true,
         });
         await expect(
           readApproval({
@@ -1123,7 +1123,7 @@ describe("approved additive capture participant state", () => {
             callId: f.predecessor.approvedByCallId,
             planDigest: f.predecessor.operator.planDigest,
           }),
-        ).resolves.toMatchObject({ approved: true, approvalId: f.predecessor.operator.approvalId });
+        ).resolves.toMatchObject({ approvalId: f.predecessor.operator.approvalId, approved: true });
       } else {
         await expect(readApproval(input)).rejects.toMatchObject({ code: "authorization_required" });
       }
@@ -1141,12 +1141,12 @@ describe("approved additive capture participant state", () => {
     };
     expect(() =>
       createParticipantSuccessorPlan(record, f.input.plan.normalActorProgram, Date.now(), {
-        version: 1,
-        organizationId: "qa-org",
-        eligibility: "public",
         appPath: "/qa",
-        membershipRole: "member",
         appRoles: ["member"],
+        eligibility: "public",
+        membershipRole: "member",
+        organizationId: "qa-org",
+        version: 1,
       }),
     ).toThrow();
   });
@@ -1156,12 +1156,12 @@ describe("approved additive capture participant state", () => {
       ...program,
       actors: [
         ...program.actors,
-        { actorKey: "qa", email: "qa@example.test", name: "QA", account: "create-email-password" },
-      ],
-      organizations: [
-        { organizationId: "qa-org", name: "QA", slug: "qa-org", ownerActorKey: "owner" },
+        { account: "create-email-password", actorKey: "qa", email: "qa@example.test", name: "QA" },
       ],
       memberships: [{ actorKey: "owner", organizationId: "qa-org", role: "owner" }],
+      organizations: [
+        { name: "QA", organizationId: "qa-org", ownerActorKey: "owner", slug: "qa-org" },
+      ],
     });
     expect(isAdditiveCaptureParticipantProgram(program, next)).toBe(false);
   });

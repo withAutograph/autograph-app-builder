@@ -128,11 +128,11 @@ const readRestorationCoordination = (
   return {
     accountLink,
     accountWait,
-    historicalWait,
-    historicalAcceptedContinuation,
     completedCurrentContinuation,
-    currentExecutionAcknowledged,
     continuationAcceptanceReceiptPresent,
+    currentExecutionAcknowledged,
+    historicalAcceptedContinuation,
+    historicalWait,
     settledLink,
     settledWait,
   };
@@ -253,17 +253,7 @@ const assertCompatible = (
 };
 
 const restorationDiagnosticSchema = z.strictObject({
-  proposalIsOriginalAccountPlan: z.boolean(),
-  proposalStage: operatorPreparationProgressSchema.shape.planStage.unwrap().or(z.literal("absent")),
-  lease: operatorPreparationProgressSchema.shape.lease,
-  hasLeaseExpiry: z.boolean(),
-  hasPendingEffect: z.boolean(),
-  hasPendingAttempt: z.boolean(),
   allPlanEffectsReceipted: z.boolean(),
-  missingEffectKinds: operatorPreparationProgressSchema.shape.missingEffectKinds,
-  executionState: z.enum(["absent", "running", "settled"]),
-  linkScope: z.enum(["absent", "current-account", "settled-or-historical", "unrelated"]),
-  wait: z.enum(["absent", "current-account", "old-adapter", "observed", "unrelated"]),
   continuation: z.enum([
     "absent",
     "old-accepted",
@@ -271,10 +261,20 @@ const restorationDiagnosticSchema = z.strictObject({
     "current-pending",
     "old-unknown",
   ]),
+  continuationAcceptanceReceiptPresent: z.boolean(),
   continuationArchiveable: z.boolean(),
   currentExecutionAcknowledged: z.boolean(),
-  continuationAcceptanceReceiptPresent: z.boolean(),
+  executionState: z.enum(["absent", "running", "settled"]),
+  hasLeaseExpiry: z.boolean(),
+  hasPendingAttempt: z.boolean(),
+  hasPendingEffect: z.boolean(),
+  lease: operatorPreparationProgressSchema.shape.lease,
+  linkScope: z.enum(["absent", "current-account", "settled-or-historical", "unrelated"]),
+  missingEffectKinds: operatorPreparationProgressSchema.shape.missingEffectKinds,
   ownerRestrictedCapabilityPresent: z.boolean(),
+  proposalIsOriginalAccountPlan: z.boolean(),
+  proposalStage: operatorPreparationProgressSchema.shape.planStage.unwrap().or(z.literal("absent")),
+  wait: z.enum(["absent", "current-account", "old-adapter", "observed", "unrelated"]),
 });
 
 type RestorationDiagnostic = z.infer<typeof restorationDiagnosticSchema>;
@@ -352,23 +352,23 @@ const reportRestorationCandidate = async (
     }
     const coordination = readRestorationCoordination(record, context);
     const diagnostic = restorationDiagnosticSchema.parse({
-      proposalIsOriginalAccountPlan: isDeepStrictEqual(proposal, preparation.accountPlan),
-      proposalStage: proposal.stage ?? "absent",
-      lease: progress.lease,
-      hasLeaseExpiry: record.leaseExpiresAt !== undefined,
-      hasPendingEffect: progress.hasPendingEffect,
-      hasPendingAttempt: progress.hasPendingAttempt,
       allPlanEffectsReceipted: progress.allPlanEffectsReceipted,
-      missingEffectKinds: progress.missingEffectKinds,
-      executionState: record.executionObservation?.state ?? "absent",
-      linkScope: diagnosticLinkScope(record, coordination),
-      wait: diagnosticWait(record, coordination),
       continuation: diagnosticContinuation(record, context),
+      continuationAcceptanceReceiptPresent: coordination.continuationAcceptanceReceiptPresent,
       continuationArchiveable:
         coordination.historicalAcceptedContinuation || coordination.completedCurrentContinuation,
       currentExecutionAcknowledged: coordination.currentExecutionAcknowledged,
-      continuationAcceptanceReceiptPresent: coordination.continuationAcceptanceReceiptPresent,
+      executionState: record.executionObservation?.state ?? "absent",
+      hasLeaseExpiry: record.leaseExpiresAt !== undefined,
+      hasPendingAttempt: progress.hasPendingAttempt,
+      hasPendingEffect: progress.hasPendingEffect,
+      lease: progress.lease,
+      linkScope: diagnosticLinkScope(record, coordination),
+      missingEffectKinds: progress.missingEffectKinds,
       ownerRestrictedCapabilityPresent: context.ownerContext?.realmContinuation !== undefined,
+      proposalIsOriginalAccountPlan: isDeepStrictEqual(proposal, preparation.accountPlan),
+      proposalStage: proposal.stage ?? "absent",
+      wait: diagnosticWait(record, coordination),
     });
     console.info("[builder:pending-account-restoration]", diagnostic);
   } catch {
@@ -415,14 +415,14 @@ export const restorePendingAccountPreparation = async (
     await deps.assertAuthorized({ ...context, plan: preparation.accountPlan, purpose: "planning" });
     for (const original of [
       {
+        approvalId: current.approvalId,
         callId: row.record.approvedByCallId,
         planDigest: current.planDigest,
-        approvalId: current.approvalId,
       },
       {
+        approvalId: preparation.accountApprovalId,
         callId: preparation.accountApprovedByCallId,
         planDigest: preparation.accountPlanDigest,
-        approvalId: preparation.accountApprovalId,
       },
     ]) {
       // oxlint-disable-next-line react-doctor/async-await-in-loop -- Preserve ordered independent approval rechecks before the same CAS attempt.
@@ -458,33 +458,33 @@ export const restorePendingAccountPreparation = async (
       ...idleRecord,
       ...(accountWait ? { realmIdentityWait } : {}),
       approvedByCallId: preparation.accountApprovedByCallId,
-      retainedAuth: auth,
+      operator: {
+        ...accountOperator,
+        ...(accountLink ? { identityLink } : {}),
+        approvalId: preparation.accountApprovalId,
+        operationRef: preparation.accountOperationRef,
+        plan: preparation.accountPlan,
+        planDigest: preparation.accountPlanDigest,
+        receipts: [],
+      },
       pendingAccountRestorations: [
         ...(row.record.pendingAccountRestorations ?? []),
         {
           approvedByCallId: row.record.approvedByCallId,
-          operator: current,
-          retainedAuth: row.record.retainedAuth,
           executionObservation,
-          realmIdentityWait,
+          operator: current,
           realmContinuation,
+          realmIdentityWait,
+          retainedAuth: row.record.retainedAuth,
         },
       ],
-      operator: {
-        ...accountOperator,
-        ...(accountLink ? { identityLink } : {}),
-        operationRef: preparation.accountOperationRef,
-        plan: preparation.accountPlan,
-        planDigest: preparation.accountPlanDigest,
-        approvalId: preparation.accountApprovalId,
-        receipts: [],
-      },
+      retainedAuth: auth,
     });
     const committed = await deps.store.compareAndSet({
       ...context,
       expectedRevision: row.revision,
-      record: restored,
       now: new Date(now()),
+      record: restored,
     });
     if (committed === undefined) {
       continue;
@@ -492,10 +492,10 @@ export const restorePendingAccountPreparation = async (
     return operatorPublicResultSchema.parse({
       appId: context.target.appId,
       authenticatedBehavior: "unassessed",
-      status: "planned",
       operationRef: preparation.accountOperationRef,
       plan: preparation.accountPlan,
       planDigest: preparation.accountPlanDigest,
+      status: "planned",
     });
   }
 };

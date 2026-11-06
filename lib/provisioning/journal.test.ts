@@ -107,12 +107,12 @@ describe("builder provisioning journal", () => {
       readVercelCredential: async () => ({
         binding: {
           active: true,
-          installationId: "icfg_202",
-          scopeType: "team",
-          scopeId: "team_1",
-          slug: "owner",
           displayName: "Owner",
+          installationId: "icfg_202",
           plan: "pro",
+          scopeId: "team_1",
+          scopeType: "team",
+          slug: "owner",
           updatedAt: new Date(),
         },
         token: secret,
@@ -128,8 +128,8 @@ describe("builder provisioning journal", () => {
               token: secret,
             },
             {
-              status: 403,
               headers: { "x-vercel-id": "iad1::denied_123" },
+              status: 403,
             },
           );
         }
@@ -140,24 +140,24 @@ describe("builder provisioning journal", () => {
     } as unknown as BuilderProvisioningDependencies;
     const result = await executeBuilderProvisioning({
       authority,
-      request: selected,
       dependencies,
+      request: selected,
     });
     expect(result.vercel).toMatchObject({
-      status: "failed",
       code: "provider_permission_denied",
       providerDiagnostic: {
-        statusCode: 403,
         code: "integration_configuration_disabled",
         requestRef: "iad1::denied_123",
+        statusCode: 403,
       },
+      status: "failed",
     });
     const retry = await executeBuilderProvisioning({
       authority,
-      request: selected,
       dependencies,
+      request: selected,
     });
-    expect(retry.vercel).toMatchObject({ status: "failed", code: "reconciliation_uncertain" });
+    expect(retry.vercel).toMatchObject({ code: "reconciliation_uncertain", status: "failed" });
     const projection = await readBuilderProvisioning({
       authority,
       journal: store,
@@ -166,9 +166,9 @@ describe("builder provisioning journal", () => {
     expect(
       projection?.diagnostics?.find((value) => value.provider === "vercel")?.lastProviderDiagnostic,
     ).toEqual({
-      statusCode: 403,
       code: "integration_configuration_disabled",
       requestRef: "iad1::denied_123",
+      statusCode: 403,
     });
     expect(postCount).toBe(1);
     const saved = await store.read({ authority, requestId: selected.requestId });
@@ -193,20 +193,6 @@ describe("builder provisioning journal", () => {
     const secret = "private-credential-and-message";
     let postCount = 0;
     const dependencies = {
-      journal: store,
-      readVercelCredential: async () => ({
-        binding: {
-          active: true,
-          installationId: "icfg_202",
-          scopeType: "team",
-          scopeId: "team_1",
-          slug: "owner",
-          displayName: "Owner",
-          plan: "pro",
-          updatedAt: new Date(),
-        },
-        token: secret,
-      }),
       fetch: async (_url: string, init?: RequestInit) => {
         if (init?.method === "POST") {
           postCount += 1;
@@ -216,8 +202,8 @@ describe("builder provisioning journal", () => {
               token: secret,
             },
             {
-              status: 403,
               headers: { "x-vercel-id": "iad1::denied_123" },
+              status: 403,
             },
           );
         }
@@ -225,6 +211,20 @@ describe("builder provisioning journal", () => {
           ? Response.json({}, { status: 404 })
           : Response.json({ id: "unproven" });
       },
+      journal: store,
+      readVercelCredential: async () => ({
+        binding: {
+          active: true,
+          displayName: "Owner",
+          installationId: "icfg_202",
+          plan: "pro",
+          scopeId: "team_1",
+          scopeType: "team",
+          slug: "owner",
+          updatedAt: new Date(),
+        },
+        token: secret,
+      }),
     };
     const result = await executeBuilderProvisioning({
       authority,
@@ -234,13 +234,13 @@ describe("builder provisioning journal", () => {
       dependencies: dependencies as never,
     });
     expect(result.vercel).toMatchObject({
-      status: "failed",
       code: "provider_permission_denied",
       providerDiagnostic: {
-        statusCode: 403,
         code: "integration_configuration_disabled",
         requestRef: "iad1::denied_123",
+        statusCode: 403,
       },
+      status: "failed",
     });
     const retry = await executeBuilderProvisioning({
       authority,
@@ -249,7 +249,7 @@ describe("builder provisioning journal", () => {
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately bounded terminal-port fixture; runtime schemas and journal replay checks remain real.
       dependencies: dependencies as never,
     });
-    expect(retry.vercel).toMatchObject({ status: "failed", code: "reconciliation_uncertain" });
+    expect(retry.vercel).toMatchObject({ code: "reconciliation_uncertain", status: "failed" });
     const projection = await readBuilderProvisioning({
       authority,
       journal: store,
@@ -258,9 +258,9 @@ describe("builder provisioning journal", () => {
     expect(
       projection?.diagnostics?.find((value) => value.provider === "vercel")?.lastProviderDiagnostic,
     ).toEqual({
-      statusCode: 403,
       code: "integration_configuration_disabled",
       requestRef: "iad1::denied_123",
+      statusCode: 403,
     });
     expect(postCount).toBe(1);
     const saved = await store.read({ authority, requestId: selected.requestId });

@@ -5,18 +5,18 @@ import { describe, expect, it, vi } from "vitest";
 import { createPostgresTenantExportJournalStore } from "./postgres-hosted-operator-export-journal";
 
 const authority = {
-  issuer: "https://builder.test/api/auth",
   audience: "https://builder.test/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.test/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const fixture = () => {
   const queries: SQL[] = [];
   const chain = {
     from: vi.fn(() => chain),
     limit: vi.fn(async () => []),
-    set: vi.fn(() => chain),
     returning: vi.fn(async () => []),
+    set: vi.fn(() => chain),
     where: vi.fn((value: SQL) => {
       queries.push(value);
       return chain;
@@ -26,7 +26,7 @@ const fixture = () => {
   // SAFETY: The controlled query double implements every method used by these read cases.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This existing database-fixture pattern isolates SQL generation without live databases.
   const store = createPostgresTenantExportJournalStore(database as never);
-  return { store, queries };
+  return { queries, store };
 };
 describe("separate tenant export journal authority", () => {
   it("selects only app-export records under all owner coordinates and its distinct UUID", async () => {

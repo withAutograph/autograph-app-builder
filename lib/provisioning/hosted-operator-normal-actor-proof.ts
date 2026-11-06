@@ -69,23 +69,23 @@ const proofSchema = z
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const cookieHeader = (storage: NormalBrowserStorageState, origin: string, path: string) => {
   const jar = new CookieJar(undefined, {
+    allowSpecialUseDomain: false,
     prefixSecurity: "strict",
     rejectPublicSuffixes: true,
-    allowSpecialUseDomain: false,
   });
   for (const cookie of storage.cookies) {
     const domain = cookie.domain.startsWith(".") ? cookie.domain.slice(1) : cookie.domain;
     jar.setCookieSync(
       new Cookie({
-        key: cookie.name,
-        value: cookie.value,
         domain,
-        path: cookie.path,
-        hostOnly: !cookie.domain.startsWith("."),
         expires: cookie.expires === -1 ? "Infinity" : new Date(cookie.expires * 1000),
-        secure: cookie.secure,
+        hostOnly: !cookie.domain.startsWith("."),
         httpOnly: cookie.httpOnly,
+        key: cookie.name,
+        path: cookie.path,
         sameSite: cookie.sameSite.toLowerCase(),
+        secure: cookie.secure,
+        value: cookie.value,
       }),
       new URL(cookie.path, origin).href,
     );
@@ -113,7 +113,7 @@ const boundedProofResponse = async (response: Response) => {
   }
   try {
     const result = z
-      .strictObject({ version: z.literal(1), proof: proofSchema })
+      .strictObject({ proof: proofSchema, version: z.literal(1) })
       .parse(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
     return result.proof;
   } catch {
@@ -152,10 +152,10 @@ const readProof = async ({
     const path = "/api/auth/platform/operator-link";
     const url = new URL(path, origin);
     const body = new URLSearchParams({
+      authResourceId: record.link.authResourceId,
+      bootstrapPlanDigest: record.link.bootstrapPlanDigest,
       nonce,
       ownerSessionId: context.target.sessionId,
-      bootstrapPlanDigest: record.link.bootstrapPlanDigest,
-      authResourceId: record.link.authResourceId,
     });
     if (record.link.publicRelease !== undefined) {
       body.set("publicEnrollmentRef", record.link.publicRelease.enrollmentRef);
@@ -169,32 +169,32 @@ const readProof = async ({
     }
     // Browser-session correlation would invoke the separate human capture callback; this nonce is already bound to the approved retained organization candidate.
     const cookie = cookieHeader(storageState, origin, path);
-    observe({ stage: "proof_request", cookiePresent: cookie !== "" });
+    observe({ cookiePresent: cookie !== "", stage: "proof_request" });
     if (cookie === "") {
       throw unavailable();
     }
     await assertCurrent();
     const response = await fetch(url, {
-      method: "POST",
       body,
-      headers: {
-        origin,
-        "content-type": "application/x-www-form-urlencoded",
-        accept: "application/vnd.realm-operator-proof+json",
-        cookie,
-      },
-      redirect: "error",
       cache: "no-store",
+      headers: {
+        accept: "application/vnd.realm-operator-proof+json",
+        "content-type": "application/x-www-form-urlencoded",
+        cookie,
+        origin,
+      },
+      method: "POST",
+      redirect: "error",
       signal: AbortSignal.timeout(20_000),
     });
     const responseFacts = {
-      cookiePresent: cookie !== "",
-      httpStatus: response.status,
-      redirected: response.redirected,
       contentTypeValid:
         response.headers
           .get("content-type")
           ?.startsWith("application/vnd.realm-operator-proof+json") === true,
+      cookiePresent: cookie !== "",
+      httpStatus: response.status,
+      redirected: response.redirected,
     };
     observe({ stage: "proof_response", ...responseFacts });
     if (
@@ -279,7 +279,7 @@ const selectedOwner = (input: CollectorInput, retained: RetainedActors) => {
   ) {
     throw mismatch();
   }
-  return { organization, candidate, actor };
+  return { actor, candidate, organization };
 };
 const assertRealmBinding = (
   input: HostedOperatorContext,
@@ -347,9 +347,9 @@ export const createHostedOperatorNormalActorProofCollector = (
         origin: preparation.program.origin,
       });
       const normal = createHostedOperatorNormalAuthClient({
+        fetch,
         origin: preparation.program.origin,
         storageState: candidate.storageState,
-        fetch,
       });
       const session = await normal.getSession();
       if (
@@ -383,7 +383,7 @@ export const createHostedOperatorNormalActorProofCollector = (
         owner: candidate.session,
         ...(binding.bootstrap === undefined || assertBootstrapCurrent === undefined
           ? {}
-          : { bootstrap: binding.bootstrap, assertBootstrapCurrent }),
+          : { assertBootstrapCurrent, bootstrap: binding.bootstrap }),
         binding: {
           audience: binding.audience,
           authResourceId: binding.authResourceId,
@@ -414,35 +414,35 @@ export const createHostedOperatorNormalActorProofCollector = (
         throw mismatch();
       }
       const proof = await readProof({
-        record: pending.record,
-        nonce: pending.nonce,
         artifacts,
+        assertCurrent,
         context: input,
         fetch,
-        storageState: normal.exportStorageState(),
-        origin: preparation.program.origin,
-        assertCurrent,
+        nonce: pending.nonce,
         observe,
+        origin: preparation.program.origin,
+        record: pending.record,
+        storageState: normal.exportStorageState(),
       });
       observe({ stage: "proof_verify" });
       const verified = await readVerifiedRealmAccess({
         assertCurrent,
-        pending: pending.record.link,
-        nonce: pending.nonce,
-        proof,
         getKey: binding.getKey,
-        resource: binding.resource,
-        transportOrigin: binding.endpointOrigin,
+        nonce: pending.nonce,
+        pending: pending.record.link,
+        proof,
         readback: async (request) => {
           observe({ stage: "proof_readback_request" });
           const response = await binding.readback(request);
           observe({
-            stage: "proof_readback_response",
             httpStatus: response.status,
             redirected: response.redirected,
+            stage: "proof_readback_response",
           });
           return response;
         },
+        resource: binding.resource,
+        transportOrigin: binding.endpointOrigin,
       });
       if (
         verified.identity.actorId !== candidate.session.actorId ||
@@ -467,22 +467,18 @@ export const createHostedOperatorNormalActorProofCollector = (
           throw mismatch();
         }
         captured = await journal.completeOrganizationProof(input, {
-          organizationId: organization.organizationId,
+          actorId: verified.identity.actorId,
+          capturedAt: new Date(deps.journalPorts.now()).toISOString(),
           nonceSha256: captured.link.nonceSha256,
+          organizationId: organization.organizationId,
           proofRef,
           proofSha256,
-          actorId: verified.identity.actorId,
           realmSessionId: verified.identity.sessionId,
-          capturedAt: new Date(deps.journalPorts.now()).toISOString(),
         });
       }
       await assertCurrent();
       observe({ stage: "result" });
       return hostedOperatorOwnedOrganizationSpecSchema.parse({
-        kind: "create-owned-organization",
-        organizationId: organization.organizationId,
-        name: organization.name,
-        slug: organization.slug,
         actorId: verified.identity.actorId,
         bootstrapPlanDigest: captured.link.bootstrapPlanDigest,
         identityCapture: {
@@ -497,6 +493,10 @@ export const createHostedOperatorNormalActorProofCollector = (
           jwksUrl: `${captured.link.endpointOrigin}/_platform/jwks.json`,
           transportSource: captured.transportSource,
         },
+        kind: "create-owned-organization",
+        name: organization.name,
+        organizationId: organization.organizationId,
+        slug: organization.slug,
       });
     } catch (error) {
       reportOperatorNormalActorProofFailure(input.target.sessionId, failure, error);

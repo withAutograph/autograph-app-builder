@@ -9,21 +9,21 @@ import {
 const secret = randomUUID();
 const envelope = {
   id: "delivery-one",
-  type: "deployment.created",
   payload: {
-    project: { id: plan.target.projectId },
-    team: { id: plan.target.teamId },
-    target: null,
     deployment: {
       id: "dpl_native_one",
-      url: "native-immutable.vercel.app",
       meta: {
+        extra: "raw provider metadata must not be retained",
         githubCommitRef: plan.source.operationBranch,
         githubCommitSha: plan.source.reviewedSourceSha,
-        extra: "raw provider metadata must not be retained",
       },
+      url: "native-immutable.vercel.app",
     },
+    project: { id: plan.target.projectId },
+    target: null,
+    team: { id: plan.target.teamId },
   },
+  type: "deployment.created",
 };
 const signed = (event = envelope) => {
   const raw = Buffer.from(JSON.stringify(event));
@@ -32,8 +32,8 @@ const signed = (event = envelope) => {
 it("admits only actual signed exact-operation native identity and retains bounded provider facts", () => {
   const receipt = verifyCentralNativeDeploymentReceipt(signed());
   expect(receipt).toMatchObject({
-    providerDeploymentId: "dpl_native_one",
     immutableOrigin: "https://native-immutable.vercel.app",
+    providerDeploymentId: "dpl_native_one",
   });
   expect(JSON.stringify(receipt)).not.toContain("raw provider");
   expect(JSON.stringify(receipt)).not.toContain(secret);
@@ -88,8 +88,8 @@ it("retains conflicting native IDs or changed delivery bytes as a conflict rathe
     providerDeploymentId: "dpl_second",
   });
   expect(conflict).toEqual({
-    status: "conflict",
     providerDeploymentIds: ["dpl_native_one", "dpl_second"],
+    status: "conflict",
   });
   expect(retainCentralNativeDeploymentReceipt(conflict, receipt)).toEqual(conflict);
   expect(

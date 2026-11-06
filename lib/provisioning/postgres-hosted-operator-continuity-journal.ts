@@ -45,6 +45,28 @@ export const createPostgresContinuityJournalStore = (
     return record;
   };
   return {
+    async compareAndSet(input) {
+      const record = continuityRecordSchema.parse(input.record);
+      if (record.revision !== input.expectedRevision + 1) {
+        throw new Error("Continuity journal revision differs.");
+      }
+      const [row] = await database
+        .update(builderProvisioningJournals)
+        .set({
+          record,
+          revision: record.revision,
+          state: record.state === "settled" ? "settled" : "pending",
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            predicate(record.plan.authority, record.requestId),
+            eq(builderProvisioningJournals.revision, input.expectedRevision),
+          ),
+        )
+        .returning();
+      return row === undefined ? undefined : continuityRecordSchema.parse(row.record);
+    },
     read,
     async reserve(input) {
       const record = continuityRecordSchema.parse(input.record);
@@ -52,12 +74,12 @@ export const createPostgresContinuityJournalStore = (
         .insert(builderProvisioningJournals)
         .values({
           ...record.plan.authority,
-          requestId: record.requestId,
-          requestDigest: record.planDigest,
+          createdAt: input.now,
           record,
+          requestDigest: record.planDigest,
+          requestId: record.requestId,
           revision: record.revision,
           state: "pending",
-          createdAt: input.now,
           updatedAt: input.now,
         })
         .onConflictDoNothing()
@@ -70,28 +92,6 @@ export const createPostgresContinuityJournalStore = (
         throw new Error("Continuity journal reservation is unavailable.");
       }
       return observed;
-    },
-    async compareAndSet(input) {
-      const record = continuityRecordSchema.parse(input.record);
-      if (record.revision !== input.expectedRevision + 1) {
-        throw new Error("Continuity journal revision differs.");
-      }
-      const [row] = await database
-        .update(builderProvisioningJournals)
-        .set({
-          record,
-          revision: record.revision,
-          updatedAt: input.now,
-          state: record.state === "settled" ? "settled" : "pending",
-        })
-        .where(
-          and(
-            predicate(record.plan.authority, record.requestId),
-            eq(builderProvisioningJournals.revision, input.expectedRevision),
-          ),
-        )
-        .returning();
-      return row === undefined ? undefined : continuityRecordSchema.parse(row.record);
     },
   };
 };

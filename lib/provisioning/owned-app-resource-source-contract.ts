@@ -7,9 +7,9 @@ export const ownedAppResourceSourceSchema = z.strictObject({
   kind: z.literal("owned-app-resources-v1"),
   scopeDigest: digest,
   source: z.strictObject({
+    checkpointSha256: digest,
     operationRef: z.uuid(),
     planDigest: digest,
-    checkpointSha256: digest,
     target: z.strictObject({
       appId: id,
       branch: id,

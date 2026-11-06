@@ -87,93 +87,93 @@ const basePlan = hostedOperatorPlanSchema.parse({
 const sourcePlan = (branch: string) =>
   hostedOperatorPlanSchema.parse({
     ...basePlan,
-    stage: "app",
     bootstrap: { endpointId: "ep-fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
-    resourcesInstaller: { reference: "resource-worker", sha256: "d".repeat(64) },
-    publicGateway: {
-      projectId: "prj_gateway",
-      branch: selection.branch,
-      origin: "https://apps-preview.example.test",
-    },
-    deploymentBoundary: {
-      authority,
-      teamId: "team_fixture",
-      app: { projectId: selection.projectId, branch, environment: "preview" },
-      gateway: { projectId: "prj_gateway", branch: selection.branch, environment: "preview" },
-      operator: {
-        projectId: "prj_operator",
-        environment: "preview",
-        deploymentId: "operator-deployment",
-      },
-      verification: {
-        gatewayOrigin: "https://gateway.example.test",
-        publicOrigin: "https://apps-preview.example.test",
-        jwksUrl: "https://gateway.example.test/_platform/jwks.json",
-      },
-    },
     delivery: {
-      projectId: selection.projectId,
-      repoId: "actual-app-repository",
       branch,
       gitSha: "c".repeat(40),
+      projectId: selection.projectId,
+      repoId: "actual-app-repository",
+    },
+    deploymentBoundary: {
+      app: { branch, environment: "preview", projectId: selection.projectId },
+      authority,
+      gateway: { branch: selection.branch, environment: "preview", projectId: "prj_gateway" },
+      operator: {
+        deploymentId: "operator-deployment",
+        environment: "preview",
+        projectId: "prj_operator",
+      },
+      teamId: "team_fixture",
+      verification: {
+        gatewayOrigin: "https://gateway.example.test",
+        jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+        publicOrigin: "https://apps-preview.example.test",
+      },
     },
     effects: [
       {
+        description: "Auth resources",
         id: "auth-resources",
         kind: "resources",
-        description: "Auth resources",
         resourceId: basePlan.authDatabase.resourceId,
       },
       {
+        description: "App resources",
         id: "app-resources",
         kind: "resources",
-        description: "App resources",
         resourceId: basePlan.appDatabase.resourceId,
       },
       ...basePlan.effects.filter((effect) => effect.kind !== "resources"),
-      { id: "delivery", kind: "delivery", description: "Actual delivery" },
+      { description: "Actual delivery", id: "delivery", kind: "delivery" },
     ],
+    publicGateway: {
+      branch: selection.branch,
+      origin: "https://apps-preview.example.test",
+      projectId: "prj_gateway",
+    },
+    resourcesInstaller: { reference: "resource-worker", sha256: "d".repeat(64) },
+    stage: "app",
   });
 const oldPlan = sourcePlan("codex/generated-old");
 const newPlan = sourcePlan("codex/generated-new");
 const operationRef = "00000000-0000-4000-8000-000000000001";
 const old = hostedOperatorRecordSchema.parse({
+  deliveryCandidates: [
+    {
+      branch: oldPlan.delivery?.branch,
+      deploymentId: "old-app-deployment",
+      operationRef,
+      origin: "https://old-app.example.test",
+      projectId: selection.projectId,
+      readyState: "READY",
+      repoId: "actual-app-repository",
+    },
+  ],
+  managedEnvironment: [
+    {
+      branch: oldPlan.delivery?.branch,
+      comment: `App Builder protected operator ${operationRef}`,
+      id: "old-owned-row",
+      key: "SPEND_REVIEW_DATABASE_URL",
+      operationRef,
+      projectId: selection.projectId,
+    },
+  ],
   mode: "protected-operator-v1",
   operationRef,
   plan: oldPlan,
   planDigest: operatorPlanDigest(oldPlan),
   receipts: [],
-  managedEnvironment: [
-    {
-      id: "old-owned-row",
-      key: "SPEND_REVIEW_DATABASE_URL",
-      branch: oldPlan.delivery?.branch,
-      projectId: selection.projectId,
-      operationRef,
-      comment: `App Builder protected operator ${operationRef}`,
-    },
-  ],
-  deliveryCandidates: [
-    {
-      branch: oldPlan.delivery?.branch,
-      projectId: selection.projectId,
-      operationRef,
-      readyState: "READY",
-      origin: "https://old-app.example.test",
-      repoId: "actual-app-repository",
-      deploymentId: "old-app-deployment",
-    },
-  ],
 });
 
 const transitioned = () =>
   retainAppDeliveryHistory(old, {
     ...old,
+    deliveryCandidates: [],
+    managedEnvironment: [],
     operationRef: "00000000-0000-4000-8000-000000000002",
     plan: newPlan,
     planDigest: operatorPlanDigest(newPlan),
-    deliveryCandidates: [],
-    managedEnvironment: [],
   });
 it("preserves actual prior source and owned rows when the published branch changes", () => {
   const next = hostedOperatorRecordSchema.parse(transitioned());
@@ -204,13 +204,13 @@ it("freezes exact saved cleanup scopes and preserves provenance after confirmed 
       ...newPlan,
       action: "cleanup",
       effects: [
-        { id: "revoke", kind: "revoke", description: "Revoke access" },
-        { id: "remove", kind: "remove-bindings", description: "Remove owned rows" },
+        { description: "Revoke access", id: "revoke", kind: "revoke" },
+        { description: "Remove owned rows", id: "remove", kind: "remove-bindings" },
         {
+          description: "Retire owned resources",
           id: "retire",
           kind: "retire",
           resourceId: newPlan.appDatabase.resourceId,
-          description: "Retire owned resources",
         },
       ],
     },
@@ -303,10 +303,10 @@ it("accepts additive historical metadata while retaining owned delivery scope", 
     })),
   });
   expect(parsed.retainedAppDeliveries?.[0]).toMatchObject({
-    projectId: selection.projectId,
-    operationRef,
     delivery: oldPlan.delivery,
     managedEnvironment: old.managedEnvironment,
+    operationRef,
+    projectId: selection.projectId,
   });
   expect(parsed.retainedAppDeliveries?.[0]).not.toHaveProperty("advisory");
   expect(() =>

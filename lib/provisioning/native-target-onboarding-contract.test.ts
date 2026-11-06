@@ -10,46 +10,23 @@ import {
 } from "./native-target-onboarding-contract";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace_fixture",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner_fixture",
+  workspaceId: "workspace_fixture",
 };
 const plan = () =>
   nativeTargetOnboardingPlanSchema.parse({
-    version: 1,
-    appId: "requests-app",
-    origin: {
-      publicSessionId: "public_original",
-      adapterSessionId: "native_original",
-      adapterGeneration: 1,
-      appSpecDigest: "a".repeat(64),
-      release: {
-        id: "release-original",
-        artifactRef: "artifact-original",
-        manifestSha256: "b".repeat(64),
-        schemaSha256: "c".repeat(64),
-      },
-    },
-    project: {
-      name: "requests-app",
-      teamId: "team_fixture",
-      installationId: "install_fixture",
-      projectSettings: {
-        framework: "nextjs",
-        rootDirectory: "apps/requests",
-        sourceFilesOutsideRootDirectory: true,
-      },
-      protection: nativeTargetRequiredProjectProtection,
-    },
-    branch: "main",
     appDatabase: {
-      resourceId: "requests-resource",
       database: "requests_data",
       migratorRole: "requests_migrator",
+      resourceId: "requests-resource",
       runtimeRole: "requests_runtime",
     },
-    productRoles: [],
+    appId: "requests-app",
+    branch: "main",
+    conflictPolicy: "stop-on-conflict",
+    cost: { description: "Fresh app project and separate database", ownership: "current-owner" },
     nativeNeon: {
       approvalReference: "native-scope-approval",
       nativeStore: {
@@ -58,35 +35,58 @@ const plan = () =>
         sourceProjectId: "native-source-project",
       },
       scope: {
-        projectId: "neon-project",
         branchId: "neon-branch",
         endpointId: "neon-endpoint",
         hostname: "ep-fixture.neon.tech",
         maintenanceDatabase: "maintenance",
         maintenanceRole: "installer",
+        projectId: "neon-project",
       },
     },
+    origin: {
+      adapterGeneration: 1,
+      adapterSessionId: "native_original",
+      appSpecDigest: "a".repeat(64),
+      publicSessionId: "public_original",
+      release: {
+        artifactRef: "artifact-original",
+        id: "release-original",
+        manifestSha256: "b".repeat(64),
+        schemaSha256: "c".repeat(64),
+      },
+    },
+    productRoles: [],
+    project: {
+      installationId: "install_fixture",
+      name: "requests-app",
+      projectSettings: {
+        framework: "nextjs",
+        rootDirectory: "apps/requests",
+        sourceFilesOutsideRootDirectory: true,
+      },
+      protection: nativeTargetRequiredProjectProtection,
+      teamId: "team_fixture",
+    },
+    retention: { policy: "Retain until explicitly approved cleanup" },
+    version: 1,
     worker: {
-      id: "generic-installer",
       executablePath: "/trusted/generic-worker",
-      sha256: "d".repeat(64),
+      id: "generic-installer",
       operationScope: "generated-app-release-install-v1",
+      sha256: "d".repeat(64),
       subcommand: "protected-generated-app-install",
     },
-    cost: { ownership: "current-owner", description: "Fresh app project and separate database" },
-    retention: { policy: "Retain until explicitly approved cleanup" },
-    conflictPolicy: "stop-on-conflict",
   });
 const record = () => {
   const p = plan();
   return {
-    kind: "native-target-onboarding",
-    version: 1,
     appId: p.appId,
+    kind: "native-target-onboarding",
     plan: p,
     planDigest: nativeTargetOnboardingPlanDigest(p),
-    stage: "planned",
     previousAttempts: [],
+    stage: "planned",
+    version: 1,
   };
 };
 
@@ -147,16 +147,16 @@ describe("native target onboarding data contract", () => {
     expect(nativeTargetOnboardingTableState(r)).toBe("pending");
     const cancelled = nativeTargetOnboardingRecordSchema.parse({
       ...r,
-      stage: "cancelled",
       approval: {
-        requestId: "approval",
         callId: "call",
-        publicSessionId: r.plan.origin.publicSessionId,
-        planDigest: r.planDigest,
-        responderPrincipalId: authority.ownerUserId,
         observedAt: "2026-10-21T15:00:00Z",
         outcome: "cancelled",
+        planDigest: r.planDigest,
+        publicSessionId: r.plan.origin.publicSessionId,
+        requestId: "approval",
+        responderPrincipalId: authority.ownerUserId,
       },
+      stage: "cancelled",
     });
     expect(nativeTargetOnboardingTableState(cancelled)).toBe("settled");
   });
@@ -165,16 +165,16 @@ describe("native target onboarding data contract", () => {
     expect(
       nativeTargetOnboardingRecordSchema.safeParse({
         ...r,
-        stage: "approved",
         approval: {
-          requestId: "approval",
           callId: "call",
-          publicSessionId: "another-public-session",
-          planDigest: r.planDigest,
-          responderPrincipalId: authority.ownerUserId,
           observedAt: "2026-10-21T15:00:00Z",
           outcome: "approved",
+          planDigest: r.planDigest,
+          publicSessionId: "another-public-session",
+          requestId: "approval",
+          responderPrincipalId: authority.ownerUserId,
         },
+        stage: "approved",
       }).success,
     ).toBe(false);
   });

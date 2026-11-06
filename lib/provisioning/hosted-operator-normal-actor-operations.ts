@@ -169,7 +169,7 @@ const selectedOrganization = (input: HostedOperatorEffectContext) => {
     throw mismatch();
   }
   const spec = selectHostedOperatorOwnedOrganizationSpec(input.plan.authMembership, organization);
-  return { program, organization, spec };
+  return { organization, program, spec };
 };
 
 /** Private normal HTTP operations under the original account approval and current full-plan approval. */
@@ -242,9 +242,9 @@ export const createHostedOperatorNormalActorOperations = (
           return;
         }
         const client = createHostedOperatorNormalAuthClient({
+          fetch,
           origin: preparation.program.origin,
           storageState: checkpoint.storageState,
-          fetch,
         });
         assertSession(
           await client.getSession(),
@@ -358,9 +358,9 @@ export const createHostedOperatorNormalActorOperations = (
           return false;
         }
         const client = createHostedOperatorNormalAuthClient({
+          fetch,
           origin: program.origin,
           storageState: scoped.storageState,
-          fetch,
         });
         assertSession(
           await client.getSession(),
@@ -386,7 +386,7 @@ export const createHostedOperatorNormalActorOperations = (
       }),
     );
     await input.assertCurrent();
-    return { state, complete: observations.every(Boolean) };
+    return { complete: observations.every(Boolean), state };
   };
 
   const freshOrganizationCandidates = async (
@@ -414,9 +414,9 @@ export const createHostedOperatorNormalActorOperations = (
           throw required();
         }
         const client = createHostedOperatorNormalAuthClient({
+          fetch,
           origin: preparation.program.origin,
           storageState: candidate.storageState,
-          fetch,
         });
         assertSession(await client.getSession(), actor, candidate.session, deps.journalPorts.now());
       }),
@@ -445,9 +445,9 @@ export const createHostedOperatorNormalActorOperations = (
         return { actorKey: actor.actorKey };
       }
       const normal = createHostedOperatorNormalAuthClient({
+        fetch,
         origin: program.origin,
         storageState: saved.storageState,
-        fetch,
       });
       // oxlint-disable-next-line react-doctor/async-await-in-loop -- Stop at the first needed capture; issuing multiple owner capture requests would overwrite the pending namespace.
       const session = await normal.getSession();
@@ -472,9 +472,9 @@ export const createHostedOperatorNormalActorOperations = (
         }
         usedSessions.add(candidate.session.realmSessionId);
         const scoped = createHostedOperatorNormalAuthClient({
+          fetch,
           origin: program.origin,
           storageState: candidate.storageState,
-          fetch,
         });
         // oxlint-disable-next-line react-doctor/async-await-in-loop -- Capture preflight stops at one pending reconnect without creating multiple nonce requests.
         const actual = await scoped.getSession();
@@ -488,7 +488,6 @@ export const createHostedOperatorNormalActorOperations = (
     return undefined;
   };
   return {
-    readNormalActorPreparation: async (context) => await read(context),
     async ensureNormalActorCapture(input) {
       await deps.assertCurrentPlan(input);
       if (
@@ -506,15 +505,15 @@ export const createHostedOperatorNormalActorOperations = (
         await journal.initializeSuccessor(
           input,
           {
-            program,
-            programDigest: normalActorProgramDigest(program),
+            accountApprovalId: input.approvalId,
+            accountApprovedByCallId: input.callId,
             accountOperationRef: input.operationRef,
             accountPlan: input.plan,
             accountPlanDigest: input.planDigest,
-            accountApprovalId: input.approvalId,
-            accountApprovedByCallId: input.callId,
-            predecessor: input.plan.normalActorPredecessor,
             capturePredecessor: input.plan.normalActorCapturePredecessor,
+            predecessor: input.plan.normalActorPredecessor,
+            program,
+            programDigest: normalActorProgramDigest(program),
           },
           async () => {
             await deps.assertCurrentPlan(input);
@@ -528,13 +527,13 @@ export const createHostedOperatorNormalActorOperations = (
       }
       if (prepared === undefined) {
         await journal.retain(input, {
-          program,
-          programDigest: normalActorProgramDigest(program),
+          accountApprovalId: input.approvalId,
+          accountApprovedByCallId: input.callId,
           accountOperationRef: input.operationRef,
           accountPlan: input.plan,
           accountPlanDigest: input.planDigest,
-          accountApprovalId: input.approvalId,
-          accountApprovedByCallId: input.callId,
+          program,
+          programDigest: normalActorProgramDigest(program),
         });
         prepared = await readRequired(input, input.plan);
       }
@@ -542,9 +541,9 @@ export const createHostedOperatorNormalActorOperations = (
       if (actor !== undefined) {
         await deps.prepareActorCapture({
           ...input,
-          preparation: prepared.preparation,
           actorKey: actor.actorKey,
           organizationId: actor.organizationId,
+          preparation: prepared.preparation,
         });
         return "required";
       }
@@ -559,9 +558,9 @@ export const createHostedOperatorNormalActorOperations = (
       }
       return await deps.prepareActorCapture({
         ...input,
-        preparation: prepared.preparation,
         actorKey: actor.actorKey,
         organizationId: actor.organizationId,
+        preparation: prepared.preparation,
       });
     },
     async prepareNormalActorAccounts(input) {
@@ -571,23 +570,74 @@ export const createHostedOperatorNormalActorOperations = (
       const prepared = await readRequired(input, input.plan);
       const result = await normalPreparation(
         prepareNormalActorAccounts({
-          program: prepared.preparation.program,
           operationRef: prepared.preparation.accountOperationRef,
-          state: prepared.state,
           ports: await accountPorts(input, prepared.preparation),
+          program: prepared.preparation.program,
+          state: prepared.state,
         }),
       );
       return result.state;
     },
-    async verifyNormalActorAccounts(input) {
-      await deps.assertCurrentPlan(input);
-      await input.assertCurrent();
+    async prepareNormalActorMemberships(input) {
+      const { organization, spec } = selectedOrganization(input);
       const prepared = await readRequired(input, input.plan);
-      const state = await freshAccounts(input, prepared.preparation, prepared.state);
-      await freshOrganizationCandidates(input, prepared.preparation, state);
-      await input.assertCurrent();
-      await checkpoint(input, state);
-      return state;
+      assertResolvedAccess(input.plan, prepared.state);
+      await freshOrganizationCandidates(
+        input,
+        prepared.preparation,
+        prepared.state,
+        organization.organizationId,
+      );
+      const result = await normalPreparation(
+        prepareNormalActorMemberships({
+          operationRef: prepared.preparation.accountOperationRef,
+          organizationId: organization.organizationId,
+          ports: {
+            ...(await accountPorts(input, prepared.preparation)),
+            assertMembershipApproved: async () => {
+              await deps.assertCurrentPlan(input);
+              await input.assertCurrent();
+            },
+            prepareOrganization: async (effect) => {
+              if (effect.organizationId !== organization.organizationId) {
+                throw mismatch();
+              }
+              await deps.executeOrganization({
+                effect: input,
+                organizationId: effect.organizationId,
+                owner: effect.owner,
+                ownerProof: effect.ownerProof,
+              });
+            },
+            readOrganizationOwnerProof: async (owner) => {
+              await deps.assertCurrentPlan(input);
+              await input.assertCurrent();
+              if (
+                spec.actorId !== owner.actorId ||
+                spec.identityCapture.realmSessionId !== owner.realmSessionId
+              ) {
+                throw mismatch();
+              }
+              return {
+                actorId: spec.actorId,
+                realmSessionId: spec.identityCapture.realmSessionId,
+                reference: spec.identityProof.reference,
+                sha256: spec.identityProof.sha256,
+              };
+            },
+            reconcileOrganization: async (effect) =>
+              await deps.inspectOrganization({
+                effect: input,
+                organizationId: effect.organizationId,
+                owner: effect.owner,
+                ownerProof: effect.ownerProof,
+              }),
+          },
+          program: prepared.preparation.program,
+          state: prepared.state,
+        }),
+      );
+      return result.state;
     },
     async readNormalActorOrganizationProofs(input) {
       await deps.assertPlanningAuthorized(input);
@@ -607,10 +657,10 @@ export const createHostedOperatorNormalActorOperations = (
         // oxlint-disable-next-line react-doctor/async-await-in-loop -- Each proof collection writes its own correlated pending nonce under the same owner journal CAS.
         const spec = await deps.collectOrganizationOwnerProof({
           ...input,
-          preparation: prepared.preparation,
-          state,
           organizationId: organization.organizationId,
           owner,
+          preparation: prepared.preparation,
+          state,
         });
         if (
           [
@@ -627,79 +677,7 @@ export const createHostedOperatorNormalActorOperations = (
       }
       return result;
     },
-    async prepareNormalActorMemberships(input) {
-      const { organization, spec } = selectedOrganization(input);
-      const prepared = await readRequired(input, input.plan);
-      assertResolvedAccess(input.plan, prepared.state);
-      await freshOrganizationCandidates(
-        input,
-        prepared.preparation,
-        prepared.state,
-        organization.organizationId,
-      );
-      const result = await normalPreparation(
-        prepareNormalActorMemberships({
-          program: prepared.preparation.program,
-          operationRef: prepared.preparation.accountOperationRef,
-          state: prepared.state,
-          organizationId: organization.organizationId,
-          ports: {
-            ...(await accountPorts(input, prepared.preparation)),
-            assertMembershipApproved: async () => {
-              await deps.assertCurrentPlan(input);
-              await input.assertCurrent();
-            },
-            readOrganizationOwnerProof: async (owner) => {
-              await deps.assertCurrentPlan(input);
-              await input.assertCurrent();
-              if (
-                spec.actorId !== owner.actorId ||
-                spec.identityCapture.realmSessionId !== owner.realmSessionId
-              ) {
-                throw mismatch();
-              }
-              return {
-                actorId: spec.actorId,
-                realmSessionId: spec.identityCapture.realmSessionId,
-                reference: spec.identityProof.reference,
-                sha256: spec.identityProof.sha256,
-              };
-            },
-            prepareOrganization: async (effect) => {
-              if (effect.organizationId !== organization.organizationId) {
-                throw mismatch();
-              }
-              await deps.executeOrganization({
-                effect: input,
-                organizationId: effect.organizationId,
-                owner: effect.owner,
-                ownerProof: effect.ownerProof,
-              });
-            },
-            reconcileOrganization: async (effect) =>
-              await deps.inspectOrganization({
-                effect: input,
-                organizationId: effect.organizationId,
-                owner: effect.owner,
-                ownerProof: effect.ownerProof,
-              }),
-          },
-        }),
-      );
-      return result.state;
-    },
-    async verifyNormalActorMemberships(input) {
-      const verified = await verifyMemberships(input);
-      if (
-        !verified.complete ||
-        verified.state.memberships.some((membership) => membership.status !== "complete") ||
-        verified.state.organizations.some((organization) => organization.status !== "complete")
-      ) {
-        throw new HostedOperatorError("reconciliation_required");
-      }
-      assertResolvedAccess(input.plan, verified.state);
-      return verified.state;
-    },
+    readNormalActorPreparation: async (context) => await read(context),
     async reconcileNormalActorMemberships(input) {
       const { organization, spec } = selectedOrganization(input);
       await deps.assertCurrentPlan(input);
@@ -739,6 +717,28 @@ export const createHostedOperatorNormalActorOperations = (
       } catch {
         return { status: "unknown" };
       }
+    },
+    async verifyNormalActorAccounts(input) {
+      await deps.assertCurrentPlan(input);
+      await input.assertCurrent();
+      const prepared = await readRequired(input, input.plan);
+      const state = await freshAccounts(input, prepared.preparation, prepared.state);
+      await freshOrganizationCandidates(input, prepared.preparation, state);
+      await input.assertCurrent();
+      await checkpoint(input, state);
+      return state;
+    },
+    async verifyNormalActorMemberships(input) {
+      const verified = await verifyMemberships(input);
+      if (
+        !verified.complete ||
+        verified.state.memberships.some((membership) => membership.status !== "complete") ||
+        verified.state.organizations.some((organization) => organization.status !== "complete")
+      ) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
+      assertResolvedAccess(input.plan, verified.state);
+      return verified.state;
     },
   };
 };

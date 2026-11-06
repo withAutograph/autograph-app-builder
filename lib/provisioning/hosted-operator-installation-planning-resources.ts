@@ -61,15 +61,12 @@ export const createAppInstallationPlanningResourceReader =
     }
     const bindingInput = structuredClone({
       ...context,
-      purpose: "planning" as const,
       plan,
       privateState: row.record.privateState,
+      purpose: "planning" as const,
     });
     const bindings = await ports.readResourceBindings(bindingInput);
     return await ports.readActiveCustomers({
-      plan: desired,
-      scopes,
-      runtimeUrl: bindings.appDatabase.runtimeUrl,
       assertCurrent: async () => {
         await ports.assertPlanningAuthorized(context);
         await ports.readResourceBindings(bindingInput);
@@ -81,5 +78,8 @@ export const createAppInstallationPlanningResourceReader =
           throw new HostedOperatorError("operation_in_progress");
         }
       },
+      plan: desired,
+      runtimeUrl: bindings.appDatabase.runtimeUrl,
+      scopes,
     });
   };

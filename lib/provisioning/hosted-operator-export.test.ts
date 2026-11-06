@@ -36,8 +36,8 @@ import { HostedOperatorError, operatorOwnerContextSchema } from "./hosted-operat
 
 const fixture = tenantExportWireFixtureSchema.parse(wire);
 const authority = {
-  issuer: "https://builder.test/api/auth",
   audience: "https://builder.test/mcp",
+  issuer: "https://builder.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -55,37 +55,37 @@ const context: HostedOperatorContext = {
   },
 };
 const selection = {
-  version: 1 as const,
-  kind: "tenant-export-plan" as const,
   authority,
-  target: {
-    appId: context.target.appId,
-    sessionId: context.target.sessionId,
-    branch: context.target.branch,
-    projectId: context.target.projectId,
-  },
+  format: fixture.worker.format,
+  kind: "tenant-export-plan" as const,
   originalSetup: {
-    operationRef: "40000000-0000-4000-8000-000000000004",
-    planDigest: "a".repeat(64),
     approvalId: "setup-human",
     approvedByCallId: "setup-call",
+    operationRef: "40000000-0000-4000-8000-000000000004",
+    planDigest: "a".repeat(64),
   },
-  scope: fixture.worker.scope,
-  resource: fixture.worker.resource,
   release: fixture.worker.release,
+  resource: fixture.worker.resource,
+  scope: fixture.worker.scope,
   selection: fixture.worker.selection,
-  format: fixture.worker.format,
+  target: {
+    appId: context.target.appId,
+    branch: context.target.branch,
+    projectId: context.target.projectId,
+    sessionId: context.target.sessionId,
+  },
+  version: 1 as const,
 };
 const completionFor = (worker: TenantExportWorkerInput): ExportCompletion => ({
   attemptId: worker.attemptId,
-  snapshotId: worker.snapshotId,
+  byteLength: fixture.manifest.byteLength,
+  fileCount: "2",
   manifest: {
     ...fixture.manifestMember,
     artifactRef: `_protected-operator/artifacts/tenant-export/${worker.exportId}/${worker.attemptId}/manifest/${fixture.manifestMember.sha256}`,
   },
-  fileCount: "2",
   rowCount: "1",
-  byteLength: fixture.manifest.byteLength,
+  snapshotId: worker.snapshotId,
 });
 const setup = () => {
   let record: HostedTenantExportExecutionRecord | undefined;
@@ -99,30 +99,35 @@ const setup = () => {
     return structuredClone(record);
   };
   const dependencies: HostedTenantExportDependencies = {
-    store: {
-      async read(input) {
-        return record === undefined || record.journal.requestId !== input.exportId
-          ? undefined
-          : structuredClone(record);
-      },
-      async reserve(input) {
-        record ??= hostedTenantExportExecutionRecordSchema.parse(input.record);
-        return read();
-      },
-      async compareAndSet(input) {
-        if (record?.journal.revision !== input.expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS result is the explicit conflict contract.
-          return undefined;
-        }
-        record = hostedTenantExportExecutionRecordSchema.parse(input.record);
-        return read();
-      },
-    },
     assertOwner: vi.fn<HostedTenantExportDependencies["assertOwner"]>(async () => {
       if (!owner) {
         throw new HostedOperatorError("authorization_required");
       }
     }),
+    assertSetup: vi.fn<HostedTenantExportDependencies["assertSetup"]>(async () => {
+      if (!owner) {
+        throw new HostedOperatorError("authorization_required");
+      }
+    }),
+    inspect: vi.fn<HostedTenantExportDependencies["inspect"]>(async () => ({ status: "unknown" })),
+    prepareWorker: vi.fn<HostedTenantExportDependencies["prepareWorker"]>(
+      async (_context, _worker, assertCurrent) => {
+        await assertCurrent();
+        return { descriptor: fixture.descriptor, sandboxId: "trusted-private-vm" };
+      },
+    ),
+    publish: vi.fn<HostedTenantExportDependencies["publish"]>(
+      async (_context, worker, _source, assertCurrent) => {
+        await assertCurrent();
+        return completionFor(worker);
+      },
+    ),
+    readApproval: vi.fn<HostedTenantExportDependencies["readApproval"]>(
+      async (_context, request, callId) =>
+        approved
+          ? { ...request, approvalId: "export-human", approvedByCallId: callId ?? "export-call" }
+          : null,
+    ),
     resolvePlan: vi.fn<HostedTenantExportDependencies["resolvePlan"]>(
       async (_context, customerId) => {
         assertTenantExportCustomer(
@@ -140,17 +145,39 @@ const setup = () => {
         return { ...selection, scope: { ...selection.scope, customerId } };
       },
     ),
-    assertSetup: vi.fn<HostedTenantExportDependencies["assertSetup"]>(async () => {
-      if (!owner) {
-        throw new HostedOperatorError("authorization_required");
-      }
-    }),
-    readApproval: vi.fn<HostedTenantExportDependencies["readApproval"]>(
-      async (_context, request, callId) =>
-        approved
-          ? { ...request, approvalId: "export-human", approvedByCallId: callId ?? "export-call" }
-          : null,
+    runWorker: vi.fn<HostedTenantExportDependencies["runWorker"]>(
+      async (_context, _worker, locator, assertCurrent, checkpoint) => {
+        await assertCurrent();
+        await checkpoint({ ...locator, commandId: "command-one" });
+        return {
+          async readManifest() {
+            return new Uint8Array();
+          },
+          async *readMember() {
+            yield new Uint8Array();
+          },
+        };
+      },
     ),
+    store: {
+      async compareAndSet(input) {
+        if (record?.journal.revision !== input.expectedRevision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS result is the explicit conflict contract.
+          return undefined;
+        }
+        record = hostedTenantExportExecutionRecordSchema.parse(input.record);
+        return read();
+      },
+      async read(input) {
+        return record === undefined || record.journal.requestId !== input.exportId
+          ? undefined
+          : structuredClone(record);
+      },
+      async reserve(input) {
+        record ??= hostedTenantExportExecutionRecordSchema.parse(input.record);
+        return read();
+      },
+    },
     async withResourceLease(input, run) {
       if (held) {
         throw new HostedOperatorError("operation_in_progress");
@@ -166,41 +193,14 @@ const setup = () => {
         held = false;
       }
     },
-    inspect: vi.fn<HostedTenantExportDependencies["inspect"]>(async () => ({ status: "unknown" })),
-    prepareWorker: vi.fn<HostedTenantExportDependencies["prepareWorker"]>(
-      async (_context, _worker, assertCurrent) => {
-        await assertCurrent();
-        return { sandboxId: "trusted-private-vm", descriptor: fixture.descriptor };
-      },
-    ),
-    runWorker: vi.fn<HostedTenantExportDependencies["runWorker"]>(
-      async (_context, _worker, locator, assertCurrent, checkpoint) => {
-        await assertCurrent();
-        await checkpoint({ ...locator, commandId: "command-one" });
-        return {
-          async readManifest() {
-            return new Uint8Array();
-          },
-          async *readMember() {
-            yield new Uint8Array();
-          },
-        };
-      },
-    ),
-    publish: vi.fn<HostedTenantExportDependencies["publish"]>(
-      async (_context, worker, _source, assertCurrent) => {
-        await assertCurrent();
-        return completionFor(worker);
-      },
-    ),
   };
   return {
-    dependencies,
-    operations: createHostedTenantExportOperations(dependencies),
-    read,
     approve() {
       approved = true;
     },
+    dependencies,
+    operations: createHostedTenantExportOperations(dependencies),
+    read,
     revoke() {
       owner = false;
     },
@@ -306,9 +306,9 @@ describe("protected tenant export orchestration", () => {
     f.approve();
     const complete = await f.operations.execute(context, planned.request, "export-call");
     expect(complete).toMatchObject({
-      state: "complete",
       counts: { fileCount: "2", rowCount: "1" },
       download: { indexPath: `/api/hosted-operator/exports/${planned.plan.exportId}` },
+      state: "complete",
     });
     expect(await f.operations.execute(context, planned.request, "technical-retry")).toEqual(
       complete,
@@ -325,9 +325,9 @@ describe("protected tenant export orchestration", () => {
     expect(f.dependencies.runWorker).toHaveBeenCalledTimes(1);
     expect(f.dependencies.readApproval).toHaveBeenCalledTimes(1);
     expect(f.read().workers[0]?.locator).toMatchObject({
-      sandboxId: "trusted-private-vm",
       commandId: "command-one",
       descriptor: fixture.descriptor,
+      sandboxId: "trusted-private-vm",
     });
     expect(JSON.stringify(complete)).not.toContain("ciphertext");
   });
@@ -387,7 +387,7 @@ describe("protected tenant export orchestration", () => {
     expect(await f.operations.execute(context, planned.request, "retry")).toMatchObject({
       state: "complete",
     });
-    const attempts = f.read().journal.attempts;
+    const { attempts } = f.read().journal;
     expect(attempts).toHaveLength(2);
     expect(attempts[0]?.state).toBe("failed");
     expect(attempts[0]?.attemptId).not.toBe(attempts[1]?.attemptId);
@@ -406,8 +406,8 @@ describe("protected tenant export orchestration", () => {
     );
     f.dependencies.inspect = vi.fn<HostedTenantExportDependencies["inspect"]>(
       async (_context, worker) => ({
-        status: "complete",
         completion: completionFor(worker),
+        status: "complete",
       }),
     );
     expect(await f.operations.execute(context, planned.request, "retry")).toMatchObject({
@@ -423,7 +423,7 @@ describe("protected tenant export orchestration", () => {
     f.dependencies.prepareWorker = vi.fn<HostedTenantExportDependencies["prepareWorker"]>(
       async () => {
         f.revoke();
-        return { sandboxId: "trusted-private-vm", descriptor: fixture.descriptor };
+        return { descriptor: fixture.descriptor, sandboxId: "trusted-private-vm" };
       },
     );
     await expect(f.operations.execute(context, planned.request, "export-call")).rejects.toThrow(
@@ -480,42 +480,42 @@ describe("existing operator transport export dispatch", () => {
       },
     );
     const dispatch = createTenantExportDispatcher({
-      store: f.dependencies.store,
-      operations: f.operations,
+      authorize,
+      authorizeRead,
       bindWorkload,
+      operations: f.operations,
+      store: f.dependencies.store,
       verifyWorkload: async (request) => {
         expect(request.headers.get("authorization")).toBe("Bearer workload-token");
       },
-      authorize,
-      authorizeRead,
     });
     const handler = createProtectedHostedOperatorHandler({
-      authorize,
       assertAuthorized: unavailable,
+      authorize,
+      bindings: unavailable,
+      executeEffect: unavailable,
+      exportRequest: dispatch,
       plan: prepare,
       readApproval: unavailable,
-      withResourceLease: unavailable,
       reconcile: unavailable,
-      executeEffect: unavailable,
-      verify: unavailable,
-      bindings: unavailable,
       store: {
+        compareAndSet: unavailable,
         read: unavailable,
         reserve: unavailable,
-        compareAndSet: unavailable,
         reserveFenceGeneration: unavailable,
       },
-      exportRequest: dispatch,
+      verify: unavailable,
+      withResourceLease: unavailable,
     });
     const client = createHostedOperatorClient({
       endpoint: "https://operator.test",
-      ownerContext,
-      sessionId: selected.sessionId,
-      token: async () => "workload-token",
       fetch: async (url, init) => {
         expect(init).toHaveProperty("dispatcher");
         return await handler(new Request(url instanceof Request ? url.url : url, init));
       },
+      ownerContext,
+      sessionId: selected.sessionId,
+      token: async () => "workload-token",
     });
     const planned = await client.planTenantExport(selected, "customer-one", "original-request");
     const savedBeforeRead = f.read();
@@ -588,29 +588,29 @@ describe("existing operator transport export dispatch", () => {
         },
       );
       const dispatch = createTenantExportDispatcher({
-        store: f.dependencies.store,
-        operations: f.operations,
-        verifyWorkload,
         authorize,
         authorizeRead,
+        operations: f.operations,
+        store: f.dependencies.store,
+        verifyWorkload,
       });
       const handler = createProtectedHostedOperatorHandler({
-        authorize,
         assertAuthorized: unavailable,
+        authorize,
+        bindings: unavailable,
+        executeEffect: unavailable,
+        exportRequest: dispatch,
         plan: unavailable,
         readApproval: unavailable,
-        withResourceLease: unavailable,
         reconcile: unavailable,
-        executeEffect: unavailable,
-        verify: unavailable,
-        bindings: unavailable,
         store: {
+          compareAndSet: unavailable,
           read: unavailable,
           reserve: unavailable,
-          compareAndSet: unavailable,
           reserveFenceGeneration: unavailable,
         },
-        exportRequest: dispatch,
+        verify: unavailable,
+        withResourceLease: unavailable,
       });
       const actions = [
         { action: "export-status", exportId: planned.plan.exportId },
@@ -621,18 +621,18 @@ describe("existing operator transport export dispatch", () => {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Each rejected ordinary transport action must remain before the private lookup.
         const response = await handler(
           new Request("https://operator.test/v1/runtime", {
-            method: "POST",
+            body: JSON.stringify({ ...action, ownerContext }),
             headers: {
               "content-type": "application/json",
               ...(credential === "invalid" ? { authorization: "Bearer invalid-token" } : {}),
             },
-            body: JSON.stringify({ ...action, ownerContext }),
+            method: "POST",
           }),
         );
         // oxlint-disable-next-line eslint/no-await-in-loop -- Read only this controlled rejection response.
         expect(await response.json()).toMatchObject({
-          status: "blocked",
           code: "authorization_required",
+          status: "blocked",
         });
       }
       expect(read).not.toHaveBeenCalled();
@@ -651,11 +651,11 @@ describe("existing operator transport export dispatch", () => {
       throw new HostedOperatorError("authorization_required");
     });
     const dispatch = createTenantExportDispatcher({
-      store: f.dependencies.store,
-      operations: f.operations,
-      verifyWorkload,
       authorize: async () => context,
       authorizeRead,
+      operations: f.operations,
+      store: f.dependencies.store,
+      verifyWorkload,
     });
     const ownerContext = {
       adapterGeneration: 1,
@@ -697,6 +697,7 @@ describe("existing operator transport export dispatch", () => {
       });
       const client = createHostedOperatorClient({
         endpoint: "https://operator.test",
+        fetch: transport,
         ownerContext: {
           adapterGeneration: 1,
           adapterSessionId: "adapter",
@@ -706,7 +707,6 @@ describe("existing operator transport export dispatch", () => {
           sessionId: context.target.sessionId,
         },
         token: async () => "workload-token",
-        fetch: transport,
       });
       await expect(client.exportTenantData(planned.request, "export-call")).rejects.toBeInstanceOf(
         HostedOperatorTransportUnknown,
@@ -736,10 +736,10 @@ describe("export planning failure boundaries", () => {
   };
   const input = {
     action: "export-plan" as const,
-    selection: { ...context.target, environment: "preview" as const },
     customerId: "customer-one",
     idempotencyKey: "diagnostic-request",
     ownerContext,
+    selection: { ...context.target, environment: "preview" as const },
   };
   const request = () => new Request("https://operator.test/v1/runtime");
 
@@ -788,11 +788,11 @@ describe("export planning failure boundaries", () => {
     const consoleSink = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       const dispatch = createTenantExportDispatcher({
-        store: f.dependencies.store,
-        operations: createHostedTenantExportOperations(f.dependencies),
-        verifyWorkload: stage === "dispatcher_workload_verification" ? reject : async () => {},
         authorize: stage === "dispatcher_owner_authorization" ? reject : async () => context,
         authorizeRead: async (_request, selected) => selected,
+        operations: createHostedTenantExportOperations(f.dependencies),
+        store: f.dependencies.store,
+        verifyWorkload: stage === "dispatcher_workload_verification" ? reject : async () => {},
       });
       const outcome = dispatch(request(), input);
       await (stage === "plan_reservation_match"
@@ -801,7 +801,7 @@ describe("export planning failure boundaries", () => {
       expect(consoleSink).toHaveBeenCalledOnce();
       expect(consoleSink.mock.calls[0]?.[1]).toMatchObject({
         boundary: "operator",
-        exportPlanningFailure: { stage, errorClass: "operator_error" },
+        exportPlanningFailure: { errorClass: "operator_error", stage },
       });
       expect(JSON.stringify(consoleSink.mock.calls)).not.toContain(context.target.sessionId);
       expect(f.dependencies.runWorker).not.toHaveBeenCalled();
@@ -840,21 +840,21 @@ describe("export planning failure boundaries", () => {
     const consoleSink = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       const dispatch = createTenantExportDispatcher({
+        authorize: async () => context,
+        authorizeRead: async (_request, selected) => selected,
+        operations: f.operations,
         store: {
           read: async () => {
             throw failure;
           },
         },
-        operations: f.operations,
         verifyWorkload: async () => {},
-        authorize: async () => context,
-        authorizeRead: async (_request, selected) => selected,
       });
       await expect(
         dispatch(request(), {
           action: "export-status",
-          ownerContext,
           exportId: "40000000-0000-4000-8000-000000000004",
+          ownerContext,
         }),
       ).rejects.toBe(failure);
       expect(consoleSink).not.toHaveBeenCalled();
@@ -870,13 +870,13 @@ describe("export planning failure boundaries", () => {
       throw new Error("sink unavailable");
     });
     const dispatch = createTenantExportDispatcher({
-      store: f.dependencies.store,
+      authorize: async () => context,
+      authorizeRead: async (_request, selected) => selected,
       operations: f.operations,
+      store: f.dependencies.store,
       verifyWorkload: async () => {
         throw failure;
       },
-      authorize: async () => context,
-      authorizeRead: async (_request, selected) => selected,
     });
     try {
       await expect(dispatch(request(), input)).rejects.toBe(failure);
@@ -905,31 +905,31 @@ describe("approved installed tenant export scope", () => {
         return "customer-one";
       });
       const dispatch = createTenantExportDispatcher({
-        store: f.dependencies.store,
-        operations: f.operations,
-        verifyWorkload: async () => {},
         authorize: async () => context,
         authorizeRead: async (_request, selected) => selected,
+        operations: f.operations,
         resolveOwnerOrganization,
+        store: f.dependencies.store,
+        verifyWorkload: async () => {},
       });
       const response = await dispatch(
         new Request("https://operator.test/exports", { method: "POST" }),
         tenantExportTransportRequestSchema.parse({
           action: "export-plan",
           idempotencyKey: "owned-selection",
-          selection: {
-            appId: context.target.appId,
-            branch: context.target.branch,
-            environment: "preview",
-            projectId: context.target.projectId,
-            sessionId: context.target.sessionId,
-          },
           ownerContext: {
             adapterGeneration: 1,
             adapterSessionId: "adapter",
             authority,
             kind: "direct",
             principal: { ...authority, scopes: ["autograph:send"] },
+            sessionId: context.target.sessionId,
+          },
+          selection: {
+            appId: context.target.appId,
+            branch: context.target.branch,
+            environment: "preview",
+            projectId: context.target.projectId,
             sessionId: context.target.sessionId,
           },
           ...(semantic ? { customerScope: "owner-organization" } : { customerId: "customer-one" }),
@@ -968,13 +968,6 @@ describe("approved installed tenant export scope", () => {
   it("requires exactly one raw or semantic export selection", () => {
     const base = {
       action: "export-plan",
-      selection: {
-        appId: context.target.appId,
-        branch: context.target.branch,
-        environment: "preview",
-        projectId: context.target.projectId,
-        sessionId: context.target.sessionId,
-      },
       idempotencyKey: "selection",
       ownerContext: {
         adapterGeneration: 1,
@@ -982,6 +975,13 @@ describe("approved installed tenant export scope", () => {
         authority,
         kind: "direct",
         principal: { ...authority, scopes: ["autograph:send"] },
+        sessionId: context.target.sessionId,
+      },
+      selection: {
+        appId: context.target.appId,
+        branch: context.target.branch,
+        environment: "preview",
+        projectId: context.target.projectId,
         sessionId: context.target.sessionId,
       },
     };
@@ -1005,10 +1005,10 @@ describe("approved installed tenant export scope", () => {
 
 describe("incremental canonical export approval history", () => {
   const owner = operatorOwnerContextSchema.parse({
-    kind: "direct",
     adapterGeneration: 1,
     adapterSessionId: "native",
     authority,
+    kind: "direct",
     principal: { ...authority, scopes: ["autograph:send"] },
     sessionId: context.target.sessionId,
   });
@@ -1020,66 +1020,66 @@ describe("incremental canonical export approval history", () => {
     f.dependencies.readApproval = vi.fn<HostedTenantExportDependencies["readApproval"]>(
       async (_context, request, callId, observation) =>
         await readPrivateOperatorApproval({
-          owner,
-          observation,
-          capture: (state) =>
-            createPrivateTenantExportApprovalCapture({
-              plan: f.read().journal.plan,
-              request,
-              principal: owner.principal,
-              callId,
-              state,
-            }),
           assertOwner: async () => {
             await f.dependencies.assertOwner(context);
           },
+          capture: (state) =>
+            createPrivateTenantExportApprovalCapture({
+              callId,
+              plan: f.read().journal.plan,
+              principal: owner.principal,
+              request,
+              state,
+            }),
+          observation,
+          owner,
           readHistory: async (startIndex, onEvent) => {
             starts.push(startIndex);
             if (startIndex === 0) {
               onEvent({
-                type: "input.requested",
-                meta: { at: "2026-10-21T00:00:00Z", id: "requested" },
                 data: {
+                  requests: [
+                    {
+                      action: {
+                        callId: "export-call",
+                        input: { ...request, plan: f.read().journal.plan },
+                        kind: "tool-call",
+                        toolName: "export-app-hosted-data",
+                      },
+                      kind: "tool-approval",
+                      prompt: "Export?",
+                      requestId: "human-approval",
+                    },
+                  ],
                   sequence: 1,
                   stepIndex: 0,
                   turnId: "turn",
-                  requests: [
-                    {
-                      kind: "tool-approval",
-                      requestId: "human-approval",
-                      prompt: "Export?",
-                      action: {
-                        kind: "tool-call",
-                        toolName: "export-app-hosted-data",
-                        callId: "export-call",
-                        input: { ...request, plan: f.read().journal.plan },
-                      },
-                    },
-                  ],
                 },
+                meta: { at: "2026-10-21T00:00:00Z", id: "requested" },
+                type: "input.requested",
               });
               if (options.revoke === true) {
                 f.revoke();
               }
               return {
-                nextNativeIndex: 1,
-                nativeTailIndex: 1,
                 complete: options.fullNoReceipt === true,
+                nativeTailIndex: 1,
+                nextNativeIndex: 1,
               };
             }
             onEvent({
-              type: "approval.settled",
-              meta: { at: "2026-10-21T00:00:01Z", id: "settled" },
               data: {
+                outcome: "approved",
+                requestId: "human-approval",
+                responderPrincipalId: "owner",
                 sequence: 2,
                 stepIndex: 0,
                 turnId: "turn",
-                requestId: "human-approval",
-                responderPrincipalId: "owner",
-                outcome: "approved",
               },
+              meta: { at: "2026-10-21T00:00:01Z", id: "settled" },
+              type: "approval.settled",
             });
-            return { nextNativeIndex: 2, nativeTailIndex: 1, complete: true };
+            return { complete: true, nativeTailIndex: 1, nextNativeIndex: 2 };
           },
         }),
     );
@@ -1099,9 +1099,9 @@ describe("incremental canonical export approval history", () => {
     expect(await f.operations.approval(context, planned.request)).toEqual({ approved: true });
     expect(f.read()).toMatchObject({
       journal: {
+        approval: { approvalId: "human-approval", approvedByCallId: "export-call" },
         revision: 3,
         state: "approved",
-        approval: { approvalId: "human-approval", approvedByCallId: "export-call" },
       },
     });
     expect(starts).toEqual([0, 1]);

@@ -2436,11 +2436,11 @@ it.each(["sync", "async"] as const)(
     const control = fixture();
     const expected = await control.writer.bind(control.input);
     const f = fixture();
-    f.diagnostics.mockImplementation(() => {
+    f.diagnostics.mockImplementation(async () => {
       if (kind === "sync") {
         throw new Error(privateAuthUrl);
       }
-      return Promise.reject(new Error(privateAuthUrl));
+      throw new Error(privateAuthUrl);
     });
     expect(await f.writer.bind(f.input)).toEqual(expected);
     expect(f.requests).toEqual(control.requests);

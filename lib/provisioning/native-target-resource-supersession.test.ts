@@ -17,52 +17,29 @@ import type {
 
 const time = "2026-10-21T15:00:00.000Z";
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace_fixture",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner_fixture",
+  workspaceId: "workspace_fixture",
 };
 const owner: NativeTargetCurrentOwner = {
+  adapterGeneration: 1,
+  adapterSessionId: "native_original",
   authority,
   publicSessionId: "public_original",
-  adapterSessionId: "native_original",
-  adapterGeneration: 1,
 };
 const plan = () =>
   nativeTargetOnboardingPlanSchema.parse({
-    version: 1,
-    appId: "requests-app",
-    origin: {
-      publicSessionId: owner.publicSessionId,
-      adapterSessionId: owner.adapterSessionId,
-      adapterGeneration: 1,
-      appSpecDigest: "a".repeat(64),
-      release: {
-        id: "release-original",
-        artifactRef: "artifact-original",
-        manifestSha256: "b".repeat(64),
-        schemaSha256: "c".repeat(64),
-      },
-    },
-    project: {
-      name: "requests-app",
-      teamId: "team_fixture",
-      installationId: "install_fixture",
-      projectSettings: {
-        framework: "nextjs",
-        rootDirectory: "apps/requests",
-        sourceFilesOutsideRootDirectory: true,
-      },
-      protection: nativeTargetRequiredProjectProtection,
-    },
-    branch: "main",
     appDatabase: {
-      resourceId: "requests-resource",
       database: "requests_data",
       migratorRole: "requests_migrator",
+      resourceId: "requests-resource",
       runtimeRole: "requests_runtime",
     },
-    productRoles: [],
+    appId: "requests-app",
+    branch: "main",
+    conflictPolicy: "stop-on-conflict",
+    cost: { description: "Separate app target", ownership: "current-owner" },
     nativeNeon: {
       approvalReference: "native-scope-approval",
       nativeStore: {
@@ -71,31 +48,54 @@ const plan = () =>
         sourceProjectId: "source-project",
       },
       scope: {
-        projectId: "neon-project",
         branchId: "neon-branch",
         endpointId: "neon-endpoint",
         hostname: "ep-fixture.neon.tech",
         maintenanceDatabase: "maintenance",
         maintenanceRole: "installer",
+        projectId: "neon-project",
       },
     },
+    origin: {
+      adapterGeneration: 1,
+      adapterSessionId: owner.adapterSessionId,
+      appSpecDigest: "a".repeat(64),
+      publicSessionId: owner.publicSessionId,
+      release: {
+        artifactRef: "artifact-original",
+        id: "release-original",
+        manifestSha256: "b".repeat(64),
+        schemaSha256: "c".repeat(64),
+      },
+    },
+    productRoles: [],
+    project: {
+      installationId: "install_fixture",
+      name: "requests-app",
+      projectSettings: {
+        framework: "nextjs",
+        rootDirectory: "apps/requests",
+        sourceFilesOutsideRootDirectory: true,
+      },
+      protection: nativeTargetRequiredProjectProtection,
+      teamId: "team_fixture",
+    },
+    retention: { policy: "Until approved cleanup" },
+    version: 1,
     worker: {
-      id: "generic-installer",
       executablePath: "/trusted/generic-worker",
-      sha256: "d".repeat(64),
+      id: "generic-installer",
       operationScope: "generated-app-release-install-v1",
+      sha256: "d".repeat(64),
       subcommand: "protected-generated-app-install",
     },
-    cost: { ownership: "current-owner", description: "Separate app target" },
-    retention: { policy: "Until approved cleanup" },
-    conflictPolicy: "stop-on-conflict",
   });
 const attempt = (): NativeTargetOnboardingAttempt => ({
   attemptId: "b209b89b-0bad-4a60-820f-4e29d5e5a4cc",
   candidateName: "requests-app",
+  leaseExpiresAt: "2026-10-21T15:10:00.000Z",
   leaseId: "b209b89b-0bad-4a60-820f-4e29d5e5a4cd",
   startedAt: time,
-  leaseExpiresAt: "2026-10-21T15:10:00.000Z",
 });
 
 const invocation = "verified-owner";
@@ -104,51 +104,50 @@ const fixture = () => {
   let current = structuredClone(owner);
   let receipt: NativeTargetOnboardingApproval | null = null;
   const assertPlanOrigin = vi.fn(
-    (_owner: NativeTargetCurrentOwner, candidate: NativeTargetOnboardingPlan) => {
+    async (_owner: NativeTargetCurrentOwner, candidate: NativeTargetOnboardingPlan) => {
       if (candidate.origin.release.artifactRef !== "artifact-original") {
         throw new Error("captured-release-mismatch");
       }
-      return Promise.resolve();
     },
   );
   const registry = createNativeTargetOnboardingRegistry({
-    store,
-    now: () => new Date(time),
     assertPlanOrigin,
-    authorize: (_inv: string, appId: string) => {
+    authorize: async (_inv: string, appId: string) => {
       if (
         appId !== "requests-app" ||
         current.authority.ownerUserId !== owner.authority.ownerUserId
       ) {
         throw new Error("owner-denied");
       }
-      return Promise.resolve(structuredClone(current));
+      return structuredClone(current);
     },
-    readApproval: () => Promise.resolve(receipt),
-  });
-  const read = () => store.read({ authority, appId: "requests-app" });
-  return {
-    registry,
+    now: () => new Date(time),
+    readApproval: async () => receipt,
     store,
-    read,
-    assertPlanOrigin,
-    setOwner: (next: NativeTargetCurrentOwner) => {
-      current = next;
-    },
+  });
+  const read = async () => await store.read({ appId: "requests-app", authority });
+  return {
     approve: (
       candidate: NativeTargetOnboardingPlan,
       outcome: "approved" | "cancelled" = "approved",
     ) => {
       receipt = {
-        requestId: `approval-${nativeTargetOnboardingPlanDigest(candidate)}`,
         callId: "fresh-call",
-        planDigest: nativeTargetOnboardingPlanDigest(candidate),
-        responderPrincipalId: authority.ownerUserId,
-        publicSessionId: owner.publicSessionId,
-        outcome,
         observedAt: time,
+        outcome,
+        planDigest: nativeTargetOnboardingPlanDigest(candidate),
+        publicSessionId: owner.publicSessionId,
+        requestId: `approval-${nativeTargetOnboardingPlanDigest(candidate)}`,
+        responderPrincipalId: authority.ownerUserId,
       };
     },
+    assertPlanOrigin,
+    read,
+    registry,
+    setOwner: (next: NativeTargetCurrentOwner) => {
+      current = next;
+    },
+    store,
   };
 };
 const rescope = (
@@ -157,21 +156,21 @@ const rescope = (
 ): NativeTargetOnboardingPlan =>
   nativeTargetOnboardingPlanSchema.parse({
     ...before,
-    resourceProfileId: label,
-    resourceProfileAuthorityDigest: "e".repeat(64),
-    resourceSelectionRevision: (before.resourceSelectionRevision ?? 0) + 1,
     appDatabase: { ...before.appDatabase, resourceId: `${label}-resource` },
     nativeNeon: {
       ...before.nativeNeon,
       nativeStore: { ...before.nativeNeon.nativeStore, resourceId: `${label}-store` },
       scope: {
         ...before.nativeNeon.scope,
-        projectId: `${label}-project`,
         branchId: `${label}-branch`,
         endpointId: `${label}-endpoint`,
         hostname: `ep-${label}.neon.tech`,
+        projectId: `${label}-project`,
       },
     },
+    resourceProfileAuthorityDigest: "e".repeat(64),
+    resourceProfileId: label,
+    resourceSelectionRevision: (before.resourceSelectionRevision ?? 0) + 1,
   });
 
 describe("planned native resource supersession", () => {
@@ -200,19 +199,19 @@ describe("planned native resource supersession", () => {
       attempt().leaseId,
     );
     await f.registry.acceptProjectId(invocation, original.appId, attempt().leaseId, {
+      acceptedAt: time,
       attemptId: attempt().attemptId,
       projectId: "new-project",
-      acceptedAt: time,
     });
     await f.registry.recordReady(invocation, original.appId, {
       attemptId: attempt().attemptId,
       observed: {
-        projectId: "new-project",
-        name: changed.project.name,
-        teamId: changed.project.teamId,
         installationId: changed.project.installationId,
+        name: changed.project.name,
+        projectId: "new-project",
         projectSettings: changed.project.projectSettings,
         protection: changed.project.protection,
+        teamId: changed.project.teamId,
       },
       observedAt: time,
     });
@@ -267,8 +266,8 @@ describe("planned native resource supersession", () => {
     await f.registry.supersedePlannedScope(invocation, b, nativeTargetOnboardingPlanDigest(a));
     const back = nativeTargetOnboardingPlanSchema.parse({
       ...a,
-      resourceProfileId: "original-a",
       resourceProfileAuthorityDigest: "f".repeat(64),
+      resourceProfileId: "original-a",
       resourceSelectionRevision: 2,
     });
     const result = await f.registry.supersedePlannedScope(
@@ -304,19 +303,19 @@ describe("planned native resource supersession", () => {
           attempt().leaseId,
         );
         await f.registry.acceptProjectId(invocation, a.appId, attempt().leaseId, {
+          acceptedAt: time,
           attemptId: attempt().attemptId,
           projectId: "new-project",
-          acceptedAt: time,
         });
         await f.registry.recordReady(invocation, a.appId, {
           attemptId: attempt().attemptId,
           observed: {
-            projectId: "new-project",
-            name: a.project.name,
-            teamId: a.project.teamId,
             installationId: a.project.installationId,
+            name: a.project.name,
+            projectId: "new-project",
             projectSettings: a.project.projectSettings,
             protection: a.project.protection,
+            teamId: a.project.teamId,
           },
           observedAt: time,
         });

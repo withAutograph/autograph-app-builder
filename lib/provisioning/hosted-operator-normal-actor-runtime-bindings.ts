@@ -54,17 +54,17 @@ export const createNormalActorRuntimeBindings = (
     if (input.plan.normalActorProgram === undefined) {
       return undefined;
     }
-    let failure: OperatorRuntimeIdentityFailure = { stage: "authority", reason: "read_failed" };
+    let failure: OperatorRuntimeIdentityFailure = { reason: "read_failed", stage: "authority" };
     const identityFailures = new Map<unknown, OperatorRuntimeIdentityFailure>();
     try {
       await deps.assertCurrentPlan(input);
-      failure = { stage: "journal", reason: "read_failed" };
+      failure = { reason: "read_failed", stage: "journal" };
       const prepared = await journal.read(input);
       if (prepared === undefined) {
-        failure = { stage: "preparation", reason: "unavailable" };
+        failure = { reason: "unavailable", stage: "preparation" };
         throw new HostedOperatorError("auth_identity_required");
       }
-      failure = { stage: "preparation", reason: "scope_mismatch" };
+      failure = { reason: "scope_mismatch", stage: "preparation" };
       const { preparation, state } = prepared;
       const frozen = input.plan.normalActorPreparation;
       if (frozen === undefined) {
@@ -82,19 +82,19 @@ export const createNormalActorRuntimeBindings = (
       ) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      failure = { stage: "projection", reason: "read_failed" };
+      failure = { reason: "read_failed", stage: "projection" };
       const projection = projectNormalActorRuntime({
+        operationRef: preparation.accountOperationRef,
         program: preparation.program,
         state,
-        operationRef: preparation.accountOperationRef,
       });
-      failure = { stage: "transport", reason: "read_failed" };
+      failure = { reason: "read_failed", stage: "transport" };
       const fetch = await deps.normalRealmFetch({ context: input, origin: projection.origin });
       await Promise.all(
         projection.identities.actors.map(async (identity) => {
           let identityFailure: OperatorRuntimeIdentityFailure = {
-            stage: "session_binding",
             reason: "read_failed",
+            stage: "session_binding",
           };
           try {
             const actor = preparation.program.actors.find(
@@ -110,18 +110,18 @@ export const createNormalActorRuntimeBindings = (
             const storageState =
               identity.organizationId === null ? retained?.storageState : scoped?.storageState;
             if (actor === undefined || expected === undefined || storageState === undefined) {
-              identityFailure = { stage: "session_binding", reason: "unavailable" };
+              identityFailure = { reason: "unavailable", stage: "session_binding" };
               throw new HostedOperatorError("auth_identity_required");
             }
             const client = createHostedOperatorNormalAuthClient({
+              fetch,
               origin: projection.origin,
               storageState,
-              fetch,
             });
-            identityFailure = { stage: "get_session", reason: "read_failed" };
+            identityFailure = { reason: "read_failed", stage: "get_session" };
             const actual = await client.getSession();
             if (actual === null) {
-              identityFailure = { stage: "get_session", reason: "unavailable" };
+              identityFailure = { reason: "unavailable", stage: "get_session" };
               throw new HostedOperatorError("auth_identity_required");
             }
             const selectedOrganization =
@@ -129,28 +129,28 @@ export const createNormalActorRuntimeBindings = (
               actual.activeOrganizationId === identity.organizationId;
             const checks: { reason: OperatorRuntimeIdentityFailure["reason"]; matches: boolean }[] =
               [
-                { reason: "actor_mismatch", matches: actual.actorId === expected.actorId },
+                { matches: actual.actorId === expected.actorId, reason: "actor_mismatch" },
                 {
-                  reason: "session_mismatch",
                   matches: actual.sessionId === expected.realmSessionId,
+                  reason: "session_mismatch",
                 },
                 {
-                  reason: "email_mismatch",
                   matches: actual.email.toLowerCase() === actor.email.toLowerCase(),
+                  reason: "email_mismatch",
                 },
                 {
-                  reason: "expired",
                   matches: Date.parse(actual.expiresAt) > deps.journalPorts.now(),
+                  reason: "expired",
                 },
-                { reason: "selected_organization_mismatch", matches: selectedOrganization },
+                { matches: selectedOrganization, reason: "selected_organization_mismatch" },
               ];
             const mismatched = checks.find((check) => !check.matches);
             if (mismatched !== undefined) {
-              identityFailure = { stage: "identity", reason: mismatched.reason };
+              identityFailure = { reason: mismatched.reason, stage: "identity" };
               throw new HostedOperatorError("auth_identity_required");
             }
             if (identity.organizationId !== null) {
-              identityFailure = { stage: "membership", reason: "read_failed" };
+              identityFailure = { reason: "read_failed", stage: "membership" };
               const membership = preparation.program.memberships.find(
                 (entry) =>
                   entry.actorKey === identity.actorKey &&
@@ -161,7 +161,7 @@ export const createNormalActorRuntimeBindings = (
                 userId: identity.actorId,
               });
               if (membership === undefined) {
-                identityFailure = { stage: "membership", reason: "unavailable" };
+                identityFailure = { reason: "unavailable", stage: "membership" };
                 throw new HostedOperatorError("auth_identity_required");
               }
               if (
@@ -171,7 +171,7 @@ export const createNormalActorRuntimeBindings = (
                   matchesMember(observed.members[0], identity, actor.email, membership.role),
                 ].some((matches) => !matches)
               ) {
-                identityFailure = { stage: "membership", reason: "membership_mismatch" };
+                identityFailure = { reason: "membership_mismatch", stage: "membership" };
                 throw new HostedOperatorError("auth_identity_required");
               }
             }
@@ -181,7 +181,7 @@ export const createNormalActorRuntimeBindings = (
           }
         }),
       );
-      failure = { stage: "final_authority", reason: "read_failed" };
+      failure = { reason: "read_failed", stage: "final_authority" };
       await deps.assertCurrentPlan(input);
       return projection;
     } catch (error) {

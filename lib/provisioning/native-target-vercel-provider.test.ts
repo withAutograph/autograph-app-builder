@@ -32,10 +32,10 @@ const project = {
   framework: null,
   id: "prj-owned",
   name,
+  oidcTokenConfig: nativeTargetRequiredProjectProtection.oidcTokenConfig,
   rootDirectory: settings.rootDirectory,
   sourceFilesOutsideRootDirectory: true,
   ssoProtection: nativeTargetRequiredProjectProtection.ssoProtection,
-  oidcTokenConfig: nativeTargetRequiredProjectProtection.oidcTokenConfig,
 };
 
 type MockPayload = typeof project | { id: string } | { error: { code: string } };
@@ -43,32 +43,28 @@ const json = (value: MockPayload, status = 200): Response => Response.json(value
 
 const fixture = () => {
   const order: string[] = [];
-  const authorizeAttempt = vi.fn(() => {
+  const authorizeAttempt = vi.fn(async () => {
     order.push("journal");
-    return Promise.resolve();
   });
-  const acceptProjectId = vi.fn((_projectId: string) => {
+  const acceptProjectId = vi.fn(async (_projectId: string) => {
     order.push("receipt");
-    return Promise.resolve();
   });
-  const request = vi.fn<typeof fetch>((_url, options) => {
+  const request = vi.fn<typeof fetch>(async (_url, options) => {
     order.push(options?.method ?? "GET");
-    return Promise.resolve(
-      options?.method === "POST" ? json({ id: project.id }, 201) : json(project),
-    );
+    return options?.method === "POST" ? json({ id: project.id }, 201) : json(project);
   });
   return {
     acceptProjectId,
     authorizeAttempt,
     input: {
-      installation,
-      token,
-      name,
-      settings,
-      protection: nativeTargetRequiredProjectProtection,
-      authorizeAttempt,
       acceptProjectId,
+      authorizeAttempt,
       fetch: request,
+      installation,
+      name,
+      protection: nativeTargetRequiredProjectProtection,
+      settings,
+      token,
     },
     order,
     request,
@@ -91,18 +87,18 @@ describe("native target Vercel project provider", () => {
     expect(await createNativeTargetVercelProject({ ...f.input, settings: rootOnly })).toEqual({
       name,
       projectId: project.id,
+      protection: nativeTargetRequiredProjectProtection,
       scopeId: installation.scopeId,
       settings: rootOnly,
-      protection: nativeTargetRequiredProjectProtection,
       status: "verified",
     });
     const createOptions = f.request.mock.calls[0]?.[1];
     expect(createOptions?.body).toBe(
       JSON.stringify({
         name,
+        oidcTokenConfig: nativeTargetRequiredProjectProtection.oidcTokenConfig,
         rootDirectory: rootOnly.rootDirectory,
         ssoProtection: nativeTargetRequiredProjectProtection.ssoProtection,
-        oidcTokenConfig: nativeTargetRequiredProjectProtection.oidcTokenConfig,
       }),
     );
     expect(f.order).toEqual(["journal", "receipt"]);
@@ -111,16 +107,16 @@ describe("native target Vercel project provider", () => {
 
   it.each([
     {
-      requested: { rootDirectory: settings.rootDirectory, framework: null },
       observed: { ...project, framework: "nextjs" },
+      requested: { framework: null, rootDirectory: settings.rootDirectory },
     },
     {
-      requested: { rootDirectory: settings.rootDirectory, buildCommand: null },
       observed: { ...project, buildCommand: "provider default" },
+      requested: { buildCommand: null, rootDirectory: settings.rootDirectory },
     },
     {
-      requested: { rootDirectory: settings.rootDirectory, sourceFilesOutsideRootDirectory: true },
       observed: { ...project, sourceFilesOutsideRootDirectory: false },
+      requested: { rootDirectory: settings.rootDirectory, sourceFilesOutsideRootDirectory: true },
     },
   ])("rejects an explicit source setting mismatch on readback", async ({ requested, observed }) => {
     const f = fixture();
@@ -128,13 +124,13 @@ describe("native target Vercel project provider", () => {
     expect(
       await observeNativeTargetVercelProject({
         ...f.input,
-        settings: requested,
         projectId: project.id,
+        settings: requested,
       }),
     ).toEqual({
-      status: "candidate",
       projectId: project.id,
       reason: "name_or_profile_mismatch",
+      status: "candidate",
     });
     expect(f.request).toHaveBeenCalledTimes(1);
   });
@@ -144,9 +140,9 @@ describe("native target Vercel project provider", () => {
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
       name,
       projectId: project.id,
+      protection: nativeTargetRequiredProjectProtection,
       scopeId: installation.scopeId,
       settings,
-      protection: nativeTargetRequiredProjectProtection,
       status: "verified",
     });
     expect(f.order).toEqual(["journal", "POST", "receipt", "GET"]);
@@ -157,12 +153,12 @@ describe("native target Vercel project provider", () => {
     expect(createOptions?.method).toBe("POST");
     expect(createOptions?.body).toBe(
       JSON.stringify({
-        name,
-        framework: settings.framework,
-        rootDirectory: settings.rootDirectory,
         buildCommand: settings.buildCommand,
-        ssoProtection: nativeTargetRequiredProjectProtection.ssoProtection,
+        framework: settings.framework,
+        name,
         oidcTokenConfig: nativeTargetRequiredProjectProtection.oidcTokenConfig,
+        rootDirectory: settings.rootDirectory,
+        ssoProtection: nativeTargetRequiredProjectProtection.ssoProtection,
       }),
     );
     expect(readUrl).toBe("https://api.vercel.com/v9/projects/prj-owned?teamId=team-owned");
@@ -171,7 +167,9 @@ describe("native target Vercel project provider", () => {
       JSON.stringify(
         await createNativeTargetVercelProject({
           ...f.input,
-          authorizeAttempt: () => Promise.reject(new Error("already dispatched")),
+          authorizeAttempt: async () => {
+            throw new Error("already dispatched");
+          },
         }),
       ),
     ).not.toContain(token);
@@ -181,17 +179,17 @@ describe("native target Vercel project provider", () => {
     "uses the create API contract and independently checks outside-root access (%s)",
     async (outsideRoot) => {
       const f = fixture();
-      f.request.mockImplementation((_url, options) => {
+      f.request.mockImplementation(async (_url, options) => {
         if (options?.method === "POST") {
           const body = z.looseObject({}).parse(JSON.parse(z.string().parse(options.body)));
           // Vercel POST /v11/projects has additionalProperties:false and does not
           // accept sourceFilesOutsideRootDirectory (the PATCH endpoint does).
           if (Object.hasOwn(body, "sourceFilesOutsideRootDirectory")) {
-            return Promise.resolve(json({ error: { code: "bad_request" } }, 400));
+            return json({ error: { code: "bad_request" } }, 400);
           }
-          return Promise.resolve(json({ id: project.id }, 201));
+          return json({ id: project.id }, 201);
         }
-        return Promise.resolve(json({ ...project, sourceFilesOutsideRootDirectory: outsideRoot }));
+        return json({ ...project, sourceFilesOutsideRootDirectory: outsideRoot });
       });
       const result = await createNativeTargetVercelProject(f.input);
       expect(result.status).toBe(outsideRoot ? "verified" : "candidate");
@@ -204,8 +202,8 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.authorizeAttempt.mockRejectedValueOnce(new Error("lease lost"));
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "rejected",
       reason: "authorization_denied",
+      status: "rejected",
     });
     expect(f.request).not.toHaveBeenCalled();
     expect(f.acceptProjectId).not.toHaveBeenCalled();
@@ -223,8 +221,8 @@ describe("native target Vercel project provider", () => {
       const f = fixture();
       f.request.mockResolvedValueOnce(json({ error: { code: "synthetic" } }, status));
       expect(await createNativeTargetVercelProject(f.input)).toEqual({
-        status: "rejected",
         reason,
+        status: "rejected",
       });
       expect(f.request).toHaveBeenCalledTimes(1);
       expect(f.acceptProjectId).not.toHaveBeenCalled();
@@ -235,8 +233,8 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.request.mockRejectedValueOnce(new Error("connection lost"));
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "uncertain",
       reason: "unknown_write",
+      status: "uncertain",
     });
     expect(f.request).toHaveBeenCalledTimes(1);
     expect(f.acceptProjectId).not.toHaveBeenCalled();
@@ -249,8 +247,8 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.request.mockResolvedValueOnce(response);
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "uncertain",
       reason: "unknown_write",
+      status: "uncertain",
     });
     expect(f.request).toHaveBeenCalledTimes(1);
     expect(f.acceptProjectId).not.toHaveBeenCalled();
@@ -260,9 +258,9 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.acceptProjectId.mockRejectedValueOnce(new Error("journal unavailable"));
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "uncertain",
-      reason: "receipt_unavailable",
       projectId: project.id,
+      reason: "receipt_unavailable",
+      status: "uncertain",
     });
     expect(f.request).toHaveBeenCalledTimes(1);
   });
@@ -272,9 +270,9 @@ describe("native target Vercel project provider", () => {
     f.request.mockResolvedValueOnce(json({ id: project.id }, 201));
     f.request.mockResolvedValueOnce(json({ ...project, accountId: "other-team" }));
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "candidate",
       projectId: project.id,
       reason: "name_or_profile_mismatch",
+      status: "candidate",
     });
     expect(f.acceptProjectId).toHaveBeenCalledWith(project.id);
   });
@@ -284,9 +282,9 @@ describe("native target Vercel project provider", () => {
     f.request.mockResolvedValueOnce(json({ id: project.id }, 201));
     f.request.mockResolvedValueOnce(Response.json({ ...project, ssoProtection: null }));
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "candidate",
       projectId: project.id,
       reason: "name_or_profile_mismatch",
+      status: "candidate",
     });
     expect(f.request).toHaveBeenCalledTimes(2);
 
@@ -297,9 +295,9 @@ describe("native target Vercel project provider", () => {
     expect(
       await observeNativeTargetVercelProject({ ...oidc.input, projectId: project.id }),
     ).toEqual({
-      status: "candidate",
       projectId: project.id,
       reason: "name_or_profile_mismatch",
+      status: "candidate",
     });
     expect(oidc.request).toHaveBeenCalledTimes(1);
   });
@@ -308,9 +306,9 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.request.mockResolvedValueOnce(Response.json({ ...project, oidcTokenConfig: undefined }));
     expect(await observeNativeTargetVercelProject({ ...f.input, projectId: project.id })).toEqual({
-      status: "uncertain",
       projectId: project.id,
       reason: "invalid_response",
+      status: "uncertain",
     });
   });
 
@@ -318,9 +316,9 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.request.mockResolvedValueOnce(json({ error: { code: "not_found" } }, 404));
     expect(await observeNativeTargetVercelProject({ ...f.input, projectId: project.id })).toEqual({
-      status: "uncertain",
       projectId: project.id,
       reason: "unobserved_project",
+      status: "uncertain",
     });
     expect(f.request).toHaveBeenCalledTimes(1);
     expect(f.request.mock.calls[0]?.[0]).toEqual(

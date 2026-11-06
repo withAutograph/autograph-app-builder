@@ -138,8 +138,8 @@ const prepareNormalActorStage = async (input: StageInput) => {
     }
     await input.ports.assertMembershipApproved({
       program,
-      state: structuredClone(state),
       proposedAccess: proposeResolvedNormalActorAccess(program, state),
+      state: structuredClone(state),
     });
   }
   const checkpointFor = (key: string) => {
@@ -185,12 +185,12 @@ const prepareNormalActorStage = async (input: StageInput) => {
       return;
     }
     checkpoint.session = normalActorSessionRefSchema.parse({
-      actorId: session.actorId,
-      realmSessionId: session.sessionId,
-      expiresAt: session.expiresAt,
-      reference: checkpoint.session?.reference ?? randomUUID(),
-      origin: program.origin,
       activeOrganizationId: session.activeOrganizationId,
+      actorId: session.actorId,
+      expiresAt: session.expiresAt,
+      origin: program.origin,
+      realmSessionId: session.sessionId,
+      reference: checkpoint.session?.reference ?? randomUUID(),
     });
     checkpoint.storageState = normalBrowserStorageStateSchema.parse(client.exportStorageState());
     checkpoint.signup = "complete";
@@ -221,9 +221,9 @@ const prepareNormalActorStage = async (input: StageInput) => {
     const checkpoint = checkpointFor(actor.actorKey);
     await restoreExistingCapture(actor, checkpoint);
     const client = (input.ports.clientFactory ?? createHostedOperatorNormalAuthClient)({
+      assertApprovedEffect: assertCurrent,
       origin: program.origin,
       storageState: checkpoint.storageState,
-      assertApprovedEffect: assertCurrent,
     });
     clients.set(actor.actorKey, client);
     if (checkpoint.signup === "complete") {
@@ -298,8 +298,8 @@ const prepareNormalActorStage = async (input: StageInput) => {
   ) => {
     if (actor.account !== CAPTURE_EXISTING || existing !== undefined) {
       return {
-        storageState: existing?.storageState,
         expectedSessionId: existing?.session.realmSessionId,
+        storageState: existing?.storageState,
       };
     }
     const another =
@@ -307,7 +307,7 @@ const prepareNormalActorStage = async (input: StageInput) => {
         (entry) => entry.actorKey === actor.actorKey && entry.organizationId !== organizationId,
       ) ?? false;
     if (!another) {
-      return { storageState: baseStorage, expectedSessionId: session.realmSessionId };
+      return { expectedSessionId: session.realmSessionId, storageState: baseStorage };
     }
     await assertCurrent();
     const captured = await input.ports.readOrganizationSession(actor.actorKey, organizationId);
@@ -319,8 +319,8 @@ const prepareNormalActorStage = async (input: StageInput) => {
       throw new Error("normal_actor_session_selection_required");
     }
     return {
-      storageState: captured.storageState,
       expectedSessionId: captured.session.realmSessionId,
+      storageState: captured.storageState,
     };
   };
   const prepareOrganizationCandidate = async (
@@ -347,9 +347,9 @@ const prepareNormalActorStage = async (input: StageInput) => {
     const { storageState } = candidate;
     let { expectedSessionId } = candidate;
     const client = (input.ports.clientFactory ?? createHostedOperatorNormalAuthClient)({
+      assertApprovedEffect: assertCurrent,
       origin: program.origin,
       storageState,
-      assertApprovedEffect: assertCurrent,
     });
     await assertCurrent();
     let normal = await client.getSession();
@@ -394,12 +394,12 @@ const prepareNormalActorStage = async (input: StageInput) => {
           ? "selected"
           : "pending",
       session: normalActorSessionRefSchema.parse({
-        actorId: normal.actorId,
-        realmSessionId: normal.sessionId,
-        origin: program.origin,
-        expiresAt: normal.expiresAt,
-        reference: existing?.session.reference ?? randomUUID(),
         activeOrganizationId: normal.activeOrganizationId,
+        actorId: normal.actorId,
+        expiresAt: normal.expiresAt,
+        origin: program.origin,
+        realmSessionId: normal.sessionId,
+        reference: existing?.session.reference ?? randomUUID(),
       }),
       storageState: normalBrowserStorageStateSchema.parse(client.exportStorageState()),
     };
@@ -417,16 +417,16 @@ const prepareNormalActorStage = async (input: StageInput) => {
     }
     await assertCurrent();
     return {
-      state: structuredClone(state),
       proposedAccess: proposeResolvedNormalActorAccess(program, state),
+      state: structuredClone(state),
     };
   }
   const assertMembershipCurrent = async () => {
     await assertCurrent();
     await input.ports.assertMembershipApproved({
       program,
-      state: structuredClone(state),
       proposedAccess: proposeResolvedNormalActorAccess(program, state),
+      state: structuredClone(state),
     });
   };
 
@@ -457,7 +457,7 @@ const prepareNormalActorStage = async (input: StageInput) => {
     ) {
       throw new Error("normal_actor_organization_owner_proof_required");
     }
-    const effect = { program, organizationId: organization.organizationId, owner, ownerProof };
+    const effect = { organizationId: organization.organizationId, owner, ownerProof, program };
     await assertCurrent();
     const observed = await input.ports.reconcileOrganization(effect);
     if (observed === "unknown") {
@@ -556,8 +556,8 @@ const prepareNormalActorStage = async (input: StageInput) => {
         await save();
         await assertMembershipCurrent();
         const invitation = await ownerClient.inviteMember({
-          organizationId: membership.organizationId,
           email: actor.email,
+          organizationId: membership.organizationId,
           role: membership.role,
         });
         if (
@@ -602,9 +602,9 @@ const prepareNormalActorStage = async (input: StageInput) => {
       throw new Error("normal_actor_session_selection_required");
     }
     const client = (input.ports.clientFactory ?? createHostedOperatorNormalAuthClient)({
+      assertApprovedEffect: assertMembershipCurrent,
       origin: program.origin,
       storageState: retained.storageState,
-      assertApprovedEffect: assertMembershipCurrent,
     });
     await assertMembershipCurrent();
     let normal = await client.getSession();
@@ -647,8 +647,8 @@ const prepareNormalActorStage = async (input: StageInput) => {
   await assertCurrent();
   // No role-grant client is present: returned actual IDs require the existing fresh access approval.
   return {
-    state: structuredClone(state),
     proposedAccess: proposeResolvedNormalActorAccess(program, state),
+    state: structuredClone(state),
   };
 };
 

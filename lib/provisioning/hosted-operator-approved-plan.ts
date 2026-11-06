@@ -53,8 +53,8 @@ export const recoverOriginalApprovedPlan = async (
     const saved = current?.record.operator;
     const original = await deps.readApprovedPlan({
       ...context,
-      plan,
       now: now(),
+      plan,
       ...(saved === undefined ? {} : { currentOperation: saved }),
     });
     if (original === null) {
@@ -97,9 +97,9 @@ export const recoverOriginalApprovedPlan = async (
     const record = { ...current.record, operator: { ...saved, ...original } };
     const restored = await deps.store.compareAndSet({
       ...context,
-      record,
       expectedRevision: current.revision,
       now: new Date(now()),
+      record,
     });
     if (restored === undefined) {
       continue;

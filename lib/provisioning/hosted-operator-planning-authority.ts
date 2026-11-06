@@ -40,12 +40,12 @@ const readPreparedPreviewJournal = async (
   }
   const { plan } = operator;
   const { delivery } = plan;
-  const artifactRef = plan.release.artifactRef;
+  const { artifactRef } = plan.release;
   if (delivery === undefined || delivery.gitSha === undefined || artifactRef === undefined) {
     reportOperatorPlanningMismatch(context.target.sessionId, "prepared_preview_journal", {
+      artifact_missing: artifactRef === undefined,
       delivery_missing: delivery === undefined,
       delivery_sha_missing: delivery?.gitSha === undefined,
-      artifact_missing: artifactRef === undefined,
     });
     throw new HostedOperatorError("resource_mismatch");
   }
@@ -64,20 +64,20 @@ const readPreparedPreviewJournal = async (
   const matchesPrepared = preparedMatches.every(Boolean);
   if (!matchesPrepared) {
     reportOperatorPlanningMismatch(context.target.sessionId, "prepared_preview_journal", {
+      delivery_project: !preparedMatches[9],
       journal_status: !preparedMatches[0],
       plan_action: !preparedMatches[1],
-      plan_stage: !preparedMatches[2],
       plan_digest: !preparedMatches[3],
+      plan_stage: !preparedMatches[2],
       selection_app: !preparedMatches[4],
       selection_branch: !preparedMatches[5],
       selection_environment: !preparedMatches[6],
       selection_project: !preparedMatches[7],
       selection_session: !preparedMatches[8],
-      delivery_project: !preparedMatches[9],
     });
     throw new HostedOperatorError("resource_mismatch");
   }
-  return { current, operator, plan, artifactRef, delivery, gitSha: delivery.gitSha };
+  return { artifactRef, current, delivery, gitSha: delivery.gitSha, operator, plan };
 };
 
 /** Restoration selects the approved prepared release, never a newer private capture. */
@@ -110,7 +110,7 @@ const readPreparedPreviewSelection = async (
   const lookup = {
     appSpecDigest: plan.contextId,
     artifactRef,
-    publishedSource: { repositoryId: delivery.repoId, branch: delivery.branch, gitSha },
+    publishedSource: { branch: delivery.branch, gitSha, repositoryId: delivery.repoId },
   };
   const selection = await controlPlane.readGeneratedSelection(context, plan.contextId, lookup);
   if (selection === undefined) {
@@ -128,10 +128,10 @@ const readPreparedPreviewSelection = async (
   const matchesRelease = releaseMatches.every(Boolean);
   if (!matchesRelease) {
     reportOperatorPlanningMismatch(context.target.sessionId, "prepared_preview_selection", {
-      release_source_binding: !releaseMatches[0],
       release_app: !releaseMatches[1],
       release_id: !releaseMatches[2],
       release_manifest: !releaseMatches[3],
+      release_source_binding: !releaseMatches[0],
     });
     throw new HostedOperatorError("resource_mismatch");
   }
@@ -154,7 +154,7 @@ const readPreparedPreviewSelection = async (
     }
   };
   await assertCurrent();
-  return { selection, contextId: plan.contextId, assertCurrent };
+  return { assertCurrent, contextId: plan.contextId, selection };
 };
 
 const readOwnedPlanningContext = async (
@@ -179,7 +179,7 @@ const readOwnedPlanningContext = async (
   if (!matchesOwner) {
     throw new HostedOperatorError("operator_unavailable");
   }
-  return { decision, currentSpec };
+  return { currentSpec, decision };
 };
 
 const assertBootstrapApproval = async (
@@ -331,10 +331,10 @@ export const readOwnedBootstrapPlanningSelection = async (input: {
   await assertCurrent();
   return {
     approvedScope: decision.scope,
+    assertCurrent,
+    contextId: plan.contextId,
     currentSpec,
     selection,
-    contextId: plan.contextId,
-    assertCurrent,
   };
 };
 
@@ -364,9 +364,9 @@ export const readOwnedOperatorPlanningSelection = async (input: {
   await input.controlPlane.readCurrentPlanningOwner(context);
   return {
     approvedScope: decision.scope,
+    assertCurrent: null,
+    contextId: currentSpec.appSpecDigest,
     currentSpec,
     selection,
-    contextId: currentSpec.appSpecDigest,
-    assertCurrent: null,
   };
 };

@@ -10,22 +10,22 @@ import {
 const worker = {
   executablePath: "/trusted/install",
   id: "trusted-installer",
-  sha256: "a".repeat(64),
   operationScope: "generated-app-release-install-v1" as const,
+  sha256: "a".repeat(64),
   subcommand: "protected-generated-app-install" as const,
 };
 const resource = (name: string) => ({
   database: name,
   migratorRole: `${name}_owner`,
-  runtimeRole: `${name}_runtime`,
   resourceId: `${name}-resource`,
+  runtimeRole: `${name}_runtime`,
 });
 const workload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const configuration = (): HostedOperatorSourceConfiguration => ({
@@ -40,7 +40,6 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
   authDatabase: resource("auth"),
   builderCallbackOrigin: "https://builder.example",
   catalogAppIds: ["sibling"],
-  teamId: "team",
   gateway: {
     authBrowserOrigin: "https://auth.example",
     branch: "main",
@@ -53,12 +52,6 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
     repoId: "gateway-repository",
     workload: { ...workload, projectId: "gateway" },
   },
-  operator: {
-    deploymentId: "operator-deployment",
-    environment: "preview",
-    origin: "https://operator.example",
-    projectId: "operator",
-  },
   nativeNeon: {
     configuration: {
       connector: "approved-connector",
@@ -69,9 +62,9 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
       },
       operator: {
         audience: workload.audience,
+        environment: workload.environment,
         issuer: workload.issuer,
         ownerId: workload.ownerId,
-        environment: workload.environment,
         projectId: "operator",
       },
     },
@@ -84,23 +77,30 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
       projectId: "shared-neon",
     },
   },
+  operator: {
+    deploymentId: "operator-deployment",
+    environment: "preview",
+    origin: "https://operator.example",
+    projectId: "operator",
+  },
   sandbox: {
     accessWorker: worker,
-    authWorker: worker,
     authProposal: { executablePath: "/trusted/propose", id: "proposal", sha256: "c".repeat(64) },
-    resourcesWorker: worker,
+    authWorker: worker,
     image: "trusted-image",
     projectId: "operator",
+    resourcesWorker: worker,
     teamId: "team",
     workers: { sibling: worker },
   },
+  teamId: "team",
   workloadPolicy: { ...workload },
 });
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const selectedConfig = () => {
   const result = configuration();
@@ -114,8 +114,8 @@ const selectedConfig = () => {
 const fixture = () => {
   const base = configuration();
   const selected = selectedConfig();
-  const profile = { id: "isolated", authority, appId: "new-app", configuration: selected };
-  return { base, selected, profile };
+  const profile = { appId: "new-app", authority, configuration: selected, id: "isolated" };
+  return { base, profile, selected };
 };
 const resolve = (
   profile: object[],
@@ -123,11 +123,11 @@ const resolve = (
 ) => {
   const { base } = fixture();
   return resolveNativeTargetResourceProfile({
-    base,
-    authority,
     appId: "new-app",
-    resourceProfileId: "isolated",
+    authority,
+    base,
     environment: { PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify(profile) },
+    resourceProfileId: "isolated",
     ...overrides,
   });
 };
@@ -142,7 +142,7 @@ describe("native target deployment resource profile", () => {
   it("preserves the legacy base when no profile is selected", () => {
     const { base } = fixture();
     expect(
-      resolveNativeTargetResourceProfile({ base, authority, appId: "other-app", environment: {} }),
+      resolveNativeTargetResourceProfile({ appId: "other-app", authority, base, environment: {} }),
     ).toBe(base);
   });
   it("rejects mismatched owners, apps, selectors and duplicate profiles", () => {
@@ -158,21 +158,21 @@ describe("native target deployment resource profile", () => {
     const { base } = fixture();
     expect(() =>
       resolveNativeTargetResourceProfile({
-        base,
-        authority,
         appId: "new-app",
-        resourceProfileId: "isolated",
+        authority,
+        base,
         environment: {},
+        resourceProfileId: "isolated",
       }),
     ).toThrow();
     expect(() => resolve([{ id: "isolated" }])).toThrow();
     expect(() =>
       resolveNativeTargetResourceProfile({
-        base,
-        authority,
         appId: "new-app",
-        resourceProfileId: "isolated",
+        authority,
+        base,
         environment: { PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: "{" },
+        resourceProfileId: "isolated",
       }),
     ).toThrow();
   });
@@ -251,18 +251,18 @@ describe("native target resource profile authority digest", () => {
     const before = selectedConfig();
     const after = structuredClone(before);
     after.authDatabase = {
-      runtimeRole: before.authDatabase.runtimeRole,
-      resourceId: before.authDatabase.resourceId,
-      migratorRole: before.authDatabase.migratorRole,
       database: before.authDatabase.database,
+      migratorRole: before.authDatabase.migratorRole,
+      resourceId: before.authDatabase.resourceId,
+      runtimeRole: before.authDatabase.runtimeRole,
     };
     after.nativeNeon.scope = {
-      projectId: before.nativeNeon.scope.projectId,
-      maintenanceRole: before.nativeNeon.scope.maintenanceRole,
-      maintenanceDatabase: before.nativeNeon.scope.maintenanceDatabase,
-      hostname: before.nativeNeon.scope.hostname,
-      endpointId: before.nativeNeon.scope.endpointId,
       branchId: before.nativeNeon.scope.branchId,
+      endpointId: before.nativeNeon.scope.endpointId,
+      hostname: before.nativeNeon.scope.hostname,
+      maintenanceDatabase: before.nativeNeon.scope.maintenanceDatabase,
+      maintenanceRole: before.nativeNeon.scope.maintenanceRole,
+      projectId: before.nativeNeon.scope.projectId,
     };
     expect(nativeTargetResourceProfileAuthorityDigest(after)).toBe(
       nativeTargetResourceProfileAuthorityDigest(before),

@@ -37,8 +37,8 @@ export const centralHostSelectionSchema = z.strictObject({
   planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
 });
 export const centralHostPlanRequestSchema = z.strictObject({
-  kind: z.enum(["setup", "caller"]),
   appId: builderAppIdSchema,
+  kind: z.enum(["setup", "caller"]),
 });
 export interface CentralApprovalReceipt {
   approvalId?: string;
@@ -170,9 +170,9 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
     await historical(invocation, row);
     if (Object.values(row.record.effects).some((phase) => phase !== "applied")) {
       return {
-        status: "pending" as const,
         operationRef: row.operationRef,
         planDigest: row.record.planDigest,
+        status: "pending" as const,
       };
     }
     if ((row.record.approvalReceipts?.length ?? 0) === 0) {
@@ -185,26 +185,26 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
       }
       if (native?.status !== "accepted") {
         return {
-          status: "waiting-native-deployment" as const,
           operationRef: row.operationRef,
           planDigest: row.record.planDigest,
+          status: "waiting-native-deployment" as const,
         };
       }
       const ready = await ports.observeSetup(invocation, row);
       await historical(invocation, row);
       return {
-        status: ready ? ("ready" as const) : ("pending" as const),
         operationRef: row.operationRef,
         planDigest: row.record.planDigest,
+        status: ready ? ("ready" as const) : ("pending" as const),
       };
     }
     const observation = await ports.observeCaller(invocation, row);
     await historical(invocation, row);
     if (observation === undefined) {
       return {
-        status: "pending" as const,
         operationRef: row.operationRef,
         planDigest: row.record.planDigest,
+        status: "pending" as const,
       };
     }
     const receipt = centralHostReadyReceiptSchema.parse(observation);
@@ -219,10 +219,10 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
         ? await save(invocation, row, { ...row.record, observation: receipt })
         : row;
     return {
-      status: "ready" as const,
       operationRef: next.operationRef,
       planDigest: next.record.planDigest,
       receipt,
+      status: "ready" as const,
     };
   };
   return {
@@ -239,7 +239,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
             throw fail();
           }
           invocation.signal.throwIfAborted();
-          return { status: "ready" as const, receipt: ready, ...ready.callerSetup };
+          return { receipt: ready, status: "ready" as const, ...ready.callerSetup };
         }
       }
       const plan = await ports.resolvePlan(invocation, request);
@@ -254,15 +254,9 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
       await authorize(invocation, plan);
       return {
         operationRef: row.operationRef,
-        planDigest: centralHostPlanDigest(plan),
         plan: row.record.plan,
+        planDigest: centralHostPlanDigest(plan),
       };
-    },
-    async read(
-      invocation: PublicReleaseInvocation,
-      selection: z.infer<typeof centralHostSelectionSchema>,
-    ) {
-      return await observe(invocation, await load(invocation, selection));
     },
     async prepare(
       invocation: PublicReleaseInvocation,
@@ -277,8 +271,8 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
       await authorize(invocation, initial.record.plan);
       return await ports.withTargetLease(invocation, initial.record.plan, async (lease) => {
         const checkedLease = centralExecutionLeaseSchema.parse({
-          leaseId: lease.leaseId,
           fenceGeneration: lease.fenceGeneration,
+          leaseId: lease.leaseId,
         });
         await lease.assertCurrent();
         let row = await load(invocation, selection);
@@ -295,10 +289,10 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
         }
         row = await save(invocation, row, {
           ...row.record,
-          executionLease: checkedLease,
           approvalReceipts: approvals.some((receipt) => isDeepStrictEqual(receipt, approval))
             ? approvals
             : [...approvals, approval],
+          executionLease: checkedLease,
         });
         const refresh = async () => {
           row = await load(invocation, selection);
@@ -332,14 +326,14 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
             }
             row = await save(invocation, row, {
               ...row.record,
-              effects: { ...row.record.effects, [effect]: "pending" },
               attempts: {
                 ...row.record.attempts,
                 [effect]: {
-                  attemptId: randomUUID(),
                   attemptGeneration: checkedLease.fenceGeneration,
+                  attemptId: randomUUID(),
                 },
               },
+              effects: { ...row.record.effects, [effect]: "pending" },
             });
           }
           const attempt = row.record.attempts?.[effect];
@@ -376,39 +370,19 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
             });
           };
           const context: CentralHostEffectContext = {
-            invocation,
-            plan: row.record.plan,
-            operationRef: row.operationRef,
-            planDigest: row.record.planDigest,
-            effect,
-            priorPhase,
-            fenceGeneration: checkedLease.fenceGeneration,
-            attemptGeneration: attempt.attemptGeneration,
             assertCurrent,
-            checkpoint: {
-              read: async () => {
-                await assertCurrent();
-                const value = row.record.attempts?.[effect];
-                if (value === undefined) {
-                  throw fail();
-                }
-                return value;
-              },
-              recordGrantAttempt: async (value) => {
-                await updateAttempt({ grantAttempt: value });
-              },
-              recordAccepted: async (raw) => {
-                const receipt = centralEffectReceiptSchema.parse(raw);
-                if (
-                  receipt.effect !== effect ||
-                  !centralEffectReceiptMatches(row.record.plan, receipt, attempt.attemptGeneration)
-                ) {
-                  throw fail();
-                }
-                await updateAttempt({ receipt });
-              },
-            },
+            attemptGeneration: attempt.attemptGeneration,
             bindings: {
+              claim: async (key) => {
+                const state = await bindingState(key);
+                if (state.state !== "idle") {
+                  throw unknown();
+                }
+                await setBinding(key, {
+                  attemptGeneration: checkedLease.fenceGeneration,
+                  state: "pending",
+                });
+              },
               read: async () => {
                 await assertCurrent();
                 return row.record.plan.kind === "central-integration-host-setup-v1"
@@ -419,16 +393,6 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
                       ]),
                     )
                   : {};
-              },
-              claim: async (key) => {
-                const state = await bindingState(key);
-                if (state.state !== "idle") {
-                  throw unknown();
-                }
-                await setBinding(key, {
-                  state: "pending",
-                  attemptGeneration: checkedLease.fenceGeneration,
-                });
               },
               recordAccepted: async (key, id) => {
                 const state = await bindingState(key);
@@ -443,12 +407,42 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
                   throw fail();
                 }
                 await setBinding(key, {
-                  state: "applied",
                   acceptedEnvId: state.acceptedEnvId,
                   attemptGeneration: state.attemptGeneration,
+                  state: "applied",
                 });
               },
             },
+            checkpoint: {
+              read: async () => {
+                await assertCurrent();
+                const value = row.record.attempts?.[effect];
+                if (value === undefined) {
+                  throw fail();
+                }
+                return value;
+              },
+              recordAccepted: async (raw) => {
+                const receipt = centralEffectReceiptSchema.parse(raw);
+                if (
+                  receipt.effect !== effect ||
+                  !centralEffectReceiptMatches(row.record.plan, receipt, attempt.attemptGeneration)
+                ) {
+                  throw fail();
+                }
+                await updateAttempt({ receipt });
+              },
+              recordGrantAttempt: async (value) => {
+                await updateAttempt({ grantAttempt: value });
+              },
+            },
+            effect,
+            fenceGeneration: checkedLease.fenceGeneration,
+            invocation,
+            operationRef: row.operationRef,
+            plan: row.record.plan,
+            planDigest: row.record.planDigest,
+            priorPhase,
           };
           if (priorPhase === "idle") {
             await ports.applyEffect(context);
@@ -469,6 +463,12 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
         await assertCurrent();
         return await observe(invocation, row);
       });
+    },
+    async read(
+      invocation: PublicReleaseInvocation,
+      selection: z.infer<typeof centralHostSelectionSchema>,
+    ) {
+      return await observe(invocation, await load(invocation, selection));
     },
   };
 };

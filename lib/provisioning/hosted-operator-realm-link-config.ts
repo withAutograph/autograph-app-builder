@@ -27,8 +27,8 @@ export const createHostedOperatorRealmLinkConfig = (
     browserOrigin: exactHttpsOrigin(bindings.authBrowserOrigin),
     builderCallbackOrigin: exactHttpsOrigin(bindings.builderCallbackOrigin),
     builderCallbackPath: "/api/hosted-operator/realm-identity",
-    operatorOrigin: exactHttpsOrigin(bindings.operatorOrigin),
     identityHandoff: { sender: bindings.sourceWorkload },
+    operatorOrigin: exactHttpsOrigin(bindings.operatorOrigin),
     readonlyAttesters: bindings.readonlyAttesters,
     ...(plan.normalActorProgram === undefined
       ? {}

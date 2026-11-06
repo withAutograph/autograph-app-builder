@@ -24,8 +24,6 @@ export const withExternallyManagedHostProtection = (
   void trustedSources;
   return hostedOperatorPlanSchema.parse({
     ...base,
-    hostProtection: policy,
-    gatewayBindings: gateway,
     effects: plan.effects.map((effect) =>
       effect.kind === "bindings" || effect.kind === "gateway-bindings"
         ? {
@@ -35,6 +33,8 @@ export const withExternallyManagedHostProtection = (
           }
         : effect,
     ),
+    gatewayBindings: gateway,
+    hostProtection: policy,
   });
 };
 
@@ -99,7 +99,7 @@ export const createNativePreviewRecoveryPlan = (
     { operator: current },
     ...(current.retainedRenewalOperations ?? []).toReversed(),
   ]) {
-    const operator = origin.operator;
+    const { operator } = origin;
     const candidates = (operator.deliveryCandidates ?? []).filter(
       (value) => value.readyState === "READY",
     );
@@ -124,26 +124,20 @@ export const createNativePreviewRecoveryPlan = (
       continue;
     }
     const intent = {
-      version: 1 as const,
       predecessor: {
+        appDeploymentId: app.deploymentId,
         operationRef: operator.operationRef,
         planDigest: operator.planDigest,
-        appDeploymentId: app.deploymentId,
         ...(gateway ? { gatewayDeploymentId: gateway.deploymentId } : {}),
       },
+      version: 1 as const,
     };
     if (!resolveReadyDeliveryReplacementPredecessor(record, intent)) {
       continue;
     }
     const proposed = hostedOperatorPlanSchema.parse({
       ...base,
-      hostProtection: policy,
-      gatewayBindings: bindings,
       appDeliveryReplacement: intent,
-      retention: {
-        ...previous.retention,
-        expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
-      },
       effects: previous.effects.map((effect) =>
         effect.kind === "bindings" || effect.kind === "gateway-bindings"
           ? {
@@ -159,6 +153,12 @@ export const createNativePreviewRecoveryPlan = (
               }
             : effect,
       ),
+      gatewayBindings: bindings,
+      hostProtection: policy,
+      retention: {
+        ...previous.retention,
+        expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+      },
     });
     if (
       isReadyDeliveryReplacementSuccessor(
@@ -213,7 +213,7 @@ export const readyReplacementHistory = (
   now = Date.now(),
 ) => {
   if (!plan.appDeliveryReplacement) {
-    return undefined;
+    return;
   }
   for (const archived of record.operator?.retainedReadyDeliveryOperations?.toReversed() ?? []) {
     const snapshot: HostedRuntimeJournalRecord = {
@@ -228,7 +228,7 @@ export const readyReplacementHistory = (
     if (
       predecessor &&
       isReadyDeliveryReplacementSuccessor(
-        { ...snapshot, leaseId: undefined, leaseExpiresAt: undefined },
+        { ...snapshot, leaseExpiresAt: undefined, leaseId: undefined },
         { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
         now,
       )
@@ -236,7 +236,6 @@ export const readyReplacementHistory = (
       return predecessor;
     }
   }
-  return undefined;
 };
 
 export const readyReplacementPriorOperators = (

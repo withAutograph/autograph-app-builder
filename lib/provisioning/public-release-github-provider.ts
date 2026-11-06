@@ -10,10 +10,10 @@ import type { PublicReleaseEffectContext, PublicReleaseInvocation } from "./publ
 
 const oid = z.string().regex(/^[a-f0-9]{40}$/u);
 const repositorySchema = z.object({
-  id: z.union([z.string(), z.number()]).transform(String),
   description: z.string(),
-  node_id: z.string().min(1),
+  id: z.union([z.string(), z.number()]).transform(String),
   name: z.string().min(1),
+  node_id: z.string().min(1),
   owner: z.object({ login: z.string().min(1) }),
 });
 const referenceSchema = z.object({ object: z.object({ sha: oid, type: z.literal("commit") }) });
@@ -62,7 +62,7 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
     ) {
       throw unavailable();
     }
-    return createGitHubTokenOctokit({ token: credential.token, fetch: deps.fetch });
+    return createGitHubTokenOctokit({ fetch: deps.fetch, token: credential.token });
   };
   const repository = async (context: PublicReleaseEffectContext) => {
     const github = await client(context);
@@ -89,36 +89,14 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
     const github = await client(context);
     const result = await github.request("GET /repos/{owner}/{repo}/git/ref/{ref}", {
       owner: repo.owner.login,
-      repo: repo.name,
       ref: `heads/${branch}`,
+      repo: repo.name,
       request: { signal: context.invocation.signal },
     });
     await check(context);
     return referenceSchema.parse(result.data).object.sha;
   };
   return {
-    async reconcile(
-      context: PublicReleaseEffectContext,
-    ): Promise<"applied" | "not-applied" | "unknown"> {
-      try {
-        const repo = await repository(context);
-        const current = await readRef(context, repo, context.plan.source.productionBranch);
-        if (current === context.plan.source.sourceSha) {
-          return !publicReleaseRequiresNativeGitEvent(context.plan) ||
-            confirmedPublications.has(context.operationRef)
-            ? "applied"
-            : "unknown";
-        }
-        // Once dispatch may have occurred, a branch that moved back does not establish non-application.
-        return context.priorPhase === "idle" &&
-          current === context.plan.source.expectedProductionSha
-          ? "not-applied"
-          : "unknown";
-      } catch (error) {
-        context.invocation.signal.throwIfAborted();
-        throw githubReleaseFailure(error) ?? unavailable();
-      }
-    },
     async publish(context: PublicReleaseEffectContext) {
       try {
         if (context.priorPhase !== "idle") {
@@ -145,13 +123,13 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
         const result = await github.request("POST /graphql", {
           query:
             "mutation($repositoryId: ID!, $name: GitRefname!, $afterOid: GitObjectID!, $beforeOid: GitObjectID!) { updateRefs(input: {repositoryId: $repositoryId, refUpdates: [{name: $name, afterOid: $afterOid, beforeOid: $beforeOid, force: false}]}) { clientMutationId } }",
+          request: { signal: context.invocation.signal },
           variables: {
-            repositoryId: repo.node_id,
-            name: `refs/heads/${context.plan.source.productionBranch}`,
             afterOid: source,
             beforeOid: context.plan.source.expectedProductionSha,
+            name: `refs/heads/${context.plan.source.productionBranch}`,
+            repositoryId: repo.node_id,
           },
-          request: { signal: context.invocation.signal },
         });
         await check(context);
         const diagnostic = githubReleaseGraphqlFailure(result.data, result.headers);
@@ -169,6 +147,28 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
       } catch (error) {
         context.invocation.signal.throwIfAborted();
         // Do not expose provider bodies, credentials or request URLs to the workflow journal.
+        throw githubReleaseFailure(error) ?? unavailable();
+      }
+    },
+    async reconcile(
+      context: PublicReleaseEffectContext,
+    ): Promise<"applied" | "not-applied" | "unknown"> {
+      try {
+        const repo = await repository(context);
+        const current = await readRef(context, repo, context.plan.source.productionBranch);
+        if (current === context.plan.source.sourceSha) {
+          return !publicReleaseRequiresNativeGitEvent(context.plan) ||
+            confirmedPublications.has(context.operationRef)
+            ? "applied"
+            : "unknown";
+        }
+        // Once dispatch may have occurred, a branch that moved back does not establish non-application.
+        return context.priorPhase === "idle" &&
+          current === context.plan.source.expectedProductionSha
+          ? "not-applied"
+          : "unknown";
+      } catch (error) {
+        context.invocation.signal.throwIfAborted();
         throw githubReleaseFailure(error) ?? unavailable();
       }
     },

@@ -6,15 +6,15 @@ import type {
 
 const identity = z.string().min(1);
 const bindingRow = z.object({
+  contentHint: z.object({
+    integrationConfigurationId: identity,
+    storeId: identity,
+    type: z.literal("integration-store-secret"),
+  }),
+  gitBranch: z.null().optional(),
   id: identity,
   key: z.string().regex(/^(?:[A-Z][A-Z0-9_]*_)?NEON_PROJECT_ID$/u),
-  contentHint: z.object({
-    type: z.literal("integration-store-secret"),
-    storeId: identity,
-    integrationConfigurationId: identity,
-  }),
   target: z.array(z.string()).refine((targets) => targets.includes("preview")),
-  gitBranch: z.null().optional(),
 });
 const identityRow = bindingRow.extend({ value: identity });
 const metadataRows = z.object({ envs: z.array(z.json()) });

@@ -16,7 +16,7 @@ export const readOperatorPreparationProgress = (
   record: PreparationRecord,
   now: number,
 ): OperatorPreparationProgress | undefined => {
-  const operator = record.operator;
+  const { operator } = record;
   if (operator === undefined) {
     return undefined;
   }

@@ -8,14 +8,14 @@ import {
 } from "./public-release-contract";
 
 const common = {
-  ownerContext: operatorOwnerContextSchema,
   adapterSessionId: z.string().min(1),
   callId: z.string().min(1),
   execution: z.strictObject({
     logicalSessionId: z.string().min(1),
-    ownerRunId: z.string().min(1).optional(),
     ownerAnchorRunId: z.string().min(1).optional(),
+    ownerRunId: z.string().min(1).optional(),
   }),
+  ownerContext: operatorOwnerContextSchema,
 };
 export const publicReleaseTransportRequestSchema = z
   .discriminatedUnion("action", [
@@ -49,25 +49,25 @@ export const publicReleaseTransportRequestSchema = z
 export { publicReleaseApprovalInputSchema as publicReleasePlanResultSchema } from "./public-release-contract";
 export const publicReleaseResultSchema = z.union([
   z.strictObject({
-    status: z.enum(["pending", "ready"]),
-    purpose: z.enum(["auth-bootstrap", "application"]).optional(),
-    operationRef: z.uuid(),
+    authenticatedBehavior: z.literal("unassessed"),
     observation: z.discriminatedUnion("status", [
       z.strictObject({ status: z.literal("pending") }),
       z.strictObject({
-        status: z.literal("ready"),
         deploymentId: z.string().min(1),
-        projectId: z.string().min(1),
         environment: z.literal("production"),
+        projectId: z.string().min(1),
         publicOrigin: z.url(),
         releaseId: z.string().min(1),
+        status: z.literal("ready"),
       }),
     ]),
-    authenticatedBehavior: z.literal("unassessed"),
+    operationRef: z.uuid(),
+    purpose: z.enum(["auth-bootstrap", "application"]).optional(),
+    status: z.enum(["pending", "ready"]),
   }),
   z.strictObject({
-    status: z.literal("reconciliation-required"),
-    operationRef: z.uuid(),
     effect: publicReleaseEffectSchema,
+    operationRef: z.uuid(),
+    status: z.literal("reconciliation-required"),
   }),
 ]);

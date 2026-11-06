@@ -43,30 +43,25 @@ describe("unapproved app successor service integration", () => {
         return id === undefined
           ? null
           : {
-              approved: true,
               action: input.action,
+              approvalId: id,
+              approved: true,
               callId: input.callId,
               planDigest: input.planDigest,
-              approvalId: id,
             };
       },
     );
     const executeEffect = vi.fn();
     const deps: ProtectedHostedOperatorDependencies = {
-      authorize: async () => context,
       assertAuthorized: vi.fn(async () => {}),
+      authorize: async () => context,
+      bindings: vi.fn(),
+      executeEffect,
+      now: () => Date.parse(observedAt),
       plan: vi.fn(async () => next),
       readApproval,
-      executeEffect,
       reconcile: vi.fn(async () => ({ status: "unknown" as const })),
-      verify: vi.fn(),
-      bindings: vi.fn(),
-      withResourceLease: vi.fn(),
-      now: () => Date.parse(observedAt),
       store: {
-        read: async () => structuredClone(row),
-        reserve: async () => structuredClone(row),
-        reserveFenceGeneration: vi.fn(),
         compareAndSet: async (input: { expectedRevision: number; record: typeof record }) => {
           if (raceOnNextCas) {
             raceOnNextCas = false;
@@ -84,36 +79,41 @@ describe("unapproved app successor service integration", () => {
           };
           return structuredClone(row);
         },
+        read: async () => structuredClone(row),
+        reserve: async () => structuredClone(row),
+        reserveFenceGeneration: vi.fn(),
       },
+      verify: vi.fn(),
+      withResourceLease: vi.fn(),
     };
     const handler = createProtectedHostedOperatorHandler(deps);
     const request = async () => {
       const response = await handler(
         new Request("https://operator.example/v1/runtime", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             action: "plan",
+            normalActorProgram: added,
             operation: "prepare",
             selection: requiredFixture(record.operator).plan.selection,
-            normalActorProgram: added,
           }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
         }),
       );
       return operatorPublicResultSchema.parse(await response.json());
     };
     return {
-      request,
-      readApproval,
-      executeEffect,
       before: record,
-      next,
       deny(callId: string) {
         deniedCall = callId;
       },
+      executeEffect,
+      next,
       race() {
         raceOnNextCas = true;
       },
+      readApproval,
+      request,
       get row() {
         return row;
       },
@@ -160,8 +160,8 @@ describe("unapproved app successor service integration", () => {
     },
   );
   it.each([
-    { expiration: "2026-10-13T00:00:00Z", expected: "planned" },
-    { expiration: "2026-10-15T00:00:00Z", expected: "blocked" },
+    { expected: "planned", expiration: "2026-10-13T00:00:00Z" },
+    { expected: "blocked", expiration: "2026-10-15T00:00:00Z" },
   ])("handles lease expiry $expiration without effects", async ({ expiration, expected }) => {
     const f = serviceFixture();
     f.row.record.leaseId = "00000000-0000-4000-8000-000000000009";

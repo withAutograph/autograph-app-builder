@@ -6,11 +6,11 @@ import { HostedOperatorError } from "./hosted-operator-contract";
 const unavailable = () => new HostedOperatorError("builder_destination_configuration_required");
 const absent = (value: string | null | undefined) => value === null || value === undefined;
 const domainSchema = z.object({
-  name: z.string().min(1),
-  verified: z.boolean(),
-  gitBranch: z.string().nullable().optional(),
   customEnvironmentId: z.string().nullable().optional(),
+  gitBranch: z.string().nullable().optional(),
+  name: z.string().min(1),
   redirect: z.string().nullable().optional(),
+  verified: z.boolean(),
 });
 const readDomains = async (response: Response) => {
   if (!response.ok || response.body === null) {

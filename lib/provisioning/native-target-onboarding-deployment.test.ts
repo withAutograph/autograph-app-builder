@@ -10,24 +10,24 @@ import {
 } from "./native-target-onboarding-deployment";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 
 const generic = {
-  id: "generic-generated-installer",
   executablePath: "/trusted/generic-installer",
-  sha256: "a".repeat(64),
+  id: "generic-generated-installer",
   operationScope: "generated-app-release-install-v1" as const,
+  sha256: "a".repeat(64),
   subcommand: "protected-generated-app-install" as const,
 };
 const access = {
-  id: "access-worker",
   executablePath: "/trusted/access-worker",
-  sha256: "b".repeat(64),
+  id: "access-worker",
   operationScope: "generated-app-access-v1" as const,
+  sha256: "b".repeat(64),
   subcommand: "protected-generated-app-access" as const,
 };
 
@@ -44,7 +44,7 @@ describe("native target deployment-owned resource selection", () => {
   });
 
   it("requires an explicit captured generic for fresh apps instead of inferring it from per-app aliases", () => {
-    const workers = { existing: generic, alias: generic };
+    const workers = { alias: generic, existing: generic };
     expect(() => selectNativeTargetInstaller(workers, "fresh-app")).toThrow(
       "generic_installer_configuration_required",
     );
@@ -72,9 +72,9 @@ describe("native target deployment-owned resource selection", () => {
       "requests-app": {
         accessRoles: ["viewer"],
         appDatabase: {
-          resourceId: "existing-resource",
           database: "existing_database",
           migratorRole: "existing_migrator",
+          resourceId: "existing-resource",
           runtimeRole: "existing_runtime",
         },
         branch: "main",
@@ -108,14 +108,9 @@ describe("native target deployment-owned resource selection", () => {
     }
     let row: Row | undefined;
     const fakeDatabase = {
-      select: () => ({
-        from: () => ({
-          where: () => ({ limit: () => Promise.resolve(row === undefined ? [] : [row]) }),
-        }),
-      }),
       insert: () => ({
         values: (value: Row) => ({
-          onConflictDoNothing: () => {
+          onConflictDoNothing: async () => {
             // These are the actual builder_provisioning_journal CHECK constraints.
             expect(value.requestId).toMatch(
               /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
@@ -124,19 +119,23 @@ describe("native target deployment-owned resource selection", () => {
             expect(["pending", "settled"]).toContain(value.state);
             expect(value.record).toBeTypeOf("object");
             row ??= value;
-            return Promise.resolve();
           },
+        }),
+      }),
+      select: () => ({
+        from: () => ({
+          where: () => ({ limit: async () => (row === undefined ? [] : [row]) }),
         }),
       }),
       update: () => ({
         set: (value: Partial<Row>) => ({
           where: () => ({
-            returning: () => {
+            returning: async () => {
               if (row === undefined) {
                 throw new Error("Approval checkpoint update requires a prior insert.");
               }
               row = { ...row, ...value };
-              return Promise.resolve([{ revision: row.revision }]);
+              return [{ revision: row.revision }];
             },
           }),
         }),
@@ -154,23 +153,23 @@ describe("native target deployment-owned resource selection", () => {
       digest,
     );
     const observation = {
-      version: 1 as const,
       native: {
-        adapterSessionId: "adapter-one",
         adapterGeneration: 1,
-        nextNativeIndex: 1,
+        adapterSessionId: "adapter-one",
         capture: {
+          entries: [],
+          ownerUserId: authority.ownerUserId,
           request: {
             action: "native-target" as const,
-            planRef: "plan-one",
-            planDigest: digest,
             idempotencyKey: "requests-app",
+            planDigest: digest,
+            planRef: "plan-one",
           },
-          ownerUserId: authority.ownerUserId,
-          entries: [],
         },
+        nextNativeIndex: 1,
       },
       terminals: [],
+      version: 1 as const,
     };
     expect(await checkpoint.read()).toBeUndefined();
     await checkpoint.save(observation);
@@ -191,57 +190,57 @@ describe("native target approval history carrier", () => {
   it("uses the verified Builder carrier only after owner and session scope checks", async () => {
     const principal = { ...authority, scopes: ["autograph:session"] };
     const historyOwner = {
-      kind: "direct" as const,
       adapterGeneration: 1,
       adapterSessionId: "wrun_fixture",
       authority,
+      kind: "direct" as const,
       principal,
       sessionId: "public-session",
     };
     const owner = {
-      authority,
       adapterGeneration: 1,
       adapterSessionId: historyOwner.adapterSessionId,
-      publicSessionId: historyOwner.sessionId,
+      authority,
       historyOwner,
+      publicSessionId: historyOwner.sessionId,
     };
     const calls: { resource: string; authorization: string | null }[] = [];
     const controller = new AbortController();
     const transport = createNativeTargetApprovalHistoryTransport({
-      builderOrigin: "https://builder.example",
       appId: "requests-app",
-      owner,
-      workload: { authorization: "Bearer verified-builder-token", signal: controller.signal },
-      assertCanonicalAppOwner: () => Promise.resolve(),
-      fetch: (resource, init) => {
+      assertCanonicalAppOwner: async () => {},
+      builderOrigin: "https://builder.example",
+      fetch: async (resource, init) => {
         const requested = resource instanceof Request ? resource.url : resource;
         const url = requested instanceof URL ? requested.href : requested;
         calls.push({
-          resource: url,
           authorization: new Headers(init?.headers).get("authorization"),
+          resource: url,
         });
-        return Promise.resolve(new Response("", { status: 401 }));
+        return new Response("", { status: 401 });
       },
+      owner,
+      workload: { authorization: "Bearer verified-builder-token", signal: controller.signal },
     });
     const read = transport.observePrivateHistory;
     expect(read).toBeDefined();
     await expect(
       read?.({
-        principal,
         adapterSessionId: "wrong",
+        onEvent: () => {},
+        principal,
         sessionId: "public-session",
         startIndex: 0,
-        onEvent: () => {},
       }),
     ).rejects.toThrow();
     expect(calls).toEqual([]);
     await expect(
       read?.({
-        principal,
         adapterSessionId: "wrun_fixture",
+        onEvent: () => {},
+        principal,
         sessionId: "public-session",
         startIndex: 0,
-        onEvent: () => {},
       }),
     ).rejects.toThrow();
     expect(calls).toHaveLength(1);
@@ -249,11 +248,11 @@ describe("native target approval history carrier", () => {
     expect(calls[0]?.authorization).toBe("Bearer verified-builder-token");
     expect(() =>
       createNativeTargetApprovalHistoryTransport({
-        builderOrigin: "https://builder.example",
         appId: "requests-app",
+        assertCanonicalAppOwner: async () => {},
+        builderOrigin: "https://builder.example",
         owner,
         workload: { authorization: null, signal: controller.signal },
-        assertCanonicalAppOwner: () => Promise.resolve(),
       }),
     ).toThrow();
   });

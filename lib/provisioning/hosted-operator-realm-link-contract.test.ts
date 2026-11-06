@@ -121,8 +121,8 @@ describe("owner-bound private Realm identity link contract", () => {
   });
   it("freezes both scoped Trusted Sources rules in the existing plan digest", () => {
     const trustedSources = {
-      builderProduction: { projectId: "prj_builder", from: "production", to: "preview" },
-      operatorPreview: { projectId: "prj_operator", from: "preview", to: "preview" },
+      builderProduction: { from: "production", projectId: "prj_builder", to: "preview" },
+      operatorPreview: { from: "preview", projectId: "prj_operator", to: "preview" },
     };
     const scoped = hostedOperatorPlanSchema.parse({
       ...plan,
@@ -143,10 +143,10 @@ describe("owner-bound private Realm identity link contract", () => {
     expect(operatorPlanDigest(changed)).not.toBe(operatorPlanDigest(scoped));
   });
   it.each([
-    { source: "builderProduction", from: "preview", to: "preview" },
-    { source: "builderProduction", from: "production", to: "production" },
-    { source: "operatorPreview", from: "production", to: "preview" },
-    { source: "operatorPreview", from: "preview", to: "production" },
+    { from: "preview", source: "builderProduction", to: "preview" },
+    { from: "production", source: "builderProduction", to: "production" },
+    { from: "production", source: "operatorPreview", to: "preview" },
+    { from: "preview", source: "operatorPreview", to: "production" },
   ])("rejects broadened $source environment scope $from to $to", ({ source, from, to }) => {
     expect(
       hostedOperatorPlanSchema.safeParse({
@@ -154,9 +154,9 @@ describe("owner-bound private Realm identity link contract", () => {
         gatewayBindings: {
           ...plan.gatewayBindings,
           trustedSources: {
-            builderProduction: { projectId: "prj_builder", from: "production", to: "preview" },
-            operatorPreview: { projectId: "prj_operator", from: "preview", to: "preview" },
-            [source]: { projectId: "prj_source", from, to },
+            builderProduction: { from: "production", projectId: "prj_builder", to: "preview" },
+            operatorPreview: { from: "preview", projectId: "prj_operator", to: "preview" },
+            [source]: { from, projectId: "prj_source", to },
           },
         },
       }).success,

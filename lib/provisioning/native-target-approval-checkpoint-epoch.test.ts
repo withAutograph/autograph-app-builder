@@ -11,10 +11,10 @@ import {
 import { createNativeTargetApprovalCheckpoint } from "./native-target-onboarding-deployment";
 
 const authority = {
-  issuer: "https://builder.test/api/auth",
   audience: "https://builder.test/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.test/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const appId = "acceptance";
 const planDigest = "a".repeat(64);
@@ -22,40 +22,40 @@ const observation = (
   adapterSessionId: string,
   nextNativeIndex: number,
 ): PrivateNativeTargetApprovalObservation => ({
-  version: 1,
   native: {
-    adapterSessionId,
     adapterGeneration: 1,
-    nextNativeIndex,
+    adapterSessionId,
     capture: {
-      request: {
-        action: "native-target",
-        planRef: "retained-plan",
-        planDigest,
-        idempotencyKey: appId,
-      },
-      ownerUserId: authority.ownerUserId,
       entries: [
         {
-          requestId: "prior-approved-request",
-          callId: "prior-approved-call",
           approved: true,
+          callId: "prior-approved-call",
           cancelled: false,
           completedApproved: true,
           completedCancelled: false,
+          requestId: "prior-approved-request",
         },
       ],
+      ownerUserId: authority.ownerUserId,
+      request: {
+        action: "native-target",
+        idempotencyKey: appId,
+        planDigest,
+        planRef: "retained-plan",
+      },
     },
+    nextNativeIndex,
   },
   terminals: [
     {
-      requestId: "prior-approved-request",
       callId: "prior-approved-call",
-      responderPrincipalId: authority.ownerUserId,
-      outcome: "approved",
       observedAt: "2026-10-29T21:03:00.000Z",
+      outcome: "approved",
+      requestId: "prior-approved-request",
+      responderPrincipalId: authority.ownerUserId,
     },
   ],
+  version: 1,
 });
 
 interface Row {
@@ -134,16 +134,16 @@ const fixture = () => {
     }),
   });
   const databasePort = {
+    insert: (table: typeof builderProvisioningJournals) => {
+      expect(table).toBe(builderProvisioningJournals);
+      return { values: insertValues };
+    },
     select: () => ({
       from: (table: typeof builderProvisioningJournals) => {
         expect(table).toBe(builderProvisioningJournals);
         return { where: selectWhere };
       },
     }),
-    insert: (table: typeof builderProvisioningJournals) => {
-      expect(table).toBe(builderProvisioningJournals);
-      return { values: insertValues };
-    },
     update: (table: typeof builderProvisioningJournals) => {
       expect(table).toBe(builderProvisioningJournals);
       return { set: updateSet };
@@ -157,8 +157,8 @@ const fixture = () => {
   >[0];
   const checkpoint = (adapterSessionId: string) =>
     createNativeTargetApprovalCheckpoint(database, authority, appId, planDigest, {
-      adapterSessionId,
       adapterGeneration: 1,
+      adapterSessionId,
       assertCurrent: async () => {
         if (currentAdapter !== adapterSessionId) {
           throw new Error("owner-revoked");
@@ -166,18 +166,18 @@ const fixture = () => {
       },
     });
   return {
-    database,
-    rows,
     checkpoint,
     current: (adapter: string) => {
       currentAdapter = adapter;
     },
-    holdUpdate: (wait: () => Promise<void>) => {
-      beforeUpdate = wait;
-    },
+    database,
     holdInsert: (wait: () => Promise<void>) => {
       beforeInsert = wait;
     },
+    holdUpdate: (wait: () => Promise<void>) => {
+      beforeUpdate = wait;
+    },
+    rows,
     updates: () => updates,
   };
 };
@@ -187,12 +187,12 @@ describe("native target approval checkpoint adapter epochs", () => {
     const f = fixture();
     const prior = observation("old-adapter", 68_259);
     prior.native.capture.entries.push({
-      requestId: "cancelled-request",
-      callId: "cancelled-call",
       approved: false,
+      callId: "cancelled-call",
       cancelled: true,
       completedApproved: false,
       completedCancelled: true,
+      requestId: "cancelled-request",
     });
     await f.checkpoint("old-adapter").save(prior);
     f.current("recovered-adapter");
@@ -202,34 +202,34 @@ describe("native target approval checkpoint adapter epochs", () => {
       throw new Error("Checkpoint missing.");
     }
     const result = await readPrivateOperatorApproval({
-      owner: {
-        kind: "direct",
-        authority,
-        principal: { ...authority, scopes: ["autograph:session"] },
-        sessionId: "saved-public-session",
-        adapterSessionId: "recovered-adapter",
-        adapterGeneration: 1,
-      },
-      observation: {
-        state: saved.native,
-        save: async (native) => {
-          await checkpoint.save({ version: 1, native, terminals: prior.terminals });
-        },
-      },
+      assertOwner: async () => {},
       capture: (state) => {
         const capture = createPrivateOperatorApprovalCapture({
-          request: prior.native.capture.request,
-          ownerUserId: authority.ownerUserId,
           callId: "new-pending-call",
+          ownerUserId: authority.ownerUserId,
+          request: prior.native.capture.request,
           state,
         });
         return { ...capture, observe: () => {} };
+      },
+      observation: {
+        save: async (native) => {
+          await checkpoint.save({ native, terminals: prior.terminals, version: 1 });
+        },
+        state: saved.native,
+      },
+      owner: {
+        adapterGeneration: 1,
+        adapterSessionId: "recovered-adapter",
+        authority,
+        kind: "direct",
+        principal: { ...authority, scopes: ["autograph:session"] },
+        sessionId: "saved-public-session",
       },
       readHistory: async (startIndex) => {
         expect(startIndex).toBe(0);
         return { complete: true, nativeTailIndex: 14, nextNativeIndex: 14 };
       },
-      assertOwner: async () => {},
     });
     expect(result).toBeNull();
     const current = await checkpoint.read();

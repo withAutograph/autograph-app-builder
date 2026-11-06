@@ -52,8 +52,8 @@ export const createHostedOperatorApprovalObserver = (input: {
 }) => {
   const options = {
     config: { baseUrl: input.builderOrigin },
-    workloadIdentity: input.workloadIdentity,
     verifyReadAuthority: input.verifyReadAuthority,
+    workloadIdentity: input.workloadIdentity,
     ...(input.fetchImplementation === undefined
       ? {}
       : { fetchImplementation: input.fetchImplementation }),
@@ -69,8 +69,32 @@ export const createHostedOperatorApprovalObserver = (input: {
       // Transport parsing/owner authorization produces this object per request.
       // Context spreads retain it; another request cannot inherit it through IDs.
       if (context.ownerContext !== undefined) {
-        capabilities.set(context.ownerContext, { token: token(), signal });
+        capabilities.set(context.ownerContext, { signal, token: token() });
       }
+    },
+    forContext(context: HostedOperatorContext): Observe {
+      const capability =
+        context.ownerContext === undefined ? undefined : capabilities.get(context.ownerContext);
+      if (capability === undefined) {
+        return ambient;
+      }
+      return async (request) => {
+        capability.signal.throwIfAborted();
+        const { observe } = createSameOriginEveTransport({
+          ...options,
+          fetchImplementation: createBuilderApprovalStreamFetch({
+            origin: input.builderOrigin,
+            adapterSessionId: request.adapterSessionId,
+            signal: capability.signal,
+            fetchImplementation: input.fetchImplementation ?? fetch,
+          }),
+          workloadIdentity: { token: async () => await Promise.resolve(capability.token) },
+        });
+        if (observe === undefined) {
+          throw new HostedOperatorError("operator_unavailable");
+        }
+        return await observe(request);
+      };
     },
     privateHistoryForContext(context: HostedOperatorContext): ObservePrivateHistory {
       const capability =
@@ -85,13 +109,13 @@ export const createHostedOperatorApprovalObserver = (input: {
         capability.signal.throwIfAborted();
         const history = createSameOriginEveTransport({
           ...options,
-          workloadIdentity: { token: () => Promise.resolve(capability.token) },
           fetchImplementation: createBuilderApprovalStreamFetch({
-            origin: input.builderOrigin,
             adapterSessionId: request.adapterSessionId,
-            signal: capability.signal,
             fetchImplementation: input.fetchImplementation ?? fetch,
+            origin: input.builderOrigin,
+            signal: capability.signal,
           }),
+          workloadIdentity: { token: async () => await Promise.resolve(capability.token) },
         }).observePrivateHistory;
         if (history === undefined) {
           throw new HostedOperatorError("operator_unavailable");
@@ -99,30 +123,6 @@ export const createHostedOperatorApprovalObserver = (input: {
         const result = await history(request);
         capability.signal.throwIfAborted();
         return result;
-      };
-    },
-    forContext(context: HostedOperatorContext): Observe {
-      const capability =
-        context.ownerContext === undefined ? undefined : capabilities.get(context.ownerContext);
-      if (capability === undefined) {
-        return ambient;
-      }
-      return async (request) => {
-        capability.signal.throwIfAborted();
-        const observe = createSameOriginEveTransport({
-          ...options,
-          workloadIdentity: { token: () => Promise.resolve(capability.token) },
-          fetchImplementation: createBuilderApprovalStreamFetch({
-            origin: input.builderOrigin,
-            adapterSessionId: request.adapterSessionId,
-            signal: capability.signal,
-            fetchImplementation: input.fetchImplementation ?? fetch,
-          }),
-        }).observe;
-        if (observe === undefined) {
-          throw new HostedOperatorError("operator_unavailable");
-        }
-        return await observe(request);
       };
     },
   };

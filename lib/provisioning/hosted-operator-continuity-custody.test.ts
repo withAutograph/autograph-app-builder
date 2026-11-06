@@ -11,10 +11,10 @@ import type { ContinuityRecord } from "./hosted-operator-continuity-contract";
 import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-custody";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const context: HostedOperatorContext = {
   authority,
@@ -22,36 +22,35 @@ const context: HostedOperatorContext = {
     appId: "orchard",
     branch: "preview",
     environment: "preview",
-    projectId: "app-project",
-    sessionId: "saved-session",
     installationId: "installation",
+    projectId: "app-project",
     scopeId: "team",
     scopeType: "team",
+    sessionId: "saved-session",
   },
 };
 const preparedPlan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
   access: [{ actorId: "actor-one", organizationId: "organization-one", roles: ["custom_role"] }],
+  action: "prepare",
   appDatabase: {
     database: "app_db",
     migratorRole: "app_migrator",
-    runtimeRole: "app_runtime",
     resourceId: "app-resource",
+    runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "auth_db",
     migratorRole: "auth_migrator",
-    runtimeRole: "auth_runtime",
     resourceId: "auth-resource",
+    runtimeRole: "auth_runtime",
   },
   contextId: "ordinary-planning-context",
   cost: { class: "shared-recovery-group", description: "Controlled fixture", owner: "Fixture" },
   effects: [
-    { id: "resources", kind: "resources", description: "Prepare resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Authorize app" },
-    { id: "bindings", kind: "bindings", description: "Bind runtime" },
+    { description: "Prepare resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Authorize app", id: "access", kind: "access" },
+    { description: "Bind runtime", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "shared-installer", sha256: "a".repeat(64) },
   neon: {
@@ -70,34 +69,35 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     projectId: context.target.projectId,
     sessionId: context.target.sessionId,
   },
+  version: 1,
 });
 const selection = {
-  version: 1 as const,
-  kind: "app-continuity-plan" as const,
+  actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
   authority,
-  target: context.target,
+  gateway: {
+    environment: "preview" as const,
+    ownerId: "team",
+    projectId: "gateway-project",
+    publicOrigin: "https://gateway.example",
+  },
+  kind: "app-continuity-plan" as const,
   originalSetup: {
-    operationRef: "10000000-0000-4000-8000-000000000001",
-    planDigest: "c".repeat(64),
     approvalId: "setup-human",
     approvedByCallId: "setup-call",
+    operationRef: "10000000-0000-4000-8000-000000000001",
+    planDigest: "c".repeat(64),
   },
   preparedPlan,
   runtime: {
-    sandboxId: "owned-sandbox",
-    root: "/controlled/source",
-    projectId: "builder-project",
-    ownerId: "team",
     appPort: 3000,
     bridgePort: 3100,
-  },
-  gateway: {
-    projectId: "gateway-project",
     ownerId: "team",
-    environment: "preview" as const,
-    publicOrigin: "https://gateway.example",
+    projectId: "builder-project",
+    root: "/controlled/source",
+    sandboxId: "owned-sandbox",
   },
-  actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
+  target: context.target,
+  version: 1 as const,
 };
 const makePlan = () =>
   hostedContinuityPlanSchema.parse({
@@ -109,91 +109,91 @@ const makePlan = () =>
 const makeRecord = () => {
   const plan = makePlan();
   return continuityRecordSchema.parse({
-    kind: "app-continuity",
-    requestId: plan.intentId,
-    revision: 1,
-    idempotencyKey: "request",
-    plan,
-    planDigest: continuityPlanDigest(plan),
-    state: "starting",
-    fence: 1,
     attemptId: "30000000-0000-4000-8000-000000000003",
+    deliveryCandidates: [],
     environmentRows: [],
     environmentWrites: [],
-    deliveryCandidates: [],
+    fence: 1,
+    idempotencyKey: "request",
+    kind: "app-continuity",
+    plan,
+    planDigest: continuityPlanDigest(plan),
+    requestId: plan.intentId,
+    revision: 1,
+    state: "starting",
   });
 };
 const capabilities = {
+  lifecycle: "controlled-lifecycle",
   suiteSelector: "controlled-selector",
   transport: "controlled-transport",
-  lifecycle: "controlled-lifecycle",
 };
 const changedAuthority: { label: string; change: (record: ContinuityRecord) => void }[] = [
   {
-    label: "owner",
     change: (record) => {
       record.plan.authority.ownerUserId = "foreign-owner";
     },
+    label: "owner",
   },
   {
-    label: "workspace",
     change: (record) => {
       record.plan.authority.workspaceId = "foreign-workspace";
     },
+    label: "workspace",
   },
   {
-    label: "issuer",
     change: (record) => {
       record.plan.authority.issuer = "https://foreign.example/auth";
     },
+    label: "issuer",
   },
   {
-    label: "audience",
     change: (record) => {
       record.plan.authority.audience = "https://foreign.example/mcp";
     },
+    label: "audience",
   },
   {
-    label: "session",
     change: (record) => {
       record.plan.target.sessionId = "foreign-session";
     },
+    label: "session",
   },
   {
-    label: "app",
     change: (record) => {
       record.plan.target.appId = "other-app";
     },
+    label: "app",
   },
   {
-    label: "intent",
     change: (record) => {
       record.requestId = "40000000-0000-4000-8000-000000000004";
     },
+    label: "intent",
   },
   {
-    label: "attempt",
     change: (record) => {
       record.attemptId = "50000000-0000-4000-8000-000000000005";
     },
+    label: "attempt",
   },
   {
-    label: "fence",
     change: (record) => {
       record.fence += 1;
     },
+    label: "fence",
   },
   {
-    label: "setup",
     change: (record) => {
       record.plan.originalSetup.operationRef = "60000000-0000-4000-8000-000000000006";
     },
+    label: "setup",
   },
   {
-    label: "plan",
     change: (record) => {
       record.planDigest = "e".repeat(64);
     },
+    label: "plan",
   },
 ];
 describe("managed continuity capability custody", () => {

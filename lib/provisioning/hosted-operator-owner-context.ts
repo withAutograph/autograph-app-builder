@@ -237,15 +237,15 @@ const resolveCallbackOwner = async (
     return owner;
   }
   const { currentSession } = await readHostedOperatorCallbackSessions({
-    store: sessions,
-    owner,
     execution,
+    owner,
     reconcileOwnerDelivery,
+    store: sessions,
   });
   return {
     ...owner,
-    adapterSessionId: currentSession.adapterSessionId,
     adapterGeneration: currentSession.adapterGeneration,
+    adapterSessionId: currentSession.adapterSessionId,
   };
 };
 
@@ -587,6 +587,11 @@ const openOwnerReaderStores: OpenOwnerReaderStores = async (config) => {
     });
     const sessions = createPostgresHostedEveStore(database);
     return {
+      handoffs: createPostgresBuilderHandoffStore(database),
+      isActiveMember: async (authority) => {
+        const active = await membership.isActiveMember(authority);
+        return active;
+      },
       reconcileOwnerDelivery: async (session) => {
         const [
           { createHostedEveSessionService },
@@ -606,16 +611,11 @@ const openOwnerReaderStores: OpenOwnerReaderStores = async (config) => {
           }),
         });
         await service.reconcileOwnerDelivery({
-          sessionId: session.sessionId,
-          adapterSessionId: session.adapterSessionId,
           adapterGeneration: session.adapterGeneration,
+          adapterSessionId: session.adapterSessionId,
           cancellationRevision: session.cancellationRevision ?? 0,
+          sessionId: session.sessionId,
         });
-      },
-      handoffs: createPostgresBuilderHandoffStore(database),
-      isActiveMember: async (authority) => {
-        const active = await membership.isActiveMember(authority);
-        return active;
       },
       sessions,
     };

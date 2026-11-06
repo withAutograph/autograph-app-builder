@@ -78,9 +78,9 @@ export const reportHostedOperatorNativeFailure = (
     }
     console.warn(
       JSON.stringify({
+        errorClass,
         event: "builder.hosted_operator_native_failure",
         stage,
-        errorClass,
         ...(error instanceof HostedOperatorError && publicCode.success
           ? { code: publicCode.data }
           : {}),

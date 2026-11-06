@@ -37,10 +37,10 @@ export const resolveExistingBuilderDestinationReference = async (input: {
     throw new HostedOperatorError("builder_destination_configuration_required");
   }
   const rows = await input.findProvisioningForAppRepository({
-    authority: input.authority,
     appId: input.appId,
-    repositoryId: source.repository.repositoryId,
+    authority: input.authority,
     githubInstallationId: source.scope.installationId,
+    repositoryId: source.repository.repositoryId,
   });
   const row = rows.length === 1 ? rows[0] : undefined;
   const github = row?.record.response.github;
@@ -63,5 +63,5 @@ export const resolveExistingBuilderDestinationReference = async (input: {
   if (!same) {
     throw new HostedOperatorError("builder_destination_configuration_required");
   }
-  return { appId: input.appId, requestId: row.requestId, requestDigest: row.requestDigest };
+  return { appId: input.appId, requestDigest: row.requestDigest, requestId: row.requestId };
 };

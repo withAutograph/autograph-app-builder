@@ -26,17 +26,17 @@ const origin = z.url().refine((text) => {
 });
 /** Resource custody and intended domain are administrator-owned; project/source come only from Builder receipts. */
 export const standardBuilderRuntimeProfileSchema = z.strictObject({
-  authority: hostedTenantAuthoritySchema,
   appId: id,
-  resourceProfileId: id,
   authOwnership: z.strictObject({
     kind: z.literal("dedicated-app-development"),
     resource: hostedOperatorSourceConfigurationSchema.shape.authDatabase,
   }),
-  publicOrigin: origin,
-  productionDatabaseIdentity: z.string().regex(/^[a-z0-9.-]+\.neon\.tech\/[a-z][a-z0-9_]*$/u),
-  gatewayWorkload: z.strictObject({ audience: z.url(), issuer: z.url(), subject: id }),
+  authority: hostedTenantAuthoritySchema,
   gatewayProductionWorkload: z.strictObject({ audience: z.url(), issuer: z.url(), subject: id }),
+  gatewayWorkload: z.strictObject({ audience: z.url(), issuer: z.url(), subject: id }),
+  productionDatabaseIdentity: z.string().regex(/^[a-z0-9.-]+\.neon\.tech\/[a-z][a-z0-9_]*$/u),
+  publicOrigin: origin,
+  resourceProfileId: id,
 });
 export const selectStandardBuilderRuntimeProfile = (input: {
   environment: Readonly<Record<string, string | undefined>>;
@@ -103,9 +103,9 @@ const deriveDevelopmentRuntime = (input: StandardRuntimeInput) => {
     const stem = `${kind}_${ownerDigest.slice(0, 32)}`;
     return {
       database: stem,
-      runtimeRole: `${stem}_r`,
       migratorRole: `${stem}_m`,
       resourceId: policy.nativeNeon.configuration.nativeStore.resourceId,
+      runtimeRole: `${stem}_r`,
     };
   };
   if (
@@ -118,23 +118,23 @@ const deriveDevelopmentRuntime = (input: StandardRuntimeInput) => {
   }
   const genericResources = validateHostedOperatorSourceConfiguration({
     ...structuredClone(input.base),
-    nativeNeon: policy.nativeNeon,
-    authDatabase: derivedNames("auth"),
     applications: {},
+    authDatabase: derivedNames("auth"),
+    nativeNeon: policy.nativeNeon,
     standardRuntime: undefined,
   });
   if (input.verifiedPublicOrigin === undefined) {
     throw fail();
   }
   const profile = {
-    resourceProfileId: `${policy.policyId}:${ownerDigest}`,
     authOwnership: { kind: "dedicated-app-development" as const, resource: derivedNames("auth") },
-    publicOrigin: origin.parse(input.verifiedPublicOrigin),
-    productionDatabaseIdentity: policy.productionDatabaseIdentity,
-    gatewayWorkload: workloadFor("preview"),
     gatewayProductionWorkload: workloadFor("production"),
+    gatewayWorkload: workloadFor("preview"),
+    productionDatabaseIdentity: policy.productionDatabaseIdentity,
+    publicOrigin: origin.parse(input.verifiedPublicOrigin),
+    resourceProfileId: `${policy.policyId}:${ownerDigest}`,
   };
-  return { profile, resources: genericResources, appResource: derivedNames("app") };
+  return { appResource: derivedNames("app"), profile, resources: genericResources };
 };
 
 export const assembleStandardBuilderRuntimeConfiguration = (
@@ -165,11 +165,11 @@ export const assembleStandardBuilderRuntimeConfiguration = (
   const resources =
     derived?.resources ??
     resolveNativeTargetResourceProfile({
-      base: input.base,
-      authority: input.authority,
       appId: input.appId,
-      resourceProfileId: profile.resourceProfileId,
+      authority: input.authority,
+      base: input.base,
       environment: input.environment,
+      resourceProfileId: profile.resourceProfileId,
     });
   if (!isDeepStrictEqual(profile.authOwnership.resource, resources.authDatabase)) {
     throw fail();
@@ -181,22 +181,6 @@ export const assembleStandardBuilderRuntimeConfiguration = (
     };
   const configuration = validateHostedOperatorSourceConfiguration({
     ...structuredClone(resources),
-    composition: "single-project-services",
-    standardRuntime: {
-      profileId: profile.resourceProfileId,
-      authOwnership: profile.authOwnership,
-      publicRealmWorkload: {
-        ...profile.gatewayProductionWorkload,
-        environment: "production",
-        projectId: destination.projectId,
-        ownerId: destination.teamId,
-      },
-      productionDatabaseIdentity: profile.productionDatabaseIdentity,
-      provisioningRequestId: destination.provisioningRequestId,
-      provisioningDigest: destination.provisioningDigest,
-      appSpecDigest: captured.selection.appSpecDigest,
-      capturedReleaseId: captured.selection.releaseId,
-    },
     applications: {
       [input.appId]: {
         accessRoles: [...captured.description.backend.roles],
@@ -208,21 +192,22 @@ export const assembleStandardBuilderRuntimeConfiguration = (
       },
     },
     catalogAppIds: [input.appId],
+    composition: "single-project-services",
     gateway: {
       authBrowserOrigin: profile.publicOrigin,
-      gatewayOrigin: profile.publicOrigin,
-      publicOrigin: profile.publicOrigin,
       branch: source.branch,
       environment: "preview",
+      gatewayOrigin: profile.publicOrigin,
       gitSha: source.gitSha,
       projectId: destination.projectId,
-      repoId: source.repositoryId,
       protectedApplicationIds: [input.appId],
+      publicOrigin: profile.publicOrigin,
+      repoId: source.repositoryId,
       workload: {
         ...profile.gatewayWorkload,
         environment: "preview",
-        projectId: destination.projectId,
         ownerId: destination.teamId,
+        projectId: destination.projectId,
       },
     },
     sandbox: {
@@ -233,6 +218,21 @@ export const assembleStandardBuilderRuntimeConfiguration = (
           input.appId,
           resources.sandbox.genericInstallerWorker,
         ),
+      },
+    },
+    standardRuntime: {
+      appSpecDigest: captured.selection.appSpecDigest,
+      authOwnership: profile.authOwnership,
+      capturedReleaseId: captured.selection.releaseId,
+      productionDatabaseIdentity: profile.productionDatabaseIdentity,
+      profileId: profile.resourceProfileId,
+      provisioningDigest: destination.provisioningDigest,
+      provisioningRequestId: destination.provisioningRequestId,
+      publicRealmWorkload: {
+        ...profile.gatewayProductionWorkload,
+        environment: "production",
+        ownerId: destination.teamId,
+        projectId: destination.projectId,
       },
     },
   });

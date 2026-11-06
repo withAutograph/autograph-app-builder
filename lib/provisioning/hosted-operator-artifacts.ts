@@ -403,7 +403,7 @@ export const createOperatorArtifactPublication = (
         if (invalid.some(Boolean)) {
           throw operatorArtifactUnavailable();
         }
-        const description = envelope.description;
+        const { description } = envelope;
         if (description !== undefined) {
           if (description.backend.kind !== "generated-postgres") {
             throw operatorArtifactUnavailable();

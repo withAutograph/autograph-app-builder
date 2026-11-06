@@ -8,15 +8,15 @@ const origin = z.url().refine((value) => {
 });
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
 export const publicRealmResourceSchema = z.strictObject({
-  version: z.literal(1),
+  database: sqlName,
   environment: z.enum(["preview", "isolated-development"]),
   hostname: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
-  port: z.literal(5432),
-  database: sqlName,
-  schema: z.literal("public"),
-  runtimeRole: sqlName,
   migratorRole: sqlName,
-  neon: z.strictObject({ projectId: id, branchId: id }),
+  neon: z.strictObject({ branchId: id, projectId: id }),
+  port: z.literal(5432),
+  runtimeRole: sqlName,
+  schema: z.literal("public"),
+  version: z.literal(1),
 });
 export const publicRealmReleaseBindingSchema = z.strictObject({
   enrollmentRef: z.uuid(),
@@ -25,25 +25,25 @@ export const publicRealmReleaseBindingSchema = z.strictObject({
 });
 /** New public enrollment; prior installer receipts retain their original classification and approval. */
 export const publicRealmEnrollmentSchema = z.strictObject({
-  version: z.literal(1),
-  kind: z.literal("public-isolated-realm-v1"),
-  enrollmentRef: z.uuid(),
   appId: id,
-  ownerSessionId: id,
   authority: z.strictObject({
-    issuer: z.url(),
     audience: z.url(),
+    issuer: z.url(),
     ownerUserId: id,
     workspaceId: id,
   }),
+  enrollmentRef: z.uuid(),
+  kind: z.literal("public-isolated-realm-v1"),
+  ownerSessionId: id,
+  project: z.strictObject({ environment: z.literal("production"), ownerId: id, projectId: id }),
   publicOrigin: origin,
-  project: z.strictObject({ projectId: id, ownerId: id, environment: z.literal("production") }),
+  resource: publicRealmResourceSchema,
   sourceBootstrap: z.strictObject({
+    authResourceId: id,
     operationRef: z.uuid(),
     planDigest: digest,
-    authResourceId: id,
   }),
-  resource: publicRealmResourceSchema,
+  version: z.literal(1),
 });
 export type PublicRealmEnrollment = z.infer<typeof publicRealmEnrollmentSchema>;
 export type PublicRealmReleaseBinding = z.infer<typeof publicRealmReleaseBindingSchema>;

@@ -64,6 +64,26 @@ export function createPostgresBuilderProvisionJournalStore(
     return rows[0] ? parseRow(rows[0]) : undefined;
   };
   return {
+    async compareAndSet(input) {
+      const authority = hostedTenantAuthoritySchema.parse(input.authority);
+      const record = builderProvisionJournalRecordSchema.parse(input.record);
+      const rows = await database
+        .update(builderProvisioningJournals)
+        .set({
+          record,
+          revision: input.expectedRevision + 1,
+          state: record.response.status,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            predicate(authority, input.requestId),
+            eq(builderProvisioningJournals.revision, input.expectedRevision),
+          ),
+        )
+        .returning();
+      return rows[0] ? parseRow(rows[0]) : undefined;
+    },
     async findSettledAppRepository(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const rows = await database
@@ -86,26 +106,6 @@ export function createPostgresBuilderProvisionJournalStore(
         )
         .limit(2);
       return rows.map(parseRow);
-    },
-    async compareAndSet(input) {
-      const authority = hostedTenantAuthoritySchema.parse(input.authority);
-      const record = builderProvisionJournalRecordSchema.parse(input.record);
-      const rows = await database
-        .update(builderProvisioningJournals)
-        .set({
-          record,
-          revision: input.expectedRevision + 1,
-          state: record.response.status,
-          updatedAt: input.now,
-        })
-        .where(
-          and(
-            predicate(authority, input.requestId),
-            eq(builderProvisioningJournals.revision, input.expectedRevision),
-          ),
-        )
-        .returning();
-      return rows[0] ? parseRow(rows[0]) : undefined;
     },
     async listDue(input) {
       const cursor = input.after;

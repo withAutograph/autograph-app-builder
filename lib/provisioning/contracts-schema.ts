@@ -54,7 +54,6 @@ export type BuilderProvisionRequest = z.infer<typeof builderProvisionRequestSche
 
 /** Bounded Vercel support facts, never a provider message or response body. */
 export const vercelProvisionDiagnosticSchema = z.strictObject({
-  statusCode: z.number().int().min(400).max(599),
   code: z
     .enum([
       "forbidden",
@@ -74,6 +73,7 @@ export const vercelProvisionDiagnosticSchema = z.strictObject({
     .max(160)
     .regex(/^[a-z0-9]{3,8}::[A-Za-z0-9_-]{1,120}$/u)
     .optional(),
+  statusCode: z.number().int().min(400).max(599),
 });
 export type VercelProvisionDiagnostic = z.infer<typeof vercelProvisionDiagnosticSchema>;
 
@@ -98,8 +98,8 @@ const failureSchema = z
       "source_mismatch",
       "postcondition_failed",
     ]),
-    retryable: z.boolean(),
     providerDiagnostic: vercelProvisionDiagnosticSchema.optional(),
+    retryable: z.boolean(),
     status: z.literal("failed"),
   })
   .strict();
@@ -208,12 +208,11 @@ export const builderProvisionResponseSchema = z
         z
           .object({
             code: z.string().min(1),
+            lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
             nextRetryAt: instant.optional(),
             operation: z.enum(["github", "vercel"]),
             outcomeKnown: z.boolean(),
             provider: z.enum(["github", "vercel"]),
-            lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
-
             recoveryAction: z.string().min(1),
           })
           .strict(),

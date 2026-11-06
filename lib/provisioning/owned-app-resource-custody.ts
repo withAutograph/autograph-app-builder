@@ -33,8 +33,8 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const fail = () => new HostedOperatorError("reconciliation_required");
 const recordSchema = z.strictObject({
   kind: z.literal("owned-app-resource-source-v1"),
-  scope: z.record(z.string(), z.unknown()),
   reference: ownedAppResourceSourceSchema,
+  scope: z.record(z.string(), z.unknown()),
 });
 
 /** Private stable credential provenance; it never grants a resource effect or stores plaintext. */
@@ -61,18 +61,18 @@ export const createOwnedAppResourceCustody = (deps: {
       throw fail();
     }
     const scope = {
-      authority: hostedTenantAuthoritySchema.parse(context.authority),
       appId: context.target.appId,
-      projectId: context.target.projectId,
+      authority: hostedTenantAuthoritySchema.parse(context.authority),
       installationId: context.target.installationId,
-      teamId: context.target.scopeId,
-      provisioningRequestId: normal.provisioningRequestId,
+      projectId: context.target.projectId,
       provisioningDigest: normal.provisioningDigest,
+      provisioningRequestId: normal.provisioningRequestId,
       resources: ownedAppResourceIdentity(plan),
+      teamId: context.target.scopeId,
     };
     const digest = hash(JSON.stringify(["owned-app-resource-source-v1", scope]));
     const requestId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
-    return { scope, digest, requestId };
+    return { digest, requestId, scope };
   };
   const readCustody = async (context: HostedOperatorContext, plan: HostedOperatorPlan) => {
     await deps.assertCurrentOwner(context);
@@ -175,8 +175,8 @@ export const createOwnedAppResourceCustody = (deps: {
       await deps.assertCurrentOwner(context);
       const rows = await deps.database
         .select({
-          requestId: builderProvisioningJournals.requestId,
           record: builderProvisioningJournals.record,
+          requestId: builderProvisioningJournals.requestId,
         })
         .from(builderProvisioningJournals)
         .where(
@@ -216,10 +216,10 @@ export const createOwnedAppResourceCustody = (deps: {
           kind: "owned-app-resources-v1",
           scopeDigest,
           source: {
-            target: record.request,
+            checkpointSha256: hash(JSON.stringify(record.privateState)),
             operationRef: setup.operationRef,
             planDigest: setup.planDigest,
-            checkpointSha256: hash(JSON.stringify(record.privateState)),
+            target: record.request,
           },
         });
       }
@@ -262,12 +262,12 @@ export const createOwnedAppResourceCustody = (deps: {
       .insert(builderProvisioningJournals)
       .values({
         ...context.authority,
-        requestId: identity.requestId,
-        requestDigest: identity.digest,
-        state: "settled",
-        revision: 1,
-        record: { kind: "owned-app-resource-source-v1", scope: identity.scope, reference },
         createdAt: new Date(),
+        record: { kind: "owned-app-resource-source-v1", reference, scope: identity.scope },
+        requestDigest: identity.digest,
+        requestId: identity.requestId,
+        revision: 1,
+        state: "settled",
         updatedAt: new Date(),
       })
       .onConflictDoNothing();
@@ -281,7 +281,7 @@ export const createOwnedAppResourceCustody = (deps: {
     plan: HostedOperatorPlan,
     record: HostedRuntimeJournalRecord,
   ) => {
-    const operator = record.operator;
+    const { operator } = record;
     if (
       operator === undefined ||
       operator.planDigest !== operatorPlanDigest(plan) ||
@@ -308,31 +308,6 @@ export const createOwnedAppResourceCustody = (deps: {
     }
   };
   return {
-    readReference,
-    async rewrap(
-      context: HostedOperatorContext,
-      plan: HostedOperatorPlan,
-      record: HostedRuntimeJournalRecord,
-    ) {
-      await assertFreshApproval(context, plan, record);
-      const reference = plan.existingResources;
-      if (reference === undefined || reference.scopeDigest !== scopeFor(context, plan).digest) {
-        throw fail();
-      }
-      const source = await sourceInput(context, plan, reference);
-      const privateState = rewrapOwnedAppResourceCredentials({
-        source: {
-          ...source.context,
-          plan: source.setup.plan,
-          record: source.record,
-          config: deps.keyring,
-        },
-        target: { ...context, plan, record, config: deps.keyring },
-      });
-      await sourceInput(context, plan, reference);
-      await reserve(context, plan, reference);
-      return privateState;
-    },
     checkpoint: async (
       context: HostedOperatorContext,
       plan: HostedOperatorPlan,
@@ -373,13 +348,38 @@ export const createOwnedAppResourceCustody = (deps: {
           kind: "owned-app-resources-v1",
           scopeDigest: identity.digest,
           source: {
-            target: context.target,
+            checkpointSha256: hash(JSON.stringify(row.record.privateState)),
             operationRef: operator.operationRef,
             planDigest: operator.planDigest,
-            checkpointSha256: hash(JSON.stringify(row.record.privateState)),
+            target: context.target,
           },
         });
       await reserve(context, plan, next);
+    },
+    readReference,
+    async rewrap(
+      context: HostedOperatorContext,
+      plan: HostedOperatorPlan,
+      record: HostedRuntimeJournalRecord,
+    ) {
+      await assertFreshApproval(context, plan, record);
+      const reference = plan.existingResources;
+      if (reference === undefined || reference.scopeDigest !== scopeFor(context, plan).digest) {
+        throw fail();
+      }
+      const source = await sourceInput(context, plan, reference);
+      const privateState = rewrapOwnedAppResourceCredentials({
+        source: {
+          ...source.context,
+          config: deps.keyring,
+          plan: source.setup.plan,
+          record: source.record,
+        },
+        target: { ...context, config: deps.keyring, plan, record },
+      });
+      await sourceInput(context, plan, reference);
+      await reserve(context, plan, reference);
+      return privateState;
     },
   };
 };

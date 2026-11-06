@@ -37,7 +37,6 @@ export const createPublicReleaseTargetLease = (input: {
     };
     return await physical(
       {
-        lockKeys: input.lockKeys(plan),
         initializeUnderLock: async () => {
           await input.assertCurrent(invocation, plan);
           await input.assertNoConflictingRelease?.(invocation, plan);
@@ -48,14 +47,15 @@ export const createPublicReleaseTargetLease = (input: {
           const updated = await input.store.compareAndSet(row, {
             ...row.record,
             executionLease: {
-              leaseId: randomUUID(),
               fenceGeneration: (row.record.executionLease?.fenceGeneration ?? 0) + 1,
+              leaseId: randomUUID(),
             },
           });
           if (updated === undefined) {
             throw new Error("public_release_lease_unavailable");
           }
         },
+        lockKeys: input.lockKeys(plan),
         readCurrentFence,
       },
       async (assertFence) => {

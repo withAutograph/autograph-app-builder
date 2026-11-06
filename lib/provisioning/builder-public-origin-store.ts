@@ -14,9 +14,9 @@ import type { BuilderPublicOriginScope } from "./builder-public-origin-contract"
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 const recordSchema = z.strictObject({
   kind: z.literal("builder-public-origin-choice-v1"),
-  selectionState: z.literal("selected"),
-  scope: builderPublicOriginScopeSchema,
   publicOrigin: builderPublicOriginSchema,
+  scope: builderPublicOriginScopeSchema,
+  selectionState: z.literal("selected"),
 });
 export interface BuilderPublicOriginStore {
   read: (input: {
@@ -100,18 +100,18 @@ export const createBuilderPublicOriginStore = (
             .insert(table)
             .values({
               ...authority,
-              requestId: key.requestId,
-              requestDigest: key.digest,
               createdAt: now,
-              updatedAt: now,
-              state: "settled",
-              revision: 1,
               record: {
                 kind: "builder-public-origin-choice-v1",
-                selectionState: "selected",
-                scope,
                 publicOrigin,
+                scope,
+                selectionState: "selected",
               },
+              requestDigest: key.digest,
+              requestId: key.requestId,
+              revision: 1,
+              state: "settled",
+              updatedAt: now,
             })
             .onConflictDoNothing();
         }
@@ -135,9 +135,9 @@ export const createBuilderPublicOriginStore = (
           .set({
             record: {
               kind: "builder-public-origin-choice-v1",
-              selectionState: "selected",
-              scope,
               publicOrigin,
+              scope,
+              selectionState: "selected",
             },
             revision: row.revision + 1,
             updatedAt: now,

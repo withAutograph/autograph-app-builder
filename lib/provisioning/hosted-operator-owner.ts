@@ -183,9 +183,9 @@ const readCurrentOwnedSession = async (
     logicalSessionId = binding.logicalSessionId;
   }
   const current = await readCurrentBuildSession.call(deps.eve, {
-    principal,
     authoritySessionId: original.sessionId,
     logicalSessionId,
+    principal,
   });
   if (current.sessionId === original.sessionId) {
     return { session: original, sessionVersion };
@@ -217,9 +217,9 @@ const readCurrentOwnedSession = async (
       ...original,
       adapterGeneration: current.adapterGeneration,
       adapterSessionId: current.adapterSessionId,
+      builderDestination: current.builderDestination ?? original.builderDestination,
       nativeRecoveryBinding: currentBinding,
       privateBuildDecision: current.privateBuildDecision,
-      builderDestination: current.builderDestination ?? original.builderDestination,
       resumability: current.resumability,
       stage: current.stage,
       status: current.status,
@@ -248,8 +248,8 @@ const assertDirectOwnerIdentity = (
   }
   if (session.appId === undefined || session.appId !== selection.appId) {
     reportOperatorPlanningMismatch(owner.sessionId, "canonical_owner_app", {
-      owner_app_missing: session.appId === undefined,
       owner_app_mismatch: session.appId !== selection.appId,
+      owner_app_missing: session.appId === undefined,
     });
     throw resourceMismatch();
   }
@@ -270,11 +270,11 @@ const observeOwnerProjectFetch =
               deps.diagnosticSink,
             )({
               boundary: "operator",
-              phase: "inline",
-              stage: "operator_request",
-              outcome: "setup_unavailable",
               httpStatus: response.status,
-              planningFailure: { stage: "plan_owner_authorization", errorClass: "unexpected" },
+              outcome: "setup_unavailable",
+              phase: "inline",
+              planningFailure: { errorClass: "unexpected", stage: "plan_owner_authorization" },
+              stage: "operator_request",
             });
           } catch {
             /* Diagnostics never change the provider request or response. */
@@ -671,13 +671,13 @@ export const readCanonicalAppOwnerSession = async (
 };
 
 const standardRepository = (receipt: BuilderProvisionResponse) => {
-  const github = receipt.github;
-  const vercel = receipt.vercel;
+  const { github } = receipt;
+  const { vercel } = receipt;
   return github.status === "succeeded" &&
     vercel.status === "succeeded" &&
     github.fullName === vercel.linkedGitHubRepository
-    ? { repositoryId: github.repositoryId, githubInstallationId: github.installationId }
-    : { repositoryId: undefined, githubInstallationId: undefined };
+    ? { githubInstallationId: github.installationId, repositoryId: github.repositoryId }
+    : { githubInstallationId: undefined, repositoryId: undefined };
 };
 
 type StandardDestinationDependencies = HostedOperatorAppOwnerDependencies &
@@ -702,10 +702,10 @@ export const readOwnedStandardBuilderDestinationReference = async (
 ) => {
   const session = await readCanonicalAppOwnerSession(deps, input);
   const reference = await resolveExistingBuilderDestinationReference({
-    session,
-    authority: input.authority,
     appId: input.target.appId,
+    authority: input.authority,
     findProvisioningForAppRepository: deps.findProvisioningForAppRepository,
+    session,
   });
   if (session.builderDestination !== undefined || reference === undefined) {
     return reference;
@@ -761,13 +761,13 @@ const readDirectStandardBuilderDestination = async (
   }
   const access = await readOwnerVercelProjectAccess({
     authority: input.authority,
-    projectId: project.projectId,
-    installationId: project.installationId,
     expectedScope: { ...project.scope, installationId: project.installationId },
-    requireServicesRoot: true,
-    requirePublicAppConfiguration: options.requirePublicAppConfiguration,
-    requireExpectedRepositoryId: standardRepository(row.record.response).repositoryId,
+    installationId: project.installationId,
+    projectId: project.projectId,
     readCredential: deps.readVercelCredential,
+    requireExpectedRepositoryId: standardRepository(row.record.response).repositoryId,
+    requirePublicAppConfiguration: options.requirePublicAppConfiguration,
+    requireServicesRoot: true,
     ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
     ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
   });
@@ -856,10 +856,10 @@ export const readStandardBuilderDestination = async (
   const access = await readPreparedVercelAccess({
     authority: owner.authority,
     intent: handoff.intent,
-    requireServicesRoot: true,
-    requirePublicAppConfiguration: options.requirePublicAppConfiguration,
-    requireExpectedRepositoryId: standardRepository(receipt).repositoryId,
     readCredential: deps.readVercelCredential,
+    requireExpectedRepositoryId: standardRepository(receipt).repositoryId,
+    requirePublicAppConfiguration: options.requirePublicAppConfiguration,
+    requireServicesRoot: true,
     ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
     ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
   });
@@ -909,7 +909,9 @@ export const readStandardBuilderDestination = async (
 export const createHostedOperatorAppOwnerAuthority = (
   deps: HostedOperatorAppOwnerDependencies,
 ) => ({
-  verifyWorkload: createOperatorWorkloadVerifier(deps.workloadPolicy, deps.keyResolver),
+  assertCanonicalAppOwner: async (input: HostedOperatorAppOwnerContext): Promise<void> => {
+    await readCanonicalAppOwnerSession(deps, input);
+  },
   assertNoStandardBuilderDestination: async (
     input: HostedOperatorAppOwnerContext,
   ): Promise<void> => {
@@ -922,9 +924,7 @@ export const createHostedOperatorAppOwnerAuthority = (
       throw new HostedOperatorError("builder_destination_configuration_required");
     }
   },
-  assertCanonicalAppOwner: async (input: HostedOperatorAppOwnerContext): Promise<void> => {
-    await readCanonicalAppOwnerSession(deps, input);
-  },
+  verifyWorkload: createOperatorWorkloadVerifier(deps.workloadPolicy, deps.keyResolver),
 });
 
 /**
@@ -1032,19 +1032,19 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
     }
   };
   return {
-    verifyWorkload,
     assertArtifactAuthorized,
-    readStandardDestination: (context: HostedOperatorAppOwnerContext) =>
-      readStandardBuilderDestination(deps, context),
+    assertAuthorized,
     assertCanonicalAppOwner,
     assertNoStandardBuilderDestination:
       createHostedOperatorAppOwnerAuthority(deps).assertNoStandardBuilderDestination,
-    assertSandboxAuthorized,
-    authorizeArtifactRead,
-    assertAuthorized,
     assertPlanningAuthorized,
+    assertSandboxAuthorized,
     authorize: resolve,
+    authorizeArtifactRead,
     readCurrentPlanningOwner,
+    readStandardDestination: async (context: HostedOperatorAppOwnerContext) =>
+      await readStandardBuilderDestination(deps, context),
+    verifyWorkload,
   };
 };
 
@@ -1241,7 +1241,7 @@ const membershipInspectionApprovalCheckpoint = (
   });
   return retained === undefined
     ? null
-    : { current: retained.operator, retainedPrepare: true, membershipInspection: true };
+    : { current: retained.operator, membershipInspection: true, retainedPrepare: true };
 };
 
 const appGatewaySourceApprovalCheckpoint = (
