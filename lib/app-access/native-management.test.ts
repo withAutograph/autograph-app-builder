@@ -62,7 +62,7 @@ const harness = (roleless = false) => {
   const accessWrites: { actorId: string; roles: string[]; active: boolean }[] = [];
   let loseAfterRevoke = false;
   let loseAfterSend = false;
-  let unknownDelivery = false;
+  let deliveryState: "sent" | "unknown" | "sending" = "sent";
   let renewCount = 0;
   const setup = {
     operationRef: repositoryProductionOperationRef(scope),
@@ -212,7 +212,7 @@ const harness = (roleless = false) => {
         if (request.action === "send" && found !== undefined && found.deliveryStatus === "ready") {
           sends.push(context.row.operationRef);
           found.deliveryAttemptId = context.row.operationRef;
-          found.deliveryStatus = unknownDelivery ? "unknown" : "sent";
+          found.deliveryStatus = deliveryState;
           if (loseAfterSend) {
             loseAfterSend = false;
             throw new Error("lost send response");
@@ -255,9 +255,9 @@ const harness = (roleless = false) => {
     loseRevoke: () => {
       loseAfterRevoke = true;
     },
-    loseSend: (unknown = false) => {
+    loseSend: (state: "sent" | "unknown" | "sending") => {
       loseAfterSend = true;
-      unknownDelivery = unknown;
+      deliveryState = state;
     },
     seedDispatched: (command: AppAccessCommand) =>
       rows.set(command.clientRequestId, {
@@ -294,13 +294,13 @@ describe("native app access recovery", () => {
     expect(h.sends).toHaveLength(1);
   });
 
-  it.each([false, true])(
-    "reconciles a lost send reply without duplicate delivery (unknown=%s)",
-    async (unknown) => {
+  it.each(["sent", "unknown", "sending"] as const)(
+    "reconciles a lost send reply without duplicate delivery (status=%s)",
+    async (state) => {
       const h = harness();
       const invite = h.invitation();
       h.invites.set(invite.id, invite);
-      h.loseSend(unknown);
+      h.loseSend(state);
       const command = {
         action: "resend" as const,
         invitationId: invite.id,
@@ -309,9 +309,10 @@ describe("native app access recovery", () => {
       await expect(h.service.execute(owner, command)).rejects.toMatchObject({
         code: "app_access_unknown",
       });
-      await h.service.execute(owner, command);
+      const result = await h.service.execute(owner, command);
       expect(h.sends).toHaveLength(1);
       expect(h.renewCount()).toBe(1);
+      expect(result.invitations[0]?.deliveryStatus).toBe(state === "sent" ? "sent" : "unknown");
     },
   );
 
