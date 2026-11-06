@@ -23,6 +23,7 @@ import {
   tenantExportStatusSchema,
 } from "./hosted-operator-export-contract";
 import type { HostedTenantExportRequest } from "./hosted-operator-export-contract";
+import { appTenantBindingReadbackSchema } from "./hosted-operator-tenant-binding-contract";
 import { Agent } from "undici";
 import {
   operatorHeaderProbeRequired,
@@ -53,6 +54,7 @@ import {
 import type { OperatorOwnerContext, OperatorRequest } from "./hosted-operator-contract";
 import {
   HostedOperatorError,
+  continuityReadDiagnosticStageSchema,
   operatorNativePreviewSchema,
   assertOperatorNativePreview,
   hostedOperatorPlanSchema,
@@ -334,6 +336,7 @@ export const createHostedOperatorClient = (input: {
     }
     return value;
   };
+  // oxlint-disable-next-line eslint/complexity -- Preserve transport and cancellation behavior while classifying read failures.
   const sendContinuity = async <T>(
     request: z.input<typeof continuityTransportRequestSchema>,
     resultSchema: z.ZodType<T>,
@@ -391,6 +394,10 @@ export const createHostedOperatorClient = (input: {
       const blocked = operatorPublicResultSchema.safeParse(value);
       if (blocked.success) {
         throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable", {
+          continuityReadStage:
+            body.action === "continuity-read" || body.action === "continuity-binding-read"
+              ? "operator_response"
+              : undefined,
           recoveryStage: blocked.data.recoveryStage,
           recoveryProgressAdvanced: blocked.data.recoveryProgressAdvanced,
         });
@@ -410,6 +417,31 @@ export const createHostedOperatorClient = (input: {
         }
       } catch {
         /* Diagnostic context lookup must preserve the original failure. */
+      }
+      if (
+        (request.action === "continuity-read" || request.action === "continuity-binding-read") &&
+        !isCancellation(error, signal)
+      ) {
+        const diagnostic = continuityReadDiagnosticStageSchema.safeParse(stage);
+        if (diagnostic.success) {
+          throw new HostedOperatorError(
+            error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+            {
+              cause: error,
+              continuityReadStage:
+                error instanceof HostedOperatorError && error.continuityReadStage !== undefined
+                  ? error.continuityReadStage
+                  : diagnostic.data,
+              ...(error instanceof HostedOperatorError && error.recoveryStage !== undefined
+                ? { recoveryStage: error.recoveryStage }
+                : {}),
+              ...(error instanceof HostedOperatorError &&
+              error.recoveryProgressAdvanced !== undefined
+                ? { recoveryProgressAdvanced: error.recoveryProgressAdvanced }
+                : {}),
+            },
+          );
+        }
       }
       throw error;
     }
@@ -480,6 +512,13 @@ export const createHostedOperatorClient = (input: {
         throw new HostedOperatorError("resource_mismatch");
       }
       return result;
+    },
+    async readContinuityBindings(intentId: string, signal?: AbortSignal) {
+      return await sendContinuity(
+        { action: "continuity-binding-read", intentId, ownerContext: exportOwner() },
+        appTenantBindingReadbackSchema,
+        signal,
+      );
     },
     async continuityStatus(intentId: string, signal?: AbortSignal) {
       const result = await sendContinuity(

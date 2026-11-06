@@ -15,6 +15,7 @@ const hooks = vi.hoisted(() => ({
   export: vi.fn(),
   readExport: vi.fn(),
   readContinuity: vi.fn(),
+  readContinuityBindings: vi.fn(),
   resolve: vi.fn(),
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
@@ -418,10 +419,31 @@ describe("saved continuity lookup tool", () => {
     hooks.client.mockResolvedValue({
       request: hooks.request,
       readContinuity: hooks.readContinuity,
+      readContinuityBindings: hooks.readContinuityBindings,
       readTenantExport: hooks.readExport,
       resolvePreviewTarget: hooks.resolve,
       sessionId: selection.sessionId,
     });
+  });
+  it("returns owner-scoped binding readback without triggering effects", async () => {
+    const result = {
+      bindings: [
+        {
+          appId: "spend-review",
+          actorId: "actor",
+          organizationId: "org",
+          role: "reviewer",
+          status: "actor_active",
+        },
+      ],
+    };
+    hooks.readContinuityBindings.mockResolvedValueOnce(result);
+    await expect(
+      getTool.execute({ operation: "continuity-bindings", intentId }, toolCtx),
+    ).resolves.toEqual(result);
+    expect(hooks.readContinuityBindings).toHaveBeenCalledWith(intentId, ctx.abortSignal);
+    expect(hooks.request).not.toHaveBeenCalled();
+    expect(hooks.resolve).not.toHaveBeenCalled();
   });
   it("returns the saved continuity intent without resolving or planning a replacement", async () => {
     const saved = {
@@ -456,5 +478,35 @@ describe("saved continuity lookup tool", () => {
     });
     expect(hooks.request).not.toHaveBeenCalled();
     expect(hooks.resolve).not.toHaveBeenCalled();
+  });
+  it("preserves an operator-provided recovery stage and progress without replaying the intent", async () => {
+    hooks.readContinuity.mockRejectedValueOnce(
+      new HostedOperatorError("operator_unavailable", {
+        recoveryStage: "canonical_read",
+        recoveryProgressAdvanced: false,
+        continuityReadStage: "client_response_validation",
+      }),
+    );
+    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
+      intentId,
+      authenticatedBehavior: "unassessed",
+      code: "operator_unavailable",
+      recoveryStage: "canonical_read",
+      recoveryProgressAdvanced: false,
+      continuityReadStage: "client_response_validation",
+      status: "blocked",
+    });
+    expect(hooks.readContinuity).toHaveBeenCalledOnce();
+    expect(hooks.request).not.toHaveBeenCalled();
+    expect(hooks.resolve).not.toHaveBeenCalled();
+  });
+  it("does not invent a stage or expose raw details for an unclassified failure", async () => {
+    hooks.readContinuity.mockRejectedValueOnce(new Error("private provider detail"));
+    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
+      intentId,
+      authenticatedBehavior: "unassessed",
+      code: "operator_unavailable",
+      status: "blocked",
+    });
   });
 });

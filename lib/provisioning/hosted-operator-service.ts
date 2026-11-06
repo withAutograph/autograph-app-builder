@@ -1921,6 +1921,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             "continuity-plan",
             "continuity-status",
             "continuity-read",
+            "continuity-binding-read",
             "continuity-approval",
             "continuity",
           ]),

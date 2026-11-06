@@ -168,9 +168,16 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       });
     }
   };
-  const read = async (context: HostedOperatorContext, intentId: string) => {
+  const read = async (
+    context: HostedOperatorContext,
+    intentId: string,
+    reportReadStage = false,
+  ) => {
     await deps.assertOwner(context);
-    const record = await deps.store.read({ authority: context.authority, intentId });
+    const readRecord = () => deps.store.read({ authority: context.authority, intentId });
+    const record = reportReadStage
+      ? await approvalStage("canonical_read", readRecord)
+      : await readRecord();
     if (record === undefined) {
       throw new HostedOperatorError("resource_mismatch");
     }
@@ -340,7 +347,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       };
     },
     async readPlan(context: HostedOperatorContext, intentId: string) {
-      const record = await read(context, z.uuid().parse(intentId));
+      const record = await read(context, z.uuid().parse(intentId), true);
       const { plan, planDigest, idempotencyKey } = record;
       const request = parseContinuityRequestForPlan(
         { action: "continuity", planRef: plan.planRef, planDigest, idempotencyKey },
