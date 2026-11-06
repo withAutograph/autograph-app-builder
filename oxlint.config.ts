@@ -2279,12 +2279,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
     },
   },
   {
-    files: ["**/lib/repository/arrusted-template.ts"],
-    rules: {
-      "typescript/dot-notation": "off",
-    },
-  },
-  {
     files: [
       "**/app/\\(product\\)/local-oauth/\\[provider\\]/approve/route.ts",
       "**/app/ui/app-builder.test.tsx",
