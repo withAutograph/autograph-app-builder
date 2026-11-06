@@ -39,6 +39,16 @@ export default defineTool({
         ...("appId" in input ? { appId: input.appId } : {}),
         authenticatedBehavior: "unassessed" as const,
         code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+        ...("intentId" in input &&
+        error instanceof HostedOperatorError &&
+        error.recoveryStage !== undefined
+          ? { recoveryStage: error.recoveryStage }
+          : {}),
+        ...("intentId" in input &&
+        error instanceof HostedOperatorError &&
+        error.recoveryProgressAdvanced !== undefined
+          ? { recoveryProgressAdvanced: error.recoveryProgressAdvanced }
+          : {}),
         status: "blocked" as const,
       };
     }

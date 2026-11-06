@@ -59,6 +59,30 @@ export const continuityPlannedSchema = z.strictObject({
 
 export type ContinuityTransportRequest = z.infer<typeof continuityTransportRequestSchema>;
 
+/** Keep a failed owner-scoped journal read distinct from an unknown execution outcome. */
+const readCanonicalContinuity = async <T>(read: () => Promise<T>, signal: AbortSignal) => {
+  try {
+    return await read();
+  } catch (error) {
+    if (signal.aborted || (error instanceof Error && error.name === "AbortError")) {
+      throw error;
+    }
+    if (error instanceof HostedOperatorError && error.recoveryStage !== undefined) {
+      throw error;
+    }
+    throw new HostedOperatorError(
+      error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+      {
+        cause: error,
+        recoveryStage: "canonical_read",
+        ...(error instanceof HostedOperatorError && error.recoveryProgressAdvanced !== undefined
+          ? { recoveryProgressAdvanced: error.recoveryProgressAdvanced }
+          : {}),
+      },
+    );
+  }
+};
+
 /** The hint locates only a row. Workload and fresh canonical owner verification precede all operations. */
 export const createContinuityDispatcher =
   (dependencies: {
@@ -93,10 +117,12 @@ export const createContinuityDispatcher =
           parsed.action === "continuity-status" || parsed.action === "continuity-read"
             ? parsed.intentId
             : z.uuid().parse(parsed.planRef.split("/").at(-1));
-        const saved = await dependencies.store.read({
-          authority: parsed.ownerContext.authority,
-          intentId,
-        });
+        const readSaved = () =>
+          dependencies.store.read({ authority: parsed.ownerContext.authority, intentId });
+        const saved =
+          parsed.action === "continuity-read"
+            ? await readCanonicalContinuity(readSaved, request.signal)
+            : await readSaved();
         if (saved === undefined) {
           throw new HostedOperatorError("resource_mismatch");
         }

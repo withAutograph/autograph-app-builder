@@ -457,4 +457,32 @@ describe("saved continuity lookup tool", () => {
     expect(hooks.request).not.toHaveBeenCalled();
     expect(hooks.resolve).not.toHaveBeenCalled();
   });
+  it("preserves an operator-provided recovery stage and progress without replaying the intent", async () => {
+    hooks.readContinuity.mockRejectedValueOnce(
+      new HostedOperatorError("operator_unavailable", {
+        recoveryStage: "canonical_read",
+        recoveryProgressAdvanced: false,
+      }),
+    );
+    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
+      intentId,
+      authenticatedBehavior: "unassessed",
+      code: "operator_unavailable",
+      recoveryStage: "canonical_read",
+      recoveryProgressAdvanced: false,
+      status: "blocked",
+    });
+    expect(hooks.readContinuity).toHaveBeenCalledOnce();
+    expect(hooks.request).not.toHaveBeenCalled();
+    expect(hooks.resolve).not.toHaveBeenCalled();
+  });
+  it("does not invent a stage or expose raw details for an unclassified failure", async () => {
+    hooks.readContinuity.mockRejectedValueOnce(new Error("private provider detail"));
+    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
+      intentId,
+      authenticatedBehavior: "unassessed",
+      code: "operator_unavailable",
+      status: "blocked",
+    });
+  });
 });

@@ -7,7 +7,11 @@ reference and digest only after their effect approval. The approval description
 names the Vercel project and Preview branch, synthetic Neon context/project/branch,
 app and shared Auth databases and roles, release, exact effects and access grants,
 cost ownership and retention. `get-app-hosted-runtime` reads operator journal
-status. Static apps require no database operation.
+status. A saved continuity lookup retains a `canonical_read` recovery stage when
+the operator identifies a journal read failure, including any observed progress
+flag. Unclassified failures remain `operator_unavailable`; the lookup does not
+infer readiness or replay the saved intent. Static apps require no database
+operation.
 
 ## Normal app destination versus protected Preview onboarding
 
