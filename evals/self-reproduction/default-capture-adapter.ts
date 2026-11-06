@@ -108,9 +108,10 @@ export const createSemanticCaptureAdapter = (
       await target.focus();
       const focused = await target.evaluate((element) => element === document.activeElement);
       const before = await signature(page);
-      await capture();
+      const captured = capture();
       await page.keyboard.press("Enter");
       await page.waitForTimeout(100);
+      await captured;
       return [
         { detail: "Semantic control received focus.", id: "focus-visible", passed: focused },
         {
@@ -122,7 +123,12 @@ export const createSemanticCaptureAdapter = (
     }
     if (state === "loading") {
       await capture();
-      const text = (await target.textContent().catch(() => "")) ?? "";
+      let text = "";
+      try {
+        text = (await target.textContent()) ?? "";
+      } catch {
+        // The loading target may disappear while the capture is being taken.
+      }
       return [
         {
           detail: "Pending UI stayed visible.",
@@ -140,9 +146,10 @@ export const createSemanticCaptureAdapter = (
       page.getByRole("button", { name: /build|create|continue|get started|retry|try again/iu }),
       page.getByRole("link", { name: /build|create|continue|get started|retry|try again/iu }),
     ]);
-    const before = await signature(page);
-    await capture();
-    await recovery?.click();
+    const [before] = await Promise.all([
+      signature(page),
+      Promise.all([capture(), recovery?.click()]),
+    ]);
     await page.waitForTimeout(100);
     const changed = Boolean(recovery) && (await signature(page)) !== before;
     return state === "empty"
@@ -181,10 +188,7 @@ export const createSemanticCaptureAdapter = (
   },
 });
 
-export const createCaptureAdapters = async (input: {
-  referenceURL: string;
-  candidateURL: string;
-}) => ({
+export const createCaptureAdapters = (input: { referenceURL: string; candidateURL: string }) => ({
   candidate: createSemanticCaptureAdapter(new URL(input.candidateURL).href, "candidate"),
   reference: createSemanticCaptureAdapter(new URL(input.referenceURL).href, "reference"),
 });

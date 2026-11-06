@@ -6,6 +6,28 @@ interface Credential {
   userHandle?: string;
 }
 
+const parseCredential = (value: unknown): Credential | undefined => {
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
+
+  const credential = value as Record<string, unknown>;
+  const { credentialId, rpId, userHandle } = credential;
+  if (
+    typeof credentialId !== "string" ||
+    typeof rpId !== "string" ||
+    (userHandle !== undefined && typeof userHandle !== "string")
+  ) {
+    return undefined;
+  }
+
+  const parsed: Credential = { credentialId, rpId };
+  if (userHandle !== undefined) {
+    parsed.userHandle = userHandle;
+  }
+  return parsed;
+};
+
 export class VirtualAuthenticator {
   private readonly session: CDPSession;
   readonly id: string;
@@ -36,7 +58,10 @@ export class VirtualAuthenticator {
     const result = await this.session.send("WebAuthn.getCredentials", {
       authenticatorId: this.id,
     });
-    return result.credentials as Credential[];
+    return result.credentials.flatMap((credential) => {
+      const parsed = parseCredential(credential);
+      return parsed === undefined ? [] : [parsed];
+    });
   }
 
   async removeCredential(credentialId: string) {

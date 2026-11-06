@@ -7,7 +7,7 @@ import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
 const git = (root: string, args: string[]) =>
-  execFileSync("git", args, { cwd: root, encoding: "utf-8" });
+  execFileSync("/opt/homebrew/bin/git", args, { cwd: root, encoding: "utf-8" });
 
 export default defineEval({
   description:

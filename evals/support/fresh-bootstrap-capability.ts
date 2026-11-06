@@ -110,6 +110,8 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
       systemPython,
       systemPythonIdentity: await executableIdentity(systemPython),
     },
-    cleanup: async () => await rm(owner, { force: true, recursive: true }),
+    cleanup: async () => {
+      await rm(owner, { force: true, recursive: true });
+    },
   };
 }

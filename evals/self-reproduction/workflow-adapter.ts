@@ -3,7 +3,8 @@ import path from "node:path";
 import { encryptOverrides } from "flags";
 import { expect } from "playwright/test";
 import postgres from "postgres";
-import type { Locator } from "playwright";
+import { z } from "zod";
+import type { APIResponse, Locator } from "playwright";
 
 import {
   appOrigin,
@@ -35,6 +36,23 @@ export interface WorkflowAdapterFactoryInput {
 
 const fixedName = "Self reproduction parity draft";
 const fixedBrief = "Create one small independent issue tracker with durable server persistence.";
+const providerReturnSuccessWorkflowId = "provider-return-success";
+const documentationWorkflowId = "documentation";
+const infrastructureUnavailable = "infrastructure-unavailable";
+const sessionSchema = z.object({ user: z.object({ id: z.string() }).optional() }).nullable();
+interface HandoffResponse {
+  error?: string;
+  status?: string;
+}
+const handoffResponseSchema = z.looseObject({
+  error: z.string().optional(),
+  status: z.string().optional(),
+});
+
+const readHandoffResponse = async (response: APIResponse): Promise<HandoffResponse> => {
+  const payload: unknown = await response.json();
+  return handoffResponseSchema.parse(payload);
+};
 
 const assertion = (id: string, passed: boolean, detail: string): AssertionResult => ({
   detail,
@@ -54,14 +72,15 @@ const firstVisible = async (locators: Locator[]) => {
   const find = async (index: number): Promise<Locator | undefined> => {
     const locator = locators[index];
     if (locator === undefined) {
-      return;
+      return undefined;
     }
-    if (
-      await locator
-        .first()
-        .isVisible()
-        .catch(() => false)
-    ) {
+    let visible = false;
+    try {
+      visible = await locator.first().isVisible();
+    } catch {
+      visible = false;
+    }
+    if (visible) {
       return locator.first();
     }
     return await find(index + 1);
@@ -85,8 +104,14 @@ const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowA
       const initialContent = await page.locator("body").textContent();
       await docs.click();
       const content = page.locator("main, article").first();
+      let contentVisible = false;
+      try {
+        contentVisible = await content.isVisible();
+      } catch {
+        contentVisible = false;
+      }
       const readable =
-        (await content.isVisible().catch(() => false)) &&
+        contentVisible &&
         ((await content.textContent()) ?? "").trim().length > 0 &&
         (await page.locator("body").textContent()) !== initialContent;
       const navigated = page.url() !== initialUrl;
@@ -113,7 +138,7 @@ const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowA
       };
     },
     async prepare(page, workflowId) {
-      if (workflowId !== "documentation") {
+      if (workflowId !== documentationWorkflowId) {
         return {
           disposition: "not-run",
           ready: false,
@@ -121,9 +146,9 @@ const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowA
         };
       }
       const response = await page.goto(entryUrl);
-      if (!response?.ok()) {
+      if (response === null || !response.ok()) {
         return {
-          disposition: "infrastructure-unavailable",
+          disposition: infrastructureUnavailable,
           ready: false,
           reason: `Candidate runtime did not answer at ${entryUrl}.`,
         };
@@ -147,16 +172,16 @@ const referenceAdapter = (
   const supported = new Set<WorkflowId>([
     "authentication",
     "durable-draft",
-    "provider-return-success",
+    providerReturnSuccessWorkflowId,
     "provider-return-error",
-    "documentation",
+    documentationWorkflowId,
   ]);
   let initialDraftRevision = 0;
   let passkeyOverride = "";
   return {
     contextOptions: { baseURL: referenceUrl, ignoreHTTPSErrors: true },
     async exercise(page, workflowId, freshPage) {
-      if (workflowId === "documentation") {
+      if (workflowId === documentationWorkflowId) {
         await page.goto("/docs");
         const readable = await page.locator("main, article").first().isVisible();
         await page.goto("/");
@@ -183,9 +208,10 @@ const referenceAdapter = (
       await page.getByLabel("App Brief", { exact: true }).fill(fixedBrief);
       await page.getByRole("status").filter({ hasText: "Draft saved" }).waitFor();
       if (workflowId === "authentication") {
-        const ownerSession = await currentSession(page);
+        const sessionPayload: unknown = await currentSession(page);
+        const ownerSession = sessionSchema.parse(sessionPayload);
         const ownerId = ownerSession?.user?.id;
-        if (typeof ownerId !== "string") {
+        if (ownerId === undefined || ownerId.length === 0) {
           throw new TypeError("Reference OAuth did not establish an owner identity.");
         }
         const sql = postgres(databaseUrl, { max: 1 });
@@ -206,7 +232,8 @@ const referenceAdapter = (
         const restored = await freshPage();
         await finishOAuth(restored, "GitHub");
         await waitForBuilderReady(restored);
-        const restoredSession = await currentSession(restored);
+        const restoredSessionPayload: unknown = await currentSession(restored);
+        const restoredSession = sessionSchema.parse(restoredSessionPayload);
         const restoredName = await restored.getByLabel("App Name").inputValue();
         const restoredBrief = await restored.getByLabel("App Brief", { exact: true }).inputValue();
         const restoredDraft =
@@ -220,7 +247,7 @@ const referenceAdapter = (
         const handoffId = new URL(restored.url()).pathname.split("/").at(-1);
         const statusPath = `/api/builder/handoffs/${handoffId}`;
         const ownerResponse = await restored.request.get(statusPath);
-        const ownerBody = await ownerResponse.json();
+        const ownerBody = await readHandoffResponse(ownerResponse);
         const ownerCanRead = ownerResponse.ok() && ownerBody.status === "prepared";
         const signedOutResponse = await page.request.get(statusPath);
         const stranger = await freshPage();
@@ -237,16 +264,19 @@ const referenceAdapter = (
         const authenticator = await registerPasskey(stranger.context(), stranger);
         let otherUserDenied = false;
         try {
-          const strangerSession = await currentSession(stranger);
+          const strangerSessionPayload: unknown = await currentSession(stranger);
+          const strangerSession = sessionSchema.parse(strangerSessionPayload);
           const strangerId = strangerSession?.user?.id;
           const response = await stranger.request.get(statusPath);
-          const body = await response.json();
+          const body = await readHandoffResponse(response);
+          const strangerIsDistinct =
+            strangerId !== undefined && strangerId.length > 0 && strangerId !== ownerId;
+          const responseIsUnavailable =
+            response.status() === 404 && body.error === "handoff_unavailable";
           otherUserDenied =
             ownerCanRead &&
-            typeof strangerId === "string" &&
-            strangerId !== ownerId &&
-            response.status() === 404 &&
-            body.error === "handoff_unavailable" &&
+            strangerIsDistinct &&
+            responseIsUnavailable &&
             Object.keys(body).length === 1;
         } finally {
           await authenticator.dispose();
@@ -279,7 +309,7 @@ const referenceAdapter = (
         await page.getByRole("button", { exact: true, name: "Connect emulated GitHub" }).click();
         await expect(page).toHaveURL(/\/local-connections\/github\?.*phase=authorize/u);
         const state = new URL(page.url()).searchParams.get("state");
-        if (!state) {
+        if (state === null || state.length === 0) {
           throw new Error("Emulated GitHub authorization did not retain callback state.");
         }
         const callback = new URL("/github/installations/callback", referenceUrl);
@@ -325,7 +355,7 @@ const referenceAdapter = (
             "Returned a denial using actual pending emulated OAuth state, then replayed the consumed callback through the application.",
         };
       }
-      if (workflowId === "provider-return-success") {
+      if (workflowId === providerReturnSuccessWorkflowId) {
         await installProvider(page, "GitHub");
         return {
           assertions: [
@@ -376,7 +406,7 @@ const referenceAdapter = (
       }
       if (new URL(referenceUrl).origin !== appOrigin) {
         return {
-          disposition: "infrastructure-unavailable",
+          disposition: infrastructureUnavailable,
           ready: false,
           reason: `Reference E2E helpers are bound to ${appOrigin}; received ${referenceUrl}.`,
         };
@@ -391,7 +421,7 @@ const referenceAdapter = (
           passkeyOverride = await encryptOverrides({ passkeys: true }, secret, "1h");
         } catch {
           return {
-            disposition: "infrastructure-unavailable",
+            disposition: infrastructureUnavailable,
             ready: false,
             reason: "Reference authentication requires the emulated passkey flag fixture secret.",
           };
@@ -402,7 +432,7 @@ const referenceAdapter = (
       return { ready: true };
     },
     async verify(workflowId) {
-      if (workflowId === "provider-return-success") {
+      if (workflowId === providerReturnSuccessWorkflowId) {
         const counts = await applicationCounts();
         return {
           assertions: [
@@ -422,12 +452,13 @@ const referenceAdapter = (
             SELECT revision, record->'draft'->'form'->>'appName' AS "appName"
             FROM builder_draft WHERE status = 'active' ORDER BY updated_at DESC LIMIT 1
           `;
+          const hasRow = row !== undefined;
           return {
             assertions: [
               assertion(
                 "revision-advanced",
-                Boolean(row && row.revision > initialDraftRevision && row.appName === fixedName),
-                row
+                hasRow && row.revision > initialDraftRevision && row.appName === fixedName,
+                hasRow
                   ? `PostgreSQL revision ${row.revision} contains the fixed app name.`
                   : "No active durable draft row was found.",
               ),
@@ -445,9 +476,13 @@ const referenceAdapter = (
 
 export const createWorkflowAdapters = (
   input: WorkflowAdapterFactoryInput,
-): Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>> => ({
-  ...(input.referenceUrl
-    ? { reference: referenceAdapter(input.referenceUrl, input.referenceFixtureRoot) }
-    : {}),
-  ...(input.candidateUrl ? { candidate: semanticCandidateAdapter(input.candidateUrl) } : {}),
-});
+): Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>> => {
+  const adapters: Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>> = {};
+  if (input.referenceUrl !== undefined && input.referenceUrl.length > 0) {
+    adapters.reference = referenceAdapter(input.referenceUrl, input.referenceFixtureRoot);
+  }
+  if (input.candidateUrl !== undefined && input.candidateUrl.length > 0) {
+    adapters.candidate = semanticCandidateAdapter(input.candidateUrl);
+  }
+  return adapters;
+};

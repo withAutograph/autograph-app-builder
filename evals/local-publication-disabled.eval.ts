@@ -1,5 +1,6 @@
 import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
+import { z } from "zod";
 
 export default defineEval({
   description:
@@ -14,14 +15,15 @@ export default defineEval({
     t.check(turn.message, includes("recommend the closest useful alternative"));
     t.check(
       turn.message,
-      satisfies(
-        (reply) =>
-          typeof reply === "string" &&
+      satisfies((reply) => {
+        const parsedReply = z.string().safeParse(reply);
+        return (
+          parsedReply.success &&
           !/(?:local checkout publication is disabled|disabled on this host|host capability|APP_BUILDER_LOCAL_PUBLICATION)/iu.test(
-            reply,
-          ),
-        "capability reply omits disabled-host and local-publication boilerplate",
-      ),
+            parsedReply.data,
+          )
+        );
+      }, "capability reply omits disabled-host and local-publication boilerplate"),
     );
     t.notCalledTool("publish_reviewed_change_set");
     t.notCalledTool("bash");

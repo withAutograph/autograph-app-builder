@@ -52,7 +52,7 @@ export const ARRUSTED_COMPONENT_COMPOSITION_MANIFEST = `${JSON.stringify(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixtureGit(root: string, args: string[]): void {
   execFileSync(
-    "git",
+    "/usr/bin/git",
     [
       "-c",
       "core.hooksPath=/dev/null",
@@ -62,7 +62,7 @@ function fixtureGit(root: string, args: string[]): void {
       "commit.gpgsign=false",
       ...args,
     ],
-    { cwd: root, env: { ...process.env, HK: "0" } },
+    { cwd: root, env: { ...process.env, HK: "0", PATH: "/usr/bin:/bin" } },
   );
 }
 
@@ -75,7 +75,7 @@ export function createSupportedRepositoryFixture(): string {
     });
   }
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "app-builder-eval-repository-")));
-  const files: Record<string, string> = {
+  const files = {
     ".config/mise/config.toml": [
       '[tasks."create:app"]',
       "run = 'mise exec --no-deps -- bun .config/turbo/generators/create-app.ts \"$usage_app\"'",
@@ -123,7 +123,7 @@ export function createSupportedRepositoryFixture(): string {
       null,
       2,
     )}\n`,
-  };
+  } satisfies Record<string, string>;
   for (const [relativePath, content] of Object.entries(files)) {
     const absolute = path.join(root, relativePath);
     mkdirSync(path.join(absolute, ".."), { recursive: true });

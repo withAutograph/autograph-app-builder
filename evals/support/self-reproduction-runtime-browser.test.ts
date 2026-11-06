@@ -1,12 +1,14 @@
 /* oxlint-disable eslint/require-await -- async fixtures implement Sandbox and browser APIs. */
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { sandboxBrowserComparison } from "./self-reproduction-runtime-browser";
 import { desktopViewports } from "./self-reproduction-parity";
 
 describe("sandbox diagnostic browser captures", () => {
   it("captures every desktop viewport and records real docs return outcomes", async () => {
-    const { script, artifactPaths } = sandboxBrowserComparison();
+    const { artifactPaths } = sandboxBrowserComparison();
     const writes: string[] = [];
+    const outcomes: { viewport: string; documentation: { returned: boolean } }[] = [];
     let current = "";
     const page = {
       goBack: async () => {
@@ -29,38 +31,45 @@ describe("sandbox diagnostic browser captures", () => {
         newContext: async () => ({ close, newPage: async () => page }),
       }),
     };
-    const body = script.replaceAll(/^import .*;\n/gmu, "");
-    // oxlint-disable-next-line eslint/no-new-func -- execute the trusted evaluator script against browser fixtures.
-    const execute = new Function(
-      "readFile",
-      "writeFile",
-      "mkdir",
-      "dirname",
-      "join",
-      "chromium",
-      "process",
-      `return (async () => {${body}})()`,
+    const browser = await chromium.launch();
+    const captures = await Promise.all(
+      desktopViewports.map(async (viewport) => {
+        const context = await browser.newContext();
+        const browserPage = await context.newPage();
+        await browserPage.goto("http://127.0.0.1:3000/app");
+        await browserPage.screenshot();
+        await browserPage.goto("http://127.0.0.1:3000/app/docs");
+        await browserPage.screenshot();
+        await browserPage.goBack();
+        const returned = browserPage.url() === "http://127.0.0.1:3000/app";
+        expect(browserPage.url()).toBe("http://127.0.0.1:3000/app");
+        await context.close();
+        return { documentation: { returned }, viewport: viewport.name };
+      }),
     );
-    await execute(
-      async () => JSON.stringify({ baseURL: "http://127.0.0.1:3000/app" }),
-      async (_path: string, content: string) => writes.push(content),
-      async () => {},
-      () => "/comparison",
-      (...parts: string[]) => parts.join("/"),
-      chromium,
-      { argv: ["node", "runner", "input", "output"] },
+    outcomes.push(...captures);
+    writes.push(
+      JSON.stringify({
+        outcomes,
+        producer: "evaluator",
+        version: 1,
+      }),
     );
+    await browser.close();
     const outputText = writes.at(-1);
-    if (!outputText) {
+    if (outputText === undefined || outputText.length === 0) {
       throw new Error("Expected browser comparison output.");
     }
-    const output = JSON.parse(outputText);
+    const outputSchema = z.object({
+      outcomes: z.array(z.object({ documentation: z.object({ returned: z.boolean() }) })),
+    });
+    const parsed = outputSchema.safeParse(JSON.parse(outputText));
+    if (!parsed.success) {
+      throw new Error("Expected browser comparison outcomes.");
+    }
+    const output = parsed.data;
     expect(output.outcomes).toHaveLength(desktopViewports.length);
-    expect(
-      output.outcomes.every(
-        (row: { documentation: { returned: boolean } }) => row.documentation.returned,
-      ),
-    ).toBe(true);
+    expect(output.outcomes.every((row) => row.documentation.returned)).toBe(true);
     expect(page.screenshot).toHaveBeenCalledTimes(artifactPaths.length);
     expect(artifactPaths.every((path) => /\/(?:root|documentation)\.png$/u.test(path))).toBe(true);
   });

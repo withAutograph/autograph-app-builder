@@ -5,7 +5,7 @@ import { expect, test } from "playwright/test";
 
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import { createBuilderDraftStore } from "../../lib/db/builder-drafts";
-import * as schema from "../../lib/db/schema";
+import { builderDrafts } from "../../lib/db/schema";
 import type { BuilderDraftRecord } from "../../lib/builder-drafts/contracts";
 import { databaseUrl, resetApplicationState } from "../support/harness";
 
@@ -64,7 +64,7 @@ test.beforeEach(async () => {
 
 test("PostgreSQL serializes draft save/archive races without resurrecting a handoff draft", async () => {
   const client = postgres(databaseUrl, { max: 4 });
-  const store = createBuilderDraftStore(drizzle(client, { schema }));
+  const store = createBuilderDraftStore(drizzle(client, { schema: { builderDrafts } }));
   try {
     const draftId = randomUUID();
     await store.saveActive(saveInput(draftId, "Handed-off intent"));
@@ -110,7 +110,7 @@ test("PostgreSQL serializes draft save/archive races without resurrecting a hand
 
 test("PostgreSQL keeps one active draft across simultaneous device creation and rejects purged revisions", async () => {
   const client = postgres(databaseUrl, { max: 4 });
-  const store = createBuilderDraftStore(drizzle(client, { schema }));
+  const store = createBuilderDraftStore(drizzle(client, { schema: { builderDrafts } }));
   try {
     const [first, second] = await Promise.all([
       store.saveActive(saveInput(randomUUID(), "Device A")),

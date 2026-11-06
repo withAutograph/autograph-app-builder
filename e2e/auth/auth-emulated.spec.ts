@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { expect, test } from "playwright/test";
 import type { Page } from "playwright/test";
+import { z } from "zod";
 
 import { VirtualAuthenticator } from "./virtual-authenticator";
 import {
@@ -13,6 +14,8 @@ import {
   resetApplicationState,
   signOut,
 } from "../support/harness";
+
+const passkeyListSchema = z.array(z.object({ id: z.string() }));
 
 const onboardingAlreadyAuthenticatedCode = "PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED";
 
@@ -59,11 +62,16 @@ async function expireOnboardingContexts() {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function reportPasskeyFailures(page: Page) {
   page.on("response", async (response) => {
-    if (response.ok() || !new URL(response.url()).pathname.startsWith("/api/auth/passkey/")) {
+    if (response.ok()) {
       return;
     }
-    const body = await response.text().catch(() => {});
-    if (body === undefined) return;
+    if (!new URL(response.url()).pathname.startsWith("/api/auth/passkey/")) return;
+    let body: string;
+    try {
+      body = await response.text();
+    } catch {
+      return;
+    }
     console.error(
       "passkey request failed",
       response.status(),
@@ -178,13 +186,17 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   expect(passkeyRequests).toBe(0);
   expect(await authCounts()).toEqual(emptyAuthCounts);
 
-  if (!signUpHref) throw new Error("Sign Up link must have an href");
+  if (signUpHref === null || signUpHref === "") {
+    throw new Error("Sign Up link must have an href");
+  }
   const signUpURL = new URL(signUpHref, page.url());
   expect(signUpURL.searchParams.get("redirectTo")).toBe(
     "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete",
   );
   const signInHref = await signInLink.getAttribute("href");
-  if (!signInHref) throw new Error("Sign In link must have an href");
+  if (signInHref === null || signInHref === "") {
+    throw new Error("Sign In link must have an href");
+  }
   const signInURL = new URL(signInHref, page.url());
   expect(signInURL.searchParams.get("redirectTo")).toBe(signUpURL.searchParams.get("redirectTo"));
 });
@@ -192,40 +204,34 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
 test("a sign-in challenge failure stays local without invoking WebAuthn", async ({ page }) => {
   let credentialRequests = 0;
   await page.addInitScript(() => {
-    const { credentials } = navigator;
-    Object.defineProperty(navigator, "credentials", {
-      configurable: true,
-      value: {
-        ...credentials,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-        get: async () => {
-          window.dispatchEvent(new Event("e2e-credential-request"));
-          return null;
+    const credentialManager = Object.defineProperties(
+      {},
+      {
+        get: {
+          configurable: true,
+          value: async () => {
+            await Promise.resolve();
+            console.log("e2e-credential-request");
+            return null;
+          },
         },
       },
+    );
+    Object.defineProperty(navigator, "credentials", {
+      configurable: true,
+      value: credentialManager,
     });
   });
-  await page.exposeFunction("recordCredentialRequest", () => {
-    credentialRequests += 1;
+  page.on("console", (message) => {
+    if (message.text() === "e2e-credential-request") credentialRequests += 1;
   });
-  await page.addInitScript(() => {
-    window.addEventListener("e2e-credential-request", () => {
-      void (
-        window as typeof window & {
-          recordCredentialRequest: () => Promise<void>;
-        }
-      ).recordCredentialRequest();
+  await page.route("**/api/auth/passkey/generate-authenticate-options*", async (route) => {
+    await route.fulfill({
+      body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
+      contentType: "application/json",
+      status: 503,
     });
   });
-  await page.route(
-    "**/api/auth/passkey/generate-authenticate-options*",
-    async (route) =>
-      await route.fulfill({
-        body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
-        contentType: "application/json",
-        status: 503,
-      }),
-  );
 
   await page.goto("/auth/sign-in");
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
@@ -241,16 +247,21 @@ for (const exceptionName of ["NotSupportedError", "SecurityError"] as const) {
   test(`a pre-assertion ${exceptionName} stays on Sign In without writes`, async ({ page }) => {
     let verificationRequests = 0;
     await page.addInitScript((name) => {
-      const { credentials } = navigator;
-      Object.defineProperty(navigator, "credentials", {
-        configurable: true,
-        value: {
-          ...credentials,
-          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-          get: async () => {
-            throw new DOMException("WebAuthn unavailable", name);
+      const credentialManager = Object.defineProperties(
+        {},
+        {
+          get: {
+            configurable: true,
+            value: async () => {
+              await Promise.resolve();
+              throw new DOMException("WebAuthn unavailable", name);
+            },
           },
         },
+      );
+      Object.defineProperty(navigator, "credentials", {
+        configurable: true,
+        value: credentialManager,
       });
     }, exceptionName);
     page.on("request", (request) => {
@@ -278,7 +289,7 @@ test("passkey registration guards Sign Up and supports returning login", async (
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.addInitScript(() => {
-      if (!window.PublicKeyCredential) return;
+      if (window.PublicKeyCredential === undefined) return;
       Object.defineProperty(
         window.PublicKeyCredential,
         "isUserVerifyingPlatformAuthenticatorAvailable",
@@ -336,7 +347,8 @@ test("passkey registration guards Sign Up and supports returning login", async (
     await expect
       .poll(async () => {
         const response = await page.request.get("/api/auth/get-session");
-        return await response.json();
+        const payload: unknown = await response.json();
+        return payload;
       })
       .toMatchObject({ user: { emailVerified: false } });
     expect(await authCounts()).toEqual(registeredCounts);
@@ -352,7 +364,7 @@ test("passkey registration keeps the alternate authenticator flow when platform 
 }) => {
   reportPasskeyFailures(page);
   await page.addInitScript(() => {
-    if (!window.PublicKeyCredential) return;
+    if (window.PublicKeyCredential === undefined) return;
     Object.defineProperty(
       window.PublicKeyCredential,
       "isUserVerifyingPlatformAuthenticatorAvailable",
@@ -477,16 +489,21 @@ test("permanent Sign Up link preserves the callback after missing credentials", 
 
 test("an interrupted passkey ceremony keeps the permanent Sign Up link", async ({ page }) => {
   await page.addInitScript(() => {
-    const { credentials } = navigator;
-    Object.defineProperty(navigator, "credentials", {
-      configurable: true,
-      value: {
-        ...credentials,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-        get: async () => {
-          throw new DOMException("The operation was cancelled.", "NotAllowedError");
+    const credentialManager = Object.defineProperties(
+      {},
+      {
+        get: {
+          configurable: true,
+          value: async () => {
+            await Promise.resolve();
+            throw new DOMException("The operation was cancelled.", "NotAllowedError");
+          },
         },
       },
+    );
+    Object.defineProperty(navigator, "credentials", {
+      configurable: true,
+      value: credentialManager,
     });
   });
   await page.goto("/auth/sign-in");
@@ -508,16 +525,21 @@ test("an interrupted passkey ceremony keeps the permanent Sign Up link", async (
 
 test("cancelled passkey registration stays on Sign Up without partial state", async ({ page }) => {
   await page.addInitScript(() => {
-    const { credentials } = navigator;
-    Object.defineProperty(navigator, "credentials", {
-      configurable: true,
-      value: {
-        ...credentials,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-        create: async () => {
-          throw new DOMException("The operation was cancelled.", "NotAllowedError");
+    const credentialManager = Object.defineProperties(
+      {},
+      {
+        create: {
+          configurable: true,
+          value: async () => {
+            await Promise.resolve();
+            throw new DOMException("The operation was cancelled.", "NotAllowedError");
+          },
         },
       },
+    );
+    Object.defineProperty(navigator, "credentials", {
+      configurable: true,
+      value: credentialManager,
     });
   });
   await page.goto("/auth/sign-up");
@@ -560,15 +582,13 @@ for (const contextFailure of [
     page,
   }) => {
     let registrationOptionsRequests = 0;
-    await page.route(
-      "**/api/auth/passkey/onboarding-context",
-      async (route) =>
-        await route.fulfill({
-          body: JSON.stringify({ code: "ONBOARDING_CONTEXT_UNAVAILABLE" }),
-          contentType: "application/json",
-          status: contextFailure.status,
-        }),
-    );
+    await page.route("**/api/auth/passkey/onboarding-context", async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({ code: "ONBOARDING_CONTEXT_UNAVAILABLE" }),
+        contentType: "application/json",
+        status: contextFailure.status,
+      });
+    });
     page.on("request", (request) => {
       if (new URL(request.url()).pathname === "/api/auth/passkey/generate-register-options") {
         registrationOptionsRequests += 1;
@@ -593,15 +613,13 @@ test("a registration-options failure retains only its bounded onboarding context
   reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
-    await page.route(
-      "**/api/auth/passkey/generate-register-options*",
-      async (route) =>
-        await route.fulfill({
-          body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
-          contentType: "application/json",
-          status: 503,
-        }),
-    );
+    await page.route("**/api/auth/passkey/generate-register-options*", async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
+        contentType: "application/json",
+        status: 503,
+      });
+    });
 
     await page.goto("/auth/sign-up");
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
@@ -630,7 +648,7 @@ test("verification transport loss stays on Sign In after an assertion", async ({
     let authenticationVerificationRequests = 0;
     await page.route("**/api/auth/passkey/verify-authentication", async (route) => {
       authenticationVerificationRequests += 1;
-      return await route.abort("failed");
+      await route.abort("failed");
     });
 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
@@ -668,7 +686,7 @@ test("server rejection after an assertion stays on Sign In without changing iden
     let verificationRequests = 0;
     await page.route("**/api/auth/passkey/verify-authentication", async (route) => {
       verificationRequests += 1;
-      return await route.fulfill({
+      await route.fulfill({
         body: JSON.stringify({ code: "INVALID_PASSKEY" }),
         contentType: "application/json",
         status: 401,
@@ -926,7 +944,9 @@ test("provider account supports multiple passkeys but retains its final passkey"
 
     const list = await page.request.get("/api/auth/passkey/list-user-passkeys");
     expect(list.ok()).toBeTruthy();
-    const credentials = (await list.json()) as { id: string }[];
+    const payload: unknown = await list.json();
+    // SAFETY: Zod validates the passkey list; the length assertion below verifies both entries before indexed access.
+    const credentials = passkeyListSchema.parse(payload);
     expect(credentials).toHaveLength(2);
     const deletePasskey = async (id: string) =>
       await page.evaluate(async (passkeyId) => {

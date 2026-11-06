@@ -7,22 +7,32 @@ interface SourceFile {
 }
 
 /** Structural hints guide a reviewer; they do not establish framework behavior. */
-const structuralHints = (files: readonly SourceFile[]) => ({
-  appRouterEntries: files
-    .filter((file) => /(?:^|\/)app\/(?:page|layout)\.[cm]?[jt]sx?$/u.test(file.path))
-    .map((file) => file.path),
-  clientDirectiveFiles: files
-    .filter((file) => /^\s*["']use client["']/u.test(file.content))
-    .map((file) => file.path),
-  serverDirectiveFiles: files
-    .filter((file) => /["']use server["']/u.test(file.content))
-    .map((file) => file.path),
-  suspenseCandidateFiles: files
-    .filter(
-      (file) => /Suspense/u.test(file.content) || /(?:^|\/)loading\.[cm]?[jt]sx?$/u.test(file.path),
-    )
-    .map((file) => file.path),
-});
+const structuralHints = (files: readonly SourceFile[]) => {
+  const hints: Record<
+    "appRouterEntries" | "clientDirectiveFiles" | "serverDirectiveFiles" | "suspenseCandidateFiles",
+    string[]
+  > = {
+    appRouterEntries: [],
+    clientDirectiveFiles: [],
+    serverDirectiveFiles: [],
+    suspenseCandidateFiles: [],
+  };
+  for (const file of files) {
+    if (/(?:^|\/)app\/(?:page|layout)\.[cm]?[jt]sx?$/u.test(file.path)) {
+      hints.appRouterEntries.push(file.path);
+    }
+    if (/^\s*["']use client["']/u.test(file.content)) {
+      hints.clientDirectiveFiles.push(file.path);
+    }
+    if (/["']use server["']/u.test(file.content)) {
+      hints.serverDirectiveFiles.push(file.path);
+    }
+    if (/Suspense/u.test(file.content) || /(?:^|\/)loading\.[cm]?[jt]sx?$/u.test(file.path)) {
+      hints.suspenseCandidateFiles.push(file.path);
+    }
+  }
+  return hints;
+};
 
 /**
  * Default discovery reports source hints only. Evaluator-owned reviews and
@@ -33,7 +43,9 @@ export const createDefaultFrameworkAdapter = (input: {
   side: "reference" | "candidate";
   files: readonly SourceFile[];
   baseURL: string;
-  sourceReview?: TrustedFrameworkAdapter["reviewSource"];
+  sourceReview?: (
+    requirementId: (typeof frameworkMatrix)[number]["id"],
+  ) => ReturnType<TrustedFrameworkAdapter["reviewSource"]>;
   browserFixture?: TrustedFrameworkAdapter["exerciseBrowser"];
   navigationFixture?: TrustedFrameworkAdapter["instantNavigationRecipe"];
 }): TrustedFrameworkAdapter => {
@@ -41,7 +53,7 @@ export const createDefaultFrameworkAdapter = (input: {
   return {
     exerciseBrowser:
       input.browserFixture ??
-      (async () => ({
+      (() => ({
         artifacts: [],
         assertions: [],
         disposition: "not-run",
@@ -49,7 +61,7 @@ export const createDefaultFrameworkAdapter = (input: {
       })),
     instantNavigationRecipe:
       input.navigationFixture ??
-      (async () => ({
+      (() => ({
         disposition: "not-run",
         ready: false,
         reason:
@@ -57,7 +69,7 @@ export const createDefaultFrameworkAdapter = (input: {
       })),
     reviewSource:
       input.sourceReview ??
-      (async () => ({
+      (() => ({
         artifacts: [],
         disposition: "not-run",
         ready: false,
@@ -71,11 +83,13 @@ export const defaultFrameworkRequirementIds = frameworkMatrix.map((row) => row.i
 export const createDefaultFrameworkAdapters = (input: {
   reference?: { files: readonly SourceFile[]; baseURL: string };
   candidate?: { files: readonly SourceFile[]; baseURL: string };
-}): Partial<Record<"reference" | "candidate", TrustedFrameworkAdapter>> => ({
-  ...(input.reference
-    ? { reference: createDefaultFrameworkAdapter({ side: "reference", ...input.reference }) }
-    : {}),
-  ...(input.candidate
-    ? { candidate: createDefaultFrameworkAdapter({ side: "candidate", ...input.candidate }) }
-    : {}),
-});
+}): Partial<Record<"reference" | "candidate", TrustedFrameworkAdapter>> => {
+  const adapters: Partial<Record<"reference" | "candidate", TrustedFrameworkAdapter>> = {};
+  if (input.reference) {
+    adapters.reference = createDefaultFrameworkAdapter({ side: "reference", ...input.reference });
+  }
+  if (input.candidate) {
+    adapters.candidate = createDefaultFrameworkAdapter({ side: "candidate", ...input.candidate });
+  }
+  return adapters;
+};
