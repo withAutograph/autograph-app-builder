@@ -55,6 +55,9 @@ export interface RepositoryProductionSetupPorts {
   ) => Promise<z.infer<ReturnType<typeof z.json>>>;
   /** Reads the one-time proof for this Builder owner; matching email is not identity authority. */
   prepareCreatorIdentity?: (context: RepositoryProductionEffectContext) => Promise<void>;
+  reconcileCreatorRoles?: (
+    context: RepositoryProductionEffectContext,
+  ) => Promise<"applied" | "skipped">;
   readCreatorIdentity: (row: RepositoryProductionRow) => Promise<RepositoryProductionIdentity>;
   reconcile: (
     context: RepositoryProductionEffectContext,
@@ -67,6 +70,7 @@ export interface RepositoryProductionSetupResult {
   signInUrl?: string;
 }
 const unfinished = (record: RepositoryProductionRecord) =>
+  record.creatorRoleUpdate?.state === "pending" ||
   Object.values(record.effects).some((effect) => effect.state === "pending");
 const selectedEffects = (record: RepositoryProductionRecord): RepositoryProductionEffect[] =>
   record.intent.storage.kind === "none"
@@ -116,6 +120,19 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         }
         next.effects["allocate-storage"] = row.record.effects["allocate-storage"];
         next.effects["creator-access"] = row.record.effects["creator-access"];
+        if (
+          next.effects["creator-access"].state === "applied" &&
+          !isDeepStrictEqual(
+            [...new Set(row.record.intent.creatorRoles)].toSorted(),
+            [...new Set(intent.creatorRoles)].toSorted(),
+          )
+        ) {
+          next.creatorRoleUpdate = {
+            commandId: randomUUID(),
+            roles: [...new Set(intent.creatorRoles)].toSorted(),
+            state: "pending",
+          };
+        }
         if (row.record.approval !== undefined) {
           next.approval = row.record.approval;
         }
@@ -141,9 +158,28 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
       }
       for (const effect of selectedEffects(row.record)) {
         await assertCurrent();
+        const context = (): RepositoryProductionEffectContext => ({
+          row,
+          effect,
+          assertCurrent,
+          checkpoint: async (value) => {
+            await save({
+              ...row.record,
+              workerCheckpoints: [...row.record.workerCheckpoints, value],
+            });
+          },
+        });
         // Once initially granted, access management owns revocation and role changes.
         // Neither an ordinary revision nor setup retry may restore an intentionally removed grant.
         if (effect === "creator-access" && row.record.effects[effect].state === "applied") {
+          const update = row.record.creatorRoleUpdate;
+          if (update?.state === "pending") {
+            if (!ports.reconcileCreatorRoles) {
+              throw new Error("repository_production_role_update_unavailable");
+            }
+            const state = await ports.reconcileCreatorRoles(context());
+            await save({ ...row.record, creatorRoleUpdate: { ...update, state } });
+          }
           continue;
         }
         if (effect === "creator-access") {
@@ -177,17 +213,6 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
             await save({ ...row.record, creatorActorId: identity.actorId });
           }
         }
-        const context = (): RepositoryProductionEffectContext => ({
-          row,
-          effect,
-          assertCurrent,
-          checkpoint: async (value) => {
-            await save({
-              ...row.record,
-              workerCheckpoints: [...row.record.workerCheckpoints, value],
-            });
-          },
-        });
         if (row.record.effects[effect].state !== "idle") {
           const observation = await ports.reconcile(context());
           await assertCurrent();

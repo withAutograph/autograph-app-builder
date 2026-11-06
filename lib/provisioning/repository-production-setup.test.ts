@@ -102,6 +102,13 @@ const fixture = () => {
         : actual.has(effect)
           ? { state: "applied", receipt: { effect } }
           : { state: "not-applied" },
+    reconcileCreatorRoles: async (context) => {
+      if (!actual.has("creator-access")) {
+        return "skipped";
+      }
+      calls.push(`roles:${context.row.record.creatorRoleUpdate?.roles.join(",")}`);
+      return "applied";
+    },
     apply: async ({ effect, row: current }) => {
       expect(current.record.effects[effect].state).toBe("pending");
       if (effect === "allocate-storage") {
@@ -181,6 +188,27 @@ describe("Builder-owned Production setup", () => {
     expect(f.read()?.record.resource).toEqual(resource);
     expect(f.calls.filter((call) => call === "creator-access")).toHaveLength(1);
     expect(f.calls.filter((call) => call === "credentials")).toHaveLength(1);
+  });
+  it("updates newly approved roles only for an active creator and retains the database", async () => {
+    const f = fixture();
+    await f.service.prepare(scope, intent);
+    const resource = f.read()?.record.resource;
+    expect((await f.service.prepare(scope, { ...intent, creatorRoles: ["approver"] })).state).toBe(
+      "ready",
+    );
+    expect(f.calls).toContain("roles:approver");
+    expect(f.read()?.record.resource).toEqual(resource);
+    expect(f.read()?.record.creatorRoleUpdate?.state).toBe("applied");
+  });
+  it("does not restore removed access when an approved revision changes roles", async () => {
+    const f = fixture();
+    await f.service.prepare(scope, intent);
+    f.actual.delete("creator-access");
+    expect((await f.service.prepare(scope, { ...intent, creatorRoles: ["approver"] })).state).toBe(
+      "ready",
+    );
+    expect(f.calls).not.toContain("roles:approver");
+    expect(f.read()?.record.creatorRoleUpdate?.state).toBe("skipped");
   });
   it("preserves an unknown write and refuses a new source intent until it settles", async () => {
     const f = fixture();

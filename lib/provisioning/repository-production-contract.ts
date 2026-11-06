@@ -66,6 +66,13 @@ export const repositoryProductionRecordSchema = z.strictObject({
   resource: repositoryProductionResourceSchema.optional(),
   privateState: z.json().optional(),
   creatorActorId: id.optional(),
+  creatorRoleUpdate: z
+    .strictObject({
+      commandId: z.uuid(),
+      roles: z.array(id),
+      state: z.enum(["pending", "applied", "skipped"]),
+    })
+    .optional(),
   ownerContext: operatorOwnerContextSchema.optional(),
   creatorOwnerContext: operatorOwnerContextSchema.optional(),
   approval: z.strictObject({ planDigest: hash, approvedByCallId: id, approvalId: id }).optional(),

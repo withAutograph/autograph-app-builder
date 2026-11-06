@@ -43,7 +43,11 @@ app. Worker effects carry a positive durable fencing generation and are
 checkpointed before dispatch. Interrupted writes are read back before retry;
 uncertain results remain pending. Revisions retain the database and credentials.
 After the initial creator grant finishes, setup never regrants it automatically:
-People-page revocations and role changes remain authoritative.
+People-page revocations and role changes remain authoritative. When a new
+reviewed schema changes creator roles, an existing active creator is updated
+through the normal access-management journal under the same app lock. Removed
+creators stay removed. Interrupted role updates retain their active preimage
+and command identity; conflicting new People commands wait for reconciliation.
 
 The runtime binding cannot adopt or overwrite an unrelated existing variable.
 An earlier delivery path's existing database must be reconciled to its original

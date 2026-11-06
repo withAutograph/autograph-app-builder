@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-nested-functions -- Request-scoped management factories share the held app lease without reacquiring it. */
 /* oxlint-disable eslint/no-nested-ternary, sonarjs/no-nested-conditional -- Progress projection retains the four distinct creator states and explicit removal status. */
 /* oxlint-disable sonarjs/expression-complexity, react-doctor/server-sequential-independent-await -- Owner authorization is re-read before examining the saved approval; the full configured destination must match. */
 /* oxlint-disable unicorn/no-await-expression-member -- These owner-scoped async reads are immediately projected; no mutable state is reused across awaits. */
@@ -28,6 +29,10 @@ import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
 import { createNativeTargetApprovalHistoryTransport } from "./native-target-onboarding-deployment";
 import { createCapturedAppDescriptionStore } from "./captured-app-description";
+import {
+  createRepositoryProductionRoleUpdater,
+  assertNoConflictingCreatorRoleUpdate,
+} from "./repository-production-role-update";
 import { createRepositoryProductionCreator } from "./repository-production-creator";
 import { createRepositoryProductionHandler } from "./repository-production-dispatcher";
 import type { RepositoryProductionRequestOwner } from "./repository-production-dispatcher";
@@ -308,12 +313,34 @@ export const createRepositoryProductionNativeHandler =
           authRealm: realm(scope),
           signal: request.signal,
           readCreator: (row) => creator.readCreator(row),
-          readGeneratedRelease: async () => {
-            const capture = (await current(scope)).capture;
-            if (!capture) {
+          readGeneratedRelease: async (row) => {
+            if (row.record.intent.storage.kind !== "postgres") {
               throw new Error("repository_production_capture_unavailable");
             }
-            return capture.files;
+            const known = await current(scope);
+            const artifactContext = {
+              authority: scope.authority,
+              target: { appId: scope.appId, sessionId: row.record.intent.sessionId },
+            };
+            const selections = createPostgresOperatorArtifactSelections({
+              database,
+              assertCurrentOwner: known.assertCurrentOwner,
+            });
+            const selection = await selections.readExact?.(artifactContext, {
+              artifactRef: row.record.intent.storage.artifactRef,
+            });
+            if (!selection) {
+              throw new Error("repository_production_capture_unavailable");
+            }
+            return (
+              await createOperatorArtifactPublication({
+                store: createPostgresOperatorArtifactStore({
+                  database,
+                  assertCurrentOwner: known.assertCurrentOwner,
+                }),
+                assertCurrentOwner: known.assertCurrentOwner,
+              }).readGeneratedRelease(artifactContext, selection)
+            ).files;
           },
           readConnections: (context) =>
             createRepositoryProductionConnectionReader({
@@ -373,6 +400,19 @@ export const createRepositoryProductionNativeHandler =
           withLease: held ? async (_scope, run) => await run(held) : withLease,
           ...workers(scope),
           prepareCreatorIdentity: (context) => creator.prepare(context),
+          reconcileCreatorRoles: createRepositoryProductionRoleUpdater({
+            readMembers: async (context) =>
+              z
+                .array(z.object({ id: z.string() }))
+                .parse(await authRequest(context, { action: "list-members" }, true)),
+            execute: async (context, command) => {
+              await managementFor(
+                () => context.assertCurrent(),
+                command.clientRequestId,
+                true,
+              ).execute((await current(scope)).owner, command);
+            },
+          }),
         });
       const creator = createRepositoryProductionCreator({
         builderOrigin,
@@ -424,111 +464,127 @@ export const createRepositoryProductionNativeHandler =
           return await setup(row.record.scope).prepare(row.record.scope, row.record.intent);
         },
       });
-      const management = createRepositoryProductionManagement({
-        builderOrigin,
-        journal: accessJournal,
-        withLease,
-        readSetup: store.read,
-        workers,
-        realm,
-        appUrl: async (scope) => {
-          const known = await current(scope);
-          return new URL(
-            known.description.app.browserEntryPath ??
-              known.description.app.routes[0] ??
-              `/${scope.appId}`,
-            scope.publicOrigin,
-          ).toString();
-        },
-        roles: async (scope) => (await current(scope)).intent.creatorRoles,
-        resolve: async (owner) => {
-          const known = await resolve(owner);
-          const row = await store.read(known.scope);
-          const state = row
-            ? await setup(known.scope).status(known.scope, row.record.intent)
-            : { state: "checking-access" as const };
-          const identity = row ? await creator.describe(row) : undefined;
-          const creatorRemoved =
-            row?.record.effects["creator-access"].state === "applied" &&
-            row.record.creatorActorId !== undefined
-              ? !z
-                  .array(z.object({ id: z.string() }))
-                  .parse(await authRequest(readContext(row), { action: "list-members" }, true))
-                  .some((person) => person.id === row.record.creatorActorId)
-              : false;
-          return {
-            scope: known.scope,
-            appName: known.scope.appId,
-            organizationName: known.profile.organization.name,
-            roles: known.intent.creatorRoles.map((id) => ({ id, label: id })),
-            canManage: true,
-            appUrl: new URL(
+      const managementFor = (held?: () => Promise<void>, commandId?: string, roleUpdate = false) =>
+        createRepositoryProductionManagement({
+          builderOrigin,
+          journal: accessJournal,
+          withLease: held ? async (_scope, run) => await run(held) : withLease,
+          readSetup: store.read,
+          workers,
+          realm,
+          appUrl: async (scope) => {
+            const known = await current(scope);
+            return new URL(
               known.description.app.browserEntryPath ??
                 known.description.app.routes[0] ??
-                `/${known.scope.appId}`,
-              known.scope.publicOrigin,
-            ).toString(),
-            creator: {
-              ...identity,
-              status: creatorRemoved
-                ? ("failed" as const)
-                : state.state === "ready"
-                  ? ("ready" as const)
-                  : state.state === "identity-required"
-                    ? ("sign_in_required" as const)
-                    : ("setting_up" as const),
-              ...("signInUrl" in state && state.signInUrl !== undefined
-                ? { signInUrl: state.signInUrl }
-                : {}),
-              ...(creatorRemoved
-                ? {
-                    message:
-                      "Your app access was removed. Restore it from People or contact your workspace owner.",
-                    retryable: false,
-                  }
-                : {}),
-            },
-          };
-        },
-        assertAuthorized: async (owner, scope) => {
-          const resolved = await resolve(owner);
-          if (!isDeepStrictEqual(resolved.scope, scope)) {
-            throw new Error("repository_production_scope_denied");
-          }
-        },
-        retrySetup: async (scope, effect) => {
-          await setup(scope, () => effect.assertCurrent()).prepare(
-            scope,
-            (await current(scope)).intent,
-          );
-        },
-        renewSignIn: async (scope, effect) => {
-          const row = await store.read(scope);
-          if (!row) {
-            throw new Error("repository_production_setup_required");
-          }
-          await creator.renew(
-            {
-              row,
-              effect: "creator-access",
-              assertCurrent: () => effect.assertCurrent(),
-              checkpoint: async (value) => {
-                const currentRow = await store.read(scope);
-                if (
-                  !currentRow ||
-                  !(await store.compareAndSet(currentRow, {
-                    ...currentRow.record,
-                    workerCheckpoints: [...currentRow.record.workerCheckpoints, value],
-                  }))
-                ) {
-                  throw new Error("repository_production_conflict");
-                }
+                `/${scope.appId}`,
+              scope.publicOrigin,
+            ).toString();
+          },
+          roles: async (scope) =>
+            (await store.read(scope))?.record.intent.creatorRoles ??
+            (await current(scope)).intent.creatorRoles,
+          resolve: async (owner) => {
+            const known = await resolve(owner);
+            const row = await store.read(known.scope);
+            const state = row
+              ? await setup(known.scope).status(known.scope, row.record.intent)
+              : { state: "checking-access" as const };
+            const identity = row ? await creator.describe(row) : undefined;
+            const creatorRemoved =
+              row?.record.effects["creator-access"].state === "applied" &&
+              row.record.creatorActorId !== undefined
+                ? !z
+                    .array(z.object({ id: z.string() }))
+                    .parse(await authRequest(readContext(row), { action: "list-members" }, true))
+                    .some((person) => person.id === row.record.creatorActorId)
+                : false;
+            return {
+              scope: known.scope,
+              appName: known.scope.appId,
+              organizationName: known.profile.organization.name,
+              roles: (row?.record.intent.creatorRoles ?? known.intent.creatorRoles).map((id) => ({
+                id,
+                label: id,
+              })),
+              canManage: true,
+              appUrl: new URL(
+                known.description.app.browserEntryPath ??
+                  known.description.app.routes[0] ??
+                  `/${known.scope.appId}`,
+                known.scope.publicOrigin,
+              ).toString(),
+              creator: {
+                ...identity,
+                status: creatorRemoved
+                  ? ("failed" as const)
+                  : state.state === "ready"
+                    ? ("ready" as const)
+                    : state.state === "identity-required"
+                      ? ("sign_in_required" as const)
+                      : ("setting_up" as const),
+                ...("signInUrl" in state && state.signInUrl !== undefined
+                  ? { signInUrl: state.signInUrl }
+                  : {}),
+                ...(creatorRemoved
+                  ? {
+                      message:
+                        "Your app access was removed. Restore it from People or contact your workspace owner.",
+                      retryable: false,
+                    }
+                  : {}),
               },
-            },
-            effect.operationRef,
-          );
-        },
-      });
+            };
+          },
+          assertAuthorized: async (owner, scope, mutating) => {
+            const resolved = await resolve(owner);
+            if (!isDeepStrictEqual(resolved.scope, scope)) {
+              throw new Error("repository_production_scope_denied");
+            }
+            if (mutating && !roleUpdate) {
+              assertNoConflictingCreatorRoleUpdate({
+                row: await store.read(scope),
+                commandId,
+                pendingCommandIds: (await accessJournal.pending(scope)).map(
+                  (item) => item.record.command.clientRequestId,
+                ),
+              });
+            }
+          },
+          retrySetup: async (scope, effect) => {
+            await setup(scope, () => effect.assertCurrent()).prepare(
+              scope,
+              (await current(scope)).intent,
+            );
+          },
+          renewSignIn: async (scope, effect) => {
+            const row = await store.read(scope);
+            if (!row) {
+              throw new Error("repository_production_setup_required");
+            }
+            await creator.renew(
+              {
+                row,
+                effect: "creator-access",
+                assertCurrent: () => effect.assertCurrent(),
+                checkpoint: async (value) => {
+                  const currentRow = await store.read(scope);
+                  if (
+                    !currentRow ||
+                    !(await store.compareAndSet(currentRow, {
+                      ...currentRow.record,
+                      workerCheckpoints: [...currentRow.record.workerCheckpoints, value],
+                    }))
+                  ) {
+                    throw new Error("repository_production_conflict");
+                  }
+                },
+              },
+              effect.operationRef,
+            );
+          },
+        });
+      const management = managementFor();
       const handler = createRepositoryProductionHandler({
         verifyBuilderWorkload: createOperatorWorkloadVerifier(configuration.builderWorkload),
         verifyAuthWorkload: async (callback, invitationId) => {
@@ -613,10 +669,17 @@ export const createRepositoryProductionNativeHandler =
             (await store.read(found.scope)) ??
             (await store.reserve(initialRepositoryProductionRecord(found.scope, found.intent)));
           if (
-            Object.values(row.record.effects).some((effect) => effect.state === "pending") &&
+            (row.record.creatorRoleUpdate?.state === "pending" ||
+              Object.values(row.record.effects).some((effect) => effect.state === "pending")) &&
             !isDeepStrictEqual(row.record.intent, found.intent)
           ) {
             throw new Error("repository_production_reconciliation_required");
+          }
+          if (
+            !isDeepStrictEqual(row.record.intent, found.intent) &&
+            (await accessJournal.pending(found.scope)).length > 0
+          ) {
+            throw new Error("repository_production_access_reconciliation_required");
           }
           if (
             !(await store.compareAndSet(row, {
@@ -632,6 +695,18 @@ export const createRepositoryProductionNativeHandler =
         },
         management: {
           ...management,
+          execute: async (owner, command) => {
+            const found = await resolve(owner);
+            const row = await store.read(found.scope);
+            if (
+              command.action === "retry-setup" &&
+              row?.record.creatorRoleUpdate?.state === "pending"
+            ) {
+              await setup(found.scope).prepare(found.scope, row.record.intent);
+              return await management.read(owner);
+            }
+            return await managementFor(undefined, command.clientRequestId).execute(owner, command);
+          },
           completeInvitation: async (id) => {
             const result = await creator.complete(id);
             if (result === "not-owned") {
