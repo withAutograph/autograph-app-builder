@@ -64,7 +64,6 @@ const setup = () => {
         if (file.endsWith("access.json")) {
           events.push("activated");
         }
-        return;
       }),
     },
     getCommand: vi.fn(async () => command),
@@ -74,7 +73,6 @@ const setup = () => {
     }),
     update: vi.fn(async ({ ports }: { ports: number[] }) => {
       events.push(ports.length === 0 ? "closed" : "exposed");
-      return;
     }),
   };
   const options = {

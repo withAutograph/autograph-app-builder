@@ -124,7 +124,6 @@ describe("development Sandbox workspace refresh", () => {
       } else {
         files.delete(target);
       }
-      return;
     });
     const sandbox = {
       id: "sandbox",
@@ -157,7 +156,6 @@ describe("development Sandbox workspace refresh", () => {
       }),
       writeBinaryFile: vi.fn(async ({ content, path: target }) => {
         files.set(target, content);
-        return;
       }),
       writeFile: vi.fn<SandboxSession["writeFile"]>(async ({ content, path: target }) => {
         const reader = content.getReader();
@@ -174,7 +172,6 @@ describe("development Sandbox workspace refresh", () => {
       }),
       writeTextFile: vi.fn(async ({ content, path: target }) => {
         files.set(target, content);
-        return;
       }),
     };
 
@@ -258,7 +255,6 @@ const legacyWorkspaceFixture = () => {
             files.delete(name);
           }
         }
-        return;
       },
     ),
     run: vi.fn(async () => ({
@@ -286,7 +282,6 @@ const legacyWorkspaceFixture = () => {
     }),
     writeTextFile: vi.fn(async ({ content, path: target }: { content: string; path: string }) => {
       files.set(target, Buffer.from(content));
-      return;
     }),
   };
   return { files, sandbox, sha, source };

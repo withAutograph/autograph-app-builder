@@ -484,7 +484,6 @@ describe("retained dirty planning baseline", () => {
       },
       removePath: async ({ path: name, recursive, force }) => {
         rmSync(localPath(name), { force, recursive });
-        return;
       },
       resolvePath: localPath,
       run: async ({ command, workingDirectory }) => {
@@ -510,7 +509,6 @@ describe("retained dirty planning baseline", () => {
         const file = localPath(name);
         mkdirSync(path.dirname(file), { recursive: true });
         writeFileSync(file, content);
-        return;
       },
       writeFile: async ({ path: name, content }) => {
         const file = localPath(name);
@@ -521,7 +519,6 @@ describe("retained dirty planning baseline", () => {
         const file = localPath(name);
         mkdirSync(path.dirname(file), { recursive: true });
         writeFileSync(file, content);
-        return;
       },
     };
     const retainedReceipts: { sourceSha: string; workspaceDigest: string; sourceTree: string }[] =
