@@ -27,6 +27,7 @@ import type { NormalActorJournalPorts } from "./hosted-operator-normal-actor-jou
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRow } from "./hosted-runtime-journal";
 import { createNormalActorRuntimeBindings } from "./hosted-operator-normal-actor-runtime-bindings";
+import { createVerifiedActorReadback } from "./hosted-operator-verified-actor-readback";
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
@@ -473,7 +474,7 @@ const fixture = async (
       ],
     });
   };
-  const runtime = createNormalActorRuntimeBindings({
+  const runtimeDeps: Parameters<typeof createNormalActorRuntimeBindings>[0] = {
     journalPorts,
     assertCurrentPlan: async (input) => {
       currentChecks += 1;
@@ -490,7 +491,9 @@ const fixture = async (
       expect(input.origin).toBe(program.origin);
       return fetch;
     },
-  });
+  };
+  const runtime = createNormalActorRuntimeBindings(runtimeDeps);
+  const verifiedReadback = createVerifiedActorReadback(runtimeDeps);
   const input = {
     ...context,
     plan: fullPlan,
@@ -498,6 +501,7 @@ const fixture = async (
   };
   return {
     runtime,
+    verifiedReadback,
     input,
     failJournal(error: Error) {
       journalFailure = error;
@@ -578,6 +582,30 @@ describe("fresh authenticated normal actor runtime bindings", () => {
     );
     const retained = await f.journal.read(context);
     expect(retained?.preparation.accountOperationRef).toBe(accountOperationRef);
+  });
+  it("returns only verified account and membership facts without returning any captured session", async () => {
+    const f = await fixture();
+    const before = structuredClone(f.row.record.accountPreparation);
+    const result = await f.verifiedReadback(f.input);
+    expect(result.requestCorrelation).toBe("not_established");
+    expect(result.actors).toHaveLength(6);
+    expect(
+      result.actors.find(
+        (entry) => entry.actorKey === "owner" && entry.organizationId === "org-one",
+      ),
+    ).toMatchObject({ actorId: "id-owner", membershipRole: "owner", appRoles: ["owner"] });
+    const publicText = JSON.stringify(result);
+    expect(publicText).not.toContain("storageState");
+    expect(publicText).not.toContain("cookie");
+    expect(publicText).not.toContain("realmSessionId");
+    expect(f.row.record.accountPreparation).toEqual(before);
+    expect(f.currentChecks).toBe(2);
+  });
+  it("refuses the account readback when the current owner is revoked", async () => {
+    const f = await fixture();
+    f.revokeCurrent();
+    await denied(f.verifiedReadback(f.input), "authorization_required");
+    expect(f.requests).toHaveLength(0);
   });
   it("exports unassigned metadata while retaining an unchanged actual active organization", async () => {
     const f = await fixture(undefined, "existing-outside-program");
