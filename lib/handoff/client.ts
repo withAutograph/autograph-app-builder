@@ -55,12 +55,11 @@ export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
   if (
     (url.protocol !== "https:" &&
       !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) ||
-    url.pathname !== "/mcp" ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
+    url.pathname !== "/mcp"
   ) {
+    throw new Error("mcp-url-invalid");
+  }
+  if (url.username || url.password || url.search || url.hash) {
     throw new Error("mcp-url-invalid");
   }
   const config = JSON.stringify({
