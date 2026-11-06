@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { execFileSync, spawnSync, spawn } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   mkdtempSync,
@@ -13,8 +13,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { once } from "node:events";
 import { describe, expect, it } from "vitest";
+import { inspectDevelopmentSourceGeneration } from "./development-source-generation";
 import { captureLocalPlanningSource, reconcileLocalPlanningSource } from "./local-planning-source";
 import { localSourceBaselineManifestSchema } from "./local-source-baseline-contract";
 import { retainPreparedLocalSourceBaseline } from "./local-source-baseline-retention";
@@ -233,28 +233,24 @@ describe("local planning base adoption", () => {
   });
   it("rejects an actually moving source before returning mismatched generation metadata", async () => {
     const f = fixture();
-    f.write(f.source, "large.txt", "x".repeat(32 * 1024 * 1024));
-    const writer = spawn(
-      process.execPath,
-      [
-        "-e",
-        `const fs=require('node:fs');let n=0;const write=()=>fs.writeFileSync(process.argv[1],String(n++));write();process.stdout.write('ready');setInterval(write,1);`,
-        path.join(f.source, "shared.txt"),
-      ],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
+    let firstObservation = true;
+    const inspectSource: typeof inspectDevelopmentSourceGeneration = async (root) => {
+      const generation = await inspectDevelopmentSourceGeneration(root);
+      if (firstObservation) {
+        firstObservation = false;
+        f.write(f.source, "shared.txt", "changed after initial source observation\n");
+      }
+      return generation;
+    };
     try {
-      await once(writer.stdout, "data");
-      await expect(captureLocalPlanningSource(f.source, f.originalSha)).rejects.toThrow(
-        "local source changed",
-      );
+      await expect(
+        captureLocalPlanningSource(f.source, f.originalSha, { inspectSource }),
+      ).rejects.toThrow("local source changed");
       expect(f.git(f.candidate, "rev-parse", "HEAD")).toBe(f.originalSha);
       expect(readFileSync(path.join(f.candidate, "apps/example/app/page.tsx"), "utf-8")).toBe(
         "saved product\n",
       );
     } finally {
-      writer.kill();
-      await once(writer, "exit");
       f.dispose();
     }
   });
