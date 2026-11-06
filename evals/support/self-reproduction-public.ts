@@ -30,6 +30,8 @@ export interface PublicState {
   session?: EveSessionResult;
   pendingMessage?: { clientRequestId: string; message: string };
   pendingResponse?: { clientRequestId: string; responses: Responses };
+  /** Accepted SEND may precede native progress beyond the previous waiting snapshot. */
+  awaitingMessageProgressAfterCursor?: number;
   answered: string[];
   outcome: string;
   error?: string;
@@ -432,13 +434,18 @@ const sendPendingMessage = async (options: SessionOptions, accept: AcceptSession
     if (!state.session) {
       throw new Error("Missing public session for pending message");
     }
-    accept(
+    const observationCursor = state.session.cursor;
+    const result = eveSessionResultSchema.parse(
       await transport.call("autograph_send", {
         ...pending,
-        observationCursor: state.session.cursor,
+        observationCursor,
         sessionId: state.session.sessionId,
       }),
     );
+    if (result.status === "working" && result.error === undefined) {
+      state.awaitingMessageProgressAfterCursor = observationCursor;
+    }
+    accept(result);
     delete state.pendingMessage;
     save();
   }
@@ -572,6 +579,13 @@ export const runPublicSession = async (options: SessionOptions) => {
         "Builder returned no public session handle. The prior session and exact pending request are preserved; inspect the retained response before resuming.",
       );
     }
+    if (
+      state.awaitingMessageProgressAfterCursor !== undefined &&
+      (result.cursor > state.awaitingMessageProgressAfterCursor ||
+        ["input_required", "completed", "failed", "cancelled"].includes(result.status))
+    ) {
+      delete state.awaitingMessageProgressAfterCursor;
+    }
     state.session = retainPublicSessionCursor(state.session, result);
     state.outcome = state.session.status;
     delete state.error;
@@ -605,7 +619,7 @@ export const runPublicSession = async (options: SessionOptions) => {
       save();
       return;
     }
-    if (session.status === "waiting") {
+    if (session.status === "waiting" && state.awaitingMessageProgressAfterCursor === undefined) {
       state.outcome = "waiting";
       save();
       return;
