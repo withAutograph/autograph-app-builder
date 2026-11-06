@@ -15,10 +15,10 @@ const root = process.cwd();
 const projectRoot = path.join(root, "lib/provisioning/operator-host");
 const configuration = z
   .object({
-    services: z.object({ operator: z.object({ root: z.literal("."), entrypoint: z.string() }) }),
     rewrites: z.array(
-      z.object({ source: z.string(), destination: z.object({ service: z.string() }) }),
+      z.object({ destination: z.object({ service: z.string() }), source: z.string() }),
     ),
+    services: z.object({ operator: z.object({ entrypoint: z.string(), root: z.literal(".") }) }),
   })
   .parse(JSON.parse(await readFile(path.join(projectRoot, "vercel.json"), "utf-8")));
 // The owned temporary directory is nested only so Node resolves the same pinned operator workspace dependencies.
@@ -28,7 +28,7 @@ const run = (binary: string, args: string[]) => {
   const result = spawnSync(binary, args, {
     cwd: root,
     encoding: "utf-8",
-    env: { PATH: process.env.PATH ?? "", NODE_ENV: "test" },
+    env: { NODE_ENV: "test", PATH: process.env.PATH ?? "" },
   });
   assert.equal(result.status, 0, `${path.basename(binary)} failed: ${result.stderr}`);
   return result.stdout;
@@ -75,5 +75,5 @@ console.log('PASS compiled native operator: '+paths.length+' actual closed Servi
   );
   console.log(run(process.execPath, [driver]).trim());
 } finally {
-  await rm(scratch, { recursive: true, force: true });
+  await rm(scratch, { force: true, recursive: true });
 }

@@ -79,7 +79,7 @@ const port =
 const run = (bin: string, args: string[]): void => {
   const result = spawnSync(path.join(postgresBin ?? "", bin), args, {
     encoding: "utf-8",
-    env: { PATH: process.env.PATH, LANG: "C", LC_ALL: "C" },
+    env: { LANG: "C", LC_ALL: "C", PATH: process.env.PATH },
   });
   if (result.status !== 0) {
     throw new Error(`Owned PostgreSQL ${bin} failed: ${result.stderr.slice(-500)}`);
@@ -387,21 +387,21 @@ try {
   const prepareForCleanup = (selection: OperatorSelection, target: HostedRuntimeTarget): void => {
     const preparePlan = makePlan(selection);
     const preparePlanChild = worker({
+      action: "plan",
       authority,
+      plan: preparePlan,
       selection,
       target,
-      plan: preparePlan,
-      action: "plan",
     });
     const preparePlanned = plannedOf(preparePlanChild.stdout);
     const prepareExecution = worker({
+      action: "execute",
       authority,
+      operationRef: preparePlanned.operationRef,
+      plan: preparePlan,
+      planDigest: preparePlanned.planDigest,
       selection,
       target,
-      plan: preparePlan,
-      action: "execute",
-      operationRef: preparePlanned.operationRef,
-      planDigest: preparePlanned.planDigest,
     });
     assert.equal(
       resultOf(prepareExecution.stdout).status,
@@ -532,7 +532,7 @@ try {
     const selection = selectionFor();
     const target = targetFor(selection);
     const plan = makePlan(selection, { action });
-    const base = { authority, selection, target, plan };
+    const base = { authority, plan, selection, target };
     if (action === "cleanup") {
       prepareForCleanup(selection, target);
     }
@@ -581,10 +581,10 @@ try {
       };
       journalRow = await store.compareAndSet({
         authority,
-        target,
         expectedRevision: journalRow.revision,
         now: new Date(),
         record: hostedRuntimeJournalRecordSchema.parse(crashedRecord),
+        target,
       });
       assert.ok(journalRow, "stale child lease must be expired before replacement recovery");
     }
@@ -613,12 +613,12 @@ try {
       planDigest,
     );
     return {
-      selection,
-      target,
-      plan: frozenPlan,
       operationRef,
+      plan: frozenPlan,
       planDigest,
       row: finalRow,
+      selection,
+      target,
     };
   };
 
@@ -681,18 +681,18 @@ try {
   const unknownPlan = makePlan(unknownSelection);
   const unknownBase = {
     authority,
+    plan: unknownPlan,
     selection: unknownSelection,
     target: unknownTarget,
-    plan: unknownPlan,
   };
   const unknownPlanWorker = worker({ ...unknownBase, action: "plan" });
   const unknownPlanned = plannedOf(unknownPlanWorker.stdout);
   const unknownExecute = worker({
     ...unknownBase,
     action: "execute",
+    failure: "unknown",
     operationRef: unknownPlanned.operationRef,
     planDigest: unknownPlanned.planDigest,
-    failure: "unknown",
   });
   assert.equal(resultOf(unknownExecute.stdout).status, "blocked");
   const noEffects = await fixtureSql<
@@ -713,9 +713,9 @@ try {
   const originalPlan = makePlan(replanSelection);
   const originalBase = {
     authority,
+    plan: originalPlan,
     selection: replanSelection,
     target: replanTarget,
-    plan: originalPlan,
   };
   const initialPlanWorker = worker({ ...originalBase, action: "plan" });
   const originalPlanned = plannedOf(initialPlanWorker.stdout);
@@ -731,11 +731,11 @@ try {
     releaseSha: "d".repeat(64),
   });
   const replacementWorker = worker({
+    action: "plan",
     authority,
+    plan: replacementPlan,
     selection: replanSelection,
     target: replanTarget,
-    plan: replacementPlan,
-    action: "plan",
   });
   const replacementResult = plannedOf(replacementWorker.stdout);
   assert.equal(replacementResult.status, "planned");
@@ -743,47 +743,47 @@ try {
   assert.equal(retained?.record.privateState?.encryptedToken, fixtureCiphertext);
   assert.equal(retained?.record.proof, undefined);
   const mismatchedPlan = makePlan(replanSelection, {
+    neonProjectId: "neon_different",
     releaseId: "release_other_resource",
     releaseSha: "e".repeat(64),
-    neonProjectId: "neon_different",
   });
   const mismatchWorker = worker({
+    action: "plan",
     authority,
+    plan: mismatchedPlan,
     selection: replanSelection,
     target: replanTarget,
-    plan: mismatchedPlan,
-    action: "plan",
   });
   const mismatchResult = resultOf(mismatchWorker.stdout);
   assert.equal(mismatchResult.status, "blocked");
   assert.equal(mismatchResult.code, "resource_mismatch");
   const cleanupPlan = makePlan(replanSelection, { action: "cleanup" });
   const cleanupPlannedWorker = worker({
+    action: "plan",
     authority,
+    operation: "cleanup",
+    plan: cleanupPlan,
     selection: replanSelection,
     target: replanTarget,
-    plan: cleanupPlan,
-    action: "plan",
-    operation: "cleanup",
   });
   const cleanupPlanned = plannedOf(cleanupPlannedWorker.stdout);
   assert.equal(cleanupPlanned.status, "planned");
   const cleanupExec = worker({
+    action: "execute",
     authority,
+    operationRef: cleanupPlanned.operationRef,
+    plan: cleanupPlan,
+    planDigest: cleanupPlanned.planDigest,
     selection: replanSelection,
     target: replanTarget,
-    plan: cleanupPlan,
-    action: "execute",
-    operationRef: cleanupPlanned.operationRef,
-    planDigest: cleanupPlanned.planDigest,
   });
   assert.equal(resultOf(cleanupExec.stdout).status, "cleaned");
   const afterCleanup = worker({
+    action: "plan",
     authority,
+    plan: mismatchedPlan,
     selection: replanSelection,
     target: replanTarget,
-    plan: mismatchedPlan,
-    action: "plan",
   });
   assert.equal(resultOf(afterCleanup.stdout).status, "planned");
 
@@ -793,9 +793,8 @@ try {
   const fenceOperationRef = randomUUID();
   const fencePlanDigest = operatorPlanDigest(fencePlan);
   const fenceRow = await store.reserve({
-    authority,
-    target: fenceTarget,
     approvedByCallId: "fixture-approved-call",
+    authority,
     now: new Date(),
     operator: {
       mode: "protected-operator-v1",
@@ -804,28 +803,29 @@ try {
       planDigest: fencePlanDigest,
       receipts: [],
     },
+    target: fenceTarget,
   });
   const expiredLeaseId = randomUUID();
   const expiredAt = new Date(Date.now() - 10_000);
   const leased = await store.compareAndSet({
     authority,
-    target: fenceTarget,
     expectedRevision: fenceRow.revision,
     now: new Date(),
     record: hostedRuntimeJournalRecordSchema.parse({
       ...fenceRow.record,
-      leaseId: expiredLeaseId,
       leaseExpiresAt: expiredAt.toISOString(),
+      leaseId: expiredLeaseId,
     }),
+    target: fenceTarget,
   });
   assert.ok(leased);
   const deniedGeneration = await store.reserveFenceGeneration({
     authority,
-    target: fenceTarget,
     expectedRevision: leased.revision,
     leaseId: expiredLeaseId,
-    operationRef: fenceOperationRef,
     now: new Date(),
+    operationRef: fenceOperationRef,
+    target: fenceTarget,
   });
   assert.equal(deniedGeneration, undefined, "expired lease must not allocate a fence generation");
   const afterExpiredAttempt = await store.read({ authority, target: fenceTarget });
@@ -836,52 +836,52 @@ try {
   );
   const renewed = await store.compareAndSet({
     authority,
-    target: fenceTarget,
     expectedRevision: leased.revision,
     now: new Date(),
     record: hostedRuntimeJournalRecordSchema.parse({
       ...leased.record,
       leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
     }),
+    target: fenceTarget,
   });
   assert.ok(renewed);
   const grantedGeneration = await store.reserveFenceGeneration({
     authority,
-    target: fenceTarget,
     expectedRevision: renewed.revision,
     leaseId: expiredLeaseId,
-    operationRef: fenceOperationRef,
     now: new Date(),
+    operationRef: fenceOperationRef,
+    target: fenceTarget,
   });
   assert.ok(grantedGeneration, "renewed lease must allocate a generation");
   const reservedGeneration = grantedGeneration.record.operator?.fenceGeneration;
   assert.ok(reservedGeneration !== undefined && reservedGeneration > 0);
   const duplicateGeneration = await store.reserveFenceGeneration({
     authority,
-    target: fenceTarget,
     expectedRevision: grantedGeneration.revision,
     leaseId: expiredLeaseId,
-    operationRef: fenceOperationRef,
     now: new Date(),
+    operationRef: fenceOperationRef,
+    target: fenceTarget,
   });
   assert.equal(duplicateGeneration, undefined);
   const processSelection = selectionFor();
   const processProof = await proveJournalProcessRecovery({
-    databaseUrl: dsn,
     authority,
-    target: targetFor(processSelection),
+    databaseUrl: dsn,
     plan: makePlan(processSelection),
+    target: targetFor(processSelection),
   });
   console.log(
     JSON.stringify({
-      failureCases: injectedCases,
       childProcessRestarts: true,
-      unknownNeverAbsent: true,
-      replanningAndCleanup: true,
       expiredFenceAllocationDenied: true,
-      processProof,
+      failureCases: injectedCases,
       fixture: "owned local PostgreSQL plus SQL-persisted synthetic provider effects",
       hostedPreview: "not assessed",
+      processProof,
+      replanningAndCleanup: true,
+      unknownNeverAbsent: true,
     }),
   );
 } finally {
@@ -916,5 +916,5 @@ try {
       process.stderr.write(`Fixture admin shutdown failed: ${String(error)}\n`);
     }
   }
-  await rm(scratch, { recursive: true, force: true });
+  await rm(scratch, { force: true, recursive: true });
 }

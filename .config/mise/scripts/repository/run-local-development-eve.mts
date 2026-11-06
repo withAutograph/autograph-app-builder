@@ -8,7 +8,7 @@ if (process.argv.length !== 2 && !resume) {
 }
 
 process.exitCode = await runLocalEve({
-  resume,
-
   repositoryRoot: path.resolve(import.meta.dirname, "../../../../"),
+
+  resume,
 });

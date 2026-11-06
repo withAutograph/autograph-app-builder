@@ -17,7 +17,7 @@ import { builderProvisionRequestSchema } from "../../../../../lib/provisioning/c
 import { builderProvisionJournalRecordSchema } from "../../../../../lib/provisioning/journal";
 // An owned loopback cluster only. Never consumes DATABASE_URL or provider credentials.
 const repositoryRoot = path.resolve(import.meta.dirname, "../../../../..");
-const postgresBin = process.argv[2];
+const postgresBin = process.argv.at(2);
 assert.ok(
   postgresBin && path.isAbsolute(postgresBin),
   "Supply an absolute installed PostgreSQL bin directory",
@@ -43,13 +43,13 @@ const passwordFile = path.join(scratch, "password");
 const command = (name: string, args: string[]) => {
   const result = spawnSync(path.join(postgresBin, name), args, {
     encoding: "utf-8",
-    env: { PATH: process.env.PATH, LANG: "C", LC_ALL: "C" },
+    env: { LANG: "C", LC_ALL: "C", PATH: process.env.PATH },
   });
   assert.equal(result.status, 0, `Owned PostgreSQL ${name} failed`);
 };
 const principal = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -78,15 +78,15 @@ try {
   ]);
   started = true;
   client = postgres({
-    host: "127.0.0.1",
-    port,
     database: "postgres",
-    username: "fixture_admin",
-    password,
+    host: "127.0.0.1",
     max: 5,
     onnotice: (notice) => {
       assert.ok(notice.message !== undefined);
     },
+    password,
+    port,
+    username: "fixture_admin",
   });
   const database = drizzle(client, { schema });
   await migrate(database, { migrationsFolder: path.join(repositoryRoot, "drizzle") });
@@ -96,11 +96,11 @@ try {
   await admin.unsafe(`create role fixture_writer login password '${writerPassword}'`);
   await admin`grant select, insert, update on builder_provisioning_journal to fixture_writer`;
   writer = postgres({
-    host: "127.0.0.1",
-    port,
     database: "postgres",
-    username: "fixture_writer",
+    host: "127.0.0.1",
     password: writerPassword,
+    port,
+    username: "fixture_writer",
   });
   const [role] = await writer`select rolsuper from pg_roles where rolname = current_user`;
   assert.equal(role?.rolsuper, false);
@@ -112,10 +112,10 @@ try {
   assert.ok(lookup, "Real repository lookup must be implemented");
   const now = new Date("2026-11-03T00:00:00Z");
   const input = {
-    authority: principal,
     appId: "lookup-app",
-    repositoryId: "501",
+    authority: principal,
     githubInstallationId: "101",
+    repositoryId: "501",
   };
   const seed = async (
     options: {
@@ -130,22 +130,20 @@ try {
     const request = builderProvisionRequestSchema.parse({
       appName: "Lookup App",
       operation: "github",
-      version: 1,
-      requestId: randomUUID(),
       providers: { githubInstallationId: "101", vercelInstallationId: "icfg_lookup" },
       repository: { name: "lookup-app", private: true },
+      requestId: randomUUID(),
+      version: 1,
     });
-    const reserved = await store.reserve({ authority, request, now });
+    const reserved = await store.reserve({ authority, now, request });
     const record = builderProvisionJournalRecordSchema.parse({
       ...reserved.record,
       response: {
         ...reserved.record.response,
-        status: options.pending === true ? "pending" : "settled",
         github:
           options.githubFailed === true
-            ? { status: "failed", code: "provider_unavailable", retryable: true }
+            ? { code: "provider_unavailable", retryable: true, status: "failed" }
             : {
-                status: "succeeded",
                 defaultBranch: "main",
                 fullName: "fixture/lookup-app",
                 headSha: "a".repeat(40),
@@ -156,25 +154,26 @@ try {
                 repositoryId: "501",
                 scope: { id: "201", login: "fixture", type: "organization" },
                 starter: {
-                  sourceSha: "c".repeat(40),
-                  sourceTree: "d".repeat(40),
+                  contractDigest: "a".repeat(64),
+                  eligibilityDigest: "b".repeat(64),
                   method: "git-clone-v1",
+                  readinessDigest: "c".repeat(64),
                   receiptVersion: 4,
                   ref: "refs/heads/main",
                   repository: "https://github.com/fixture/starter",
-                  contractDigest: "a".repeat(64),
-                  eligibilityDigest: "b".repeat(64),
-                  readinessDigest: "c".repeat(64),
                   sourceReceiptDigest: "d".repeat(64),
+                  sourceSha: "c".repeat(40),
+                  sourceTree: "d".repeat(40),
                 },
+                status: "succeeded",
                 url: "https://github.com/fixture/lookup-app",
                 visibility: "private",
               },
+        status: options.pending === true ? "pending" : "settled",
         vercel:
           options.vercelFailed === true
-            ? { status: "failed", code: "provider_unavailable", retryable: true }
+            ? { code: "provider_unavailable", retryable: true, status: "failed" }
             : {
-                status: "succeeded",
                 dashboardUrl: "https://vercel.com/fixture/apps-lookup-app",
                 framework: "services",
                 installationId: "icfg_lookup",
@@ -182,15 +181,16 @@ try {
                 projectId: "prj_lookup",
                 rootDirectory: ".",
                 scope: { id: "team_lookup", slug: "fixture", type: "team" },
+                status: "succeeded",
               },
       },
     });
     const saved = await store.compareAndSet({
       authority,
-      requestId: request.requestId,
       expectedRevision: reserved.revision,
-      record,
       now,
+      record,
+      requestId: request.requestId,
     });
     assert.ok(saved);
     if (options.tagged === true) {
@@ -205,8 +205,8 @@ try {
   for (const authority of [
     {
       ...principal,
-      issuer: "https://other-builder.example/api/auth",
       audience: "https://other-builder.example/mcp",
+      issuer: "https://other-builder.example/api/auth",
     },
     { ...principal, workspaceId: "other-workspace" },
     { ...principal, ownerUserId: "other-owner" },
@@ -253,10 +253,10 @@ try {
   checks += 1;
   console.log(
     JSON.stringify({
-      result: "passed",
-      evidence: "owned loopback PostgreSQL; real findSettledAppRepository SQL",
       checks,
+      evidence: "owned loopback PostgreSQL; real findSettledAppRepository SQL",
       hostedAcceptance: "unassessed",
+      result: "passed",
     }),
   );
 } finally {
@@ -265,5 +265,5 @@ try {
   if (started) {
     command("pg_ctl", ["-D", data, "-m", "immediate", "-w", "stop"]);
   }
-  await rm(scratch, { recursive: true, force: true });
+  await rm(scratch, { force: true, recursive: true });
 }
