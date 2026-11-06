@@ -528,7 +528,7 @@ export const nonAppIndexDigest = async (sandbox: SandboxSession, root: string, a
     }
     if (match.groups?.stage !== "0") {
       throw new Error(
-        "A repository owner must resolve non-app merge conflicts before Builder can continue.",
+        `A repository owner must resolve the merge conflict at ${JSON.stringify(match.groups?.path)} before Builder can continue.`,
       );
     }
     return true;
@@ -913,7 +913,7 @@ const replayCandidateApp = async (
   }
 };
 
-const resolveRestoredAppRegistrationConflict = async (
+const resolveRestoredAppRouteConflict = async (
   input: DraftReconciliationInput,
   root: string,
   workspaceRoot: string,
@@ -948,6 +948,45 @@ const resolveRestoredAppRegistrationConflict = async (
     content: plan.proposedBytes,
   });
   await checked(sandbox, "stage the restored app registration", git(root, ["add", "--", path]));
+};
+
+const regenerateRestoredAppLockfile = async (input: DraftReconciliationInput, root: string) => {
+  const { sandbox, unpublished, appId } = input;
+  if (
+    unpublished?.initialSourceRevision === undefined ||
+    !unpublished.changes.some(({ path }) => path === "bun.lock")
+  ) {
+    return;
+  }
+  const conflicts = records(
+    await checked(sandbox, "inspect restored dependency conflicts", git(root, UNMERGED_PATHS)),
+  );
+  if (!conflicts.includes("bun.lock") || conflicts.some((path) => path !== "bun.lock")) {
+    return;
+  }
+  // Bun resolves the restored workspace against main's current dependency graph.
+  await checked(
+    sandbox,
+    "restore the current base lockfile for regeneration",
+    git(root, ["restore", "--theirs", "--worktree", "--", "bun.lock"]),
+  );
+  const appManifest = quote(`apps/${appId}/package.json`);
+  const trust = 'MISE_TRUSTED_CONFIG_PATHS="$MISE_TRUSTED_CONFIG_PATHS:"';
+  await checked(
+    sandbox,
+    "regenerate the restored app workspace lockfile",
+    [
+      `cd ${quote(root)}`,
+      "test -f bun.lock && test ! -L bun.lock",
+      `test -f ${appManifest} && test ! -L ${appManifest}`,
+      `${trust}${quote(root)} mise exec -- bun install --lockfile-only --ignore-scripts`,
+    ].join(" && "),
+  );
+  await checked(
+    sandbox,
+    "stage the regenerated app lockfile",
+    git(root, ["add", "--", "bun.lock"]),
+  );
 };
 
 const readCandidateConflicts = async (
@@ -1150,7 +1189,8 @@ export const prepareDraftReconciliation = async (
     }
   }
   if (created) {
-    await resolveRestoredAppRegistrationConflict(input, root, workspaceRoot);
+    await resolveRestoredAppRouteConflict(input, root, workspaceRoot);
+    await regenerateRestoredAppLockfile(input, root);
   }
   // Capture only a newly created native merge, before replay or any app edits.
   let publicationScope: OwnedPublicationReconciliationScope | undefined;
