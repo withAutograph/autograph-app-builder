@@ -249,9 +249,19 @@ For a selected existing repository with native Production deployment, including
 Arrusted, publish the reviewed draft, use the separate approved PR Ready and
 merge flow, and report the native deployment result. Hosted Preview, a synthetic
 runtime journal, and external qualification are optional and do not precede this
-handoff. For new runtime bindings the app actually needs, use the destination's
-protected Production setup. The creator supplies the repository and app
-requirements; keep infrastructure details within the operator flow.
+handoff. For new runtime bindings the app actually needs, call
+`plan-app-production` and present its exact plan with `prepare-app-production`.
+Builder resolves the saved repository, organization, app schema and managed
+resources. Frontend-only apps skip database allocation. If creator access needs
+one-time app signup or sign-in, show the returned link and the session's People
+page; its authenticated callback resumes the same setup automatically. Use
+`get-app-production` to read progress after an uncertain response. Revisions
+reuse the original destination and database. Never request a database identifier,
+connection string, manual enrollment, organization administrator role or an
+external command from the creator. Invitations, app roles, access removal and
+account recovery belong to the session's People controls. The creator supplies
+the repository and app requirements; keep infrastructure details within the
+operator flow.
 Preserve separate effect approvals and report unavailable deployment/submission
 capabilities as delivery work still required.
 

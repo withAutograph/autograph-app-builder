@@ -5,6 +5,12 @@ Normal delivery into an existing repository uses the protected
 runtime or an isolated Preview enrollment. The older Preview operations keep
 their existing contracts.
 
+Builder uses `REPOSITORY_PRODUCTION_OPERATOR_URL` for this endpoint. The
+existing `HOSTED_RUNTIME_OPERATOR_URL` continues to identify the historical
+Preview operator; a Production rollout does not redirect or reconfigure that
+operator. Both Production ingress paths are explicitly routed by the native
+operator service, including `/v1/repository-production/access/complete`.
+
 The deployment owns `REPOSITORY_PRODUCTION_CONFIGURATION`. It identifies the
 Builder and operator Production workloads, fixed installer workers, managed
 Neon connection, protected Vercel credential binding, and authorized mappings
@@ -59,3 +65,10 @@ invitation completion accepts only an invitation ID from the authorized Auth
 workload, reads the stored inviter and verified invitee, and rechecks current
 ownership. Neither an email match nor the invitee's possession of a Creator
 Builder session is required or sufficient.
+
+Normal delivery tools are `plan-app-production`, `prepare-app-production` and
+`get-app-production`. Planning resolves the saved destination and captured app
+description without provider writes. The preparation approval covers data and
+access setup. Code publication, Ready, and merge remain tied to the reviewed
+revision through the existing delivery flow. Setup status does not claim that
+the native deployment is active or that app behavior has been tested.

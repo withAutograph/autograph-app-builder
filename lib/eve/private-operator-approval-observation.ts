@@ -12,6 +12,7 @@ const requestSchema = z.strictObject({
     "continuity",
     "native-target",
     "public-release",
+    "repository-production",
     "app-integration-capability",
     "central-integration-host",
     "normal-platform-integrations",

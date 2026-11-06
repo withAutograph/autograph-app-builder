@@ -237,10 +237,13 @@ resource must not be treated as authorization for development database effects.
 
 ### Compiled ingress qualification
 
-The operator Services route table exposes six exact paths: key-custody
+The operator Services route table exposes exact paths for key-custody
 possession, runtime, public release, app capability, central setup/caller, and
 central deployment receipts. The central endpoints are `/v1/central-integrations`
-and `/v1/central-deployment-events`; mounting a Hono handler without these
+and `/v1/central-deployment-events`. Existing-repository Production setup and
+Auth continuation use `/v1/repository-production` and
+`/v1/repository-production/access/complete` with their separate Production
+configuration. Mounting a Hono handler without these
 service-targeted rewrites does not expose it. No wildcard ingress is added.
 
 Run `mise run test:compiled-operator -- --bun-bin /absolute/path/to/bun` with the

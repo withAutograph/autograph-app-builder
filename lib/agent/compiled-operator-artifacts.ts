@@ -492,6 +492,18 @@ export const publishCompiledOperatorArtifactsForSession = async (
     checkStopped();
     observe({ outcome: "completed", stage: "description" });
     if (description.backend.kind === "static") {
+      // Hosted frontend-only apps need an authoritative description too; there
+      // is deliberately no compiled SQL release or database allocation.
+      if (binding.localAuthority === undefined) {
+        const { createCapturedAppDescriptionStore } =
+          await import("../provisioning/captured-app-description");
+        database ??= openArtifactDatabase();
+        const descriptions = createCapturedAppDescriptionStore({
+          database: await database,
+          assertCurrentOwner,
+        });
+        await descriptions.record(context, input.appSpecDigest, input.callId, description);
+      }
       return {
         status: "not-required" as const,
         compilation: {
