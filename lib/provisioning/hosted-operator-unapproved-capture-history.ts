@@ -25,7 +25,7 @@ export const readUnapprovedCapturePredecessor = (
   for (const history of record.unapprovedAppProposalHistory ?? []) {
     const { preparation: account, retainedAuth: auth, operator: old } = history;
     const prior = old.plan;
-    const accountPlan = account.accountPlan;
+    const { accountPlan } = account;
     const authPlan = auth.plan;
     const gatewayAuthority =
       pointer.gateway === undefined ? undefined : history.retainedParticipantGateway?.completion;

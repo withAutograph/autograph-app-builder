@@ -6,40 +6,40 @@ import { createPublicReleaseDeployment } from "./public-release-deployment";
 import { plan, authority } from "./public-release-test-fixture";
 
 const ownerContext = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: 1,
+  adapterSessionId: "native",
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: plan.selection.sessionId,
-  adapterSessionId: "native",
-  adapterGeneration: 1,
 });
 const request = () =>
   new Request("https://operator.example/v1/public-release", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify({
       action: "public-release-plan",
-      appId: plan.selection.appId,
-      ownerContext,
       adapterSessionId: "native",
+      appId: plan.selection.appId,
       callId: "current-call",
       execution: { logicalSessionId: "native" },
+      ownerContext,
     }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
   });
 const fixture = () => {
-  const limit = vi.fn(() => Promise.resolve([]));
+  const limit = vi.fn(async () => []);
   const select = vi.fn(() => ({ from: () => ({ where: () => ({ limit }) }) }));
   // SAFETY: This test supplies only the exact read-only Drizzle query chain consumed by the readiness reader; no write/effect method exists.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The deliberately partial read-only database fixture exercises the real HTTP prerequisite path.
   const database = { select } as unknown as ReturnType<typeof openHostedPostgresDatabase>;
   const owner = {
-    verifyWorkload: vi.fn(() => Promise.resolve()),
-    assertCanonicalAppOwner: vi.fn(() => Promise.resolve()),
+    assertCanonicalAppOwner: vi.fn(async () => {}),
     readStandardDestination: vi.fn<
       Parameters<typeof createPublicReleaseDeployment>[0]["owner"]["readStandardDestination"]
-    >(() => Promise.resolve({ ...plan.project })),
+    >(async () => ({ ...plan.project })),
+    verifyWorkload: vi.fn(async () => {}),
   };
-  return { owner, select, handler: createPublicReleaseDeployment({ database, owner }) };
+  return { handler: createPublicReleaseDeployment({ database, owner }), owner, select };
 };
 describe("mounted public release native preparation inspection", () => {
   it("requires the canonical normal Builder destination before any runtime journal read", async () => {

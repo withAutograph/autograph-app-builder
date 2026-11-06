@@ -78,7 +78,7 @@ const ownerWitnesses = (
       link.organizationId === null || link.organizationId === membership.organizationId,
     ].every(Boolean);
     if (sameOwnedInstallation && sameCapture) {
-      candidates.push({ ...entry, membership, link });
+      candidates.push({ ...entry, link, membership });
     }
   }
   return candidates;

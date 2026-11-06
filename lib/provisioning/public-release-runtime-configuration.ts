@@ -20,32 +20,32 @@ const origin = z
   .url()
   .refine((value) => new URL(value).protocol === "https:" && new URL(value).origin === value);
 export const publicReleaseRuntimeConfigurationScopeSchema = z.strictObject({
-  authority: hostedTenantAuthoritySchema,
   appId: id,
-  sessionId: id,
-  projectId: id,
-  runtimeOperationRef: z.uuid(),
-  runtimePlanDigest: digest,
-  releaseId: id,
-  publicOrigin: origin,
-  realmEnrollmentRef: z.uuid().optional(),
+  authority: hostedTenantAuthoritySchema,
   integrationCapability: z
     .strictObject({
-      operationRef: z.uuid(),
-      planDigest: digest,
       capabilitySha256: digest,
       configurationSha256: digest,
+      operationRef: z.uuid(),
+      planDigest: digest,
     })
     .optional(),
+  projectId: id,
+  publicOrigin: origin,
+  realmEnrollmentRef: z.uuid().optional(),
+  releaseId: id,
+  runtimeOperationRef: z.uuid(),
+  runtimePlanDigest: digest,
+  sessionId: id,
 });
 export type PublicReleaseRuntimeConfigurationScope = z.infer<
   typeof publicReleaseRuntimeConfigurationScopeSchema
 >;
 const sealedSchema = z.strictObject({
   encryptedToken: id,
+  keyVersion: id,
   tokenIv: id,
   tokenTag: id,
-  keyVersion: id,
 });
 const valuesSchema = z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/u), z.string().min(1));
 const recordSchema = z.strictObject({
@@ -114,27 +114,27 @@ export const createFreshPublicAuthValues = (input: {
   }
   const seed = input.seed ?? createFreshPublicAuthSeed();
   return {
-    PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY: seed.PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY,
+    AUTH_DATABASE_RESOURCE: JSON.stringify({
+      version: 1,
+      ...resource,
+    }),
+    AUTH_PRODUCTION_DATABASE_IDENTITY: input.productionDatabaseIdentity,
+    BETTER_AUTH_SECRET: seed.BETTER_AUTH_SECRET,
+    BETTER_AUTH_URL: publicOrigin,
+    PLATFORM_AUTH_DATABASE_URL: input.authRuntimeUrl,
+    PLATFORM_AUTH_DEPLOYMENT_PROFILE: "isolated-development",
+    PLATFORM_AUTH_TRUSTED_ORIGINS: publicOrigin,
     PLATFORM_GATEWAY_IDENTITY_KEY_ID: seed.PLATFORM_GATEWAY_IDENTITY_KEY_ID,
+    PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY: seed.PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY,
     PLATFORM_GATEWAY_PROTECTED_APPLICATIONS: JSON.stringify([
       z
         .string()
         .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
         .parse(input.appId),
     ]),
-    PLATFORM_ORIGIN: publicOrigin,
     PLATFORM_JWKS_URL: `${publicOrigin}/_platform/jwks.json`,
-    BETTER_AUTH_URL: publicOrigin,
-    BETTER_AUTH_SECRET: seed.BETTER_AUTH_SECRET,
-    PLATFORM_AUTH_DATABASE_URL: input.authRuntimeUrl,
-    AUTH_DATABASE_RESOURCE: JSON.stringify({
-      version: 1,
-      ...resource,
-    }),
-    AUTH_PRODUCTION_DATABASE_IDENTITY: input.productionDatabaseIdentity,
-    PLATFORM_AUTH_TRUSTED_ORIGINS: publicOrigin,
+    PLATFORM_ORIGIN: publicOrigin,
     PLATFORM_PUBLIC_ORIGIN: publicOrigin,
-    PLATFORM_AUTH_DEPLOYMENT_PROFILE: "isolated-development",
   };
 };
 
@@ -188,8 +188,8 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
         JSON.parse(
           decryptVersionedVercelToken({
             ...record.sealed,
-            config: input.keyring,
             associatedData: associatedData(scope),
+            config: input.keyring,
           }),
         ),
       );
@@ -198,8 +198,8 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
     }
   };
   return {
-    reference: (scope: PublicReleaseRuntimeConfigurationScope) => identity(scope).ref,
     read,
+    reference: (scope: PublicReleaseRuntimeConfigurationScope) => identity(scope).ref,
     async reserve(
       scopeInput: PublicReleaseRuntimeConfigurationScope,
       prepareValues: () => Record<string, string>,
@@ -211,9 +211,9 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
         const proposed = valuesSchema.parse(prepareValues());
         const sealed = {
           ...encryptVercelToken({
+            associatedData: associatedData(scope),
             key: input.keyring.tokenKey,
             token: JSON.stringify(proposed),
-            associatedData: associatedData(scope),
           }),
           keyVersion: input.keyring.tokenKeyVersion,
         };
@@ -223,16 +223,16 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
           .insert(builderProvisioningJournals)
           .values({
             ...scope.authority,
-            requestId: identity(scope).ref,
-            requestDigest: identity(scope).digest,
-            revision: 1,
+            createdAt: now,
             record: recordSchema.parse({
               kind: "public-release-runtime-configuration-v1",
               scope,
               sealed,
             }),
+            requestDigest: identity(scope).digest,
+            requestId: identity(scope).ref,
+            revision: 1,
             state: "pending",
-            createdAt: now,
             updatedAt: now,
           })
           .onConflictDoNothing();

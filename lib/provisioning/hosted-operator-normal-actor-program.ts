@@ -14,28 +14,16 @@ const origin = z.url().refine((value) => {
 /** Public approval input. Credentials and normal session bytes never belong in this program. */
 export const normalActorProgramSchema = z
   .strictObject({
-    version: z.literal(1),
-    appId: actorKey,
-    origin,
     actors: z
       .array(
         z.strictObject({
+          account: z.enum(["capture-existing", "create-email-password"]),
           actorKey,
           email: z.email(),
           name: z.string().min(1).max(120),
-          account: z.enum(["capture-existing", "create-email-password"]),
         }),
       )
       .min(1),
-    organizations: z.array(
-      z.strictObject({
-        organizationId: id,
-        ownerActorKey: actorKey,
-        name: z.string().min(1).max(120),
-        slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,118}[a-z0-9])?$/u),
-      }),
-    ),
-    memberships: z.array(z.strictObject({ actorKey, organizationId: id, role })),
     appAccess: z.array(
       z.strictObject({
         actorKey,
@@ -43,6 +31,18 @@ export const normalActorProgramSchema = z
         roles: z.array(generatedAppRoleSchema).min(1),
       }),
     ),
+    appId: actorKey,
+    memberships: z.array(z.strictObject({ actorKey, organizationId: id, role })),
+    organizations: z.array(
+      z.strictObject({
+        name: z.string().min(1).max(120),
+        organizationId: id,
+        ownerActorKey: actorKey,
+        slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,118}[a-z0-9])?$/u),
+      }),
+    ),
+    origin,
+    version: z.literal(1),
   })
   .superRefine((program, ctx) => {
     const keys = new Set(program.actors.map((actor) => actor.actorKey));
@@ -116,47 +116,54 @@ export const normalActorProgramDigest = (program: NormalActorProgram): string =>
 export const normalBrowserStorageStateSchema = z.strictObject({
   cookies: z.array(
     z.strictObject({
-      name: id,
-      value: z.string().min(1),
       domain: id,
-      path: z.string().startsWith("/"),
       expires: z.number(),
       httpOnly: z.boolean(),
-      secure: z.boolean(),
+      name: id,
+      path: z.string().startsWith("/"),
       sameSite: z.enum(["Strict", "Lax", "None"]),
+      secure: z.boolean(),
+      value: z.string().min(1),
     }),
   ),
   origins: z.array(
     z.strictObject({
-      origin,
       localStorage: z.array(z.strictObject({ name: id, value: z.string() })),
+      origin,
     }),
   ),
 });
 export type NormalBrowserStorageState = z.infer<typeof normalBrowserStorageStateSchema>;
 export const normalActorSessionRefSchema = z.strictObject({
-  reference: z.uuid(),
-  actorId: id,
-  realmSessionId: id,
-  origin,
-  expiresAt: z.iso.datetime({ offset: true }),
   activeOrganizationId: id.nullable().optional(),
+  actorId: id,
+  expiresAt: z.iso.datetime({ offset: true }),
+  origin,
+  realmSessionId: id,
+  reference: z.uuid(),
 });
 export type NormalActorSessionRef = z.infer<typeof normalActorSessionRefSchema>;
 const stepSchema = z.enum(["pending", "attempted", "complete"]);
 export const normalActorCheckpointSchema = z.strictObject({
   actorKey,
-  signup: stepSchema,
   credentials: z.strictObject({ password: z.string().min(32).max(512) }).optional(),
   session: normalActorSessionRefSchema.optional(),
+  signup: stepSchema,
   storageState: normalBrowserStorageStateSchema.optional(),
 });
 export type NormalActorCheckpoint = z.infer<typeof normalActorCheckpointSchema>;
 export const normalActorStateSchema = z.strictObject({
-  version: z.literal(1),
-  operationRef: z.uuid(),
-  programDigest: digest,
   actors: z.array(normalActorCheckpointSchema),
+  memberships: z.array(
+    z.strictObject({
+      actorKey,
+      invitationId: id.optional(),
+      organizationId: id,
+      role,
+      status: stepSchema,
+    }),
+  ),
+  operationRef: z.uuid(),
   organizationSessions: z
     .array(
       z.strictObject({
@@ -169,15 +176,8 @@ export const normalActorStateSchema = z.strictObject({
     )
     .optional(),
   organizations: z.array(z.strictObject({ organizationId: id, status: stepSchema })),
-  memberships: z.array(
-    z.strictObject({
-      actorKey,
-      organizationId: id,
-      role,
-      status: stepSchema,
-      invitationId: id.optional(),
-    }),
-  ),
+  programDigest: digest,
+  version: z.literal(1),
 });
 export type NormalActorState = z.infer<typeof normalActorStateSchema>;
 
@@ -187,16 +187,16 @@ export const initialNormalActorState = (
 ): NormalActorState => {
   const program = normalActorProgramSchema.parse(programInput);
   return normalActorStateSchema.parse({
-    version: 1,
-    operationRef,
-    programDigest: normalActorProgramDigest(program),
     actors: program.actors.map((actor) => ({ actorKey: actor.actorKey, signup: "pending" })),
+    memberships: program.memberships.map((member) => ({ ...member, status: "pending" })),
+    operationRef,
     organizationSessions: [],
     organizations: program.organizations.map((organization) => ({
       organizationId: organization.organizationId,
       status: "pending",
     })),
-    memberships: program.memberships.map((member) => ({ ...member, status: "pending" })),
+    programDigest: normalActorProgramDigest(program),
+    version: 1,
   });
 };
 
@@ -281,16 +281,16 @@ export const assertNormalActorState = (
 
 /** References only; the actual browser state files are delivered on a private binding channel. */
 export const normalActorIdentityManifestSchema = z.strictObject({
-  version: z.literal(1),
   actors: z.array(
     z.strictObject({
-      actorKey,
       actorId: id,
+      actorKey,
       organizationId: id.nullable(),
       roles: z.array(generatedAppRoleSchema),
       storageState: id,
     }),
   ),
+  version: z.literal(1),
 });
 export type NormalActorIdentityManifest = z.infer<typeof normalActorIdentityManifestSchema>;
 export interface NormalActorRuntimeProjection {

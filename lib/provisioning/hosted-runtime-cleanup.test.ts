@@ -182,8 +182,8 @@ const fixture = () => {
         accountId: target.scopeId,
         framework: "services",
         id: target.projectId,
-        rootDirectory: ".",
         link: { productionBranch: target.branch },
+        rootDirectory: ".",
       },
     );
   });

@@ -268,11 +268,11 @@ describe("immutable private operator artifacts", () => {
       source: f.source,
     });
     const source = {
-      repositoryId: "owned-repository",
       branch: "reviewed-draft",
+      changeSetDigest: "3".repeat(64),
       gitSha: "1".repeat(40),
       gitTree: "2".repeat(40),
-      changeSetDigest: "3".repeat(64),
+      repositoryId: "owned-repository",
       reviewDigest: "4".repeat(64),
     };
     const identity = {
@@ -295,12 +295,12 @@ describe("immutable private operator artifacts", () => {
       record: async (_context, _callId, value) => await Promise.resolve(value),
     };
     const lookup = {
-      artifactRef: old.artifactRef,
       appSpecDigest: identity.appSpecDigest,
+      artifactRef: old.artifactRef,
       publishedSource: {
-        repositoryId: source.repositoryId,
         branch: source.branch,
         gitSha: source.gitSha,
+        repositoryId: source.repositoryId,
       },
     };
     const result = await readExactCompiledOperatorRelease({

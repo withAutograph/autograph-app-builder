@@ -27,8 +27,8 @@ export const githubReleaseFailure = (error: unknown): PublicReleaseProviderError
   }
   const status = z
     .object({
-      status: z.number().int().min(400).max(599),
       response: z.object({ status: z.number().int().min(400).max(599) }),
+      status: z.number().int().min(400).max(599),
     })
     .safeParse(error);
   if (!status.success || status.data.status !== status.data.response.status) {

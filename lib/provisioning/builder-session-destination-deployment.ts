@@ -42,8 +42,8 @@ const originEpoch = (session: DurableHostedSessionRecord) => {
   return {
     appId: z.string().min(1).parse(session.appId),
     expected: {
-      adapterSessionId: session.adapterSessionId,
       adapterGeneration: session.adapterGeneration,
+      adapterSessionId: session.adapterSessionId,
       cancellationRevision: session.cancellationRevision ?? 0,
       checkpointDigest: session.checkpointDigest,
     },
@@ -67,30 +67,31 @@ const publicOriginDestination = (appId: string, receipt: BuilderProvisionRespons
     throw new Error("This app's public destination is not ready.");
   }
   return {
+    repositoryId: github.repositoryId,
     scope: {
       appId,
-      projectId: vercel.projectId,
-      teamId: vercel.scope.id,
       installationId: vercel.installationId,
-      provisioningRequestId: receipt.requestId,
+      projectId: vercel.projectId,
       provisioningDigest: receipt.requestDigest,
+      provisioningRequestId: receipt.requestId,
+      teamId: vercel.scope.id,
     },
-    repositoryId: github.repositoryId,
   };
 };
 export const openBuilderSessionDestination = async (
   headers: Headers,
   environment: NodeJS.ProcessEnv = process.env,
 ) => {
-  const readOwner = () => ensurePreviewOAuthDeploymentSessionOrganization({ headers, environment });
+  const readOwner = async () =>
+    await ensurePreviewOAuthDeploymentSessionOrganization({ environment, headers });
   const owner = await readOwner();
   if (owner === null || owner === undefined) {
     throw new BuilderSessionDestinationSignInRequiredError();
   }
   const config = readPreviewOAuthRuntimeConfig(environment);
   const authority = {
-    issuer: config.issuer,
     audience: config.resource,
+    issuer: config.issuer,
     ownerUserId: owner.user.id,
     workspaceId: owner.organization.workspaceId,
   };
@@ -110,7 +111,6 @@ export const openBuilderSessionDestination = async (
     }
   };
   const publicOrigins = createBuilderPublicOriginService({
-    store: createBuilderPublicOriginStore(database),
     resolve: async (selected, sessionId) => {
       await assertMember(selected);
       const readTarget = async () => {
@@ -169,19 +169,18 @@ export const openBuilderSessionDestination = async (
           installationId: input.installationId,
         });
       return {
-        scope: target.scope,
-        expected: target.expected,
         assertCurrent,
+        expected: target.expected,
         readOrigins: async () => {
           await assertCurrent();
           const access = await readOwnerVercelProjectAccess({
             authority,
-            projectId: target.scope.projectId,
             installationId: target.scope.installationId,
-            requireServicesRoot: true,
-            requirePublicAppConfiguration: true,
-            requireExpectedRepositoryId: target.repositoryId,
+            projectId: target.scope.projectId,
             readCredential,
+            requireExpectedRepositoryId: target.repositoryId,
+            requirePublicAppConfiguration: true,
+            requireServicesRoot: true,
           });
           if (
             access.status !== "ready" ||
@@ -192,34 +191,24 @@ export const openBuilderSessionDestination = async (
             throw new Error("This app's current project is unavailable.");
           }
           return await readStandardBuilderPublicOrigins({
-            destination: target.scope,
             assertCurrent,
-            readCredential: () =>
-              readCredential({
+            destination: target.scope,
+            readCredential: async () =>
+              await readCredential({
                 installationId: target.scope.installationId,
               }),
           });
         },
+        scope: target.scope,
       };
     },
+    store: createBuilderPublicOriginStore(database),
   });
   return {
+    authority,
+    dependencies,
     principal,
     publicOrigins,
-    authority,
-    sessions,
-    service: {
-      select: (
-        input: Parameters<ReturnType<typeof createBuilderSessionDestinationService>["select"]>[0],
-      ) =>
-        createBuilderSessionDestinationService({
-          sessions,
-          provisioning: createBuilderProvisioningDependencies(environment).dependencies,
-          execute: executeBuilderProvisioning,
-          assertMember,
-          readNativeTarget: createPostgresNativeTargetOnboardingStore(database).read,
-        }).select(input),
-    },
     readPage: async (sessionId: string) => {
       const stored = await sessions.getSession(principal, sessionId);
       if (stored === null) {
@@ -241,8 +230,8 @@ export const openBuilderSessionDestination = async (
         }
         reference = {
           appId: receipt.appId,
-          requestId: receipt.requestId,
           requestDigest: receipt.requestDigest,
+          requestId: receipt.requestId,
         };
       }
       const row =
@@ -260,22 +249,35 @@ export const openBuilderSessionDestination = async (
         workspaceId: owner.organization.workspaceId,
       });
       return {
-        sessionId,
         appId: session.appId,
-        title: session.title,
+        enabled: await builderResourceProvisioningFlag(),
         expected: {
-          adapterSessionId: session.adapterSessionId,
           adapterGeneration: session.adapterGeneration,
+          adapterSessionId: session.adapterSessionId,
           cancellationRevision: session.cancellationRevision ?? 0,
           checkpointDigest: session.checkpointDigest,
         },
-        request: row?.record.request,
-        ready: row?.record.response.vercel.status === "succeeded",
-        selectable: session.status === "waiting" && session.sourceHandoffId === undefined,
-        enabled: await builderResourceProvisioningFlag(),
         github: integrations.github.scopes,
+        ready: row?.record.response.vercel.status === "succeeded",
+        request: row?.record.request,
+        selectable: session.status === "waiting" && session.sourceHandoffId === undefined,
+        sessionId,
+        title: session.title,
         vercel: integrations.vercel.scopes,
       };
     },
+    service: {
+      select: (
+        input: Parameters<ReturnType<typeof createBuilderSessionDestinationService>["select"]>[0],
+      ) =>
+        createBuilderSessionDestinationService({
+          sessions,
+          provisioning: createBuilderProvisioningDependencies(environment).dependencies,
+          execute: executeBuilderProvisioning,
+          assertMember,
+          readNativeTarget: createPostgresNativeTargetOnboardingStore(database).read,
+        }).select(input),
+    },
+    sessions,
   };
 };

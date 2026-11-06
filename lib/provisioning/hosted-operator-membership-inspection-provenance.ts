@@ -67,7 +67,7 @@ const selectedMembership = (plan: HostedOperatorPlan, organizationId: string) =>
   if (spec === undefined || effects.length !== 1 || effects[0] === undefined) {
     return null;
   }
-  return { spec, effect: effects[0] };
+  return { effect: effects[0], spec };
 };
 
 // A later approval may use a fresh signed owner capture. Its original capture
@@ -77,24 +77,24 @@ const selectedMembershipAuthority = (
   plan: HostedOperatorPlan,
   spec: HostedOperatorOwnedOrganizationSpec,
 ) => ({
-  selection: plan.selection,
   authDatabase: plan.authDatabase,
+  authority: plan.deploymentBoundary?.authority,
   neon: {
-    projectId: plan.neon.projectId,
     branchId: plan.neon.branchId,
     endpoint: plan.neon.endpoint,
+    projectId: plan.neon.projectId,
   },
-  authority: plan.deploymentBoundary?.authority,
-  teamId: plan.deploymentBoundary?.teamId,
   organization: {
-    organizationId: spec.organizationId,
-    name: spec.name,
-    slug: spec.slug,
     actorId: spec.actorId,
+    name: spec.name,
+    organizationId: spec.organizationId,
+    slug: spec.slug,
   },
+  selection: plan.selection,
+  teamId: plan.deploymentBoundary?.teamId,
   verification: {
-    issuer: spec.identityVerification.issuer,
     audience: spec.identityVerification.audience,
+    issuer: spec.identityVerification.issuer,
     transportSource: spec.identityVerification.transportSource,
   },
 });
@@ -131,34 +131,34 @@ const originalOwnershipReadback = (operator: HostedOperatorRecordBase): string |
 const membershipAuthority = (plan: HostedOperatorPlan) => {
   const boundary = plan.deploymentBoundary;
   return {
-    selection: plan.selection,
-    contextId: plan.contextId,
-    neon: plan.neon,
     authDatabase: plan.authDatabase,
     authMembership: plan.authMembership,
-    publicGateway: plan.publicGateway,
+    contextId: plan.contextId,
     deploymentBoundary:
       boundary === undefined
         ? undefined
         : {
-            authority: boundary.authority,
-            teamId: boundary.teamId,
-            operator: {
-              projectId: boundary.operator.projectId,
-              environment: boundary.operator.environment,
-            },
             app: {
-              projectId: boundary.app.projectId,
               branch: boundary.app.branch,
               environment: boundary.app.environment,
+              projectId: boundary.app.projectId,
             },
+            authority: boundary.authority,
             gateway: {
-              projectId: boundary.gateway.projectId,
               branch: boundary.gateway.branch,
               environment: boundary.gateway.environment,
+              projectId: boundary.gateway.projectId,
             },
+            operator: {
+              environment: boundary.operator.environment,
+              projectId: boundary.operator.projectId,
+            },
+            teamId: boundary.teamId,
             verification: boundary.verification,
           },
+    neon: plan.neon,
+    publicGateway: plan.publicGateway,
+    selection: plan.selection,
   };
 };
 
@@ -185,7 +185,7 @@ const retainedOperations = (operator: OperatorHistory): RetainedOperation[] => [
 export const retainedHostedOperatorOperations = (
   record: HostedRuntimeJournalRecord,
 ): RetainedOperation[] => {
-  const operator = record.operator;
+  const { operator } = record;
   return operator === undefined
     ? []
     : [
@@ -333,8 +333,8 @@ export const retainedMembershipInspectionProvenance = (
     seen.add(identity);
     candidates.push({
       approvedByCallId: entry.approvedByCallId,
-      operator: prior,
       effect: priorEffect,
+      operator: prior,
     });
   }
   return candidates;

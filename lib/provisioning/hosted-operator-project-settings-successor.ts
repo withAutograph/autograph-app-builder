@@ -128,8 +128,8 @@ export const projectSettingsDeliveryProvenance = (
     ].every(Boolean);
     if (exactRetainedDelivery) {
       return {
-        approvedByCallId: retained.approvedByCallId,
         approvalId: prior.approvalId,
+        approvedByCallId: retained.approvedByCallId,
         deliveryCandidates: prior.deliveryCandidates ?? [],
         operationRef: prior.operationRef,
         plan: prior.plan,

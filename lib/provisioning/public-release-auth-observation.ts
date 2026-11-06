@@ -5,16 +5,16 @@ import { publicReleaseRuntimeBindingDigest } from "./public-release-contract";
 import type { PublicReleasePlan } from "./public-release-contract";
 
 const publicKeySchema = z.object({
-  kty: z.literal("OKP"),
   crv: z.literal("Ed25519"),
+  kty: z.literal("OKP"),
   x: z.string().regex(/^[A-Za-z0-9_-]{43}$/u),
 });
 const publicJwkSchema = publicKeySchema
   .extend({
-    kid: z.string().optional(),
     alg: z.literal("EdDSA").optional(),
-    use: z.literal("sig").optional(),
     key_ops: z.array(z.string()).optional(),
+    kid: z.string().optional(),
+    use: z.literal("sig").optional(),
   })
   .strict();
 const fail = () => new Error("public_release_auth_observation_unavailable");
@@ -53,10 +53,10 @@ export const createPublicReleaseAuthObservation =
     const read = async (path: string) => {
       await check();
       const response = await (input.fetch ?? fetch)(new URL(path, plan.publicOrigin), {
-        method: "GET",
-        redirect: "manual",
         credentials: "omit",
         headers: { accept: "application/json" },
+        method: "GET",
+        redirect: "manual",
         signal: invocation.signal,
       });
       await check();
@@ -88,7 +88,7 @@ export const createPublicReleaseAuthObservation =
         await check();
         // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Remote JSON is parsed by the exact protocol schema at each call site.
         const data: unknown = JSON.parse(Buffer.concat(buffers).toString("utf-8"));
-        return { status: "observed" as const, data };
+        return { data, status: "observed" as const };
       } finally {
         await reader.cancel();
         reader.releaseLock();

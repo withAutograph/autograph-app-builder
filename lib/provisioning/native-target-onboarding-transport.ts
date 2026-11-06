@@ -11,13 +11,13 @@ import {
 } from "../agent/native-target-onboarding-runtime";
 
 const id = z.string().min(1);
-const common = { ownerContext: operatorOwnerContextSchema, adapterSessionId: id, callId: id };
+const common = { adapterSessionId: id, callId: id, ownerContext: operatorOwnerContextSchema };
 /** Minimal authenticated native responder identity; excludes auth functions and forwarded attributes. */
 export const nativeTargetApprovalResponderSchema = z.strictObject({
   authenticator: id,
+  issuer: id.optional(),
   principalId: id,
   principalType: id,
-  issuer: id.optional(),
   subject: id.optional(),
 });
 export const nativeTargetTransportRequestSchema = z
@@ -47,13 +47,13 @@ export const nativeTargetTransportRequestSchema = z
     z.strictObject({
       ...common,
       action: z.literal("native-target-approval-candidate"),
-      input: nativeTargetPreparationRequestSchema,
       candidate: z.strictObject({
-        requestId: id,
         callId: id,
-        toolName: z.literal("prepare-app-native-target"),
+        requestId: id,
         responder: nativeTargetApprovalResponderSchema,
+        toolName: z.literal("prepare-app-native-target"),
       }),
+      input: nativeTargetPreparationRequestSchema,
     }),
   ])
   .superRefine((request, context) => {
@@ -83,22 +83,22 @@ export type NativeTargetTransportRequest = z.infer<typeof nativeTargetTransportR
 export const nativeTargetTerminalApprovalResultSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("pending") }),
   z.strictObject({
-    status: z.literal("approved"),
     proof: nativeTargetOnboardingApprovalSchema.extend({ outcome: z.literal("approved") }),
+    status: z.literal("approved"),
   }),
   z.strictObject({
-    status: z.literal("cancelled"),
     proof: nativeTargetOnboardingApprovalSchema.extend({ outcome: z.literal("cancelled") }),
+    status: z.literal("cancelled"),
   }),
 ]);
 export const nativeTargetApprovalCandidateResultSchema = z.strictObject({
   status: z.literal("allowed"),
 });
 export const nativeTargetTransportResponseSchemas = {
+  "native-target-approval-candidate": nativeTargetApprovalCandidateResultSchema,
+  "native-target-approval-read": nativeTargetTerminalApprovalResultSchema,
   "native-target-plan": nativeTargetOnboardingResultSchema,
   "native-target-prepare": nativeTargetOnboardingResultSchema,
-  "native-target-approval-read": nativeTargetTerminalApprovalResultSchema,
-  "native-target-approval-candidate": nativeTargetApprovalCandidateResultSchema,
 } as const;
 
 export type NativeTargetTransportResponse =

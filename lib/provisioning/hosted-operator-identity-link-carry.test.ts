@@ -125,6 +125,22 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
       targetDigest: "b".repeat(64),
     },
     bootstrap: { endpointId: "ep-fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
+    effects: [
+      {
+        description: "Observe owned Auth",
+        id: "auth-resources",
+        kind: "resources",
+        resourceId: plan.authDatabase.resourceId,
+      },
+      {
+        description: "Observe owned app",
+        id: "app-resources",
+        kind: "resources",
+        resourceId: plan.appDatabase.resourceId,
+      },
+      ...plan.effects.filter((effect) => effect.kind !== "resources"),
+      { description: "Bind shared Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+    ],
     gatewayBindings: {
       authBrowserOrigin: "https://auth-preview.example.test",
       builderCallbackOrigin: "https://builder.example",
@@ -140,22 +156,6 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
       },
     },
     resourcesInstaller: plan.installer,
-    effects: [
-      {
-        id: "auth-resources",
-        kind: "resources",
-        resourceId: plan.authDatabase.resourceId,
-        description: "Observe owned Auth",
-      },
-      {
-        id: "app-resources",
-        kind: "resources",
-        resourceId: plan.appDatabase.resourceId,
-        description: "Observe owned app",
-      },
-      ...plan.effects.filter((effect) => effect.kind !== "resources"),
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind shared Gateway" },
-    ],
   });
   const operationRef = "00000000-0000-4000-8000-000000000001";
   const planDigest = operatorPlanDigest(originalPlan);
@@ -164,26 +164,60 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
     authResourceId: originalPlan.authDatabase.resourceId,
     bootstrapPlanDigest: planDigest,
     browserOrigin: "https://auth-preview.example.test",
-    endpointOrigin: "https://gateway-preview.example.test",
-    issuer: "https://apps-preview.example.test",
-    ownerSessionId: selection.sessionId,
-    organizationId: null,
-    nonceSha256: "d".repeat(64),
-    expiresAt: "2026-10-01T00:00:00Z",
     consumedAt: "2026-09-30T23:59:00Z",
+    endpointOrigin: "https://gateway-preview.example.test",
+    expiresAt: "2026-10-01T00:00:00Z",
+    issuer: "https://apps-preview.example.test",
+    nonceSha256: "d".repeat(64),
+    organizationId: null,
+    ownerSessionId: selection.sessionId,
     proofRef: "original-approved-owner-proof",
     proofSha256: "e".repeat(64),
   };
   let row: HostedRuntimeJournalRow = {
-    revision: 1,
     record: hostedRuntimeJournalRecordSchema.parse({
-      version: 1,
-      kind: "app-runtime",
       approvedByCallId: "original-approved-call",
-      request: target,
-      status: "prepared",
-      step: "bound",
       environmentBound: true,
+      kind: "app-runtime",
+      operator: {
+        approvalId: "original-approval",
+        authPreparation: {
+          assetSha256: "1".repeat(64),
+          catalogFingerprint: "2".repeat(64),
+          database: originalPlan.authDatabase.database,
+          observedAt: "2026-10-19T12:00:00Z",
+          runtimeRole: originalPlan.authDatabase.runtimeRole,
+          targetDigest: originalPlan.authSchema?.targetDigest,
+        },
+        fenceGeneration: 1,
+        identityLink,
+        mode: "protected-operator-v1",
+        operationRef,
+        plan: originalPlan,
+        planDigest,
+        receipts: originalPlan.effects.map((effect) => ({
+          effectId: effect.id,
+          fenceGeneration: 1,
+          observedAt: "2026-10-19T12:00:00Z",
+          resourceVersion: "observed",
+        })),
+        ...(observedEndpoint
+          ? {
+              deliveredGatewayDeploymentId: "ready-owner-gateway",
+              gatewayDeliveryCandidates: [
+                {
+                  branch: "preview",
+                  deploymentId: "ready-owner-gateway",
+                  operationRef,
+                  origin: identityLink.endpointOrigin,
+                  projectId: "prj_gateway",
+                  readyState: "READY",
+                  repoId: "gateway-repo",
+                },
+              ],
+            }
+          : {}),
+      },
       privateState: {
         encryptedToken: "ciphertext",
         keyVersion: "key-v1",
@@ -192,57 +226,27 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
       },
       proof: {
         actors: 0,
-        tenants: 1,
-        authenticatedBehavior: "unassessed",
         artifactHash: "c".repeat(64),
+        authenticatedBehavior: "unassessed",
         manifestSha256: originalPlan.release.sha256,
         releaseId: originalPlan.release.id,
+        tenants: 1,
       },
-      operator: {
-        mode: "protected-operator-v1",
-        approvalId: "original-approval",
-        operationRef,
-        plan: originalPlan,
-        planDigest,
-        fenceGeneration: 1,
-        identityLink,
-        authPreparation: {
-          assetSha256: "1".repeat(64),
-          catalogFingerprint: "2".repeat(64),
-          database: originalPlan.authDatabase.database,
-          runtimeRole: originalPlan.authDatabase.runtimeRole,
-          targetDigest: originalPlan.authSchema?.targetDigest,
-          observedAt: "2026-10-19T12:00:00Z",
-        },
-        receipts: originalPlan.effects.map((effect) => ({
-          effectId: effect.id,
-          observedAt: "2026-10-19T12:00:00Z",
-          resourceVersion: "observed",
-          fenceGeneration: 1,
-        })),
-        ...(observedEndpoint
-          ? {
-              deliveredGatewayDeploymentId: "ready-owner-gateway",
-              gatewayDeliveryCandidates: [
-                {
-                  deploymentId: "ready-owner-gateway",
-                  readyState: "READY",
-                  origin: identityLink.endpointOrigin,
-                  branch: "preview",
-                  projectId: "prj_gateway",
-                  repoId: "gateway-repo",
-                  operationRef,
-                },
-              ],
-            }
-          : {}),
-      },
+      request: target,
+      status: "prepared",
+      step: "bound",
+      version: 1,
     }),
+    revision: 1,
   };
   const original = structuredClone(row.record);
   const deps: ProtectedHostedOperatorDependencies = {
-    authorize: vi.fn(async () => ({ authority, target })),
     assertAuthorized: vi.fn(async () => {}),
+    authorize: vi.fn(async () => ({ authority, target })),
+    bindings: vi.fn(async () => ({})),
+    executeEffect: vi.fn(async () => {
+      throw new Error("Planning cannot execute effects");
+    }),
     plan: vi.fn(async () => originalPlan),
     readApproval: vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(async (input) =>
       input.planDigest === planDigest && input.callId === original.approvedByCallId
@@ -255,34 +259,30 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
           }
         : null,
     ),
+    reconcile: vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async () => ({
+      status: "absent",
+    })),
     store: {
-      read: async () => structuredClone(row),
-      reserve: async () => structuredClone(row),
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- A lost journal CAS returns no row.
           return undefined;
         }
         row = {
-          revision: row.revision + 1,
           record: hostedRuntimeJournalRecordSchema.parse(input.record),
+          revision: row.revision + 1,
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
+      reserve: async () => structuredClone(row),
       reserveFenceGeneration: vi.fn(async () => {
         throw new Error("Planning cannot claim an effect fence");
       }),
     },
-    executeEffect: vi.fn(async () => {
-      throw new Error("Planning cannot execute effects");
-    }),
-    reconcile: vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async () => ({
-      status: "absent",
-    })),
     verify: vi.fn(async () => {
       throw new Error("Planning cannot publish readiness");
     }),
-    bindings: vi.fn(async () => ({})),
     withResourceLease: vi.fn(async () => {
       throw new Error("Planning cannot claim an effect lease");
     }),
@@ -292,15 +292,15 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
     request: async (input: OperatorRequest) => {
       const response = await handler(
         new Request("https://operator.example/v1/runtime", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(input),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
         }),
       );
       return operatorPublicResultSchema.parse(await response.json());
     },
   };
-  return { deps, client, originalPlan, original, identityLink, row: () => row };
+  return { client, deps, identityLink, original, originalPlan, row: () => row };
 };
 
 describe("participant proposal identity continuity", () => {
@@ -313,7 +313,7 @@ describe("participant proposal identity continuity", () => {
       });
     f.deps.readApproval = async () => null;
     const result = await f.client.request({ action: "plan", operation: "prepare", selection });
-    expect(result).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(result).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.row().record).toEqual(f.original);
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
@@ -343,7 +343,7 @@ describe("participant proposal identity continuity", () => {
 
   it("preserves a pending link when re-exposing its unchanged original plan", async () => {
     const f = preparedOwnerFixture(false);
-    const record = f.row().record;
+    const { record } = f.row();
     const link = record.operator?.identityLink;
     if (link === undefined) {
       throw new Error("Missing fixture link");
@@ -373,55 +373,55 @@ describe("participant proposal identity continuity", () => {
       const proposal = hostedOperatorPlanSchema.parse({
         ...originalPlan,
         access: [],
-        stage: "auth-bootstrap",
-        effects: originalPlan.effects.filter((effect) =>
-          ["resources", "install", "gateway-bindings"].includes(effect.kind),
-        ),
-        publicGateway: { ...originalPlan.publicGateway, origin: publicOrigin },
         deploymentBoundary: {
           ...boundary,
           verification: {
             ...boundary.verification,
-            publicOrigin,
-            jwksUrl: ["endpoint", "observed-endpoint"].includes(scope)
-              ? "https://next-gateway.example.test/_platform/jwks.json"
-              : boundary.verification.jwksUrl,
             gatewayOrigin: ["endpoint", "observed-endpoint"].includes(scope)
               ? "https://next-gateway.example.test"
               : identityLink.endpointOrigin,
+            jwksUrl: ["endpoint", "observed-endpoint"].includes(scope)
+              ? "https://next-gateway.example.test/_platform/jwks.json"
+              : boundary.verification.jwksUrl,
+            publicOrigin,
           },
         },
+        effects: originalPlan.effects.filter((effect) =>
+          ["resources", "install", "gateway-bindings"].includes(effect.kind),
+        ),
         gatewayBindings: {
           ...originalPlan.gatewayBindings,
           authBrowserOrigin:
             scope === "browser" ? "https://next-auth.example.test" : identityLink.browserOrigin,
         },
         normalActorProgram: {
-          version: 1,
-          appId: selection.appId,
-          origin: publicOrigin,
           actors: [
             {
-              actorKey: "reviewer",
-              name: "Reviewer",
-              email: "reviewer@example.test",
               account: "create-email-password",
+              actorKey: "reviewer",
+              email: "reviewer@example.test",
+              name: "Reviewer",
             },
           ],
-          organizations: [],
-          memberships: [],
           appAccess: [],
+          appId: selection.appId,
+          memberships: [],
+          organizations: [],
+          origin: publicOrigin,
+          version: 1,
         },
+        publicGateway: { ...originalPlan.publicGateway, origin: publicOrigin },
+        stage: "auth-bootstrap",
       });
       f.deps.plan = async () => proposal;
       const result = await f.client.request({
         action: "plan",
+        normalActorProgram: proposal.normalActorProgram,
         operation: "prepare",
         selection,
-        normalActorProgram: proposal.normalActorProgram,
       });
       expect(result.status).toBe("planned");
-      const record = f.row().record;
+      const { record } = f.row();
       expect(record.operator?.identityLink).toEqual(
         ["unchanged", "observed-endpoint"].includes(scope) ? identityLink : undefined,
       );
@@ -450,20 +450,6 @@ describe("consumed proof after Gateway selection advances", () => {
     }
     const currentPlan = hostedOperatorPlanSchema.parse({
       ...original.plan,
-      effects: [
-        ...original.plan.effects,
-        {
-          id: "gateway-delivery",
-          kind: "gateway-delivery",
-          description: "Deliver the approved Gateway",
-        },
-      ],
-      gatewayDelivery: {
-        projectId: "prj_gateway",
-        branch: "preview",
-        repoId: "gateway-repo",
-        gitSha: "c".repeat(40),
-      },
       deploymentBoundary: {
         ...original.plan.deploymentBoundary,
         verification: {
@@ -471,6 +457,20 @@ describe("consumed proof after Gateway selection advances", () => {
           gatewayOrigin: "https://frozen-gateway.example.test",
           jwksUrl: "https://frozen-gateway.example.test/_platform/jwks.json",
         },
+      },
+      effects: [
+        ...original.plan.effects,
+        {
+          description: "Deliver the approved Gateway",
+          id: "gateway-delivery",
+          kind: "gateway-delivery",
+        },
+      ],
+      gatewayDelivery: {
+        branch: "preview",
+        gitSha: "c".repeat(40),
+        projectId: "prj_gateway",
+        repoId: "gateway-repo",
       },
     });
     const before = hostedOperatorRecordSchema.parse({
@@ -485,17 +485,17 @@ describe("consumed proof after Gateway selection advances", () => {
     const next = {
       ...previous,
       deploymentId: "next-gateway",
-      origin: "https://next-gateway.example.test",
       operationRef: "00000000-0000-4000-8000-000000000002",
+      origin: "https://next-gateway.example.test",
     };
     return {
-      before,
       after: {
         ...before,
-        operationRef: next.operationRef,
-        gatewayDeliveryCandidates: [previous, next],
         deliveredGatewayDeploymentId: next.deploymentId,
+        gatewayDeliveryCandidates: [previous, next],
+        operationRef: next.operationRef,
       },
+      before,
     };
   };
 
@@ -513,8 +513,8 @@ describe("consumed proof after Gateway selection advances", () => {
     };
     const next = hostedOperatorRecordSchema.parse({
       ...advanced,
-      gatewayDeliveryCandidates: [...(advanced.gatewayDeliveryCandidates ?? []), newer],
       deliveredGatewayDeploymentId: newer.deploymentId,
+      gatewayDeliveryCandidates: [...(advanced.gatewayDeliveryCandidates ?? []), newer],
     });
     expect(next.identityLink).toEqual(before.identityLink);
     expect(next.receipts).toEqual(before.receipts);

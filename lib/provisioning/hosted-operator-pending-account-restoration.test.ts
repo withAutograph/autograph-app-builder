@@ -119,138 +119,138 @@ const operationRef = "00000000-0000-4000-8000-000000000001";
 const observedAt = "2026-10-14T12:00:00Z";
 const sourceWorkload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const desiredPlan = () =>
   hostedOperatorPlanSchema.parse({
     ...bootstrapPlan(),
-    normalActorProgram: normalActorProgramSchema.parse({
-      version: 1,
-      appId: context.target.appId,
-      origin: "https://apps.example",
-      actors: [
-        {
-          actorKey: "owner",
-          email: "owner@example.test",
-          name: "Owner",
-          account: "capture-existing",
-        },
-      ],
-      organizations: [],
-      memberships: [],
-      appAccess: [],
-    }),
-    publicGateway: {
-      projectId: "gateway",
-      branch: context.target.branch,
-      origin: "https://apps.example",
-    },
     deploymentBoundary: {
-      authority,
-      teamId: "team",
       app: {
-        projectId: context.target.projectId,
+        branch: context.target.branch,
         deploymentId: "app-deployment",
-        branch: context.target.branch,
         environment: "preview",
+        projectId: context.target.projectId,
       },
+      authority,
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: context.target.branch,
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
+      teamId: "team",
       verification: {
         gatewayOrigin: "https://gateway.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
         publicOrigin: "https://apps.example",
       },
     },
+    effects: [
+      ...bootstrapPlan().effects,
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
+    ],
     gatewayBindings: {
       authBrowserOrigin: "https://apps.example",
       builderCallbackOrigin: "https://builder.example",
-      operatorOrigin: "https://operator.example",
       catalogAppIds: [context.target.appId],
+      operatorOrigin: "https://operator.example",
       sourceWorkload,
     },
     gatewayDelivery: {
-      projectId: "gateway",
       branch: context.target.branch,
-      repoId: "gateway-repo",
       gitSha: "c".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repo",
     },
-    effects: [
-      ...bootstrapPlan().effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
-    ],
+    normalActorProgram: normalActorProgramSchema.parse({
+      actors: [
+        {
+          account: "capture-existing",
+          actorKey: "owner",
+          email: "owner@example.test",
+          name: "Owner",
+        },
+      ],
+      appAccess: [],
+      appId: context.target.appId,
+      memberships: [],
+      organizations: [],
+      origin: "https://apps.example",
+      version: 1,
+    }),
+    publicGateway: {
+      branch: context.target.branch,
+      origin: "https://apps.example",
+      projectId: "gateway",
+    },
   });
 const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
   hostedRuntimeJournalRecordSchema.parse({
-    version: 1,
-    kind: "app-runtime",
     approvedByCallId: "ordinary-public-approval",
-    request: context.target,
-    status: "pending",
-    step: "reserved",
+    kind: "app-runtime",
+    operator: {
+      approvalId: "actual-approval",
+      authPreparation: {
+        assetSha256: "d".repeat(64),
+        catalogFingerprint: "e".repeat(64),
+        database: plan.authDatabase.database,
+        observedAt,
+        runtimeRole: plan.authDatabase.runtimeRole,
+        targetDigest: plan.authSchema?.targetDigest,
+      },
+      deliveredGatewayDeploymentId: "gateway-delivery",
+      gatewayDeliveryCandidates: [
+        {
+          branch: context.target.branch,
+          deploymentId: "gateway-delivery",
+          operationRef,
+          origin: "https://gateway.example",
+          projectId: "gateway",
+          readyState: "READY",
+          repoId: "gateway-repo",
+        },
+      ],
+      gatewayEnvironment: [
+        {
+          branch: context.target.branch,
+          comment: `App Builder protected operator ${operationRef}`,
+          id: "owned-environment-row",
+          key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+          operationRef,
+          projectId: "gateway",
+          valueSha256: hostedOperatorRealmLinkConfigSha256(plan),
+        },
+      ],
+      mode: "protected-operator-v1",
+      operationRef,
+      plan,
+      planDigest: operatorPlanDigest(plan),
+      receipts: plan.effects.map((effect) => ({
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      })),
+    },
     privateState: {
       encryptedToken: "private-ciphertext",
       keyVersion: "key-version",
       tokenIv: "iv",
       tokenTag: "tag",
     },
-    operator: {
-      mode: "protected-operator-v1",
-      approvalId: "actual-approval",
-      operationRef,
-      plan,
-      planDigest: operatorPlanDigest(plan),
-      authPreparation: {
-        assetSha256: "d".repeat(64),
-        catalogFingerprint: "e".repeat(64),
-        database: plan.authDatabase.database,
-        runtimeRole: plan.authDatabase.runtimeRole,
-        targetDigest: plan.authSchema?.targetDigest,
-        observedAt,
-      },
-      receipts: plan.effects.map((effect) => ({
-        effectId: effect.id,
-        observedAt,
-        resourceVersion: "actual-readback",
-      })),
-      gatewayEnvironment: [
-        {
-          key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
-          id: "owned-environment-row",
-          projectId: "gateway",
-          branch: context.target.branch,
-          operationRef,
-          comment: `App Builder protected operator ${operationRef}`,
-          valueSha256: hostedOperatorRealmLinkConfigSha256(plan),
-        },
-      ],
-      gatewayDeliveryCandidates: [
-        {
-          projectId: "gateway",
-          branch: context.target.branch,
-          repoId: "gateway-repo",
-          operationRef,
-          origin: "https://gateway.example",
-          deploymentId: "gateway-delivery",
-          readyState: "READY",
-        },
-      ],
-      deliveredGatewayDeploymentId: "gateway-delivery",
-    },
+    request: context.target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
   });
 
 const required = <T>(value: T | undefined): T => {
@@ -267,50 +267,50 @@ const setup = () => {
   const live = required(record.operator);
   const accountPlan = hostedOperatorPlanSchema.parse({
     ...live.plan,
-    stage: "auth-participants",
-    gatewayDelivery: { ...live.plan.gatewayDelivery, gitSha: "a".repeat(40) },
     effects: [
       {
+        description: "Capture the approved existing account",
         id: "normal-accounts",
         kind: "normal-accounts",
-        description: "Capture the approved existing account",
       },
     ],
+    gatewayDelivery: { ...live.plan.gatewayDelivery, gitSha: "a".repeat(40) },
+    stage: "auth-participants",
   });
   const program = required(accountPlan.normalActorProgram);
   record.retainedAuth = retainedOperatorAuthFromJournal(record);
   record.accountPreparation = {
-    accountOperationRef,
-    accountPlanDigest: operatorPlanDigest(accountPlan),
     accountApprovalId: "account-approval",
     accountApprovedByCallId: "account-call",
-    programDigest: normalActorProgramDigest(program),
-    program,
+    accountOperationRef,
     accountPlan,
-    sealedState: encryptNormalActorState({
-      authority,
-      ownerSessionId: context.target.sessionId,
-      operationRef: accountOperationRef,
-      program,
-      config: keyring,
-      state: initialNormalActorState(program, accountOperationRef),
-    }),
+    accountPlanDigest: operatorPlanDigest(accountPlan),
     captures: [
       {
-        reference: "00000000-0000-4000-8000-000000000003",
         actorKey: "owner",
+        expiresAt: "2027-01-01T00:00:00Z",
         nonceSha256: "a".repeat(64),
         proofSha256: "b".repeat(64),
-        expiresAt: "2027-01-01T00:00:00Z",
+        reference: "00000000-0000-4000-8000-000000000003",
       },
     ],
-    pendingCaptures: [
-      { actorKey: "owner", nonceSha256: "c".repeat(64), expiresAt: "2027-01-01T00:00:00Z" },
-    ],
     organizationProofs: [],
+    pendingCaptures: [
+      { actorKey: "owner", expiresAt: "2027-01-01T00:00:00Z", nonceSha256: "c".repeat(64) },
+    ],
+    program,
+    programDigest: normalActorProgramDigest(program),
+    sealedState: encryptNormalActorState({
+      authority,
+      config: keyring,
+      operationRef: accountOperationRef,
+      ownerSessionId: context.target.sessionId,
+      program,
+      state: initialNormalActorState(program, accountOperationRef),
+    }),
     supersededOrganizationProofs: [],
   };
-  let row: HostedRuntimeJournalRow = { revision: 1, record };
+  let row: HostedRuntimeJournalRow = { record, revision: 1 };
   const read = vi.fn(async () => await Promise.resolve(structuredClone(row)));
   const compareAndSet = vi.fn<ProtectedHostedOperatorDependencies["store"]["compareAndSet"]>(
     async (input) => {
@@ -318,8 +318,8 @@ const setup = () => {
         return undefined;
       }
       row = {
-        revision: row.revision + 1,
         record: hostedRuntimeJournalRecordSchema.parse(input.record),
+        revision: row.revision + 1,
       };
       return await Promise.resolve(structuredClone(row));
     },
@@ -331,22 +331,23 @@ const setup = () => {
     async (input) =>
       await Promise.resolve({
         action: "prepare",
+        approvalId: input.callId === "account-call" ? "account-approval" : "actual-approval",
         approved: true,
         callId: input.callId,
         planDigest: input.planDigest,
-        approvalId: input.callId === "account-call" ? "account-approval" : "actual-approval",
       }),
   );
-  const ports = { store: { read, compareAndSet }, assertAuthorized, readApproval };
+  const ports = { assertAuthorized, readApproval, store: { compareAndSet, read } };
   const input = { action: "plan", operation: "prepare", selection: accountPlan.selection } as const;
   return {
-    ports,
-    input,
     accountPlan,
+    input,
+    ports,
     get row() {
       return row;
     },
-    run: () => restorePendingAccountPreparation(ports, context, input, accountPlan, () => now),
+    run: async () =>
+      await restorePendingAccountPreparation(ports, context, input, accountPlan, () => now),
   };
 };
 
@@ -358,17 +359,17 @@ describe("pending account restoration after completed infrastructure", () => {
     const current = required(before.operator);
     await expect(f.run()).resolves.toMatchObject({
       operationRef: accountOperationRef,
-      planDigest: original.accountPlanDigest,
       plan: original.accountPlan,
+      planDigest: original.accountPlanDigest,
     });
     const after = f.row.record;
     expect(
       decryptNormalActorState({
         authority,
-        ownerSessionId: context.target.sessionId,
-        operationRef: accountOperationRef,
-        program: original.program,
         config: keyring,
+        operationRef: accountOperationRef,
+        ownerSessionId: context.target.sessionId,
+        program: original.program,
         sealed: required(after.accountPreparation).sealedState,
       }),
     ).toEqual(initialNormalActorState(original.program, accountOperationRef));
@@ -376,15 +377,15 @@ describe("pending account restoration after completed infrastructure", () => {
     expect(after.privateState).toEqual(before.privateState);
     expect(after.approvedByCallId).toBe(original.accountApprovedByCallId);
     expect(after.operator).toMatchObject({
-      operationRef: accountOperationRef,
       approvalId: original.accountApprovalId,
-      planDigest: original.accountPlanDigest,
-      plan: original.accountPlan,
-      receipts: [],
       authPreparation: current.authPreparation,
-      gatewayEnvironment: current.gatewayEnvironment,
-      gatewayDeliveryCandidates: current.gatewayDeliveryCandidates,
       deliveredGatewayDeploymentId: current.deliveredGatewayDeploymentId,
+      gatewayDeliveryCandidates: current.gatewayDeliveryCandidates,
+      gatewayEnvironment: current.gatewayEnvironment,
+      operationRef: accountOperationRef,
+      plan: original.accountPlan,
+      planDigest: original.accountPlanDigest,
+      receipts: [],
     });
     expect(after.pendingAccountRestorations).toEqual([
       {
@@ -407,7 +408,7 @@ describe("pending account restoration after completed infrastructure", () => {
     "preserves unknown work and refuses %s",
     async (kind) => {
       const f = setup();
-      const record = f.row.record;
+      const { record } = f.row;
       const operator = required(record.operator);
       if (kind === "lease" || kind === "expired-lease") {
         record.leaseId = "00000000-0000-4000-8000-000000000004";
@@ -435,11 +436,11 @@ describe("pending account restoration after completed infrastructure", () => {
       async (input) =>
         await Promise.resolve({
           action: "prepare",
+          approvalId: input.callId === "account-call" ? "account-approval" : "actual-approval",
           approved:
             input.callId !== (which === "account" ? "account-call" : "ordinary-public-approval"),
           callId: input.callId,
           planDigest: input.planDigest,
-          approvalId: input.callId === "account-call" ? "account-approval" : "actual-approval",
         }),
     );
     await expect(f.run()).rejects.toMatchObject({ code: "authorization_required" });
@@ -493,41 +494,41 @@ it("restores through ordinary planner then satisfies idle account/capture author
   });
   const deps: ProtectedHostedOperatorDependencies = {
     ...f.ports,
+    authorize: async () => await Promise.resolve(context),
+    bindings: forbidden,
+    executeEffect: forbidden,
     now: () => now,
+    plan: async () => await Promise.resolve(f.accountPlan),
+    readApprovedPlan: forbidden,
+    reconcile: forbidden,
     store: {
       ...f.ports.store,
       reserve: async () => await Promise.resolve(f.row),
       reserveFenceGeneration: forbidden,
     },
-    authorize: async () => await Promise.resolve(context),
-    plan: async () => await Promise.resolve(f.accountPlan),
-    readApprovedPlan: forbidden,
-    withResourceLease: forbidden,
-    reconcile: forbidden,
-    executeEffect: forbidden,
     verify: forbidden,
-    bindings: forbidden,
+    withResourceLease: forbidden,
   };
   const response = await createProtectedHostedOperatorHandler(deps)(
     new Request("https://operator.example/v1/runtime", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify(f.input),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
   );
   expect(await response.json()).toMatchObject({
-    status: "planned",
     operationRef: accountOperationRef,
     plan: f.accountPlan,
+    status: "planned",
   });
   const owner = vi.fn(async () => {});
   const captureAuthority = createNormalActorJournalAuthority({
-    store: f.ports.store,
+    assertApprovedOwner: f.ports.assertAuthorized,
+    assertCanonicalOwner: owner,
     keyring,
     now: () => now,
-    assertCanonicalOwner: owner,
-    assertApprovedOwner: f.ports.assertAuthorized,
     readApproval: f.ports.readApproval,
+    store: f.ports.store,
   });
   await captureAuthority.assertMutationAuthority(context, f.row);
   await captureAuthority.assertAccountApproval(context, required(f.row.record.accountPreparation));
@@ -588,7 +589,7 @@ it.each(["auth-resource", "app-resource", "browser", "issuer", "program", "gatew
 
 it("archives old success/failure histories and settled execution observation without reusing its active authority", async () => {
   const f = setup();
-  const record = f.row.record;
+  const { record } = f.row;
   const current = required(record.operator);
   record.pendingAccountRestorations = [
     {
@@ -598,13 +599,13 @@ it("archives old success/failure histories and settled execution observation wit
     },
   ];
   record.executionObservation = {
-    state: "settled",
-    attemptRef: "00000000-0000-4000-8000-000000000004",
-    operationRef,
-    planDigest: current.planDigest,
-    callId: record.approvedByCallId,
     approvalId: required(current.approvalId),
-    outcome: { status: "blocked", code: "reconciliation_required" },
+    attemptRef: "00000000-0000-4000-8000-000000000004",
+    callId: record.approvedByCallId,
+    operationRef,
+    outcome: { code: "reconciliation_required", status: "blocked" },
+    planDigest: current.planDigest,
+    state: "settled",
   };
   const before = structuredClone(record);
   await f.run();
@@ -621,12 +622,12 @@ it("refuses any unsettled native execution rather than discarding it", async () 
   const f = setup();
   const current = required(f.row.record.operator);
   f.row.record.executionObservation = {
-    state: "running",
+    approvalId: required(current.approvalId),
     attemptRef: "00000000-0000-4000-8000-000000000004",
+    callId: f.row.record.approvedByCallId,
     operationRef,
     planDigest: current.planDigest,
-    callId: f.row.record.approvedByCallId,
-    approvalId: required(current.approvalId),
+    state: "running",
   };
   await expect(f.run()).rejects.toMatchObject({ code: "operation_in_progress" });
   expect(f.ports.store.compareAndSet).not.toHaveBeenCalled();
@@ -637,13 +638,13 @@ it.each(["claimed", "unknown", "accepted"] as const)(
   async (status) => {
     const f = setup();
     f.row.record.realmContinuation = {
-      dispatchId: "d".repeat(64),
-      operationRef,
-      approvedPlanDigest: required(f.row.record.operator).planDigest,
-      nonceSha256: "e".repeat(64),
-      status,
-      claimedAt: observedAt,
       adapterSessionId: required(context.ownerContext).adapterSessionId,
+      approvedPlanDigest: required(f.row.record.operator).planDigest,
+      claimedAt: observedAt,
+      dispatchId: "d".repeat(64),
+      nonceSha256: "e".repeat(64),
+      operationRef,
+      status,
       ...(status === "accepted" ? { acceptedAt: observedAt, receiverClaimedAt: observedAt } : {}),
     };
     const before = structuredClone(f.row.record);
@@ -661,14 +662,14 @@ it("archives only accepted old-adapter continuation and stale hook while preserv
     audience: required(original.accountPlan.gatewayBindings).operatorOrigin,
     authResourceId: original.accountPlan.authDatabase.resourceId,
     bootstrapPlanDigest: original.accountPlanDigest,
+    browserOrigin: original.program.origin,
     browserSession: {
       operationRef: original.accountOperationRef,
       participantProgramDigest: original.programDigest,
     },
-    browserOrigin: original.program.origin,
     endpointOrigin: "https://gateway.example",
-    issuer: required(original.accountPlan.deploymentBoundary).verification.publicOrigin,
     expiresAt: "2027-01-01T00:00:00Z",
+    issuer: required(original.accountPlan.deploymentBoundary).verification.publicOrigin,
     nonceSha256: "c".repeat(64),
     organizationId: null,
     ownerSessionId: context.target.sessionId,
@@ -683,15 +684,15 @@ it("archives only accepted old-adapter continuation and stale hook while preserv
     registeredAt: observedAt,
   };
   f.row.record.realmContinuation = {
-    dispatchId: "d".repeat(64),
-    operationRef: accountOperationRef,
-    approvedPlanDigest: original.accountPlanDigest,
-    nonceSha256: "c".repeat(64),
-    status: "accepted",
-    claimedAt: observedAt,
     acceptedAt: observedAt,
-    receiverClaimedAt: observedAt,
     adapterSessionId: "displaced-adapter",
+    approvedPlanDigest: original.accountPlanDigest,
+    claimedAt: observedAt,
+    dispatchId: "d".repeat(64),
+    nonceSha256: "c".repeat(64),
+    operationRef: accountOperationRef,
+    receiverClaimedAt: observedAt,
+    status: "accepted",
   };
   const before = structuredClone(f.row.record);
   await f.run();
@@ -700,21 +701,21 @@ it("archives only accepted old-adapter continuation and stale hook while preserv
   expect(f.row.record.realmIdentityWait).toBeUndefined();
   expect(f.row.record.realmContinuation).toBeUndefined();
   expect(f.row.record.pendingAccountRestorations?.[0]).toMatchObject({
-    realmIdentityWait: before.realmIdentityWait,
     realmContinuation: before.realmContinuation,
+    realmIdentityWait: before.realmIdentityWait,
   });
 });
 
 it("does not discard an old-adapter unknown continuation", async () => {
   const f = setup();
   f.row.record.realmContinuation = {
-    dispatchId: "d".repeat(64),
-    operationRef,
-    approvedPlanDigest: required(f.row.record.operator).planDigest,
-    nonceSha256: "e".repeat(64),
-    status: "unknown",
-    claimedAt: observedAt,
     adapterSessionId: "displaced-adapter",
+    approvedPlanDigest: required(f.row.record.operator).planDigest,
+    claimedAt: observedAt,
+    dispatchId: "d".repeat(64),
+    nonceSha256: "e".repeat(64),
+    operationRef,
+    status: "unknown",
   };
   await expect(f.run()).rejects.toMatchObject({ code: "operation_in_progress" });
   expect(f.ports.store.compareAndSet).not.toHaveBeenCalled();
@@ -759,22 +760,22 @@ it("reports a closed authorized candidate before a nonparticipant proposal silen
       ),
     ).resolves.toBeNull();
     expect(logs).toHaveBeenCalledWith("[builder:pending-account-restoration]", {
-      proposalIsOriginalAccountPlan: false,
-      proposalStage: "auth-bootstrap",
-      lease: "absent",
-      hasLeaseExpiry: false,
-      hasPendingEffect: false,
-      hasPendingAttempt: false,
       allPlanEffectsReceipted: true,
-      missingEffectKinds: [],
-      executionState: "absent",
-      linkScope: "absent",
-      wait: "absent",
       continuation: "absent",
+      continuationAcceptanceReceiptPresent: false,
       continuationArchiveable: false,
       currentExecutionAcknowledged: false,
-      continuationAcceptanceReceiptPresent: false,
+      executionState: "absent",
+      hasLeaseExpiry: false,
+      hasPendingAttempt: false,
+      hasPendingEffect: false,
+      lease: "absent",
+      linkScope: "absent",
+      missingEffectKinds: [],
       ownerRestrictedCapabilityPresent: false,
+      proposalIsOriginalAccountPlan: false,
+      proposalStage: "auth-bootstrap",
+      wait: "absent",
     });
     expect(f.row.record).toEqual(original);
     expect(f.ports.readApproval).not.toHaveBeenCalled();
@@ -876,14 +877,14 @@ it.each(["current-account", "old-adapter", "observed", "unrelated"] as const)(
         audience: required(original.accountPlan.gatewayBindings).operatorOrigin,
         authResourceId: original.accountPlan.authDatabase.resourceId,
         bootstrapPlanDigest: original.accountPlanDigest,
+        browserOrigin: original.program.origin,
         browserSession: {
           operationRef: original.accountOperationRef,
           participantProgramDigest: original.programDigest,
         },
-        browserOrigin: original.program.origin,
         endpointOrigin: "https://gateway.example",
-        issuer: required(original.accountPlan.deploymentBoundary).verification.publicOrigin,
         expiresAt: "2027-01-01T00:00:00Z",
+        issuer: required(original.accountPlan.deploymentBoundary).verification.publicOrigin,
         nonceSha256: "c".repeat(64),
         organizationId: null,
         ownerSessionId: context.target.sessionId,
@@ -900,7 +901,7 @@ it.each(["current-account", "old-adapter", "observed", "unrelated"] as const)(
       nonceSha256: "c".repeat(64),
       operationRef: accountOperationRef,
       registeredAt: observedAt,
-      ...(classification === "observed" ? { observedAt, eventId: "f".repeat(64) } : {}),
+      ...(classification === "observed" ? { eventId: "f".repeat(64), observedAt } : {}),
     };
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
@@ -922,15 +923,15 @@ it.each(["old-accepted", "current-accepted", "current-pending", "old-unknown"] a
     const f = setup();
     const accepted = classification.endsWith("accepted");
     f.row.record.realmContinuation = {
-      dispatchId: "d".repeat(64),
-      operationRef,
-      approvedPlanDigest: required(f.row.record.operator).planDigest,
-      nonceSha256: "e".repeat(64),
-      status: accepted ? "accepted" : "unknown",
-      claimedAt: observedAt,
       adapterSessionId: classification.startsWith("old")
         ? "private-displaced-adapter"
         : required(context.ownerContext).adapterSessionId,
+      approvedPlanDigest: required(f.row.record.operator).planDigest,
+      claimedAt: observedAt,
+      dispatchId: "d".repeat(64),
+      nonceSha256: "e".repeat(64),
+      operationRef,
+      status: accepted ? "accepted" : "unknown",
       ...(accepted ? { acceptedAt: observedAt, receiverClaimedAt: observedAt } : {}),
     };
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -965,12 +966,12 @@ it("projects pending record facts and only the presence of restricted owner capa
   operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000008" };
   operator.receipts.pop();
   f.row.record.executionObservation = {
-    state: "running",
+    approvalId: required(operator.approvalId),
     attemptRef: f.row.record.leaseId,
+    callId: f.row.record.approvedByCallId,
     operationRef,
     planDigest: operator.planDigest,
-    callId: f.row.record.approvedByCallId,
-    approvalId: required(operator.approvalId),
+    state: "running",
   };
   const restrictedContext = {
     ...context,
@@ -991,13 +992,13 @@ it("projects pending record facts and only the presence of restricted owner capa
     expect(logs).toHaveBeenCalledWith(
       "[builder:pending-account-restoration]",
       expect.objectContaining({
-        lease: "active",
-        hasLeaseExpiry: true,
-        hasPendingEffect: true,
-        hasPendingAttempt: true,
         allPlanEffectsReceipted: false,
-        missingEffectKinds: ["gateway-delivery"],
         executionState: "running",
+        hasLeaseExpiry: true,
+        hasPendingAttempt: true,
+        hasPendingEffect: true,
+        lease: "active",
+        missingEffectKinds: ["gateway-delivery"],
         ownerRestrictedCapabilityPresent: true,
       }),
     );
@@ -1017,8 +1018,8 @@ it("does not change an authorized restoration when its advisory logger throws", 
   });
   try {
     await expect(f.run()).resolves.toMatchObject({
-      status: "planned",
       operationRef: accountOperationRef,
+      status: "planned",
     });
     expect(f.ports.store.compareAndSet).toHaveBeenCalledOnce();
   } finally {
@@ -1030,35 +1031,35 @@ const completedNotification = () => {
   const f = setup();
   const operator = required(f.row.record.operator);
   f.row.record.executionObservation = {
-    state: "settled",
-    attemptRef: "00000000-0000-4000-8000-000000000007",
-    operationRef,
-    planDigest: operator.planDigest,
-    callId: f.row.record.approvedByCallId,
     approvalId: required(operator.approvalId),
+    attemptRef: "00000000-0000-4000-8000-000000000007",
+    callId: f.row.record.approvedByCallId,
+    operationRef,
     outcome: { status: "auth-schema-prepared" },
+    planDigest: operator.planDigest,
+    state: "settled",
   };
   f.row.record.realmContinuation = {
-    dispatchId: "d".repeat(64),
-    operationRef,
-    approvedPlanDigest: operator.planDigest,
-    nonceSha256: "e".repeat(64),
-    status: "accepted",
-    claimedAt: observedAt,
     acceptedAt: observedAt,
-    receiverClaimedAt: observedAt,
     adapterSessionId: required(context.ownerContext).adapterSessionId,
+    approvedPlanDigest: operator.planDigest,
+    claimedAt: observedAt,
+    dispatchId: "d".repeat(64),
+    nonceSha256: "e".repeat(64),
+    operationRef,
+    receiverClaimedAt: observedAt,
+    status: "accepted",
   };
   f.row.record.realmIdentityWait = {
     adapterSessionId: required(context.ownerContext).adapterSessionId,
     approvedPlanDigest: "a".repeat(64),
     callId: "past-notification-call",
+    eventId: "f".repeat(64),
     hook: { encryptedToken: "private-hook", keyVersion: "v1", tokenIv: "iv", tokenTag: "tag" },
     nonceSha256: "b".repeat(64),
+    observedAt,
     operationRef: accountOperationRef,
     registeredAt: observedAt,
-    observedAt,
-    eventId: "f".repeat(64),
   };
   return f;
 };
@@ -1081,8 +1082,8 @@ it.each(["past", "absent", "account"] as const)(
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       await expect(f.run()).resolves.toMatchObject({
-        status: "planned",
         operationRef: accountOperationRef,
+        status: "planned",
       });
       expect(f.row.record.realmContinuation).toBeUndefined();
       expect(f.row.record.realmIdentityWait).toBeUndefined();
@@ -1090,8 +1091,8 @@ it.each(["past", "absent", "account"] as const)(
       expect(f.row.record.accountPreparation).toEqual(before.accountPreparation);
       expect(f.row.record.privateState).toEqual(before.privateState);
       expect(f.row.record.pendingAccountRestorations?.[0]).toMatchObject({
-        realmContinuation: before.realmContinuation,
         executionObservation: before.executionObservation,
+        realmContinuation: before.realmContinuation,
       });
       expect(f.row.record.pendingAccountRestorations?.[0].realmIdentityWait).toEqual(
         before.realmIdentityWait,
@@ -1100,9 +1101,9 @@ it.each(["past", "absent", "account"] as const)(
         "[builder:pending-account-restoration]",
         expect.objectContaining({
           continuation: "current-accepted",
+          continuationAcceptanceReceiptPresent: true,
           continuationArchiveable: true,
           currentExecutionAcknowledged: true,
-          continuationAcceptanceReceiptPresent: true,
         }),
       );
     } finally {
@@ -1169,14 +1170,14 @@ it.each([
       audience: required(account.accountPlan.gatewayBindings).operatorOrigin,
       authResourceId: account.accountPlan.authDatabase.resourceId,
       bootstrapPlanDigest: account.accountPlanDigest,
+      browserOrigin: account.program.origin,
       browserSession: {
         operationRef: account.accountOperationRef,
         participantProgramDigest: account.programDigest,
       },
-      browserOrigin: account.program.origin,
       endpointOrigin: "https://gateway.example",
-      issuer: required(account.accountPlan.deploymentBoundary).verification.publicOrigin,
       expiresAt: "2027-01-01T00:00:00Z",
+      issuer: required(account.accountPlan.deploymentBoundary).verification.publicOrigin,
       nonceSha256: "c".repeat(64),
       organizationId: null,
       ownerSessionId: context.target.sessionId,

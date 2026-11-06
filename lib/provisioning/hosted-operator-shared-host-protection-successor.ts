@@ -62,13 +62,13 @@ const sameNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan): 
   }
   return sameOperatorPlanExceptExpiry(prior, {
     ...next,
+    effects: next.effects.map((effect) =>
+      effect.id === binding.id ? { ...effect, description: binding.description } : effect,
+    ),
     gatewayBindings: {
       ...next.gatewayBindings,
       trustedSources: prior.gatewayBindings.trustedSources,
     },
-    effects: next.effects.map((effect) =>
-      effect.id === binding.id ? { ...effect, description: binding.description } : effect,
-    ),
   });
 };
 
@@ -267,11 +267,11 @@ export const sharedHostProtectionDeliveryProvenance = (
       return [];
     }
     const provenance = {
+      approvalId: original.approvalId,
+      approvedByCallId: retained.approvedByCallId,
       operationRef: original.operationRef,
       plan: original.plan,
       planDigest: original.planDigest,
-      approvalId: original.approvalId,
-      approvedByCallId: retained.approvedByCallId,
     };
     return isSharedHostProtectionDeliveryProvenance(provenance, current.plan, current.operationRef)
       ? [provenance]

@@ -441,10 +441,10 @@ const requireOperator = (record: HostedRuntimeJournalRecord) =>
 const correctionDeliveryIntent = (plan: HostedOperatorPlan, effectId: string) => {
   const effect = plan.effects.find((candidate) => candidate.id === effectId);
   if (effect?.kind === "delivery") {
-    return { kind: effect.kind, delivery: plan.delivery };
+    return { delivery: plan.delivery, kind: effect.kind };
   }
   if (effect?.kind === GATEWAY_DELIVERY_EFFECT) {
-    return { kind: effect.kind, delivery: plan.gatewayDelivery };
+    return { delivery: plan.gatewayDelivery, kind: effect.kind };
   }
   // oxlint-disable-next-line unicorn/no-useless-undefined -- Non-delivery effects explicitly have no delivery intent.
   return undefined;
@@ -526,8 +526,8 @@ const isGatewaySourceSuccessor = (
       ...plan,
       gatewayDelivery: {
         ...plan.gatewayDelivery,
-        gitSha: prior.plan.gatewayDelivery.gitSha,
         gitRef: prior.plan.gatewayDelivery.gitRef,
+        gitSha: prior.plan.gatewayDelivery.gitSha,
       },
     }),
     record.leaseId === undefined ||
@@ -622,7 +622,7 @@ const readPendingPreparedPreviewPlan = async (
   if (!samePendingProposal) {
     throw new HostedOperatorError("operation_in_progress");
   }
-  return { plan, planDigest: operator.planDigest, operationRef: operator.operationRef };
+  return { operationRef: operator.operationRef, plan, planDigest: operator.planDigest };
 };
 
 const handlePlanOperation = async (
@@ -898,9 +898,9 @@ const handlePlanOperation = async (
     ),
   );
   const failed = {
+    gateway_plan: !hasRequiredGatewayPlan(input.operation, plan),
     plan_action: plan.action !== input.operation,
     plan_selection: !sameOperatorSelection(plan.selection, input.selection),
-    gateway_plan: !hasRequiredGatewayPlan(input.operation, plan),
   };
   if (Object.values(failed).some(Boolean)) {
     reportOperatorPlanningMismatch(context.target.sessionId, "plan_result", failed);
@@ -970,24 +970,15 @@ const handlePlanOperation = async (
     retentionRenewal,
     readySuccessor,
   } = await observeOperatorPlanStage(context.target.sessionId, "successor_classification", () => ({
-    participantSuccessor:
-      successorPrior !== undefined &&
-      isParticipantProgramSuccessor(successorPrior.record, plan, now()),
-    sharedHostSuccessor:
-      successorPrior !== undefined &&
-      isSharedHostProtectionSuccessor(successorPrior.record, plan, now()),
-    installerSuccessor:
-      successorPrior !== undefined &&
-      isInstallerSourceSuccessor(successorPrior.record, plan, now()),
     appGatewaySuccessor:
       successorPrior !== undefined &&
       isAppGatewaySourceSuccessor(successorPrior.record, plan, now()),
-    settingsSuccessor:
+    installerSuccessor:
       successorPrior !== undefined &&
-      isProjectSettingsSuccessor(successorPrior.record, plan, now()),
-    retentionRenewal:
+      isInstallerSourceSuccessor(successorPrior.record, plan, now()),
+    participantSuccessor:
       successorPrior !== undefined &&
-      isRetentionRenewalSuccessor(successorPrior.record, plan, now()),
+      isParticipantProgramSuccessor(successorPrior.record, plan, now()),
     readySuccessor:
       successorPrior !== undefined &&
       plan.appDeliveryReplacement !== undefined &&
@@ -996,6 +987,15 @@ const handlePlanOperation = async (
         { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
         now(),
       ),
+    retentionRenewal:
+      successorPrior !== undefined &&
+      isRetentionRenewalSuccessor(successorPrior.record, plan, now()),
+    settingsSuccessor:
+      successorPrior !== undefined &&
+      isProjectSettingsSuccessor(successorPrior.record, plan, now()),
+    sharedHostSuccessor:
+      successorPrior !== undefined &&
+      isSharedHostProtectionSuccessor(successorPrior.record, plan, now()),
   }));
   if (renewalPrior !== undefined && successorPrior?.revision !== renewalPrior.revision) {
     throw new HostedOperatorError("operation_in_progress");
@@ -1168,8 +1168,6 @@ const handlePlanOperation = async (
     async () =>
       await updateHostedRuntimeJournal({
         ...context,
-        now,
-        store: deps.store,
         beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
           if (plan.normalActorCapturePredecessor !== undefined) {
             const fresh =
@@ -1245,6 +1243,8 @@ const handlePlanOperation = async (
             }
           }
         },
+        now,
+        store: deps.store,
         update: (record) => {
           if (!record.operator) {
             throw new HostedOperatorError("legacy_runtime_requires_migration");
@@ -1778,9 +1778,9 @@ const handleBindingsOperation = async (input: {
     }
     publicDelivery = await deps.publicRuntimeBinding({
       ...context,
-      request: input.request,
-      plan,
       operationRef,
+      plan,
+      request: input.request,
     });
     assertPublicRuntimeBinding(publicDelivery, plan, operationRef);
   }
@@ -1793,7 +1793,7 @@ const handleBindingsOperation = async (input: {
     if (plan.normalActorProgram.origin !== browserOrigin) {
       throw new HostedOperatorError("resource_mismatch");
     }
-    normalActors = await deps.normalActorRuntimeBindings({ ...context, plan, operationRef });
+    normalActors = await deps.normalActorRuntimeBindings({ ...context, operationRef, plan });
     if (normalActors === undefined) {
       throw new HostedOperatorError("auth_identity_required");
     }
@@ -1804,9 +1804,9 @@ const handleBindingsOperation = async (input: {
   if (publicDelivery !== undefined) {
     const latestDelivery = await deps.publicRuntimeBinding?.({
       ...context,
-      request: input.request,
-      plan,
       operationRef,
+      plan,
+      request: input.request,
     });
     if (!isDeepStrictEqual(latestDelivery, publicDelivery)) {
       throw new HostedOperatorError("resource_mismatch");
@@ -2203,7 +2203,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             "cleaned",
           ].includes(result.status)
         ) {
-          execution = { state: "settled", outcome: { status: result.status } };
+          execution = { outcome: { status: result.status }, state: "settled" };
         }
         return response(
           operatorPublicResultSchema.parse({
@@ -2218,7 +2218,6 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           throw new HostedOperatorError("auth_identity_required");
         }
         return await handleBindingsOperation({
-          request,
           context,
           current,
           deps,
@@ -2228,6 +2227,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           plan,
           planDigest,
           read,
+          request,
         });
       }
       if (input.planDigest !== planDigest) {
@@ -2352,10 +2352,10 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         });
         const capture = await deps.ensureNormalActorCapture({
           ...context,
-          plan,
-          operationRef,
-          callId: input.callId,
           approvalId: approval.approvalId,
+          callId: input.callId,
+          operationRef,
+          plan,
           planDigest,
         });
         if (capture !== "ready") {
@@ -2393,12 +2393,12 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               ...(executionObservationRequested
                 ? {
                     executionObservation: {
-                      state: "running" as const,
+                      approvalId: approval.approvalId,
                       attemptRef: leaseId,
+                      callId: input.callId,
                       operationRef,
                       planDigest,
-                      callId: input.callId,
-                      approvalId: approval.approvalId,
+                      state: "running" as const,
                     },
                   }
                 : {}),
@@ -2543,9 +2543,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   await assertFence();
                   await ownedUpdate((record) =>
                     settleOperatorExecution(record, leaseId, {
-                      status: "blocked",
                       code:
                         error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+                      status: "blocked",
                     }),
                   );
                 });
@@ -2812,6 +2812,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                         throw new HostedOperatorError("reconciliation_required");
                       }
                       const saved: OperatorDeliveryCorrection = {
+                        createAttempted: attempted || correction.createAttempted,
                         effectId: effect.id,
                         rejectedDeploymentIds: [
                           ...new Set([
@@ -2819,7 +2820,6 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                             ...correction.rejectedDeploymentIds,
                           ]),
                         ],
-                        createAttempted: attempted || correction.createAttempted,
                       };
                       return {
                         ...value,
@@ -3080,8 +3080,8 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   }),
                 );
                 effectInput.readyReplacement = {
-                  originatingOperator: predecessor.originatingOperator,
                   appCandidate: predecessor.appCandidate,
+                  originatingOperator: predecessor.originatingOperator,
                   ...(predecessor.gatewayCandidate
                     ? { gatewayCandidate: predecessor.gatewayCandidate }
                     : {}),
@@ -3307,14 +3307,14 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 program,
                 await deps.verifyNormalActorAccounts({
                   ...context,
-                  plan,
-                  effect: accountEffect,
-                  operationRef,
-                  leaseId,
-                  fenceGeneration,
-                  assertCurrent,
                   accountPreparation: preparation,
+                  assertCurrent,
                   checkpointAccountPreparation,
+                  effect: accountEffect,
+                  fenceGeneration,
+                  leaseId,
+                  operationRef,
+                  plan,
                 }),
                 preparation.accountOperationRef,
               );
@@ -3430,9 +3430,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           appId,
           authenticatedBehavior: "unassessed",
           code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
-          recoveryStage: error instanceof HostedOperatorError ? error.recoveryStage : undefined,
           recoveryProgressAdvanced:
             error instanceof HostedOperatorError ? error.recoveryProgressAdvanced : undefined,
+          recoveryStage: error instanceof HostedOperatorError ? error.recoveryStage : undefined,
           status: "blocked",
         }),
       );

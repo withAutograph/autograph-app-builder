@@ -38,19 +38,19 @@ const bodySchema = z.strictObject({
 });
 const stageSchema = bodySchema.extend({ expiresAt: z.number().int(), version: z.literal(1) });
 const privateStageRequestSchema = z.strictObject({
-  version: z.literal(1),
-  purpose: z.literal("realm-owner-identity-stage-v1"),
-  origin: z.url(),
   nonce: bodySchema.shape.nonce,
+  origin: z.url(),
   proof: bodySchema.shape.proof,
+  purpose: z.literal("realm-owner-identity-stage-v1"),
+  version: z.literal(1),
 });
 const privateStageSchema = stageSchema.extend({ claimHash: bodySchema.shape.nonce });
 const routingTicketSchema = z.strictObject({
-  version: z.literal(1),
-  ownerSessionId: bodySchema.shape.ownerSessionId,
-  nonceSha256: bodySchema.shape.nonce,
   claimSecret: bodySchema.shape.nonce,
   expiresAt: z.number().int(),
+  nonceSha256: bodySchema.shape.nonce,
+  ownerSessionId: bodySchema.shape.ownerSessionId,
+  version: z.literal(1),
 });
 const envelopeSchema = z.strictObject({
   encryptedToken: z.string(),
@@ -183,11 +183,11 @@ const privateStageAad = (origin: string, sessionId: string, claimHash: string) =
 const stageReference = (context: HostedOperatorContext, claimHash: string) =>
   `_protected-operator/artifacts/realm-identity-stage/${context.target.appId}/${claimHash}`;
 const senderClaimsSchema = z.object({
-  iss: z.string(),
   aud: z.string(),
+  environment: z.string(),
+  iss: z.string(),
   owner_id: z.string(),
   project_id: z.string(),
-  environment: z.string(),
   sub: z.string(),
 });
 
@@ -227,10 +227,10 @@ export const createRealmIdentityHandoffSenderVerifier =
     }
     const verified = await verify(bearer, {
       audience: sender.audience,
+      environment: sender.environment,
       issuer: sender.issuer,
       ownerId: sender.ownerId,
       projectId: sender.projectId,
-      environment: sender.environment,
       subject: sender.subject,
     });
     const claims = senderClaimsSchema.parse(verified.payload);
@@ -291,7 +291,7 @@ const observeJwksResponse = (response: Response): JwksResponseObservation => {
     contentType = "html";
   }
   const providerError = response.headers.get("x-vercel-error");
-  const observation: JwksResponseObservation = { httpStatus: response.status, contentType };
+  const observation: JwksResponseObservation = { contentType, httpStatus: response.status };
   if (providerError !== null && providerError !== "") {
     observation.vercelError =
       providerError === "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH" ||
@@ -314,8 +314,8 @@ const reportPrivateStageFailure = (
   jwks?: JwksResponseObservation,
 ) => {
   const failure: PrivateStageFailure = {
-    stage,
     errorClass: "unknown",
+    stage,
     ...(stage === "proof_verification" && jwks !== undefined ? { jwks } : {}),
   };
   try {
@@ -385,8 +385,8 @@ const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request)
     });
     stage = "context";
     const context = await handoff.context({
-      ownerSessionId: input.ownerSessionId,
       nonceSha256: staging.link.nonceSha256,
+      ownerSessionId: input.ownerSessionId,
     });
     if (context.target.sessionId !== input.ownerSessionId) {
       throw new Error("realm_callback_scope");
@@ -404,7 +404,7 @@ const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request)
     const encrypted = seal(
       ports,
       privateStageAad(ports.builderOrigin, input.ownerSessionId, claimHash),
-      JSON.stringify({ ...input, expiresAt, claimHash, version: 1 }),
+      JSON.stringify({ ...input, claimHash, expiresAt, version: 1 }),
     );
     stage = "artifact";
     await handoff.artifacts.put(
@@ -422,10 +422,10 @@ const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request)
       ports,
       ticketAad(ports.builderOrigin),
       JSON.stringify({
-        ownerSessionId: input.ownerSessionId,
-        nonceSha256: staging.link.nonceSha256,
         claimSecret,
         expiresAt,
+        nonceSha256: staging.link.nonceSha256,
+        ownerSessionId: input.ownerSessionId,
         version: 1,
       }),
     );
@@ -433,8 +433,8 @@ const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request)
     stage = "response";
     return Response.json(
       {
-        version: 1,
         continuationUrl: `${ports.builderOrigin}${PATH}?handoff=${encodeURIComponent(value)}`,
+        version: 1,
       },
       { headers: noStore },
     );
@@ -725,7 +725,6 @@ export const createRealmIdentityCallbackDeploymentHandler =
             try {
               const canonical = await resolveOwnedStandardRuntimeConfiguration({
                 configuration,
-                resources: privateResources,
                 context: {
                   authority: selected.context.authority,
                   ownerContext: operatorOwnerContextSchema.parse(selected.context.ownerContext),
@@ -735,6 +734,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
                   },
                 },
                 environment,
+                resources: privateResources,
               });
               resources = await openHostedOperatorConfigurationResources(canonical, environment);
               configuration = resources.configuration;
@@ -754,8 +754,8 @@ export const createRealmIdentityCallbackDeploymentHandler =
         await controlPlane.assertPlanningAuthorized(context);
         if (selectedPublicRealm !== undefined && selectedNonceSha256 !== undefined) {
           await controlPlane.readPendingRealmIdentityLinkForStaging({
-            ownerSessionId: context.target.sessionId,
             nonceSha256: selectedNonceSha256,
+            ownerSessionId: context.target.sessionId,
           });
         }
       };
@@ -776,6 +776,9 @@ export const createRealmIdentityCallbackDeploymentHandler =
         database: openHostedPostgresDatabase(runtime.databaseUrl),
       });
       return await createRealmIdentityCallbackHandler({
+        afterLinked: async (context) => {
+          await controlPlane.reconcileOwnerRealmContinuation(context);
+        },
         assertCurrent,
         authenticate: async (incoming, selector) => {
           await selectCanonicalRuntime(selector);
@@ -798,9 +801,6 @@ export const createRealmIdentityCallbackDeploymentHandler =
             : await controlPlane.resolveRealmIdentityCallbackContext({ authority, ...selector });
         },
         builderOrigin: configuration.builderCallbackOrigin,
-        afterLinked: async (context) => {
-          await controlPlane.reconcileOwnerRealmContinuation(context);
-        },
         consume: async (input) => {
           await controlPlane.consumeOwnerRealmIdentityCallback(input);
         },
@@ -841,6 +841,9 @@ export const createRealmIdentityCallbackDeploymentHandler =
           return Response.json({ keys: [pinned] }, { headers: noStore });
         },
         identityHandoff: {
+          artifacts: stageArtifacts,
+          context: async (selector) =>
+            await controlPlane.resolveRealmIdentityCallbackContext(selector),
           verifySender: async (incoming) => {
             if (
               environment.PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES !== undefined ||
@@ -851,8 +854,8 @@ export const createRealmIdentityCallbackDeploymentHandler =
               );
               const routed = routing(candidate.nonce, candidate.proof);
               await selectCanonicalRuntime({
-                ownerSessionId: routed.ownerSessionId,
                 nonceSha256: realmIdentityNonceSha256(routed.nonce),
+                ownerSessionId: routed.ownerSessionId,
               });
             }
             const nativeSender: NormalActorCaptureSender =
@@ -864,9 +867,6 @@ export const createRealmIdentityCallbackDeploymentHandler =
                   };
             await createRealmIdentityHandoffSenderVerifier(nativeSender)(incoming);
           },
-          context: async (selector) =>
-            await controlPlane.resolveRealmIdentityCallbackContext(selector),
-          artifacts: stageArtifacts,
         },
         keyring: readVercelTokenKeyringEnvironment({ ...environment }),
         publish: async (context, proof) => {

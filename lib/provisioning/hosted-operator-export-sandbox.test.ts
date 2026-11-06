@@ -14,9 +14,9 @@ const metadata = new Map<string, Buffer>();
 let commandTerminal = true;
 let dispatchUnknown = false;
 const command = {
-  stdout: async () => "",
   cmdId: "command-one",
   exitCode: 0,
+  stdout: async () => "",
   wait: vi.fn(async () => ({ exitCode: 0 })),
 };
 const runCommand = vi.fn(
@@ -42,14 +42,16 @@ const runCommand = vi.fn(
         throw new Error("Missing fixed metadata arguments");
       }
       const fs = {
-        mkdirSync: vi.fn(),
+        closeSync: vi.fn(),
+        fsyncSync: vi.fn(),
         lstatSync: (value: string) => ({
           isDirectory: () => value !== target,
           isFile: () => value === target,
           isSymbolicLink: () => false,
-          uid: 500,
           mode: value === target ? 0o600 : 0o700,
+          uid: 500,
         }),
+        mkdirSync: vi.fn(),
         openSync: (value: string, flags: string, mode: number) => {
           expect(flags).toBe("wx");
           expect(mode).toBe(0o600);
@@ -58,25 +60,23 @@ const runCommand = vi.fn(
           }
           return value;
         },
+        readFileSync: (value: string) => metadata.get(value)?.toString("utf-8"),
         writeFileSync: (handle: string, value: string) => {
           metadata.set(handle, Buffer.from(value));
         },
-        fsyncSync: vi.fn(),
-        closeSync: vi.fn(),
-        readFileSync: (value: string) => metadata.get(value)?.toString("utf-8"),
       };
       // oxlint-disable-next-line sonarjs/code-eval -- Execute only the source-owned fixed metadata writer against a virtual filesystem, never app code.
       runInNewContext(script, {
-        require: (module: string) => (module === "node:fs" ? fs : path),
         process: {
           argv: ["node", target, content],
-          getuid: () => 500,
           exit: (code: number) => {
             if (code !== 0) {
               throw new Error("invalid private metadata");
             }
           },
+          getuid: () => 500,
         },
+        require: (module: string) => (module === "node:fs" ? fs : path),
       });
       return { ...command, exitCode: 0 };
     }
@@ -87,25 +87,25 @@ const runCommand = vi.fn(
   },
 );
 const sandbox = {
-  name: "private-vm",
-  runCommand,
   delete: vi.fn(async () => {}),
   extendTimeout: vi.fn(async () => {}),
+  getCommand: vi.fn(async () => ({ ...command, exitCode: commandTerminal ? 0 : null })),
+  name: "private-vm",
+  readFile: vi.fn(async () => null),
   readFileToBuffer: vi.fn(async (input: { path: string }) =>
     input.path.endsWith("manifest.json")
       ? Buffer.from("private manifest")
       : (metadata.get(input.path) ?? null),
   ),
-  readFile: vi.fn(async () => null),
-  getCommand: vi.fn(async () => ({ ...command, exitCode: commandTerminal ? 0 : null })),
+  runCommand,
 };
 const launcher = () =>
   createTenantExportSandbox(
     {
+      exportWorker: fixture.descriptor,
       image: "trusted-image",
       projectId: "operator-project",
       teamId: "operator-team",
-      exportWorker: fixture.descriptor,
     },
     sdk,
   );
@@ -128,10 +128,10 @@ describe("fixed tenant export Sandbox transport", () => {
     await executor.run(fixture.worker, locator, credential, assertCurrent, checkpoint);
     expect(sdk.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        ports: [],
-        persistent: false,
-        networkPolicy: "allow-all",
         env: {},
+        networkPolicy: "allow-all",
+        persistent: false,
+        ports: [],
       }),
     );
     const actual = runCommand.mock.calls.at(-1)?.[0];

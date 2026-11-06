@@ -109,13 +109,13 @@ it("keeps an app-caller authorization receipt outside infrastructure setup autho
     centralEffectReceiptMatches(
       plan,
       {
-        effect: "authorize-app-central-caller",
-        projectId: plan.target.projectId,
         callerProjectId: plan.inspector.projectId,
+        effect: "authorize-app-central-caller",
         environment: plan.inspector.environment,
+        projectId: plan.target.projectId,
         targetEnvironment: "preview",
-        trustedSourcesSha256: "a".repeat(64),
         trustedSourcesGrantSha256: "b".repeat(64),
+        trustedSourcesSha256: "a".repeat(64),
       },
       1,
     ),

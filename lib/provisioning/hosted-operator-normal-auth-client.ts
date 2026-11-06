@@ -9,27 +9,27 @@ const credentials = z.object({ email, password: z.string().min(1).max(1024) });
 const signUpInput = credentials.extend({ name: z.string().min(1).max(120) });
 const organizationInput = z.object({ organizationId: id });
 const invitationSchema = z.object({
-  id,
   email,
-  role: id,
-  organizationId: id,
-  status: z.enum(["pending", "accepted", "rejected", "canceled"]),
   expiresAt: z.iso.datetime({ offset: true }),
+  id,
+  organizationId: id,
+  role: id,
+  status: z.enum(["pending", "accepted", "rejected", "canceled"]),
 });
-const memberSchema = z.object({ id, userId: id, organizationId: id, role: id });
+const memberSchema = z.object({ id, organizationId: id, role: id, userId: id });
 const membersSchema = z.object({
-  members: z.array(memberSchema.extend({ user: z.object({ id, email }) })),
+  members: z.array(memberSchema.extend({ user: z.object({ email, id }) })),
   total: z.number().int().nonnegative(),
 });
 const sessionSchema = z
   .object({
     session: z.object({
+      activeOrganizationId: id.nullable().optional(),
+      expiresAt: z.iso.datetime({ offset: true }),
       id,
       userId: id,
-      expiresAt: z.iso.datetime({ offset: true }),
-      activeOrganizationId: id.nullable().optional(),
     }),
-    user: z.object({ id, email }),
+    user: z.object({ email, id }),
   })
   .nullable();
 
@@ -108,10 +108,10 @@ type Failure = z.infer<typeof normalAuthFailureSchema>;
 
 /** The same closed client vocabulary is used for request handling and safe diagnostics. */
 export const normalAuthClientFailureDiagnosticSchema = z.strictObject({
-  code: normalAuthFailureSchema,
-  operation: normalAuthOperationSchema.optional(),
-  httpStatus: z.number().int().min(100).max(599).optional(),
   authCode: errorCodes.optional(),
+  code: normalAuthFailureSchema,
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  operation: normalAuthOperationSchema.optional(),
   retryAfterMs: z.number().int().nonnegative().refine(Number.isSafeInteger).optional(),
 });
 export type NormalAuthClientFailureDiagnostic = z.infer<
@@ -280,8 +280,8 @@ const rejectedResponse = async (
     // Error bodies are untrusted and stay private, including malformed or oversized responses.
   }
   return new NormalAuthClientError("auth_rejected", {
-    operation,
     httpStatus: response.status,
+    operation,
     ...(authCode ? { authCode } : {}),
   });
 };
@@ -324,19 +324,19 @@ export const createHostedOperatorNormalAuthClient = (options: {
   } catch {
     throw new NormalAuthClientError("invalid_origin");
   }
-  const jar = new CookieJar(undefined, { prefixSecurity: "strict", allowSpecialUseDomain: false });
+  const jar = new CookieJar(undefined, { allowSpecialUseDomain: false, prefixSecurity: "strict" });
   try {
     for (const saved of options.storageState?.cookies ?? []) {
       const cookie = new Cookie({
-        key: saved.name,
-        value: saved.value,
         domain: saved.domain.replace(/^\./u, ""),
-        hostOnly: !saved.domain.startsWith("."),
-        path: saved.path,
         expires: saved.expires === -1 ? "Infinity" : new Date(saved.expires * 1000),
-        secure: saved.secure,
+        hostOnly: !saved.domain.startsWith("."),
         httpOnly: saved.httpOnly,
+        key: saved.name,
+        path: saved.path,
         sameSite: saved.sameSite.toLowerCase(),
+        secure: saved.secure,
+        value: saved.value,
       });
       // Restore only cookies for this actual origin, without changing a Domain or Path.
       if (cookie.hostOnly === true && cookie.domain !== origin.hostname) {
@@ -439,15 +439,15 @@ export const createHostedOperatorNormalAuthClient = (options: {
       assertDeadline();
       if (retryAfterMs === 0) {
         throw new NormalAuthClientError("auth_rejected", {
-          operation,
           httpStatus: 429,
+          operation,
           retryAfterMs,
         });
       }
       if (retryAfterMs >= deadline - now()) {
         throw new NormalAuthClientError("deadline_exceeded", {
-          operation,
           httpStatus: 429,
+          operation,
           retryAfterMs,
         });
       }
@@ -455,8 +455,8 @@ export const createHostedOperatorNormalAuthClient = (options: {
         await (options.wait ?? waitForRetry)(retryAfterMs, signal);
       } catch {
         throw new NormalAuthClientError("deadline_exceeded", {
-          operation,
           httpStatus: 429,
+          operation,
           retryAfterMs,
         });
       }
@@ -483,34 +483,52 @@ export const createHostedOperatorNormalAuthClient = (options: {
       } catch {
         assertDeadline();
         throw new NormalAuthClientError("invalid_response", {
-          operation,
           httpStatus: response.status,
+          operation,
         });
       }
     }
   };
 
   return {
-    async signUp(input) {
-      await request(
-        "sign_up",
-        "sign-up/email",
-        z.object({ user: z.object({ id, email }) }),
-        parseInput(signUpInput, input, "sign_up"),
+    async acceptInvitation(input) {
+      return await request(
+        "accept_invitation",
+        "organization/accept-invitation",
+        z.object({ invitation: invitationSchema, member: memberSchema }),
+        parseInput(z.object({ invitationId: id }), input, "accept_invitation"),
       );
     },
-    async signIn(input) {
-      await request(
-        "sign_in",
-        "sign-in/email",
-        z.object({ user: z.object({ id, email }) }),
-        parseInput(credentials, input, "sign_in"),
-      );
+    exportStorageState() {
+      const now = Date.now();
+      const cookies = (jar.serializeSync()?.cookies ?? []).flatMap((saved) => {
+        const cookie = Cookie.fromJSON(saved);
+        if (!cookie) {
+          return [];
+        }
+        const expires = cookie.expiryTime() ?? Infinity;
+        if (expires <= now) {
+          return [];
+        }
+        return [
+          {
+            domain: `${cookie.hostOnly === true ? "" : "."}${cookie.domain}`,
+            expires: Number.isFinite(expires) ? expires / 1000 : -1,
+            httpOnly: cookie.httpOnly,
+            name: cookie.key,
+            path: cookie.path ?? "/",
+            sameSite: cookieSameSite(cookie),
+            secure: cookie.secure,
+            value: cookie.value,
+          },
+        ];
+      });
+      return { cookies, origins: [] };
     },
     async getSession() {
       const value = await request("get_session", "get-session", sessionSchema, undefined, {
-        disableRefresh: "true",
         disableCookieCache: "true",
+        disableRefresh: "true",
       });
       if (value === null) {
         return null;
@@ -520,27 +538,13 @@ export const createHostedOperatorNormalAuthClient = (options: {
       }
       return {
         actorId: value.user.id,
-        sessionId: value.session.id,
         email: value.user.email,
         expiresAt: value.session.expiresAt,
+        sessionId: value.session.id,
         ...(value.session.activeOrganizationId === undefined
           ? {}
           : { activeOrganizationId: value.session.activeOrganizationId }),
       };
-    },
-    async setActiveOrganization(input) {
-      const parsed = parseInput(organizationInput, input, "set_active_organization");
-      const organization = await request(
-        "set_active_organization",
-        "organization/set-active",
-        z.object({ id }),
-        parsed,
-      );
-      if (organization.id !== parsed.organizationId) {
-        throw new NormalAuthClientError("invalid_response", {
-          operation: "set_active_organization",
-        });
-      }
     },
     async inviteMember(input) {
       return await request(
@@ -548,14 +552,6 @@ export const createHostedOperatorNormalAuthClient = (options: {
         "organization/invite-member",
         invitationSchema,
         parseInput(organizationInput.extend({ email, role: id }), input, "invite_member"),
-      );
-    },
-    async acceptInvitation(input) {
-      return await request(
-        "accept_invitation",
-        "organization/accept-invitation",
-        z.object({ invitation: invitationSchema, member: memberSchema }),
-        parseInput(z.object({ invitationId: id }), input, "accept_invitation"),
       );
     },
     async listInvitations(input) {
@@ -578,34 +574,38 @@ export const createHostedOperatorNormalAuthClient = (options: {
         organizationId: parsed.organizationId,
         ...(parsed.userId === undefined
           ? {}
-          : { filterField: "userId", filterValue: parsed.userId, filterOperator: "eq" }),
+          : { filterField: "userId", filterOperator: "eq", filterValue: parsed.userId }),
       });
     },
-    exportStorageState() {
-      const now = Date.now();
-      const cookies = (jar.serializeSync()?.cookies ?? []).flatMap((saved) => {
-        const cookie = Cookie.fromJSON(saved);
-        if (!cookie) {
-          return [];
-        }
-        const expires = cookie.expiryTime() ?? Infinity;
-        if (expires <= now) {
-          return [];
-        }
-        return [
-          {
-            name: cookie.key,
-            value: cookie.value,
-            domain: `${cookie.hostOnly === true ? "" : "."}${cookie.domain}`,
-            path: cookie.path ?? "/",
-            expires: Number.isFinite(expires) ? expires / 1000 : -1,
-            httpOnly: cookie.httpOnly,
-            secure: cookie.secure,
-            sameSite: cookieSameSite(cookie),
-          },
-        ];
-      });
-      return { cookies, origins: [] };
+    async setActiveOrganization(input) {
+      const parsed = parseInput(organizationInput, input, "set_active_organization");
+      const organization = await request(
+        "set_active_organization",
+        "organization/set-active",
+        z.object({ id }),
+        parsed,
+      );
+      if (organization.id !== parsed.organizationId) {
+        throw new NormalAuthClientError("invalid_response", {
+          operation: "set_active_organization",
+        });
+      }
+    },
+    async signIn(input) {
+      await request(
+        "sign_in",
+        "sign-in/email",
+        z.object({ user: z.object({ email, id }) }),
+        parseInput(credentials, input, "sign_in"),
+      );
+    },
+    async signUp(input) {
+      await request(
+        "sign_up",
+        "sign-up/email",
+        z.object({ user: z.object({ email, id }) }),
+        parseInput(signUpInput, input, "sign_up"),
+      );
     },
   };
 };

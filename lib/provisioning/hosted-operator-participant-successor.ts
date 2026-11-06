@@ -85,7 +85,7 @@ const completed = (record: HostedRuntimeJournalRecord, now: number): Predecessor
     ),
   ].every(Boolean);
   return eligible
-    ? { preparation, operator, approvedByCallId: record.approvedByCallId, proof: record.proof }
+    ? { approvedByCallId: record.approvedByCallId, operator, preparation, proof: record.proof }
     : undefined;
 };
 
@@ -189,7 +189,7 @@ export const createParticipantSuccessorPlan = (
   void authMembership;
   void authSignupPolicy;
   void normalActorPreparation;
-  const gatewayBindings = prior.operator.plan.gatewayBindings;
+  const { gatewayBindings } = prior.operator.plan;
   const trustedSources = gatewayBindings?.trustedSources;
   return hostedOperatorPlanSchema.parse({
     ...base,
@@ -205,24 +205,24 @@ export const createParticipantSuccessorPlan = (
                 : undefined,
           },
         }),
-    stage: "auth-participants",
     access: [],
-    normalActorProgram: program,
-    normalActorPredecessor: {
-      preparation: normalActorPreparationSchema.strip().parse(prior.preparation),
-      operationRef: prior.operator.operationRef,
-      planDigest: prior.operator.planDigest,
-      approvalId: prior.operator.approvalId,
-      approvedByCallId: prior.approvedByCallId,
-    },
     effects: [
       {
-        id: "normal-accounts",
-        kind: "normal-accounts",
         description:
           "Prepare only the explicitly approved additional participants; preserve the original verified personal capture.",
+        id: "normal-accounts",
+        kind: "normal-accounts",
       },
     ],
+    normalActorPredecessor: {
+      approvalId: prior.operator.approvalId,
+      approvedByCallId: prior.approvedByCallId,
+      operationRef: prior.operator.operationRef,
+      planDigest: prior.operator.planDigest,
+      preparation: normalActorPreparationSchema.strip().parse(prior.preparation),
+    },
+    normalActorProgram: program,
+    stage: "auth-participants",
   });
 };
 

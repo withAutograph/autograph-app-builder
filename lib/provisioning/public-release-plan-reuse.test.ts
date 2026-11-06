@@ -38,15 +38,15 @@ describe("public release intent and prior row reconciliation", () => {
   });
   it("binds each provider-observed prior row to its exact own accepted journal receipt", () => {
     const record = initialPublicReleaseRecord(plan);
-    record.bindings.INVOICE_APP_DATABASE_URL = { state: "applied", acceptedEnvId: "env-owned" };
+    record.bindings.INVOICE_APP_DATABASE_URL = { acceptedEnvId: "env-owned", state: "applied" };
     record.effects = { "bind-production-runtime": "applied", "publish-release-source": "applied" };
     const candidate = publicReleasePlanSchema.parse({
       ...plan,
       runtime: { ...plan.runtime, releaseId: "next" },
     });
     const snapshot = {
-      key: "INVOICE_APP_DATABASE_URL",
       id: "env-owned",
+      key: "INVOICE_APP_DATABASE_URL",
       operationRef: publicReleaseOperationRef(plan),
       sha256: plan.environment[0].sha256,
     };
@@ -92,8 +92,8 @@ it("requires an ordinary reviewed source revision when runtime changes need a na
 it("retains the original approved activation fence when the same intent is resumed after provider activation", () => {
   const original = publicReleasePlanSchema.parse({
     ...plan,
-    purpose: "application",
     project: { ...plan.project, priorActiveDeploymentId: "prior-production" },
+    purpose: "application",
   });
   const record = initialPublicReleaseRecord(original);
   record.effects["publish-release-source"] = "pending";
@@ -110,10 +110,10 @@ it("retains the original approved activation fence when the same intent is resum
 it("a pending removal fence blocks a changed release before runtime or source writes", () => {
   const original = publicReleasePlanSchema.parse({
     ...plan,
-    purpose: "application",
-    integrationRemoval: removal,
-    retainedOptionalBindings: retained,
     effects: ["fence-app-integration-authority", ...plan.effects],
+    integrationRemoval: removal,
+    purpose: "application",
+    retainedOptionalBindings: retained,
   });
   const record = initialPublicReleaseRecord(original);
   record.effects["fence-app-integration-authority"] = "pending";

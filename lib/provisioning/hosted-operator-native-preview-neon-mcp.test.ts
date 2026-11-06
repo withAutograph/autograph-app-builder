@@ -73,12 +73,12 @@ const toolResponseText = (name: string, value: NeonFixtureMetadata) => {
   if (name === "get_connection_string" && name !== invalidMetadataTool) {
     const credential = z
       .object({
-        uri: z.string(),
-        projectId: z.string(),
-        databaseName: z.string(),
-        roleName: z.string(),
         branchId: z.string(),
         computeId: z.string(),
+        databaseName: z.string(),
+        projectId: z.string(),
+        roleName: z.string(),
+        uri: z.string(),
       })
       .parse(value);
     return [
@@ -430,8 +430,8 @@ const fixture = (
     close,
     events,
     owner,
-    planningOwner,
     planning,
+    planningOwner,
     reader: createPreviewNeonMcpReader({
       assertApprovedScope: approved,
       ...(useLocalApprovedOwner ? { assertApprovedOwner: approvedOwner } : {}),
@@ -466,7 +466,7 @@ describe("private Neon reader failure diagnostics", () => {
     );
     expect(diagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ planningFailure: { stage, errorClass: "validation_error" } }),
+        expect.objectContaining({ planningFailure: { errorClass: "validation_error", stage } }),
       ]),
     );
     expect(f.close).toHaveBeenCalledTimes(1);
@@ -492,7 +492,7 @@ describe("private Neon reader failure diagnostics", () => {
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planningFailure: { stage: "neon_configuration", errorClass: "validation_error" },
+          planningFailure: { errorClass: "validation_error", stage: "neon_configuration" },
         }),
       ]),
     );
@@ -504,9 +504,9 @@ describe("private Neon reader failure diagnostics", () => {
       expect.arrayContaining([
         expect.objectContaining({
           planningFailure: {
-            stage: "neon_owner_guard",
-            errorClass: "operator_error",
             code: "authorization_required",
+            errorClass: "operator_error",
+            stage: "neon_owner_guard",
           },
         }),
       ]),
@@ -534,7 +534,7 @@ describe("private Neon reader failure diagnostics", () => {
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planningFailure: { stage: "neon_mcp_client", errorClass: "unexpected" },
+          planningFailure: { errorClass: "unexpected", stage: "neon_mcp_client" },
         }),
       ]),
     );
@@ -563,9 +563,9 @@ describe("private Neon reader failure diagnostics", () => {
       expect.arrayContaining([
         expect.objectContaining({
           planningFailure: {
-            stage: "neon_connect_broker",
-            errorClass: "operator_error",
             code: "authorization_required",
+            errorClass: "operator_error",
+            stage: "neon_connect_broker",
           },
         }),
       ]),
@@ -585,7 +585,7 @@ describe("private Neon reader failure diagnostics", () => {
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planningFailure: { stage: "neon_oidc", errorClass: "unexpected" },
+          planningFailure: { errorClass: "unexpected", stage: "neon_oidc" },
         }),
       ]),
     );
@@ -605,7 +605,7 @@ describe("private Neon reader failure diagnostics", () => {
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planningFailure: { stage: "neon_branch_metadata", errorClass: "unexpected" },
+          planningFailure: { errorClass: "unexpected", stage: "neon_branch_metadata" },
         }),
       ]),
     );
@@ -647,13 +647,13 @@ describe("metadata owner observation boundaries", () => {
     // operation, while unrelated operations may interleave between those guards.
     const starts = f.events.flatMap((event, index) => {
       if (event.startsWith("tool-start:")) {
-        return [{ operation: event.slice("tool-start:".length), index }];
+        return [{ index, operation: event.slice("tool-start:".length) }];
       }
       if (event === "token-start") {
-        return [{ operation: "token", index }];
+        return [{ index, operation: "token" }];
       }
       if (event === "oidc-start") {
-        return [{ operation: "oidc", index }];
+        return [{ index, operation: "oidc" }];
       }
       return [];
     });

@@ -255,7 +255,6 @@ const completedGatewayBindingObservation = (stage: "app" | "auth-bootstrap" = "a
         publicOrigin: "https://apps.example.test",
       },
     },
-    resourcesInstaller: { reference: "resource-worker", sha256: "e".repeat(64) },
     effects: [
       {
         description: "Auth resources",
@@ -299,6 +298,7 @@ const completedGatewayBindingObservation = (stage: "app" | "auth-bootstrap" = "a
       origin: "https://apps.example.test",
       projectId: "gateway-project",
     },
+    resourcesInstaller: { reference: "resource-worker", sha256: "e".repeat(64) },
     stage: "app",
   });
   const gatewayPlan =
@@ -306,18 +306,18 @@ const completedGatewayBindingObservation = (stage: "app" | "auth-bootstrap" = "a
       ? appPlan
       : hostedOperatorPlanSchema.parse({
           ...appPlan,
-          stage,
           access: [],
-          delivery: undefined,
           authSchema: {
             artifactRef: "auth-fixture",
             installer: { reference: "auth-worker", sha256: "f".repeat(64) },
             planDigest: "a".repeat(64),
             targetDigest: "b".repeat(64),
           },
+          delivery: undefined,
           effects: appPlan.effects.filter((effect) =>
             ["resources", "install", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
           ),
+          stage,
         });
   const prepared = prepareHostedOperatorResourceCredentials({ ...input, plan: gatewayPlan });
   const attemptId = "00000000-0000-4000-8000-000000000022";
@@ -326,9 +326,6 @@ const completedGatewayBindingObservation = (stage: "app" | "auth-bootstrap" = "a
     approvedByCallId: "approved-call",
     leaseExpiresAt: "2099-01-01T00:00:00.000Z",
     leaseId: "00000000-0000-4000-8000-000000000023",
-    privateState: prepared.privateState,
-    status: "pending",
-    step: "reserved",
     operator: {
       approvalId: "approval_fixture",
       fenceGeneration: 7,
@@ -346,10 +343,13 @@ const completedGatewayBindingObservation = (stage: "app" | "auth-bootstrap" = "a
         },
       ],
     },
+    privateState: prepared.privateState,
+    status: "pending",
+    step: "reserved",
   });
   const effect = {
-    authority,
     assertCurrent: async () => {},
+    authority,
     checkpoint: async () => {},
     effect: bindingEffect,
     fenceGeneration: 7,

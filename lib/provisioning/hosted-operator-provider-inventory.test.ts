@@ -339,11 +339,11 @@ describe("private read-only operator provider inventory", () => {
     ).rejects.toThrow("operator_unavailable");
     expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toContainEqual(
       expect.objectContaining({
-        target: "app",
         operation: "project",
         phase,
+        target: "app",
         ...(status && phase === "http_response"
-          ? { httpStatus: status, errorClass: "operator_error", publicCode: "operator_unavailable" }
+          ? { errorClass: "operator_error", httpStatus: status, publicCode: "operator_unavailable" }
           : {}),
       }),
     );
@@ -363,9 +363,9 @@ describe("private read-only operator provider inventory", () => {
       readHostedOperatorProviderInventory({ ...owner.input, diagnosticSink: ownerSink }),
     ).rejects.toThrow("operator_unavailable");
     expect(ownerSink.mock.calls[0]?.[0].inventoryReadFailure).toMatchObject({
-      target: "inventory",
       operation: "owner",
       phase: "owner",
+      target: "inventory",
     });
     expect(owner.fetcher).not.toHaveBeenCalled();
 
@@ -376,9 +376,9 @@ describe("private read-only operator provider inventory", () => {
       readHostedOperatorProviderInventory({ ...credential.input, diagnosticSink: credentialSink }),
     ).rejects.toThrow("operator_unavailable");
     expect(credentialSink.mock.calls[0]?.[0].inventoryReadFailure).toMatchObject({
-      target: "inventory",
       operation: "credential",
       phase: "credential",
+      target: "inventory",
     });
     expect(credential.fetcher).not.toHaveBeenCalled();
 
@@ -402,9 +402,9 @@ describe("private read-only operator provider inventory", () => {
     await expect(
       readHostedOperatorProviderInventory({
         ...alias.input,
+        diagnosticSink: aliasSink,
         phase: "bootstrap-planning",
         resolveGatewayByPublicOrigin: true,
-        diagnosticSink: aliasSink,
       }),
     ).resolves.toBeDefined();
     expect(aliasSink.mock.calls.some(([event]) => event.inventoryReadFailure)).toBe(false);
@@ -439,8 +439,8 @@ describe("private read-only operator provider inventory", () => {
     expect(observed).toHaveLength(2);
     expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ target: "app", operation: "project", phase: "schema" }),
-        expect.objectContaining({ target: "gateway", operation: "project", phase: "schema" }),
+        expect.objectContaining({ operation: "project", phase: "schema", target: "app" }),
+        expect.objectContaining({ operation: "project", phase: "schema", target: "gateway" }),
       ]),
     );
     const projectReads = f.fetcher.mock.calls
@@ -472,8 +472,8 @@ describe("private read-only operator provider inventory", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "final_inventory_readback",
             errorClass: "validation_error",
+            stage: "final_inventory_readback",
           },
         }),
       ]);
@@ -487,8 +487,8 @@ describe("private read-only operator provider inventory", () => {
     f.payloads.set("/v10/projects/prj_app/env", {
       envs: [
         {
-          key: "PLATFORM_JWKS_URL",
           configurationId: null,
+          key: "PLATFORM_JWKS_URL",
           target: ["preview"],
           value: "private-app-value",
         },
@@ -497,8 +497,8 @@ describe("private read-only operator provider inventory", () => {
     f.payloads.set("/v10/projects/prj_operator/env", {
       envs: [
         {
-          key: "DATABASE_URL_UNPOOLED",
           configurationId: null,
+          key: "DATABASE_URL_UNPOOLED",
           target: ["production"],
           value: "postgres://private-password@private-host/db",
         },
@@ -521,27 +521,27 @@ describe("private read-only operator provider inventory", () => {
     f.payloads.set("/v10/projects/prj_app/env", {
       envs: [
         {
-          key: "PLATFORM_JWKS_URL",
           configurationId: null,
           gitBranch: null,
+          key: "PLATFORM_JWKS_URL",
           target: ["preview"],
           value: "private-inherited-value",
         },
         {
-          key: "APP_MODE",
           gitBranch: "main",
+          key: "APP_MODE",
           target: ["preview"],
           value: "private-matching-value",
         },
         {
-          key: "BETTER_AUTH_SECRET",
           configurationId: null,
+          key: "BETTER_AUTH_SECRET",
           target: ["preview"],
           value: "private-app-secret",
         },
         {
-          key: "PGUSER",
           gitBranch: "foreign",
+          key: "PGUSER",
           target: ["preview"],
           value: "private-foreign-value",
         },
@@ -565,12 +565,12 @@ describe("private read-only operator provider inventory", () => {
     });
     const observed = await readHostedOperatorProviderInventory({
       ...f.input,
-      context: { ...context, target: { ...context.target, branch: "main" } },
       configuration: {
         ...configuration,
         app: { ...configuration.app, branch: "main" },
         gateway: { ...configuration.gateway, branch: "main" },
       },
+      context: { ...context, target: { ...context.target, branch: "main" } },
     });
     expect(observed.app.projectEnvironmentKeys).toEqual([
       "APP_MODE",
@@ -956,8 +956,8 @@ describe("private read-only operator provider inventory", () => {
     ).rejects.toThrow("resource_mismatch");
     const observed = await readHostedOperatorProviderInventory({
       ...f.input,
-      configuration: configured,
       approvedAppBranch: branch,
+      configuration: configured,
     });
     expect(observed.app.branch).toBe(branch);
     expect(context.target.branch).toBe("feature/preview");

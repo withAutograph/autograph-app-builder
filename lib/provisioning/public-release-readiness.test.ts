@@ -19,29 +19,29 @@ const bootstrap = () => {
     approvedByCallId: auth.approvedByCallId,
     operator: {
       ...operator,
-      plan: auth.plan,
-      planDigest: auth.planDigest,
-      operationRef: auth.operationRef,
       approvalId: auth.approvalId,
       authPreparation: auth.authPreparation,
+      operationRef: auth.operationRef,
+      plan: auth.plan,
+      planDigest: auth.planDigest,
       receipts: auth.receipts,
     },
   });
 };
-const read = (records: ReturnType<typeof bootstrap>[]) => {
+const read = async (records: ReturnType<typeof bootstrap>[]) => {
   const select = () => ({
     from: () => ({
-      where: () => ({ limit: () => Promise.resolve(records.map((record) => ({ record }))) }),
+      where: () => ({ limit: async () => records.map((record) => ({ record })) }),
     }),
   });
   // SAFETY: The test database implements only the exact read-only Drizzle chain used by this reader; no writes or effects are available.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Bounded read-chain fixture exercises actual journal schemas and stage classification.
   const database = { select } as unknown as ReturnType<typeof openHostedPostgresDatabase>;
-  return readPublicReleasePreparedRuntime({
+  return await readPublicReleasePreparedRuntime({
+    assertCurrentOwner: vi.fn(async () => {}),
     database,
     owner: operatorOwnerContextSchema.parse(context.ownerContext),
     target: context.target,
-    assertCurrentOwner: vi.fn(() => Promise.resolve()),
   });
 };
 describe("public bootstrap runtime staging", () => {

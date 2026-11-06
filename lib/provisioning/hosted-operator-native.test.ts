@@ -152,16 +152,14 @@ describe("separate native operator host", () => {
   });
   it("dispatches public release through its separate canonical authority boundary", async () => {
     const dependencies = deniedDependencies();
-    dependencies.publicReleaseRequest = vi.fn(() =>
-      Promise.resolve(Response.json({ status: "pending" })),
-    );
+    dependencies.publicReleaseRequest = vi.fn(async () => Response.json({ status: "pending" }));
     const handler = createHostedOperatorNativeHandler({
-      createDependencies: () => Promise.resolve(dependencies),
+      createDependencies: async () => dependencies,
     });
     const response = await handler(
       new Request("https://operator.example.test/v1/public-release", {
-        method: "POST",
         body: "{}",
+        method: "POST",
       }),
     );
     expect(response.status).toBe(200);
@@ -170,16 +168,14 @@ describe("separate native operator host", () => {
   });
   it("dispatches public release through its separate canonical authority boundary", async () => {
     const dependencies = deniedDependencies();
-    dependencies.publicReleaseRequest = vi.fn(() =>
-      Promise.resolve(Response.json({ status: "pending" })),
-    );
+    dependencies.publicReleaseRequest = vi.fn(async () => Response.json({ status: "pending" }));
     const handler = createHostedOperatorNativeHandler({
-      createDependencies: () => Promise.resolve(dependencies),
+      createDependencies: async () => dependencies,
     });
     const response = await handler(
       new Request("https://operator.example.test/v1/public-release", {
-        method: "POST",
         body: "{}",
+        method: "POST",
       }),
     );
     expect(response.status).toBe(200);
@@ -188,16 +184,16 @@ describe("separate native operator host", () => {
   });
   it("dispatches optional integration capability through its separate canonical boundary", async () => {
     const dependencies = deniedDependencies();
-    dependencies.appIntegrationCapabilityRequest = vi.fn(() =>
-      Promise.resolve(Response.json({ status: "blocked" })),
+    dependencies.appIntegrationCapabilityRequest = vi.fn(async () =>
+      Response.json({ status: "blocked" }),
     );
     const handler = createHostedOperatorNativeHandler({
-      createDependencies: () => Promise.resolve(dependencies),
+      createDependencies: async () => dependencies,
     });
     const response = await handler(
       new Request("https://operator.example.test/v1/app-integrations", {
-        method: "POST",
         body: "{}",
+        method: "POST",
       }),
     );
     expect(response.status).toBe(200);

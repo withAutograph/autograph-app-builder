@@ -14,14 +14,14 @@ import type { VercelTokenKeyringConfig } from "../integrations/vercel-installati
 const id = z.string().min(1);
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const scopeSchema = z.strictObject({
-  authority: hostedTenantAuthoritySchema,
   appId: id,
-  sessionId: id,
+  authResourceIdentity: z.string().regex(/^[a-f0-9]{64}$/u),
+  authority: hostedTenantAuthoritySchema,
   projectId: id,
   publicOrigin: z
     .url()
     .refine((value) => new URL(value).protocol === "https:" && new URL(value).origin === value),
-  authResourceIdentity: z.string().regex(/^[a-f0-9]{64}$/u),
+  sessionId: id,
 });
 export type PublicReleaseAuthSeedScope = z.infer<typeof scopeSchema>;
 const seedSchema = z.strictObject({
@@ -33,15 +33,15 @@ export type PublicReleaseAuthSeed = z.infer<typeof seedSchema>;
 const recordSchema = z.strictObject({
   kind: z.enum(["public-release-auth-seed-v1", "public-release-auth-seed-v2"]),
   scope: scopeSchema,
-  sealed: z.strictObject({ encryptedToken: id, tokenIv: id, tokenTag: id, keyVersion: id }),
+  sealed: z.strictObject({ encryptedToken: id, keyVersion: id, tokenIv: id, tokenTag: id }),
 });
 const unavailable = () => new Error("public_release_auth_seed_unavailable");
 const appScope = (scope: PublicReleaseAuthSeedScope) => ({
-  authority: scope.authority,
   appId: scope.appId,
+  authResourceIdentity: scope.authResourceIdentity,
+  authority: scope.authority,
   projectId: scope.projectId,
   publicOrigin: scope.publicOrigin,
-  authResourceIdentity: scope.authResourceIdentity,
 });
 const identity = (scope: PublicReleaseAuthSeedScope, version: 1 | 2 = 2) => {
   const digest = hash(
@@ -58,21 +58,21 @@ const identity = (scope: PublicReleaseAuthSeedScope, version: 1 | 2 = 2) => {
 const associatedDataFor = (scope: PublicReleaseAuthSeedScope, version: 1 | 2) => {
   const { digest, ref } = identity(scope, version);
   return JSON.stringify({
-    purpose: `public-release-auth-seed-v${version}`,
     digest,
+    purpose: `public-release-auth-seed-v${version}`,
     ref,
     ...(version === 1 ? {} : { creationSessionId: scope.sessionId }),
   });
 };
 export const createFreshPublicAuthSeed = (): PublicReleaseAuthSeed => {
   const key = generateKeyPairSync("ed25519", {
-    privateKeyEncoding: { type: "pkcs8", format: "pem" },
-    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { format: "pem", type: "pkcs8" },
+    publicKeyEncoding: { format: "pem", type: "spki" },
   });
   return {
     BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
-    PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY: key.privateKey,
     PLATFORM_GATEWAY_IDENTITY_KEY_ID: hash(key.publicKey),
+    PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY: key.privateKey,
   };
 };
 
@@ -188,9 +188,9 @@ export const reservePublicReleaseAuthSeed = async (input: {
   }
   const sealed = {
     ...encryptVercelToken({
+      associatedData,
       key: input.keyring.tokenKey,
       token: JSON.stringify(seed),
-      associatedData,
     }),
     keyVersion: input.keyring.tokenKeyVersion,
   };
@@ -200,12 +200,12 @@ export const reservePublicReleaseAuthSeed = async (input: {
     .insert(builderProvisioningJournals)
     .values({
       ...scope.authority,
-      requestId: ref,
-      requestDigest: digest,
+      createdAt: now,
       record: recordSchema.parse({ kind: "public-release-auth-seed-v2", scope, sealed }),
+      requestDigest: digest,
+      requestId: ref,
       revision: 1,
       state: "pending",
-      createdAt: now,
       updatedAt: now,
     })
     .onConflictDoNothing();

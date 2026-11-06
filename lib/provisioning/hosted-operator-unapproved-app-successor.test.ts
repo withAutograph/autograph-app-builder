@@ -78,12 +78,12 @@ describe("unapproved app successor eligibility", () => {
     }
     if (change === "running") {
       record.executionObservation = {
-        state: "running",
+        approvalId: "approval",
         attemptRef: "00000000-0000-4000-8000-000000000010",
+        callId: "call",
         operationRef,
         planDigest: operator.planDigest,
-        callId: "call",
-        approvalId: "approval",
+        state: "running",
       };
     }
     if (change === "approved") {
@@ -127,17 +127,17 @@ describe("unapproved app successor eligibility", () => {
         retainedParticipantGateway: record.retainedParticipantGateway,
       },
     ];
-    const auth = before.bootstrap.auth;
+    const { auth } = before.bootstrap;
     const next = hostedOperatorPlanSchema.parse({
       ...before.account.accountPlan,
-      normalActorProgram: added,
       normalActorCapturePredecessor: {
-        preparation: normalActorPreparationSchema.strip().parse(before.account),
-        bootstrapOperationRef: auth.operationRef,
-        bootstrapPlanDigest: auth.planDigest,
         bootstrapApprovalId: auth.approvalId,
         bootstrapApprovedByCallId: auth.approvedByCallId,
+        bootstrapOperationRef: auth.operationRef,
+        bootstrapPlanDigest: auth.planDigest,
+        preparation: normalActorPreparationSchema.strip().parse(before.account),
       },
+      normalActorProgram: added,
     });
     expect(
       readUnapprovedCapturePredecessor(record, next, Date.parse(observedAt))?.account
@@ -166,12 +166,12 @@ describe("unapproved app successor eligibility", () => {
     }));
     const candidate = {
       ...requiredFixture(operator.gatewayDeliveryCandidates?.[0]),
-      operationRef: completion.operationRef,
       deploymentId: "separate-gateway",
+      operationRef: completion.operationRef,
     };
     requiredFixture(operator.gatewayDeliveryCandidates).push(candidate);
     operator.deliveredGatewayDeploymentId = candidate.deploymentId;
-    record.retainedParticipantGateway = { completion, candidate };
+    record.retainedParticipantGateway = { candidate, completion };
     const found = inspectUnapprovedAppSuccessor(
       record,
       context.target,
@@ -191,24 +191,24 @@ describe("unapproved app successor eligibility", () => {
         retainedParticipantGateway: record.retainedParticipantGateway,
       },
     ];
-    const auth = found.bootstrap.auth;
-    const gateway = found.bootstrap.gateway;
+    const { auth } = found.bootstrap;
+    const { gateway } = found.bootstrap;
     const next = hostedOperatorPlanSchema.parse({
       ...found.account.accountPlan,
-      normalActorProgram: added,
       normalActorCapturePredecessor: {
-        preparation: normalActorPreparationSchema.strip().parse(found.account),
-        bootstrapOperationRef: auth.operationRef,
-        bootstrapPlanDigest: auth.planDigest,
         bootstrapApprovalId: auth.approvalId,
         bootstrapApprovedByCallId: auth.approvedByCallId,
+        bootstrapOperationRef: auth.operationRef,
+        bootstrapPlanDigest: auth.planDigest,
         gateway: {
-          operationRef: gateway.operationRef,
-          planDigest: gateway.planDigest,
           approvalId: gateway.approvalId,
           approvedByCallId: gateway.approvedByCallId,
+          operationRef: gateway.operationRef,
+          planDigest: gateway.planDigest,
         },
+        preparation: normalActorPreparationSchema.strip().parse(found.account),
       },
+      normalActorProgram: added,
     });
     expect(
       readUnapprovedCapturePredecessor(record, next, Date.parse(observedAt))?.bootstrap.gateway

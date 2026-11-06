@@ -8,20 +8,20 @@ import type { createHostedOperatorControlPlane } from "./hosted-operator-deploym
 
 const id = z.string().min(1);
 const deployment = z.object({
-  id,
-  projectId: id,
-  ownerId: id,
-  readyState: z.literal("READY"),
-  url: id,
-  target: z.string().nullable(),
   customEnvironment: z.unknown().optional(),
-  oidcTokenClaims: z.unknown().optional(),
   gitSource: z.object({
     ref: id,
     repoId: z.union([id, z.number()]),
     sha: id,
     type: z.literal("github"),
   }),
+  id,
+  oidcTokenClaims: z.unknown().optional(),
+  ownerId: id,
+  projectId: id,
+  readyState: z.literal("READY"),
+  target: z.string().nullable(),
+  url: id,
 });
 /** Closed native metadata reads only. This never reads policy or touches an old delivery/alias attempt. */
 export const createReadyReplacementNativeReader = (ports: {
@@ -48,11 +48,11 @@ export const createReadyReplacementNativeReader = (ports: {
     const url = new URL(path, "https://api.vercel.com");
     url.searchParams.set("teamId", target.scopeId);
     const response = await (ports.fetch ?? fetch)(url, {
-      method: "GET",
       cache: "no-store",
       credentials: "omit",
-      redirect: "error",
       headers: { Authorization: `Bearer ${credential.token}` },
+      method: "GET",
+      redirect: "error",
     });
     if (!response.ok) {
       throw new HostedOperatorError("reconciliation_required");
@@ -84,7 +84,6 @@ export const createReadyReplacementNativeReader = (ports: {
     return observed.deploymentId;
   };
   return {
-    readGatewayAlias,
     async aliasWriteAuthority(
       plan: HostedOperatorPlan,
       selectedDeploymentId: string,
@@ -99,6 +98,7 @@ export const createReadyReplacementNativeReader = (ports: {
       }
       return actual === predecessor ? "write" : "unknown";
     },
+    readGatewayAlias,
     async verify(
       plan: HostedOperatorPlan,
       predecessor: Pick<
@@ -118,7 +118,7 @@ export const createReadyReplacementNativeReader = (ports: {
           throw new HostedOperatorError("resource_mismatch");
         }
         const project = z
-          .object({ id, accountId: id })
+          .object({ accountId: id, id })
           .parse(await request(`/v9/projects/${encodeURIComponent(candidate.projectId)}`));
         const native = deployment.parse(
           await request(`/v13/deployments/${encodeURIComponent(candidate.deploymentId)}`),

@@ -222,14 +222,14 @@ export const createExistingAuthBootstrapPrerequisite = (
   }
   const plan = hostedOperatorPlanSchema.parse({
     ...prior,
-    normalActorProgram: program,
-    gatewayBindings,
-    gatewayDelivery,
     cost: {
       ...prior.cost,
       description:
         "Refresh existing Auth and Gateway infrastructure only. Historical app release metadata does not validate or publish the current app revision.",
     },
+    gatewayBindings,
+    gatewayDelivery,
+    normalActorProgram: program,
     retention: { ...prior.retention, expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString() },
   });
   // Account approval freezes its original Gateway intent. A separately completed

@@ -71,16 +71,16 @@ export const readOwnedBuilderRuntime = async (input: {
   const recordedBuilderDestination = {
     appId,
     projectId: destination.projectId,
-    repositoryId: provisioning.record.response.github.repositoryId,
     repositoryFullName: provisioning.record.response.github.fullName,
+    repositoryId: provisioning.record.response.github.repositoryId,
   };
   const marker = input.configuration?.standardRuntime;
   if (marker === undefined) {
     throw new PublicReleasePrerequisiteError("same_project_auth_required");
   }
   const selections = createPostgresOperatorArtifactSelections({
-    database: input.database,
     assertCurrentOwner,
+    database: input.database,
   });
   const selection = await selections.read(context, marker.appSpecDigest);
   await assertCurrentOwner();
@@ -98,31 +98,31 @@ export const readOwnedBuilderRuntime = async (input: {
     );
   }
   const prepared = await readPublicReleasePreparedRuntime({
+    assertCurrentOwner,
     database: input.database,
     owner: input.owner,
-    target: {
-      appId,
-      sessionId: input.owner.sessionId,
-      projectId: destination.projectId,
-      branch: selection.publishedSource.branch,
-      environment: "preview",
-      scopeId: destination.teamId,
-      scopeType: "team",
-      installationId: destination.installationId,
-    },
     release: {
-      id: selection.releaseId,
       artifactRef: selection.artifactRef,
+      id: selection.releaseId,
       sha256: selection.manifestSha256,
     },
-    assertCurrentOwner,
+    target: {
+      appId,
+      branch: selection.publishedSource.branch,
+      environment: "preview",
+      installationId: destination.installationId,
+      projectId: destination.projectId,
+      scopeId: destination.teamId,
+      scopeType: "team",
+      sessionId: input.owner.sessionId,
+    },
   });
   const publication = createOperatorArtifactPublication({
-    store: createPostgresOperatorArtifactStore({
-      database: input.database,
-      assertCurrentOwner,
-    }),
     assertCurrentOwner,
+    store: createPostgresOperatorArtifactStore({
+      assertCurrentOwner,
+      database: input.database,
+    }),
   });
   const captured = await publication.readGeneratedRelease(context, selection);
   await assertCurrentOwner();

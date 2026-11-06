@@ -35,7 +35,7 @@ const requirePrepared = (row: AppIntegrationCapabilityRow | undefined, digest: s
   if (row.record.planDigest !== digest || row.record.approvalReceipts.length === 0) {
     throw unavailable();
   }
-  return { row, capability: row.record.prepared };
+  return { capability: row.record.prepared, row };
 };
 /** A model may select a reference; only the independent approved journal and private custody supply its values. */
 export const readAppIntegrationCapabilityForRelease = async (input: {
@@ -58,8 +58,8 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
   const store = createPostgresAppIntegrationCapabilityStore(input.database);
   const observedRow = await store.read(input.owner.authority, input.pointer.operationRef);
   const { row, capability } = requirePrepared(observedRow, input.pointer.planDigest);
-  const plan = row.record.plan;
-  const owned = input.owned;
+  const { plan } = row.record;
+  const { owned } = input;
   const selected = owned.description.integrations?.configuration?.find(
     (entry) => entry.provider === "quickbooks",
   );
@@ -98,16 +98,16 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
   }
   const central = await readAppIntegrationCentralReference({
     planVersion: plan.version,
-    readLegacy: input.readCentralReady,
     readExisting: input.readExistingPlatformReady,
+    readLegacy: input.readCentralReady,
     scope: {
-      authority: input.owner.authority,
       appId: plan.selection.appId,
-      appProjectId: plan.project.projectId,
-      teamId: plan.project.teamId,
       appInstallationId: plan.project.installationId,
+      appProjectId: plan.project.projectId,
       assertCurrentOwner: input.assertCurrent,
+      authority: input.owner.authority,
       signal: input.request.signal,
+      teamId: plan.project.teamId,
     },
   });
   if (
@@ -119,13 +119,13 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
     throw unavailable();
   }
   const approval = createAppIntegrationCapabilityApprovalAuthority({
-    database: input.database,
-    builderOrigin: input.builderOrigin,
-    request: input.request,
-    owner: input.owner,
-    authority: input.authority,
     assertCurrentOwner: input.assertCurrent,
+    authority: input.authority,
+    builderOrigin: input.builderOrigin,
+    database: input.database,
     fetch: input.fetch,
+    owner: input.owner,
+    request: input.request,
   });
   for (const receipt of row.record.approvalReceipts) {
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each retained committed approval is independently re-read and may revoke capability custody.
@@ -135,27 +135,27 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
     }
   }
   const appScope = {
-    authority: plan.authority,
     appId: plan.selection.appId,
-    projectId: plan.project.projectId,
-    provisioningRequestId: plan.project.provisioningRequestId,
-    provisioningDigest: plan.project.provisioningDigest,
-    resourceProfileId: plan.control.resourceProfileId,
-    controlResource: plan.control.database,
+    authority: plan.authority,
     controlNeon: plan.control.neon,
+    controlResource: plan.control.database,
+    projectId: plan.project.projectId,
+    provisioningDigest: plan.project.provisioningDigest,
+    provisioningRequestId: plan.project.provisioningRequestId,
+    resourceProfileId: plan.control.resourceProfileId,
   };
   const custody = createAppIntegrationPrivateCustody({
-    database: input.database,
-    keyring: input.keyring,
     app: appScope,
     assertCurrent: input.assertCurrent,
+    database: input.database,
+    keyring: input.keyring,
   });
   const scopeSha256 = preparedIntegrationScopeDigest(capability);
   const configuration = await custody.read({
     app: appScope,
+    checkpoint: `${row.record.planDigest}:${scopeSha256}`,
     purpose: "runtime-configuration",
     version: 1,
-    checkpoint: `${row.record.planDigest}:${scopeSha256}`,
   });
   if (
     configuration === undefined ||
@@ -177,8 +177,8 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
   const attachment: AppIntegrationReleaseAttachment = appIntegrationReleaseAttachmentSchema.parse({
     ...input.pointer,
     capability,
-    scopeSha256,
     readinessPath: plan.readinessPath,
+    scopeSha256,
   });
   await input.assertCurrent();
   const latest = await store.read(input.owner.authority, input.pointer.operationRef);
@@ -191,11 +191,11 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
   }
   return {
     attachment,
-    serializedConfiguration,
-    setupProofSecret: privateValue.setupProofSecret,
     environment: {
       APP_INTEGRATIONS_CAPABILITY: JSON.stringify(capability),
       APP_INTEGRATIONS_RUNTIME_CONFIGURATION: serializedConfiguration,
     },
+    serializedConfiguration,
+    setupProofSecret: privateValue.setupProofSecret,
   };
 };

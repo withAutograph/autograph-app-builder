@@ -17,24 +17,24 @@ const fixture = () => {
   let moveBeforeWrite = false;
   const writes: { beforeOid: string; afterOid: string; name: string }[] = [];
   const context: PublicReleaseEffectContext = {
+    bindings: {
+      claim: async () => {
+        throw new Error("unused");
+      },
+      read: async () => ({}),
+      recordAccepted: async () => {},
+      recordVerified: async () => {},
+    },
+    effect: "publish-release-source",
     invocation: {
       authority: plan.authority,
-      sessionId: plan.selection.sessionId,
       callId: "approved",
+      sessionId: plan.selection.sessionId,
       signal: new AbortController().signal,
     },
     operationRef: "33333333-3333-4333-a333-333333333333",
     plan,
-    effect: "publish-release-source",
     priorPhase: "idle",
-    bindings: {
-      read: async () => ({}),
-      claim: async () => {
-        throw new Error("unused");
-      },
-      recordAccepted: async () => {},
-      recordVerified: async () => {},
-    },
   };
   const provider = createPublicReleaseGitHubProvider({
     assertCurrent: async () => {
@@ -42,21 +42,16 @@ const fixture = () => {
         throw new Error("denied");
       }
     },
-    readCredential: async () => ({
-      token: "test-token",
-      installationId: plan.source.installationId,
-      repositoryId: "123",
-    }),
     fetch: vi.fn<typeof fetch>(async (resource, init) => {
       const input = z.union([z.string(), z.instanceof(URL), z.instanceof(Request)]).parse(resource);
       const url = new URL(input instanceof Request ? input.url : String(input));
       expect(url.origin).toBe("https://api.github.com");
       if (url.pathname === "/repositories/123") {
         return Response.json({
-          id: 123,
           description,
-          node_id: "repository-node",
+          id: 123,
           name: "app",
+          node_id: "repository-node",
           owner: { login: "owner" },
         });
       }
@@ -74,8 +69,8 @@ const fixture = () => {
           .object({
             query: z.string(),
             variables: z.object({
-              beforeOid: z.string(),
               afterOid: z.string(),
+              beforeOid: z.string(),
               name: z.string(),
               repositoryId: z.string(),
             }),
@@ -88,7 +83,7 @@ const fixture = () => {
           production = "f".repeat(40);
         }
         if (production !== body.variables.beforeOid) {
-          return Response.json({ errors: [{ message: "branch moved" }], data: null });
+          return Response.json({ data: null, errors: [{ message: "branch moved" }] });
         }
         if (applyWrite) {
           production = body.variables.afterOid;
@@ -100,14 +95,28 @@ const fixture = () => {
       }
       throw new Error("unexpected route");
     }),
+    readCredential: async () => ({
+      installationId: plan.source.installationId,
+      repositoryId: "123",
+      token: "test-token",
+    }),
   });
   return {
-    plan,
     context,
-    provider,
-    writes,
     foreignRepository: () => {
       description = "Shared platform repository";
+    },
+    lose: (accepted = true) => {
+      loseResponse = true;
+      applyWrite = accepted;
+    },
+    plan,
+    provider,
+    race: () => {
+      moveBeforeWrite = true;
+    },
+    revoke: () => {
+      authorized = false;
     },
     setProduction: (v: string) => {
       production = v;
@@ -115,16 +124,7 @@ const fixture = () => {
     setSource: (v: string) => {
       source = v;
     },
-    revoke: () => {
-      authorized = false;
-    },
-    lose: (accepted = true) => {
-      loseResponse = true;
-      applyWrite = accepted;
-    },
-    race: () => {
-      moveBeforeWrite = true;
-    },
+    writes,
   };
 };
 
@@ -134,8 +134,8 @@ it("publishes the approved commit with atomic expected-before and independently 
   await f.provider.publish(f.context);
   expect(f.writes).toEqual([
     {
-      beforeOid: f.plan.source.expectedProductionSha,
       afterOid: f.plan.source.sourceSha,
+      beforeOid: f.plan.source.expectedProductionSha,
       name: "refs/heads/main",
       repositoryId: "repository-node",
     },

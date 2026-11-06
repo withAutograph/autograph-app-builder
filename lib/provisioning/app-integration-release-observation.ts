@@ -4,19 +4,19 @@ import type { AppIntegrationReleaseAttachment } from "./app-integration-release-
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const observationSchema = z.strictObject({
-  version: z.literal(1),
-  status: z.literal("ready"),
   appId: z.string().min(1),
-  releaseId: z.string().min(1),
-  provider: z.literal("quickbooksSandbox"),
-  serviceMemberships: z.number().int().positive(),
-  principalGeneration: z.number().int().positive(),
   capabilitySha256: digest,
   configurationReference: z.uuid(),
   configurationSha256: digest,
-  scopeSha256: digest,
   nonce: z.uuid(),
   observedAt: z.number().int().nonnegative(),
+  principalGeneration: z.number().int().positive(),
+  provider: z.literal("quickbooksSandbox"),
+  releaseId: z.string().min(1),
+  scopeSha256: digest,
+  serviceMemberships: z.number().int().positive(),
+  status: z.literal("ready"),
+  version: z.literal(1),
 });
 const signature = (purpose: "request" | "response", value: string, secret: string) =>
   createHmac("sha256", secret)
@@ -47,22 +47,20 @@ export const observeAppIntegrationPublicRelease = async (input: {
     await input.assertCurrent();
     const now = input.now ?? Date.now;
     const issuedAt = Math.floor(now() / 1000);
-    const capability = input.attachment.capability;
+    const { capability } = input.attachment;
     const challenge = {
-      version: 1,
-      purpose: "app-integration-readiness",
       appId: capability.appId,
-      nonce: randomUUID(),
-      issuedAt,
-      expiresAt: issuedAt + 120,
       capabilitySha256: createHash("sha256").update(JSON.stringify(capability)).digest("hex"),
       configurationReference: capability.privateConfiguration.reference,
       configurationSha256: capability.privateConfiguration.sha256,
+      expiresAt: issuedAt + 120,
+      issuedAt,
+      nonce: randomUUID(),
+      purpose: "app-integration-readiness",
+      version: 1,
     };
     const response = await (input.fetch ?? fetch)(new URL(input.attachment.readinessPath, origin), {
-      method: "POST",
-      redirect: "error",
-      signal: input.signal,
+      body: JSON.stringify(challenge),
       headers: {
         "content-type": "application/json",
         "x-autograph-integration-readiness-signature": signature(
@@ -71,7 +69,9 @@ export const observeAppIntegrationPublicRelease = async (input: {
           input.setupProofSecret,
         ),
       },
-      body: JSON.stringify(challenge),
+      method: "POST",
+      redirect: "error",
+      signal: input.signal,
     });
     await input.assertCurrent();
     if (response.status !== 200) {

@@ -13,9 +13,9 @@ const origin = z.url().refine((value) => {
   return url.protocol === "https:" && url.origin === value && !url.username && !url.password;
 });
 const neon = z.strictObject({
-  projectId: id,
   branchId: id,
   endpointId: id,
+  projectId: id,
   source: z.literal("synthetic-only"),
 });
 const controlResource = integrationCapabilityResourceSchema.omit({ runtimeRole: true });
@@ -53,66 +53,44 @@ export const centralHostSetupEffects = [
   "publish-central-host-source",
 ] as const;
 export const centralHostCallerEffects = ["authorize-app-central-caller"] as const;
-const profile = z.strictObject({ id, digest });
+const profile = z.strictObject({ digest, id });
 const control = z.strictObject({
-  resource: controlResource,
   centralRuntimeRole: sqlName.refine((value) => !["postgres", "neondb_owner"].includes(value)),
   neon,
+  resource: controlResource,
   schemaSha256: digest,
 });
 const provider = z.strictObject({
-  kind: z.literal("quickbooksSandbox"),
-  projectId: id,
-  integrationId: id,
   authorizationOrigins: z.array(origin).min(1),
+  integrationId: id,
+  kind: z.literal("quickbooksSandbox"),
   payloadHosts: z.array(id).min(1),
-});
-const selection = z.strictObject({ sessionId: id, initiatingAppId: builderAppIdSchema });
-const target = z.strictObject({
   projectId: id,
-  teamId: id,
-  installationId: id,
+});
+const selection = z.strictObject({ initiatingAppId: builderAppIdSchema, sessionId: id });
+const target = z.strictObject({
   environment: z.literal("preview"),
-  serviceId: z.literal("integrations"),
   framework: z.literal("services"),
+  installationId: id,
+  projectId: id,
   rootDirectory: z.literal("."),
+  serviceId: z.literal("integrations"),
+  teamId: id,
 });
 const activation = z.strictObject({ keyId: id, publicKeyPem: id, publicKeySha256: digest });
 export const centralHostSetupPlanSchema = z
   .strictObject({
-    version: z.literal(1),
-    kind: z.literal("central-integration-host-setup-v1"),
-    intentId: z.uuid(),
-    authority: hostedTenantAuthoritySchema,
-    selection,
-    profile,
-    resourceProfileId: id,
-    target,
-    control,
-    provider,
     activation,
-    source: z.strictObject({
-      repositoryId: id,
-      installationId: id,
-      reviewedSourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
-      reviewDigest: digest,
-      operationBranch: id,
-      expectedBranchAbsent: z.literal(true),
-      servicesManifestSha256: digest,
-      serviceIds: z.array(id).min(1),
-      configurationRef: id,
-      configurationSha256: digest,
-      applicationIngress: z.literal("signed-app-development-v1"),
-      deploymentProfile: z.literal("isolated-central-integrations-v1").optional(),
-      buildReceiptSha256: digest.optional(),
-      workers: z.strictObject({
-        resources: z.strictObject({ id: z.literal("neon-resource-bootstrap-v1"), sha256: digest }),
-        schema: z.strictObject({
-          id: z.literal("central-integration-bootstrap-v1"),
-          sha256: digest,
-        }),
-      }),
-    }),
+    authority: hostedTenantAuthoritySchema,
+    control,
+    effects: z.tuple([
+      z.literal("prepare-central-resources"),
+      z.literal("install-central-schema"),
+      z.literal("register-deployment-receiver"),
+      z.literal("authorize-central-inspector"),
+      z.literal("bind-central-preview-runtime"),
+      z.literal("publish-central-host-source"),
+    ]),
     environment: z
       .array(
         z.strictObject({
@@ -124,26 +102,48 @@ export const centralHostSetupPlanSchema = z
         }),
       )
       .min(1),
-    receiver: z.strictObject({
-      subscriptionRef: z.uuid(),
-      publicOrigin: origin,
-      path: z.string().startsWith("/api/central-integrations/deployment-events/"),
-      events: z.tuple([z.literal("deployment.created"), z.literal("deployment.ready")]),
-    }),
     inspector: z.strictObject({
-      projectId: id,
       environment: z.enum(["preview", "production"]),
-      targetEnvironment: z.literal("preview"),
       priorGrantSha256: digest,
+      projectId: id,
+      targetEnvironment: z.literal("preview"),
     }),
-    effects: z.tuple([
-      z.literal("prepare-central-resources"),
-      z.literal("install-central-schema"),
-      z.literal("register-deployment-receiver"),
-      z.literal("authorize-central-inspector"),
-      z.literal("bind-central-preview-runtime"),
-      z.literal("publish-central-host-source"),
-    ]),
+    intentId: z.uuid(),
+    kind: z.literal("central-integration-host-setup-v1"),
+    profile,
+    provider,
+    receiver: z.strictObject({
+      events: z.tuple([z.literal("deployment.created"), z.literal("deployment.ready")]),
+      path: z.string().startsWith("/api/central-integrations/deployment-events/"),
+      publicOrigin: origin,
+      subscriptionRef: z.uuid(),
+    }),
+    resourceProfileId: id,
+    selection,
+    source: z.strictObject({
+      applicationIngress: z.literal("signed-app-development-v1"),
+      buildReceiptSha256: digest.optional(),
+      configurationRef: id,
+      configurationSha256: digest,
+      deploymentProfile: z.literal("isolated-central-integrations-v1").optional(),
+      expectedBranchAbsent: z.literal(true),
+      installationId: id,
+      operationBranch: id,
+      repositoryId: id,
+      reviewDigest: digest,
+      reviewedSourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
+      serviceIds: z.array(id).min(1),
+      servicesManifestSha256: digest,
+      workers: z.strictObject({
+        resources: z.strictObject({ id: z.literal("neon-resource-bootstrap-v1"), sha256: digest }),
+        schema: z.strictObject({
+          id: z.literal("central-integration-bootstrap-v1"),
+          sha256: digest,
+        }),
+      }),
+    }),
+    target,
+    version: z.literal(1),
   })
   .superRefine((plan, context) => {
     if (
@@ -173,31 +173,31 @@ export const centralHostSetupPlanSchema = z
   });
 export type CentralHostSetupPlan = z.infer<typeof centralHostSetupPlanSchema>;
 export const centralHostCallerPlanSchema = z.strictObject({
-  version: z.literal(1),
-  kind: z.literal("central-integration-host-caller-v1"),
   authority: hostedTenantAuthoritySchema,
-  selection,
-  profile,
-  setup: planPointer,
-  setupAuthority: hostedTenantAuthoritySchema,
-  central: z.strictObject({
-    projectId: id,
-    teamId: id,
-    installationId: id,
-    providerDeploymentId: id,
-    immutableOrigin: origin,
-    configurationSha256: digest,
-  }),
   caller: z.strictObject({
-    projectId: id,
-    ownerId: id,
     environment: z.literal("production"),
-    targetEnvironment: z.literal("preview"),
-    provisioningRequestId: z.uuid(),
-    provisioningDigest: digest,
+    ownerId: id,
     priorGrantSha256: digest,
+    projectId: id,
+    provisioningDigest: digest,
+    provisioningRequestId: z.uuid(),
+    targetEnvironment: z.literal("preview"),
+  }),
+  central: z.strictObject({
+    configurationSha256: digest,
+    immutableOrigin: origin,
+    installationId: id,
+    projectId: id,
+    providerDeploymentId: id,
+    teamId: id,
   }),
   effects: z.tuple([z.literal("authorize-app-central-caller")]),
+  kind: z.literal("central-integration-host-caller-v1"),
+  profile,
+  selection,
+  setup: planPointer,
+  setupAuthority: hostedTenantAuthoritySchema,
+  version: z.literal(1),
 });
 export type CentralHostCallerPlan = z.infer<typeof centralHostCallerPlanSchema>;
 export const centralHostPlanDigest = (plan: CentralHostSetupPlan | CentralHostCallerPlan) =>
@@ -214,33 +214,33 @@ export const centralHostOperationRef = (plan: CentralHostSetupPlan | CentralHost
 };
 export const centralHostReadyReceiptSchema = z
   .strictObject({
-    version: z.literal(1),
-    kind: z.literal("central-integration-host-ready-v1"),
-    authority: hostedTenantAuthoritySchema,
-    setup: planPointer,
-    callerSetup: planPointer,
-    profile,
-    resourceProfileId: id,
-    control,
     activation,
-    provider,
-    deployment: z.strictObject({
-      projectId: id,
-      teamId: id,
-      installationId: id,
-      environment: z.literal("preview"),
-      serviceId: z.literal("integrations"),
-      providerDeploymentId: id,
-      immutableOrigin: origin,
-      configurationRef: id,
-      configurationSha256: digest,
-    }),
+    authority: hostedTenantAuthoritySchema,
     caller: z.strictObject({
-      projectId: id,
-      ownerId: id,
       environment: z.literal("production"),
+      ownerId: id,
+      projectId: id,
       trustedSourcesGrantSha256: digest,
     }),
+    callerSetup: planPointer,
+    control,
+    deployment: z.strictObject({
+      configurationRef: id,
+      configurationSha256: digest,
+      environment: z.literal("preview"),
+      immutableOrigin: origin,
+      installationId: id,
+      projectId: id,
+      providerDeploymentId: id,
+      serviceId: z.literal("integrations"),
+      teamId: id,
+    }),
+    kind: z.literal("central-integration-host-ready-v1"),
+    profile,
+    provider,
+    resourceProfileId: id,
+    setup: planPointer,
+    version: z.literal(1),
   })
   .superRefine((receipt, context) => {
     try {

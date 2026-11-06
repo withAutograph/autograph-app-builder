@@ -1794,8 +1794,8 @@ const runPinnedFileSpoolTransport = async (
       );
     }
     if (membership && input.membershipProof !== undefined) {
-      const legacyPlan = input.legacyPlan;
-      const legacyEffect = input.legacyEffect;
+      const { legacyPlan } = input;
+      const { legacyEffect } = input;
       if (legacyPlan === undefined || legacyEffect === undefined) {
         throw resourceMismatch();
       }
@@ -1867,7 +1867,7 @@ const runPinnedFileSpoolTransport = async (
       );
     }
     if (authPlanBytes !== undefined) {
-      const legacyPlan = input.legacyPlan;
+      const { legacyPlan } = input;
       if (legacyPlan === undefined) {
         throw resourceMismatch();
       }
@@ -1898,7 +1898,7 @@ const runPinnedFileSpoolTransport = async (
       (worker.operationScope === GENERATED_APP_SCOPE || needsAccessConnections) &&
       !input.repositoryProduction
     ) {
-      const legacyPlan = input.legacyPlan;
+      const { legacyPlan } = input;
       if (legacyPlan === undefined) {
         throw resourceMismatch();
       }
@@ -2183,7 +2183,7 @@ export const runAppIntegrationFileSpool = async (
   ) {
     throw resourceMismatch();
   }
-  const context = input.context;
+  const { context } = input;
   if (context.installer.id !== worker.id || context.installer.sha256 !== worker.sha256) {
     throw resourceMismatch();
   }

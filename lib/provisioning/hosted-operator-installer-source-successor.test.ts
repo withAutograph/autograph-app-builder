@@ -10,8 +10,8 @@ import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
 
 const now = Date.parse("2028-01-01T00:00:00.000Z");
 const plan = hostedOperatorPlanSchema.parse({
-  action: "prepare",
   access: [{ actorId: "reviewer", organizationId: "org_fixture", roles: ["reviewer"] }],
+  action: "prepare",
   appDatabase: {
     database: "spend",
     migratorRole: "spend_owner",
@@ -79,25 +79,6 @@ const makeRecord = (sourcePlan: HostedOperatorPlan = plan): HostedRuntimeJournal
   hostedRuntimeJournalRecordSchema.parse({
     approvedByCallId: "approved-plan-call",
     kind: "app-runtime",
-    privateState: {
-      encryptedToken: "fixture-ciphertext",
-      keyVersion: "key-v1",
-      tokenIv: "fixture-iv",
-      tokenTag: "fixture-tag",
-    },
-    request: {
-      appId: sourcePlan.selection.appId,
-      branch: sourcePlan.selection.branch,
-      environment: "preview",
-      installationId: "icfg_fixture",
-      projectId: sourcePlan.selection.projectId,
-      scopeId: "team_fixture",
-      scopeType: "team",
-      sessionId: sourcePlan.selection.sessionId,
-    },
-    status: "pending",
-    step: "reserved",
-    version: 1,
     operator: {
       approvalId: "approval-fixture",
       fenceGeneration: 7,
@@ -132,6 +113,25 @@ const makeRecord = (sourcePlan: HostedOperatorPlan = plan): HostedRuntimeJournal
         },
       ],
     },
+    privateState: {
+      encryptedToken: "fixture-ciphertext",
+      keyVersion: "key-v1",
+      tokenIv: "fixture-iv",
+      tokenTag: "fixture-tag",
+    },
+    request: {
+      appId: sourcePlan.selection.appId,
+      branch: sourcePlan.selection.branch,
+      environment: "preview",
+      installationId: "icfg_fixture",
+      projectId: sourcePlan.selection.projectId,
+      scopeId: "team_fixture",
+      scopeType: "team",
+      sessionId: sourcePlan.selection.sessionId,
+    },
+    status: "pending",
+    step: "reserved",
+    version: 1,
   });
 
 const requireDefined = <T>(value: T | undefined): T => {
@@ -156,13 +156,13 @@ const makeIdleRecord = (sourcePlan: HostedOperatorPlan = plan): HostedRuntimeJou
   delete operator.pendingEffectAttempt;
   delete operator.workerCheckpoints;
   record.executionObservation = {
-    state: "settled",
-    attemptRef: "5b61f372-3afb-46e8-a7e1-06be519b72ab",
-    operationRef: operator.operationRef,
-    planDigest: operator.planDigest,
-    callId: record.approvedByCallId,
     approvalId: requireDefined(operator.approvalId),
-    outcome: { status: "blocked", code: "resource_mismatch" },
+    attemptRef: "5b61f372-3afb-46e8-a7e1-06be519b72ab",
+    callId: record.approvedByCallId,
+    operationRef: operator.operationRef,
+    outcome: { code: "resource_mismatch", status: "blocked" },
+    planDigest: operator.planDigest,
+    state: "settled",
   };
   return record;
 };
@@ -210,20 +210,20 @@ describe("hosted operator installer source successor", () => {
       }
       case "running observation": {
         record.executionObservation = {
-          state: "running",
+          approvalId: observation.approvalId,
           attemptRef: observation.attemptRef,
+          callId: observation.callId,
           operationRef: observation.operationRef,
           planDigest: observation.planDigest,
-          callId: observation.callId,
-          approvalId: observation.approvalId,
+          state: "running",
         };
         break;
       }
       case "nonblocked observation": {
         record.executionObservation = {
           ...observation,
-          state: "settled",
           outcome: { status: "prepared" },
+          state: "settled",
         };
         break;
       }
@@ -297,7 +297,7 @@ describe("hosted operator installer source successor", () => {
       ...plan,
       effects: [
         plan.effects[0],
-        { id: "auth-schema", kind: "install", description: "Prepare Auth" },
+        { description: "Prepare Auth", id: "auth-schema", kind: "install" },
         ...plan.effects.slice(1),
       ],
     });
@@ -316,7 +316,7 @@ describe("hosted operator installer source successor", () => {
       effects: plan.effects.flatMap((effect) =>
         effect.id === "app-install"
           ? [
-              { id: "auth-schema", kind: "install", description: "Prepare shared Auth schema" },
+              { description: "Prepare shared Auth schema", id: "auth-schema", kind: "install" },
               effect,
             ]
           : [effect],

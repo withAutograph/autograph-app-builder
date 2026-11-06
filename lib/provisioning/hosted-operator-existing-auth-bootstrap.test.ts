@@ -19,8 +19,8 @@ import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-lin
 import type { HostedOperatorContext } from "./hosted-operator-service";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -30,49 +30,45 @@ const context: HostedOperatorContext = {
     appId: "fixture",
     branch: "preview",
     environment: "preview",
-    projectId: "app",
-    sessionId: "session",
     installationId: "installation",
+    projectId: "app",
     scopeId: "team",
     scopeType: "team",
+    sessionId: "session",
   },
 };
 const resource = (name: string) => ({
-  resourceId: `${name}-resource`,
   database: name,
-  runtimeRole: `${name}_runtime`,
   migratorRole: `${name}_owner`,
+  resourceId: `${name}-resource`,
+  runtimeRole: `${name}_runtime`,
 });
 const worker = {
   executablePath: "/fixture",
   id: "fixture-worker",
+  operationScope: "auth-protected-schema-v1",
   sha256: "a".repeat(64),
   subcommand: "auth-protected-schema",
-  operationScope: "auth-protected-schema-v1",
 };
 const fixture = () => {
   const native = {
-    projectId: "neon",
     branchId: "branch",
     endpointId: "endpoint",
     hostname: "ep-fixture.neon.tech",
-    maintenanceRole: "neondb_owner",
     maintenanceDatabase: "neondb",
+    maintenanceRole: "neondb_owner",
+    projectId: "neon",
   };
   const workload = {
-    issuer: "https://oidc.vercel.com/team",
     audience: "https://vercel.com/team",
+    environment: "preview",
+    issuer: "https://oidc.vercel.com/team",
     ownerId: "team",
     projectId: "gateway",
-    environment: "preview",
     subject: "gateway-workload",
   };
   const configuration = readHostedOperatorSourceConfiguration({
     PROTECTED_HOSTED_OPERATOR_CONFIGURATION: JSON.stringify({
-      teamId: "team",
-      authDatabase: resource("auth"),
-      builderCallbackOrigin: "https://builder.example",
-      catalogAppIds: ["fixture"],
       applications: {
         fixture: {
           accessRoles: ["member"],
@@ -81,6 +77,9 @@ const fixture = () => {
           projectId: "app",
         },
       },
+      authDatabase: resource("auth"),
+      builderCallbackOrigin: "https://builder.example",
+      catalogAppIds: ["fixture"],
       gateway: {
         authBrowserOrigin: "https://apps.example",
         branch: "gateway",
@@ -93,14 +92,7 @@ const fixture = () => {
         repoId: "gateway-repository",
         workload,
       },
-      operator: {
-        deploymentId: "operator-deployment",
-        environment: "preview",
-        origin: "https://operator.example",
-        projectId: "operator",
-      },
       nativeNeon: {
-        scope: native,
         configuration: {
           connector: "connection",
           nativeStore: {
@@ -109,40 +101,45 @@ const fixture = () => {
             sourceProjectId: "operator",
           },
           operator: {
-            issuer: workload.issuer,
             audience: workload.audience,
+            environment: "preview",
+            issuer: workload.issuer,
             ownerId: "team",
             projectId: "operator",
-            environment: "preview",
           },
         },
+        scope: native,
       },
-      workloadPolicy: {
-        ...workload,
-        projectId: "builder",
-        environment: "production",
-        subject: "builder-workload",
+      operator: {
+        deploymentId: "operator-deployment",
+        environment: "preview",
+        origin: "https://operator.example",
+        projectId: "operator",
       },
       sandbox: {
-        image: "fixture",
-        teamId: "team",
-        projectId: "operator",
         accessWorker: worker,
-        authWorker: worker,
-        resourcesWorker: worker,
         authProposal: { executablePath: "/proposal", id: "proposal", sha256: "b".repeat(64) },
+        authWorker: worker,
+        image: "fixture",
+        projectId: "operator",
+        resourcesWorker: worker,
+        teamId: "team",
         workers: { fixture: worker },
+      },
+      teamId: "team",
+      workloadPolicy: {
+        ...workload,
+        environment: "production",
+        projectId: "builder",
+        subject: "builder-workload",
       },
     }),
   });
   const plan = hostedOperatorPlanSchema.parse({
-    version: 1,
-    stage: "auth-bootstrap",
-    action: "prepare",
     access: [],
+    action: "prepare",
     appDatabase: resource("app"),
     authDatabase: resource("auth"),
-    contextId: "historical-accepted-spec",
     authSchema: {
       artifactRef: "original-auth-plan",
       installer: { reference: "auth-worker", sha256: "c".repeat(64) },
@@ -154,26 +151,61 @@ const fixture = () => {
       maintenanceDatabase: native.maintenanceDatabase,
       role: native.maintenanceRole,
     },
+    contextId: "historical-accepted-spec",
     cost: { class: "shared-recovery-group", description: "Original approved Auth", owner: "owner" },
-    effects: [
-      { id: "auth-resources", kind: "resources", resourceId: "auth-resource", description: "Auth" },
-      { id: "app-resources", kind: "resources", resourceId: "app-resource", description: "App" },
-      { id: "auth-schema", kind: "install", description: "Auth schema" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
-    ],
-    installer: { reference: "historical-app-worker", sha256: "f".repeat(64) },
-    release: {
-      artifactRef: "historical-app-release",
-      id: "historical-release",
-      sha256: "1".repeat(64),
+    deploymentBoundary: {
+      app: {
+        branch: "preview",
+        deploymentId: "app-deployment",
+        environment: "preview",
+        projectId: "app",
+      },
+      authority,
+      gateway: {
+        branch: "gateway",
+        deploymentId: "gateway-deployment",
+        environment: "preview",
+        projectId: "gateway",
+      },
+      operator: {
+        deploymentId: "operator-deployment",
+        environment: "preview",
+        projectId: "operator",
+      },
+      teamId: "team",
+      verification: {
+        gatewayOrigin: "https://immutable-gateway.example",
+        jwksUrl: "https://immutable-gateway.example/_platform/jwks.json",
+        publicOrigin: "https://apps.example",
+      },
     },
+    effects: [
+      { description: "Auth", id: "auth-resources", kind: "resources", resourceId: "auth-resource" },
+      { description: "App", id: "app-resources", kind: "resources", resourceId: "app-resource" },
+      { description: "Auth schema", id: "auth-schema", kind: "install" },
+      { description: "Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
+    ],
+    gatewayBindings: configuredBootstrapGatewayBindings(configuration),
+    gatewayDelivery: {
+      branch: "gateway",
+      gitSha: configuration.gateway.gitSha,
+      projectId: "gateway",
+      repoId: "gateway-repository",
+    },
+    installer: { reference: "historical-app-worker", sha256: "f".repeat(64) },
     neon: {
       branchId: native.branchId,
       connectionRef: "connection",
       endpoint: native.hostname,
       projectId: native.projectId,
       source: "synthetic-only",
+    },
+    publicGateway: { branch: "gateway", origin: "https://apps.example", projectId: "gateway" },
+    release: {
+      artifactRef: "historical-app-release",
+      id: "historical-release",
+      sha256: "1".repeat(64),
     },
     resourcesInstaller: { reference: "resources-worker", sha256: "2".repeat(64) },
     retention: { expiresAt: "2030-01-01T00:00:00Z", policy: "Retain Auth" },
@@ -184,83 +216,51 @@ const fixture = () => {
       projectId: context.target.projectId,
       sessionId: context.target.sessionId,
     },
-    publicGateway: { branch: "gateway", projectId: "gateway", origin: "https://apps.example" },
-    gatewayBindings: configuredBootstrapGatewayBindings(configuration),
-    gatewayDelivery: {
-      branch: "gateway",
-      projectId: "gateway",
-      gitSha: configuration.gateway.gitSha,
-      repoId: "gateway-repository",
-    },
-    deploymentBoundary: {
-      authority,
-      teamId: "team",
-      app: {
-        projectId: "app",
-        branch: "preview",
-        environment: "preview",
-        deploymentId: "app-deployment",
-      },
-      gateway: {
-        projectId: "gateway",
-        branch: "gateway",
-        environment: "preview",
-        deploymentId: "gateway-deployment",
-      },
-      operator: {
-        projectId: "operator",
-        environment: "preview",
-        deploymentId: "operator-deployment",
-      },
-      verification: {
-        publicOrigin: "https://apps.example",
-        gatewayOrigin: "https://immutable-gateway.example",
-        jwksUrl: "https://immutable-gateway.example/_platform/jwks.json",
-      },
-    },
+    stage: "auth-bootstrap",
+    version: 1,
   });
   const record = hostedRuntimeJournalRecordSchema.parse({
-    version: 1,
-    kind: "app-runtime",
-    status: "pending",
-    step: "reserved",
-    request: context.target,
     approvedByCallId: "original-call",
-    privateState: {
-      encryptedToken: "retained-private-ciphertext",
-      keyVersion: "v1",
-      tokenIv: "iv",
-      tokenTag: "tag",
-    },
+    kind: "app-runtime",
     operator: {
-      mode: "protected-operator-v1",
-      operationRef: "11111111-1111-4111-8111-111111111111",
-      plan,
-      planDigest: operatorPlanDigest(plan),
       approvalId: "original-approval",
       authPreparation: {
         assetSha256: "3".repeat(64),
         catalogFingerprint: "4".repeat(64),
         database: "auth",
+        observedAt: "2026-10-19T12:00:00Z",
         runtimeRole: "auth_runtime",
         targetDigest: plan.authSchema?.targetDigest,
-        observedAt: "2026-10-19T12:00:00Z",
       },
+      mode: "protected-operator-v1",
+      operationRef: "11111111-1111-4111-8111-111111111111",
+      plan,
+      planDigest: operatorPlanDigest(plan),
       receipts: plan.effects.map((effect) => ({
         effectId: effect.id,
         observedAt: "2026-10-19T12:00:00Z",
         resourceVersion: "observed",
       })),
     },
+    privateState: {
+      encryptedToken: "retained-private-ciphertext",
+      keyVersion: "v1",
+      tokenIv: "iv",
+      tokenTag: "tag",
+    },
+    request: context.target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
   });
   record.retainedAuth = retainedOperatorAuthFromJournal(record);
   configuration.gateway.gitSha = "b".repeat(40);
   return {
     configuration,
-    record,
     context: structuredClone(context),
-    plan,
     now: Date.parse("2026-10-19T12:00:00Z"),
+    plan,
+    record,
   };
 };
 const propose = (f: ReturnType<typeof fixture>) =>
@@ -275,20 +275,20 @@ const propose = (f: ReturnType<typeof fixture>) =>
 const completedParticipants = () => {
   const f = fixture();
   const program = normalActorProgramSchema.parse({
-    version: 1,
-    appId: "fixture",
-    origin: "https://apps.example",
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
-    organizations: [],
-    memberships: [],
     appAccess: [],
+    appId: "fixture",
+    memberships: [],
+    organizations: [],
+    origin: "https://apps.example",
+    version: 1,
   });
   const refreshed = hostedOperatorPlanSchema.parse({
     ...propose(f)!.plan,
@@ -299,45 +299,45 @@ const completedParticipants = () => {
   operator.planDigest = operatorPlanDigest(refreshed);
   operator.gatewayEnvironment = [
     {
-      key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
-      id: "owned-row",
-      projectId: "gateway",
       branch: "gateway",
-      operationRef: operator.operationRef,
       comment: `App Builder protected operator ${operator.operationRef}`,
+      id: "owned-row",
+      key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+      operationRef: operator.operationRef,
+      projectId: "gateway",
       valueSha256: hostedOperatorRealmLinkConfigSha256(refreshed),
     },
   ];
   operator.gatewayDeliveryCandidates = [
     {
-      deploymentId: "completed-current-gateway",
-      readyState: "READY",
-      operationRef: operator.operationRef,
-      projectId: "gateway",
       branch: "gateway",
-      repoId: "gateway-repository",
+      deploymentId: "completed-current-gateway",
+      operationRef: operator.operationRef,
       origin: "https://immutable-gateway.example",
+      projectId: "gateway",
+      readyState: "READY",
+      repoId: "gateway-repository",
     },
   ];
   operator.deliveredGatewayDeploymentId = "completed-current-gateway";
   f.record.retainedAuth = retainedOperatorAuthFromJournal(f.record);
   const accountPlan = hostedOperatorPlanSchema.parse({
     ...f.plan,
-    stage: "auth-participants",
+    effects: [{ description: "Captured accounts", id: "normal-accounts", kind: "normal-accounts" }],
     normalActorProgram: program,
-    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Captured accounts" }],
+    stage: "auth-participants",
   });
   f.record.accountPreparation = {
-    program,
-    programDigest: normalActorProgramDigest(program),
-    accountPlan,
-    accountPlanDigest: operatorPlanDigest(accountPlan),
-    accountOperationRef: "22222222-2222-4222-8222-222222222222",
     accountApprovalId: "account-approval",
     accountApprovedByCallId: "account-call",
-    sealedState: structuredClone(f.record.privateState!),
-    captures: [],
+    accountOperationRef: "22222222-2222-4222-8222-222222222222",
+    accountPlan,
+    accountPlanDigest: operatorPlanDigest(accountPlan),
     accountsCompletedAt: "2026-10-19T12:00:00Z",
+    captures: [],
+    program,
+    programDigest: normalActorProgramDigest(program),
+    sealedState: structuredClone(f.record.privateState!),
   };
   operator.plan = accountPlan;
   operator.planDigest = operatorPlanDigest(accountPlan);
@@ -522,13 +522,7 @@ describe("retained existing Auth bootstrap prerequisite", () => {
     const f = fixture();
     const app = hostedOperatorPlanSchema.parse({
       ...f.plan,
-      stage: "app",
       contextId: "published-next-app-spec",
-      release: {
-        artifactRef: "published-current-app-release",
-        id: "published-current-release",
-        sha256: "9".repeat(64),
-      },
       delivery: {
         branch: "preview",
         gitSha: "c".repeat(40),
@@ -537,19 +531,23 @@ describe("retained existing Auth bootstrap prerequisite", () => {
       },
       effects: [
         ...f.plan.effects.filter((effect) => ["resources", "install"].includes(effect.kind)),
-        { id: "install-app", kind: "install", description: "Current app install" },
-        { id: "access", kind: "access", description: "Verify current app access" },
-        { id: "bindings", kind: "bindings", description: "Bind current app" },
-        { id: "delivery", kind: "delivery", description: "Current published app delivery" },
+        { description: "Current app install", id: "install-app", kind: "install" },
+        { description: "Verify current app access", id: "access", kind: "access" },
+        { description: "Bind current app", id: "bindings", kind: "bindings" },
+        { description: "Current published app delivery", id: "delivery", kind: "delivery" },
         ...f.plan.effects.filter((effect) =>
           ["gateway-bindings", "gateway-delivery"].includes(effect.kind),
         ),
       ],
+      release: {
+        artifactRef: "published-current-app-release",
+        id: "published-current-release",
+        sha256: "9".repeat(64),
+      },
+      stage: "app",
     });
     f.record = hostedRuntimeJournalRecordSchema.parse({
       ...f.record,
-      status: "prepared",
-      step: "bound",
       environmentBound: true,
       operator: {
         ...f.record.operator!,
@@ -563,12 +561,14 @@ describe("retained existing Auth bootstrap prerequisite", () => {
       },
       proof: {
         actors: 0,
-        tenants: 1,
-        authenticatedBehavior: "unassessed",
         artifactHash: "8".repeat(64),
+        authenticatedBehavior: "unassessed",
         manifestSha256: app.release.sha256,
         releaseId: app.release.id,
+        tenants: 1,
       },
+      status: "prepared",
+      step: "bound",
     });
     const before = structuredClone(f.record);
     const proposed = propose(f);

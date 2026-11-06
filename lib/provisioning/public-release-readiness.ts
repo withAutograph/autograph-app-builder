@@ -30,7 +30,7 @@ export const readPublicReleasePreparedRuntime = async (input: {
     throw new PublicReleasePrerequisiteError("prepared_runtime_required");
   }
   const record = hostedRuntimeJournalRecordSchema.parse(row.record);
-  const operator = record.operator;
+  const { operator } = record;
   const auth = retainedOperatorAuthFromJournal(record);
   const bootstrap = operator?.plan.stage === "auth-bootstrap" && auth !== undefined;
   const resourceOnly = z
@@ -81,8 +81,8 @@ export const readPublicReleasePreparedRuntime = async (input: {
     throw new PublicReleasePrerequisiteError("prepared_runtime_required");
   }
   return {
-    record,
     operator,
     purpose: bootstrap ? ("auth-bootstrap" as const) : ("application" as const),
+    record,
   };
 };

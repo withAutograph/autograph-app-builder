@@ -16,19 +16,19 @@ import type {
 
 /** A fresh public observation is distinct from every historical protected Preview receipt. */
 export const publicRuntimeBindingSchema = z.strictObject({
+  appEntryPath: browserEntryPathSchema.nullable().optional(),
+  deploymentId: z.string().min(1),
+  environment: z.literal("production"),
   kind: z.literal("public-application-runtime-v1"),
   operationRef: z.uuid(),
   planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  runtimeOperationRef: z.uuid(),
-  runtimePlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   projectId: z.string().min(1),
-  environment: z.literal("production"),
   publicOrigin: z
     .url()
     .refine((value) => new URL(value).protocol === "https:" && new URL(value).origin === value),
-  appEntryPath: browserEntryPathSchema.nullable().optional(),
-  deploymentId: z.string().min(1),
   releaseId: z.string().min(1),
+  runtimeOperationRef: z.uuid(),
+  runtimePlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
 });
 export type PublicRuntimeBinding = z.infer<typeof publicRuntimeBindingSchema>;
 const fail = () => new HostedOperatorError("auth_identity_required");
@@ -72,7 +72,7 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
   }
   const row = rows[0];
   const record: PublicReleaseRecord = publicReleaseRecordSchema.parse(row.record);
-  const plan = record.plan;
+  const { plan } = record;
   if (
     row.requestId !== publicReleaseOperationRef(plan) ||
     row.requestDigest !== publicReleasePlanDigest(plan) ||

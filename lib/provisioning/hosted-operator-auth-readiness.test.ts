@@ -131,28 +131,21 @@ const fixture = () => {
 const upgradeFixture = () => {
   const f = fixture();
   const resource = {
-    version: 1,
+    database: f.input.plan.authDatabase.database,
     environment: "preview",
     hostname: f.input.plan.neon.endpoint,
-    port: 5432,
-    database: f.input.plan.authDatabase.database,
-    schema: "public",
-    runtimeRole: f.input.plan.authDatabase.runtimeRole,
     migratorRole: f.input.plan.authDatabase.migratorRole,
     neon: { branchId: f.input.plan.neon.branchId, projectId: f.input.plan.neon.projectId },
+    port: 5432,
+    runtimeRole: f.input.plan.authDatabase.runtimeRole,
+    schema: "public",
+    version: 1,
   };
   const frame = {
-    version: 1,
     resource,
     schemaPlan: {
-      version: 1,
-      resource,
-      toolchain: "better-auth@1.7.3",
-      history: { version: 1, schema: "_auth_schema_history", tables: ["plan", "attempt"] },
-      catalogAppIds: [f.input.plan.selection.appId],
-      planDigest: "a".repeat(64),
-      targetDigest: "b".repeat(64),
       beforeSchemaHash: "d".repeat(64),
+      catalogAppIds: [f.input.plan.selection.appId],
       effects: [
         { owner: "readiness", sha256: assetHash, sql: assetSql },
         {
@@ -161,7 +154,14 @@ const upgradeFixture = () => {
           sql: "create table app_signup_policy(id text);",
         },
       ],
+      history: { schema: "_auth_schema_history", tables: ["plan", "attempt"], version: 1 },
+      planDigest: "a".repeat(64),
+      resource,
+      targetDigest: "b".repeat(64),
+      toolchain: "better-auth@1.7.3",
+      version: 1,
     },
+    version: 1,
   };
   f.readAuthPlan.mockResolvedValue(Buffer.from(JSON.stringify(frame)));
   f.snapshot.readiness.targetDigest = "e".repeat(64);
@@ -188,8 +188,8 @@ describe("restricted Auth schema publication readiness", () => {
   it("reports the actual prior publication without claiming the approved target is installed", async () => {
     const f = upgradeFixture();
     expect(await f.reader.verifyPublication(f.input)).toMatchObject({
-      targetDigest: "e".repeat(64),
       assetSha256: "f".repeat(64),
+      targetDigest: "e".repeat(64),
     });
     await expect(f.reader.verify(f.input)).rejects.toMatchObject({ code: "operator_unavailable" });
   });

@@ -15,12 +15,12 @@ const approved = async () => {
 };
 const session = (actorId = "actor-one") => ({
   session: {
-    id: "session-one",
-    userId: actorId,
     expiresAt: "2030-01-01T00:00:00.000Z",
+    id: "session-one",
     token: "private-token",
+    userId: actorId,
   },
-  user: { id: actorId, email: "member@example.com", privateField: "private-response" },
+  user: { email: "member@example.com", id: actorId, privateField: "private-response" },
 });
 
 describe("normal Auth client", () => {
@@ -44,9 +44,9 @@ describe("normal Auth client", () => {
         )
         .mockImplementation(async () => await Promise.resolve(Response.json(session())));
       const client = createHostedOperatorNormalAuthClient({
-        origin,
-        fetch: mocked,
         assertApprovedEffect: approved,
+        fetch: mocked,
+        origin,
       });
       await client.signIn({ email: "member@example.com", password });
       expect(client.exportStorageState().cookies[0]?.expires).toBe(received / 1000 + 60);
@@ -55,8 +55,8 @@ describe("normal Auth client", () => {
       const saved = client.exportStorageState();
       expect(saved.cookies[0]?.expires).toBe(received / 1000 + 60);
       const resumed = createHostedOperatorNormalAuthClient({
-        origin,
         fetch: mocked,
+        origin,
         storageState: saved,
       });
       vi.setSystemTime(received + 61_000);
@@ -74,11 +74,11 @@ describe("normal Auth client", () => {
   it("uses real ordinary signup, signin, invitation acceptance and independent membership readback", async () => {
     // Installed Better Auth's memory adapter is a local fixture, not hosted proof or a database grant.
     const auth = betterAuth({
-      secret: "normal-auth-local-fixture-long-enough-secret",
       baseURL: origin,
       emailAndPassword: { enabled: true },
-      plugins: [organization()],
       logger: { disabled: true },
+      plugins: [organization()],
+      secret: "normal-auth-local-fixture-long-enough-secret",
     });
     const requests: Request[] = [];
     const localFetch: typeof fetch = async (target, init) => {
@@ -87,17 +87,17 @@ describe("normal Auth client", () => {
       return await auth.handler(request);
     };
     const owner = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: localFetch,
       assertApprovedEffect: approved,
+      fetch: localFetch,
+      origin,
     });
     const participant = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: localFetch,
       assertApprovedEffect: approved,
+      fetch: localFetch,
+      origin,
     });
-    await owner.signUp({ name: "Owner", email: "owner@example.com", password });
-    await participant.signUp({ name: "Member", email: "member@example.com", password });
+    await owner.signUp({ email: "owner@example.com", name: "Owner", password });
+    await participant.signUp({ email: "member@example.com", name: "Member", password });
     const actor = await participant.getSession();
     if (!actor) {
       throw new Error("Missing fixture actor");
@@ -110,28 +110,28 @@ describe("normal Auth client", () => {
     const ownerState = owner.exportStorageState();
     const createOrganization = await auth.handler(
       new Request(`${origin}/api/auth/organization/create`, {
-        method: "POST",
+        body: JSON.stringify({ name: "Fixture", slug: "fixture" }),
         headers: {
-          origin,
           "content-type": "application/json",
           cookie: ownerState.cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; "),
+          origin,
         },
-        body: JSON.stringify({ name: "Fixture", slug: "fixture" }),
+        method: "POST",
       }),
     );
     expect(createOrganization.status).toBe(200);
     const created = z.object({ id: z.string() }).parse(await createOrganization.json());
     const invite = await owner.inviteMember({
-      organizationId: created.id,
       email: actor.email,
+      organizationId: created.id,
       role: "member",
     });
     expect(await owner.listInvitations({ organizationId: created.id })).toEqual([invite]);
     const accepted = await participant.acceptInvitation({ invitationId: invite.id });
     expect(accepted.member).toMatchObject({
-      userId: actor.actorId,
       organizationId: created.id,
       role: "member",
+      userId: actor.actorId,
     });
     expect(accepted.invitation.status).toBe("accepted");
     const membership = await participant.listMembers({
@@ -140,20 +140,20 @@ describe("normal Auth client", () => {
     });
     expect(membership.total).toBe(1);
     expect(membership.members[0]).toMatchObject({
+      user: { email: actor.email, id: actor.actorId },
       userId: actor.actorId,
-      user: { id: actor.actorId, email: actor.email },
     });
 
     const resumed = createHostedOperatorNormalAuthClient({
+      fetch: localFetch,
       origin,
       storageState: participant.exportStorageState(),
-      fetch: localFetch,
     });
     expect(await resumed.getSession()).toEqual({ ...actor, activeOrganizationId: created.id });
     const reconciliation = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: localFetch,
       assertApprovedEffect: approved,
+      fetch: localFetch,
+      origin,
     });
     expect(await reconciliation.getSession()).toBeNull();
     await reconciliation.signIn({ email: actor.email, password });
@@ -164,35 +164,35 @@ describe("normal Auth client", () => {
 
   it("selects independent actual organization sessions through the ordinary endpoint", async () => {
     const auth = betterAuth({
-      secret: "normal-auth-local-fixture-long-enough-secret",
       baseURL: origin,
       emailAndPassword: { enabled: true },
-      plugins: [organization()],
       logger: { disabled: true },
+      plugins: [organization()],
+      secret: "normal-auth-local-fixture-long-enough-secret",
     });
     const localFetch: typeof fetch = async (target, init) =>
       await auth.handler(new Request(target, init));
     const owner = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: localFetch,
       assertApprovedEffect: approved,
+      fetch: localFetch,
+      origin,
     });
-    await owner.signUp({ name: "Owner", email: "owner@example.com", password });
+    await owner.signUp({ email: "owner@example.com", name: "Owner", password });
     const ids: string[] = [];
     for (const slug of ["first", "second"]) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Ordinary organization creation changes this single fixture owner session.
       const response = await auth.handler(
         new Request(`${origin}/api/auth/organization/create`, {
-          method: "POST",
+          body: JSON.stringify({ name: slug, slug }),
           headers: {
-            origin,
             "content-type": "application/json",
             cookie: owner
               .exportStorageState()
               .cookies.map((cookie) => `${cookie.name}=${cookie.value}`)
               .join("; "),
+            origin,
           },
-          body: JSON.stringify({ name: slug, slug }),
+          method: "POST",
         }),
       );
       // oxlint-disable-next-line eslint/no-await-in-loop -- The next ordinary creation follows this actual response.
@@ -201,9 +201,9 @@ describe("normal Auth client", () => {
     const sessions = await Promise.all(
       ids.map(async (organizationId) => {
         const client = createHostedOperatorNormalAuthClient({
-          origin,
-          fetch: localFetch,
           assertApprovedEffect: approved,
+          fetch: localFetch,
+          origin,
         });
         await client.signIn({ email: "owner@example.com", password });
         await client.setActiveOrganization({ organizationId });
@@ -214,8 +214,8 @@ describe("normal Auth client", () => {
     expect(await sessions[0]?.client.getSession()).toMatchObject({ activeOrganizationId: ids[0] });
     expect(await sessions[1]?.client.getSession()).toMatchObject({ activeOrganizationId: ids[1] });
     const readOnly = createHostedOperatorNormalAuthClient({
-      origin,
       fetch: localFetch,
+      origin,
       storageState: sessions[0]?.client.exportStorageState(),
     });
     await expect(
@@ -249,9 +249,9 @@ describe("normal Auth client", () => {
       )
       .mockResolvedValueOnce(Response.json(session()));
     const client = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: mocked,
       assertApprovedEffect: approved,
+      fetch: mocked,
+      origin,
     });
     await client.signIn({ email: "member@example.com", password });
     const state = client.exportStorageState();
@@ -263,14 +263,14 @@ describe("normal Auth client", () => {
     });
     expect(state.cookies.find((cookie) => cookie.name === "parent")).toMatchObject({
       domain: ".example.com",
-      path: "/api/auth",
       expires: -1,
+      path: "/api/auth",
       sameSite: "Strict",
     });
     const resumed = createHostedOperatorNormalAuthClient({
+      fetch: mocked,
       origin,
       storageState: state,
-      fetch: mocked,
     });
     await resumed.getSession();
     expect(new Headers(mocked.mock.calls[1]?.[1]?.headers).get("cookie")).toBe(
@@ -292,7 +292,7 @@ describe("normal Auth client", () => {
     const mocked = vi
       .fn<typeof fetch>()
       .mockResolvedValue(Response.json({ members: [], total: 0 }));
-    const client = createHostedOperatorNormalAuthClient({ origin, fetch: mocked });
+    const client = createHostedOperatorNormalAuthClient({ fetch: mocked, origin });
     await expect(client.signIn({ email: "member@example.com", password })).rejects.toMatchObject({
       code: "approval_required",
     });
@@ -311,7 +311,7 @@ describe("normal Auth client", () => {
     expect(url.pathname).toBe("/api/auth/organization/list-members");
     expect(url.searchParams.get("organizationId")).toBe("https://evil.example/?secret=1");
     expect(url.searchParams.get("filterValue")).toBe("user&private=1");
-    expect(init).toMatchObject({ redirect: "error", cache: "no-store", method: "GET" });
+    expect(init).toMatchObject({ cache: "no-store", method: "GET", redirect: "error" });
     expect(init?.signal).toBeInstanceOf(AbortSignal);
     expect(new Headers(init?.headers).get("origin")).toBe(origin);
   });
@@ -324,7 +324,7 @@ describe("normal Auth client", () => {
     `${origin}?private=1`,
   ])("rejects non-origin targets before any fetch", (value) => {
     const mocked = vi.fn<typeof fetch>();
-    expect(() => createHostedOperatorNormalAuthClient({ origin: value, fetch: mocked })).toThrow(
+    expect(() => createHostedOperatorNormalAuthClient({ fetch: mocked, origin: value })).toThrow(
       NormalAuthClientError,
     );
     expect(mocked).not.toHaveBeenCalled();
@@ -337,14 +337,14 @@ describe("normal Auth client", () => {
         storageState: {
           cookies: [
             {
-              name: "session",
-              value: "private-cookie",
               domain: "other.example.com",
-              path: "/",
               expires: -1,
               httpOnly: true,
-              secure: true,
+              name: "session",
+              path: "/",
               sameSite: "Lax",
+              secure: true,
+              value: "private-cookie",
             },
           ],
           origins: [],
@@ -372,14 +372,14 @@ describe("normal Auth client", () => {
       )
       .mockResolvedValueOnce(Response.json({ privateResponse: password }));
     const client = createHostedOperatorNormalAuthClient({
-      origin,
-      fetch: mocked,
       assertApprovedEffect: approved,
+      fetch: mocked,
+      origin,
     });
     for (const expected of [
       { code: "transport_failed" },
-      { code: "auth_rejected", httpStatus: 401, authCode: "INVALID_EMAIL_OR_PASSWORD" },
-      { code: "auth_rejected", httpStatus: 500, authCode: undefined },
+      { authCode: "INVALID_EMAIL_OR_PASSWORD", code: "auth_rejected", httpStatus: 401 },
+      { authCode: undefined, code: "auth_rejected", httpStatus: 500 },
       { code: "invalid_response" },
     ]) {
       try {
@@ -414,9 +414,9 @@ describe("normal Auth client", () => {
       .mockResolvedValueOnce(Response.json({ private: "x".repeat(128 * 1024) }))
       .mockResolvedValueOnce(redirected)
       .mockResolvedValueOnce(
-        Response.json({ ...session(), user: { id: "other-actor", email: "member@example.com" } }),
+        Response.json({ ...session(), user: { email: "member@example.com", id: "other-actor" } }),
       );
-    const client = createHostedOperatorNormalAuthClient({ origin, fetch: mocked });
+    const client = createHostedOperatorNormalAuthClient({ fetch: mocked, origin });
     await expect(client.getSession()).rejects.toMatchObject({ code: "invalid_response" });
     await expect(client.getSession()).rejects.toMatchObject({ code: "transport_failed" });
     await expect(client.getSession()).rejects.toMatchObject({ code: "invalid_response" });
@@ -424,7 +424,7 @@ describe("normal Auth client", () => {
 });
 
 const rejection = (headers: HeadersInit = {}) =>
-  Response.json({ message: "private server rejection" }, { status: 429, headers });
+  Response.json({ message: "private server rejection" }, { headers, status: 429 });
 
 describe("normal Auth rate limit recovery", () => {
   const fixture = (responses: (Response | Error)[]) => {
@@ -445,28 +445,28 @@ describe("normal Auth rate limit recovery", () => {
       return await Promise.resolve(response);
     };
     const options = {
-      origin,
+      assertApprovedEffect: async (operation: string) => {
+        permissions.push(operation);
+        await Promise.resolve();
+      },
       fetch: typedFetch,
       now: () => currentTime,
+      origin,
       wait: async (delayMs: number, signal: AbortSignal) => {
         expect(signal).toBe(attempts[0]?.signal);
         waits.push(delayMs);
         currentTime += delayMs;
         await Promise.resolve();
       },
-      assertApprovedEffect: async (operation: string) => {
-        permissions.push(operation);
-        await Promise.resolve();
-      },
     };
     return {
-      options,
-      attempts,
-      waits,
-      permissions,
       advance: (ms: number) => {
         currentTime += ms;
       },
+      attempts,
+      options,
+      permissions,
+      waits,
     };
   };
   const successfulAccount = () => Response.json({ user: session().user });
@@ -475,12 +475,12 @@ describe("normal Auth rate limit recovery", () => {
     "retries %s only after the actual delay with fresh approval and the same body/jar",
     async (method) => {
       const retry = rejection({
-        "x-retry-after": "2",
         "set-cookie": "challenge=private-rate-cookie; Path=/; Secure; HttpOnly",
+        "x-retry-after": "2",
       });
       const f = fixture([retry, successfulAccount()]);
       const client = createHostedOperatorNormalAuthClient(f.options);
-      await client[method]({ email: "member@example.com", password, name: "Member" });
+      await client[method]({ email: "member@example.com", name: "Member", password });
       expect(f.waits).toEqual([2000]);
       expect(f.permissions).toEqual([
         method === "signUp" ? "sign_up" : "sign_in",
@@ -498,9 +498,9 @@ describe("normal Auth rate limit recovery", () => {
   );
 
   it.each<{ headers: Record<string, string>; delay: number }>([
-    { headers: { "x-retry-after": "2", "retry-after": "8" }, delay: 2000 },
-    { headers: { "retry-after": "3" }, delay: 3000 },
-    { headers: { "retry-after": "Wed, 14 Oct 2026 12:00:04 GMT" }, delay: 4000 },
+    { delay: 2000, headers: { "retry-after": "8", "x-retry-after": "2" } },
+    { delay: 3000, headers: { "retry-after": "3" } },
+    { delay: 4000, headers: { "retry-after": "Wed, 14 Oct 2026 12:00:04 GMT" } },
   ])("honors X timing precedence and standard delta/date timing", async ({ headers, delay }) => {
     const f = fixture([rejection(headers), successfulAccount()]);
     await createHostedOperatorNormalAuthClient(f.options).signIn({
@@ -516,19 +516,19 @@ describe("normal Auth rate limit recovery", () => {
     let approvalLive = true;
     const client = createHostedOperatorNormalAuthClient({
       ...f.options,
-      wait: async (delayMs, signal) => {
-        await f.options.wait(delayMs, signal);
-        approvalLive = false;
-      },
       assertApprovedEffect: async () => {
         if (!approvalLive) {
           throw new Error("private revoked authority");
         }
         await Promise.resolve();
       },
+      wait: async (delayMs, signal) => {
+        await f.options.wait(delayMs, signal);
+        approvalLive = false;
+      },
     });
     await expect(
-      client.signUp({ email: "member@example.com", password, name: "Member" }),
+      client.signUp({ email: "member@example.com", name: "Member", password }),
     ).rejects.toMatchObject({ code: "approval_required" });
     expect(f.attempts).toHaveLength(1);
     expect(f.waits).toEqual([1000]);
@@ -539,7 +539,7 @@ describe("normal Auth rate limit recovery", () => {
     { "x-retry-after": "invalid" },
     { "x-retry-after": "-1" },
     { "x-retry-after": "0" },
-    { "x-retry-after": "invalid", "retry-after": "1" },
+    { "retry-after": "1", "x-retry-after": "invalid" },
     { "retry-after": "invalid date" },
   ])("does not replay absent, invalid or immediate timing", async (headers) => {
     const f = fixture([rejection(headers), successfulAccount()]);
@@ -559,15 +559,15 @@ describe("normal Auth rate limit recovery", () => {
       const f = fixture([
         Response.json(
           { code: "INVALID_EMAIL_OR_PASSWORD" },
-          { status, headers: { "x-retry-after": "1" } },
+          { headers: { "x-retry-after": "1" }, status },
         ),
         successfulAccount(),
       ]);
       await expect(
         createHostedOperatorNormalAuthClient(f.options).signUp({
           email: "member@example.com",
-          password,
           name: "Member",
+          password,
         }),
       ).rejects.toMatchObject({ code: "auth_rejected", httpStatus: status });
       expect(f.attempts).toHaveLength(1);
@@ -580,8 +580,8 @@ describe("normal Auth rate limit recovery", () => {
     await expect(
       createHostedOperatorNormalAuthClient(f.options).signUp({
         email: "member@example.com",
-        password,
         name: "Member",
+        password,
       }),
     ).rejects.toMatchObject({ code: "transport_failed" });
     expect(f.attempts).toHaveLength(1);
@@ -651,7 +651,7 @@ describe("normal Auth rate limit recovery", () => {
           cancelled = true;
         },
       }),
-      { status: 429, headers: { "x-retry-after": "1" } },
+      { headers: { "x-retry-after": "1" }, status: 429 },
     );
     const f = fixture([response, successfulAccount()]);
     const client = createHostedOperatorNormalAuthClient({

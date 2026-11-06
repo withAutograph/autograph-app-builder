@@ -61,7 +61,7 @@ const requireSourceRelease = (source: PublicReleaseRow | undefined) => {
   if (valid.includes(false)) {
     throw fail();
   }
-  return { source, prior, capPointer, approvals };
+  return { approvals, capPointer, prior, source };
 };
 const requireSourceCapability = (
   cap: AppIntegrationCapabilityRow | undefined,
@@ -123,7 +123,7 @@ export const createOptionalIntegrationRetentionReader =
       // oxlint-disable-next-line unicorn/no-useless-undefined -- No existing optional binding needs retention authority.
       return undefined;
     }
-    const readSourceOwner = input.readSourceOwner;
+    const { readSourceOwner } = input;
     if (readSourceOwner === undefined) {
       throw fail();
     }
@@ -181,8 +181,8 @@ export const createOptionalIntegrationRetentionReader =
         throw fail();
       }
       return {
-        key: binding.key,
         acceptedEnvId: binding.id,
+        key: binding.key,
         sha256: binding.sha256,
         sourceOperationRef: operationRef,
         sourcePlanDigest: source.record.planDigest,
@@ -212,10 +212,10 @@ export const createOptionalIntegrationRetentionReader =
     for (const receipt of approvals) {
       // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- The source owner's single durable native history cursor is read in order.
       const actual = await ports.readPublicApproval({
-        plan: prior,
-        owner: sourceOwner,
-        callId: receipt.approvedByCallId,
         assertCurrent: assertSource,
+        callId: receipt.approvedByCallId,
+        owner: sourceOwner,
+        plan: prior,
       });
       if (!isDeepStrictEqual(actual, receipt)) {
         throw fail();
@@ -224,10 +224,10 @@ export const createOptionalIntegrationRetentionReader =
     for (const receipt of cap.record.approvalReceipts) {
       // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- The source owner's single durable native history cursor is read in order.
       const actual = await ports.readCapabilityApproval({
-        plan: old,
-        owner: sourceOwner,
-        callId: receipt.approvedByCallId,
         assertCurrent: assertSource,
+        callId: receipt.approvedByCallId,
+        owner: sourceOwner,
+        plan: old,
       });
       if (!isDeepStrictEqual(actual, receipt)) {
         throw fail();
@@ -267,27 +267,27 @@ export const readOptionalIntegrationRetention = async (
   },
 ) => {
   const reader = createOptionalIntegrationRetentionReader({
-    publicReleases: createPostgresPublicReleaseStore(input.database),
     capabilities: createPostgresAppIntegrationCapabilityStore(input.database),
-    readPublicApproval: async ({ plan, owner, callId, assertCurrent }) =>
-      await createPublicReleaseApprovalAuthority({
-        database: input.database,
-        builderOrigin: input.builderOrigin,
-        request: input.request,
-        owner,
-        authority: input.authority,
-        assertCurrentOwner: assertCurrent,
-        fetch: input.fetch,
-      })(plan, callId),
+    publicReleases: createPostgresPublicReleaseStore(input.database),
     readCapabilityApproval: async ({ plan, owner, callId, assertCurrent }) =>
       await createAppIntegrationCapabilityApprovalAuthority({
-        database: input.database,
-        builderOrigin: input.builderOrigin,
-        request: input.request,
-        owner,
-        authority: input.authority,
         assertCurrentOwner: assertCurrent,
+        authority: input.authority,
+        builderOrigin: input.builderOrigin,
+        database: input.database,
         fetch: input.fetch,
+        owner,
+        request: input.request,
+      })(plan, callId),
+    readPublicApproval: async ({ plan, owner, callId, assertCurrent }) =>
+      await createPublicReleaseApprovalAuthority({
+        assertCurrentOwner: assertCurrent,
+        authority: input.authority,
+        builderOrigin: input.builderOrigin,
+        database: input.database,
+        fetch: input.fetch,
+        owner,
+        request: input.request,
       })(plan, callId),
   });
   return await reader(input);

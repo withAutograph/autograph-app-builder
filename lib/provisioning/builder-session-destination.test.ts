@@ -17,18 +17,18 @@ const principal = {
   audience: "https://builder.example/mcp",
   issuer: "https://builder.example/auth",
   ownerUserId: "owner",
-  workspaceId: "workspace",
   scopes: ["autograph:session"],
+  workspaceId: "workspace",
 };
 const sessionId = "saved-session";
 const request = {
-  version: 1 as const,
-  operation: "vercel" as const,
   appName: "saved-app",
   deploymentAccess: "public-app" as const,
-  repository: { name: "saved-app", private: true },
+  operation: "vercel" as const,
   providers: { vercelInstallationId: "installation" },
+  repository: { name: "saved-app", private: true },
   requestId: "be05a1b9-92d0-4a16-832b-3309a5594244",
+  version: 1 as const,
 };
 const expected = {
   adapterGeneration: 1,
@@ -37,18 +37,18 @@ const expected = {
 };
 const destination = {
   appId: "saved-app",
-  requestId: request.requestId,
   requestDigest: builderProvisionRequestDigest(request),
+  requestId: request.requestId,
 };
 const session = () => ({
   ...toDurableHostedSessionRecord({
-    version: 1,
     adapterSessionId: expected.adapterSessionId,
-    sessionId,
-    principal,
-    status: "waiting",
     createdAtEpochMs: 1,
+    principal,
+    sessionId,
+    status: "waiting",
     updatedAtEpochMs: 1,
+    version: 1,
   }),
   appId: "saved-app",
 });
@@ -64,24 +64,24 @@ const readSession = async (store: InMemoryHostedEveStore) => {
 const fixture = async () => {
   const sessions = new InMemoryHostedEveStore();
   const start = {
-    version: 1 as const,
     clientRequestId: "start",
-    operationId: "start-operation",
+    createdAtEpochMs: 1,
     kind: "start" as const,
+    operationId: "start-operation",
     principal,
     requestDigest: `sha256:${"a".repeat(64)}`,
     state: "reserved" as const,
-    createdAtEpochMs: 1,
     updatedAtEpochMs: 1,
+    version: 1 as const,
   };
   await sessions.reserveOperation(principal, start);
   await sessions.settleSucceeded({
-    principal,
-    operationId: start.operationId,
-    requestDigest: start.requestDigest,
     nowEpochMs: 1,
+    operationId: start.operationId,
+    principal,
+    requestDigest: start.requestDigest,
+    result: { cursor: 0, events: [], sessionId, status: "waiting" },
     session: session(),
-    result: { sessionId, status: "waiting", events: [], cursor: 0 },
   });
   const rows = new Map<string, BuilderProvisionJournalRow>();
   const reserve = vi.fn(
@@ -97,21 +97,19 @@ const fixture = async () => {
       }
       const row: BuilderProvisionJournalRow = {
         authority: input.authority,
-        requestId: input.request.requestId,
-        requestDigest: digest,
-        record: initialBuilderProvisionJournalRecord(input.request, input.now),
-        revision: 1,
         createdAt: input.now,
-        updatedAt: input.now,
+        record: initialBuilderProvisionJournalRecord(input.request, input.now),
+        requestDigest: digest,
+        requestId: input.request.requestId,
+        revision: 1,
         state: "pending",
+        updatedAt: input.now,
       };
       rows.set(row.requestId, row);
       return row;
     },
   );
   const journal: BuilderProvisioningDependencies["journal"] = {
-    reserve,
-    read: async (input) => await Promise.resolve(rows.get(input.requestId)),
     compareAndSet: async (input) => {
       const row = rows.get(input.requestId);
       if (row === undefined || row.revision !== input.expectedRevision) {
@@ -121,14 +119,16 @@ const fixture = async () => {
       }
       const next = {
         ...row,
-        revision: row.revision + 1,
         record: structuredClone(input.record),
+        revision: row.revision + 1,
         state: input.record.response.status,
         updatedAt: input.now,
       };
       rows.set(input.requestId, next);
       return await Promise.resolve(next);
     },
+    read: async (input) => await Promise.resolve(rows.get(input.requestId)),
+    reserve,
   };
   // The selected service delegates provider work unchanged; this fixture observes dispatch.
   const provisioning = { journal };
@@ -146,30 +146,30 @@ const fixture = async () => {
     Parameters<typeof createBuilderSessionDestinationService>[0]["readNativeTarget"]
   >(
     // oxlint-disable-next-line unicorn/no-useless-undefined -- This lookup intentionally has no native onboarding journal.
-    () => Promise.resolve(undefined),
+    async () => undefined,
   );
   const service = createBuilderSessionDestinationService({
-    sessions,
-    provisioning,
-    execute,
     assertMember,
+    execute,
+    provisioning,
     readNativeTarget,
+    sessions,
   });
-  return { sessions, service, execute, assertMember, reserve, start, journal, readNativeTarget };
+  return { assertMember, execute, journal, readNativeTarget, reserve, service, sessions, start };
 };
 
 describe("saved-session destination selection", () => {
   it("attaches the normal journal reference before provider work and reuses it after unknown outcome", async () => {
     const f = await fixture();
     f.execute.mockRejectedValueOnce(new Error("provider transport interrupted"));
-    await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+    await expect(f.service.select({ expected, principal, request, sessionId })).rejects.toThrow(
       "interrupted",
     );
     const saved = await readSession(f.sessions);
     expect(saved.builderDestination).toEqual(destination);
     expect(saved.sourceHandoffId).toBeUndefined();
     expect(saved.adapterSessionId).toBe(expected.adapterSessionId);
-    await f.service.select({ principal, sessionId, expected, request });
+    await f.service.select({ expected, principal, request, sessionId });
     expect(f.reserve).toHaveBeenCalledTimes(2);
     expect(f.execute).toHaveBeenCalledTimes(2);
     expect(f.execute.mock.calls[0]?.[0]?.request).toEqual(f.execute.mock.calls[1]?.[0]?.request);
@@ -177,13 +177,13 @@ describe("saved-session destination selection", () => {
 
   it("refuses a different destination after reservation instead of creating another project", async () => {
     const f = await fixture();
-    await f.service.select({ principal, sessionId, expected, request });
+    await f.service.select({ expected, principal, request, sessionId });
     await expect(
       f.service.select({
-        principal,
-        sessionId,
         expected,
+        principal,
         request: { ...request, requestId: "be05a1b9-92d0-4a16-832b-3309a5594245" },
+        sessionId,
       }),
     ).rejects.toThrow("already selected");
     expect(f.execute).toHaveBeenCalledOnce();
@@ -196,14 +196,14 @@ describe("saved-session destination selection", () => {
       const who = kind === "owner" ? { ...principal, ownerUserId: "foreign" } : principal;
       const epoch = kind === "epoch" ? { ...expected, adapterGeneration: 2 } : expected;
       if (kind === "cancel") {
-        await f.sessions.recordCancellationIntent({ principal, sessionId, nowEpochMs: 2 });
+        await f.sessions.recordCancellationIntent({ nowEpochMs: 2, principal, sessionId });
       }
       await expect(
         f.service.select({
-          principal: who,
-          sessionId,
           expected: epoch,
+          principal: who,
           request: kind === "app" ? { ...request, appName: "foreign-app" } : request,
+          sessionId,
         }),
       ).rejects.toThrow();
       expect(f.execute).not.toHaveBeenCalled();
@@ -214,21 +214,21 @@ describe("saved-session destination selection", () => {
     const f = await fixture();
     const response = {
       ...f.start,
-      kind: "respond" as const,
-      sessionId,
-      operationId: "uncertain-response",
       clientRequestId: "do-not-resend",
+      kind: "respond" as const,
+      operationId: "uncertain-response",
+      sessionId,
     };
     await f.sessions.reserveOperation(principal, response);
     await f.sessions.settleUnsuccessful({
-      principal,
-      operationId: response.operationId,
-      requestDigest: response.requestDigest,
-      state: "submission_unknown",
-      safeErrorCode: "submission_unknown",
       nowEpochMs: 2,
+      operationId: response.operationId,
+      principal,
+      requestDigest: response.requestDigest,
+      safeErrorCode: "submission_unknown",
+      state: "submission_unknown",
     });
-    await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+    await expect(f.service.select({ expected, principal, request, sessionId })).rejects.toThrow(
       "settled session operations",
     );
     const unknown = await f.sessions.getPrivateOperation(principal, response.operationId);
@@ -238,15 +238,15 @@ describe("saved-session destination selection", () => {
 
   it("inherits the selected reference through recovery without changing creation authority", () => {
     const source = attachBuilderDestinationRecord(session(), {
-      expected,
       destination,
+      expected,
       nowEpochMs: 2,
     });
     const child = {
       ...session(),
-      sessionId: "recovered-child",
-      adapterSessionId: "new-adapter",
       adapterGeneration: 2,
+      adapterSessionId: "new-adapter",
+      sessionId: "recovered-child",
     };
     const inherited = toDurableHostedSessionRecord(
       inheritRecoveryBuildDecision(source, session(), child),
@@ -264,16 +264,16 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
     throw new Error("Unexpected unused GitHub adapter");
   };
   const credential = vi.fn(async () => {
-    await f.sessions.recordCancellationIntent({ principal, sessionId, nowEpochMs: Date.now() });
+    await f.sessions.recordCancellationIntent({ nowEpochMs: Date.now(), principal, sessionId });
     return {
       binding: {
         active: true,
-        installationId: "installation",
-        scopeType: "team" as const,
-        scopeId: "team",
-        slug: "team",
         displayName: "Team",
+        installationId: "installation",
         plan: "pro",
+        scopeId: "team",
+        scopeType: "team" as const,
+        slug: "team",
         updatedAt: new Date(),
       },
       token: "synthetic-test-token",
@@ -283,15 +283,18 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
     async () => await Promise.resolve(Response.json({}, { status: 404 })),
   );
   const dependencies: BuilderProvisioningDependencies = {
-    journal: f.journal,
-    githubInstallations: { read: never, bind: never },
-    githubCredentials: { bind: never, read: never, rotate: never, deactivate: never },
+    deactivateVercelInstallation: never,
+    fetch,
     githubConfig: {
       appId: "1",
       clientId: "unused",
       clientSecret: "unused-synthetic-secret",
       privateKey: "unused",
     },
+    githubCredentials: { bind: never, deactivate: never, read: never, rotate: never },
+    githubInstallations: { bind: never, read: never },
+    journal: f.journal,
+    readVercelCredential: credential,
     vercelConfig: {
       clientId: "unused",
       clientSecret: "unused",
@@ -301,9 +304,6 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
       tokenKey: Buffer.alloc(32),
       tokenKeyVersion: "test",
     },
-    readVercelCredential: credential,
-    deactivateVercelInstallation: never,
-    fetch,
   };
   const service = createBuilderSessionDestinationService({
     sessions: f.sessions,
@@ -311,9 +311,9 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
     execute: executeBuilderProvisioning,
     assertMember: f.assertMember,
     // oxlint-disable-next-line unicorn/no-useless-undefined -- No legacy onboarding is present in this cancellation fixture.
-    readNativeTarget: () => Promise.resolve(undefined),
+    readNativeTarget: async () => undefined,
   });
-  const result = await service.select({ principal, sessionId, expected, request });
+  const result = await service.select({ expected, principal, request, sessionId });
   expect(credential).toHaveBeenCalledOnce();
   expect(result.provisioning.vercel.status).toBe("failed");
   expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
@@ -327,7 +327,7 @@ it.each(["creating", "unknown", "ready"] as const)(
   async (stage) => {
     const f = await fixture();
     f.readNativeTarget.mockResolvedValue({ record: { stage } });
-    await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+    await expect(f.service.select({ expected, principal, request, sessionId })).rejects.toThrow(
       "Reconcile",
     );
     expect(f.reserve).not.toHaveBeenCalled();
@@ -345,7 +345,7 @@ it.each(["creating", "unknown", "ready"] as const)(
       // oxlint-disable-next-line unicorn/no-useless-undefined -- The first lookup deliberately observes an absent native journal.
       .mockResolvedValueOnce(undefined)
       .mockResolvedValue({ record: { stage } });
-    await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+    await expect(f.service.select({ expected, principal, request, sessionId })).rejects.toThrow(
       "Reconcile",
     );
     expect(f.execute).not.toHaveBeenCalled();

@@ -542,8 +542,8 @@ const managedScopeFixture = (productionBranch: string = target.branch) => {
     accountId: target.scopeId,
     framework: "services",
     id: target.projectId,
-    rootDirectory: ".",
     link: { productionBranch },
+    rootDirectory: ".",
   };
   // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
   const request = vi.fn<typeof fetch>(async (resource, init) => {
@@ -605,7 +605,7 @@ it("uses generic Preview managed rows for the observed production branch without
     }
     if (init?.method === "POST") {
       expect(JSON.parse(z.string().parse(init.body))).toMatchObject([
-        { target: ["preview"], comment: ownerComment },
+        { comment: ownerComment, target: ["preview"] },
       ]);
       expect(
         z.array(z.record(z.string(), z.json())).parse(JSON.parse(z.string().parse(init.body)))[0],
@@ -636,12 +636,12 @@ it("retains historical branch-specific managed scope even if that branch is now 
 
 it("rejects foreign generic managed rows and never borrows a generic installer credential", async () => {
   const f = managedScopeFixture();
-  f.rows.push({ ...ownedApp, gitBranch: null, comment: "App Builder runtime foreign" });
+  f.rows.push({ ...ownedApp, comment: "App Builder runtime foreign", gitBranch: null });
   const provider = createHostedRuntimeVercelProvider({
     credential,
+    environmentGitBranch: null,
     fetch: f.request,
     target,
-    environmentGitBranch: null,
   });
   await expect(
     provider.bindEnvironment({ [ownedApp.key]: ownedApp.value }, { runtimeId }),

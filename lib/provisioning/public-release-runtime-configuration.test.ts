@@ -3,21 +3,21 @@ import { publicRealmResourceSchema } from "./public-realm-enrollment";
 import { createFreshPublicAuthValues } from "./public-release-runtime-configuration";
 
 const input = {
-  publicOrigin: "https://app.example",
   appId: "invoice-app",
   authResource: {
+    database: "app_auth",
     environment: "preview" as const,
     hostname: "ep-synthetic.aws.neon.tech",
-    port: 5432 as const,
-    database: "app_auth",
-    schema: "public" as const,
-    runtimeRole: "restricted_auth",
     migratorRole: "auth_migrator",
-    neon: { projectId: "synthetic", branchId: "non-default" },
+    neon: { branchId: "non-default", projectId: "synthetic" },
+    port: 5432 as const,
+    runtimeRole: "restricted_auth",
+    schema: "public" as const,
   },
   authRuntimeUrl:
     "postgresql://restricted_auth:private@ep-synthetic.aws.neon.tech/app_auth?sslmode=verify-full",
   productionDatabaseIdentity: "ep-production.aws.neon.tech/neondb",
+  publicOrigin: "https://app.example",
 };
 describe("fresh public app Auth configuration", () => {
   it("generates private per-app keys with exact public origins and an isolated resource profile", () => {

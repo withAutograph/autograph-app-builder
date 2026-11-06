@@ -161,25 +161,25 @@ export const privateMaintenanceUrl = (
     !scope.hostname.includes("-pooler.") &&
     url.hostname === scope.hostname.replace(".", "-pooler.");
   const checks: Record<OperatorMaintenanceUriMismatch, boolean> = {
-    url: true,
-    encoding: true,
-    protocol: ["postgres:", "postgresql:"].includes(url.protocol),
-    hostname: url.hostname === scope.hostname || sameOwnedPooler,
-    pooled_hostname: !url.hostname.includes("-pooler.") || sameOwnedPooler,
-    port: ["", "5432"].includes(url.port),
-    role: role === scope.maintenanceRole,
-    password: url.password !== "",
-    database: database === scope.maintenanceDatabase,
-    fragment: url.hash === "",
-    tls_mode: ["require", verifiedTls].includes(url.searchParams.get("sslmode") ?? ""),
-    tls_count: url.searchParams.getAll("sslmode").length === 1,
-    query_keys: [...url.searchParams.keys()].every((key) =>
-      ["sslmode", "channel_binding"].includes(key),
-    ),
     channel_binding_count: url.searchParams.getAll("channel_binding").length <= 1,
     channel_binding_value:
       !url.searchParams.has("channel_binding") ||
       url.searchParams.get("channel_binding") === "require",
+    database: database === scope.maintenanceDatabase,
+    encoding: true,
+    fragment: url.hash === "",
+    hostname: url.hostname === scope.hostname || sameOwnedPooler,
+    password: url.password !== "",
+    pooled_hostname: !url.hostname.includes("-pooler.") || sameOwnedPooler,
+    port: ["", "5432"].includes(url.port),
+    protocol: ["postgres:", "postgresql:"].includes(url.protocol),
+    query_keys: [...url.searchParams.keys()].every((key) =>
+      ["sslmode", "channel_binding"].includes(key),
+    ),
+    role: role === scope.maintenanceRole,
+    tls_count: url.searchParams.getAll("sslmode").length === 1,
+    tls_mode: ["require", verifiedTls].includes(url.searchParams.get("sslmode") ?? ""),
+    url: true,
   };
   const mismatches = maintenanceUriMismatchSchema.options.filter((field) => !checks[field]);
   if (mismatches.length > 0) {

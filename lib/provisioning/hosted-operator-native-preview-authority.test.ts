@@ -243,14 +243,14 @@ const fixture = () => {
       });
     }
     const projectIdentity = {
+      contentHint: {
+        integrationConfigurationId: store.product.integrationConfigurationId,
+        storeId: store.id,
+        type: "integration-store-secret",
+      },
       id: "env_neon_project",
       key: "AUTOGRAPH_PREVIEW_SOURCE_NEON_PROJECT_ID",
       target: ["preview"],
-      contentHint: {
-        type: "integration-store-secret",
-        storeId: store.id,
-        integrationConfigurationId: store.product.integrationConfigurationId,
-      },
       value: store.externalResourceId,
     };
     if (url.pathname === `/v9/projects/${nativeStore.sourceProjectId}/env`) {
@@ -276,8 +276,8 @@ const fixture = () => {
         nativeStore,
         now: () => now,
       }),
-    controlPlane,
     canonicalOwner,
+    controlPlane,
     duringGet: (run: () => void) => {
       duringGet = run;
     },
@@ -311,15 +311,15 @@ describe("native Preview canonical planning owner", () => {
     const reader = createNativePreviewNeonPlanningAuthority({
       context: f.effect,
       controlPlane: {
-        assertPlanningAuthorized,
         assertCanonicalOwner,
+        assertPlanningAuthorized,
         readCredential: f.controlPlane.readCredential,
       },
+      fetch: f.fetcher,
       nativeStore,
       scope,
-      fetch: f.fetcher,
     });
-    return { ...f, assertPlanningAuthorized, assertCanonicalOwner, reader };
+    return { ...f, assertCanonicalOwner, assertPlanningAuthorized, reader };
   };
 
   it("refreshes canonical ownership and the active installation on every metadata guard without HTTP", async () => {
@@ -397,11 +397,11 @@ describe("native Preview canonical planning owner", () => {
   it("keeps the original owner adapter generation pinned across metadata guards", async () => {
     const f = fixture();
     const ownerContext = {
-      kind: "direct" as const,
-      authority,
-      principal: { ...authority, scopes: ["autograph:session"] },
-      adapterSessionId: "fixture-adapter",
       adapterGeneration: 1,
+      adapterSessionId: "fixture-adapter",
+      authority,
+      kind: "direct" as const,
+      principal: { ...authority, scopes: ["autograph:session"] },
       sessionId: target.sessionId,
     };
     const bound = { ...f.effect, ownerContext };
@@ -416,9 +416,9 @@ describe("native Preview canonical planning owner", () => {
         },
         readCredential: f.controlPlane.readCredential,
       },
+      fetch: f.fetcher,
       nativeStore,
       scope,
-      fetch: f.fetcher,
     });
     await reader.assertPlanningOwner(bound, scope);
     await expect(
@@ -459,9 +459,9 @@ describe("native Preview canonical planning owner", () => {
     const reader = createNativePreviewNeonPlanningAuthority({
       context: f.effect,
       controlPlane: { assertPlanningAuthorized, readCredential: f.controlPlane.readCredential },
+      fetch: f.fetcher,
       nativeStore,
       scope,
-      fetch: f.fetcher,
     });
     await reader.assertPlanningOwner(f.effect, scope);
     expect(assertPlanningAuthorized).toHaveBeenCalled();
@@ -479,8 +479,8 @@ describe("concrete native Preview owner and approval callbacks", () => {
       const f = fixture();
       const diagnostics: HostedOperatorConsentMetadata[] = [];
       const response = Response.json(
-        { privateToken: "must-not-log-response", credential: "postgres://secret@private" },
-        { status, headers: { "private-provider-header": "must-not-log-header" } },
+        { credential: "postgres://secret@private", privateToken: "must-not-log-response" },
+        { headers: { "private-provider-header": "must-not-log-header" }, status },
       );
       const readJson = vi.spyOn(response, "json");
       const readText = vi.spyOn(response, "text");
@@ -502,10 +502,10 @@ describe("concrete native Preview owner and approval callbacks", () => {
           },
           readCredential: f.controlPlane.readCredential,
         },
-        fetch: fetcher,
         diagnosticSink: (event) => {
           diagnostics.push(event);
         },
+        fetch: fetcher,
         nativeStore,
         scope,
       });
@@ -516,7 +516,7 @@ describe("concrete native Preview owner and approval callbacks", () => {
         expect.arrayContaining([
           expect.objectContaining({
             httpStatus: status,
-            planningFailure: { stage: "neon_source_project_access", errorClass: "unexpected" },
+            planningFailure: { errorClass: "unexpected", stage: "neon_source_project_access" },
           }),
         ]),
       );
@@ -550,10 +550,10 @@ describe("concrete native Preview owner and approval callbacks", () => {
         },
         readCredential: f.controlPlane.readCredential,
       },
-      fetch: fetcher,
       diagnosticSink: () => {
         throw new Error("sink unavailable");
       },
+      fetch: fetcher,
       nativeStore,
       scope,
     });
@@ -578,10 +578,10 @@ describe("concrete native Preview owner and approval callbacks", () => {
         },
         readCredential: f.controlPlane.readCredential,
       },
-      fetch: fetcher,
       diagnosticSink: (event) => {
         diagnostics.push(event);
       },
+      fetch: fetcher,
       nativeStore,
       scope,
     });
@@ -591,7 +591,7 @@ describe("concrete native Preview owner and approval callbacks", () => {
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planningFailure: { stage: "neon_source_project_access", errorClass: "type_error" },
+          planningFailure: { errorClass: "type_error", stage: "neon_source_project_access" },
         }),
       ]),
     );
@@ -612,18 +612,18 @@ describe("concrete native Preview owner and approval callbacks", () => {
         },
         readCredential: f.controlPlane.readCredential,
       },
+      diagnosticSink: (event) => {
+        diagnostics.push(event);
+      },
       fetch: async (request, init) => {
         const url = new URL(request instanceof Request ? request.url : request);
         if (url.pathname === `/v9/projects/${nativeStore.sourceProjectId}/env`) {
           return Response.json(
-            { privateToken: "must-not-log-response", credential: "postgres://secret@private" },
+            { credential: "postgres://secret@private", privateToken: "must-not-log-response" },
             { status: 403 },
           );
         }
         return await f.fetcher(request, init);
-      },
-      diagnosticSink: (event) => {
-        diagnostics.push(event);
       },
       nativeStore,
       scope,
@@ -635,7 +635,7 @@ describe("concrete native Preview owner and approval callbacks", () => {
       expect.arrayContaining([
         expect.objectContaining({
           httpStatus: 403,
-          planningFailure: { stage: "neon_native_store", errorClass: "unexpected" },
+          planningFailure: { errorClass: "unexpected", stage: "neon_native_store" },
         }),
       ]),
     );
@@ -660,15 +660,15 @@ describe("concrete native Preview owner and approval callbacks", () => {
         },
         readCredential: f.controlPlane.readCredential,
       },
+      diagnosticSink: () => {
+        throw new Error("diagnostic sink unavailable");
+      },
       fetch: async (request, init) => {
         const url = new URL(request instanceof Request ? request.url : request);
         if (url.pathname === `/v9/projects/${nativeStore.sourceProjectId}/env`) {
           return Response.json({}, { status: 403 });
         }
         return await f.fetcher(request, init);
-      },
-      diagnosticSink: () => {
-        throw new Error("diagnostic sink unavailable");
       },
       nativeStore,
       scope,
@@ -920,15 +920,15 @@ describe("approved native credential observation authority", () => {
     const callbacks = createNativePreviewNeonExecutionAuthority({
       controlPlane: { ...f.controlPlane, assertCanonicalOwner: f.canonicalOwner },
       effect: f.effect,
-      nativeStore,
       fetch: f.fetcher,
+      nativeStore,
       now: () => f.now,
     });
     const { assertApprovedOwner } = callbacks;
     if (assertApprovedOwner === undefined) {
       throw new Error("Actual observation callbacks required by fixture");
     }
-    return { ...f, callbacks, assertApprovedOwner, assertCurrentObservation };
+    return { ...f, assertApprovedOwner, assertCurrentObservation, callbacks };
   };
 
   it("rechecks the original approved effect and active installation without provider calls or caching", async () => {
@@ -984,8 +984,8 @@ describe("approved native credential observation authority", () => {
       const callbacks = createNativePreviewNeonExecutionAuthority({
         controlPlane,
         effect: f.effect,
-        nativeStore,
         fetch: f.fetcher,
+        nativeStore,
         now: () => f.now,
       });
       expect(callbacks.assertApprovedOwner).toBeUndefined();

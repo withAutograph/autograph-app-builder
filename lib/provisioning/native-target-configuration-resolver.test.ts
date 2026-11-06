@@ -27,22 +27,22 @@ import type { OperatorOwnerContext, OperatorSelection } from "./hosted-operator-
 const worker = {
   executablePath: "/trusted/install",
   id: "trusted-installer",
-  sha256: "a".repeat(64),
   operationScope: "generated-app-release-install-v1" as const,
+  sha256: "a".repeat(64),
   subcommand: "protected-generated-app-install" as const,
 };
 const resource = (name: string) => ({
   database: name,
   migratorRole: `${name}_owner`,
-  runtimeRole: `${name}_runtime`,
   resourceId: `${name}-resource`,
+  runtimeRole: `${name}_runtime`,
 });
 const workload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const configuration = (): HostedOperatorSourceConfiguration => ({
@@ -57,7 +57,6 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
   authDatabase: resource("auth"),
   builderCallbackOrigin: "https://builder.example",
   catalogAppIds: ["sibling"],
-  teamId: "team",
   gateway: {
     authBrowserOrigin: "https://auth.example",
     branch: "main",
@@ -69,12 +68,6 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
     publicOrigin: "https://apps.example",
     repoId: "gateway-repository",
     workload: { ...workload, projectId: "gateway" },
-  },
-  operator: {
-    deploymentId: "operator-deployment",
-    environment: "preview",
-    origin: "https://operator.example",
-    projectId: "operator",
   },
   nativeNeon: {
     configuration: {
@@ -95,99 +88,106 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
       projectId: "shared-neon",
     },
   },
+  operator: {
+    deploymentId: "operator-deployment",
+    environment: "preview",
+    origin: "https://operator.example",
+    projectId: "operator",
+  },
   sandbox: {
     accessWorker: worker,
-    authWorker: worker,
     authProposal: { executablePath: "/trusted/propose", id: "proposal", sha256: "c".repeat(64) },
-    resourcesWorker: worker,
+    authWorker: worker,
     image: "trusted-image",
     projectId: "operator",
+    resourcesWorker: worker,
     teamId: "team",
     workers: { sibling: worker },
   },
+  teamId: "team",
   workloadPolicy: workload,
 });
 const ready = (appId = "new-app"): NativeTargetReadyRegistration => {
   const time = "2026-10-21T15:00:00.000Z";
   const attemptId = "11111111-1111-4111-8111-111111111111";
   const projectSettings = {
+    buildCommand: "bun run build",
     framework: "nextjs" as const,
     rootDirectory: `apps/${appId}`,
     sourceFilesOutsideRootDirectory: true,
-    buildCommand: "bun run build",
   };
   const result: NativeTargetReadyRegistration = {
-    kind: "native-target-onboarding",
-    version: 1,
-    stage: "ready",
+    acceptedCreation: { acceptedAt: time, attemptId, projectId: `project-${appId}` },
     appId,
-    planDigest: "a".repeat(64),
-    previousAttempts: [],
+    approval: {
+      callId: "call",
+      observedAt: time,
+      outcome: "approved",
+      planDigest: "a".repeat(64),
+      publicSessionId: "original-session",
+      requestId: "request",
+      responderPrincipalId: "owner",
+    },
+    attempt: {
+      attemptId,
+      candidateName: appId,
+      leaseExpiresAt: time,
+      leaseId: attemptId,
+      startedAt: time,
+    },
+    dispatchAuthorizedAt: time,
+    kind: "native-target-onboarding",
     plan: {
-      version: 1,
+      appDatabase: resource(appId.replaceAll("-", "_")),
       appId,
       branch: "main",
-      appDatabase: resource(appId.replaceAll("-", "_")),
-      productRoles: [],
-      worker,
-      origin: {
-        publicSessionId: "original-session",
-        adapterSessionId: "original-adapter",
-        adapterGeneration: 1,
-        appSpecDigest: "b".repeat(64),
-        release: {
-          id: "release-original",
-          artifactRef: "private-artifact",
-          manifestSha256: "c".repeat(64),
-          schemaSha256: "d".repeat(64),
-        },
-      },
-      project: {
-        name: appId,
-        teamId: "team",
-        installationId: "installation",
-        projectSettings,
-        protection: nativeTargetRequiredProjectProtection,
-      },
+      conflictPolicy: "stop-on-conflict",
+      cost: { description: "Approved native target", ownership: "current-owner" },
       nativeNeon: {
         approvalReference: "original-approved-native-scope",
         nativeStore: configuration().nativeNeon.configuration.nativeStore,
         scope: configuration().nativeNeon.scope,
       },
-      cost: { ownership: "current-owner", description: "Approved native target" },
+      origin: {
+        adapterGeneration: 1,
+        adapterSessionId: "original-adapter",
+        appSpecDigest: "b".repeat(64),
+        publicSessionId: "original-session",
+        release: {
+          artifactRef: "private-artifact",
+          id: "release-original",
+          manifestSha256: "c".repeat(64),
+          schemaSha256: "d".repeat(64),
+        },
+      },
+      productRoles: [],
+      project: {
+        installationId: "installation",
+        name: appId,
+        projectSettings,
+        protection: nativeTargetRequiredProjectProtection,
+        teamId: "team",
+      },
       retention: { policy: "retain" },
-      conflictPolicy: "stop-on-conflict",
+      version: 1,
+      worker,
     },
-    approval: {
-      requestId: "request",
-      callId: "call",
-      planDigest: "a".repeat(64),
-      responderPrincipalId: "owner",
-      publicSessionId: "original-session",
-      outcome: "approved",
-      observedAt: time,
-    },
-    attempt: {
-      attemptId,
-      candidateName: appId,
-      leaseId: attemptId,
-      leaseExpiresAt: time,
-      startedAt: time,
-    },
-    dispatchAuthorizedAt: time,
-    acceptedCreation: { attemptId, projectId: `project-${appId}`, acceptedAt: time },
+    planDigest: "a".repeat(64),
+    previousAttempts: [],
     registration: {
       attemptId,
       observed: {
-        projectId: `project-${appId}`,
-        name: appId,
-        teamId: "team",
         installationId: "installation",
+        name: appId,
+        projectId: `project-${appId}`,
         projectSettings,
         protection: nativeTargetRequiredProjectProtection,
+        teamId: "team",
       },
       observedAt: time,
     },
+    stage: "ready",
+    version: 1,
   };
   result.planDigest = nativeTargetOnboardingPlanDigest(result.plan);
   result.approval.planDigest = result.planDigest;
@@ -204,12 +204,12 @@ const authority = {
   workspaceId: "workspace",
 };
 const ownerContext = {
-  kind: "direct" as const,
+  adapterGeneration: 2,
+  adapterSessionId: "current-adapter",
   authority,
+  kind: "direct" as const,
   principal: { ...authority, scopes: ["autograph:get"] },
   sessionId: "current-session",
-  adapterSessionId: "current-adapter",
-  adapterGeneration: 2,
 };
 const context = (appId = "new-app"): HostedOperatorContext => ({
   authority,
@@ -246,9 +246,9 @@ interface ConfigurationFixtureBody {
 }
 const request = (body: ConfigurationFixtureBody) =>
   new Request("https://operator.example/v1/runtime", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    headers: { "content-type": "application/json" },
+    method: "POST",
   });
 const setup = () => {
   const order: string[] = [];
@@ -257,46 +257,45 @@ const setup = () => {
     read: vi.fn(async () => {
       order.push("registry");
       return await Promise.resolve({
-        authority,
         appId: record.appId,
+        authority,
+        createdAt: new Date(),
+        record,
         requestId: "registry",
         revision: 1,
-        record,
-        createdAt: new Date(),
         updatedAt: new Date(),
       });
     }),
   };
   const resources = {
-    owner: {
-      verifyWorkload: vi.fn(async () => {
-        order.push("workload");
-        await Promise.resolve();
-      }),
-      assertNoStandardBuilderDestination: vi.fn(() => Promise.resolve()),
-
-      assertCanonicalAppOwner: vi.fn(async () => {
-        order.push("owner");
-        await Promise.resolve();
-      }),
-    },
-    registry,
-    continuity: { read: vi.fn().mockResolvedValue({ plan: { target: context().target } }) },
-    exports: { read: vi.fn().mockResolvedValue({ originalTarget: context().target }) },
     close: vi.fn(async () => {
       order.push("close");
       await Promise.resolve();
     }),
+    continuity: { read: vi.fn().mockResolvedValue({ plan: { target: context().target } }) },
+    exports: { read: vi.fn().mockResolvedValue({ originalTarget: context().target }) },
+    owner: {
+      assertCanonicalAppOwner: vi.fn(async () => {
+        order.push("owner");
+        await Promise.resolve();
+      }),
+      assertNoStandardBuilderDestination: vi.fn(async () => {}),
+      verifyWorkload: vi.fn(async () => {
+        order.push("workload");
+        await Promise.resolve();
+      }),
+    },
+    registry,
   } satisfies NativeTargetConfigurationResources;
   const openResources = vi.fn(async () => await Promise.resolve(resources));
   return {
+    openResources,
+    order,
     resolve: createNativeTargetConfigurationResolver({
       configuration: configuration(),
       openResources,
     }),
     resources,
-    openResources,
-    order,
   };
 };
 
@@ -307,8 +306,8 @@ describe("production native target configuration resolver", () => {
       request({
         action: "resolve-preview-target",
         appId: "new-app",
-        sessionId: ownerContext.sessionId,
         ownerContext,
+        sessionId: ownerContext.sessionId,
       }),
     );
     expect(fixture.order).toEqual(["workload", "owner", "registry", "close"]);
@@ -318,14 +317,14 @@ describe("production native target configuration resolver", () => {
       target: { appId: "new-app", sessionId: ownerContext.sessionId },
     });
     expect(fixture.resources.registry.read).toHaveBeenCalledExactlyOnceWith({
-      authority,
       appId: "new-app",
+      authority,
     });
     expect(effective.applications["new-app"].projectId).toBe("project-new-app");
   });
   it("resolves an ordinary selected app operation through fresh registry authorization", async () => {
     const fixture = setup();
-    const target = context().target;
+    const { target } = context();
     const effective = await fixture.resolve(
       request({
         action: "plan",
@@ -333,10 +332,10 @@ describe("production native target configuration resolver", () => {
         ownerContext,
         selection: {
           appId: target.appId,
-          sessionId: target.sessionId,
-          projectId: target.projectId,
           branch: target.branch,
           environment: target.environment,
+          projectId: target.projectId,
+          sessionId: target.sessionId,
         },
       }),
     );
@@ -357,8 +356,8 @@ describe("production native target configuration resolver", () => {
           request({
             action: "resolve-preview-target",
             appId: "new-app",
-            sessionId: ownerContext.sessionId,
             ownerContext,
+            sessionId: ownerContext.sessionId,
           }),
         ),
       ).rejects.toMatchObject({ code: "authorization_required" });
@@ -385,11 +384,11 @@ describe("production native target configuration resolver", () => {
       ...(isRead
         ? { [action.startsWith("continuity") ? "intentId" : "exportId"]: id }
         : {
+            idempotencyKey: "same-operation",
+            planDigest: "a".repeat(64),
             planRef: action.startsWith("export")
               ? `_protected-operator/export-plans/${id}`
               : `private-plan/${id}`,
-            planDigest: "a".repeat(64),
-            idempotencyKey: "same-operation",
             ...(action.endsWith("approval") ? {} : { callId: "approved-call" }),
           }),
     };
@@ -400,8 +399,8 @@ describe("production native target configuration resolver", () => {
     expect(reader).toHaveBeenCalledOnce();
     expect(fixture.order).toEqual(["workload", "workload", "owner", "registry", "close"]);
     expect(fixture.resources.registry.read).toHaveBeenCalledExactlyOnceWith({
-      authority,
       appId: "new-app",
+      authority,
     });
     expect(effective.applications["new-app"].projectId).toBe("project-new-app");
   });
@@ -442,9 +441,9 @@ describe("production native target configuration resolver", () => {
   it.each([
     {
       action: "neon-authorization",
+      ownerContext,
       phase: "check",
       sessionId: ownerContext.sessionId,
-      ownerContext,
     },
     { action: "separate-onboarding-dispatch", appId: "new-app" },
   ])(
@@ -473,8 +472,8 @@ describe("normal single-project destination resolution", () => {
   const body = {
     action: "resolve-preview-target",
     appId: "sibling",
-    sessionId: ownerContext.sessionId,
     ownerContext,
+    sessionId: ownerContext.sessionId,
   };
 
   it("requires normal destination selection without looking up a dedicated target", async () => {
@@ -493,10 +492,10 @@ describe("normal single-project destination resolution", () => {
     const f = setup();
     const config = standard();
     const readStandardDestination = vi.fn().mockResolvedValue({
-      projectId: config.gateway.projectId,
-      teamId: config.teamId,
       installationId: "installation",
       name: "apps-sibling",
+      projectId: config.gateway.projectId,
+      teamId: config.teamId,
     });
     const resolve = createNativeTargetConfigurationResolver({
       configuration: config,
@@ -519,10 +518,10 @@ describe("normal single-project destination resolution", () => {
         await Promise.resolve({
           ...f.resources,
           readStandardDestination: vi.fn().mockResolvedValue({
-            projectId: "new-standard-project",
-            teamId: "team",
             installationId: "installation",
             name: "apps-sibling",
+            projectId: "new-standard-project",
+            teamId: "team",
           }),
         }),
     });
@@ -541,8 +540,8 @@ describe("fresh normal same-project runtime assembly", () => {
     const { audience, issuer, environment: operatorEnvironment, ownerId } = workload;
     base.nativeNeon.configuration.operator = {
       audience,
-      issuer,
       environment: operatorEnvironment,
+      issuer,
       ownerId,
       projectId: base.operator.projectId,
     };
@@ -551,94 +550,92 @@ describe("fresh normal same-project runtime assembly", () => {
       appSpecDigest: "a".repeat(64),
       artifactRef: "generated-release:fixture",
       manifestSha256: "b".repeat(64),
-      schemaSha256: "c".repeat(64),
-      releaseId: "release-current",
-      version: 1 as const,
       publishedSource: {
-        repositoryId: "123",
         branch: "builder/current-app",
+        changeSetDigest: "1".repeat(64),
         gitSha: "d".repeat(40),
         gitTree: "e".repeat(40),
+        repositoryId: "123",
         reviewDigest: "f".repeat(64),
-        changeSetDigest: "1".repeat(64),
       },
+      releaseId: "release-current",
+      schemaSha256: "c".repeat(64),
+      version: 1 as const,
     };
     const description = {
-      version: 1 as const,
       app: { id: "new-app", routes: ["/"], workspacePath: "apps/new-app" },
       backend: {
-        kind: "generated-postgres" as const,
         authorization: "app-owned" as const,
-        release: { id: "release-current", artifactHash: "c".repeat(64), directory: "release" },
+        kind: "generated-postgres" as const,
+        release: { artifactHash: "c".repeat(64), directory: "release", id: "release-current" },
         roles: ["member"],
         runtime: { databaseEnvironment: "APP_DATABASE_URL" },
         schemaReceipt: null,
       },
-      validation: { check: { task: "check" }, browser: null, test: null },
+      validation: { browser: null, check: { task: "check" }, test: null },
+      version: 1 as const,
     };
     const destination = {
-      projectId: "standard-project",
-      teamId: "team",
+      deploymentAccess: "public-app" as const,
       installationId: "installation",
       name: "apps-new-app",
-      teamSlug: "team",
+      projectId: "standard-project",
+      provisioningDigest: "2".repeat(64),
+      provisioningRequestId: "bb863e20-5238-4e28-b156-31b9ca26d304",
       repository: "owner/apps-new-app",
       repositoryId: "123",
-      provisioningRequestId: "bb863e20-5238-4e28-b156-31b9ca26d304",
-      provisioningDigest: "2".repeat(64),
-      deploymentAccess: "public-app" as const,
+      teamId: "team",
+      teamSlug: "team",
     };
     const environment = {
+      PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify([
+        { appId: "new-app", authority, configuration: base, id: "isolated" },
+      ]),
       PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES: JSON.stringify([
         {
-          authority,
           appId: "new-app",
-          resourceProfileId: "isolated",
           authOwnership: { kind: "dedicated-app-development", resource: base.authDatabase },
-          publicOrigin: "https://apps-new-app.vercel.app",
-          productionDatabaseIdentity: "ep-production.neon.tech/auth",
+          authority,
           gatewayProductionWorkload: {
             audience: workload.audience,
             issuer: workload.issuer,
             subject: "explicitly-reviewed-production-gateway",
           },
-
           gatewayWorkload: {
             audience: workload.audience,
             issuer: workload.issuer,
             subject: "same-project-gateway",
           },
+          productionDatabaseIdentity: "ep-production.neon.tech/auth",
+          publicOrigin: "https://apps-new-app.vercel.app",
+          resourceProfileId: "isolated",
         },
-      ]),
-      PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify([
-        { id: "isolated", authority, appId: "new-app", configuration: base },
       ]),
     };
     const readStandardDestination = vi.fn().mockResolvedValue(destination);
-    const readStandardCapture = vi.fn().mockResolvedValue({ selection: selected, description });
+    const readStandardCapture = vi.fn().mockResolvedValue({ description, selection: selected });
     const resolve = createNativeTargetConfigurationResolver({
       configuration: base,
       environment,
-      openResources: () =>
-        Promise.resolve({ ...f.resources, readStandardDestination, readStandardCapture }),
+      openResources: async () => ({ ...f.resources, readStandardCapture, readStandardDestination }),
     });
     const body = {
       action: "resolve-preview-target",
       appId: "new-app",
-      sessionId: ownerContext.sessionId,
       ownerContext,
+      sessionId: ownerContext.sessionId,
     };
     return {
       ...f,
       base,
-      selected,
+      body,
       description,
       destination,
       environment,
-      readStandardDestination,
       readStandardCapture,
+      readStandardDestination,
       resolve,
-      body,
+      selected,
     };
   };
   const generic = () => {
@@ -646,34 +643,34 @@ describe("fresh normal same-project runtime assembly", () => {
     const nativeNeon = structuredClone(f.base.nativeNeon);
     nativeNeon.configuration.syntheticEnrollment = {
       authority: "synthetic-only",
+      branches: [
+        {
+          branchId: nativeNeon.scope.branchId,
+          createdAt: "2026-10-01T01:00:00Z",
+          initSource: "parent-schema",
+          parentId: "development-root",
+          parentLsn: "0/1",
+        },
+      ],
+      creationApprovalReference: "existing-reviewed-development-project",
       project: {
+        createdAt: "2026-10-01T00:00:00Z",
         id: nativeNeon.scope.projectId,
         ownerId: "development-owner",
-        createdAt: "2026-10-01T00:00:00Z",
       },
       root: {
         branchId: "development-root",
         createdAt: "2026-10-01T00:00:00Z",
         initSource: "schema-only",
       },
-      branches: [
-        {
-          branchId: nativeNeon.scope.branchId,
-          parentId: "development-root",
-          createdAt: "2026-10-01T01:00:00Z",
-          initSource: "parent-schema",
-          parentLsn: "0/1",
-        },
-      ],
-      creationApprovalReference: "existing-reviewed-development-project",
       sourceBaselineReference: "reviewed-empty-development-baseline",
     };
     f.base.standardDevelopmentRuntime = {
-      version: 1,
       kind: "standard-development-runtime-policy-v1",
-      policyId: "normal-development",
       nativeNeon,
+      policyId: "normal-development",
       productionDatabaseIdentity: "ep-production.neon.tech/auth",
+      version: 1,
       workloadIdentity: "vercel-team-oidc-v1",
     };
     const readStandardPublicOrigin = vi.fn().mockResolvedValue("https://actual-public.example");
@@ -681,12 +678,12 @@ describe("fresh normal same-project runtime assembly", () => {
       configuration: f.base,
       openResources: async () => ({
         ...f.resources,
-        readStandardDestination: f.readStandardDestination,
         readStandardCapture: f.readStandardCapture,
+        readStandardDestination: f.readStandardDestination,
         readStandardPublicOrigin,
       }),
     });
-    return { ...f, resolve, readStandardPublicOrigin };
+    return { ...f, readStandardPublicOrigin, resolve };
   };
   it("derives a new normal app runtime through the generic policy without a per-app profile or old registration", async () => {
     const f = generic();
@@ -719,8 +716,8 @@ describe("fresh normal same-project runtime assembly", () => {
       environment: f.environment,
       openResources: async () => ({
         ...f.resources,
-        readStandardDestination: f.readStandardDestination,
         readStandardCapture: f.readStandardCapture,
+        readStandardDestination: f.readStandardDestination,
         readStandardPublicOrigin: f.readStandardPublicOrigin,
       }),
     });
@@ -734,14 +731,14 @@ describe("fresh normal same-project runtime assembly", () => {
     const resolve = createNativeTargetConfigurationResolver({
       configuration: f.base,
       environment: f.environment,
-      openResources: () =>
-        Promise.resolve({
-          ...f.resources,
-          readStandardDestination: f.readStandardDestination,
-          readStandardCapture: f.readStandardCapture,
-          readStandardOriginSelection: () => Promise.resolve("https://different-chosen.example"),
-          readStandardPublicOrigin: f.readStandardPublicOrigin,
-        }),
+      openResources: async () => ({
+        ...f.resources,
+        readStandardCapture: f.readStandardCapture,
+        readStandardDestination: f.readStandardDestination,
+        readStandardOriginSelection: async () =>
+          await Promise.resolve("https://different-chosen.example"),
+        readStandardPublicOrigin: f.readStandardPublicOrigin,
+      }),
     });
     await expect(resolve(request(f.body))).rejects.toMatchObject({
       code: "builder_destination_configuration_required",
@@ -758,14 +755,13 @@ describe("fresh normal same-project runtime assembly", () => {
     const resolve = createNativeTargetConfigurationResolver({
       configuration: f.base,
       environment: f.environment,
-      openResources: () =>
-        Promise.resolve({
-          ...f.resources,
-          readStandardDestination: f.readStandardDestination,
-          readStandardCapture: f.readStandardCapture,
-          readStandardOriginSelection,
-          readStandardPublicOrigin: f.readStandardPublicOrigin,
-        }),
+      openResources: async () => ({
+        ...f.resources,
+        readStandardCapture: f.readStandardCapture,
+        readStandardDestination: f.readStandardDestination,
+        readStandardOriginSelection,
+        readStandardPublicOrigin: f.readStandardPublicOrigin,
+      }),
     });
     await expect(resolve(request(f.body))).rejects.toMatchObject({ code: "resource_mismatch" });
     expect(f.base).toEqual(before);
@@ -778,14 +774,13 @@ describe("fresh normal same-project runtime assembly", () => {
     f.readStandardPublicOrigin.mockResolvedValue("https://choice-b.example");
     const resolve = createNativeTargetConfigurationResolver({
       configuration: f.base,
-      openResources: () =>
-        Promise.resolve({
-          ...f.resources,
-          readStandardDestination: f.readStandardDestination,
-          readStandardCapture: f.readStandardCapture,
-          readStandardOriginSelection,
-          readStandardPublicOrigin: f.readStandardPublicOrigin,
-        }),
+      openResources: async () => ({
+        ...f.resources,
+        readStandardCapture: f.readStandardCapture,
+        readStandardDestination: f.readStandardDestination,
+        readStandardOriginSelection,
+        readStandardPublicOrigin: f.readStandardPublicOrigin,
+      }),
     });
     await expect(resolve(request(f.body))).rejects.toMatchObject({ code: "resource_mismatch" });
     expect(readStandardOriginSelection).toHaveBeenCalledOnce();
@@ -803,10 +798,10 @@ describe("fresh normal same-project runtime assembly", () => {
       });
       const common = {
         action,
-        ownerContext,
         adapterSessionId: ownerContext.adapterSessionId,
         callId: "current-capability-call",
         execution: { logicalSessionId: ownerContext.adapterSessionId },
+        ownerContext,
       };
       const incoming = appIntegrationCapabilityTransportRequestSchema.parse(
         action === "app-integration-capability-plan"
@@ -814,16 +809,16 @@ describe("fresh normal same-project runtime assembly", () => {
           : {
               ...common,
               input: {
-                plan,
                 operationRef: appIntegrationCapabilityOperationRef(plan),
+                plan,
                 planDigest: appIntegrationCapabilityPlanDigest(plan),
               },
             },
       );
       const result = await f.resolve(
         new Request("https://operator.example/v1/app-integrations", {
-          method: "POST",
           body: JSON.stringify(incoming),
+          method: "POST",
         }),
       );
       expect(result.applications[plan.selection.appId]?.projectId).toBe(f.destination.projectId);
@@ -836,17 +831,17 @@ describe("fresh normal same-project runtime assembly", () => {
     f.resources.owner.assertCanonicalAppOwner.mockRejectedValueOnce(new Error("foreign app owner"));
     const incoming = {
       action: "app-integration-capability-plan",
-      appId: "new-app",
-      ownerContext,
       adapterSessionId: ownerContext.adapterSessionId,
+      appId: "new-app",
       callId: "capability",
       execution: { logicalSessionId: ownerContext.adapterSessionId },
+      ownerContext,
     };
     await expect(
       f.resolve(
         new Request("https://operator.example/v1/app-integrations", {
-          method: "POST",
           body: JSON.stringify(incoming),
+          method: "POST",
         }),
       ),
     ).rejects.toThrow("foreign app owner");
@@ -857,15 +852,15 @@ describe("fresh normal same-project runtime assembly", () => {
     const f = generic();
     const assemble = (owner = authority, release = f.selected) =>
       assembleStandardBuilderRuntimeConfiguration({
-        base: f.base,
-        authority: owner,
         appId: "new-app",
+        authority: owner,
+        base: f.base,
+        captured: { description: f.description, selection: release },
         destination: {
           ...f.destination,
           githubInstallationId: undefined,
           productionBranch: undefined,
         },
-        captured: { selection: release, description: f.description },
         environment: {},
         verifiedPublicOrigin: "https://actual-public.example",
       });
@@ -902,15 +897,15 @@ describe("fresh normal same-project runtime assembly", () => {
     policy.nativeNeon.configuration.operator.audience = "https://foreign.example";
     expect(() =>
       assembleStandardBuilderRuntimeConfiguration({
-        base: f.base,
-        authority,
         appId: "new-app",
+        authority,
+        base: f.base,
+        captured: { description: f.description, selection: f.selected },
         destination: {
           ...f.destination,
           githubInstallationId: undefined,
           productionBranch: undefined,
         },
-        captured: { selection: f.selected, description: f.description },
         environment: {},
         verifiedPublicOrigin: "https://actual-public.example",
       }),
@@ -920,30 +915,30 @@ describe("fresh normal same-project runtime assembly", () => {
     const f = fixture();
     const result = await f.resolve(request(f.body));
     expect(result.gateway).toMatchObject({
-      projectId: f.destination.projectId,
-      repoId: "123",
       branch: f.selected.publishedSource.branch,
-      gitSha: f.selected.publishedSource.gitSha,
-      publicOrigin: "https://apps-new-app.vercel.app",
       environment: "preview",
+      gitSha: f.selected.publishedSource.gitSha,
+      projectId: f.destination.projectId,
+      publicOrigin: "https://apps-new-app.vercel.app",
+      repoId: "123",
     });
     expect(result.gateway.deploymentId).toBeUndefined();
     expect(result.sandbox.workers["new-app"]).toEqual(capturedGenericWorkerFixture);
     expect(result.standardRuntime?.publicRealmWorkload).toMatchObject({
       environment: "production",
-      projectId: f.destination.projectId,
       ownerId: f.destination.teamId,
+      projectId: f.destination.projectId,
       subject: "explicitly-reviewed-production-gateway",
     });
     expect(result.standardRuntime?.publicRealmWorkload).toMatchObject({
       environment: "production",
-      projectId: f.destination.projectId,
       ownerId: f.destination.teamId,
+      projectId: f.destination.projectId,
       subject: "explicitly-reviewed-production-gateway",
     });
     expect(result.applications["new-app"]).toMatchObject({
-      projectId: result.gateway.projectId,
       accessRoles: ["member"],
+      projectId: result.gateway.projectId,
       projectSettings: { framework: "services", rootDirectory: "." },
     });
     expect(result.applications.sibling).toBeUndefined();
@@ -965,10 +960,10 @@ describe("fresh normal same-project runtime assembly", () => {
       if (failure === "foreign-profile") {
         f.environment.PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES = JSON.stringify([
           {
-            id: "isolated",
-            authority: { ...authority, ownerUserId: "other" },
             appId: "new-app",
+            authority: { ...authority, ownerUserId: "other" },
             configuration: f.base,
+            id: "isolated",
           },
         ]);
       }
@@ -987,11 +982,11 @@ describe("fresh normal same-project runtime assembly", () => {
     const result = await f.resolve(
       request({
         action: "public-release-plan",
-        appId: "new-app",
-        ownerContext,
         adapterSessionId: ownerContext.adapterSessionId,
+        appId: "new-app",
         callId: "release-call",
         execution: { logicalSessionId: ownerContext.adapterSessionId },
+        ownerContext,
       }),
     );
     expect(result.gateway.projectId).toBe(f.destination.projectId);
@@ -1004,11 +999,11 @@ describe("fresh normal same-project runtime assembly", () => {
       f.resolve(
         request({
           action: "public-release-plan",
-          appId: "new-app",
-          ownerContext,
           adapterSessionId: ownerContext.adapterSessionId,
+          appId: "new-app",
           callId: "release-call",
           execution: { logicalSessionId: ownerContext.adapterSessionId },
+          ownerContext,
         }),
       ),
     ).rejects.toMatchObject({ code: "builder_destination_configuration_required" });
@@ -1033,8 +1028,8 @@ describe("normal single-project destination resolution", () => {
   const body = {
     action: "resolve-preview-target",
     appId: "sibling",
-    sessionId: ownerContext.sessionId,
     ownerContext,
+    sessionId: ownerContext.sessionId,
   };
 
   it("requires normal destination selection without looking up a dedicated target", async () => {
@@ -1053,10 +1048,10 @@ describe("normal single-project destination resolution", () => {
     const f = setup();
     const config = standard();
     const readStandardDestination = vi.fn().mockResolvedValue({
-      projectId: config.gateway.projectId,
-      teamId: config.teamId,
       installationId: "installation",
       name: "apps-sibling",
+      projectId: config.gateway.projectId,
+      teamId: config.teamId,
     });
     const resolve = createNativeTargetConfigurationResolver({
       configuration: config,
@@ -1079,10 +1074,10 @@ describe("normal single-project destination resolution", () => {
         await Promise.resolve({
           ...f.resources,
           readStandardDestination: vi.fn().mockResolvedValue({
-            projectId: "new-standard-project",
-            teamId: "team",
             installationId: "installation",
             name: "apps-sibling",
+            projectId: "new-standard-project",
+            teamId: "team",
           }),
         }),
     });
@@ -1101,8 +1096,8 @@ describe("fresh normal same-project runtime assembly", () => {
     const { audience, issuer, environment: operatorEnvironment, ownerId } = workload;
     base.nativeNeon.configuration.operator = {
       audience,
-      issuer,
       environment: operatorEnvironment,
+      issuer,
       ownerId,
       projectId: base.operator.projectId,
     };
@@ -1111,52 +1106,52 @@ describe("fresh normal same-project runtime assembly", () => {
       appSpecDigest: "a".repeat(64),
       artifactRef: "generated-release:fixture",
       manifestSha256: "b".repeat(64),
-      schemaSha256: "c".repeat(64),
-      releaseId: "release-current",
-      version: 1 as const,
       publishedSource: {
-        repositoryId: "123",
         branch: "builder/current-app",
+        changeSetDigest: "1".repeat(64),
         gitSha: "d".repeat(40),
         gitTree: "e".repeat(40),
+        repositoryId: "123",
         reviewDigest: "f".repeat(64),
-        changeSetDigest: "1".repeat(64),
       },
+      releaseId: "release-current",
+      schemaSha256: "c".repeat(64),
+      version: 1 as const,
     };
     const description = {
-      version: 1 as const,
       app: { id: "new-app", routes: ["/"], workspacePath: "apps/new-app" },
       backend: {
-        kind: "generated-postgres" as const,
         authorization: "app-owned" as const,
-        release: { id: "release-current", artifactHash: "c".repeat(64), directory: "release" },
+        kind: "generated-postgres" as const,
+        release: { artifactHash: "c".repeat(64), directory: "release", id: "release-current" },
         roles: ["member"],
         runtime: { databaseEnvironment: "APP_DATABASE_URL" },
         schemaReceipt: null,
       },
-      validation: { check: { task: "check" }, browser: null, test: null },
+      validation: { browser: null, check: { task: "check" }, test: null },
+      version: 1 as const,
     };
     const destination = {
-      projectId: "standard-project",
-      teamId: "team",
+      deploymentAccess: "public-app" as const,
       installationId: "installation",
       name: "apps-new-app",
-      teamSlug: "team",
+      projectId: "standard-project",
+      provisioningDigest: "2".repeat(64),
+      provisioningRequestId: "bb863e20-5238-4e28-b156-31b9ca26d304",
       repository: "owner/apps-new-app",
       repositoryId: "123",
-      provisioningRequestId: "bb863e20-5238-4e28-b156-31b9ca26d304",
-      provisioningDigest: "2".repeat(64),
-      deploymentAccess: "public-app" as const,
+      teamId: "team",
+      teamSlug: "team",
     };
     const environment = {
+      PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify([
+        { appId: "new-app", authority, configuration: base, id: "isolated" },
+      ]),
       PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES: JSON.stringify([
         {
-          authority,
           appId: "new-app",
-          resourceProfileId: "isolated",
           authOwnership: { kind: "dedicated-app-development", resource: base.authDatabase },
-          publicOrigin: "https://apps-new-app.vercel.app",
-          productionDatabaseIdentity: "ep-production.neon.tech/auth",
+          authority,
           gatewayProductionWorkload: {
             audience: workload.audience,
             issuer: workload.issuer,
@@ -1167,61 +1162,60 @@ describe("fresh normal same-project runtime assembly", () => {
             issuer: workload.issuer,
             subject: "same-project-gateway",
           },
+          productionDatabaseIdentity: "ep-production.neon.tech/auth",
+          publicOrigin: "https://apps-new-app.vercel.app",
+          resourceProfileId: "isolated",
         },
-      ]),
-      PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify([
-        { id: "isolated", authority, appId: "new-app", configuration: base },
       ]),
     };
     const readStandardDestination = vi.fn().mockResolvedValue(destination);
-    const readStandardCapture = vi.fn().mockResolvedValue({ selection: selected, description });
+    const readStandardCapture = vi.fn().mockResolvedValue({ description, selection: selected });
     const resolve = createNativeTargetConfigurationResolver({
       configuration: base,
       environment,
-      openResources: () =>
-        Promise.resolve({ ...f.resources, readStandardDestination, readStandardCapture }),
+      openResources: async () => ({ ...f.resources, readStandardCapture, readStandardDestination }),
     });
     const body = {
       action: "resolve-preview-target",
       appId: "new-app",
-      sessionId: ownerContext.sessionId,
       ownerContext,
+      sessionId: ownerContext.sessionId,
     };
     return {
       ...f,
       base,
-      selected,
+      body,
       description,
       destination,
       environment,
-      readStandardDestination,
       readStandardCapture,
+      readStandardDestination,
       resolve,
-      body,
+      selected,
     };
   };
   it("uses the real normal receipt and captured source without reading legacy native registration", async () => {
     const f = fixture();
     const result = await f.resolve(request(f.body));
     expect(result.gateway).toMatchObject({
-      projectId: f.destination.projectId,
-      repoId: "123",
       branch: f.selected.publishedSource.branch,
-      gitSha: f.selected.publishedSource.gitSha,
-      publicOrigin: "https://apps-new-app.vercel.app",
       environment: "preview",
+      gitSha: f.selected.publishedSource.gitSha,
+      projectId: f.destination.projectId,
+      publicOrigin: "https://apps-new-app.vercel.app",
+      repoId: "123",
     });
     expect(result.gateway.deploymentId).toBeUndefined();
     expect(result.sandbox.workers["new-app"]).toEqual(capturedGenericWorkerFixture);
     expect(result.standardRuntime?.publicRealmWorkload).toMatchObject({
       environment: "production",
-      projectId: f.destination.projectId,
       ownerId: f.destination.teamId,
+      projectId: f.destination.projectId,
       subject: "explicitly-reviewed-production-gateway",
     });
     expect(result.applications["new-app"]).toMatchObject({
-      projectId: result.gateway.projectId,
       accessRoles: ["member"],
+      projectId: result.gateway.projectId,
       projectSettings: { framework: "services", rootDirectory: "." },
     });
     expect(result.applications.sibling).toBeUndefined();
@@ -1243,10 +1237,10 @@ describe("fresh normal same-project runtime assembly", () => {
       if (failure === "foreign-profile") {
         f.environment.PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES = JSON.stringify([
           {
-            id: "isolated",
-            authority: { ...authority, ownerUserId: "other" },
             appId: "new-app",
+            authority: { ...authority, ownerUserId: "other" },
             configuration: f.base,
+            id: "isolated",
           },
         ]);
       }
@@ -1265,11 +1259,11 @@ describe("fresh normal same-project runtime assembly", () => {
     const result = await f.resolve(
       request({
         action: "public-release-plan",
-        appId: "new-app",
-        ownerContext,
         adapterSessionId: ownerContext.adapterSessionId,
+        appId: "new-app",
         callId: "release-call",
         execution: { logicalSessionId: ownerContext.adapterSessionId },
+        ownerContext,
       }),
     );
     expect(result.gateway.projectId).toBe(f.destination.projectId);
@@ -1282,11 +1276,11 @@ describe("fresh normal same-project runtime assembly", () => {
       f.resolve(
         request({
           action: "public-release-plan",
-          appId: "new-app",
-          ownerContext,
           adapterSessionId: ownerContext.adapterSessionId,
+          appId: "new-app",
           callId: "release-call",
           execution: { logicalSessionId: ownerContext.adapterSessionId },
+          ownerContext,
         }),
       ),
     ).rejects.toMatchObject({ code: "builder_destination_configuration_required" });
@@ -1297,8 +1291,8 @@ it("closed receipt ingress has no request-selected app or unbounded pre-authoriz
   const fixture = setup();
   const result = await fixture.resolve(
     new Request("https://operator.example/v1/central-deployment-events", {
-      method: "POST",
       body: "not-json; the authenticated receipt handler owns bounded parsing",
+      method: "POST",
     }),
   );
   expect(result).toEqual(configuration());

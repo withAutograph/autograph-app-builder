@@ -75,11 +75,11 @@ export const assertOwnedAppAuthRuntimeScope = (input: {
   runtimeUrl(input.bindings.appDatabase.runtimeUrl, appResource, input.neon.endpoint);
   runtimeUrl(input.bindings.authDatabase.runtimeUrl, authResource, input.neon.endpoint);
   return {
-    boundary: "owned-app-project" as const,
     appId: input.appId,
-    profileId: profile.profileId,
-    authResource: { ...authResource },
     appResource: { ...appResource },
+    authResource: { ...authResource },
+    boundary: "owned-app-project" as const,
+    profileId: profile.profileId,
     providerEnvironment: "development" as const,
     publicOrigin: input.publicOrigin,
   };

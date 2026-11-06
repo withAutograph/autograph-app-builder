@@ -139,7 +139,7 @@ const fixture = () => {
     ...plan,
     effects: [
       ...plan.effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind shared Gateway" },
+      { description: "Bind shared Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
     gatewayBindings: {
       authBrowserOrigin: "https://auth-preview.example.test",
@@ -166,33 +166,33 @@ const fixture = () => {
     }
   >();
   const store: HostedRuntimeJournalStore = {
+    async compareAndSet(input) {
+      const matches = row?.revision === input.expectedRevision;
+      if (matches) {
+        row = {
+          record: hostedRuntimeJournalRecordSchema.parse(input.record),
+          revision: input.expectedRevision + 1,
+        };
+      }
+      return matches ? structuredClone(row) : undefined;
+    },
     async read() {
       return row ? structuredClone(row) : undefined;
     },
     async reserve(input) {
       row ??= {
-        revision: 1,
         record: hostedRuntimeJournalRecordSchema.parse({
-          version: 1,
-          kind: "app-runtime",
           approvedByCallId: input.approvedByCallId,
-          request: input.target,
+          kind: "app-runtime",
           operator: input.operator,
+          request: input.target,
           status: "pending",
           step: "reserved",
+          version: 1,
         }),
+        revision: 1,
       };
       return structuredClone(row);
-    },
-    async compareAndSet(input) {
-      const matches = row?.revision === input.expectedRevision;
-      if (matches) {
-        row = {
-          revision: input.expectedRevision + 1,
-          record: hostedRuntimeJournalRecordSchema.parse(input.record),
-        };
-      }
-      return matches ? structuredClone(row) : undefined;
     },
     async reserveFenceGeneration(input) {
       const current = row;
@@ -202,11 +202,11 @@ const fixture = () => {
         current.revision === input.expectedRevision;
       if (matches) {
         row = {
-          revision: current.revision + 1,
           record: hostedRuntimeJournalRecordSchema.parse({
             ...current.record,
             operator: { ...current.record.operator, fenceGeneration: 1 },
           }),
+          revision: current.revision + 1,
         };
       }
       return matches ? structuredClone(row) : undefined;
@@ -214,30 +214,13 @@ const fixture = () => {
   };
   const observedRows: HostedRuntimeJournalRow[] = [];
   const deps: ProtectedHostedOperatorDependencies = {
-    store,
-    authorize: async () => ({ authority, target, ownerContext }),
     assertAuthorized: async () => {
       if (!authorized) {
         throw new HostedOperatorError("authorization_required");
       }
     },
-    plan: async () => gatewayPlan,
-    readApproval: async (input) =>
-      approved
-        ? {
-            action: input.action,
-            approvalId: "fixture-approval",
-            approved: true,
-            callId: input.callId,
-            planDigest: input.planDigest,
-          }
-        : null,
+    authorize: async () => ({ authority, ownerContext, target }),
     bindings: async () => ({}),
-    withResourceLease: async (_input, run) => await run(async () => {}),
-    reconcile: vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) => {
-      const receipt = applied.get(input.effect.id);
-      return receipt ? { status: "applied", receipt } : { status: "absent" };
-    }),
     executeEffect: vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(async (input) => {
       await input.assertCurrent();
       await input.checkpoint({
@@ -255,6 +238,22 @@ const fixture = () => {
       applied.set(input.effect.id, receipt);
       return receipt;
     }),
+    plan: async () => gatewayPlan,
+    readApproval: async (input) =>
+      approved
+        ? {
+            action: input.action,
+            approvalId: "fixture-approval",
+            approved: true,
+            callId: input.callId,
+            planDigest: input.planDigest,
+          }
+        : null,
+    reconcile: vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) => {
+      const receipt = applied.get(input.effect.id);
+      return receipt ? { receipt, status: "applied" } : { status: "absent" };
+    }),
+    store,
     verify: vi.fn<ProtectedHostedOperatorDependencies["verify"]>(async (input) => {
       const current = await store.read(input);
       if (current !== undefined) {
@@ -263,14 +262,15 @@ const fixture = () => {
       requireFinalResourceBindingPhase(current, input);
       return proof;
     }),
+    withResourceLease: async (_input, run) => await run(async () => {}),
   };
   const handler = createProtectedHostedOperatorHandler(deps);
   const request = async (input: OperatorRequest) => {
     const response = await handler(
       new Request("https://operator.example/v1/runtime", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
         body: JSON.stringify(input),
+        headers: { "content-type": "application/json" },
+        method: "POST",
       }),
     );
     return operatorPublicResultSchema.parse(await response.json());
@@ -279,11 +279,11 @@ const fixture = () => {
     deps,
     observedRows,
     request,
-    revokeOwner: () => {
-      authorized = false;
-    },
     revokeApproval: () => {
       approved = false;
+    },
+    revokeOwner: () => {
+      authorized = false;
     },
     get row() {
       return row;
@@ -317,10 +317,10 @@ describe("prepared operation reentry through the actual service lease", () => {
     expect(vi.mocked(f.deps.reconcile).mock.calls[0]?.[0].effect.kind).toBe("gateway-bindings");
     expect(f.deps.verify).toHaveBeenCalledTimes(2);
     expect(f.observedRows[1]?.record).toMatchObject({
-      status: "pending",
-      proof: before?.record.proof,
-      privateState: before?.record.privateState,
       operator: before?.record.operator,
+      privateState: before?.record.privateState,
+      proof: before?.record.proof,
+      status: "pending",
     });
     expect(f.observedRows[1]?.record.leaseId).toEqual(expect.any(String));
     expect(f.observedRows[1]?.record.leaseExpiresAt).toEqual(expect.any(String));
@@ -349,8 +349,8 @@ describe("prepared operation reentry through the actual service lease", () => {
       }
       const before = structuredClone(f.row);
       expect(await f.request(execute)).toMatchObject({
-        status: "blocked",
         code: guard === "active-lease" ? "operation_in_progress" : "authorization_required",
+        status: "blocked",
       });
       expect(f.deps.verify).toHaveBeenCalledOnce();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(plan.effects.length + 1);

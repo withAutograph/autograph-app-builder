@@ -9,32 +9,32 @@ import type { ExportOwnerOrganizationWitness } from "./hosted-operator-export-cu
 
 const keys = generateKeyPairSync("ed25519");
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "builder-owner",
+  workspaceId: "workspace",
 };
 const target = {
   appId: "review-app",
-  sessionId: "saved-public-session",
-  projectId: "app-project",
   branch: "preview",
   environment: "preview" as const,
   installationId: "owned-installation",
+  projectId: "app-project",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "saved-public-session",
 };
 const context = { authority, target };
 const resource = {
-  version: 1 as const,
+  database: "auth",
   environment: "preview" as const,
   hostname: "ep-owned.neon.tech",
-  database: "auth",
   migratorRole: "auth_owner",
-  runtimeRole: "auth_runtime",
+  neon: { branchId: "neon-branch", projectId: "neon-project" },
   port: 5432,
+  runtimeRole: "auth_runtime",
   schema: "public" as const,
-  neon: { projectId: "neon-project", branchId: "neon-branch" },
+  version: 1 as const,
 };
 const fixture = async () => {
   const issued = Math.floor(Date.now() / 1000) - 600;
@@ -44,13 +44,13 @@ const fixture = async () => {
     authResourceId: "auth-resource",
     bootstrapPlanDigest: "a".repeat(64),
     browserOrigin: "https://realm.example",
+    consumedAt: capturedAt,
     endpointOrigin: "https://gateway.example",
     expiresAt: new Date((issued + 600) * 1000).toISOString(),
     issuer: "https://realm.example",
     nonceSha256: "b".repeat(64),
     organizationId: null,
     ownerSessionId: target.sessionId,
-    consumedAt: capturedAt,
   };
   const claims = {
     aud: link.audience,
@@ -80,18 +80,14 @@ const fixture = async () => {
     sha256,
   };
   const membership = {
-    kind: "create-owned-organization",
     actorId: claims.sub,
-    organizationId: "original-org",
-    name: "Original organization",
-    slug: "original-organization",
     bootstrapPlanDigest: link.bootstrapPlanDigest,
+    identityCapture: { capturedAt, realmSessionId: claims.sessionId },
     identityNonceSha256: link.nonceSha256,
     identityProof,
-    identityCapture: { capturedAt, realmSessionId: claims.sessionId },
     identityVerification: {
-      issuer: link.issuer,
       audience: link.audience,
+      issuer: link.issuer,
       jwksUrl: `${link.endpointOrigin}/_platform/jwks.json`,
       transportSource: {
         audience: "https://vercel.com",
@@ -101,56 +97,67 @@ const fixture = async () => {
         projectId: "operator-project",
       },
     },
+    kind: "create-owned-organization",
+    name: "Original organization",
+    organizationId: "original-org",
+    slug: "original-organization",
   };
   const original = hostedOperatorPlanSchema.parse({
-    action: "prepare",
-    stage: "app",
-    version: 1,
-    contextId: "original-accepted-spec",
     access: [{ actorId: claims.sub, organizationId: "original-org", roles: ["reviewer"] }],
-    authMembership: membership,
+    action: "prepare",
     appDatabase: {
       database: "app",
       migratorRole: "app_owner",
-      runtimeRole: "app_runtime",
       resourceId: "app-resource",
+      runtimeRole: "app_runtime",
     },
     authDatabase: {
       database: "auth",
       migratorRole: "auth_owner",
-      runtimeRole: "auth_runtime",
       resourceId: "auth-resource",
+      runtimeRole: "auth_runtime",
     },
+    authMembership: membership,
+    contextId: "original-accepted-spec",
     cost: {
       class: "shared-recovery-group",
       description: "Approved prepared Preview",
       owner: authority.ownerUserId,
     },
+    deploymentBoundary: {
+      app: {
+        branch: "preview",
+        deploymentId: "app-deployment",
+        environment: "preview",
+        projectId: target.projectId,
+      },
+      authority,
+      gateway: {
+        branch: "preview",
+        deploymentId: "gateway-deployment",
+        environment: "preview",
+        projectId: "gateway-project",
+      },
+      operator: {
+        deploymentId: "operator-deployment",
+        environment: "preview",
+        projectId: "operator-project",
+      },
+      teamId: "team",
+      verification: {
+        gatewayOrigin: link.endpointOrigin,
+        jwksUrl: `${link.endpointOrigin}/_platform/jwks.json`,
+        publicOrigin: link.issuer,
+      },
+    },
     effects: [
-      { id: "resources", kind: "resources", description: "Owned resources" },
-      { id: "install", kind: "install", description: "Compiled release" },
-      { id: "membership", kind: "auth-membership", description: "Original organization" },
-      { id: "access", kind: "access", description: "Approved app access" },
-      { id: "bindings", kind: "bindings", description: "Owned runtime" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Owned Gateway" },
+      { description: "Owned resources", id: "resources", kind: "resources" },
+      { description: "Compiled release", id: "install", kind: "install" },
+      { description: "Original organization", id: "membership", kind: "auth-membership" },
+      { description: "Approved app access", id: "access", kind: "access" },
+      { description: "Owned runtime", id: "bindings", kind: "bindings" },
+      { description: "Owned Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
-    installer: { reference: "worker", sha256: "c".repeat(64) },
-    neon: {
-      projectId: resource.neon.projectId,
-      branchId: resource.neon.branchId,
-      endpoint: resource.hostname,
-      connectionRef: "owned-connection",
-      source: "synthetic-only",
-    },
-    release: { id: "old-release", sha256: "d".repeat(64), artifactRef: "old-artifact" },
-    retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "Keep approved data" },
-    selection: {
-      appId: target.appId,
-      sessionId: target.sessionId,
-      projectId: target.projectId,
-      branch: target.branch,
-      environment: target.environment,
-    },
     gatewayBindings: {
       authBrowserOrigin: link.browserOrigin,
       builderCallbackOrigin: "https://builder.example",
@@ -165,76 +172,69 @@ const fixture = async () => {
         subject: "app-preview",
       },
     },
-    publicGateway: { branch: "preview", origin: link.browserOrigin, projectId: "gateway-project" },
-    deploymentBoundary: {
-      authority,
-      teamId: "team",
-      app: {
-        branch: "preview",
-        projectId: target.projectId,
-        deploymentId: "app-deployment",
-        environment: "preview",
-      },
-      gateway: {
-        branch: "preview",
-        projectId: "gateway-project",
-        deploymentId: "gateway-deployment",
-        environment: "preview",
-      },
-      operator: {
-        projectId: "operator-project",
-        deploymentId: "operator-deployment",
-        environment: "preview",
-      },
-      verification: {
-        publicOrigin: link.issuer,
-        gatewayOrigin: link.endpointOrigin,
-        jwksUrl: `${link.endpointOrigin}/_platform/jwks.json`,
-      },
+    installer: { reference: "worker", sha256: "c".repeat(64) },
+    neon: {
+      branchId: resource.neon.branchId,
+      connectionRef: "owned-connection",
+      endpoint: resource.hostname,
+      projectId: resource.neon.projectId,
+      source: "synthetic-only",
     },
+    publicGateway: { branch: "preview", origin: link.browserOrigin, projectId: "gateway-project" },
+    release: { artifactRef: "old-artifact", id: "old-release", sha256: "d".repeat(64) },
+    retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "Keep approved data" },
+    selection: {
+      appId: target.appId,
+      branch: target.branch,
+      environment: target.environment,
+      projectId: target.projectId,
+      sessionId: target.sessionId,
+    },
+    stage: "app",
+    version: 1,
   });
   const { authMembership: omitted, ...preparedInput } = {
     ...original,
-    contextId: "newer-accepted-spec",
-    appInstallation: { customerIds: ["original-org", "qa-org"] },
     access: [{ actorId: "qa-actor", organizationId: "qa-org", roles: ["reviewer"] }],
+    appInstallation: { customerIds: ["original-org", "qa-org"] },
+    contextId: "newer-accepted-spec",
+    effects: original.effects.filter((effect) => effect.kind !== "auth-membership"),
     release: {
+      artifactRef: "current-artifact",
       id: "different-current-release",
       sha256: "e".repeat(64),
-      artifactRef: "current-artifact",
     },
-    effects: original.effects.filter((effect) => effect.kind !== "auth-membership"),
   };
   void omitted;
   const prepared = hostedOperatorPlanSchema.parse(preparedInput);
   const historical = {
     approvedByCallId: "original-approved-call",
     operator: {
+      approvalId: "original-approval",
+      identityLink: { ...link, proofRef: identityProof.reference, proofSha256: sha256 },
       mode: "protected-operator-v1" as const,
       operationRef: "00000000-0000-4000-8000-000000000001",
-      approvalId: "original-approval",
       plan: original,
       planDigest: operatorPlanDigest(original),
       receipts: [],
-      identityLink: { ...link, proofRef: identityProof.reference, proofSha256: sha256 },
     },
   };
   const record = hostedRuntimeJournalRecordSchema.parse({
-    kind: "app-runtime",
-    version: 1,
-    status: "prepared",
-    step: "bound",
-    request: target,
     approvedByCallId: "current-call",
+    kind: "app-runtime",
     operator: {
+      approvalId: "current-approval",
       mode: "protected-operator-v1",
       operationRef: "00000000-0000-4000-8000-000000000002",
-      approvalId: "current-approval",
       plan: prepared,
       planDigest: operatorPlanDigest(prepared),
       receipts: [],
       retainedGatewayDeliveries: [historical],
     },
+    request: target,
+    status: "prepared",
+    step: "bound",
+    version: 1,
   });
   const assertCurrent = vi.fn(async () => {
     await Promise.resolve();
@@ -243,16 +243,16 @@ const fixture = async () => {
   const getKey = vi.fn(async () => await Promise.resolve(keys.publicKey));
   const verifyProof = vi.fn(
     async (witness: ExportOwnerOrganizationWitness) =>
-      await verifyCapturedRealmIdentityProof({ proof, pending: witness.link, resource, getKey }),
+      await verifyCapturedRealmIdentityProof({ getKey, pending: witness.link, proof, resource }),
   );
   const readCurrentRecord = vi.fn(async () => await Promise.resolve(structuredClone(record)));
   return {
-    input: { context, prepared, assertCurrent, readApproval, verifyProof, readCurrentRecord },
-    record,
-    historical,
-    proof,
-    getKey,
     claims,
+    getKey,
+    historical,
+    input: { assertCurrent, context, prepared, readApproval, readCurrentRecord, verifyProof },
+    proof,
+    record,
   };
 };
 
@@ -278,10 +278,10 @@ describe("original owner organization export selection", () => {
     f.input.verifyProof.mockImplementationOnce(
       async (witness) =>
         await verifyCapturedRealmIdentityProof({
-          proof: `${f.proof}tampered`,
-          pending: witness.link,
-          resource,
           getKey: f.getKey,
+          pending: witness.link,
+          proof: `${f.proof}tampered`,
+          resource,
         }),
     );
     await expect(resolveExportOwnerOrganization(f.input)).rejects.toMatchObject({
@@ -392,7 +392,7 @@ describe("original owner organization export selection", () => {
   it("clarifies rather than choosing among multiple authenticated original organizations", async () => {
     const f = await fixture();
     const second = structuredClone(f.historical);
-    const plan = second.operator.plan;
+    const { plan } = second.operator;
     if (plan.authMembership?.kind !== "create-owned-organization") {
       throw new Error("Missing membership");
     }

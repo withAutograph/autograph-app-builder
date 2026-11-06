@@ -268,16 +268,16 @@ export const createNormalActorOrganizationWorkers = (
     }
     await assertCurrent(input);
     return {
-      database: "authDatabase" as const,
-      directDatabaseUrl: urls.authDatabase.migrationUrl,
       accessConnections: {
         appMigrator: urls.appDatabase.migrationUrl,
         appRuntime: urls.appDatabase.runtimeUrl,
         authMigrator: urls.authDatabase.migrationUrl,
         authRuntime: urls.authDatabase.runtimeUrl,
       },
+      database: "authDatabase" as const,
+      directDatabaseUrl: urls.authDatabase.migrationUrl,
       generatedRelease,
-      membershipProof: { proof: retained.proof, oidcToken, organizationId: input.organizationId },
+      membershipProof: { oidcToken, organizationId: input.organizationId, proof: retained.proof },
     };
   };
   return {
@@ -308,9 +308,9 @@ export const createNormalActorOrganizationWorkers = (
             ...(historical === undefined || original === undefined
               ? {}
               : {
-                  plan: historical.plan,
                   effect: historical.effect,
                   membershipProof: { ...prepared.membershipProof, proof: original.proof },
+                  plan: historical.plan,
                 }),
             // Only the observed marker uses historical plan bytes. Authority and
             // every execution fence still belong to the current approved effect.
