@@ -4,6 +4,9 @@ import { z } from "zod";
 import type { GitHubProvisionResult } from "./contracts-schema";
 import { provisionVercelProject } from "./vercel-provider";
 
+const requestUrl = (input: RequestInfo | URL): string =>
+  input instanceof Request ? input.url : input.toString();
+
 const github = {
   defaultBranch: "main",
   fullName: "withAutograph/vendor-portal",
@@ -55,7 +58,7 @@ describe("Vercel project provisioning", () => {
       // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
       const request = vi.fn<typeof fetch>(async (_url, init) => {
         if (init?.method === "POST") {
-          writes.push(JSON.parse(String(init.body)));
+          writes.push(JSON.parse(z.string().parse(init.body)));
           created = true;
           return Response.json({ id: "prj_public" }, { status: 201 });
         }
@@ -148,7 +151,7 @@ describe("Vercel project provisioning", () => {
       // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
       const request = vi.fn<typeof fetch>(async (_url, init) => {
         if (init?.method === "POST") {
-          writes.push(JSON.parse(String(init.body)));
+          writes.push(JSON.parse(z.string().parse(init.body)));
           created = true;
           return Response.json({ id: "prj_public" }, { status: 201 });
         }
@@ -338,9 +341,9 @@ describe("Vercel project provisioning", () => {
     const candidates: string[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url, init) => {
-      const path = new URL(String(url)).pathname;
+      const path = new URL(requestUrl(url)).pathname;
       if (init?.method === "POST") {
-        const body = z.object({ name: z.string() }).parse(JSON.parse(String(init.body)));
+        const body = z.object({ name: z.string() }).parse(JSON.parse(z.string().parse(init.body)));
         created.add(body.name);
         return Response.json({ id: "prj_7" }, { status: 201 });
       }
@@ -385,12 +388,12 @@ describe("Vercel project provisioning", () => {
       let created = false;
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const request = vi.fn<typeof fetch>(async (url, init) => {
-        const value = new URL(String(url));
+        const value = new URL(requestUrl(url));
         expect(value.searchParams.has("teamId")).toBe(scopeType === "team");
         expect(value.pathname).not.toContain("deployments");
         if (init?.method === "POST") {
           created = true;
-          const body: unknown = JSON.parse(String(init.body));
+          const body: unknown = JSON.parse(z.string().parse(init.body));
           expect(body).not.toHaveProperty("ssoProtection");
           expect(body).not.toHaveProperty("oidcTokenConfig");
           expect(body).toMatchObject({
@@ -446,7 +449,9 @@ describe("Vercel project provisioning", () => {
       });
       expect(candidates[0]).toBe("apps-vendor-portal");
       expect(absent).toEqual(["apps-vendor-portal"]);
-      expect(request.mock.calls.every(([url]) => !String(url).includes("deployments"))).toBe(true);
+      expect(request.mock.calls.every(([url]) => !requestUrl(url).includes("deployments"))).toBe(
+        true,
+      );
     },
   );
 
@@ -481,7 +486,7 @@ describe("Vercel project provisioning", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method === "POST") {
-        bodies.push(JSON.parse(String(init.body)));
+        bodies.push(JSON.parse(z.string().parse(init.body)));
         return Response.json({ error: { code: "repo_not_found" } }, { status: 400 });
       }
       return Response.json({}, { status: 404 });
@@ -513,9 +518,11 @@ describe("Vercel project provisioning", () => {
     let created = false;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url, init) => {
-      const path = new URL(String(url)).pathname;
+      const path = new URL(requestUrl(url)).pathname;
       if (init?.method === "POST") {
-        const body = z.looseObject({ name: z.string() }).parse(JSON.parse(String(init.body)));
+        const body = z
+          .looseObject({ name: z.string() })
+          .parse(JSON.parse(z.string().parse(init.body)));
         expect(body.name).toBe("apps-vendor-portal-a1b2c3");
         expect(body).not.toHaveProperty("gitRepository");
         created = true;
