@@ -114,7 +114,7 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
   return createHostedGitHubPublicationRuntimeResolver({
     dependencies: input.resolverDependencies,
     enabled: true,
-    prEffectsEnabled: input.environment.APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED === "1",
+    prEffectsEnabled: (input.environment.APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED ?? "1") === "1",
     openDatabase: () => openDatabase(config.databaseUrl),
     providerFactory: ({ authority, installation }) =>
       createAdapter(
