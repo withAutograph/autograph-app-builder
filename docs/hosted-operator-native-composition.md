@@ -554,19 +554,20 @@ uncertainty. No table, migration, sequence privilege or new admin URL is added.
 
 Source rechecks the original actor/session/membership and existing active v1
 owner-bound Vercel installation. It requires destination VERSION Config `v1` in
-the exact project Preview scope with no branch override, and validates the
+the exact approved project/environment scope with no branch override, and validates the
 original installation's team binding and fresh destination project ownership.
 Only a validated readable VERSION row may use the exact single-row decrypted
 Config GET; app values and Secret key bytes are never decrypted from provider
 storage. The Secret port sends one fixed create-only REST request with
-`type: sensitive`, target Preview, null branch and `upsert=false`, using in-memory
+`type: sensitive`, the approved Preview or Production target, null branch and
+`upsert=false`, using in-memory
 active key bytes. Its `comment` binds the operation/plan/grant metadata for safe
 unknown-outcome reconciliation. Config visibility cannot substitute for Secret
 visibility. Current APIs may report Secret storage as encrypted with
 `visibility: secret`; this normalizes to the logical sensitive receipt type.
 
-The fixed lock covers team, Operator project, Preview/null branch, and the KEY
-and VERSION pair across all actor/session/operation tuples. The transaction keeps
+The fixed lock covers team, Operator project, approved environment/null branch,
+and the KEY and VERSION pair across all actor/session/operation tuples. The transaction keeps
 backend/held-lock/active-connection checks while the independent journal pool
 commits attempted state before POST. A timed durable lease and CAS fence govern
 each continuation. Transport failure or nondefinitive/partial success retains
@@ -577,8 +578,9 @@ provider bearer, previous keyring or raw provider body.
 
 After the separately approved refreshed receiver is available, Source resolves
 the configured alias through the native alias API, then independently reads its
-exact deployment. It requires the fixed project/team, native Preview target
-(null), READY state, and creation after the attempted Secret write, and freezes
+exact deployment. It requires the fixed project/team, approved native target
+(`null` for Preview or `production` for Production), READY state, and creation
+after the attempted Secret write, and freezes
 its exact deployment ID and unique origin. READY only permits this possession
 checkpoint; it does not prove key equality. A server nonce and expiry bind the
 current fence, plan/grant digests, both workloads, active v1 and exact receiver.
