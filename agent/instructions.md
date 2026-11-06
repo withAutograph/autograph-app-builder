@@ -329,9 +329,12 @@ follow-up. Missing handoff metadata does not invalidate private app validation.
 Builder source and Preview evidence do not prove protected access or hosted
 Production readiness. Do not restore a retired demo authentication bypass to
 make a walkthrough pass.
-For a private preview, start the applied app directly with `start_app_preview`.
-Do not run lint or repository validation as a prerequisite to startup. Report
-lint separately as advisory for the private preview.
+For a private preview, start the applied app directly with `start_app_preview`
+before repository validation.
+For reviewed delivery, validate the selected repository's native app build and
+declared app tests. Run explicitly requested lint separately and report its
+result as advisory. Preview startup and ordinary delivery proceed independently
+of lint.
 Use `start_app_preview` for requested local delivery or to exercise
 uncovered behavior, with the repository's actual development command and the
 implemented app's route. For requested hosted delivery of changed source,
@@ -497,9 +500,18 @@ For an explicitly requested manual continuity exercise, use `plan-app-hosted-run
 
 When a user asks to save or transfer the local app, wait until its accepted app apply/validation work is idle, then call `export-application-source` with its display name. Return the actual source download reference and report omissions. This saves the current owning Sandbox files, including binary assets and app-owned schema history; do not substitute the original host checkout, an old authored bundle, a compiled preview, or reconstructed journal. Source exports carry no database, identity, destination, approval or native-session authority. An authenticated hosted start imports this as untrusted app source through its ordinary workflow and fresh effect approvals.
 
-When validation reports `tooling-prerequisite` with `native-tool-panic`, the checker itself failed before completing. Preserve the current app and its failed receipt, and report that validation did not finish. Continue approved source work and preview startup using actual app diagnostics. Pause only the operation that requires the failed check or a new tooling or compute approval. Do not repeatedly edit app source or rerun the same fatal checker as if it were a lint/type diagnostic. Exit 134 by itself does not establish an out-of-memory cause. Ordinary app lint, type and assertion failures remain part of the approved repair loop.
+If a saved validation receipt records a lint checker panic, retain that
+diagnostic and continue ordinary delivery with the native app build and
+declared tests. Repair current build or test failures using their own output.
+When the user wants to investigate the checker, report the actual tooling
+failure separately. Exit 134 alone gives no cause for the failure.
 
-After a positive native checker panic, `prepare_app_creation` with `privateCompute: "private-checks-16gib-v1"` is the supported read-only same-app profile proposal when its source/task and provider-capacity prerequisites pass. It freezes the actual Sandbox/Drive and 8 vCPU/16 GiB ephemeral billing description into a fresh proposal; require approval of the compute resize before `apply_app_creation` with the same profile. Do not reuse prior approval, silently resize, replace the app or infer that this necessarily fixes the panic. If the supported profile cannot be qualified, explain which check remains unavailable and continue independent approved app work.
+For an explicitly selected checker investigation, a qualifying native checker
+panic may support `prepare_app_creation` with
+`privateCompute: "private-checks-16gib-v1"`. This read-only same-app proposal
+resolves the existing Sandbox, check task, and provider capacity and presents
+the 8 vCPU/16 GiB profile and ephemeral billing for fresh approval before
+`apply_app_creation`. Ordinary delivery uses the existing build scope.
 
 If an approval response or external action may have been submitted, preserve its
 original request and operation identifiers. Read back the existing session and

@@ -14,6 +14,7 @@ import type { SandboxSession } from "eve/sandbox";
 
 import type { TargetApplyReceipt } from "./target-apply";
 import { localRuntimeEnvironmentPath } from "./runtime-environment";
+import { repositoryDeliveryBuildCommand } from "./supported-template";
 import type { ValidationCommandExecutor } from "./target-validation";
 import type {
   ValidationLogKey,
@@ -126,6 +127,101 @@ const memoryValidationLogStore = (): ValidationLogStore => {
   };
 };
 
+const writePrivateNativeRunnerFixture = (root: string, hasEnvironmentHelper: boolean) => {
+  const write = (relativePath: string, contents: string, mode = 0o644) => {
+    const file = path.join(root, relativePath);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, contents, { mode });
+  };
+  const environmentHelper = hasEnvironmentHelper
+    ? `export const applicationTaskEnvironment = (root) => ({
+  ...process.env,
+  VC_MICROFRONTENDS_CONFIG: root + "/.scratch/microfrontends/microfrontends.json",
+  APP_TASK_ENV_OWNER: "checkout",
+  TURBO_TELEMETRY_DISABLED: "1",
+});`
+    : "";
+  write(
+    ".config/mise/scripts/repository/app-validation.ts",
+    `const selectedApp = {
+  id: "example",
+  directory: "apps/example",
+  framework: "next",
+  package: "@fixture/selected",
+};
+export const discoverApplications = (root) => {
+  if (root !== process.cwd()) process.exit(56);
+  return [{ id: "other" }, selectedApp];
+};
+export const ${hasEnvironmentHelper ? "applicationTaskArguments" : "lifecycleTaskArguments"} = (root, app, task) => {
+  if (root !== process.cwd() || app !== selectedApp || task !== "build") process.exit(134);
+  return ["run", task, "--ui=stream", "--only", "--filter=" + app.package];
+};
+${environmentHelper}
+`,
+  );
+  write(
+    ".config/mise/scripts/repository/generate-microfrontends.ts",
+    `import { mkdirSync, writeFileSync } from "node:fs";
+if (process.env.FIXTURE_OUTCOME === "catalog failed") process.exit(45);
+mkdirSync(".scratch/microfrontends", { recursive: true });
+writeFileSync(".scratch/microfrontends/microfrontends.json", "selected catalog");
+console.log("generated selected catalog");
+`,
+  );
+  write(
+    "node_modules/.bin/turbo",
+    `#!/bin/sh
+if [ "$*" != "run build --ui=stream --only --filter=@fixture/selected" ]; then exit 134; fi
+if [ ! -s "$VC_MICROFRONTENDS_CONFIG" ] || [ "$TURBO_TELEMETRY_DISABLED" != 1 ]; then exit 57; fi
+if [ "$APP_TASK_ENV_OWNER" != "${hasEnvironmentHelper ? "checkout" : ""}" ]; then exit 58; fi
+if [ "$BETTER_AUTH_SECRET" != local-only-fixture ] || [ -n "$APP_RUNTIME_STATE_DIR" ]; then exit 59; fi
+if [ -n "$UNRELATED_RUNTIME_VALUE" ]; then exit 60; fi
+if [ "$FIXTURE_OUTCOME" = "build failed" ]; then exit 44; fi
+mkdir -p apps/example/.next
+printf 'fixture native output\n' > apps/example/.next/build-proof
+printf 'ran selected native build\n'
+`,
+    0o755,
+  );
+  if (hasEnvironmentHelper) {
+    write(
+      "node_modules/@autograph/microfrontends/package.json",
+      JSON.stringify({ name: "@autograph/microfrontends", exports: { "./config": "./config.js" } }),
+    );
+    write(
+      "node_modules/@autograph/microfrontends/config.js",
+      `import { readFileSync } from "node:fs";
+export const readMicrofrontendsConfig = ({ cwd, environment }) => {
+  if (cwd !== process.cwd() || environment.APP_TASK_ENV_OWNER !== "checkout") process.exit(61);
+  return readFileSync(environment.VC_MICROFRONTENDS_CONFIG, "utf8");
+};
+`,
+    );
+    write(
+      "packages/platform-microfrontends/src/policy/application-identity",
+      `export const platformCatalogApplication = (config, appId) => {
+  if (config !== "selected catalog" || appId !== "example") process.exit(62);
+  return { assetPrefix: "selected-assets" };
+};
+`,
+    );
+  }
+  write(
+    "packages/platform-microfrontends/src/hosting/vercel/next-build-output",
+    `export async function assertNativeNextBuild(appRoot, appId${hasEnvironmentHelper ? ", prefix" : ""}) {
+  if (appRoot !== process.cwd() + "/apps/example" || appId !== "example") process.exit(63);
+  ${hasEnvironmentHelper ? 'if (prefix !== "/selected-assets") process.exit(64);' : ""}
+  if (process.env.FIXTURE_OUTCOME === "private verifier rejected") {
+    throw new Error("native output verification rejected");
+  }
+  if (!(await Bun.file(appRoot + "/.next/build-proof").exists())) process.exit(65);
+  console.log("verified selected native output");
+}
+`,
+  );
+};
+
 describe("target validation", () => {
   it("preserves compiler operation inputs across the check and test commands", async () => {
     const { sandbox } = sandboxFixture();
@@ -166,7 +262,7 @@ describe("target validation", () => {
         apply,
         attempt,
         executor: async ({ command, onChunk }) => {
-          if (command.includes(" app:check ")) {
+          if (command === repositoryDeliveryBuildCommand("example")) {
             vi.advanceTimersByTime(125);
             return { exitCode: 0, stderr: "", stdout: "" };
           }
@@ -298,14 +394,7 @@ describe("target validation", () => {
   });
 
   it.each([
-    ["mise run --no-deps --skip-tools app:check example", "repository-check", undefined, undefined],
     ["mise run --no-deps --skip-tools app:test example 1/1", "repository-test", "1/1", undefined],
-    [
-      "mise run --no-deps --skip-deps --skip-tools app:check example",
-      "repository-check",
-      undefined,
-      true,
-    ],
     [
       "mise run --no-deps --skip-deps --skip-tools app:test example 1/1",
       "repository-test",
@@ -351,10 +440,7 @@ describe("target validation", () => {
       expect(result).toMatchObject({ exitCode: 0, stdout: "checks passed" });
       expect(runTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          environment: {
-            ...environment,
-            ...(task === "repository-check" ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
-          },
+          environment,
           onChunk,
           task,
           ...(shard ? { shard } : {}),
@@ -465,12 +551,22 @@ describe("target validation", () => {
     });
     expect(JSON.stringify(result)).not.toContain("secret-test-value");
   });
-  it("blocks automatic validation retry for the exact native missing selected-app check task", async () => {
+  it("preserves recovery guidance for a retained native missing selected-app check task", async () => {
     const { sandbox } = sandboxFixture();
+    const attempt = createTargetValidationAttempt(apply, "missing-native-app-task");
     const result = await executeProposalBoundValidation({
       appId: "example",
       apply,
-      attempt: createTargetValidationAttempt(apply, "missing-native-app-task"),
+      attempt: {
+        ...attempt,
+        commands: [
+          {
+            name: "check-build",
+            command: "mise run --no-deps --skip-tools app:check example",
+            validationRoot: apply.applyRoot,
+          },
+        ],
+      },
       executor: async ({ onChunk }) => {
         await onChunk?.("stderr", "mise ERROR no task //apps/example:che");
         await onChunk?.("stderr", "ck found\n");
@@ -789,7 +885,7 @@ describe("target validation", () => {
     expect(result.receipt.commandFailure?.hint).toContain("Sandbox command launch failed");
     expect(result.receipt.commandFailure?.hint).toContain("workspace unavailable for apps/example");
     expect(result.receipt.commandFailure?.hint).toContain(
-      "mise run --no-deps --skip-tools app:check example",
+      repositoryDeliveryBuildCommand("example"),
     );
     expect(JSON.stringify(result)).not.toContain("private-value");
   });
@@ -915,9 +1011,7 @@ describe("target validation", () => {
   });
 
   it.each([
-    ["mise run --no-deps --skip-tools app:check example", undefined],
     ["mise run --no-deps --skip-tools app:test example 1/1", undefined],
-    ["mise run --no-deps --skip-deps --skip-tools app:check example", true],
     ["mise run --no-deps --skip-deps --skip-tools app:test example 1/1", true],
   ] as const)(
     "runs the repository-owned validation task once: %s",
@@ -947,14 +1041,13 @@ set -e
 (
 ${sourceDeclaredToolchainActivationCommand()}
 )
-if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run --no-deps app:runtime run example ${command.includes(" app:check ") ? "repository-check" : "repository-test 1/1"}; else ${command}; fi
+if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run --no-deps app:runtime run example repository-test 1/1; else ${command}; fi
 ) > "$log" 2>&1
 status=$?
 cat "$log"
 rm -f "$log"
 exit "$status"`,
         env: {
-          ...(command.includes(" app:check ") ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
           ...(alreadyCompiled ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
           APP_RUNTIME_STATE_DIR: path.posix.dirname(
             localRuntimeEnvironmentPath("/workspace/repository", "example"),
@@ -966,9 +1059,7 @@ exit "$status"`,
   );
 
   it.each([
-    [false, "mise run --no-deps --skip-tools app:check example", "repository-check"],
     [false, "mise run --no-deps --skip-tools app:test example 1/1", "repository-test 1/1"],
-    [true, "mise run --no-deps --skip-tools app:check example", "repository-check"],
     [true, "mise run --no-deps --skip-tools app:test example 1/1", "repository-test 1/1"],
   ] as const)(
     "hands compiler inputs and the prepared state directory to mise with streaming=%s for %s",
@@ -1056,7 +1147,6 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
         expect((streaming ? spawn : run).mock.calls[0]?.[0].env).toEqual({
           APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
           APP_RUNTIME_STATE_DIR: stateDirectory,
-          ...(runtimeTask === "repository-check" ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
         });
         expect(streaming ? run : spawn).not.toHaveBeenCalled();
       } finally {
@@ -1065,6 +1155,173 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
       }
     },
   );
+
+  it.each([
+    { outcome: "build", exitCode: 0 },
+    { outcome: "already compiled", alreadyCompiled: true as const, exitCode: 0 },
+    { outcome: "native output rejected", exitCode: 42 },
+    { outcome: "compile failed", exitCode: 43 },
+    { outcome: "private runner with catalog helper", privateRunner: true, exitCode: 0 },
+    {
+      outcome: "oldest runner helper names",
+      privateRunner: true,
+      legacyEnv: true,
+      exitCode: 0,
+    },
+    { outcome: "catalog failed", privateRunner: true, exitCode: 45 },
+    { outcome: "build failed", privateRunner: true, exitCode: 44 },
+    { outcome: "private verifier rejected", privateRunner: true, exitCode: 1 },
+  ])("executes the selected checkout's build without lint: $outcome", async (scenario) => {
+    const directory = mkdtempSync(path.join(tmpdir(), "builder-native-delivery-"));
+    const environmentPath = localRuntimeEnvironmentPath(directory, "example");
+    const stateDirectory = path.posix.dirname(environmentPath);
+    try {
+      mkdirSync(stateDirectory, { mode: 0o700, recursive: true });
+      writeFileSync(
+        environmentPath,
+        JSON.stringify({
+          BETTER_AUTH_SECRET: "local-only-fixture",
+          UNRELATED_RUNTIME_VALUE: "must-not-enter-build",
+        }),
+        { mode: 0o600 },
+      );
+      mkdirSync(path.join(directory, ".config/mise/scripts/repository"), { recursive: true });
+      writeFileSync(path.join(directory, ".config/mise/config.toml"), "[tools]\n");
+      writeFileSync(path.join(directory, "source-cue"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      // Hosted repository CI provides Node. Use Bun when installed, otherwise
+      // supply only the Bun.file operations needed by this executable fixture.
+      writeFileSync(
+        path.join(directory, "bun"),
+        `#!/bin/sh
+if PATH="$FIXTURE_SOURCE_PATH" command -v bun >/dev/null 2>&1; then
+  PATH="$FIXTURE_SOURCE_PATH" exec bun "$@"
+fi
+preload="$PWD/fixture-bun-file.mjs"
+if [ "$1" = -e ]; then
+  shift
+  exec "$FIXTURE_NODE" --conditions=source --import "$preload" --input-type=module -e "$@"
+fi
+exec "$FIXTURE_NODE" --conditions=source --import "$preload" "$@"
+`,
+        { mode: 0o755 },
+      );
+      writeFileSync(
+        path.join(directory, "fixture-bun-file.mjs"),
+        `import { access, readFile } from "node:fs/promises";
+globalThis.Bun = {
+  file: (path) => ({
+    exists: () => access(path).then(() => true, () => false),
+    json: async () => JSON.parse(await readFile(path, "utf8")),
+  }),
+};
+`,
+      );
+      writeFileSync(
+        path.join(directory, "mise"),
+        `#!/bin/sh
+case "$1" in
+ trust|install) exit 0 ;;
+ which) printf '%s\\n' "$PWD/source-cue"; exit 0 ;;
+esac
+if [ "$*" = "run --no-deps --skip-tools app:compile example" ]; then
+  if [ -n "$BETTER_AUTH_SECRET" ]; then exit 51; fi
+  if [ "$FIXTURE_OUTCOME" = "compile failed" ]; then exit 43; fi
+  touch .compiled
+  printf 'compiled selected schema\\n'
+  exit 0
+fi
+if [ "$1" = exec ] && [ "$2" = --no-deps ] && [ "$3" = -- ]; then
+  shift 3
+  exec "$@"
+fi
+printf 'legacy app:check invoked\\n'
+exit 134
+`,
+        { mode: 0o755 },
+      );
+      if (scenario.privateRunner === true) {
+        writePrivateNativeRunnerFixture(directory, scenario.legacyEnv !== true);
+      } else {
+        writeFileSync(
+          path.join(directory, ".config/mise/scripts/repository/app-validation.ts"),
+          `export async function runApplicationTasks(root, appId, tasks) {
+  if (root !== process.cwd() || appId !== "example" || tasks.join() !== "build") process.exit(134);
+  if (process.env.BETTER_AUTH_SECRET !== "local-only-fixture") process.exit(52);
+  if (process.env.UNRELATED_RUNTIME_VALUE || process.env.APP_RUNTIME_STATE_DIR) process.exit(53);
+  if (!process.env.BUN_OPTIONS?.includes("--conditions=source")) process.exit(55);
+  const compiled = await Bun.file(root + "/.compiled").exists();
+  if (compiled === (process.env.FIXTURE_OUTCOME === "already compiled")) process.exit(54);
+  if (process.env.FIXTURE_OUTCOME === "native output rejected") {
+    console.error("native output verification rejected");
+    process.exit(42);
+  }
+  console.log("verified selected native output");
+}
+  `,
+        );
+      }
+      const run = vi.fn((input: Parameters<SandboxSession["run"]>[0]) => {
+        const result = spawnSync("/bin/bash", ["-c", input.command], {
+          cwd: directory,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            ...input.env,
+            BETTER_AUTH_SECRET: "",
+            FIXTURE_OUTCOME: scenario.outcome,
+            FIXTURE_NODE: process.execPath,
+            FIXTURE_SOURCE_PATH: process.env.PATH ?? "",
+            PATH: `${directory}:${process.env.PATH ?? ""}`,
+          },
+          timeout: 5000,
+        });
+        if (result.error !== undefined) {
+          throw result.error;
+        }
+        return Promise.resolve({
+          exitCode: result.status ?? -1,
+          stderr: result.stderr,
+          stdout: result.stdout,
+        });
+      });
+      const command = repositoryDeliveryBuildCommand("example", scenario.alreadyCompiled);
+      const result = await sandboxValidationCommandExecutor({
+        alreadyCompiled: scenario.alreadyCompiled,
+      })({
+        appId: "example",
+        command,
+        sandbox: { run } as unknown as SandboxSession,
+        validationRoot: directory,
+      });
+      expect(run).toHaveBeenCalledOnce();
+      expect(run.mock.calls[0]?.[0].command).toContain(command);
+      expect(result.exitCode, result.stdout).toBe(scenario.exitCode);
+      expect(result.stdout).not.toContain("legacy app:check invoked");
+      expect(result.stdout).not.toContain("local-only-fixture");
+      if (scenario.exitCode === 0) {
+        expect(result.stdout).toContain("verified selected native output");
+      }
+      if (scenario.outcome === "already compiled") {
+        expect(result.stdout).not.toContain("compiled selected schema");
+      }
+      if (scenario.privateRunner === true && scenario.exitCode === 0) {
+        expect(result.stdout).toContain("generated selected catalog");
+        expect(result.stdout).toContain("ran selected native build");
+      }
+      if (scenario.outcome === "catalog failed") {
+        expect(result.stdout).not.toContain("ran selected native build");
+      }
+      if (scenario.outcome === "build failed") {
+        expect(result.stdout).not.toContain("verified selected native output");
+      }
+      if (scenario.outcome === "private verifier rejected") {
+        expect(result.stdout).toContain("native output verification rejected");
+      }
+    } finally {
+      rmSync(stateDirectory, { force: true, recursive: true });
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
 
   it("does not validate a resumed workspace when declared tool activation fails", async () => {
     const directory = mkdtempSync(path.join(tmpdir(), "builder-toolchain-failure-"));
@@ -1099,7 +1356,7 @@ exit 99
       });
       const result = await sandboxValidationCommandExecutor()({
         appId: "example",
-        command: "mise run --no-deps --skip-tools app:check example",
+        command: repositoryDeliveryBuildCommand("example"),
         sandbox: { run } as unknown as SandboxSession,
         validationRoot: directory,
       });

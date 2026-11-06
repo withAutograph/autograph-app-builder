@@ -17,6 +17,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { VercelSdkSessionNative } from "./vercel-sdk-session";
 import { Readable } from "node:stream";
+import { text as readNodeText } from "node:stream/consumers";
 import { createVercelSdkSession } from "./vercel-sdk-session";
 
 const fixture = () => ({
@@ -486,7 +487,8 @@ describe("Builder SDK session I/O", () => {
         { stdio: ["ignore", "pipe", "pipe"] },
       );
       child.stdout.setEncoding("utf-8");
-      child.stderr.setEncoding("utf-8");
+      // Child exit can drain an unread stderr pipe before stdout finishes yielding.
+      const diagnostic = readNodeText(child.stderr);
       const exited = Promise.withResolvers<{ exitCode: number | null }>();
       child.once("error", exited.reject);
       child.once("exit", (code) => {
@@ -501,9 +503,7 @@ describe("Builder SDK session I/O", () => {
           for await (const bytes of child.stdout) {
             yield { stream: "stdout", data: String(bytes) };
           }
-          for await (const bytes of child.stderr) {
-            yield { stream: "stderr", data: String(bytes) };
-          }
+          yield { stream: "stderr", data: await diagnostic };
         },
       };
     });
