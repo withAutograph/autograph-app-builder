@@ -93,10 +93,10 @@ describe("destination adapters", () => {
       const match = /autograph_start with (?<payload>\{[^\n]+\})\./u.exec(prompt);
       const serializedPayload = match?.groups?.payload;
       expect(serializedPayload).toBeDefined();
-      if (!serializedPayload) {
+      if (serializedPayload === undefined || serializedPayload === "") {
         throw new Error("Handoff prompt payload not found");
       }
-      const payload = JSON.parse(serializedPayload);
+      const payload: unknown = JSON.parse(serializedPayload);
       expect(payload).toEqual({
         clientRequestId: `web-handoff:${id}`,
         handoffId: id,
@@ -112,7 +112,7 @@ describe("destination adapters", () => {
     expect(buildCursorInstallUrl(initial.mcpUrl, false)).toBeUndefined();
     const installUrl = buildCursorInstallUrl(initial.mcpUrl, true);
     expect(installUrl).toBeDefined();
-    if (!installUrl) {
+    if (installUrl === undefined || installUrl === "") {
       throw new Error("Cursor install URL not found");
     }
     const url = new URL(installUrl);
@@ -120,7 +120,7 @@ describe("destination adapters", () => {
     expect(url.pathname).toBe("/mcp/install");
     const config = url.searchParams.get("config");
     expect(config).toBeDefined();
-    if (!config) {
+    if (config === null || config === "") {
       throw new Error("Cursor install config not found");
     }
     expect(JSON.parse(atob(config))).toEqual({

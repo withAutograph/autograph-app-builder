@@ -10,7 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { AnonymousBrief } from "./anonymous-brief";
 import { AnonymousBuilder } from "./anonymous-builder";
 
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+const navigation = vi.hoisted(() => ({ push: vi.fn<() => void>() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 
 const requireElement = (element: Element | null | undefined): HTMLElement => {
