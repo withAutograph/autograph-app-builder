@@ -36,7 +36,7 @@ export const runnableSelectedApp = async (input: {
     state.sourceReceipt.sourceKind !== "existing-repository"
   ) {
     throw new Error(
-      "Select an existing GitHub app checkout, or apply an accepted new app build before running its preview or browser tasks.",
+      "Select an existing GitHub app checkout, or apply an accepted new app build before running its preview or browser tasks. If an unapplied same-app repair displaced the approved checkout, resume it with prepare_app_creation and resumeApprovedBuild enabled.",
     );
   }
   if (input.appId === undefined) {
