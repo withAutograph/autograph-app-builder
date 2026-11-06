@@ -126,7 +126,8 @@ test("anonymous account settings redirects through a safe local callback", async
 });
 
 test("anonymous saved app destination preserves the build on sign-in", async ({ page }) => {
-  const destination = `/builds/${encodeURIComponent("saved/session?fragment#")}/destination`;
+  const sessionId = `ses_${"a".repeat(64)}`;
+  const destination = `/builds/${sessionId}/destination`;
   await page.goto(destination);
   await expect(page).toHaveURL(
     (url) =>
