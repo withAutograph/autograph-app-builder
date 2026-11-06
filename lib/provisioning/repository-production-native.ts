@@ -58,7 +58,10 @@ import {
 } from "./repository-production-store";
 import { createRepositoryProductionWorkers } from "./repository-production-workers";
 import { createRepositoryProductionSetup } from "./repository-production-setup";
-import type { RepositoryProductionEffectContext } from "./repository-production-setup";
+import type {
+  RepositoryProductionEffectContext,
+  RepositoryProductionSetupPorts,
+} from "./repository-production-setup";
 import { createRepositoryProductionConnectionReader } from "./repository-production-connections";
 import { createRepositoryProductionRuntimeBinding } from "./repository-production-runtime-binding";
 
@@ -68,6 +71,28 @@ const defined = <T>(value: T | undefined): T => {
     throw new Error("repository_production_state_unavailable");
   }
   return value;
+};
+
+/** Setup locks authorize the requested approved revision before its journal intent is advanced. */
+export const createRepositoryProductionIntentBoundSetup = (
+  ports: Omit<RepositoryProductionSetupPorts, "withLease">,
+  acquire: <T>(
+    scope: RepositoryProductionScope,
+    intent: RepositoryProductionIntent,
+    run: (assertCurrent: () => Promise<void>) => Promise<T>,
+  ) => Promise<T>,
+) => {
+  const forIntent = (intent: RepositoryProductionIntent) =>
+    createRepositoryProductionSetup({
+      ...ports,
+      withLease: async (scope, run) => await acquire(scope, intent, run),
+    });
+  return {
+    prepare: async (scope: RepositoryProductionScope, intent: RepositoryProductionIntent) =>
+      await forIntent(intent).prepare(scope, intent),
+    status: async (scope: RepositoryProductionScope, intent: RepositoryProductionIntent) =>
+      await forIntent(intent).status(scope, intent),
+  };
 };
 export const createRepositoryProductionNativeHandler =
   (environment: Readonly<Record<string, string | undefined>> = process.env) =>
@@ -238,13 +263,14 @@ export const createRepositoryProductionNativeHandler =
       const withLease = async <T>(
         scope: RepositoryProductionScope,
         run: (assertCurrent: () => Promise<void>) => Promise<T>,
+        requestedIntent?: RepositoryProductionIntent,
       ) => {
         const known = await current(scope);
         const saved = await store.read(scope);
         return await createRepositoryProductionLease({
           databaseUrl: environment.PROTECTED_RESOURCE_LOCK_DATABASE_URL ?? settings.databaseUrl,
           store,
-          intent: saved?.record.intent ?? known.intent,
+          intent: requestedIntent ?? saved?.record.intent ?? known.intent,
           assertAuthorized,
         })(scope, run);
       };
@@ -394,26 +420,29 @@ export const createRepositoryProductionNativeHandler =
         return z.object({ result: z.unknown() }).parse(response).result;
       };
       const setup = (scope: RepositoryProductionScope, held?: () => Promise<void>) =>
-        createRepositoryProductionSetup({
-          store,
-          assertAuthorized,
-          withLease: held ? async (_scope, run) => await run(held) : withLease,
-          ...workers(scope),
-          prepareCreatorIdentity: (context) => creator.prepare(context),
-          reconcileCreatorRoles: createRepositoryProductionRoleUpdater({
-            readMembers: async (context) =>
-              z
-                .array(z.object({ id: z.string() }))
-                .parse(await authRequest(context, { action: "list-members" }, true)),
-            execute: async (context, command) => {
-              await managementFor(
-                () => context.assertCurrent(),
-                command.clientRequestId,
-                true,
-              ).execute((await current(scope)).owner, command);
-            },
-          }),
-        });
+        createRepositoryProductionIntentBoundSetup(
+          {
+            store,
+            assertAuthorized,
+            ...workers(scope),
+            prepareCreatorIdentity: (context) => creator.prepare(context),
+            reconcileCreatorRoles: createRepositoryProductionRoleUpdater({
+              readMembers: async (context) =>
+                z
+                  .array(z.object({ id: z.string() }))
+                  .parse(await authRequest(context, { action: "list-members" }, true)),
+              execute: async (context, command) => {
+                await managementFor(
+                  () => context.assertCurrent(),
+                  command.clientRequestId,
+                  true,
+                ).execute((await current(scope)).owner, command);
+              },
+            }),
+          },
+          async (target, intent, run) =>
+            held ? await run(held) : await withLease(target, run, intent),
+        );
       const creator = createRepositoryProductionCreator({
         builderOrigin,
         readCurrent: store.read,
