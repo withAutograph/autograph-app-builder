@@ -11,7 +11,7 @@ const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(
     roots.splice(0).map(async (root) => {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }),
   );
 });
@@ -42,14 +42,14 @@ const fixture = async (providerTeam = "team_example") => {
       destinationRoot,
       path.join(repositoryRoot, ".vercel"),
     ].map(async (directory) => {
-      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await mkdir(directory, { mode: 0o700, recursive: true });
     }),
   );
   await writeFile(
     path.join(repositoryRoot, ".vercel/project.json"),
     JSON.stringify({
-      projectId: "prj_example",
       orgId: "team_example",
+      projectId: "prj_example",
       projectName: "builder-local",
     }),
     { mode: 0o600 },
@@ -60,42 +60,42 @@ const fixture = async (providerTeam = "team_example") => {
   const vercelExecutable = path.join(root, "vercel");
   await writeFile(
     vercelExecutable,
-    `#!/bin/sh\nprintf '%s\\n' "$@" > '${argumentsFile}'\nprintf '%s' '${JSON.stringify({ id: providerTeam, billing: { plan: "pro" }, limited: false })}'\n`,
+    `#!/bin/sh\nprintf '%s\\n' "$@" > '${argumentsFile}'\nprintf '%s' '${JSON.stringify({ billing: { plan: "pro" }, id: providerTeam, limited: false })}'\n`,
     { mode: 0o700 },
   );
   const closed = developmentLaunchEnvironment({
-    sourceRoot,
-    snapshotRoot: sourceRoot,
+    dependencyKey: "d".repeat(64),
     destinationRoot,
+    evePort: 23_117,
+    fingerprint: "c".repeat(64),
+    snapshotRoot: sourceRoot,
+    sourceRoot,
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
-    fingerprint: "c".repeat(64),
-    dependencyKey: "d".repeat(64),
-    evePort: 23_117,
   });
   const input = {
-    cycleFile,
-    closed,
     applicationRoot,
-    runsRoot,
-    supervisorRoot,
-    runtimeHome,
-    workflowData,
-    repositoryRoot,
-    nodeExecutable: process.execPath,
-    vercelExecutable,
+    closed,
+    cycleFile,
     environment: {
-      NODE_ENV: "development" as const,
+      AI_GATEWAY_API_KEY: "never-forward",
+      APP_BUILDER_LOCAL_EVE_CYCLE_FILE: "/foreign-cycle",
+      APP_BUILDER_PRIVATE_COMPUTE_LIMITS: "forged ambient capacity",
       HOME: root,
+      NODE_ENV: "development" as const,
       PATH: "/usr/bin:/bin",
       VERCEL_TOKEN: "never-forward",
-      AI_GATEWAY_API_KEY: "never-forward",
-      APP_BUILDER_PRIVATE_COMPUTE_LIMITS: "forged ambient capacity",
-      APP_BUILDER_LOCAL_EVE_CYCLE_FILE: "/foreign-cycle",
     },
+    nodeExecutable: process.execPath,
+    repositoryRoot,
+    runsRoot,
+    runtimeHome,
     signal: new AbortController().signal,
+    supervisorRoot,
+    vercelExecutable,
+    workflowData,
   };
-  return { input, argumentsFile, vercelExecutable };
+  return { argumentsFile, input, vercelExecutable };
 };
 
 it("carries the actual supervisor cycle/source and read-only observation through the real Eve invocation", async () => {
@@ -114,12 +114,12 @@ it("carries the actual supervisor cycle/source and read-only observation through
   );
   const invocation = createLocalEveInvocation({
     environment: wrapper,
-    repositoryRoot: f.input.repositoryRoot,
-    pinnedNode: process.execPath,
     eveCli: path.join(f.input.repositoryRoot, "eve.js"),
     oidcToken: "test-project-oidc",
+    pinnedNode: process.execPath,
     privateComputeLimits: limits,
-    vercelProject: { projectId: "prj_example", orgId: "team_example" },
+    repositoryRoot: f.input.repositoryRoot,
+    vercelProject: { orgId: "team_example", projectId: "prj_example" },
   });
   expect(invocation.environment.APP_BUILDER_LOCAL_EVE_CYCLE_FILE).toBe(f.input.cycleFile);
   expect(invocation.environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS).toBe(JSON.stringify(limits));

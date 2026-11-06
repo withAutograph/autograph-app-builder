@@ -40,23 +40,20 @@ export const importPreparedApplicationSource = async (
   const sandbox = await ctx.getSandbox();
   const saved = applicationSourceImportState.get();
   const binding = {
-    version: 1 as const,
-    kind: "application-source-import-v1" as const,
-    reference: intent.sourceCandidate,
-    sourceSessionId: validated.artifact.manifest.sourceSessionId,
-    importedSessionId: ctx.session.id,
-    platformSourceReceiptDigest: platform.digest,
-    workspaceId: getBuilderSandboxId(sandbox),
     appRoot: `apps/${intent.appId}`,
     importedByCallId: saved?.importedByCallId ?? ctx.callId,
+    importedSessionId: ctx.session.id,
+    kind: "application-source-import-v1" as const,
+    platformSourceReceiptDigest: platform.digest,
+    reference: intent.sourceCandidate,
+    sourceSessionId: validated.artifact.manifest.sourceSessionId,
+    version: 1 as const,
+    workspaceId: getBuilderSandboxId(sandbox),
   };
   if (saved !== undefined && JSON.stringify(saved) !== JSON.stringify(binding)) {
     throw new Error("This session already owns a different application source import.");
   }
   await materializeApplicationSource({
-    sandbox,
-    validated,
-    receipt: binding,
     abortSignal: ctx.abortSignal,
     assertCurrent: async () => {
       ctx.abortSignal.throwIfAborted();
@@ -65,6 +62,9 @@ export const importPreparedApplicationSource = async (
         throw new Error("Application source owner changed.");
       }
     },
+    receipt: binding,
+    sandbox,
+    validated,
   });
   // Owner and current membership are rechecked after the private write and before accepting it.
   const after = await readPreparedHandoffContext(ctx.session.auth);

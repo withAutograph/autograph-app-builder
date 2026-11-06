@@ -128,17 +128,17 @@ describe("initial draft destination review workflow", () => {
 
   it("allows only observational destination read progress to change during a workflow operation", () => {
     const expected = {
-      phase: "empty" as const,
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      sourceReceipt: { sourceSha: "original" },
       approvalReceipt: { digest: "approved" },
+      phase: "empty" as const,
+      sourceReceipt: { sourceSha: "original" },
+      version: APP_BUILDER_WORKFLOW_VERSION,
     };
     const observed = {
       ...expected,
       githubDestinationReviewRead: {
-        changeSetDigest: "observed-diff",
-        beforeComplete: true,
         afterComplete: false,
+        beforeComplete: true,
+        changeSetDigest: "observed-diff",
       },
     };
     expect(() => {

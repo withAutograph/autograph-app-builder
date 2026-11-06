@@ -63,10 +63,10 @@ export const developmentPackageFingerprint = async (input: {
   const repositoryRoot = path.resolve(input.repositoryRoot);
   return sha256(
     JSON.stringify({
+      hostedSession: input.hostedSession,
       icon: sha256(await readFile(path.join(repositoryRoot, "assets/autograph-icon.png"))),
       mcpHandler: sha256(await readFile(path.join(repositoryRoot, "lib/mcp/request-handler.ts"))),
       origin: input.origin,
-      hostedSession: input.hostedSession,
       plugin: sha256(await readFile(path.join(repositoryRoot, ".codex-plugin/plugin.json"))),
       port: input.port,
       skills: await packageInputDigest(path.join(repositoryRoot, "skills")),
@@ -143,8 +143,6 @@ export const createDevelopmentPackage = async (input: {
                 url: endpoint,
               }
             : {
-                type: "stdio",
-                command: input.hostedSession.nodeBin,
                 args: [
                   "--import",
                   fileURLToPath(import.meta.resolve("tsx")),
@@ -156,6 +154,8 @@ export const createDevelopmentPackage = async (input: {
                   "--cwd",
                   input.hostedSession.cwd,
                 ],
+                command: input.hostedSession.nodeBin,
+                type: "stdio",
               },
       },
     };
@@ -224,7 +224,7 @@ export const createDevelopmentPackage = async (input: {
       mcpAppPreview: false,
       ...(input.hostedSession === undefined
         ? {}
-        : { hostedSessionResource: input.hostedSession.resourceUrl, execution: "hosted" }),
+        : { execution: "hosted", hostedSessionResource: input.hostedSession.resourceUrl }),
       mcpServer,
       plugin: DEVELOPMENT_PLUGIN_NAME,
       publication: false,
@@ -283,9 +283,9 @@ export const registerDevelopmentPackage = async (input: {
 }) => {
   if (input.installPlugin === false) {
     return {
+      installed: false,
       marketplaceRoot: input.marketplaceRoot,
       selector: DEVELOPMENT_PLUGIN_SELECTOR,
-      installed: false,
     };
   }
   if (input.codexBin === undefined || input.codexHome === undefined) {

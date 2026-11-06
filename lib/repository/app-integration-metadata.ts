@@ -19,8 +19,8 @@ export const appIntegrationReadinessPathSchema = z.string().refine((value) => {
   }
 });
 export const appIntegrationInstallReadinessSchema = z.strictObject({
-  protocol: z.literal("app-integration-readiness-v1"),
   path: appIntegrationReadinessPathSchema,
+  protocol: z.literal("app-integration-readiness-v1"),
 });
 const readIdentifier = z
   .string()
@@ -38,11 +38,11 @@ export const appIntegrationReadObjectsSchema = z
   .record(
     z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u),
     z.strictObject({
-      objectName: readIdentifier,
       destination: readIdentifier,
+      objectName: readIdentifier,
       schedule: readIdentifier.optional(),
-      selectedFields: z.record(readIdentifier, z.boolean()).optional(),
       selectedFieldMappings: z.record(readIdentifier, readIdentifier).optional(),
+      selectedFields: z.record(readIdentifier, z.boolean()).optional(),
       selectedValueMappings: z
         .record(readIdentifier, z.record(readIdentifier, readIdentifier))
         .optional(),
@@ -78,12 +78,12 @@ export const appIntegrationReadObjectsDigest = (value: unknown) =>
     .digest("hex");
 export const appIntegrationProviderConfigurationSchema = z
   .strictObject({
-    provider: z.enum(["quickbooks", "xero", "ramp"]),
     connectionProviderKey: z.string().min(1),
-    recipeId: z.string().min(1),
-    recipeVersion: z.string().min(1),
+    provider: z.enum(["quickbooks", "xero", "ramp"]),
     readObjects: appIntegrationReadObjectsSchema,
     readObjectsSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+    recipeId: z.string().min(1),
+    recipeVersion: z.string().min(1),
   })
   .superRefine((entry, context) => {
     if (appIntegrationReadObjectsDigest(entry.readObjects) !== entry.readObjectsSha256) {
@@ -113,8 +113,6 @@ export const appIntegrationMachineIngressSchema = z
   );
 
 export const appIntegrationsDescriptionSchema = z.strictObject({
-  contract: z.literal("app-integrations-development-v1"),
-  readinessPath: appIntegrationReadinessPathSchema,
   configuration: z
     .array(appIntegrationProviderConfigurationSchema)
     .refine(
@@ -123,5 +121,7 @@ export const appIntegrationsDescriptionSchema = z.strictObject({
         new Set(entries.map((entry) => entry.connectionProviderKey)).size === entries.length,
     )
     .optional(),
+  contract: z.literal("app-integrations-development-v1"),
   machineIngress: appIntegrationMachineIngressSchema.optional(),
+  readinessPath: appIntegrationReadinessPathSchema,
 });

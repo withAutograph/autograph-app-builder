@@ -114,8 +114,8 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
   return createHostedGitHubPublicationRuntimeResolver({
     dependencies: input.resolverDependencies,
     enabled: true,
-    prEffectsEnabled: (input.environment.APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED ?? "1") === "1",
     openDatabase: () => openDatabase(config.databaseUrl),
+    prEffectsEnabled: (input.environment.APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED ?? "1") === "1",
     providerFactory: ({ authority, installation }) =>
       createAdapter(
         {
@@ -138,5 +138,5 @@ export async function githubPublicationRuntimeForSession(
   defaultResolver ??= createDeploymentGitHubPublicationRuntimeResolver({
     environment: process.env,
   });
-  return defaultResolver.resolve(sessionAuth, selection);
+  return await defaultResolver.resolve(sessionAuth, selection);
 }

@@ -88,8 +88,8 @@ export const materializeApplicationSource = async (input: {
     // Append through a trusted program; never interpret source content as shell or code.
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each ordered file initializes its own bounded transport stream.
     await input.sandbox.writeTextFile({
-      path: `${staging.slice("/workspace/".length)}/${index}.base64`,
       content: "",
+      path: `${staging.slice("/workspace/".length)}/${index}.base64`,
     });
     for (let offset = 0; offset < encoded.length; offset += 32_768) {
       input.abortSignal?.throwIfAborted();
@@ -106,13 +106,13 @@ export const materializeApplicationSource = async (input: {
     }
   }
   const plan = JSON.stringify({
-    receipt: input.receipt,
     files: input.validated.artifact.manifest.files,
+    receipt: input.receipt,
     staging,
   });
   await input.sandbox.writeTextFile({
-    path: `${staging.slice("/workspace/".length)}/plan.json`,
     content: "",
+    path: `${staging.slice("/workspace/".length)}/plan.json`,
   });
   for (let offset = 0; offset < plan.length; offset += 8192) {
     const manifestPath = `${staging}/plan.json`;
@@ -127,12 +127,12 @@ export const materializeApplicationSource = async (input: {
   }
   const scriptPath = `${staging.slice("/workspace/".length)}/import.cjs`;
   await input.sandbox.writeTextFile({
-    path: scriptPath,
     content: applicationSourceImportProgram({
-      receipt: input.receipt,
       files: input.validated.artifact.manifest.files,
+      receipt: input.receipt,
       staging,
     }),
+    path: scriptPath,
   });
   input.abortSignal?.throwIfAborted();
   await input.assertCurrent?.();

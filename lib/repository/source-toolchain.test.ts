@@ -33,8 +33,8 @@ esac
         ["-c", `${sourceDeclaredToolchainActivationCommand()}\nprintf 'runtime' > runtime-ran`],
         {
           cwd: root,
-          env: { NODE_ENV: "test", PATH: `${bin}:/usr/bin:/bin` },
           encoding: "utf-8",
+          env: { NODE_ENV: "test", PATH: `${bin}:/usr/bin:/bin` },
         },
       );
       expect(result.status, result.stderr).toBe(exitCode);
@@ -44,7 +44,7 @@ esac
       expect(readFileSync(config, "utf-8")).toBe(source);
       expect(existsSync(path.join(root, "runtime-ran"))).toBe(exitCode === 0);
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      rmSync(root, { force: true, recursive: true });
     }
   });
 });

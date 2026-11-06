@@ -8,8 +8,8 @@ import { privateComputeLimitsSchema } from "../sandbox/private-compute-profile";
 // oxlint-disable-next-line typescript/strict-void-return -- Node execFile returns a ChildProcess handle alongside its callback; the official promisify adapter intentionally uses callback completion.
 const execute = promisify(execFile);
 const teamSchema = z.object({
-  id: z.string(),
   billing: z.object({ plan: z.enum(["hobby", "pro", "enterprise"]) }),
+  id: z.string(),
   limited: z.boolean().optional(),
   softBlock: z.null().optional(),
 });
@@ -29,16 +29,16 @@ export const observePrivateComputeLimits = async (input: {
       ["api", `/v2/teams/${project.orgId}`, "--scope", project.orgId],
       {
         cwd: input.repositoryRoot,
-        signal: input.signal,
-        maxBuffer: Infinity,
         env: {
           HOME: input.environment.HOME,
-          PATH: input.environment.PATH,
           NODE_ENV: "development",
+          PATH: input.environment.PATH,
           ...(input.environment.XDG_DATA_HOME === undefined
             ? {}
             : { XDG_DATA_HOME: input.environment.XDG_DATA_HOME }),
         },
+        maxBuffer: Infinity,
+        signal: input.signal,
       },
     );
     const team = teamSchema.parse(JSON.parse(stdout));
@@ -46,13 +46,13 @@ export const observePrivateComputeLimits = async (input: {
       throw new Error("Provider team unavailable");
     }
     return privateComputeLimitsSchema.parse({
-      version: 1,
-      teamId: team.id,
-      projectId: project.projectId,
-      plan: team.billing.plan,
-      maxVcpus: { hobby: 4, pro: 8, enterprise: 32 }[team.billing.plan],
       limited: false,
+      maxVcpus: { enterprise: 32, hobby: 4, pro: 8 }[team.billing.plan],
       observedAt: new Date().toISOString(),
+      plan: team.billing.plan,
+      projectId: project.projectId,
+      teamId: team.id,
+      version: 1,
     });
   } catch {
     throw new Error(

@@ -23,19 +23,19 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
   state?: PrivateOperatorApprovalCapture;
 }) => {
   const expected = appIntegrationCapabilityApprovalInputSchema.parse({
+    operationRef: appIntegrationCapabilityOperationRef(input.plan),
     plan: input.plan,
     planDigest: appIntegrationCapabilityPlanDigest(input.plan),
-    operationRef: appIntegrationCapabilityOperationRef(input.plan),
   });
   const capture = createPrivateOperatorApprovalCapture({
+    callId: input.callId,
+    ownerUserId: input.plan.authority.ownerUserId,
     request: {
       action: "app-integration-capability",
-      planRef: expected.operationRef,
-      planDigest: expected.planDigest,
       idempotencyKey: input.plan.selection.appId,
+      planDigest: expected.planDigest,
+      planRef: expected.operationRef,
     },
-    ownerUserId: input.plan.authority.ownerUserId,
-    callId: input.callId,
     ...(input.state === undefined ? {} : { state: input.state }),
   });
   return {
@@ -59,6 +59,7 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
         capture.settle(event);
       }
     },
+    proveComplete: capture.proveComplete,
     read() {
       // A prior cancellation denies the same plan, even when the new call has consent.
       if (capture.snapshot().entries.some((entry) => entry.cancelled)) {
@@ -67,7 +68,6 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
       return capture.read();
     },
     snapshot: capture.snapshot,
-    proveComplete: capture.proveComplete,
   };
 };
 export const readPrivateAppIntegrationCapabilityApproval = async (input: {
@@ -92,8 +92,8 @@ export const readPrivateAppIntegrationCapabilityApproval = async (input: {
     ...(input.observation === undefined ? {} : { observation: input.observation }),
     capture: (state) =>
       createPrivateAppIntegrationCapabilityApprovalCapture({
-        plan: input.plan,
         callId: input.callId,
+        plan: input.plan,
         ...(state === undefined ? {} : { state }),
       }),
     readHistory: input.readHistory,

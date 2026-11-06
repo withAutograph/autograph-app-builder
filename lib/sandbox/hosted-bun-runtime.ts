@@ -65,10 +65,11 @@ cc --version`,
 export function createHostedRuntimeInstaller() {
   const installs = new Map<string, Promise<void>>();
 
-  return (sandbox: Pick<SandboxSession, "run"> & { readonly id: string }) => {
+  return async (sandbox: Pick<SandboxSession, "run"> & { readonly id: string }) => {
     const existing = installs.get(sandbox.id);
     if (existing !== undefined) {
-      return existing;
+      await existing;
+      return;
     }
 
     // Promise composition preserves the shared install handle and cleanup identity.
@@ -101,6 +102,6 @@ export function createHostedRuntimeInstaller() {
     // oxlint-enable promise/prefer-await-to-callbacks
     // oxlint-enable promise/prefer-await-to-then
     installs.set(sandbox.id, install);
-    return install;
+    await install;
   };
 }

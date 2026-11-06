@@ -14,7 +14,7 @@ const startReadyCycle = async (input: {
   const { approvedReadyAt, observed } = input;
   if (approvedReadyAt !== undefined) {
     return !observed.draft && observed.readyAt === approvedReadyAt
-      ? { status: "waiting-for-checks" as const, readyAt: approvedReadyAt }
+      ? { readyAt: approvedReadyAt, status: "waiting-for-checks" as const }
       : { status: "ready-cycle-changed" as const };
   }
   const result = await input.runReady(!observed.draft);
@@ -22,22 +22,22 @@ const startReadyCycle = async (input: {
     return { status: "ready-cycle-changed" as const };
   }
   if (result.status === "failed") {
-    return { status: "ready-rejected" as const, reason: result.code };
+    return { reason: result.code, status: "ready-rejected" as const };
   }
   if (result.status !== "succeeded" || result.evidence.kind !== "pr-ready") {
     return { status: "ready-unconfirmed" as const };
   }
-  return { status: "waiting-for-checks" as const, readyAt: result.evidence.readyAt };
+  return { readyAt: result.evidence.readyAt, status: "waiting-for-checks" as const };
 };
 
 const mergeResult = (result: GitHubPrEffectReceipt | undefined) => {
   if (result?.status === "failed") {
-    return { status: "merge-rejected" as const, reason: result.code };
+    return { reason: result.code, status: "merge-rejected" as const };
   }
   if (result?.status !== "succeeded" || result.evidence.kind !== "pr-merge") {
     return { status: "merge-unconfirmed" as const };
   }
-  return { status: "merged" as const, mergeCommitSha: result.evidence.mergeCommitSha };
+  return { mergeCommitSha: result.evidence.mergeCommitSha, status: "merged" as const };
 };
 
 // eslint-disable-next-line eslint/func-style -- Workflow requires a top-level step declaration.
@@ -88,7 +88,7 @@ export async function continueGitHubPrDelivery(
     if (readyAt !== undefined && observed.readyAt === readyAt) {
       await run({ ...effect, kind: "pr-merge", readyAt, reconcileOnly: true });
     }
-    return { status: "merged" as const, mergeCommitSha: observed.mergeCommitSha };
+    return { mergeCommitSha: observed.mergeCommitSha, status: "merged" as const };
   }
   if (observed.state !== "open") {
     return { status: "closed" as const };
@@ -115,7 +115,7 @@ export async function continueGitHubPrDelivery(
     return { status: "checks-failed" as const };
   }
   if (observed.checks !== "passed") {
-    return { status: "waiting-for-checks" as const, readyAt };
+    return { readyAt, status: "waiting-for-checks" as const };
   }
 
   ctx.abortSignal.throwIfAborted();

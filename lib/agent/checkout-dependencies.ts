@@ -165,7 +165,7 @@ const dependencyDispatch = (
   executionCommand: string,
 ) => {
   if (command === "dependency-probe") {
-    return { sandboxCommand: executionCommand, provenance: {} };
+    return { provenance: {}, sandboxCommand: executionCommand };
   }
   if (executionCommand !== "bun install" && executionCommand !== "bun install --frozen-lockfile") {
     throw new Error("The checkout dependency install recipe is unsupported.");
@@ -175,10 +175,10 @@ const dependencyDispatch = (
     executionCommand === "bun install --frozen-lockfile",
   );
   return {
-    sandboxCommand,
     provenance: {
       dispatchedCommandDigest: createHash("sha256").update(sandboxCommand).digest("hex"),
     },
+    sandboxCommand,
   };
 };
 

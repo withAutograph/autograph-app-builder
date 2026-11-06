@@ -515,12 +515,12 @@ const reportInvalidStartAlias = (
 const hostedOperationCommonShape = {
   clientRequestId: z.string().min(1).max(200),
   createdAtEpochMs: z.number().int().nonnegative(),
-  internalBuildContinuation: internalBuildContinuationSchema.optional(),
   internalAuthoringContinuation: internalAuthoringContinuationSchema.optional(),
-  nativeRecovery: nativeRecoveryDescriptorSchema.optional(),
-  nativeRecoveryReceipt: nativeRecoveryBindingSchema.optional(),
+  internalBuildContinuation: internalBuildContinuationSchema.optional(),
   internalSessionLimitResponse: internalSessionLimitResponseSchema.optional(),
   kind: hostedOperationKindSchema,
+  nativeRecovery: nativeRecoveryDescriptorSchema.optional(),
+  nativeRecoveryReceipt: nativeRecoveryBindingSchema.optional(),
   operationId: z.string().min(1).max(200),
   principal: hostedPrincipalSchema,
   requestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
@@ -843,8 +843,8 @@ export const inheritRecoveryBuildDecision = (
   });
 };
 export const unsettledSendAcknowledgementSchema = z.strictObject({
-  operation: hostedOperationRecordSchema,
   cancellationRevisionAtDispatch: z.number().int().nonnegative().nullable(),
+  operation: hostedOperationRecordSchema,
 });
 export type UnsettledSendAcknowledgement = z.infer<typeof unsettledSendAcknowledgementSchema>;
 export const sendAcknowledgementCursorSchema = z.strictObject({
@@ -859,8 +859,8 @@ export const unsettledSendAcknowledgementPageSchema = z.strictObject({
 /** The cursor is an ordered storage coordinate, never a limit on total recovery history. */
 export const unsettledResponseCursorSchema = sendAcknowledgementCursorSchema;
 export const unsettledResponsePageSchema = z.strictObject({
-  operations: z.array(hostedOperationRecordSchema),
   nextCursor: unsettledResponseCursorSchema.optional(),
+  operations: z.array(hostedOperationRecordSchema),
 });
 
 const START_ALIAS_CANNOT_BIND = "The original start request cannot bind this canonical result.";
@@ -1004,15 +1004,15 @@ export const isProvedResourceApprovalResponse = (
   )
     return false;
   return provesResourceApprovalResponse({
+    capture: metadata.privateApprovalCaptureState,
     clientRequestId: operation.clientRequestId,
+    marker,
+    ownerUserId: current.principal.ownerUserId,
+    proof,
+    receipts: current.privateApprovalReceipts ?? [],
     requestDigest: operation.requestDigest,
     sessionId: current.sessionId,
-    ownerUserId: current.principal.ownerUserId,
-    marker,
-    proof,
     state: native.privateInputState,
-    capture: metadata.privateApprovalCaptureState,
-    receipts: current.privateApprovalReceipts ?? [],
   });
 };
 
@@ -1770,7 +1770,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return structuredClone(updated);
   }
 
-  readUnsettledSendAcknowledgements: HostedEveStore["readUnsettledSendAcknowledgements"] = (
+  readUnsettledSendAcknowledgements: HostedEveStore["readUnsettledSendAcknowledgements"] = async (
     input,
   ) => {
     const principal = hostedPrincipalSchema.parse(input.principal);
@@ -1813,25 +1813,23 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       );
     const page = operations.slice(0, input.limit);
     const last = page.at(-1);
-    return Promise.resolve(
-      unsettledSendAcknowledgementPageSchema.parse({
-        acknowledgements: page.map((operation) => ({
-          operation: structuredClone(operation),
-          cancellationRevisionAtDispatch:
-            this.sendCancellationRevisions.get(
-              InMemoryHostedEveStore.operationKey(principal, operation.operationId),
-            ) ?? null,
-        })),
-        ...(operations.length > page.length && last !== undefined
-          ? {
-              nextCursor: {
-                createdAtEpochMs: last.createdAtEpochMs,
-                operationId: last.operationId,
-              },
-            }
-          : {}),
-      }),
-    );
+    return unsettledSendAcknowledgementPageSchema.parse({
+      acknowledgements: page.map((operation) => ({
+        cancellationRevisionAtDispatch:
+          this.sendCancellationRevisions.get(
+            InMemoryHostedEveStore.operationKey(principal, operation.operationId),
+          ) ?? null,
+        operation: structuredClone(operation),
+      })),
+      ...(operations.length > page.length && last !== undefined
+        ? {
+            nextCursor: {
+              createdAtEpochMs: last.createdAtEpochMs,
+              operationId: last.operationId,
+            },
+          }
+        : {}),
+    });
   };
 
   // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous store contract for validation errors.
@@ -2396,11 +2394,11 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     )
       throw new Error("Resource approval settlement is not proved.");
     const page = await this.readCheckpointPage({
-      principal: operation.principal,
-      sessionId: current.sessionId,
       checkpointRef: current.checkpointRef,
       cursor: 0,
       limit: 1,
+      principal: operation.principal,
+      sessionId: current.sessionId,
     });
     // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Re-read authoritative state after checkpoint I/O to reject concurrent replacement.
     const latest = await this.getSession(operation.principal, current.sessionId);
@@ -2437,7 +2435,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     ) {
       throw new Error("Canonical SEND delivery is not proved.");
     }
-    return { operation, current };
+    return { current, operation };
   }
 
   private async provedSendDelivery(

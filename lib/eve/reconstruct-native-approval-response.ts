@@ -166,13 +166,13 @@ export const reconstructNativeApprovalResponse = (input: {
       });
     }
   }
-  const request = { clientRequestId: input.clientRequestId, sessionId: input.sessionId, responses };
+  const request = { clientRequestId: input.clientRequestId, responses, sessionId: input.sessionId };
   if (digest({ kind: "respond", request, sessionId: input.sessionId }) !== input.requestDigest) {
     return undefined;
   }
   const parsedProof = resourceApprovalResponseProofSchema.safeParse({
-    adapterSessionId: input.adapterSessionId,
     adapterGeneration: input.adapterGeneration,
+    adapterSessionId: input.adapterSessionId,
     checkpointDigest: input.checkpointDigest,
     request,
   });
@@ -181,14 +181,14 @@ export const reconstructNativeApprovalResponse = (input: {
   }
   if (
     !provesResourceApprovalResponse({
+      capture,
       clientRequestId: input.clientRequestId,
-      requestDigest: input.requestDigest,
-      sessionId: input.sessionId,
       ownerUserId: input.ownerUserId,
       proof: parsedProof.data,
-      state: input.state,
-      capture,
       receipts,
+      requestDigest: input.requestDigest,
+      sessionId: input.sessionId,
+      state: input.state,
     })
   ) {
     return undefined;

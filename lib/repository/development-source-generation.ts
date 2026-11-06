@@ -93,12 +93,12 @@ export const inspectDevelopmentSourceGeneration = async (sourcePathInput: string
   const generation = workspaceDigest.slice(0, 40);
 
   return {
-    sourcePath,
-    sourceSha,
     eligibilityDigest,
+    generation,
     names,
     sourceFiles,
+    sourcePath,
+    sourceSha,
     workspaceDigest,
-    generation,
   };
 };

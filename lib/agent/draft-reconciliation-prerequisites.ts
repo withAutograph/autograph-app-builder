@@ -16,11 +16,11 @@ export const ownedPublishedDraftRecovery = (state: ReconciliationWorkflowPrerequ
     return null;
   }
   return {
-    tool: "prepare_github_draft_pr_reconciliation" as const,
-    recovery: "reopen-current-owned-draft" as const,
-    reviewRequired: state.phase !== "reviewed",
     nextAction:
       "Preserve this app, its starter source and private work. Complete the normal current app review if needed, then call prepare_github_draft_pr_reconciliation for this same owned draft PR with recovery: reopen-current-owned-draft. Builder verifies the owned publication and opens a fresh private candidate from its current draft and base without replaying the ambiguous old review. Read preserved work as needed, deliberately edit the current candidate, validate it and review both diffs before sealing a new proposal and requesting exact publication approval. Do not replace the source or start another app build.",
+    recovery: "reopen-current-owned-draft" as const,
+    reviewRequired: state.phase !== "reviewed",
+    tool: "prepare_github_draft_pr_reconciliation" as const,
   };
 };
 
@@ -73,9 +73,9 @@ const diagnostic = (
   recovery: Recovery,
   action: string,
 ): PrerequisiteDiagnostic => ({
+  nextAction: `${action} ${sameSessionRecovery}`,
   reason,
   recovery,
-  nextAction: `${action} ${sameSessionRecovery}`,
 });
 
 /** Diagnostic only: callers retain their original prerequisite checks and ordering. */

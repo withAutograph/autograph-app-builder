@@ -25,26 +25,26 @@ import {
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const profile = () =>
   privateComputeProfileSchema.parse({
-    version: 1,
-    id: "private-checks-16gib-v1",
-    vcpus: 8,
-    memoryMiB: 16_384,
-    lintWorkers: 1,
-    target: { sandboxId: "same", workspaceDrive: "same-drive" },
     checkPolicy: {
-      path: "apps/example/.config/mise/tasks/check",
-      beforeSha256: hash(LEGACY_PRIVATE_COMPUTE_CHECK_TASK),
       afterSha256: hash(PRIVATE_COMPUTE_CHECK_TASK),
+      beforeSha256: hash(LEGACY_PRIVATE_COMPUTE_CHECK_TASK),
+      path: "apps/example/.config/mise/tasks/check",
     },
+    id: "private-checks-16gib-v1",
     limits: {
-      version: 1,
-      teamId: "team_owned",
-      projectId: "prj_owned",
-      plan: "pro",
-      maxVcpus: 8,
       limited: false,
+      maxVcpus: 8,
       observedAt: "2026-11-03T12:00:00.000Z",
+      plan: "pro",
+      projectId: "prj_owned",
+      teamId: "team_owned",
+      version: 1,
     },
+    lintWorkers: 1,
+    memoryMiB: 16_384,
+    target: { sandboxId: "same", workspaceDrive: "same-drive" },
+    vcpus: 8,
+    version: 1,
   });
 const modeOf = async (file: string) => {
   const observed = await stat(file);
@@ -52,7 +52,11 @@ const modeOf = async (file: string) => {
 };
 const roots: string[] = [];
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(
+    roots.splice(0).map(async (root) => {
+      await rm(root, { force: true, recursive: true });
+    }),
+  );
 });
 const fixture = async (content = LEGACY_PRIVATE_COMPUTE_CHECK_TASK, mode = 0o755) => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "builder-check-policy-")));
@@ -62,7 +66,7 @@ const fixture = async (content = LEGACY_PRIVATE_COMPUTE_CHECK_TASK, mode = 0o755
   await writeFile(file, content, { mode });
   const calls: string[] = [];
   const sandbox = {
-    run: (input: { command: string; workingDirectory?: string }) => {
+    run: async (input: { command: string; workingDirectory?: string }) => {
       calls.push(input.command);
       expect(input.workingDirectory).toBe("/workspace/repository");
       try {
@@ -76,23 +80,23 @@ const fixture = async (content = LEGACY_PRIVATE_COMPUTE_CHECK_TASK, mode = 0o755
           ],
           { cwd: root, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] },
         );
-        return Promise.resolve({ stdout, stderr: "", exitCode: 0 });
+        return { exitCode: 0, stderr: "", stdout };
       } catch (error) {
         const output = z.object({ stdout: z.string() }).safeParse(error);
-        return Promise.resolve({
-          stdout: output.success ? output.data.stdout : "",
-          stderr: "",
+        return {
           exitCode: 1,
-        });
+          stderr: "",
+          stdout: output.success ? output.data.stdout : "",
+        };
       }
     },
   };
   return {
-    root,
-    file,
     calls,
+    file,
+    input: { applyRoot: "/workspace/repository", profile: profile(), sandbox },
+    root,
     sandbox,
-    input: { sandbox, applyRoot: "/workspace/repository", profile: profile() },
   };
 };
 describe("reviewed private check task", () => {
@@ -149,13 +153,13 @@ describe("reviewed private check task", () => {
   it.each([
     "",
     '{"sha256":"wrong","mode":"755"}',
-    JSON.stringify({ sha256: hash(PRIVATE_COMPUTE_CHECK_TASK), mode: "644" }),
+    JSON.stringify({ mode: "644", sha256: hash(PRIVATE_COMPUTE_CHECK_TASK) }),
   ])("rejects missing or invalid immediate readback %s", async (stdout) => {
     await expect(
       applyPrivateComputeCheckPolicy({
         applyRoot: "/workspace/repository",
         profile: profile(),
-        sandbox: { run: () => Promise.resolve({ exitCode: 0, stdout, stderr: "" }) },
+        sandbox: { run: async () => ({ exitCode: 0, stderr: "", stdout }) },
       }),
     ).rejects.toThrow("readback");
   });
@@ -165,7 +169,9 @@ describe("reviewed private check task", () => {
         applyRoot: "/workspace/repository",
         profile: profile(),
         sandbox: {
-          run: () => Promise.reject(new Error("owner cancelled")),
+          run: async () => {
+            throw new Error("owner cancelled");
+          },
         },
       }),
     ).rejects.toThrow("owner cancelled");
@@ -174,19 +180,19 @@ describe("reviewed private check task", () => {
     const controller = new AbortController();
     let calls = 0;
     const input = {
+      abortSignal: controller.signal,
       applyRoot: "/workspace/repository",
       profile: profile(),
-      abortSignal: controller.signal,
       sandbox: {
-        run: (options: { abortSignal?: AbortSignal }) => {
+        run: async (options: { abortSignal?: AbortSignal }) => {
           calls += 1;
           expect(options.abortSignal).toBe(controller.signal);
           controller.abort(new Error("cancelled during install"));
-          return Promise.resolve({
+          return {
             exitCode: 0,
-            stdout: JSON.stringify({ sha256: hash(PRIVATE_COMPUTE_CHECK_TASK), mode: "755" }),
             stderr: "",
-          });
+            stdout: JSON.stringify({ mode: "755", sha256: hash(PRIVATE_COMPUTE_CHECK_TASK) }),
+          };
         },
       },
     };

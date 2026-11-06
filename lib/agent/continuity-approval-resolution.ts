@@ -32,5 +32,5 @@ export const readSavedContinuityApproval = async (
   if (saved.status.supersededBy !== undefined) {
     throw new Error("Continuity intent was superseded; use its saved successor.");
   }
-  return { operator, saved, request };
+  return { operator, request, saved };
 };

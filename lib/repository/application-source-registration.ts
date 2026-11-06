@@ -5,11 +5,11 @@ import type { SandboxSession } from "eve/sandbox";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const applicationSourceRegistrationSchema = z.strictObject({
-  oldDigest: digest,
-  newDigest: digest,
-  proposedBytes: z.string(),
-  projectName: z.string(),
   assetRoute: z.string(),
+  newDigest: digest,
+  oldDigest: digest,
+  projectName: z.string(),
+  proposedBytes: z.string(),
 });
 const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
 

@@ -29,8 +29,8 @@ describe("generated app product roles", () => {
     expect(
       normalActorIdentityManifestSchema.shape.actors.parse([
         {
-          actorKey: "actor",
           actorId: "actor-id",
+          actorKey: "actor",
           organizationId: "organization",
           roles: [role],
           storageState: "private-reference",

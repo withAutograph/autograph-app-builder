@@ -63,8 +63,8 @@ export async function createDevelopmentApplication(input: {
     });
     await makeDevelopmentWorkAreaWritable(application.root);
     await bindDevelopmentApplicationDependencies({
-      repositoryRoot: input.repositoryRoot,
       applicationRoot: application.root,
+      repositoryRoot: input.repositoryRoot,
     });
     try {
       await lstat(nodePath.join(application.root, ".eve"));
@@ -168,8 +168,8 @@ export async function refreshDevelopmentApplication(input: {
       await rename(nodePath.join(snapshot.root, entry), nodePath.join(applicationRoot, entry));
     });
     await bindDevelopmentApplicationDependencies({
-      repositoryRoot: input.repositoryRoot,
       applicationRoot,
+      repositoryRoot: input.repositoryRoot,
     });
     // `rename` preserves modes.  Reassert the work-area contract after the
     // refresh so every installed application file remains writable for live

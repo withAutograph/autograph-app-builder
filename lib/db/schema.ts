@@ -1411,12 +1411,12 @@ export const hostedGitHubPrEffectJournals = pgTable(
   "hosted_github_pr_effect_journal",
   {
     ...hostedGitHubTenantColumns,
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     intentDigest: text("intent_digest").notNull(),
     kind: text("kind").notNull(),
     receiptDigest: text("receipt_digest").notNull(),
     record: jsonb("record").notNull(),
     status: text("status").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [

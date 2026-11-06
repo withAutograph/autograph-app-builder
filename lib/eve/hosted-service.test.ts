@@ -33,7 +33,7 @@ import type {
 import type { EveSessionService } from "./service";
 
 const createHostedEveSessionService = (input: Parameters<typeof createHostedService>[0]) =>
-  createHostedService({ assertSendDeliveryOwner: () => Promise.resolve(), ...input });
+  createHostedService({ assertSendDeliveryOwner: async () => {}, ...input });
 
 const principal: HostedPrincipal = {
   audience: "autograph-app-builder",
@@ -97,14 +97,14 @@ const deliveredSnapshot = (deliveryId = "fixture-delivery"): HostedEngineSnapsho
 
 const transport = function transport(overrides: Partial<HostedEveTransport> = {}) {
   const base: HostedEveTransport = {
-    cancel: vi.fn(() => Promise.resolve(snapshot)),
-    get: vi.fn(() => Promise.resolve(snapshot)),
-    respond: vi.fn(() => Promise.resolve(snapshot)),
+    cancel: vi.fn(async () => snapshot),
+    get: vi.fn(async () => snapshot),
+    respond: vi.fn(async () => snapshot),
     send: vi.fn<HostedEveTransport["send"]>(async (input) => {
       await input.onAccepted?.("fixture-delivery");
       return deliveredSnapshot();
     }),
-    start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_1", snapshot })),
+    start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
   };
   return { ...base, ...overrides };
 };
@@ -175,7 +175,7 @@ describe("failed public session native recovery", () => {
       );
       const adapter = transport({
         activateRecovery,
-        cancel: () => Promise.resolve({ events: [], status: "cancelled" }),
+        cancel: async () => ({ events: [], status: "cancelled" }),
         start: vi
           .fn<HostedEveTransport["start"]>()
           .mockResolvedValueOnce({
@@ -183,7 +183,7 @@ describe("failed public session native recovery", () => {
             snapshot: { events: [], status: "failed" },
           })
           .mockImplementationOnce(async (request) => {
-            const recovery = request.recovery;
+            const { recovery } = request;
             if (recovery === undefined) {
               throw new Error("Expected typed native recovery.");
             }
@@ -191,18 +191,18 @@ describe("failed public session native recovery", () => {
               ...recovery,
               ownerRunId: "run_child",
               provenance: {
+                checkpointVersion: 1 as const,
                 kind: "failed-turn-input" as const,
-                sourceStepId: "step_1",
                 sourceEventId: "event_1",
                 sourceSlot: 1,
-                checkpointVersion: 1 as const,
+                sourceStepId: "step_1",
               },
             };
             await store.commitNativeRecoveryReceipt({
-              principal,
               descriptor: recovery,
-              recoveryBinding,
               nowEpochMs: 4,
+              principal,
+              recoveryBinding,
             });
             return {
               adapterSessionId: "run_child",
@@ -212,7 +212,9 @@ describe("failed public session native recovery", () => {
           }),
       });
       const service = createHostedEveSessionService({
-        assertNativeRecoveryOwner: async () => await Promise.resolve(),
+        assertNativeRecoveryOwner: async () => {
+          await Promise.resolve();
+        },
         onSubmissionDiagnostic: diagnostics,
         principal,
         store,
@@ -249,18 +251,18 @@ describe("failed public session native recovery", () => {
           adapterSessionId: "run_child",
         });
         if (retry === "GET")
-          await service.get({ sessionId: committed.sessionId, cursor: 0, limit: 100 });
+          await service.get({ cursor: 0, limit: 100, sessionId: committed.sessionId });
         if (retry === "stop-before-activation") {
           expect(
-            await service.get({ sessionId: committed.sessionId, cursor: 0, limit: 100 }),
+            await service.get({ cursor: 0, limit: 100, sessionId: committed.sessionId }),
           ).toMatchObject({ status: "cancelled" });
           expect(await service.start(request)).toEqual(committed.result);
           expect(ownerEffects).toBe(0);
           expect(activatedReceipts.size).toBe(0);
           expect(adapter.start).toHaveBeenCalledTimes(2);
           expect(await readOriginal(principal, committed.sessionId)).toMatchObject({
-            status: "cancelled",
             cancellationRevision: 1,
+            status: "cancelled",
           });
           return;
         }
@@ -276,7 +278,7 @@ describe("failed public session native recovery", () => {
       expect(
         await service.start({ clientRequestId: "recover", resumeSessionId: first.sessionId }),
       ).toEqual(resumed);
-      await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 });
+      await service.get({ cursor: 0, limit: 100, sessionId: resumed.sessionId });
       expect(activatedReceipts.size).toBe(1);
       expect(ownerEffects).toBe(1);
       expect(resumed.sessionId).not.toBe(first.sessionId);
@@ -285,8 +287,8 @@ describe("failed public session native recovery", () => {
         expect.objectContaining({
           prompt: "",
           recovery: expect.objectContaining({
-            sourcePublicSessionId: first.sessionId,
             sourceOwnerRunId: "run_parent",
+            sourcePublicSessionId: first.sessionId,
           }),
         }),
       );
@@ -305,15 +307,15 @@ describe("failed public session native recovery", () => {
         expect(stopped.status).toBe("cancelled");
         const resumedSend = await service.send({
           clientRequestId: "proved-resume",
-          sessionId: resumed.sessionId,
           message: "Continue",
+          sessionId: resumed.sessionId,
         });
         expect(resumedSend.status).not.toBe("cancelled");
         expect(await readOriginal(principal, resumed.sessionId)).toMatchObject({
           cancellationRevision: 1,
           resumedCancellationRevision: 1,
         });
-        const observed = await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 });
+        const observed = await service.get({ cursor: 0, limit: 100, sessionId: resumed.sessionId });
         expect(observed.status).not.toBe("cancelled");
         expect(await service.start(request)).toEqual(resumed);
         expect(activatedReceipts.size).toBe(1);
@@ -321,7 +323,7 @@ describe("failed public session native recovery", () => {
         expect(adapter.start).toHaveBeenCalledTimes(2);
         await service.cancel({ sessionId: resumed.sessionId });
         expect(
-          await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 }),
+          await service.get({ cursor: 0, limit: 100, sessionId: resumed.sessionId }),
         ).toMatchObject({ status: "cancelled" });
         expect(await readOriginal(principal, resumed.sessionId)).toMatchObject({
           cancellationRevision: 2,
@@ -358,11 +360,11 @@ describe("failed public session native recovery", () => {
             ...recovery,
             ownerRunId: "paged_child",
             provenance: {
+              checkpointVersion: 1 as const,
               kind: "failed-turn-input" as const,
-              sourceStepId: "step_paged",
               sourceEventId: "event_paged",
               sourceSlot: 1,
-              checkpointVersion: 1 as const,
+              sourceStepId: "step_paged",
             },
           };
           await base.commitNativeRecoveryReceipt({
@@ -378,7 +380,7 @@ describe("failed public session native recovery", () => {
           };
         }),
     });
-    const owner = { assertNativeRecoveryOwner: () => Promise.resolve() };
+    const owner = { assertNativeRecoveryOwner: async () => {} };
     const initial = createHostedEveSessionService({
       ...owner,
       principal,
@@ -415,9 +417,9 @@ describe("failed public session native recovery", () => {
       getSession: base.getSession.bind(base),
       getStartOperation: base.getStartOperation.bind(base),
       listSessions: base.listSessions.bind(base),
-      readCheckpointPage: vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(() =>
-        Promise.reject(new Error("This settlement fixture does not read checkpoint pages.")),
-      ),
+      readCheckpointPage: vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(async () => {
+        throw new Error("This settlement fixture does not read checkpoint pages.");
+      }),
       reserveOperation: vi.fn(base.reserveOperation.bind(base)),
       settleSucceeded: base.settleSucceeded.bind(base),
       settleSucceededPaged,
@@ -531,7 +533,9 @@ describe("prepared handoff session continuity", () => {
     let accept = false;
     const adapter = transport({
       start: vi.fn<HostedEveTransport["start"]>(async () => {
-        await vi.waitFor(() => expect(accept).toBe(true));
+        await vi.waitFor(() => {
+          expect(accept).toBe(true);
+        });
         return { adapterSessionId: "eve_prepared", snapshot };
       }),
     });
@@ -543,7 +547,9 @@ describe("prepared handoff session continuity", () => {
       sourceHandoffId,
     };
     const first = createService().start(request);
-    await vi.waitFor(() => expect(adapter.start).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(adapter.start).toHaveBeenCalledOnce();
+    });
     await expect(createService().start(request)).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );
@@ -744,27 +750,27 @@ const invokeHostedOperation = async function invokeHostedOperation(
 ) {
   switch (operation) {
     case "start": {
-      return service.start({ clientRequestId: "scope_start", prompt: "Build" });
+      return await service.start({ clientRequestId: "scope_start", prompt: "Build" });
     }
     case "get": {
-      return service.get({ cursor: 0, limit: 1, sessionId: "session_1" });
+      return await service.get({ cursor: 0, limit: 1, sessionId: "session_1" });
     }
     case "send": {
-      return service.send({
+      return await service.send({
         clientRequestId: "scope_send",
         message: "Continue",
         sessionId: "session_1",
       });
     }
     case "respond": {
-      return service.respond({
+      return await service.respond({
         clientRequestId: "scope_respond",
         responses: [{ requestId: "request_1", response: { kind: "deny" } }],
         sessionId: "session_1",
       });
     }
     case "cancel": {
-      return service.cancel({ sessionId: "session_1", turnId: "turn_1" });
+      return await service.cancel({ sessionId: "session_1", turnId: "turn_1" });
     }
     default: {
       throw new Error(`Unsupported hosted operation: ${operation}`);
@@ -814,8 +820,8 @@ describe("delayed durable session reads", () => {
       status: "working",
     };
     const adapter = transport({
-      get: vi.fn(() => Promise.resolve(working)),
-      start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_build", snapshot: working })),
+      get: vi.fn(async () => working),
+      start: vi.fn(async () => ({ adapterSessionId: "eve_build", snapshot: working })),
     });
     const { service, result } = await started({ now: () => now, transport: adapter });
     const { cursor } = result;
@@ -928,7 +934,7 @@ describe("hosted Eve service core", () => {
         .fn()
         .mockResolvedValueOnce({ adapterSessionId: "eve_failed", snapshot: terminal })
         .mockImplementationOnce(async (request: Parameters<HostedEveTransport["start"]>[0]) => {
-          const recovery = request.recovery;
+          const { recovery } = request;
           if (recovery === undefined) {
             throw new Error("Expected typed native recovery.");
           }
@@ -936,18 +942,18 @@ describe("hosted Eve service core", () => {
             ...recovery,
             ownerRunId: "eve_recovered",
             provenance: {
+              checkpointVersion: 1 as const,
               kind: "failed-turn-input" as const,
-              sourceStepId: "step_paged",
               sourceEventId: "event_paged",
               sourceSlot: 1,
-              checkpointVersion: 1 as const,
+              sourceStepId: "step_paged",
             },
           };
           await baseStore.commitNativeRecoveryReceipt({
-            principal,
             descriptor: recovery,
-            recoveryBinding,
             nowEpochMs: 2000,
+            principal,
+            recoveryBinding,
           });
           return { adapterSessionId: "eve_recovered", recoveryBinding, snapshot };
         }),
@@ -992,13 +998,16 @@ describe("hosted Eve service core", () => {
         }
         return { ...withoutInlineCheckpoint, checkpointRef };
       },
-      listSessions: (input) => baseStore.listSessions(input),
+      listSessions: async (input) => await baseStore.listSessions(input),
       readCheckpointPage,
-      reserveOperation: (owner, candidate) => baseStore.reserveOperation(owner, candidate),
-      settleSucceeded: (input) => baseStore.settleSucceeded(input),
-      settleUnsuccessful: (input) => baseStore.settleUnsuccessful(input),
+      reserveOperation: async (owner, candidate) =>
+        await baseStore.reserveOperation(owner, candidate),
+      settleSucceeded: async (input) => await baseStore.settleSucceeded(input),
+      settleUnsuccessful: async (input) => await baseStore.settleUnsuccessful(input),
     };
-    const assertNativeRecoveryOwner = vi.fn(async () => await Promise.resolve());
+    const assertNativeRecoveryOwner = vi.fn(async () => {
+      await Promise.resolve();
+    });
     const service = createHostedEveSessionService({
       assertNativeRecoveryOwner,
       now: () => 2000,
@@ -1019,8 +1028,8 @@ describe("hosted Eve service core", () => {
       expect.objectContaining({
         prompt: "",
         recovery: expect.objectContaining({
-          sourcePublicSessionId: first.result.sessionId,
           sourceOwnerRunId: "eve_failed",
+          sourcePublicSessionId: first.result.sessionId,
         }),
       }),
     );
@@ -1643,13 +1652,11 @@ describe("hosted Eve service core", () => {
     const first = await started({
       store,
       transport: transport({
-        get: vi.fn(() => Promise.resolve({ ...snapshot, workingPreview: null })),
-        start: vi.fn(() =>
-          Promise.resolve({
-            adapterSessionId: "working-preview",
-            snapshot: { ...snapshot, workingPreview },
-          }),
-        ),
+        get: vi.fn(async () => ({ ...snapshot, workingPreview: null })),
+        start: vi.fn(async () => ({
+          adapterSessionId: "working-preview",
+          snapshot: { ...snapshot, workingPreview },
+        })),
       }),
     });
     const record = await store.getSession(principal, first.result.sessionId);
@@ -1814,7 +1821,9 @@ describe("hosted Eve service core", () => {
     const adapter = transport({
       send: vi.fn<HostedEveTransport["send"]>(async (input) => {
         await input.onAccepted?.("fixture-delivery");
-        await vi.waitFor(() => expect(completeSend).toBe(true));
+        await vi.waitFor(() => {
+          expect(completeSend).toBe(true);
+        });
         return deliveredSnapshot();
       }),
     });
@@ -1824,7 +1833,9 @@ describe("hosted Eve service core", () => {
       message: "First",
       sessionId: first.result.sessionId,
     });
-    await vi.waitFor(() => expect(adapter.send).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => {
+      expect(adapter.send).toHaveBeenCalledTimes(1);
+    });
     await expect(
       first.service.send({
         clientRequestId: "send_competing",
@@ -1850,7 +1861,9 @@ describe("hosted Eve service core", () => {
           snapshot: terminalSnapshot,
         })
         .mockImplementationOnce(async () => {
-          await vi.waitFor(() => expect(completeResume).toBe(true));
+          await vi.waitFor(() => {
+            expect(completeResume).toBe(true);
+          });
           return { adapterSessionId: "eve_child", snapshot };
         }),
     });
@@ -1859,7 +1872,9 @@ describe("hosted Eve service core", () => {
       clientRequestId: "resume_active",
       resumeSessionId: first.result.sessionId,
     });
-    await vi.waitFor(() => expect(adapter.start).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      expect(adapter.start).toHaveBeenCalledTimes(2);
+    });
     await expect(
       first.service.start({
         clientRequestId: "resume_competing",
@@ -1883,11 +1898,11 @@ describe("hosted Eve service core", () => {
           }
           return session === null ? null : { ...session, adapterSessionId: "eve_mismatched" };
         },
-        listSessions: (request) => base.listSessions(request),
-        reserveOperation: (requestPrincipal, candidate) =>
-          base.reserveOperation(requestPrincipal, candidate),
-        settleSucceeded: (settlement) => base.settleSucceeded(settlement),
-        settleUnsuccessful: (settlement) => base.settleUnsuccessful(settlement),
+        listSessions: async (request) => await base.listSessions(request),
+        reserveOperation: async (requestPrincipal, candidate) =>
+          await base.reserveOperation(requestPrincipal, candidate),
+        settleSucceeded: async (settlement) => await base.settleSucceeded(settlement),
+        settleUnsuccessful: async (settlement) => await base.settleUnsuccessful(settlement),
       };
       const retry = createHostedEveSessionService({
         now: () => 1000,
@@ -2107,14 +2122,14 @@ describe("hosted Eve service core", () => {
     const store = new InMemoryHostedEveStore();
     const acceptedOperations = new Map<string, string>();
     let responseLost = true;
-    const start = vi.fn<HostedEveTransport["start"]>(({ operationId }) => {
+    const start = vi.fn<HostedEveTransport["start"]>(async ({ operationId }) => {
       const adapterSessionId = acceptedOperations.get(operationId) ?? "eve_original";
       acceptedOperations.set(operationId, adapterSessionId);
       if (responseLost) {
         responseLost = false;
         throw new SubmissionOutcomeUnknownError();
       }
-      return Promise.resolve({ adapterSessionId, snapshot: { events: [], status: "working" } });
+      return { adapterSessionId, snapshot: { events: [], status: "working" } };
     });
     const service = createHostedEveSessionService({
       principal,
@@ -2141,13 +2156,11 @@ describe("hosted Eve service core", () => {
     let currentTime = 1000;
     const start = vi
       .fn<HostedEveTransport["start"]>()
-      .mockImplementationOnce(() => pending.promise)
-      .mockImplementationOnce(() =>
-        Promise.resolve({
-          adapterSessionId: "eve_original",
-          snapshot: { events: [], status: "working" },
-        }),
-      );
+      .mockImplementationOnce(async () => await pending.promise)
+      .mockImplementationOnce(async () => ({
+        adapterSessionId: "eve_original",
+        snapshot: { events: [], status: "working" },
+      }));
     const service = createHostedEveSessionService({
       now: () => currentTime,
       principal,
@@ -2158,7 +2171,9 @@ describe("hosted Eve service core", () => {
     const firstRejected = expect(service.start(request)).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );
-    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(start).toHaveBeenCalledOnce();
+    });
     await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     currentTime += 300_001;
     const recovered = await service.start(request);
@@ -2234,11 +2249,12 @@ describe("hosted Eve service core", () => {
   ])("fails closed on an unsuccessful settlement %s mismatch", async (_label, transform) => {
     const base = new InMemoryHostedEveStore();
     const maliciousStore: HostedEveStore = {
-      getSession: (requestPrincipal, sessionId) => base.getSession(requestPrincipal, sessionId),
-      listSessions: (request) => base.listSessions(request),
-      reserveOperation: (requestPrincipal, candidate) =>
-        base.reserveOperation(requestPrincipal, candidate),
-      settleSucceeded: (settlement) => base.settleSucceeded(settlement),
+      getSession: async (requestPrincipal, sessionId) =>
+        await base.getSession(requestPrincipal, sessionId),
+      listSessions: async (request) => await base.listSessions(request),
+      reserveOperation: async (requestPrincipal, candidate) =>
+        await base.reserveOperation(requestPrincipal, candidate),
+      settleSucceeded: async (settlement) => await base.settleSucceeded(settlement),
       async settleUnsuccessful(settlement) {
         const record = await base.settleUnsuccessful(settlement);
         return transform(record) as HostedOperationRecord;
@@ -2273,9 +2289,9 @@ describe("hosted Eve service core", () => {
             ? { ...session, adapterSessionId: "eve_substituted" }
             : session;
         },
-        listSessions: (request) => base.listSessions(request),
-        reserveOperation: (requestPrincipal, candidate) =>
-          base.reserveOperation(requestPrincipal, candidate),
+        listSessions: async (request) => await base.listSessions(request),
+        reserveOperation: async (requestPrincipal, candidate) =>
+          await base.reserveOperation(requestPrincipal, candidate),
         async settleSucceeded(settlement) {
           const record = await base.settleSucceeded(settlement);
           if (record.state !== "succeeded") {
@@ -2315,7 +2331,7 @@ describe("hosted Eve service core", () => {
           }
           return record;
         },
-        settleUnsuccessful: (settlement) => base.settleUnsuccessful(settlement),
+        settleUnsuccessful: async (settlement) => await base.settleUnsuccessful(settlement),
       };
       const adapter = transport();
       const service = createHostedEveSessionService({
@@ -2487,16 +2503,15 @@ it("keeps acknowledged cancellation terminal when an already-pending read comple
   const pending = Promise.withResolvers<HostedEngineSnapshot>();
   const readStarted = Promise.withResolvers<null>();
   const adapter = transport({
-    cancel: () => Promise.resolve({ events: [], status: "cancelled" }),
-    get: () => {
+    cancel: async () => ({ events: [], status: "cancelled" }),
+    get: async () => {
       readStarted.resolve(null);
-      return pending.promise;
+      return await pending.promise;
     },
-    start: () =>
-      Promise.resolve({
-        adapterSessionId: "cancel-race",
-        snapshot: { events: [], status: "working" },
-      }),
+    start: async () => ({
+      adapterSessionId: "cancel-race",
+      snapshot: { events: [], status: "working" },
+    }),
   });
   const service = createHostedEveSessionService({ principal, store, transport: adapter });
   const initialSession = await service.start({
@@ -2526,7 +2541,9 @@ it("keeps acknowledged cancellation terminal when an already-pending read comple
 describe("fallback mutation event pages", () => {
   it("rejects an unavailable legacy baseline before dispatch and permits a new request after recovery", async () => {
     const adapter = transport({
-      get: vi.fn(() => Promise.reject(new Error("native read unavailable"))),
+      get: vi.fn(async () => {
+        throw new Error("native read unavailable");
+      }),
     });
     const store = new InMemoryHostedEveStore();
     const service = createHostedEveSessionService({ principal, store, transport: adapter });
@@ -2536,13 +2553,13 @@ describe("fallback mutation event pages", () => {
     });
     const request = {
       clientRequestId: "legacy-read-send",
-      sessionId: initialSession.sessionId,
       message: "Continue",
+      sessionId: initialSession.sessionId,
     };
     const rejection = new HostedRejectedOperationError("send_preflight_unavailable");
     await expect(service.send(request)).rejects.toEqual(rejection);
     expect(adapter.send).not.toHaveBeenCalled();
-    adapter.get = vi.fn(() => Promise.resolve(snapshot));
+    adapter.get = vi.fn(async () => snapshot);
     await expect(service.send(request)).rejects.toEqual(rejection);
     expect(adapter.send).not.toHaveBeenCalled();
     await expect(
@@ -2588,8 +2605,8 @@ describe("fallback mutation event pages", () => {
       await input.onAccepted?.("fixture-delivery");
       return after;
     });
-    const respond = vi.fn(() => Promise.resolve(after));
-    const adapter = transport({ get: vi.fn(() => Promise.resolve(before)), send, respond });
+    const respond = vi.fn(async () => after);
+    const adapter = transport({ get: vi.fn(async () => before), respond, send });
     const store = new InMemoryHostedEveStore();
     const service = createHostedEveSessionService({ principal, store, transport: adapter });
     // The native history advanced since the saved session checkpoint.
@@ -2597,17 +2614,17 @@ describe("fallback mutation event pages", () => {
       clientRequestId: "fallback-start",
       prompt: "Build",
     });
-    const submit = () =>
+    const submit = async () =>
       kind === "send"
-        ? service.send({
+        ? await service.send({
             clientRequestId: "fallback-send",
-            sessionId: initialSession.sessionId,
             message: "Continue",
-          })
-        : service.respond({
-            clientRequestId: "fallback-respond",
             sessionId: initialSession.sessionId,
+          })
+        : await service.respond({
+            clientRequestId: "fallback-respond",
             responses: [{ requestId: "build", response: { kind: "approve" } }],
+            sessionId: initialSession.sessionId,
           });
     const result = await submit();
     expect(result.events.map((event) => event.index)).toEqual(
@@ -2616,11 +2633,11 @@ describe("fallback mutation event pages", () => {
     expect(result.cursor).toBe(tail + Math.min(delta, 100));
     expect(await submit()).toEqual(result);
     expect(kind === "send" ? send : respond).toHaveBeenCalledOnce();
-    adapter.get = vi.fn(() => Promise.resolve(after));
+    adapter.get = vi.fn(async () => after);
     const remainder = await service.get({
-      sessionId: initialSession.sessionId,
       cursor: result.cursor,
       limit: 100,
+      sessionId: initialSession.sessionId,
     });
     expect(remainder.events.map((event) => event.index)).toEqual(
       Array.from({ length: Math.max(0, delta - 100) }, (_, index) => tail + 100 + index),

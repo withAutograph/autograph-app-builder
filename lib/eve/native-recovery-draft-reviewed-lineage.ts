@@ -20,48 +20,48 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const text = z.string().min(1);
 const sha = z.string().regex(/^[a-f0-9]{40}$/u);
 const executionBinding = z.looseObject({
-  sourceSha: sha,
-  sourceTree: sha,
-  sourceReceiptDigest: digest,
-  eligibilityDigest: digest,
-  workspaceDigest: digest,
-  imageDigest: digest,
-  dependencyCacheDigest: digest,
   appSpecDigest: digest,
   artifactRevision: text,
+  dependencyCacheDigest: digest,
+  eligibilityDigest: digest,
+  imageDigest: digest,
+  sourceReceiptDigest: digest,
+  sourceSha: sha,
+  sourceTree: sha,
+  workspaceDigest: digest,
 });
-const overlayFile = z.looseObject({ path: text, mode: text, digest });
+const overlayFile = z.looseObject({ digest, mode: text, path: text });
 const applySchema = executionBinding.extend({
-  version: z.literal(2),
-  status: z.literal("applied"),
-  digest,
-  applyRoot: text,
   appSpecPath: text,
-  dependencyReceiptDigest: digest,
-  identityDigest: digest,
+  appliedByCallId: text,
+  applyRoot: text,
+  changedContentDigest: digest,
+  changes: z.array(z.looseObject({ kind: z.enum(["added", "removed", "modified"]), path: text })),
+  command: z.looseObject({
+    exitCode: z.literal(0),
+    name: z.enum(["create-app", "iterate-existing-app"]),
+    stderrDigest: digest,
+    stdoutDigest: digest,
+  }),
   dependencyCacheContentDigest: digest,
-  proposalDigest: digest,
+  dependencyReceiptDigest: digest,
+  digest,
+  identityDigest: digest,
   planningTreeDigest: digest,
-  preparedTreeDigest: digest,
-  preTree: z.array(overlayFile),
-  preTreeDigest: digest,
   postTree: z.array(overlayFile),
   postTreeDigest: digest,
-  changes: z.array(z.looseObject({ kind: z.enum(["added", "removed", "modified"]), path: text })),
-  changedContentDigest: digest,
-  appliedByCallId: text,
+  preTree: z.array(overlayFile),
+  preTreeDigest: digest,
+  preparedTreeDigest: digest,
+  proposalDigest: digest,
+  status: z.literal("applied"),
   targetReceipt: targetApplyCommandReceiptSchema,
-  command: z.looseObject({
-    name: z.enum(["create-app", "iterate-existing-app"]),
-    exitCode: z.literal(0),
-    stdoutDigest: digest,
-    stderrDigest: digest,
-  }),
+  version: z.literal(2),
 });
 const originSchema = z.object({
+  eventId: text,
   slot: z.number().int().nonnegative(),
   stepId: text,
-  eventId: text,
 });
 const contextSchema = z.record(z.string(), z.unknown());
 const checkpointSchema = z.object({
@@ -70,115 +70,115 @@ const checkpointSchema = z.object({
   sessionState: z.object({ snapshot: z.object({ session: z.object({ sessionId: text }) }) }),
 });
 const payloadSchema = z.object({
-  binding: z.object({ ownerRunId: text, logicalSessionId: text }),
+  binding: z.object({ logicalSessionId: text, ownerRunId: text }),
   candidates: z.array(checkpointSchema),
 });
 const candidateSchema = z.looseObject({
-  version: z.literal(1),
   appId: text,
   githubSourceDigest: digest,
   originalReviewDigest: digest,
   repositoryId: text,
-  root: text,
   reviewedLineage: z.unknown().optional(),
+  root: text,
+  version: z.literal(1),
 });
 const workflowSchema = z.looseObject({
-  phase: z.enum(["reviewed", "applied", "validation_pending", "validation_failed", "validated"]),
   appSpec: z.looseObject({
+    acceptedByCallId: text,
     appId: text,
-    digest,
     artifactPath: text,
     artifactRevision: text,
-    acceptedByCallId: text,
+    digest,
   }),
   applyReceipt: applySchema,
-  sourceReceipt: z.looseObject({
-    digest,
-    sourceKind: z.enum(["existing-repository", "fresh-template"]),
-    contractDigest: digest,
-  }),
   githubSource: z
     .looseObject({ digest, repository: z.looseObject({ repositoryId: text }) })
     .optional(),
   identityReceipt: executionBinding.extend({
-    version: z.literal(1),
+    digest,
     identity: targetIdentitySchema,
     resolvedByCallId: text,
-    digest,
-  }),
-  proposal: executionBinding.extend({
     version: z.literal(1),
-    digest,
+  }),
+  phase: z.enum(["reviewed", "applied", "validation_pending", "validation_failed", "validated"]),
+  proposal: executionBinding.extend({
     contractDigest: digest,
+    digest,
     identityDigest: digest,
-    target: targetProposalSchema,
     plannedByCallId: text,
+    target: targetProposalSchema,
+    version: z.literal(1),
+  }),
+  sourceReceipt: z.looseObject({
+    contractDigest: digest,
+    digest,
+    sourceKind: z.enum(["existing-repository", "fresh-template"]),
   }),
   workspace: z.looseObject({
-    workspaceId: text,
-    workspaceDigest: digest,
-    workspacePath: text,
+    adapter: text,
+    eligibilityDigest: digest,
     sourcePath: text,
     sourceSha: sha,
     sourceTree: sha,
-    adapter: text,
-    eligibilityDigest: digest,
+    workspaceDigest: digest,
+    workspaceId: text,
+    workspacePath: text,
   }),
 });
 const reviewedSchema = workflowSchema.extend({
-  phase: z.literal("reviewed"),
-  validationReceipt: executionBinding.extend({
-    version: z.literal(3),
-    digest,
-    status: z.literal("passed"),
-    attemptDigest: digest,
-    testShards: z.array(text),
-    appValidationSha256: digest,
-    appSpecPath: text,
-    dependencyReceiptDigest: digest,
-    identityDigest: digest,
-    dependencyCacheContentDigest: digest,
-    proposalDigest: digest,
-    applyDigest: digest,
-    appliedTreeDigest: digest,
-    changedContentDigest: digest,
-    validatedByCallId: text,
-    commands: z.array(
-      z.looseObject({
-        name: z.enum(["check-build", "test"]),
-        command: text,
-        validationRoot: text,
-        inputTreeDigest: digest,
-        exitCode: z.literal(0),
-        stdoutDigest: digest,
-        stderrDigest: digest,
-      }),
-    ),
-  }),
+  artifacts: z.array(z.unknown()),
   dependencyReceipt: executionBinding.extend({
-    version: z.literal(2),
+    cacheContentDigest: digest,
+    cacheManifestDigest: digest,
+    dependencyLayout: executionDependencyLayoutSchema,
     digest,
+    preparedByCallId: text,
     targetSha: sha,
     targetTree: sha,
-    cacheManifestDigest: digest,
-    cacheContentDigest: digest,
-    dependencyLayout: executionDependencyLayoutSchema,
-    preparedByCallId: text,
+    version: z.literal(2),
   }),
-  artifacts: z.array(z.unknown()),
+  phase: z.literal("reviewed"),
   preparedByCallId: text,
   reviewReceipt: z.looseObject({
-    version: z.literal(2),
-    digest,
+    approvedPaths: z.array(text),
     changeSetDigest: digest,
-    reviewedByCallId: text,
-    contractDigest: digest,
-    repositoryContractDigest: digest,
-    preTreeDigest: digest,
-    postTreeDigest: digest,
     changedContentDigest: digest,
     changes: z.array(z.looseObject({ path: text })),
-    approvedPaths: z.array(text),
+    contractDigest: digest,
+    digest,
+    postTreeDigest: digest,
+    preTreeDigest: digest,
+    repositoryContractDigest: digest,
+    reviewedByCallId: text,
+    version: z.literal(2),
+  }),
+  validationReceipt: executionBinding.extend({
+    appSpecPath: text,
+    appValidationSha256: digest,
+    appliedTreeDigest: digest,
+    applyDigest: digest,
+    attemptDigest: digest,
+    changedContentDigest: digest,
+    commands: z.array(
+      z.looseObject({
+        command: text,
+        exitCode: z.literal(0),
+        inputTreeDigest: digest,
+        name: z.enum(["check-build", "test"]),
+        stderrDigest: digest,
+        stdoutDigest: digest,
+        validationRoot: text,
+      }),
+    ),
+    dependencyCacheContentDigest: digest,
+    dependencyReceiptDigest: digest,
+    digest,
+    identityDigest: digest,
+    proposalDigest: digest,
+    status: z.literal("passed"),
+    testShards: z.array(text),
+    validatedByCallId: text,
+    version: z.literal(3),
   }),
 });
 
@@ -208,10 +208,10 @@ const readReviewedWorkflow = (value: unknown): DraftReviewedWorkflow | undefined
     const normalized = deriveNormalizedChangeSet(
       {
         ...reviewed.applyReceipt,
-        preTreeDigest: reviewed.reviewReceipt.preTreeDigest,
-        postTreeDigest: reviewed.reviewReceipt.postTreeDigest,
         changedContentDigest: reviewed.reviewReceipt.changedContentDigest,
         changes: reviewed.reviewReceipt.changes,
+        postTreeDigest: reviewed.reviewReceipt.postTreeDigest,
+        preTreeDigest: reviewed.reviewReceipt.preTreeDigest,
       },
       reviewed.validationReceipt,
       reviewed.proposal.contractDigest,
@@ -249,7 +249,7 @@ const latestReviewedCheckpoint = (
   let latest: z.infer<typeof checkpointSchema> | undefined;
   let conflicting = false;
   for (const entry of candidates) {
-    const slot = entry.origin.slot;
+    const { slot } = entry.origin;
     if (
       slot >= selectedSlot ||
       !z.object({ phase: z.literal("reviewed") }).safeParse(entry.serializedContext[workflowKey])
@@ -326,7 +326,7 @@ const recoveryContext = (input: DraftReviewedLineageRecoveryInput): RecoveryCont
   ) {
     return undefined;
   }
-  return { payload, selected, context };
+  return { context, payload, selected };
 };
 
 const hasCurrentReview = (context: RecoveryContext): boolean =>

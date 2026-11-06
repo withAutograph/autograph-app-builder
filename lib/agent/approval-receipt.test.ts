@@ -295,9 +295,9 @@ describe("approval receipt", () => {
 describe("saved continuity consent rendering", () => {
   const compact = {
     action: "continuity",
-    planRef: "_protected-operator/continuity-plans/20000000-0000-4000-8000-000000000002",
-    planDigest: "a".repeat(64),
     idempotencyKey: "retained-intent",
+    planDigest: "a".repeat(64),
+    planRef: "_protected-operator/continuity-plans/20000000-0000-4000-8000-000000000002",
   };
   it("renders fixed effects and an exact saved reference without inventing an actor roster", () => {
     const description = publicApprovalDescription(compact, "run-app-continuity-tests");

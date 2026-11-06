@@ -66,7 +66,7 @@ function service(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function startTwice(hosted: ReturnType<typeof service>, first = "one", second = "two") {
   await hosted.start({ clientRequestId: first, prompt: "Build" });
-  return hosted.start({ clientRequestId: second, prompt: "Build again" });
+  return await hosted.start({ clientRequestId: second, prompt: "Build again" });
 }
 
 describe("hosted start capacity", () => {

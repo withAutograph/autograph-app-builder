@@ -8,25 +8,28 @@ import type { ManagedRuntimeIdentity } from "./managed-runtime-capabilities";
 export const managedLifecycleCommandSchema = z.discriminatedUnion("operation", [
   z.strictObject({ operation: z.literal("status") }),
   z.strictObject({
-    operation: z.enum(["stop-and-wait", "start-same-environment", "observe-readiness"]),
     commandId: z.uuid(),
+    operation: z.enum(["stop-and-wait", "start-same-environment", "observe-readiness"]),
   }),
 ]);
 export type ManagedLifecycleCommand = z.infer<typeof managedLifecycleCommandSchema>;
 const exitSchema = z.strictObject({
   code: z.number().int().nullable(),
-  signal: z.string().nullable(),
   observedAt: z.iso.datetime(),
+  signal: z.string().nullable(),
 });
 const processSchema = z.strictObject({
+  exit: exitSchema.optional(),
   generation: z.number().int().positive().refine(Number.isSafeInteger),
   pid: z.number().int().positive().refine(Number.isSafeInteger),
+  readiness: z.strictObject({ observedAt: z.iso.datetime(), ready: z.boolean() }).optional(),
   startedAt: z.iso.datetime(),
-  exit: exitSchema.optional(),
-  readiness: z.strictObject({ ready: z.boolean(), observedAt: z.iso.datetime() }).optional(),
 });
 export const managedLifecycleReceiptSchema = z.strictObject({
+  commandId: z.uuid().optional(),
   identity: managedRuntimeIdentitySchema,
+  operation: z.enum(["status", "stop-and-wait", "start-same-environment", "observe-readiness"]),
+  process: processSchema.optional(),
   state: z.enum([
     "stopped",
     "starting",
@@ -36,9 +39,6 @@ export const managedLifecycleReceiptSchema = z.strictObject({
     "expired",
     "reconciliation-required",
   ]),
-  process: processSchema.optional(),
-  commandId: z.uuid().optional(),
-  operation: z.enum(["status", "stop-and-wait", "start-same-environment", "observe-readiness"]),
 });
 export type ManagedChildExit = z.infer<typeof exitSchema>;
 export interface ManagedOwnedChild {
@@ -98,7 +98,7 @@ export const createManagedOwnedChildLauncher = (input: {
         failure = true;
       });
       child.once("close", (code, signal) => {
-        resolve({ code, signal, observedAt: new Date().toISOString() });
+        resolve({ code, observedAt: new Date().toISOString(), signal });
       });
     });
     // Only this launch creates and captures the group. No caller can supply a PID/PGID.
@@ -148,7 +148,7 @@ export const createManagedOwnedChildLauncher = (input: {
       return exit;
     };
     let termination: Promise<ManagedChildExit> | undefined;
-    const terminate = () => {
+    const terminate = async () => {
       termination ??= (async () => {
         signalGroup("SIGTERM");
         try {
@@ -158,7 +158,7 @@ export const createManagedOwnedChildLauncher = (input: {
           return await waitUntilGone();
         }
       })();
-      return termination;
+      return await termination;
     };
     // Start cleanup as soon as the owned wrapper exits, before its group could be reused.
     child.once("close", () => {
@@ -180,11 +180,11 @@ export const createManagedOwnedChildLauncher = (input: {
         }),
         stopTimeoutMs,
       );
-      const pid = child.pid;
+      const { pid } = child;
       if (pid === undefined || failure) {
         throw unavailable();
       }
-      return { pid, closed, terminate };
+      return { closed, pid, terminate };
     } catch {
       await terminate();
       throw unavailable();
@@ -316,12 +316,16 @@ export const createManagedRuntimeSupervisor = (input: {
       if (childHasExited(current)) {
         throw unavailable();
       }
-      current.observation.readiness = { ready, observedAt: now().toISOString() };
+      current.observation.readiness = { observedAt: now().toISOString(), ready };
       state = ready ? "ready" : "starting";
     }
     return snapshot(command.operation, command.commandId);
   };
   return {
+    async close() {
+      closedByOwner.abort();
+      await revoke();
+    },
     async execute(value: ManagedLifecycleCommand): Promise<ManagedLifecycleReceipt> {
       const command = managedLifecycleCommandSchema.parse(value);
       if (command.operation === "status") {
@@ -356,10 +360,6 @@ export const createManagedRuntimeSupervisor = (input: {
         }
       })();
       return await result;
-    },
-    async close() {
-      closedByOwner.abort();
-      await revoke();
     },
   };
 };

@@ -8,74 +8,73 @@ import { compactMessages } from "../../node_modules/eve/dist/src/harness/compact
 
 export const model = () =>
   new MockLanguageModelV4({
-    doGenerate: () =>
-      Promise.resolve({
-        content: [{ type: "text", text: "Retained product instructions and completed history." }],
-        finishReason: { unified: "stop", raw: "stop" },
-        usage: {
-          inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
-          outputTokens: { total: 5, text: 5, reasoning: 0 },
-        },
-        warnings: [],
-      }),
+    doGenerate: async () => ({
+      content: [{ text: "Retained product instructions and completed history.", type: "text" }],
+      finishReason: { raw: "stop", unified: "stop" },
+      usage: {
+        inputTokens: { cacheRead: 0, cacheWrite: 0, noCache: 10, total: 10 },
+        outputTokens: { reasoning: 0, text: 5, total: 5 },
+      },
+      warnings: [],
+    }),
   });
 export const call = {
-  type: "tool-call" as const,
+  input: { proposalDigest: "current-proposal" },
   toolCallId: "private-build-call",
   toolName: "apply_app_creation",
-  input: { proposalDigest: "current-proposal" },
+  type: "tool-call" as const,
 };
 export const originalUser = {
-  role: "user" as const,
-  kind: "user",
   content: "Continue this same saved app with its reviewed Auth flow. ".repeat(15),
+  kind: "user",
+  role: "user" as const,
 };
 export const history = (approved = true): ModelMessage[] => [
   originalUser,
-  { role: "assistant", content: "Older repository observations. ".repeat(4000) },
+  { content: "Older repository observations. ".repeat(4000), role: "assistant" },
   {
-    role: "assistant",
     content: [
       call,
-      { type: "tool-approval-request", approvalId: "build-approval", toolCallId: call.toolCallId },
+      { approvalId: "build-approval", toolCallId: call.toolCallId, type: "tool-approval-request" },
     ],
+    role: "assistant",
   },
   {
-    role: "tool",
     content: [
-      { type: "tool-approval-response", approvalId: "build-approval", approved },
+      { approvalId: "build-approval", approved, type: "tool-approval-response" },
       ...(approved
         ? []
         : [
             {
-              type: "tool-result" as const,
+              output: { type: "execution-denied" as const },
               toolCallId: call.toolCallId,
               toolName: call.toolName,
-              output: { type: "execution-denied" as const },
+              type: "tool-result" as const,
             },
           ]),
     ],
+    role: "tool",
   },
 ];
-export const compact = (messages: ModelMessage[], recentWindowSize = 2) =>
-  compactMessages(messages, model(), { recentWindowSize, threshold: 1800 });
+export const compact = async (messages: ModelMessage[], recentWindowSize = 2) =>
+  await compactMessages(messages, model(), { recentWindowSize, threshold: 1800 });
 export const execute = async (
   messages: ModelMessage[],
   abortSignal?: AbortSignal,
   apply: (
     input: { proposalDigest: string },
     options: { abortSignal?: AbortSignal },
-  ) => Promise<{ state: string }> = vi.fn(() => Promise.resolve({ state: "applied" })),
+  ) => Promise<{ state: string }> = vi.fn(async () => ({ state: "applied" })),
 ) => {
   const agent = new ToolLoopAgent({
     model: model(),
     tools: {
       apply_app_creation: tool({
-        inputSchema: z.strictObject({ proposalDigest: z.literal("current-proposal") }),
         execute: apply,
+        inputSchema: z.strictObject({ proposalDigest: z.literal("current-proposal") }),
       }),
     },
   });
-  await agent.generate({ messages, abortSignal });
+  await agent.generate({ abortSignal, messages });
   return apply;
 };

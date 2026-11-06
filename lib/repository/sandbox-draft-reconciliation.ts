@@ -495,7 +495,7 @@ try {
 
 const candidateUntracked = async (sandbox: SandboxSession, root: string, workspace: string) =>
   z
-    .strictObject({ paths: z.array(z.string()), dependencyRoots: z.array(z.string()) })
+    .strictObject({ dependencyRoots: z.array(z.string()), paths: z.array(z.string()) })
     .parse(
       JSON.parse(
         await checked(
@@ -635,8 +635,8 @@ const outsideCandidateChanges = async (
 ): Promise<boolean> => {
   const dependencyCatalog = retainedDependencyCatalog(input, root);
   const catalogPaths = await inspectDependencyCatalog(input.sandbox, {
-    root,
     appId: input.appId,
+    root,
     ...(dependencyCatalog === undefined ? {} : { dependencyCatalog }),
   });
   if (input.ownedPublication !== undefined) {
@@ -1055,7 +1055,7 @@ const selectCandidateRoot = async (
       replayedAppChanges = false;
     }
   }
-  return { root, created, preservedCandidateRoot, replayedAppChanges };
+  return { created, preservedCandidateRoot, replayedAppChanges, root };
 };
 
 /** Prepare a private merge candidate. This never updates the GitHub PR branch. */
@@ -1210,9 +1210,9 @@ export const prepareDraftReconciliation = async (
     await replayCandidateApp(input, preservedCandidateRoot, root);
   }
   await attachCheckoutDependencyView({
-    sandbox,
-    checkoutRoot: checkout,
     candidateRoot: root,
+    checkoutRoot: checkout,
+    sandbox,
     workspaceRoot,
   });
   const conflicts = await readCandidateConflicts(input, root);
@@ -1732,7 +1732,7 @@ export const inspectDraftReconciliation = async (input: {
 export const preparePublishedDraftRepairCandidate = async (
   request: Omit<DraftReconciliationInput, "baseSha" | "baseBranch">,
 ): Promise<PreparedDraftReconciliation> => {
-  const input = { ...request, baseSha: request.headSha, baseBranch: request.headBranch };
+  const input = { ...request, baseBranch: request.headBranch, baseSha: request.headSha };
   verifyInputs(input);
   const { sandbox } = input;
   const workspaceRoot = input.workspaceRoot ?? DEFAULT_WORKSPACE;
@@ -1789,20 +1789,20 @@ export const preparePublishedDraftRepairCandidate = async (
     await stageUnpublished(input, root, workspaceRoot);
   }
   await attachCheckoutDependencyView({
-    sandbox,
-    checkoutRoot: checkout,
     candidateRoot: root,
+    checkoutRoot: checkout,
+    sandbox,
     workspaceRoot,
   });
   const headTree = await inspectRevision(sandbox, checkout, input.headSha);
   return {
     appId: input.appId,
-    workspaceRoot,
-    root,
-    headSha: input.headSha,
-    headTree,
     baseSha: input.headSha,
     baseTree: headTree,
     conflicts: await readCandidateConflicts(input, root),
+    headSha: input.headSha,
+    headTree,
+    root,
+    workspaceRoot,
   };
 };

@@ -709,7 +709,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       }
     }
     if ("operation" in proposal && proposal.applicationSourceImport !== undefined) {
-      const registration = proposal.applicationSourceImport.registration;
+      const { registration } = proposal.applicationSourceImport;
       if (
         registration === undefined ||
         registration.projectName !== appId ||
@@ -717,9 +717,9 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       ) {
         return {
           exitCode: 2,
-          stdout: "",
-          stderr: "Imported app registration is missing from the approved proposal.",
           failedCommand: "verify approved application registration",
+          stderr: "Imported app registration is missing from the approved proposal.",
+          stdout: "",
         };
       }
       const topologyPath = `${applyRoot.replace(/^\/workspace\//u, "")}/microfrontends.json`;
@@ -730,12 +730,12 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       ) {
         return {
           exitCode: 2,
-          stdout: "",
-          stderr: "Imported app registration preimage changed.",
           failedCommand: "verify approved application registration",
+          stderr: "Imported app registration preimage changed.",
+          stdout: "",
         };
       }
-      await sandbox.writeTextFile({ path: topologyPath, content: registration.proposedBytes });
+      await sandbox.writeTextFile({ content: registration.proposedBytes, path: topologyPath });
     }
     // The writable checkout is the execution environment. Prepared dependency
     // roots are only a cache optimization; a checkout-backed flow can have no
@@ -1007,9 +1007,9 @@ export async function executeProposalBoundApply(input: {
     });
     if (command.exitCode === 0 && input.proposal.privateCompute !== undefined) {
       await applyPrivateComputeCheckPolicy({
-        sandbox: input.sandbox,
         applyRoot: overlay.applyRoot,
         profile: input.proposal.privateCompute,
+        sandbox: input.sandbox,
       });
     }
     await stageCreatedAppSpec({
@@ -1036,9 +1036,7 @@ export async function executeProposalBoundApply(input: {
     applyRoot: overlay.applyRoot,
     command: {
       exitCode: command.exitCode,
-      name: ("operation" in input.proposal ? "iterate-existing-app" : "create-app") as
-        | "create-app"
-        | "iterate-existing-app",
+      name: "operation" in input.proposal ? "iterate-existing-app" : "create-app",
       stderrDigest: sha256(command.stderr),
       stdoutDigest: sha256(command.stdout),
     },

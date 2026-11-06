@@ -142,9 +142,9 @@ export const createHostedRuntimePriorApprovalReader =
     }
     const readOwned = async () => {
       const sessions = await readHostedOperatorCallbackOwner({
-        store: dependencies.store,
-        owner,
         execution: hostedOperatorCallbackExecution(ctx.session),
+        owner,
+        store: dependencies.store,
       });
       const latest = (sessions.authoritySession.privateApprovalReceipts ?? [])
         .filter((value) => matchesHostedRuntimePreparationReceipt(value, parsed))
@@ -294,7 +294,7 @@ export const readHostedRuntimePriorApproval = async (
       hostedOperatorCallbackExecution(ctx.session),
     ));
   const store = await openHostedRuntimeApprovalStore();
-  return await createHostedRuntimePriorApprovalReader({ store, now: Date.now, ...options })(
+  return await createHostedRuntimePriorApprovalReader({ now: Date.now, store, ...options })(
     input,
     ctx,
     operator,
@@ -312,9 +312,9 @@ const readApprovalCaptureSeed = async (
   }
   try {
     const { currentSession: session } = await readHostedOperatorCallbackOwner({
-      store,
-      owner,
       execution,
+      owner,
+      store,
     });
     const ref = session.checkpointRef;
     if (ref === undefined) {
@@ -347,7 +347,7 @@ const readApprovalCaptureSeed = async (
     const capture = privateHostedApprovalCaptureStateSchema.safeParse(
       page.metadata.privateApprovalCaptureState,
     );
-    await readHostedOperatorCallbackOwner({ store, owner, execution });
+    await readHostedOperatorCallbackOwner({ execution, owner, store });
     if (!native.success || !capture.success) {
       return null;
     }
@@ -360,7 +360,7 @@ const readApprovalCaptureSeed = async (
     ) {
       return null;
     }
-    return { native: native.data, capture: capture.data };
+    return { capture: capture.data, native: native.data };
   } catch {
     // Checkpoint reuse is optional; the existing authenticated cold read remains available.
     return null;
@@ -389,7 +389,6 @@ export const captureHostedRuntimeApproval = async (input: {
   });
   const transport = createSameOriginEveTransport({
     config: { baseUrl: input.baseUrl },
-    workloadIdentity: input.workloadIdentity,
     fetchImplementation: async (url, init) =>
       await (input.fetchImplementation ?? fetch)(url, {
         ...init,
@@ -401,9 +400,9 @@ export const captureHostedRuntimeApproval = async (input: {
     verifyReadAuthority: async ({ principal, sessionId, adapterSessionId }) => {
       input.signal.throwIfAborted();
       const { authoritySession: session, currentSession } = await readHostedOperatorCallbackOwner({
-        store: input.store,
-        owner,
         execution: input.execution,
+        owner,
+        store: input.store,
       });
       return [
         sessionId === owner.sessionId,
@@ -415,6 +414,7 @@ export const captureHostedRuntimeApproval = async (input: {
         tenantKeyFor(session.principal) === tenantKeyFor(owner.principal),
       ].every(Boolean);
     },
+    workloadIdentity: input.workloadIdentity,
   });
   if (transport.observe === undefined) {
     throw new HostedOperatorError("operator_unavailable");
@@ -422,13 +422,13 @@ export const captureHostedRuntimeApproval = async (input: {
   await transport.observe({
     ...(seed === null ? {} : { nativeObservationState: seed.native }),
     adapterSessionId: owner.adapterSessionId,
-    principal: owner.principal,
-    sessionId: owner.sessionId,
     onEvent: () => {
       /* Only private approval events are captured here. */
     },
     onPrivateEvent: recorder.observe,
+    principal: owner.principal,
     readDeadline: true,
+    sessionId: owner.sessionId,
   });
   input.signal.throwIfAborted();
 };
@@ -469,16 +469,16 @@ export const captureHostedRuntimeExecutionApproval = async (ctx: Context, operat
   const configuration = readHostedOperatorOwnerReaderConfiguration(process.env);
   const store = await openHostedRuntimeApprovalStore();
   await captureHostedRuntimeApproval({
-    ownerContext: operatorOwnerContextSchema.parse(operator.ownerContext),
-    store,
     baseUrl: new URL(configuration.resource).origin,
-    workloadIdentity: createVercelWorkloadIdentity(),
-    signal: ctx.abortSignal,
     execution: hostedOperatorCallbackExecution(ctx.session),
+    ownerContext: operatorOwnerContextSchema.parse(operator.ownerContext),
+    signal: ctx.abortSignal,
+    store,
+    workloadIdentity: createVercelWorkloadIdentity(),
   });
 };
 
 export const readHostedRuntimeExecutionApproval = createHostedRuntimeExecutionApprovalReader({
-  readPrior: readHostedRuntimePriorApproval,
   capture: captureHostedRuntimeExecutionApproval,
+  readPrior: readHostedRuntimePriorApproval,
 });

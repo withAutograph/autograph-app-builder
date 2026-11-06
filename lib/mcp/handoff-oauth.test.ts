@@ -267,7 +267,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const jwksFetch = vi.fn<typeof fetch>(async (url, init) => {
         expect(String(url)).toBe(config.jwksUrl);
-        return auth.customFetchImpl(url, init);
+        return await auth.customFetchImpl(url, init);
       });
       const handler = createMcpRequestHandler({
         environment: { EVE_HOSTED_ADAPTER: "1" },

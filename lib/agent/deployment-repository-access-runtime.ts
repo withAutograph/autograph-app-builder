@@ -298,7 +298,7 @@ export function createRepositoryAccessRuntime(input: {
           `Builder cannot restore the selected checkout for ${repository}: the GitHub source provider is unavailable. Ask an operator to restore the GitHub App source adapter, then retry.`,
         );
       }
-      return provider.acquireRepositoryReadCredential({
+      return await provider.acquireRepositoryReadCredential({
         repositoryId: value.repository.repositoryId,
       });
     },
@@ -519,7 +519,9 @@ export function createRepositoryAccessRuntime(input: {
         {
           repository: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
         },
-        () => materializeBuilderSandboxGitSource(sandbox, sandboxSource),
+        async () => {
+          await materializeBuilderSandboxGitSource(sandbox, sandboxSource);
+        },
       );
       const appBaseline =
         value.appBaseline === undefined
@@ -662,7 +664,7 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
       origin: new URL(installation.issuer).origin,
       ...(emulation
         ? {
-            providerFetch: ((resource, init) => {
+            providerFetch: async (resource, init) => {
               let resourceUrl: string;
               if (typeof resource === "string") {
                 resourceUrl = resource;
@@ -672,12 +674,12 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
                 resourceUrl = resource.url;
               }
               const url = new URL(resourceUrl);
-              return providerEmulationFetch(
+              return await providerEmulationFetch(
                 `${emulation.githubOrigin}${url.pathname}${url.search}`,
                 init,
                 emulation,
               );
-            }) as typeof fetch,
+            },
           }
         : {}),
     };
@@ -732,7 +734,7 @@ export async function resumeAuthorizedRepositoryAccessForSession(input: {
   fetchImplementation?: typeof fetch;
 }) {
   const runtime = await repositoryAccessRuntimeForSession(input.sessionAuth);
-  return runtime.resumeAuthorizedForSession({
+  return await runtime.resumeAuthorizedForSession({
     sessionId: input.sessionId,
     ...(input.fetchImplementation ? { fetchImplementation: input.fetchImplementation } : {}),
   });

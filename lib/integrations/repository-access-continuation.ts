@@ -176,7 +176,7 @@ export function createRepositoryAccessContinuationService(input: {
       selectedInstallationId?: string;
     }) {
       const continuationId = continuationIdSchema.parse(value.continuationId);
-      return input.store.consume({
+      return await input.store.consume({
         authority: hostedTenantAuthoritySchema.parse(value.authority),
         continuationDigest: continuationDigest(continuationId),
         now: now(),

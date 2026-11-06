@@ -121,16 +121,16 @@ export const resumeDevelopmentCycle = async (input: {
   // and cannot establish whether a local process still owns the cycle.
   await stopped(applicationRoot, input.evePort);
   await refreshDevelopmentApplication({
-    repositoryRoot: input.repositoryRoot,
     applicationRoot,
+    repositoryRoot: input.repositoryRoot,
     runRoot: root,
   });
   const dependencyBinding = await readSelectedDevelopmentDependencies(input.repositoryRoot);
   return {
-    root,
     application: { root: applicationRoot },
+    dependencyBinding,
+    root,
     runtimeHome,
     workflowData,
-    dependencyBinding,
   };
 };

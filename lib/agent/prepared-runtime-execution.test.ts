@@ -19,38 +19,38 @@ import {
 import { HostedRuntimeProviderError } from "../provisioning/hosted-runtime-provider";
 
 const capturedActors = () => ({
-  origin: "https://apps-preview.example.test",
+  files: {
+    "member.storage.json": JSON.stringify({
+      cookies: [
+        {
+          domain: "apps-preview.example.test",
+          name: "session",
+          path: "/",
+          secure: true,
+          value: "captured-private-session",
+        },
+      ],
+      origins: [
+        {
+          localStorage: [{ name: "selected-org", value: "captured-private-org" }],
+          origin: "https://apps-preview.example.test",
+        },
+      ],
+    }),
+  },
   identities: {
-    version: 1 as const,
     actors: [
       {
-        actorKey: "member",
         actorId: "actual-member-id",
+        actorKey: "member",
         organizationId: "actual-org-id",
         roles: ["member"],
         storageState: "member.storage.json",
       },
     ],
+    version: 1 as const,
   },
-  files: {
-    "member.storage.json": JSON.stringify({
-      cookies: [
-        {
-          name: "session",
-          domain: "apps-preview.example.test",
-          value: "captured-private-session",
-          path: "/",
-          secure: true,
-        },
-      ],
-      origins: [
-        {
-          origin: "https://apps-preview.example.test",
-          localStorage: [{ name: "selected-org", value: "captured-private-org" }],
-        },
-      ],
-    }),
-  },
+  origin: "https://apps-preview.example.test",
 });
 
 const mocks = {
@@ -71,10 +71,10 @@ const proof = {
 };
 const descriptor = {
   app: {
+    browserEntryPath: z.string().nullable().optional().parse("/private-entry"),
     id: "spend-review",
     routes: [],
     workspacePath: "apps/spend-review",
-    browserEntryPath: z.string().nullable().optional().parse("/private-entry"),
   },
   backend: {
     authorization: "declared-policy",
@@ -310,8 +310,8 @@ describe("approved hosted runtime consumers", () => {
       const browserResult = await runAppBrowserTests({
         appId: context.appId,
         root: context.root,
-        sandbox: { run: vi.fn() },
         runtime,
+        sandbox: { run: vi.fn() },
       });
       expect(browserResult.status).toBe(entry === "/private-entry" ? "passed" : "failed");
       if (entry === "/private-entry") {
@@ -324,6 +324,8 @@ describe("approved hosted runtime consumers", () => {
       const preserved = await restorePreparedRuntimeExecution({
         appId: context.appId,
         binding: binding(),
+        browserTestBaseUrl: "https://owned.example.test",
+        browserTestEntryPath: "/public-entry",
         observeInstallation: async () => ({
           actors: proof.actors,
           artifactHash: proof.artifactHash,
@@ -333,8 +335,6 @@ describe("approved hosted runtime consumers", () => {
         }),
         provider: publicFixture.provider,
         root: context.root,
-        browserTestEntryPath: "/public-entry",
-        browserTestBaseUrl: "https://owned.example.test",
       });
       expect(preserved.browserTestEntryPath).toBe("/public-entry");
       expect(preserved.browserTestBaseUrl).toBe("https://owned.example.test");
@@ -355,8 +355,8 @@ describe("approved hosted runtime consumers", () => {
       root: context.root,
     });
     await runtime.runTask({
+      browserSelection: { maxFailures: 1, retries: 0, testName: "@acceptance", workers: 1 },
       task: "test-e2e",
-      browserSelection: { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 },
     });
     expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -378,13 +378,13 @@ describe("approved hosted runtime consumers", () => {
       }),
     );
     await expect(
-      runtime.runTask({ task: "repository-test", browserSelection: { testName: "x" } }),
+      runtime.runTask({ browserSelection: { testName: "x" }, task: "repository-test" }),
     ).rejects.toThrow();
     await expect(
       runtime.runTask({
-        task: "test-e2e",
-        commandId: "saved",
         browserSelection: { testName: "x" },
+        commandId: "saved",
+        task: "test-e2e",
       }),
     ).rejects.toThrow("cannot be resumed with a new test selection");
   });
@@ -415,16 +415,16 @@ describe("approved hosted runtime consumers", () => {
         signal: undefined,
       });
       await runtime.runTask({
-        task,
-        shard,
         alreadyCompiled,
         environment: {
-          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
-          PATH: "/sandbox/custom/bin:/usr/bin",
-          APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
-          OPTIONAL_INPUT: undefined,
           APP_RUNTIME_ALREADY_COMPILED: "untrusted",
+          APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
+          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+          OPTIONAL_INPUT: undefined,
+          PATH: "/sandbox/custom/bin:/usr/bin",
         },
+        shard,
+        task,
       });
       expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -441,9 +441,9 @@ describe("approved hosted runtime consumers", () => {
           cwd: context.root,
           detached: true,
           env: {
+            APP_RUNTIME_STATE_DIR: "/private-state",
             APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
             PATH: "/sandbox/custom/bin:/usr/bin",
-            APP_RUNTIME_STATE_DIR: "/private-state",
             ...(alreadyCompiled && task !== "test-e2e"
               ? { APP_RUNTIME_ALREADY_COMPILED: "1" }
               : {}),
@@ -453,26 +453,26 @@ describe("approved hosted runtime consumers", () => {
     },
   );
   it.each([
-    { publicOrigin: undefined, publicDelivery: false },
-    { publicOrigin: "https://apps-preview.example.test", publicDelivery: false },
-    { publicOrigin: "https://public-app.example.test", publicDelivery: true },
+    { publicDelivery: false, publicOrigin: undefined },
+    { publicDelivery: false, publicOrigin: "https://apps-preview.example.test" },
+    { publicDelivery: true, publicOrigin: "https://public-app.example.test" },
   ])(
     "preserves the verified browser destination $publicOrigin with publicDelivery=$publicDelivery",
     async ({ publicOrigin, publicDelivery }) => {
       const fixture = transport();
       const operationRef = "11111111-1111-4111-8111-111111111111";
       const environment = {
+        PLATFORM_JWKS_URL: "https://gateway-preview.example.test/_platform/jwks.json",
+        PLATFORM_ORIGIN: "https://gateway-preview.example.test",
+        PLATFORM_PUBLIC_ORIGIN: "https://apps-preview.example.test",
         SPEND_REVIEW_DATABASE_URL:
           "postgres://spend_runtime:synthetic@ep-fixture.neon.tech/spend?sslmode=verify-full",
-        PLATFORM_PUBLIC_ORIGIN: "https://apps-preview.example.test",
-        PLATFORM_ORIGIN: "https://gateway-preview.example.test",
-        PLATFORM_JWKS_URL: "https://gateway-preview.example.test/_platform/jwks.json",
       };
       const bindings = vi.fn().mockResolvedValue({
         environment,
         nativePreview: publicOrigin === undefined || publicDelivery ? undefined : { publicOrigin },
         ...(publicDelivery
-          ? { publicDelivery: { publicOrigin, appEntryPath: "/actual-catalog-route" } }
+          ? { publicDelivery: { appEntryPath: "/actual-catalog-route", publicOrigin } }
           : {}),
         operationRef,
         plan: operatorPlan,
@@ -484,7 +484,7 @@ describe("approved hosted runtime consumers", () => {
           tenants: proof.tenants,
         },
       });
-      const operatorClient = vi.fn().mockResolvedValue({ sessionId: context.sessionId, bindings });
+      const operatorClient = vi.fn().mockResolvedValue({ bindings, sessionId: context.sessionId });
       mocks.getProvider.mockResolvedValue(fixture.provider);
       const runtime = await resolvePreparedRuntimeExecution(
         context,
@@ -513,8 +513,8 @@ describe("approved hosted runtime consumers", () => {
         }),
       );
       await runtime?.runTask({
-        task: "test-e2e",
         environment: publicOrigin === undefined ? undefined : { APP_TEST_BASE_URL: publicOrigin },
+        task: "test-e2e",
       });
       expect(fixture.provider.runCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -559,11 +559,11 @@ describe("approved hosted runtime consumers", () => {
           path: "/private-state/normal-actors/member.storage.json",
         });
         const result = await runtime.runTask({
-          task: "test-e2e",
           environment: {
             APP_TEST_BASE_URL: "https://untrusted.example.test",
             APP_TEST_IDENTITIES_FILE: "/untrusted",
           },
+          task: "test-e2e",
         });
         expect(result.stdout).not.toContain("captured-private-");
         expect(result.stdout).not.toContain("actual-member-id");
@@ -600,10 +600,8 @@ describe("approved hosted runtime consumers", () => {
       await restorePreparedRuntimeExecution({
         appId: context.appId,
         binding: binding(),
-        normalActors: captured,
         browserTestBaseUrl: captured.origin,
-        provider: fixture.provider,
-        root: context.root,
+        normalActors: captured,
         observeInstallation: async () => ({
           actors: proof.actors,
           artifactHash: proof.artifactHash,
@@ -611,6 +609,8 @@ describe("approved hosted runtime consumers", () => {
           releaseId: proof.releaseId,
           tenants: proof.tenants,
         }),
+        provider: fixture.provider,
+        root: context.root,
       });
     fixture.provider.writeFiles.mockRejectedValueOnce(
       new Error("write failed captured-private-session actual-member-id"),
@@ -648,7 +648,6 @@ describe("approved hosted runtime consumers", () => {
       appId: context.appId,
       binding: binding(),
       normalActors: capturedActors(),
-      privateValues: [selector, lifecycle, ""],
       observeInstallation: async () => ({
         actors: proof.actors,
         artifactHash: proof.artifactHash,
@@ -656,6 +655,7 @@ describe("approved hosted runtime consumers", () => {
         releaseId: proof.releaseId,
         tenants: proof.tenants,
       }),
+      privateValues: [selector, lifecycle, ""],
       provider: fixture.provider,
       root: context.root,
     });
@@ -664,25 +664,25 @@ describe("approved hosted runtime consumers", () => {
       logs: () =>
         Object.assign(
           (async function* output() {
-            yield { stream: "stdout" as const, data: `out ${selector.slice(0, 14)}` };
-            yield { stream: "stderr" as const, data: `err ${lifecycle.slice(0, 13)}` };
+            yield { data: `out ${selector.slice(0, 14)}`, stream: "stdout" as const };
+            yield { data: `err ${lifecycle.slice(0, 13)}`, stream: "stderr" as const };
             yield {
-              stream: "stdout" as const,
               data: `${selector.slice(14)} captured-private-session done`,
+              stream: "stdout" as const,
             };
-            yield { stream: "stderr" as const, data: `${lifecycle.slice(13)} done` };
+            yield { data: `${lifecycle.slice(13)} done`, stream: "stderr" as const };
           })(),
           { close: fixture.close },
         ),
     });
     const onChunk = vi.fn();
     const result = await runtime.runTask({
-      task: "test-e2e",
-      onChunk,
       environment: {
-        APP_TEST_MANAGED_SUITE_SELECTOR: selector,
         APP_TEST_MANAGED_LIFECYCLE_CAPABILITY: lifecycle,
+        APP_TEST_MANAGED_SUITE_SELECTOR: selector,
       },
+      onChunk,
+      task: "test-e2e",
     });
     expect(result.stdout).toBe("out [REDACTED] [REDACTED] done");
     expect(result.stderr).toBe("err [REDACTED] done");
@@ -692,8 +692,8 @@ describe("approved hosted runtime consumers", () => {
       expect(result.stdout + result.stderr).not.toContain(secret);
     }
     expect(fixture.provider.runCommand.mock.calls.at(-1)?.[0].env).toMatchObject({
-      APP_TEST_MANAGED_SUITE_SELECTOR: selector,
       APP_TEST_MANAGED_LIFECYCLE_CAPABILITY: lifecycle,
+      APP_TEST_MANAGED_SUITE_SELECTOR: selector,
     });
   });
 
@@ -707,7 +707,6 @@ describe("approved hosted runtime consumers", () => {
       const runtime = await restorePreparedRuntimeExecution({
         appId: context.appId,
         binding: binding(),
-        privateValues: [selector, lifecycle],
         observeInstallation: async () => ({
           actors: proof.actors,
           artifactHash: proof.artifactHash,
@@ -715,6 +714,7 @@ describe("approved hosted runtime consumers", () => {
           releaseId: proof.releaseId,
           tenants: proof.tenants,
         }),
+        privateValues: [selector, lifecycle],
         provider: fixture.provider,
         resumeCommand: async () => {
           throw privateError;
@@ -734,7 +734,7 @@ describe("approved hosted runtime consumers", () => {
         command.logs = () =>
           Object.assign(
             (async function* failedOutput() {
-              yield { stream: "stdout" as const, data: "before SDK failure" };
+              yield { data: "before SDK failure", stream: "stdout" as const };
               throw failure === "kill" ? new Error("controlled iteration failure") : privateError;
             })(),
             { close: fixture.close },
@@ -759,7 +759,7 @@ describe("approved hosted runtime consumers", () => {
       await expect(
         runtime.runTask({
           task: "test-e2e",
-          ...(failure === "resume" ? { commandId: "retained-command", allowDispatch: false } : {}),
+          ...(failure === "resume" ? { allowDispatch: false, commandId: "retained-command" } : {}),
         }),
       ).rejects.toThrow("SDK failure [REDACTED] and [REDACTED]");
       if (failure === "resume") {
@@ -774,7 +774,6 @@ describe("approved hosted runtime consumers", () => {
     const runtime = await restorePreparedRuntimeExecution({
       appId: context.appId,
       binding: binding(),
-      privateValues: ["controlled-suite-selector-capability"],
       observeInstallation: async () => ({
         actors: proof.actors,
         artifactHash: proof.artifactHash,
@@ -782,6 +781,7 @@ describe("approved hosted runtime consumers", () => {
         releaseId: proof.releaseId,
         tenants: proof.tenants,
       }),
+      privateValues: ["controlled-suite-selector-capability"],
       provider: fixture.provider,
       resumeCommand: async () => {
         throw closedError;
@@ -789,7 +789,7 @@ describe("approved hosted runtime consumers", () => {
       root: context.root,
     });
     await expect(
-      runtime.runTask({ task: "test-e2e", commandId: "retained", allowDispatch: false }),
+      runtime.runTask({ allowDispatch: false, commandId: "retained", task: "test-e2e" }),
     ).rejects.toBe(closedError);
   });
 
@@ -813,10 +813,10 @@ describe("approved hosted runtime consumers", () => {
     });
     await expect(
       runtime.runTask({
-        task: "test-e2e",
-        commandId: "retained-command",
-        commandCheckpoint,
         allowDispatch: false,
+        commandCheckpoint,
+        commandId: "retained-command",
+        task: "test-e2e",
       }),
     ).resolves.toMatchObject({ exitCode: 0 });
     expect(resumeCommand).toHaveBeenCalledExactlyOnceWith("retained-command");
@@ -824,8 +824,8 @@ describe("approved hosted runtime consumers", () => {
     expect(fixture.provider.runCommand).toHaveBeenCalledTimes(1);
     expect(fixture.provider.runCommand).toHaveBeenCalledWith(
       expect.objectContaining({
-        cmd: "/usr/bin/env",
         args: ["mise", "run", "app:describe", context.appId],
+        cmd: "/usr/bin/env",
       }),
     );
   });
@@ -1030,21 +1030,20 @@ it("reports the failed description command stage without exposing its output", a
   });
   await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
   await expect(result).rejects.toMatchObject({
-    name: "HostedRuntimeProviderError",
     code: "resource_mismatch",
     message: "resource_mismatch: runtime restore app-description-command (exit 23)",
+    name: "HostedRuntimeProviderError",
   });
   expect(stdout).not.toHaveBeenCalled();
 });
 
 it.each([
   {
-    stage: "app-identity",
     description: { ...descriptor, app: { ...descriptor.app, id: "private-app-canary" } },
+    stage: "app-identity",
   },
-  { stage: "backend-kind", description: { ...descriptor, backend: { kind: "static" } } },
+  { description: { ...descriptor, backend: { kind: "static" } }, stage: "backend-kind" },
   {
-    stage: "release-identity",
     description: {
       ...descriptor,
       backend: {
@@ -1052,9 +1051,9 @@ it.each([
         release: { ...descriptor.backend.release, id: "private-release-canary" },
       },
     },
+    stage: "release-identity",
   },
   {
-    stage: "artifact-identity",
     description: {
       ...descriptor,
       backend: {
@@ -1062,6 +1061,7 @@ it.each([
         release: { ...descriptor.backend.release, artifactHash: "sha256:private-artifact-canary" },
       },
     },
+    stage: "artifact-identity",
   },
 ])("reports only the closed $stage mismatch stage", async ({ stage, description }) => {
   const fixture = transport();
@@ -1083,9 +1083,9 @@ it.each([
   });
   await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
   await expect(result).rejects.toMatchObject({
-    name: "HostedRuntimeProviderError",
     code: "resource_mismatch",
     message: `resource_mismatch: runtime restore ${stage}`,
+    name: "HostedRuntimeProviderError",
   });
 });
 
@@ -1094,9 +1094,9 @@ it("reports a selected project mismatch before restoring provider state", async 
   const result = resolvePreparedRuntimeExecution(context, selection, mocks);
   await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
   await expect(result).rejects.toMatchObject({
-    name: "HostedRuntimeProviderError",
     code: "resource_mismatch",
     message: "resource_mismatch: runtime restore project-identity",
+    name: "HostedRuntimeProviderError",
   });
   expect(mocks.getProvider).not.toHaveBeenCalled();
 });

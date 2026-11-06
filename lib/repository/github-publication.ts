@@ -610,8 +610,7 @@ function canonicalPathsOrEmpty(paths: readonly string[]): readonly string[] {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function releaseGateAbsent(repository: GitHubRepositoryObservation): boolean {
   return (
-    repository.releaseGate.name === REPOSITORY_RELEASE_GATE &&
-    repository.releaseGate.configured === false
+    repository.releaseGate.name === REPOSITORY_RELEASE_GATE && !repository.releaseGate.configured
   );
 }
 
@@ -1051,7 +1050,7 @@ function assertReviewedBinding(
   parseSourceReceiptEvidence(source);
   assertCanonicalReview(review);
   if (
-    source.releaseEnabled !== false ||
+    source.releaseEnabled ||
     source.digest !== review.sourceReceiptDigest ||
     source.sourceSha !== review.sourceSha ||
     source.sourceTree !== review.sourceTree ||
@@ -1441,7 +1440,7 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
     !isDigest(proposal.reviewDigest) ||
     !isDigest(proposal.changeSetDigest) ||
     proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    proposal.releaseGate.configured !== false ||
+    proposal.releaseGate.configured ||
     proposal.initialCommitMessage !== "Initialize repository from supported template" ||
     proposal.intendedOutcome !== "create-private-fresh-history-repository" ||
     proposal.idempotencyKey !== expectedKey
@@ -1569,7 +1568,7 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
     JSON.stringify(canonicalPaths(proposal.approvedPaths)) !==
       JSON.stringify(proposal.approvedPaths) ||
     !safeBranch(proposal.branchName) ||
-    proposal.draft !== true ||
+    !proposal.draft ||
     !safeTitle(proposal.title) ||
     proposal.idempotencyKey !== idempotencyKey ||
     proposal.branchName !== `app-builder/review-${idempotencyKey.slice(0, 20)}` ||
@@ -1704,7 +1703,7 @@ function assertDraftReadBack(
     !isDecimal(readBack.pullRequest.pullRequestId) ||
     !Number.isSafeInteger(readBack.pullRequest.pullRequestNumber) ||
     readBack.pullRequest.pullRequestNumber < 1 ||
-    readBack.pullRequest.draft !== true ||
+    !readBack.pullRequest.draft ||
     readBack.pullRequest.headRepositoryId !== proposal.repositoryId ||
     readBack.pullRequest.headBranch !== proposal.branchName ||
     readBack.pullRequest.baseRepositoryId !== proposal.repositoryId ||
@@ -1791,7 +1790,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     if (
       (value.failureCode !== "provider-rejected" && value.failureCode !== "postcondition-failed") ||
       !/^[a-z][a-z0-9-]{0,63}$/u.test(value.providerCode) ||
-      value.recoveryRequired !== true
+      !value.recoveryRequired
     ) {
       throw new Error("GitHub failure receipt is invalid.");
     }
@@ -1799,9 +1798,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     if (
       !isDigest(value.providerReadBackDigest) ||
       !isDigest(value.installationIdentityDigest) ||
-      (value.kind === "fresh-repository"
-        ? value.releaseGateAbsent !== true
-        : value.releaseGateUnchanged !== true)
+      (value.kind === "fresh-repository" ? !value.releaseGateAbsent : !value.releaseGateUnchanged)
     ) {
       throw new Error("GitHub success receipt read-back binding is invalid.");
     }
@@ -1810,7 +1807,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
       if (
         value.installationIdentityDigest !== value.repository.installationIdentityDigest ||
         value.parentCount !== 0 ||
-        value.freshHistory !== true ||
+        !value.freshHistory ||
         value.initialCommitSha !== value.repository.headSha ||
         value.initialCommitTree !== value.repository.headTree
       ) {
@@ -1824,7 +1821,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
       !isDecimal(value.pullRequestId) ||
       !Number.isSafeInteger(value.pullRequestNumber) ||
       value.pullRequestNumber < 1 ||
-      value.draft !== true ||
+      !value.draft ||
       !safeBranch(value.baseBranch) ||
       !isObjectId(value.baseSha) ||
       !isDigest(value.changeSetDigest) ||

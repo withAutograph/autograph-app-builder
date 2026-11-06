@@ -11,7 +11,11 @@ import { removeDevelopmentSnapshot } from "./local-mode";
 const roots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
+  await Promise.all(
+    roots.splice(0).map(async (root) => {
+      await rm(root, { force: true, recursive: true });
+    }),
+  );
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

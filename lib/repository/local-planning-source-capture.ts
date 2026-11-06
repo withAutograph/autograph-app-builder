@@ -39,19 +39,19 @@ const fixedGitArgs = [
   "protocol.file.allow=always",
 ];
 const gitEnvironment = {
-  NODE_ENV: process.env.NODE_ENV ?? "production",
+  GIT_ATTR_NOSYSTEM: "1",
+  GIT_AUTHOR_DATE: "2000-01-01T00:00:00Z",
+  GIT_AUTHOR_EMAIL: "builder@autograph.so",
+  GIT_AUTHOR_NAME: "Autograph Builder",
+  GIT_COMMITTER_DATE: "2000-01-01T00:00:00Z",
+  GIT_COMMITTER_EMAIL: "builder@autograph.so",
+  GIT_COMMITTER_NAME: "Autograph Builder",
+  GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_SYSTEM: "/dev/null",
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_ATTR_NOSYSTEM: "1",
   GIT_NO_LAZY_FETCH: "1",
   GIT_TERMINAL_PROMPT: "0",
-  GIT_AUTHOR_NAME: "Autograph Builder",
-  GIT_AUTHOR_EMAIL: "builder@autograph.so",
-  GIT_COMMITTER_NAME: "Autograph Builder",
-  GIT_COMMITTER_EMAIL: "builder@autograph.so",
-  GIT_AUTHOR_DATE: "2000-01-01T00:00:00Z",
-  GIT_COMMITTER_DATE: "2000-01-01T00:00:00Z",
+  NODE_ENV: process.env.NODE_ENV ?? "production",
   PATH: "/usr/bin:/bin",
 };
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -157,7 +157,7 @@ export const captureLocalPlanningSource = async (
         records.push(`120000 ${oid}\t${name}`);
       } else if (info.isFile()) {
         // oxlint-disable-next-line eslint/no-bitwise -- Preserve the actual executable mode.
-        regular.push({ name, absolute, mode: (info.mode & 0o111) === 0 ? "100644" : "100755" });
+        regular.push({ absolute, mode: (info.mode & 0o111) === 0 ? "100644" : "100755", name });
       } else {
         throw new Error(
           "The local source contains a non-file Git entry that cannot be reconciled; the app checkout is unchanged.",
@@ -231,9 +231,9 @@ export const captureLocalPlanningSource = async (
           }
           return {
             mode: match.mode,
-            type: match.type,
             oid: objectId.parse(match.oid),
             path: match.path,
+            type: match.type,
           };
         });
       if (!linksCapturedAtPreparation && entries.some((entry) => entry.mode === "120000")) {
@@ -550,8 +550,6 @@ export const captureLocalPlanningSource = async (
     const reference = `refs/app-builder/local-source/${snapshotSha}`;
     git(["update-ref", reference, snapshotSha]);
     return {
-      generation,
-      originalBase,
       capturedBase: () => {
         const base = packOriginalBase(snapshotSha, generation.workspaceDigest, true, sourceSha);
         if (base === undefined) {
@@ -563,10 +561,15 @@ export const captureLocalPlanningSource = async (
         return base;
       },
       currentCommit,
-      sourceSha,
+      dispose: () => {
+        rmSync(directory, { force: true, recursive: true });
+      },
+      generation,
+      needsBundle: snapshotSha !== originalSourceSha,
+      originalBase,
       snapshotSha,
       snapshotTree,
-      needsBundle: snapshotSha !== originalSourceSha,
+      sourceSha,
       streamBundle: () =>
         processStdoutByteStream(
           gitExecutable,
@@ -582,12 +585,9 @@ export const captureLocalPlanningSource = async (
           ],
           { env: gitEnvironment },
         ),
-      dispose: () => {
-        rmSync(directory, { recursive: true, force: true });
-      },
     };
   } catch (error) {
-    rmSync(directory, { recursive: true, force: true });
+    rmSync(directory, { force: true, recursive: true });
     throw error;
   }
 };

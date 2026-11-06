@@ -210,19 +210,19 @@ describe("release promotion contract", () => {
       sealPromotionReceipt({
         ...unsigned(),
         endpoint: "http://127.0.0.1:3000/mcp",
-      } as never),
+      }),
     ).toThrow();
     expect(() =>
       sealPromotionReceipt({
         ...unsigned(),
         image: { ...unsigned().image, reference: `${IMAGE_REPOSITORY}:latest` },
-      } as never),
+      }),
     ).toThrow();
     expect(() =>
       sealPromotionReceipt({
         ...unsigned(),
         package: { ...unsigned().package, archive: "/tmp/release.tar.gz" },
-      } as never),
+      }),
     ).toThrow();
     expect(() =>
       sealPromotionReceipt({

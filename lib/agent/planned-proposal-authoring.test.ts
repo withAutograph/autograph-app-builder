@@ -37,12 +37,12 @@ vi.mock("./preapproval-authoring-runtime", async (original) => {
   const actual = await original<typeof import("./preapproval-authoring-runtime")>();
   return {
     ...actual,
-    recordPreapprovalAuthoringDecision: (
+    recordPreapprovalAuthoringDecision: async (
       _ctx: Pick<HookContext, "session">,
       decision: Parameters<typeof actual.recordPreapprovalAuthoringDecision>[1],
     ) => {
       actual.diagnosticAuthoringDecisionState.update(() => decision);
-      return Promise.resolve();
+      return;
     },
   };
 });
@@ -54,50 +54,50 @@ const seed = () => {
   const hash = (letter: string) => letter.repeat(64);
   const changes = [
     {
-      path: "apps/example/app/page.tsx",
       after: {
         content: "draft",
         digest: sha256("draft"),
         mode: "644",
       },
+      path: "apps/example/app/page.tsx",
     },
   ];
   const contract = {
     appId: "example",
-    version: 1,
     appSpec: { path: "app-spec.md", sha256: hash("a") },
+    version: 1,
   };
   const unsigned = {
-    version: 1,
     appSpecDigest: hash("a"),
-    workspaceDigest: hash("b"),
-    sourceReceiptDigest: hash("c"),
     contractDigest: sha256(JSON.stringify(contract)),
     plannedByCallId: "actual-plan",
+    sourceReceiptDigest: hash("c"),
     target: {
-      operation: "iterate-existing-app",
       contract,
       iteration: {
         changes,
         digest: sha256(JSON.stringify(changes)),
       },
+      operation: "iterate-existing-app",
     },
+    version: 1,
+    workspaceDigest: hash("b"),
   };
   const current = {
-    version: 17,
-    phase: "planned",
-    artifacts: [],
     appSpec: {
-      appId: "example",
-      digest: hash("a"),
       acceptedByCallId: "actual-accept",
+      appId: "example",
       artifactPath: "app-spec.md",
       artifactRevision: "accepted-revision",
+      digest: hash("a"),
     },
+    artifacts: [],
     identityReceipt: { identity: { appId: "example" } },
-    sourceReceipt: { digest: hash("c") },
-    workspace: { workspaceId: "sandbox", workspaceDigest: hash("b") },
+    phase: "planned",
     proposal: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },
+    sourceReceipt: { digest: hash("c") },
+    version: 17,
+    workspace: { workspaceDigest: hash("b"), workspaceId: "sandbox" },
   } as unknown as Extract<AppBuilderWorkflowState, { phase: "planned" }>;
   appBuilderWorkflowState.update(() => current);
   return current;
@@ -106,8 +106,8 @@ const scope = (current: ReturnType<typeof seed>) => ({
   appId: "example",
   appSpecDigest: current.appSpec.digest,
   proposalDigest: current.proposal.digest,
-  workspaceId: "sandbox",
   sessionId: "owned",
+  workspaceId: "sandbox",
 });
 const deny = (current: ReturnType<typeof seed>) => {
   requestPrivateApplyApproval(scope(current), "denied-call");
@@ -122,8 +122,8 @@ const deny = (current: ReturnType<typeof seed>) => {
 const request = (owner = ctx()) => {
   observePlannedAuthoringRequest(owner, {
     message: "Correct the current draft and tests before asking for fresh Build.",
-    turnId: owner.session.turn.id,
     sequence: 0,
+    turnId: owner.session.turn.id,
   });
 };
 const inspection = (current: ReturnType<typeof seed>, owner = ctx(), callId = "actual-inspect") => {
@@ -131,30 +131,30 @@ const inspection = (current: ReturnType<typeof seed>, owner = ctx(), callId = "a
     {
       appId: "example",
       expectedProposalDigest: current.proposal.digest,
-      paths: [],
       pathIndex: 0,
+      paths: [],
     },
     owner as unknown as Pick<ToolContext, "session" | "abortSignal">,
   );
   return {
-    type: "action.result",
     data: {
-      status: "completed",
       result: {
-        kind: "tool-result",
-        toolName: "inspect_existing_app",
         callId,
+        kind: "tool-result",
         output,
+        toolName: "inspect_existing_app",
       },
+      status: "completed",
     },
+    type: "action.result",
   } as unknown as Parameters<typeof observePlannedAuthoringInspection>[0];
 };
 const run = (operation: () => void | Promise<void>) =>
   contextStorage.run(new ContextContainer(), operation);
 const decision = (owner = ctx()) =>
   currentAuthoringDecision(owner, {
-    completed: true,
     blocked: false,
+    completed: true,
     pendingInput: false,
   });
 
@@ -171,10 +171,10 @@ describe("declined current-proposal drafting observation", () => {
       const observed = decision();
       expect(observed.decision).toBe("runnable");
       expect(observed.scope?.correction).toMatchObject({
-        proposalDigest: current.proposal.digest,
-        inspectionCallId: "actual-inspect",
-        requestTurnId: "correction",
         denialEvidenceDigest: authority.terminalDecisions?.[0]?.evidenceDigest,
+        inspectionCallId: "actual-inspect",
+        proposalDigest: current.proposal.digest,
+        requestTurnId: "correction",
       });
       expect(preapprovalAuthoringDecisionSchema.parse(observed)).toEqual(observed);
       expect(readPrivateApplyAuthority()).toEqual(authority);
@@ -228,10 +228,10 @@ describe("declined current-proposal drafting observation", () => {
         }
         if (mode === "other-proposal" && event.data.result.kind === "tool-result") {
           event.data.result.output = {
-            source: "current-proposal",
-            status: "UNAPPLIED",
             appId: "example",
             proposalDigest: "other",
+            source: "current-proposal",
+            status: "UNAPPLIED",
           };
         }
         observePlannedAuthoringInspection(event, mode === "other-turn" ? ctx("other", 3) : ctx());
@@ -268,8 +268,8 @@ describe("declined current-proposal drafting observation", () => {
         {
           data: {
             message: "Correct this unapproved draft",
-            turnId: owner.session.turn.id,
             sequence: 0,
+            turnId: owner.session.turn.id,
           },
         } as never,
         owner,
@@ -285,8 +285,8 @@ describe("declined current-proposal drafting observation", () => {
       const retainedScopeDigest = first.scopeDigest;
       const internal = ctx("internal", 3);
       authenticatedAuthoringDelivery.update(() => ({
-        turnId: "internal",
         scopeDigest: retainedScopeDigest,
+        turnId: "internal",
       }));
       await authoringHook.events?.["turn.started"]?.({} as never, internal);
       await authoringHook.events?.["action.result"]?.(
@@ -364,8 +364,8 @@ describe("declined current-proposal drafting observation", () => {
       expect(decision().decision).toBe("runnable");
       observePlannedAuthoringRequest(ctx(), {
         message: "different bytes",
-        turnId: "correction",
         sequence: 0,
+        turnId: "correction",
       });
       expect(decision().decision).toBe("planned");
       expect(readPrivateApplyAuthority().grant).toBeNull();
@@ -386,8 +386,8 @@ describe("declined current-proposal drafting observation", () => {
         const owner = ctx(mode === "fresh-external" ? "new-user" : "internal", 3);
         if (mode !== "fresh-external") {
           authenticatedAuthoringDelivery.update(() => ({
-            turnId: "internal",
             scopeDigest: originalScopeDigest,
+            turnId: "internal",
           }));
         }
         if (mode === "internal-successor") {
@@ -406,9 +406,9 @@ describe("declined current-proposal drafting observation", () => {
         }
         const input = {
           ...owner,
+          abortSignal: new AbortController().signal,
           callId: "next-apply",
           toolInput: {},
-          abortSignal: new AbortController().signal,
         };
         expect(await policy(input as never)).toBe(
           mode === "internal-unchanged" ? "not-applicable" : "user-approval",

@@ -77,10 +77,10 @@ describe("development process supervision", () => {
       pid: { value: 43_210 },
       signalCode: { value: null, writable: true },
     });
-    child.kill = ((signal?: NodeJS.Signals | number) => {
+    child.kill = (signal?: NodeJS.Signals | number) => {
       directSignals.push(signal);
       return true;
-    }) as ChildProcess["kill"];
+    };
     const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
       groupSignals.push(signal);
       if (signal === "SIGKILL") {

@@ -21,7 +21,7 @@ import { requestPrivateApplyApproval } from "./private-apply-authority";
 import hook from "../../agent/hooks/continue-preapproval-authoring";
 import acceptAppSpec from "../../agent/tools/accept_app_spec";
 
-const mocks = vi.hoisted(() => ({ prepare: vi.fn(), record: vi.fn(), projection: vi.fn() }));
+const mocks = vi.hoisted(() => ({ prepare: vi.fn(), projection: vi.fn(), record: vi.fn() }));
 vi.mock("eve/hooks", () => ({ defineHook: <T>(value: T) => value }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(value: T) => value }));
 vi.mock("./prepare-app-creation", () => ({ prepareAppCreation: mocks.prepare }));
@@ -67,25 +67,25 @@ const seed = async () => {
     digest: sha256(content),
     mediaType: "text/markdown",
     path: "prototype/inventory/app-spec.md",
+    recordedByCallId: "record",
     revision: "revision1",
     sessionId: ctx.session.id,
-    recordedByCallId: "record",
   };
   const state = {
-    version: 17,
-    phase: "prepared",
     artifacts: [artifact],
+    phase: "prepared",
     preparedByCallId: "prepare",
     sourceReceipt: { digest: "a".repeat(64) },
-    workspace: { workspaceId: "same-sandbox", workspaceDigest: "b".repeat(64) },
+    version: 17,
+    workspace: { workspaceDigest: "b".repeat(64), workspaceId: "same-sandbox" },
   } as unknown as AppBuilderWorkflowState;
   appBuilderWorkflowState.update(() => state);
   mocks.prepare.mockResolvedValue(null);
   await acceptAppSpec.execute({ appId: "inventory" }, {
-    session: ctx.session,
     callId: "actual-accept",
     getSandbox: vi.fn(),
     getSkill: vi.fn(),
+    session: ctx.session,
   } as unknown as Parameters<typeof acceptAppSpec.execute>[1]);
   expect(appBuilderWorkflowState.get().phase).toBe("app_spec_accepted");
 };
@@ -107,16 +107,16 @@ describe("native preapproval drafting lifecycle", () => {
       for (const callId of ["read1", "read2", "read3"]) {
         await emit("actions.requested", { actions: [{ callId }] });
         await emit("action.result", {
+          result: { callId, kind: "tool-result", output: {}, toolName: "inspect_existing_app" },
           status: "completed",
-          result: { kind: "tool-result", toolName: "inspect_existing_app", callId, output: {} },
         });
       }
       await emit("turn.completed");
       expect(diagnosticAuthoringDecisionState.get()).toMatchObject({
         decision: "runnable",
         scope: {
-          authoritySessionId: "original-logical",
           acceptedByCallId: "actual-accept",
+          authoritySessionId: "original-logical",
           workspaceId: "same-sandbox",
         },
       });
@@ -139,10 +139,10 @@ describe("native preapproval drafting lifecycle", () => {
       } else if (mode === "pendingApproval") {
         requestPrivateApplyApproval(
           {
-            sessionId: ctx.session.id,
             appId: "inventory",
             appSpecDigest: "c".repeat(64),
             proposalDigest: "d".repeat(64),
+            sessionId: ctx.session.id,
             workspaceId: "same-sandbox",
           },
           "pending-build",
@@ -153,14 +153,14 @@ describe("native preapproval drafting lifecycle", () => {
         await emit("actions.requested", { actions: [{ callId: "read" }] });
         if (mode !== "unfinished") {
           await emit("action.result", {
-            status: mode === "isError" ? "completed" : mode,
             result: {
-              kind: "tool-result",
-              toolName: "inspect_repository",
               callId: "read",
-              output: {},
               isError: mode === "isError",
+              kind: "tool-result",
+              output: {},
+              toolName: "inspect_repository",
             },
+            status: mode === "isError" ? "completed" : mode,
           });
         }
       }
@@ -177,8 +177,8 @@ describe("native preapproval drafting lifecycle", () => {
       await emit("turn.completed");
       const first = diagnosticAuthoringDecisionState.get()!;
       authenticatedAuthoringDelivery.update(() => ({
-        turnId: "turn1",
         scopeDigest: first.scopeDigest!,
+        turnId: "turn1",
       }));
       await emit("turn.completed");
       expect(diagnosticAuthoringDecisionState.get()).toMatchObject({
@@ -194,16 +194,16 @@ describe("native preapproval drafting lifecycle", () => {
       await emit("turn.completed");
       const before = diagnosticAuthoringDecisionState.get()!;
       authenticatedAuthoringDelivery.update(() => ({
-        turnId: "turn1",
         scopeDigest: before.scopeDigest!,
+        turnId: "turn1",
       }));
       const state = appBuilderWorkflowState.get();
       appBuilderWorkflowState.update(
         () =>
           ({
             ...state,
-            phase: "dependencies_prepared",
             dependencyReceipt: { digest: "e".repeat(64) },
+            phase: "dependencies_prepared",
           }) as unknown as AppBuilderWorkflowState,
       );
       await emit("turn.completed");

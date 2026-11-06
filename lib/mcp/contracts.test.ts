@@ -76,7 +76,7 @@ describe("SEND observation cursors", () => {
       expect(eveSendInputSchema.safeParse({ ...request, observationCursor: cursor }).success).toBe(
         false,
       );
-      expect(eveGetInputSchema.safeParse({ sessionId: request.sessionId, cursor }).success).toBe(
+      expect(eveGetInputSchema.safeParse({ cursor, sessionId: request.sessionId }).success).toBe(
         false,
       );
     }

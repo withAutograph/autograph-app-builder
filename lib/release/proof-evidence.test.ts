@@ -5,11 +5,15 @@ import { assertExactToolDiscovery, parseReviewedProof } from "./proof-evidence";
 
 describe("release proof evidence", () => {
   it("requires exact ordered five-tool discovery", () => {
-    expect(() => assertExactToolDiscovery(TOOL_NAMES)).not.toThrow();
-    expect(() => assertExactToolDiscovery(TOOL_NAMES.slice(0, 4))).toThrow("five public tools");
-    expect(() => assertExactToolDiscovery([...TOOL_NAMES].toReversed())).toThrow(
-      "five public tools",
-    );
+    expect(() => {
+      assertExactToolDiscovery(TOOL_NAMES);
+    }).not.toThrow();
+    expect(() => {
+      assertExactToolDiscovery(TOOL_NAMES.slice(0, 4));
+    }).toThrow("five public tools");
+    expect(() => {
+      assertExactToolDiscovery([...TOOL_NAMES].toReversed());
+    }).toThrow("five public tools");
   });
 
   it("accepts only Browser-backed reviewed proof without publication", () => {

@@ -34,22 +34,24 @@ import {
 import { BUILD_READY_APP_SPEC } from "../../evals/support/app-spec";
 
 const ports = vi.hoisted(() => ({
-  profile: vi.fn(),
+  emitProjection: vi.fn(),
   execute: vi.fn(),
+  profile: vi.fn(),
   readBinary: vi.fn(),
   run: vi.fn(),
-  emitProjection: vi.fn(),
 }));
 const repairSandbox = { id: "workspace", readBinaryFile: ports.readBinary, run: ports.run };
 vi.mock("./refresh-planning-source", () => ({
-  refreshPlanningSource: () => Promise.resolve(repairSandbox),
+  refreshPlanningSource: async () => repairSandbox,
 }));
 vi.mock("./approved-build-continuation-runtime", () => ({
   emitCurrentBuildWorkflowProjection: ports.emitProjection,
 }));
 vi.mock("./target-dependency-preparation", () => ({
-  prepareOrReuseDependencies: () =>
-    Promise.resolve({ state: appBuilderWorkflowState.get(), sandbox: repairSandbox }),
+  prepareOrReuseDependencies: async () => ({
+    sandbox: repairSandbox,
+    state: appBuilderWorkflowState.get(),
+  }),
 }));
 vi.mock("./private-compute-planning", async (importOriginal) => ({
   ...(await importOriginal<{
@@ -59,13 +61,6 @@ vi.mock("./private-compute-planning", async (importOriginal) => ({
   preparePrivateComputePlanning: ports.profile,
 }));
 vi.mock("../repository/target-planning", () => ({
-  targetExecutionBinding: () => ({
-    fixture: true,
-    dependencyCacheDigest: "cache",
-    imageDigest: "image",
-  }),
-  fixtureTargetCommandExecutor: () => ({}),
-  sandboxTargetCommandExecutor: () => ({}),
   executeTargetIdentityAndPlanning: async (input: {
     onIdentity: (identity: { appId: string; workspacePath: string }) => void | Promise<void>;
   }) => {
@@ -73,69 +68,76 @@ vi.mock("../repository/target-planning", () => ({
     const result: unknown = await ports.execute(input);
     return result;
   },
+  fixtureTargetCommandExecutor: () => ({}),
+  sandboxTargetCommandExecutor: () => ({}),
+  targetExecutionBinding: () => ({
+    dependencyCacheDigest: "cache",
+    fixture: true,
+    imageDigest: "image",
+  }),
 }));
 const sha256 = (content: string) => createHash("sha256").update(content).digest("hex");
 const profile = () =>
   privateComputeProfileSchema.parse({
-    version: 1,
-    id: "private-checks-16gib-v1",
-    vcpus: 8,
-    memoryMiB: 16_384,
-    lintWorkers: 1,
-    target: { sandboxId: "workspace", workspaceDrive: "same-drive" },
     checkPolicy: {
-      path: "apps/example/.config/mise/tasks/check",
-      beforeSha256: "a".repeat(64),
       afterSha256: sha256(PRIVATE_COMPUTE_CHECK_TASK),
+      beforeSha256: "a".repeat(64),
+      path: "apps/example/.config/mise/tasks/check",
     },
+    id: "private-checks-16gib-v1",
     limits: {
-      version: 1,
-      teamId: "team_owned",
-      projectId: "prj_owned",
-      plan: "pro",
-      maxVcpus: 8,
       limited: false,
+      maxVcpus: 8,
       observedAt: "2026-11-03T12:00:00.000Z",
+      plan: "pro",
+      projectId: "prj_owned",
+      teamId: "team_owned",
+      version: 1,
     },
+    lintWorkers: 1,
+    memoryMiB: 16_384,
+    target: { sandboxId: "workspace", workspaceDrive: "same-drive" },
+    vcpus: 8,
+    version: 1,
   });
 const fixture = (phase: "planned" | "identity_resolved", compute = profile()) =>
   // SAFETY: The real producer consumes these immutable state fields; unrelated receipt internals are opaque test sentinels and no provider or filesystem port is available.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only the explicit consumed receipt fields are modeled; unavailable execution ports cannot perform effects.
   ({
-    version: 17,
-    phase,
     appSpec: {
-      appId: "example",
       acceptedByCallId: "accepted",
-      content: BUILD_READY_APP_SPEC,
-      digest: "spec",
+      appId: "example",
       artifactPath: "prototype/example/app-spec.md",
       artifactRevision: "artifact",
+      content: BUILD_READY_APP_SPEC,
+      digest: "spec",
     },
     artifacts: [],
+    dependencyReceipt: { digest: "dependency" },
+    identityReceipt: { digest: "identity" },
+    phase,
+    preparedByCallId: "prepared",
     sourceReceipt: { digest: "source" },
+    version: 17,
     workspace: {
-      workspaceId: "workspace",
-      workspacePath: "/workspace/repository",
+      eligibilityDigest: "eligible",
       sourceSha: "source-sha",
       sourceTree: "source-tree",
       workspaceDigest: "workspace",
-      eligibilityDigest: "eligible",
+      workspaceId: "workspace",
+      workspacePath: "/workspace/repository",
     },
-    dependencyReceipt: { digest: "dependency" },
-    identityReceipt: { digest: "identity" },
-    preparedByCallId: "prepared",
     ...(phase === "planned"
       ? { proposal: { digest: "frozen-proposal", target: { privateCompute: compute } } }
       : {}),
   }) as unknown as AppBuilderWorkflowState;
 // SAFETY: Planning I/O is mocked above; only the call and session identifiers are consumed by this producer test.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Context uses only these identifiers while execution ports are isolated.
-const context = { callId: "plan", session: { id: "session", auth: {} } } as unknown as Parameters<
+const context = { callId: "plan", session: { auth: {}, id: "session" } } as unknown as Parameters<
   typeof prepareAppCreation
 >[1];
-const run = <T>(operation: () => Promise<T>) =>
-  contextStorage.run(new ContextContainer(), operation);
+const run = async <T>(operation: () => Promise<T>) =>
+  await contextStorage.run(new ContextContainer(), operation);
 beforeEach(() => {
   vi.clearAllMocks();
   ports.profile.mockResolvedValue(profile());
@@ -158,9 +160,9 @@ describe("normal private compute recipe projection", () => {
         expect(result.checkTaskSha256).toBe(sha256(PRIVATE_COMPUTE_CHECK_TASK));
         expect(implementationFilesSchema.parse(result.implementationFiles)).toEqual([
           {
-            path: profile().checkPolicy.path,
-            operation: "upsert",
             content: PRIVATE_COMPUTE_CHECK_TASK,
+            operation: "upsert",
+            path: profile().checkPolicy.path,
           },
         ]);
         expect(result.privateCompute).toEqual(profile());
@@ -179,7 +181,7 @@ describe("normal private compute recipe projection", () => {
       }
       Reflect.deleteProperty(current.proposal.target, "privateCompute");
       appBuilderWorkflowState.update(() => current);
-      ports.profile.mockImplementation(() => Promise.resolve());
+      ports.profile.mockImplementation(async () => {});
       const result = await prepareAppCreation({}, context);
       expect(result.reused).toBe(true);
       expect(result).not.toHaveProperty("privateCompute");
@@ -207,14 +209,14 @@ const appliedRepairFixture = () => {
   // SAFETY: The existing receipt fixture supplies all immutable fields consumed by the real repair producer.
   return {
     ...planned,
-    phase: "applied",
     applyReceipt: {
       appSpecDigest: "spec",
-      proposalDigest: planned.proposal.digest,
-      workspaceDigest: "workspace",
-      sourceReceiptDigest: "source",
       applyRoot: "/workspace/repository",
+      proposalDigest: planned.proposal.digest,
+      sourceReceiptDigest: "source",
+      workspaceDigest: "workspace",
     },
+    phase: "applied",
   } as AppBuilderWorkflowState;
 };
 const approveRepairFixture = (state: AppBuilderWorkflowState) => {
@@ -233,8 +235,8 @@ const approveRepairFixture = (state: AppBuilderWorkflowState) => {
 };
 const repairFiles = [
   {
-    path: "apps/example/.config/mise/config.toml",
     content: "# Enables discovery of generated app-scoped mise tasks.\n",
+    path: "apps/example/.config/mise/config.toml",
   },
 ];
 
@@ -242,8 +244,8 @@ const hostedRecoveryContext = {
   ...context,
   callId: "hosted-recovery",
   // SAFETY: Recovery may inspect this Sandbox's identity only. The command and file spies assert no source I/O.
-  getSandbox: vi.fn(() =>
-    Promise.resolve(repairSandbox as unknown as Awaited<ReturnType<typeof context.getSandbox>>),
+  getSandbox: vi.fn(
+    async () => repairSandbox as unknown as Awaited<ReturnType<typeof context.getSandbox>>,
   ),
 };
 
@@ -262,9 +264,9 @@ const prepareRecoveryFixture = async (
     ...(phase === "validation_failed" ? { validationFailure: { reason: "command-failed" } } : {}),
     ...(phase === "reviewed"
       ? {
-          validationReceipt: {},
-          reviewReceipt: {},
           githubDraftProposal: { proposal: { digest: "sealed-draft" } },
+          reviewReceipt: {},
+          validationReceipt: {},
         }
       : {}),
     publishedGitHubDraftProposalDigest,
@@ -372,7 +374,7 @@ describe("resume the approved build through the planning tool", () => {
             appSpec: { ...planned.appSpec, appId: "different-app" },
           }));
         } else {
-          const grant = readPrivateApplyAuthority().grant;
+          const { grant } = readPrivateApplyAuthority();
           if (grant === null) {
             throw new Error("fixture");
           }
@@ -405,20 +407,20 @@ describe("explicit same-app private repair through the real planning producer", 
       ports.execute.mockResolvedValue({
         contractDigest: "contract",
         proposal: {
-          privateCompute: profile(),
-          operation: "iterate-existing-app",
           iteration: {
             changes: [
               {
-                path: repairFiles[0].path,
                 after: {
                   content: repairFiles[0].content,
                   digest: sha256(repairFiles[0].content),
                   mode: "644",
                 },
+                path: repairFiles[0].path,
               },
             ],
           },
+          operation: "iterate-existing-app",
+          privateCompute: profile(),
         },
       });
       const before = JSON.stringify(old);
@@ -454,8 +456,8 @@ describe("explicit same-app private repair through the real planning producer", 
         appSpec: { ...next.appSpec, uiRevision: "recorded-ui-revision" },
         workspace: {
           ...next.workspace,
-          sourcePath: "/owned-relocated-source",
           eligibilityDigest: sha256("refreshed-eligibility-metadata"),
+          sourcePath: "/owned-relocated-source",
         },
       }));
       const repeated = await prepareAppCreation({ existingAppChanges: repairFiles }, context);
@@ -481,21 +483,21 @@ describe("explicit same-app private repair through the real planning producer", 
       ports.execute.mockResolvedValue({
         contractDigest: "contract",
         proposal: {
-          privateCompute: profile(),
-          operation: "iterate-existing-app",
           iteration: {
             changes: [
               {
-                path: repairFiles[0].path,
-                before: { digest: sha256("current source"), mode: "755" },
                 after: {
                   content: repairFiles[0].content,
                   digest: sha256(repairFiles[0].content),
                   mode: "755",
                 },
+                before: { digest: sha256("current source"), mode: "755" },
+                path: repairFiles[0].path,
               },
             ],
           },
+          operation: "iterate-existing-app",
+          privateCompute: profile(),
         },
       });
       await prepareAppCreation({ existingAppChanges: repairFiles }, context);
@@ -552,7 +554,7 @@ describe("explicit same-app private repair through the real planning producer", 
       ).rejects.toThrow("exact reviewed");
       await expect(
         prepareAppCreation(
-          { existingAppChanges: [{ path: "apps/foreign/page.tsx", content: "x" }] },
+          { existingAppChanges: [{ content: "x", path: "apps/foreign/page.tsx" }] },
           context,
         ),
       ).rejects.toThrow("path");
@@ -592,9 +594,9 @@ it("rejects a missing current compute profile on a retained prepared repair", as
     ports.execute.mockResolvedValue({
       contractDigest: "contract",
       proposal: {
-        privateCompute: profile(),
-        operation: "iterate-existing-app",
         iteration: { changes: [] },
+        operation: "iterate-existing-app",
+        privateCompute: profile(),
       },
     });
     await prepareAppCreation({ existingAppChanges: repairFiles }, context);
@@ -623,9 +625,9 @@ it("does not reuse the same repair intent after its applied file has drifted", a
     ports.execute.mockResolvedValue({
       contractDigest: "contract",
       proposal: {
-        privateCompute: profile(),
-        operation: "iterate-existing-app",
         iteration: { changes: [] },
+        operation: "iterate-existing-app",
+        privateCompute: profile(),
       },
     });
     await prepareAppCreation({ existingAppChanges: repairFiles }, context);
@@ -635,8 +637,8 @@ it("does not reuse the same repair intent after its applied file has drifted", a
     }
     const applied = {
       ...planned,
-      phase: "applied",
       applyReceipt: { ...old.applyReceipt, proposalDigest: planned.proposal.digest },
+      phase: "applied",
     };
     // SAFETY: Preserve all applied receipt fields and replace only its newly approved proposal identity.
     appBuilderWorkflowState.update(() => applied as AppBuilderWorkflowState);
@@ -669,8 +671,8 @@ const unappliedIterationFixture = () => {
       plannedByCallId: "compute-only-replan",
       target: {
         ...state.proposal.target,
-        operation: "iterate-existing-app",
         iteration: { changes: [], digest: "iteration" },
+        operation: "iterate-existing-app",
       },
     },
   } as unknown as AppBuilderWorkflowState;
@@ -701,12 +703,12 @@ describe("unapproved existing-app plan amendment", () => {
         expected: readPrivateApplyAuthority(),
         proofs: [
           {
-            sessionId: "session",
             callId: "denied-build",
-            requestId: "framework-request",
-            outcome: "denied-not-run",
             eventIds: ["request", "resolution", "not-run"],
             evidenceDigest: sha256("verified-native-negative-proof"),
+            outcome: "denied-not-run",
+            requestId: "framework-request",
+            sessionId: "session",
           },
         ],
       });
@@ -714,9 +716,9 @@ describe("unapproved existing-app plan amendment", () => {
       ports.execute.mockResolvedValue({
         contractDigest: "contract",
         proposal: {
-          privateCompute: profile(),
-          operation: "iterate-existing-app",
           iteration: { changes: [] },
+          operation: "iterate-existing-app",
+          privateCompute: profile(),
         },
       });
       const result = await prepareAppCreation({ existingAppChanges: repairFiles }, context);
@@ -813,9 +815,9 @@ describe("unapproved existing-app plan amendment", () => {
       }
       current.proposal.target.iteration.changes = [
         {
-          path: "apps/example/.config/mise/config.toml",
-          before: { digest: sha256("before"), mode: "644" },
           after: { content: "after", digest: sha256("after"), mode: "644" },
+          before: { digest: sha256("before"), mode: "644" },
+          path: "apps/example/.config/mise/config.toml",
         },
       ];
       appBuilderWorkflowState.update(() => current);
@@ -823,9 +825,9 @@ describe("unapproved existing-app plan amendment", () => {
       ports.execute.mockResolvedValue({
         contractDigest: "fresh-contract",
         proposal: {
-          privateCompute: profile(),
-          operation: "iterate-existing-app",
           iteration: { changes: [] },
+          operation: "iterate-existing-app",
+          privateCompute: profile(),
         },
       });
       const result = await prepareAppCreation(

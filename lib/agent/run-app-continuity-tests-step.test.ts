@@ -20,8 +20,8 @@ import {
 } from "../provisioning/hosted-acceptance-recovery.test-fixture";
 
 const hooks = vi.hoisted(() => ({
-  client: vi.fn(),
   approval: vi.fn<(ctx: ApprovalContext<ContinuityApprovalToolInput>) => Promise<ApprovalStatus>>(),
+  client: vi.fn(),
 }));
 vi.mock("eve/tools", () => ({
   defineWorkflowTool: <
@@ -40,78 +40,78 @@ vi.mock("../provisioning/hosted-operator-client", () => ({
 }));
 
 vi.mock("workflow", () => ({
-  sleep: vi.fn(),
   RetryableError: class extends Error {
     override name = "RetryableError";
   },
+  sleep: vi.fn(),
 }));
 
 const fixture = async () => {
   const f = setup();
   const saved = await f.operations.plan(context, selection.runtime, "retained-continuity");
   const capture = createPrivateContinuityApprovalCapture({
-    plan: saved.plan,
-    request: saved.request,
-    principal: { ...authority, scopes: ["autograph:send"] },
     callId: "continuity-call",
+    plan: saved.plan,
+    principal: { ...authority, scopes: ["autograph:send"] },
+    request: saved.request,
   });
   f.deps.readApproval = async () => capture.read();
   const client = {
-    sessionId: context.target.sessionId,
-    readContinuity: async (intentId: string) => await f.operations.readPlan(context, intentId),
     continuityApproval: async (request: typeof saved.request) =>
       await f.operations.approval(context, request),
+    readContinuity: async (intentId: string) => await f.operations.readPlan(context, intentId),
     runContinuity: async (request: typeof saved.request, callId: string) =>
       await f.operations.execute(context, request, callId),
+    sessionId: context.target.sessionId,
   };
   hooks.client.mockResolvedValue(client);
   const ctx = z.custom<Parameters<typeof runHostedContinuityStep>[1]>().parse({
-    session: {
-      id: context.target.sessionId,
-      auth: {},
-      ownerRunId: "owner-run",
-      ownerAnchorRunId: context.target.sessionId,
-    },
-    callId: "continuity-call",
     abortSignal: new AbortController().signal,
+    callId: "continuity-call",
+    session: {
+      auth: {},
+      id: context.target.sessionId,
+      ownerAnchorRunId: context.target.sessionId,
+      ownerRunId: "owner-run",
+    },
   });
   const approve = () => {
     capture.observe({
-      type: "input.requested",
-      meta: { at: "2026-11-03T00:00:00Z", id: "request-event" },
       data: {
+        requests: [
+          {
+            action: {
+              callId: ctx.callId,
+              input: saved.request,
+              kind: "tool-call",
+              toolName: "run-app-continuity-tests",
+            },
+            kind: "tool-approval",
+            prompt: "Approve continuity",
+            requestId: "native-approval",
+          },
+        ],
         sequence: 1,
         stepIndex: 0,
         turnId: "retained-turn",
-        requests: [
-          {
-            kind: "tool-approval",
-            requestId: "native-approval",
-            prompt: "Approve continuity",
-            action: {
-              kind: "tool-call",
-              toolName: "run-app-continuity-tests",
-              callId: ctx.callId,
-              input: saved.request,
-            },
-          },
-        ],
       },
+      meta: { at: "2026-11-03T00:00:00Z", id: "request-event" },
+      type: "input.requested",
     });
     capture.observe({
-      type: "approval.settled",
-      meta: { at: "2026-11-03T00:00:01Z", id: "approval-event" },
       data: {
+        outcome: "approved",
+        requestId: "native-approval",
+        responderPrincipalId: authority.ownerUserId,
         sequence: 2,
         stepIndex: 0,
         turnId: "retained-turn",
-        requestId: "native-approval",
-        responderPrincipalId: authority.ownerUserId,
-        outcome: "approved",
       },
+      meta: { at: "2026-11-03T00:00:01Z", id: "approval-event" },
+      type: "approval.settled",
     });
   };
-  return { f, saved, capture, client, ctx, approve };
+  return { approve, capture, client, ctx, f, saved };
 };
 
 it("server-loads the complete saved plan from compact arguments and never executes before native settlement", async () => {

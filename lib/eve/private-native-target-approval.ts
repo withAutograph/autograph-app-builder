@@ -27,21 +27,21 @@ import type {
 import type { NativeTargetCurrentOwner } from "../provisioning/native-target-onboarding-store";
 
 const terminalSchema = z.strictObject({
-  requestId: z.string().min(1),
   callId: z.string().min(1),
-  responderPrincipalId: z.string().min(1),
-  outcome: z.enum(["approved", "cancelled"]),
   observedAt: z.iso.datetime({ offset: true }),
+  outcome: z.enum(["approved", "cancelled"]),
+  requestId: z.string().min(1),
+  responderPrincipalId: z.string().min(1),
 });
 type Terminal = z.infer<typeof terminalSchema>;
 export const privateNativeTargetApprovalObservationSchema = z.strictObject({
-  version: z.literal(1),
   native: privateOperatorApprovalObservationSchema,
   terminals: z.array(terminalSchema).superRefine((entries, context) => {
     if (new Set(entries.map((entry) => entry.requestId)).size !== entries.length) {
       context.addIssue({ code: "custom", message: "Ambiguous native target terminal proof." });
     }
   }),
+  version: z.literal(1),
 });
 export type PrivateNativeTargetApprovalObservation = z.infer<
   typeof privateNativeTargetApprovalObservationSchema
@@ -54,8 +54,8 @@ export interface PrivateNativeTargetApprovalObservationPort {
 const inputSchema = z.strictObject({
   appId: nativeTargetOnboardingPlanSchema.shape.appId,
   operationRef: z.uuid(),
-  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   plan: nativeTargetOnboardingPlanSchema,
+  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
 });
 
 /** The frozen registry plan is the intent; event input is only its exact human-visible echo. */
@@ -71,20 +71,20 @@ export const createPrivateNativeTargetApprovalCapture = (input: {
   const expected = inputSchema.parse({
     appId: record.appId,
     operationRef,
-    planDigest: record.planDigest,
     plan: record.plan,
+    planDigest: record.planDigest,
   });
   if (nativeTargetOnboardingPlanDigest(record.plan) !== record.planDigest) {
     throw new Error("Native target approval plan changed.");
   }
   const capture = createPrivateOperatorApprovalCapture({
+    ownerUserId: input.owner.authority.ownerUserId,
     request: {
       action: "native-target",
-      planRef: operationRef,
-      planDigest: record.planDigest,
       idempotencyKey: record.appId,
+      planDigest: record.planDigest,
+      planRef: operationRef,
     },
-    ownerUserId: input.owner.authority.ownerUserId,
     ...(input.callId === undefined ? {} : { callId: input.callId }),
     ...(input.state === undefined ? {} : { state: input.state }),
   });
@@ -114,13 +114,13 @@ export const createPrivateNativeTargetApprovalCapture = (input: {
       throw new Error("Native target terminal proof is unavailable.");
     }
     return nativeTargetOnboardingApprovalSchema.parse({
-      requestId: terminal.requestId,
       callId: terminal.callId,
-      planDigest: record.planDigest,
-      responderPrincipalId: terminal.responderPrincipalId,
-      publicSessionId: record.plan.origin.publicSessionId,
-      outcome: terminal.outcome,
       observedAt: terminal.observedAt,
+      outcome: terminal.outcome,
+      planDigest: record.planDigest,
+      publicSessionId: record.plan.origin.publicSessionId,
+      requestId: terminal.requestId,
+      responderPrincipalId: terminal.responderPrincipalId,
     });
   };
   return {
@@ -156,15 +156,16 @@ export const createPrivateNativeTargetApprovalCapture = (input: {
         terminals.set(
           entry.requestId,
           terminalSchema.parse({
-            requestId: entry.requestId,
             callId: entry.callId,
-            responderPrincipalId: event.data.responderPrincipalId,
-            outcome,
             observedAt: event.meta.at,
+            outcome,
+            requestId: entry.requestId,
+            responderPrincipalId: event.data.responderPrincipalId,
           }),
         );
       }
     },
+    proveComplete: capture.proveComplete,
     read(): NativeTargetOnboardingApproval | null {
       const allEntries = capture.snapshot().entries;
       // Cancellation denies this exact plan across invocations; only positive
@@ -190,7 +191,6 @@ export const createPrivateNativeTargetApprovalCapture = (input: {
       return proofFor(entry);
     },
     snapshot: capture.snapshot,
-    proveComplete: capture.proveComplete,
     terminalSnapshot: () =>
       [...terminals.values()].map((terminal) => terminalSchema.parse(terminal)),
   };
@@ -238,9 +238,9 @@ export const readPrivateNativeTargetApproval = async (input: {
               }
               await input.observation?.save(
                 privateNativeTargetApprovalObservationSchema.parse({
-                  version: 1,
                   native,
                   terminals: capture.terminalSnapshot(),
+                  version: 1,
                 }),
               );
             },
@@ -259,5 +259,5 @@ export const readPrivateNativeTargetApproval = async (input: {
     readHistory: input.readHistory,
     assertOwner: input.assertOwner,
   });
-  return approval === null ? { status: "pending" } : { status: approval.outcome, proof: approval };
+  return approval === null ? { status: "pending" } : { proof: approval, status: approval.outcome };
 };

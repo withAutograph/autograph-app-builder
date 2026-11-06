@@ -11,29 +11,29 @@ const scopeSchema = z.object({
   workspaceId: z.string().min(1),
 });
 const receiptSchema = z.object({
-  appliedByCallId: z.string(),
   appSpecDigest: z.string(),
+  appliedByCallId: z.string(),
   proposalDigest: z.string(),
   workspaceDigest: z.string(),
 });
 const workflowSchema = z.object({
-  phase: z.enum(["planned", "applied", "apply_failed"]),
   appSpec: z.object({ digest: z.string().min(1) }),
+  applyFailure: receiptSchema.optional(),
+  applyReceipt: receiptSchema.optional(),
+  phase: z.enum(["planned", "applied", "apply_failed"]),
   proposal: z.object({
     digest: z.string().min(1),
     target: z.object({ contract: z.object({ appId: z.string().min(1) }) }),
   }),
-  workspace: z.object({ workspaceId: z.string().min(1), workspaceDigest: z.string().optional() }),
-  applyReceipt: receiptSchema.optional(),
-  applyFailure: receiptSchema.optional(),
+  workspace: z.object({ workspaceDigest: z.string().optional(), workspaceId: z.string().min(1) }),
 });
 const partSchema = z.looseObject({
-  type: z.string(),
-  toolCallId: z.string().optional(),
-  toolName: z.string().optional(),
-  providerExecuted: z.boolean().optional(),
   approvalId: z.string().optional(),
   approved: z.boolean().optional(),
+  providerExecuted: z.boolean().optional(),
+  toolCallId: z.string().optional(),
+  toolName: z.string().optional(),
+  type: z.string(),
 });
 const candidateSchema = z.object({
   origin: z.object({ slot: z.number() }),
@@ -41,16 +41,16 @@ const candidateSchema = z.object({
   sessionState: z.object({
     snapshot: z.object({
       session: z.object({
-        sessionId: z.string(),
         history: z.array(
-          z.object({ role: z.string(), content: z.union([z.string(), z.array(partSchema)]) }),
+          z.object({ content: z.union([z.string(), z.array(partSchema)]), role: z.string() }),
         ),
+        sessionId: z.string(),
       }),
     }),
   }),
 });
 const payloadSchema = z.object({
-  binding: z.object({ ownerRunId: z.string(), logicalSessionId: z.string() }),
+  binding: z.object({ logicalSessionId: z.string(), ownerRunId: z.string() }),
   candidates: z.array(z.unknown()),
 });
 interface RepeatableApplyInput {
@@ -69,7 +69,7 @@ const hasUniqueApprovedBinding = (parts: z.infer<typeof partSchema>[], id: strin
   if (requests.length !== 1) {
     return false;
   }
-  const approvalId = requests[0].approvalId;
+  const { approvalId } = requests[0];
   if (approvalId === undefined || approvalId.length === 0) {
     return false;
   }

@@ -70,20 +70,20 @@ describe("safe hosted read trace", () => {
     trace.completed();
     expect(getter).not.toHaveBeenCalled();
     expect(sink.mock.calls[0]?.[0]).toMatchObject({
-      toolRequested: 2,
-      toolCompleted: 1,
-      toolFailed: 1,
       prepareWorkspaceRequested: 1,
       resolveGithubSourceCompleted: 1,
+      toolCompleted: 1,
+      toolFailed: 1,
+      toolRequested: 2,
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     expect(JSON.stringify(sink.mock.calls)).not.toContain("blocked");
     const fresh = createHostedReadTrace({ sessionId: secret, sink });
     fresh.completed();
     expect(sink.mock.calls[1]?.[0]).toMatchObject({
-      toolRequested: 0,
       toolCompleted: 0,
       toolFailed: 0,
+      toolRequested: 0,
     });
   });
 
@@ -98,11 +98,11 @@ describe("safe hosted read trace", () => {
       }
       trace.completed();
       expect(log.mock.calls[0]?.[1]).toMatchObject({
-        toolRequested: 4,
-        toolCompleted: 4,
-        toolFailed: 4,
         prepareWorkspaceRequested: 0,
         resolveGithubSourceRequested: 0,
+        toolCompleted: 4,
+        toolFailed: 4,
+        toolRequested: 4,
       });
       const serialized = JSON.stringify(log.mock.calls);
       for (const name of [secret, "__proto__", "constructor", "unknown future tool"]) {
@@ -138,11 +138,11 @@ describe("safe hosted read trace", () => {
     trace.completed();
     expect(getter).not.toHaveBeenCalled();
     expect(sink.mock.calls[0]?.[0]).toMatchObject({
-      toolRequested: 1,
-      toolCompleted: 1,
-      toolFailed: 0,
       prepareWorkspaceRequested: 0,
       resolveGithubSourceCompleted: 1,
+      toolCompleted: 1,
+      toolFailed: 0,
+      toolRequested: 1,
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -276,13 +276,13 @@ describe("safe hosted read trace", () => {
       prepareWorkspaceRequested: 0,
       privateCallbacks: 0,
       publicSpoolEvents: 0,
-      toolRequested: 0,
-      toolCompleted: 0,
-      toolFailed: 0,
       resolveGithubSourceCompleted: 0,
       resolveGithubSourceFailed: 0,
       resolveGithubSourceRequested: 0,
       sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
+      toolCompleted: 0,
+      toolFailed: 0,
+      toolRequested: 0,
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     expect(JSON.stringify(sink.mock.calls)).not.toContain("provider.example");

@@ -20,17 +20,17 @@ export const createApplicationSourceDownloadHandler =
       );
       return new Response(new Uint8Array(saved.bytes), {
         headers: {
-          "content-type": "application/octet-stream",
-          "content-disposition": `attachment; filename="${saved.manifest.appId}.application-source.json"`,
           "cache-control": "no-store",
-          "x-content-type-options": "nosniff",
+          "content-disposition": `attachment; filename="${saved.manifest.appId}.application-source.json"`,
           "content-security-policy": "sandbox; default-src 'none'",
+          "content-type": "application/octet-stream",
+          "x-content-type-options": "nosniff",
         },
       });
     } catch {
       return new Response("Source download unavailable", {
-        status: 404,
         headers: { "cache-control": "no-store" },
+        status: 404,
       });
     }
   };

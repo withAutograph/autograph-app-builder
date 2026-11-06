@@ -18,26 +18,26 @@ import { HostedOperatorError } from "../provisioning/hosted-operator-contract";
 const binary = Buffer.from([0, 255, 128, 1, 10, 13, 0, 240, 159, 140, 179]);
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const descriptor = {
-  id: "managed-app-runtime-v1",
   executablePath: "/opt/autograph/workers/managed-runtime",
-  sha256: sha(binary),
+  id: "managed-app-runtime-v1",
   operationScope: "managed-app-runtime-v1",
+  sha256: sha(binary),
   subcommand: "protected-managed-app-runtime",
 } as const;
 const worker = {
-  id: "fixture-installer",
   executablePath: "/opt/workers/installer",
-  sha256: "a".repeat(64),
+  id: "fixture-installer",
   operationScope: "generated-app-release-install-v1",
+  sha256: "a".repeat(64),
   subcommand: "protected-generated-app-install",
 } as const;
 const fields = {
-  projectId: "operator-project",
-  teamId: "operator-team",
   accessWorker: worker,
+  authProposal: { executablePath: "/opt/workers/proposal", id: "proposal", sha256: "b".repeat(64) },
   authWorker: worker,
+  projectId: "operator-project",
   resourcesWorker: worker,
-  authProposal: { id: "proposal", executablePath: "/opt/workers/proposal", sha256: "b".repeat(64) },
+  teamId: "operator-team",
   workers: { fixture: worker },
 };
 interface AssetFixtureFaults {
@@ -64,22 +64,22 @@ const fixture = (image = false) => {
   let exists = false;
   let denied = false;
   const faults: AssetFixtureFaults = {
-    sourceBytes: Buffer.from(binary),
-    createUnknown: false,
-    createAccepted: true,
-    getUnknown: false,
-    deleteUnknown: false,
-    deleteAccepted: true,
-    deleteNotFound: false,
-    writeUnknown: false,
     badReadback: false,
     checkpointFailure: false,
-    tokenFailure: false,
+    createAccepted: true,
+    createUnknown: false,
+    deleteAccepted: true,
+    deleteNotFound: false,
+    deleteUnknown: false,
+    getUnknown: false,
     revokeAfterSourceRead: false,
-    wrongName: false,
+    sourceBytes: Buffer.from(binary),
     stopFailure: false,
+    tokenFailure: false,
+    writeUnknown: false,
+    wrongName: false,
   };
-  const stats = { creates: 0, gets: 0, stops: 0, deletes: 0, writes: 0, reads: 0, tokens: 0 };
+  const stats = { creates: 0, deletes: 0, gets: 0, reads: 0, stops: 0, tokens: 0, writes: 0 };
   const checkpoints: ManagedRuntimeWorkerAssetState[] = [];
   const createOptions: Parameters<typeof Sandbox.create>[0][] = [];
   const getOptions: Parameters<typeof Sandbox.get>[0][] = [];
@@ -117,6 +117,19 @@ const fixture = (image = false) => {
     },
   };
   const source: ManagedRuntimeWorkerAssetSource = {
+    async delete(options) {
+      stats.deletes += 1;
+      expect(options?.deleteOrphanSnapshots).toBe(false);
+      if (faults.deleteAccepted) {
+        exists = false;
+      }
+      if (faults.deleteUnknown) {
+        throw new Error("Owned delete result unknown");
+      }
+      if (faults.deleteNotFound) {
+        throw new APIError(new Response(null, { status: 404 }));
+      }
+    },
     get name() {
       return faults.wrongName ? "unrelated-source" : name;
     },
@@ -133,32 +146,11 @@ const fixture = (image = false) => {
         throw new Error("Stop result unknown");
       }
     },
-    async delete(options) {
-      stats.deletes += 1;
-      expect(options?.deleteOrphanSnapshots).toBe(false);
-      if (faults.deleteAccepted) {
-        exists = false;
-      }
-      if (faults.deleteUnknown) {
-        throw new Error("Owned delete result unknown");
-      }
-      if (faults.deleteNotFound) {
-        throw new APIError(new Response(null, { status: 404 }));
-      }
-    },
   };
   const helper = createManagedRuntimeWorkerAsset({
     configuration: image
       ? { ...fields, image: "operator-workers@sha256:fixture" }
-      : { ...fields, source: { type: "snapshot", snapshotId: "snap_operator_workers" } },
-    token: async (options) => {
-      stats.tokens += 1;
-      expect(options).toEqual({ project: fields.projectId, team: fields.teamId });
-      if (faults.tokenFailure) {
-        throw new Error("Native host OIDC unavailable");
-      }
-      return "native-operator-host-oidc";
-    },
+      : { ...fields, source: { snapshotId: "snap_operator_workers", type: "snapshot" } },
     create: async (options) => {
       expect(state.sourceCreationAttempted).toBe(true);
       expect(state.disposed).toBe(false);
@@ -188,35 +180,22 @@ const fixture = (image = false) => {
       }
       return source;
     },
+    token: async (options) => {
+      stats.tokens += 1;
+      expect(options).toEqual({ project: fields.projectId, team: fields.teamId });
+      if (faults.tokenFailure) {
+        throw new Error("Native host OIDC unavailable");
+      }
+      return "native-operator-host-oidc";
+    },
   });
   return {
     attemptId,
-    name,
-    stats,
-    faults,
     checkpoints,
     createOptions,
-    getOptions,
-    get state() {
-      return state;
-    },
-    setState(value: ManagedRuntimeWorkerAssetState) {
-      state = managedRuntimeWorkerAssetSchema.parse(value);
-    },
-    setTarget(value: Buffer | null) {
-      targetBytes = value;
-    },
-    get targetBytes() {
-      return targetBytes;
-    },
-    retain() {
-      exists = true;
-      state = { sourceCreationAttempted: true, sourceSandboxId: name, disposed: false };
-    },
-    dispose: () =>
-      helper.dispose({
+    dispose: async () => {
+      await helper.dispose({
         attemptId,
-        state,
         checkpoint: async (next) => {
           if (faults.checkpointFailure) {
             throw new Error("Durable cleanup checkpoint unavailable");
@@ -224,18 +203,19 @@ const fixture = (image = false) => {
           state = managedRuntimeWorkerAssetSchema.parse(next);
           checkpoints.push(structuredClone(state));
         },
-      }),
-    install: () =>
-      helper.install({
-        target,
-        descriptor,
-        attemptId,
         state,
+      });
+    },
+    faults,
+    getOptions,
+    install: async () => {
+      await helper.install({
         assertCurrent: async () => {
           if (denied) {
             throw new HostedOperatorError("authorization_required");
           }
         },
+        attemptId,
         checkpoint: async (next) => {
           if (faults.checkpointFailure) {
             throw new Error("Durable checkpoint unavailable");
@@ -243,7 +223,29 @@ const fixture = (image = false) => {
           state = managedRuntimeWorkerAssetSchema.parse(next);
           checkpoints.push(structuredClone(state));
         },
-      }),
+        descriptor,
+        state,
+        target,
+      });
+    },
+    name,
+    retain() {
+      exists = true;
+      state = { disposed: false, sourceCreationAttempted: true, sourceSandboxId: name };
+    },
+    setState(value: ManagedRuntimeWorkerAssetState) {
+      state = managedRuntimeWorkerAssetSchema.parse(value);
+    },
+    setTarget(value: Buffer | null) {
+      targetBytes = value;
+    },
+    get state() {
+      return state;
+    },
+    stats,
+    get targetBytes() {
+      return targetBytes;
+    },
   };
 };
 
@@ -254,31 +256,31 @@ it.each([false, true])(
     await f.install();
     expect(f.targetBytes).toEqual(binary);
     expect(f.state).toMatchObject({
+      disposed: true,
+      installed: true,
       sourceCreationAttempted: true,
       sourceSandboxId: f.name,
-      installed: true,
-      disposed: true,
     });
     expect(f.stats.creates).toBe(1);
     expect(f.stats.stops).toBe(1);
     expect(f.stats.deletes).toBe(1);
     expect(f.createOptions[0]).toMatchObject({
+      env: {},
       name: f.name,
+      networkPolicy: "allow-all",
+      persistent: false,
+      ports: [],
       projectId: fields.projectId,
       teamId: fields.teamId,
       token: "native-operator-host-oidc",
-      persistent: false,
-      env: {},
-      ports: [],
-      networkPolicy: "allow-all",
     });
     if (image) {
       expect(f.createOptions[0]).toHaveProperty("image", "operator-workers@sha256:fixture");
       expect(f.createOptions[0]).not.toHaveProperty("source");
     } else {
       expect(f.createOptions[0]).toHaveProperty("source", {
-        type: "snapshot",
         snapshotId: "snap_operator_workers",
+        type: "snapshot",
       });
       expect(f.createOptions[0]).not.toHaveProperty("image");
     }
@@ -295,7 +297,7 @@ it("reads the target first, restores executable mode and avoids a source VM when
   expect(f.stats.creates).toBe(0);
   expect(f.stats.tokens).toBe(0);
   expect(f.stats.writes).toBe(1);
-  expect(f.state).toEqual({ installed: true, disposed: true });
+  expect(f.state).toEqual({ disposed: true, installed: true });
 });
 
 it.each(["wrong", "missing"])(
@@ -364,7 +366,7 @@ it("retains unknown cleanup then settles only exact known-source SDK404 without 
   const f = fixture();
   f.faults.deleteUnknown = true;
   await expect(f.install()).rejects.toMatchObject({ code: "reconciliation_required" });
-  expect(f.state).toMatchObject({ installed: true, disposed: false, sourceSandboxId: f.name });
+  expect(f.state).toMatchObject({ disposed: false, installed: true, sourceSandboxId: f.name });
   await f.install();
   expect(f.state.disposed).toBe(true);
   expect(f.stats.creates).toBe(1);
@@ -418,7 +420,7 @@ it("accepts authoritative owned deletion after stop uncertainty and repairs agai
   await f.install();
   expect(f.stats.creates).toBe(2);
   expect(f.targetBytes).toEqual(binary);
-  expect(f.state).toMatchObject({ installed: true, disposed: true });
+  expect(f.state).toMatchObject({ disposed: true, installed: true });
 });
 
 it("disposes a retained named source without target access or another create", async () => {
@@ -435,7 +437,7 @@ it("disposes a retained named source without target access or another create", a
 
 it("disposal alone preserves unresolved create and never creates or installs", async () => {
   const f = fixture();
-  f.setState({ sourceCreationAttempted: true, disposed: false });
+  f.setState({ disposed: false, sourceCreationAttempted: true });
   await expect(f.dispose()).rejects.toMatchObject({ code: "reconciliation_required" });
   expect(f.stats.creates).toBe(0);
   expect(f.stats.writes).toBe(0);

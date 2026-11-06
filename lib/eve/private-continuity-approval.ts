@@ -26,9 +26,9 @@ export const continuityApprovalInputSchema = z
       parseContinuityRequestForPlan(
         {
           action: value.action,
-          planRef: value.planRef,
-          planDigest: value.planDigest,
           idempotencyKey: value.idempotencyKey,
+          planDigest: value.planDigest,
+          planRef: value.planRef,
         },
         value.plan,
       );
@@ -84,12 +84,12 @@ export const createPrivateContinuityApprovalCapture = (input: {
 }) => {
   parseContinuityRequestForPlan(input.request, input.plan);
   const { issuer, audience, workspaceId, ownerUserId } = input.principal;
-  if (!isDeepStrictEqual(input.plan.authority, { issuer, audience, workspaceId, ownerUserId })) {
+  if (!isDeepStrictEqual(input.plan.authority, { audience, issuer, ownerUserId, workspaceId })) {
     throw new Error("Private approval owner differs from its frozen plan.");
   }
   const capture = createPrivateOperatorApprovalCapture({
-    request: input.request,
     ownerUserId: input.principal.ownerUserId,
+    request: input.request,
     ...(input.callId === undefined ? {} : { callId: input.callId }),
     ...(input.state === undefined ? {} : { state: input.state }),
   });
@@ -121,11 +121,11 @@ export const createPrivateContinuityApprovalCapture = (input: {
       }
       capture.settle(event);
     },
+    proveComplete: capture.proveComplete,
     read: (): ContinuityApproval | null => {
       const receipt = capture.read();
       return receipt === null ? null : { ...input.request, ...receipt };
     },
     snapshot: capture.snapshot,
-    proveComplete: capture.proveComplete,
   };
 };

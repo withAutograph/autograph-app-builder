@@ -165,7 +165,7 @@ export const createPublicationTargetResolver =
     }
     const access = await ports.resolveAccess(destination, input.ctx);
     if (access.kind === "selection") {
-      return { kind: "selection", access: access.access };
+      return { access: access.access, kind: "selection" };
     }
     const selected = publicationDestinationFromAccess(access.receipt, input.ctx.session.id);
     if (ownedDestination !== undefined) {

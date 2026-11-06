@@ -6,13 +6,13 @@ import { createLocalPrivateComputeJournal } from "./private-compute-journal";
 import type { PrivateComputeActivation } from "./private-compute-profile";
 
 const record: PrivateComputeActivation = {
-  sandboxId: "same-sandbox",
-  workspaceDrive: "same-drive",
   appId: "example",
-  sessionId: "actual-session",
-  proposalDigest: "a".repeat(64),
-  profileId: "private-checks-16gib-v1",
   phase: "configuring",
+  profileId: "private-checks-16gib-v1",
+  proposalDigest: "a".repeat(64),
+  sandboxId: "same-sandbox",
+  sessionId: "actual-session",
+  workspaceDrive: "same-drive",
 };
 describe("durable private compute resource journal", () => {
   it("awaits immutable persistence, rehydrates pending intent in a new instance, and denies stale/competing CAS", async () => {
@@ -20,10 +20,10 @@ describe("durable private compute resource journal", () => {
     const root = await realpath(temporary);
     await chmod(root, 0o700);
     const input = {
-      authority: { kind: "local" as const, stateRoot: root, ownerUid: process.getuid?.() ?? -1 },
+      assertCurrent: () => {},
+      authority: { kind: "local" as const, ownerUid: process.getuid?.() ?? -1, stateRoot: root },
       sandboxId: record.sandboxId,
       workspaceDrive: "same-drive",
-      assertCurrent: () => {},
     };
     try {
       const first = await createLocalPrivateComputeJournal(input);
@@ -53,7 +53,7 @@ describe("durable private compute resource journal", () => {
         }),
       ).rejects.toThrow("another local owner");
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 });

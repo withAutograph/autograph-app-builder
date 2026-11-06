@@ -264,7 +264,7 @@ function signalExitCode(signal: NodeJS.Signals | null) {
  * bounded final backstop for listeners or descendants left by an interruption.
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function waitForEveEvalChild(
+export async function waitForEveEvalChild(
   input: Readonly<{
     authorization: Duplex;
     child: ChildProcess;
@@ -318,8 +318,12 @@ export function waitForEveEvalChild(
       forceTimer = setTimeout(forceGroup, gracefulTimeoutMs);
       forceTimer.unref?.();
     };
-    const interrupt = () => requestStop("SIGINT");
-    const terminate = () => requestStop("SIGTERM");
+    const interrupt = () => {
+      requestStop("SIGINT");
+    };
+    const terminate = () => {
+      requestStop("SIGTERM");
+    };
     const failed = (error: Error) => {
       if (settled) {
         return;
@@ -346,5 +350,5 @@ export function waitForEveEvalChild(
     input.child.once("error", handlers.failed);
     input.child.once("exit", handlers.exited);
   }
-  return promise;
+  return await promise;
 }

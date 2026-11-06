@@ -55,7 +55,7 @@ export const inspectPlannedAuthoringCandidate = (input: {
   ) {
     return null;
   }
-  const target = current.proposal.target;
+  const { target } = current.proposal;
   if (
     target.contract.appId !== current.appSpec.appId ||
     target.contract.appSpec.sha256 !== current.appSpec.digest ||
@@ -79,8 +79,8 @@ export const inspectPlannedAuthoringCandidate = (input: {
     appId: current.appSpec.appId,
     appSpecDigest: current.appSpec.digest,
     proposalDigest: digest,
-    workspaceId: current.workspace.workspaceId,
     sessionId,
+    workspaceId: current.workspace.workspaceId,
   };
   const denial = authority.terminalDecisions?.findLast(
     (row) =>
@@ -93,18 +93,18 @@ export const inspectPlannedAuthoringCandidate = (input: {
     return null;
   }
   return {
+    denialEvidenceDigest: denial.evidenceDigest,
     ownerSessionId: sessionId,
     scope,
     sourceReceiptDigest: current.sourceReceipt.digest,
     workspaceDigest: current.workspace.workspaceDigest,
-    denialEvidenceDigest: denial.evidenceDigest,
   };
 };
 
 const candidate = (ctx: Context) =>
   inspectPlannedAuthoringCandidate({
-    current: appBuilderWorkflowState.get(),
     authority: readPrivateApplyAuthority(),
+    current: appBuilderWorkflowState.get(),
     history: existingAppRepairHistory.get(),
     sessionId: ctx.session.id,
   });
@@ -126,10 +126,10 @@ export const observePlannedAuthoringRequest = (
     input.sequence >= 0
       ? {
           ...selected,
+          requestMessageDigest: hash(input.message),
+          requestMessageSequence: input.sequence,
           requestTurnId: input.turnId,
           requestTurnSequence: ctx.session.turn.sequence,
-          requestMessageSequence: input.sequence,
-          requestMessageDigest: hash(input.message),
         }
       : null;
   const prior = observation.get();
@@ -150,17 +150,17 @@ export const observePlannedAuthoringRequest = (
 };
 
 const selectedObservation = (value: Observation) => ({
+  denialEvidenceDigest: value.denialEvidenceDigest,
   ownerSessionId: value.ownerSessionId,
   scope: value.scope,
   sourceReceiptDigest: value.sourceReceiptDigest,
   workspaceDigest: value.workspaceDigest,
-  denialEvidenceDigest: value.denialEvidenceDigest,
 });
 const inspectionSchema = z.object({
-  source: z.literal("current-proposal"),
-  status: z.literal("UNAPPLIED"),
   appId: z.string(),
   proposalDigest: z.string(),
+  source: z.literal("current-proposal"),
+  status: z.literal("UNAPPLIED"),
 });
 /** Only a completed real current-draft inspection arms the already-observed request. */
 export const observePlannedAuthoringInspection = (
@@ -218,12 +218,12 @@ export const currentPlannedAuthoringCorrection = (
     return undefined;
   }
   return plannedAuthoringCorrectionSchema.parse({
-    proposalDigest: retained.scope.proposalDigest,
     denialEvidenceDigest: retained.denialEvidenceDigest,
+    inspectionCallId,
+    proposalDigest: retained.scope.proposalDigest,
+    requestMessageDigest,
+    requestMessageSequence,
     requestTurnId,
     requestTurnSequence,
-    requestMessageSequence,
-    requestMessageDigest,
-    inspectionCallId,
   });
 };

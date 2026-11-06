@@ -30,10 +30,10 @@ for directory,dirs,files in os.walk(base,followlinks=False):
 print(json.dumps(rows))`;
 const listingSchema = z.array(
   z.strictObject({
-    path: z.string(),
-    kind: z.enum(["file", "directory", "symlink", "unsupported"]),
     bytes: z.number().int().nonnegative().optional(),
+    kind: z.enum(["file", "directory", "symlink", "unsupported"]),
     mode: z.enum(["100644", "100755"]).optional(),
+    path: z.string(),
   }),
 );
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
@@ -90,11 +90,11 @@ export const captureApplicationSource = async (input: {
       throw new Error("Application source changed during capture");
     }
     const data = Buffer.from(bytes);
-    files.push({ path: row.path, contentBase64: data.toString("base64") });
+    files.push({ contentBase64: data.toString("base64"), path: row.path });
     manifestFiles.push({
-      path: row.path,
-      mode: row.mode,
       bytes: data.byteLength,
+      mode: row.mode,
+      path: row.path,
       sha256: createHash("sha256").update(data).digest("hex"),
     });
   }
@@ -113,15 +113,15 @@ export const captureApplicationSource = async (input: {
   await input.assertCurrent();
   input.signal.throwIfAborted();
   return validateApplicationSourceArtifact({
+    files,
     manifest: {
-      version: 1,
-      kind: "application-source-v1",
       appId: input.appId,
       displayName: input.displayName,
-      sourceSessionId: input.sourceSessionId,
       files: manifestFiles,
+      kind: "application-source-v1",
       omissions,
+      sourceSessionId: input.sourceSessionId,
+      version: 1,
     },
-    files,
   });
 };

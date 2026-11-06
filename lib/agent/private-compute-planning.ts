@@ -59,18 +59,18 @@ export const planPrivateComputeProfile = async (
   }
   const hash = (text: string) => createHash("sha256").update(text).digest("hex");
   return privateComputeProfileSchema.parse({
-    version: 1,
-    id: PRIVATE_COMPUTE_PROFILE_ID,
-    vcpus: 8,
-    memoryMiB: 16_384,
-    lintWorkers: 1,
-    target: { sandboxId: native.name, workspaceDrive: mount.drive },
     checkPolicy: {
-      path: checkPath,
-      beforeSha256: hash(before),
       afterSha256: hash(PRIVATE_COMPUTE_CHECK_TASK),
+      beforeSha256: hash(before),
+      path: checkPath,
     },
+    id: PRIVATE_COMPUTE_PROFILE_ID,
     limits,
+    lintWorkers: 1,
+    memoryMiB: 16_384,
+    target: { sandboxId: native.name, workspaceDrive: mount.drive },
+    vcpus: 8,
+    version: 1,
   });
 };
 /** Observation timestamps and installed preimages do not change a frozen compute intent. */
@@ -130,13 +130,13 @@ export const refreshPrivateComputePlanning = (
   appBuilderWorkflowState.update((latest) => {
     assertExactWorkflowState(latest, current, "prepare a new private compute plan");
     return {
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      phase: "app_spec_accepted",
       appSpec: current.appSpec,
       artifacts: current.artifacts,
+      phase: "app_spec_accepted",
       preparedByCallId: callId,
-      workspace: current.workspace,
       sourceReceipt: current.sourceReceipt,
+      version: APP_BUILDER_WORKFLOW_VERSION,
+      workspace: current.workspace,
       ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
       ...(current.checkoutDependencyAttempts === undefined
         ? {}
@@ -161,7 +161,7 @@ export const preparePrivateComputePlanning = async (input: {
   if (!("appSpec" in input.state)) {
     throw new Error("Accept the app product before selecting private compute.");
   }
-  const appId = input.state.appSpec.appId;
+  const { appId } = input.state.appSpec;
   const check = input.repairChanges?.find(
     (change) => change.path === `apps/${appId}/.config/mise/tasks/check`,
   );
@@ -196,14 +196,14 @@ export const privateComputeProjection = (profile?: PrivateComputeProfile) => {
     );
   }
   return {
-    privateCompute: profile,
     checkTaskSha256: sha256,
     implementationFiles: [
       {
-        path: profile.checkPolicy.path,
-        operation: "upsert" as const,
         content: PRIVATE_COMPUTE_CHECK_TASK,
+        operation: "upsert" as const,
+        path: profile.checkPolicy.path,
       },
     ],
+    privateCompute: profile,
   };
 };

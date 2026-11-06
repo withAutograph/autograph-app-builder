@@ -76,19 +76,19 @@ export const createHostedRuntimeApprovalReceiptReader =
       throw new HostedOperatorError("resource_mismatch");
     }
     const { authoritySession: session, currentSession } = await readHostedOperatorCallbackOwner({
-      store: ports.store,
-      owner,
       execution: hostedOperatorCallbackExecution(ctx.session),
+      owner,
+      store: ports.store,
     });
     ctx.abortSignal.throwIfAborted();
     const snapshot: HostedRuntimeApprovalWaitSnapshot = {
-      sessionId: session.sessionId,
-      adapterSessionId: currentSession.adapterSessionId,
       adapterGeneration: currentSession.adapterGeneration,
-      cancellationRevision: currentSession.cancellationRevision ?? 0,
+      adapterSessionId: currentSession.adapterSessionId,
       callId: ctx.callId,
+      cancellationRevision: currentSession.cancellationRevision ?? 0,
       operationRef: parsed.operationRef,
       planDigest: parsed.planDigest,
+      sessionId: session.sessionId,
     };
     const validSession = [
       session.sessionId === owner.sessionId,
@@ -125,8 +125,8 @@ export const createHostedRuntimeApprovalReceiptReader =
       return { snapshot, status: "approved" };
     }
     return {
+      checkAfter: new Date(Math.min(now + delayMs, expiresAt)).toISOString(),
       snapshot,
       status: "pending",
-      checkAfter: new Date(Math.min(now + delayMs, expiresAt)).toISOString(),
     };
   };

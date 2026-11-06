@@ -588,15 +588,13 @@ export const parseRemoteIndexInspection = (
     throw new Error("Remote attestation manifest is not exactly bound to the platform image.");
   }
   const indexReference = exactDigestReference(`${IMAGE_REPOSITORY}@${descriptor.digest}`);
-  const platformReference = exactDigestReference(
-    `${IMAGE_REPOSITORY}@${platformEntry.digest as string}`,
-  );
+  const platformReference = exactDigestReference(`${IMAGE_REPOSITORY}@${platformEntry.digest}`);
   return {
     attestationManifestDigest: attestationEntry.digest,
     indexDigest: descriptor.digest,
     indexReference,
-    platformManifestDigest: platformEntry.digest as string,
-    platformManifestSize: platformEntry.size as number,
+    platformManifestDigest: platformEntry.digest,
+    platformManifestSize: platformEntry.size,
     platformReference,
   };
 };

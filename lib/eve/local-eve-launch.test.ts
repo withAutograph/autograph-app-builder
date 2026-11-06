@@ -52,14 +52,13 @@ function fixture() {
   const cycleFile = path.join(stateRoot, "eve-cycle");
   writeFileSync(cycleFile, "c".repeat(64), { mode: 0o600 });
   const environment: Record<string, string> = {
-    APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
     APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: "d".repeat(64),
     APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: "c".repeat(64),
+    APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: realpathSync(sourceRoot),
     APP_BUILDER_DEVELOPMENT_SOURCE_SHA: "a".repeat(40),
     APP_BUILDER_DEVELOPMENT_SOURCE_TREE: "b".repeat(40),
     APP_BUILDER_DEV_EVE_ROOT: realpathSync(applicationRoot),
-    APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: realpathSync(sourceRoot),
     APP_BUILDER_DEV_RUNS_ROOT: realpathSync(runsRoot),
     APP_BUILDER_DEV_RUNTIME_HOME: realpathSync(runtimeHome),
     APP_BUILDER_DEV_SUPERVISOR_ROOT: supervisorRoot,
@@ -70,6 +69,7 @@ function fixture() {
     APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
     APP_BUILDER_LOCAL_ADAPTER: "1",
     APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
+    APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
     APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
     APP_BUILDER_LOCAL_PUBLICATION: "0",
     APP_BUILDER_SANDBOX_PROVIDER: "vercel",
@@ -97,12 +97,12 @@ describe("closed local Eve launch", () => {
       exitCode: { value: null, writable: true },
       signalCode: { value: null, writable: true },
     });
-    child.kill = ((signal?: NodeJS.Signals | number) => {
+    child.kill = (signal?: NodeJS.Signals | number) => {
       if (typeof signal === "string") {
         forwarded.push(signal);
       }
       return true;
-    }) as ChildProcess["kill"];
+    };
 
     const stopped = waitForForwardedEveChild(child, signals);
     signals.emit("SIGTERM");
@@ -136,13 +136,13 @@ describe("closed local Eve launch", () => {
       createLocalEveInvocation(options).environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS,
     ).toBeUndefined();
     const privateComputeLimits = {
-      version: 1 as const,
-      teamId: "team_example",
-      projectId: "prj_example",
-      plan: "pro" as const,
-      maxVcpus: 8 as const,
       limited: false as const,
+      maxVcpus: 8 as const,
       observedAt: "2026-11-03T12:00:00.000Z",
+      plan: "pro" as const,
+      projectId: "prj_example",
+      teamId: "team_example",
+      version: 1 as const,
     };
     const invocation = createLocalEveInvocation({ ...options, privateComputeLimits });
     expect(invocation.environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS).toBe(
@@ -177,8 +177,8 @@ describe("closed local Eve launch", () => {
       oidcToken: sentinel,
       pinnedNode: "/mise/node/24.18.0/bin/node",
       repositoryRoot: input.repositoryRoot,
-      vercelProject: { orgId: "team_example", projectId: "prj_example" },
       resume: true,
+      vercelProject: { orgId: "team_example", projectId: "prj_example" },
     });
     expect(recovering.args).toContain("--resume");
     expect(recovering.environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS).toBe("0");
@@ -281,12 +281,12 @@ describe("closed local Eve launch", () => {
 it("the real child launch can retain private planning artifacts without a hosted operator", async () => {
   const f = fixture();
   const invocation = createLocalEveInvocation({
-    repositoryRoot: f.repositoryRoot,
     environment: f.environment,
-    pinnedNode: process.execPath,
     eveCli: "/owned/eve-cli.mjs",
     oidcToken: "synthetic-project-oidc",
-    vercelProject: { projectId: "project", orgId: "team" },
+    pinnedNode: process.execPath,
+    repositoryRoot: f.repositoryRoot,
+    vercelProject: { orgId: "team", projectId: "project" },
   });
   const authority = await readLocalOperatorArtifactAuthority(invocation.environment);
   expect(authority).toBeDefined();
@@ -298,11 +298,11 @@ it("the real child launch can retain private planning artifacts without a hosted
     target: { appId: "supplier-spend", sessionId: "saved-local-session" },
   };
   const artifacts = await createLocalOperatorArtifactStorage({
-    authority,
-    assertCurrentOwner: (current) => {
+    assertCurrentOwner: async (current) => {
       expect(current).toEqual(context);
-      return Promise.resolve();
+      return;
     },
+    authority,
   });
   const artifactRef = `_protected-operator/artifacts/source-review-context/supplier-spend/${"a".repeat(64)}`;
   await artifacts.store.put(context, {
@@ -316,12 +316,12 @@ it("the real child launch can retain private planning artifacts without a hosted
 it("the real child launch can retain private planning artifacts without a hosted operator", async () => {
   const f = fixture();
   const invocation = createLocalEveInvocation({
-    repositoryRoot: f.repositoryRoot,
     environment: f.environment,
-    pinnedNode: process.execPath,
     eveCli: "/owned/eve-cli.mjs",
     oidcToken: "synthetic-project-oidc",
-    vercelProject: { projectId: "project", orgId: "team" },
+    pinnedNode: process.execPath,
+    repositoryRoot: f.repositoryRoot,
+    vercelProject: { orgId: "team", projectId: "project" },
   });
   const authority = await readLocalOperatorArtifactAuthority(invocation.environment);
   expect(authority).toBeDefined();
@@ -333,11 +333,11 @@ it("the real child launch can retain private planning artifacts without a hosted
     target: { appId: "supplier-spend", sessionId: "saved-local-session" },
   };
   const artifacts = await createLocalOperatorArtifactStorage({
-    authority,
-    assertCurrentOwner: (current) => {
+    assertCurrentOwner: async (current) => {
       expect(current).toEqual(context);
-      return Promise.resolve();
+      return;
     },
+    authority,
   });
   const artifactRef = `_protected-operator/artifacts/source-review-context/supplier-spend/${"a".repeat(64)}`;
   await artifacts.store.put(context, {

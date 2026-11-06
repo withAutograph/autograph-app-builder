@@ -416,7 +416,7 @@ export const restorePreparedRuntimeExecution = async (input: {
           throw new Error("A saved browser command cannot be resumed with a new test selection.");
         }
         const command = await resolveTaskCommand(
-          { commandId, commandCheckpoint, allowDispatch },
+          { allowDispatch, commandCheckpoint, commandId },
           {
             args: [
               "mise",

@@ -46,8 +46,8 @@ const denied = () =>
     "The current unapplied proposal source no longer matches this session, app or digest. Inspect the current plan before retrying.",
   );
 const event = (output: Output) => ({
-  type: "action.result",
   data: { result: { kind: "tool-result", output, toolName: "inspect_existing_app" } },
+  type: "action.result",
 });
 
 /** Session-scoped frozen model-authored bytes only. Never acquires or reads a Sandbox. */
@@ -75,7 +75,7 @@ const bindCurrentProposalSource = (
   }
   const { proposal } = current;
   const { digest, ...unsigned } = proposal;
-  const target = current.proposal.target;
+  const { target } = current.proposal;
   if (
     !ctx.session.id ||
     proposal.plannedByCallId.length === 0 ||
@@ -180,10 +180,10 @@ const appendProposalFiles = (
         throw denied();
       }
       output.files.push({
-        path,
-        operation: "delete",
         beforeDigest: change.before?.digest,
         mode: change.before?.mode,
+        operation: "delete",
+        path,
       });
       continue;
     }
@@ -198,41 +198,41 @@ const appendProposalFiles = (
     const offsetBytes = input.contentPath === undefined ? 0 : (input.offsetBytes ?? 0);
     if (content === "" && offsetBytes === 0) {
       output.files.push({
-        path,
-        operation: "upsert",
+        content,
         digest: fileDigest,
         mode,
-        content,
         offsetBytes,
+        operation: "upsert",
+        path,
       });
       continue;
     }
     const chunk = largestUtf8PayloadChunk({
-      maxBytes: EVE_NATIVE_RESULT_PAGE_BYTES,
       content,
-      offsetBytes,
       makePayload: (part, next) =>
         event({
           ...output,
           files: [
             ...output.files,
-            { path, operation: "upsert", digest: fileDigest, mode, content: part, offsetBytes },
+            { content: part, digest: fileDigest, mode, offsetBytes, operation: "upsert", path },
           ],
           ...(next < Buffer.byteLength(content)
-            ? { continuation: { path, digest: fileDigest, offsetBytes: next } }
+            ? { continuation: { digest: fileDigest, offsetBytes: next, path } }
             : {}),
         }),
-    });
-    output.files.push({
-      path,
-      operation: "upsert",
-      digest: fileDigest,
-      mode,
-      content: chunk.content,
+      maxBytes: EVE_NATIVE_RESULT_PAGE_BYTES,
       offsetBytes,
     });
+    output.files.push({
+      content: chunk.content,
+      digest: fileDigest,
+      mode,
+      offsetBytes,
+      operation: "upsert",
+      path,
+    });
     if (chunk.nextOffsetBytes < Buffer.byteLength(content)) {
-      output.continuation = { path, digest: fileDigest, offsetBytes: chunk.nextOffsetBytes };
+      output.continuation = { digest: fileDigest, offsetBytes: chunk.nextOffsetBytes, path };
       break;
     }
   }
@@ -243,17 +243,17 @@ const renderCurrentProposalSource = (
   binding: ReturnType<typeof bindCurrentProposalSource>,
 ): Output => {
   const { proposal, target } = binding;
-  const digest = proposal.digest;
+  const { digest } = proposal;
   const prefix = `apps/${input.appId}/`;
-  const changes = target.iteration.changes;
+  const { changes } = target.iteration;
   const paths = validateProposalChanges(changes, prefix);
   const output: Output = {
     appId: input.appId,
+    files: [],
+    iterationDigest: target.iteration.digest,
+    proposalDigest: digest,
     source: "current-proposal",
     status: "UNAPPLIED",
-    proposalDigest: digest,
-    iterationDigest: target.iteration.digest,
-    files: [],
   };
   const fits = () => serializedPayloadBytes(event(output)) <= EVE_NATIVE_RESULT_PAGE_BYTES;
   const changeByPath = new Map(changes.map((change) => [change.path, change]));

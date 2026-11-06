@@ -45,9 +45,9 @@ describe("hosted runtime handoff diagnostics", () => {
         appId: "private-app-id",
         operationRef: "123e4567-e89b-42d3-a456-426614174000",
         planDigest: "a".repeat(64),
-        status: "prepared",
         privatePayload: secret,
         privateUrl: "https://private.example/identity?token=secret",
+        status: "prepared",
       },
       stage: "owner_action_result",
     });

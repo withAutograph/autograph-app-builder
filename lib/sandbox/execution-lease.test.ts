@@ -15,13 +15,13 @@ const principal = (ownerUserId: string): HostedPrincipal => ({
   workspaceId: "workspace_1",
 });
 
-const acquire = (
+const acquire = async (
   store: InMemorySandboxExecutionLeaseStore,
   ownerUserId: string,
   sessionId: string,
   nowEpochMs = 1000,
 ) =>
-  store.acquire({
+  await store.acquire({
     adapterSessionId: sessionId,
     nowEpochMs,
     policy: SANDBOX_EXECUTION_POLICY,

@@ -158,15 +158,15 @@ type EvidenceSubmission = z.infer<typeof evidenceSubmissionSchema>;
 const sourceReadReference = (
   result: Awaited<ReturnType<ApplicationReviewEvidence["readSource"]>>,
 ) => ({
-  kind: "source" as const,
-  path: result.path,
-  digest: result.digest,
-  startLine: result.startLine,
-  endLine: result.endLine,
-  startColumn: result.startColumn,
-  endColumn: result.endColumn,
   contentDigest: hash(result.content),
+  digest: result.digest,
+  endColumn: result.endColumn,
+  endLine: result.endLine,
+  kind: "source" as const,
   nextCursor: result.nextCursor === undefined ? undefined : { ...result.nextCursor },
+  path: result.path,
+  startColumn: result.startColumn,
+  startLine: result.startLine,
 });
 
 interface ReusableEvidenceRead {
@@ -201,9 +201,9 @@ const rememberEvidenceRead = (
 ): void => {
   try {
     reads.set(toolCallId, {
-      toolName,
-      selectionDigest: hash(JSON.stringify(selection)),
       resultDigest: hash(JSON.stringify(result)),
+      selectionDigest: hash(JSON.stringify(selection)),
+      toolName,
     });
   } catch {
     // An unrecognized result stays full; optional projection cannot fail a read.
@@ -236,8 +236,8 @@ const projectSourceReviewMessages = (
                 retainedResults.set(key, part.toolCallId);
               } else {
                 const reference = {
-                  kind: "retained-evidence-result",
                   firstToolCallId,
+                  kind: "retained-evidence-result",
                   resultDigest: read.resultDigest,
                 };
                 if (JSON.stringify(reference).length < serialized.length) {
@@ -254,18 +254,18 @@ const projectSourceReviewMessages = (
 };
 
 const emptyMessageMeasurements = (): ApplicationSourceReviewMessageMeasurements => ({
-  measurementAvailable: false,
-  messageCount: 0,
   groups: {
+    assistant: { partCount: 0, serializedUtf16Characters: 0 },
+    listing: { partCount: 0, serializedUtf16Characters: 0 },
+    other: { partCount: 0, serializedUtf16Characters: 0 },
     requirements: { partCount: 0, serializedUtf16Characters: 0 },
     source: { partCount: 0, serializedUtf16Characters: 0 },
-    listing: { partCount: 0, serializedUtf16Characters: 0 },
-    assistant: { partCount: 0, serializedUtf16Characters: 0 },
-    other: { partCount: 0, serializedUtf16Characters: 0 },
   },
+  instructionSerializedUtf16Characters: 0,
+  measurementAvailable: false,
+  messageCount: 0,
   sourceFullResultCount: 0,
   sourceReferenceResultCount: 0,
-  instructionSerializedUtf16Characters: 0,
   toolDefinitionSerializedUtf16Characters: 0,
 });
 type SerializedReviewContent =
@@ -277,10 +277,10 @@ const serializedUtf16Characters = (value: SerializedReviewContent): number =>
   (JSON.stringify(value) ?? "").length;
 const fullSourceMeasurement = z.object({ content: z.string() });
 const sourceReferenceMeasurement = z.union([
-  z.object({ kind: z.literal("source"), contentDigest: z.string() }),
+  z.object({ contentDigest: z.string(), kind: z.literal("source") }),
   z.object({
-    kind: z.literal("retained-evidence-result"),
     firstToolCallId: z.string(),
+    kind: z.literal("retained-evidence-result"),
     resultDigest: z.string(),
   }),
 ]);
@@ -417,7 +417,7 @@ const verifiedSubmission = async (
           documentId: finding.requirementDocumentId,
           quote: finding.requirementQuote,
         }),
-        ...finding.citations.map((citation) => evidence.verifySourceCitation(citation)),
+        ...finding.citations.map(async (citation) => await evidence.verifySourceCitation(citation)),
       ]);
       return checks.every(Boolean);
     }),
@@ -451,16 +451,24 @@ const reviewTools = (
     }
   };
   return {
+    completeReview: tool({
+      description:
+        "Finish the independent application review after inspecting requirements and relevant execution paths. This grants no runtime success, resource or publication authority.",
+      execute: async ({ remainingRuntimeChecks }) => {
+        await guard();
+        for (const check of remainingRuntimeChecks) {
+          state.runtimeChecks.add(check);
+        }
+        state.completionRequested = true;
+        return { completionRequested: true };
+      },
+      inputSchema: z.strictObject({ remainingRuntimeChecks: z.array(z.string()) }),
+    }),
     listEvidence: tool({
       description:
         "Locate exact requirement documents or repository source, including unchanged imports. Continue with nextCursor; this is metadata paging, not a total review limit.",
-      inputSchema: z.strictObject({
-        kind: z.enum(["requirements", "source", "changes"]),
-        prefix: z.string().optional(),
-        cursor: z.number().int().nonnegative().optional(),
-      }),
       execute: async ({ kind, prefix, cursor = 0 }, { toolCallId }) => {
-        const result = await read(() => {
+        const result = await read(async () => {
           const items =
             kind === "requirements"
               ? [...evidence.requirements]
@@ -470,32 +478,33 @@ const reviewTools = (
                     (kind !== "changes" || changedPaths.has(path)),
                 );
           const page = items.slice(cursor, cursor + 200);
-          return Promise.resolve({
+          return {
             items: page,
             ...(cursor + page.length < items.length ? { nextCursor: cursor + page.length } : {}),
-          });
+          };
         });
         if (!(result instanceof ApplicationReviewSelectionError)) {
           rememberEvidenceRead(
             state.reusableReads,
             toolCallId,
             "listEvidence",
-            { kind, prefix: prefix ?? null, cursor },
+            { cursor, kind, prefix: prefix ?? null },
             result,
           );
         }
         return result;
       },
+      inputSchema: z.strictObject({
+        cursor: z.number().int().nonnegative().optional(),
+        kind: z.enum(["requirements", "source", "changes"]),
+        prefix: z.string().optional(),
+      }),
     }),
     readRequirements: tool({
       description:
         "Read an exact original request, chronological product clarification or accepted specification. Follow nextCursor to its end; originals stay accessible after context recovery.",
-      inputSchema: z.strictObject({
-        id: z.string().min(1),
-        cursor: z.number().int().nonnegative().optional(),
-      }),
       execute: async (request, { toolCallId }) => {
-        const result = await read(() => evidence.readRequirements(request));
+        const result = await read(async () => await evidence.readRequirements(request));
         if (result instanceof ApplicationReviewSelectionError) {
           return { error: "selection_unavailable", message: result.message };
         }
@@ -510,29 +519,21 @@ const reviewTools = (
           state.reusableReads,
           toolCallId,
           "readRequirements",
-          { id: request.id, cursor: request.cursor ?? 0 },
+          { cursor: request.cursor ?? 0, id: request.id },
           result,
         );
         return result;
       },
+      inputSchema: z.strictObject({
+        cursor: z.number().int().nonnegative().optional(),
+        id: z.string().min(1),
+      }),
     }),
     readSource: tool({
       description:
         "Read actual observed repository source, including relevant unchanged imports. Results are bounded transport windows, including inside a long line. Pass nextCursor verbatim as cursor with the same path to continue; it preserves the requested endLine. Line/column positions are 1-based UTF16 locations. A partial window is not a complete line/file and cannot establish absence. Every byte remains accessible. No commands execute.",
-      inputSchema: z.strictObject({
-        path: z.string().min(1),
-        startLine: z.number().int().positive().optional(),
-        endLine: z.number().int().positive().optional(),
-        cursor: z
-          .strictObject({
-            line: z.number().int().positive(),
-            column: z.number().int().positive(),
-            endLine: z.number().int().positive().optional(),
-          })
-          .optional(),
-      }),
       execute: async (request, { toolCallId }) => {
-        const result = await read(() => evidence.readSource(request));
+        const result = await read(async () => await evidence.readSource(request));
         if (result instanceof ApplicationReviewSelectionError) {
           return { error: "selection_unavailable", message: result.message };
         }
@@ -543,22 +544,33 @@ const reviewTools = (
           toolCallId,
           "readSource",
           {
+            cursor: request.cursor ?? null,
+            endLine: request.endLine ?? null,
             path: request.path,
             startLine: request.startLine ?? 1,
-            endLine: request.endLine ?? null,
-            cursor: request.cursor ?? null,
           },
           result,
         );
         return result;
       },
+      inputSchema: z.strictObject({
+        cursor: z
+          .strictObject({
+            column: z.number().int().positive(),
+            endLine: z.number().int().positive().optional(),
+            line: z.number().int().positive(),
+          })
+          .optional(),
+        endLine: z.number().int().positive().optional(),
+        path: z.string().min(1),
+        startLine: z.number().int().positive().optional(),
+      }),
     }),
     recordReviewEvidence: tool({
       description:
         "Record source-demonstrated findings with exact requirement document IDs/quotes and absolute source citations, plus runtime unknowns. Submit incrementally; invalid evidence is not accepted.",
-      inputSchema: evidenceSubmissionSchema,
       execute: async (submission) => {
-        const verified = await read(() => verifiedSubmission(submission, evidence));
+        const verified = await read(async () => await verifiedSubmission(submission, evidence));
         if (verified !== true) {
           state.invalidEvidence = true;
           return {
@@ -574,18 +586,18 @@ const reviewTools = (
             finding,
           );
           const requirement = {
-            kind: "verified-requirement" as const,
             documentId: requirementDocumentId,
+            kind: "verified-requirement" as const,
             quoteDigest: hash(finding.requirementQuote),
           };
           state.references.set(JSON.stringify(requirement), requirement);
           for (const citation of finding.citations) {
             const reference = {
+              endLine: citation.endLine,
+              excerptDigest: hash(citation.excerpt),
               kind: "verified-source" as const,
               path: citation.path,
               startLine: citation.startLine,
-              endLine: citation.endLine,
-              excerptDigest: hash(citation.excerpt),
             };
             state.references.set(JSON.stringify(reference), reference);
           }
@@ -599,19 +611,7 @@ const reviewTools = (
           runtimeCheckCount: state.runtimeChecks.size,
         };
       },
-    }),
-    completeReview: tool({
-      description:
-        "Finish the independent application review after inspecting requirements and relevant execution paths. This grants no runtime success, resource or publication authority.",
-      inputSchema: z.strictObject({ remainingRuntimeChecks: z.array(z.string()) }),
-      execute: async ({ remainingRuntimeChecks }) => {
-        await guard();
-        for (const check of remainingRuntimeChecks) {
-          state.runtimeChecks.add(check);
-        }
-        state.completionRequested = true;
-        return { completionRequested: true };
-      },
+      inputSchema: evidenceSubmissionSchema,
     }),
   };
 };
@@ -630,9 +630,6 @@ const assessmentFor = (
     redactionTexts,
     reviewer,
   ),
-  reasoningEffort: reviewer.reasoningEffort,
-  reviewPolicyId: policyId,
-  reviewRubricDigest: applicationSourceReviewRubricDigest(),
   evidenceDigest: hash(
     JSON.stringify([
       sourceReviewBindingDigest(input),
@@ -640,8 +637,11 @@ const assessmentFor = (
       [...state.references.values()],
     ]),
   ),
-  usage: { ...invocation.freshUsage },
   invocation,
+  reasoningEffort: reviewer.reasoningEffort,
+  reviewPolicyId: policyId,
+  reviewRubricDigest: applicationSourceReviewRubricDigest(),
+  usage: { ...invocation.freshUsage },
 });
 
 const hasCompletedReview = (state: ReviewState): boolean =>
@@ -673,31 +673,31 @@ const restoreReviewRound = (
       ? emptySourceReviewInvocation()
       : { ...continuation.invocation, freshUsage: { ...continuation.invocation.freshUsage } };
   const state: ReviewState = {
+    completionRequested: continuation?.completionRequested === true,
+    evidenceFailed: continuation?.evidenceFailed === true,
     findings: new Map(continuation?.findings),
-    runtimeChecks: new Set(continuation?.runtimeChecks),
+    invalidEvidence: continuation?.invalidEvidence === true,
+    outputRejected: continuation?.outputRejected === true,
     references: new Map(continuation?.references),
     reusableReads: new Map(continuation?.reusableReads),
-    completionRequested: continuation?.completionRequested === true,
-    invalidEvidence: continuation?.invalidEvidence === true,
-    evidenceFailed: continuation?.evidenceFailed === true,
-    outputRejected: continuation?.outputRejected === true,
+    runtimeChecks: new Set(continuation?.runtimeChecks),
   };
   const initial = {
-    requirements: evidence.requirements,
-    changedPaths: evidence.changedPaths,
-    sourceDigest: input.sourceDigest,
     appSpecDigest: input.appSpecDigest,
+    changedPaths: evidence.changedPaths,
+    requirements: evidence.requirements,
+    sourceDigest: input.sourceDigest,
   };
   const messages: ModelMessage[] = continuation?.messages ?? [
-    { role: "user", content: JSON.stringify(initial) },
+    { content: JSON.stringify(initial), role: "user" },
   ];
   return {
     invocation,
-    state,
+    lastRecovery: continuation?.lastRecovery,
     messages,
     requestOrdinal: continuation?.requestOrdinal ?? 0,
+    state,
     stepNumber: continuation?.stepNumber ?? 0,
-    lastRecovery: continuation?.lastRecovery,
   };
 };
 
@@ -748,11 +748,14 @@ const settleIncompleteReviewRound = async (
     return blocked("Primary review document redaction is unavailable.");
   }
   const recovery = JSON.stringify({
-    sourceDigest: input.sourceDigest,
     appSpecDigest: input.appSpecDigest,
     evidence:
       "Exact original documents, the complete accepted specification, changed-file manifest and unchanged source remain accessible through the read tools and listEvidence. Reinspect as needed; references are not replacement requirements.",
+    instruction: state.outputRejected
+      ? "The provider exhausted output capacity. Submit one finding or runtime check at a time through recordReviewEvidence, then call completeReview. All previously accepted findings are retained."
+      : "The provider rejected accumulated context. Continue the holistic review using exact evidence documents and source reads; all validated findings are retained.",
     readReferences: [...state.references.values()],
+    sourceDigest: input.sourceDigest,
     validated: sanitizeSourceJudgment(
       input,
       {
@@ -761,9 +764,6 @@ const settleIncompleteReviewRound = async (
       },
       texts,
     ),
-    instruction: state.outputRejected
-      ? "The provider exhausted output capacity. Submit one finding or runtime check at a time through recordReviewEvidence, then call completeReview. All previously accepted findings are retained."
-      : "The provider rejected accumulated context. Continue the holistic review using exact evidence documents and source reads; all validated findings are retained.",
   });
   if (recovery === lastRecovery) {
     return blocked(
@@ -772,7 +772,7 @@ const settleIncompleteReviewRound = async (
   }
   if (
     contextRejected &&
-    JSON.stringify(currentMessages) === JSON.stringify([{ role: "user", content: recovery }])
+    JSON.stringify(currentMessages) === JSON.stringify([{ content: recovery, role: "user" }])
   ) {
     return blocked("The provider rejected the compact application review context.");
   }
@@ -796,8 +796,8 @@ const resolveReviewPolicy = (
     (options.testModel === undefined
       ? sourceReviewPolicy()
       : {
-          id: "fixture-sol",
           fallback: { modelId: builderValidationModelId, reasoningEffort: null },
+          id: "fixture-sol",
           primary: { modelId: builderValidationModelId, reasoningEffort: null },
         });
   // A legacy checkpoint may contain Sol-generated messages; never resume those with a different model.
@@ -808,7 +808,7 @@ const resolveReviewPolicy = (
       : { modelId: builderValidationModelId, reasoningEffort: null });
   const policyId =
     continuation?.reviewPolicyId ?? (continuation === undefined ? policy.id : "legacy-sol");
-  return { policy, reviewer, policyId, fallbackUsed: continuation?.fallbackUsed === true };
+  return { fallbackUsed: continuation?.fallbackUsed === true, policy, policyId, reviewer };
 };
 
 const canFallback = ({
@@ -850,23 +850,23 @@ const restartReviewWithFallback = async (
       fallbackUsed: true,
       // Keep the prior reviewer’s partial evidence separate from the fresh review.
       priorReviewerEvidence: {
-        reviewer: current.reviewer,
         findings: saved.findings,
-        runtimeChecks: saved.runtimeChecks,
         references: saved.references,
+        reviewer: current.reviewer,
+        runtimeChecks: saved.runtimeChecks,
       },
       findings: [],
       runtimeChecks: [],
       references: [],
       messages: [
         {
-          role: "user",
           content: JSON.stringify({
-            requirements: evidence.requirements,
-            changedPaths: evidence.changedPaths,
-            sourceDigest: input.sourceDigest,
             appSpecDigest: input.appSpecDigest,
+            changedPaths: evidence.changedPaths,
+            requirements: evidence.requirements,
+            sourceDigest: input.sourceDigest,
           }),
+          role: "user",
         },
       ],
       reusableReads: [],
@@ -951,7 +951,7 @@ const preserveVerifiedFindings = async (
   if (texts === undefined) {
     return context.blocked("Primary review document redaction is unavailable.");
   }
-  const prior = context.prior;
+  const { prior } = context;
   const hasPrior =
     prior !== undefined && (prior.findings.length > 0 || prior.runtimeChecks.length > 0);
   const hasCurrent = context.state.findings.size > 0 || context.state.runtimeChecks.size > 0;
@@ -959,8 +959,8 @@ const preserveVerifiedFindings = async (
     ? {
         ...context.state,
         findings: new Map([...prior.findings, ...context.state.findings]),
-        runtimeChecks: new Set([...prior.runtimeChecks, ...context.state.runtimeChecks]),
         references: new Map([...prior.references, ...context.state.references]),
+        runtimeChecks: new Set([...prior.runtimeChecks, ...context.state.runtimeChecks]),
       }
     : context.state;
   const attribution = hasPrior && !hasCurrent ? prior.reviewer : context.reviewer;
@@ -976,9 +976,9 @@ const preserveVerifiedFindings = async (
     ...partial,
     ...(hasPrior && hasCurrent
       ? {
+          evidenceNote: `${partial.evidenceNote} Review evidence includes independent contributions from ${prior.reviewer.modelId} and ${context.reviewer.modelId}.`,
           modelId: "multiple",
           reasoningEffort: null,
-          evidenceNote: `${partial.evidenceNote} Review evidence includes independent contributions from ${prior.reviewer.modelId} and ${context.reviewer.modelId}.`,
         }
       : {}),
     reason,
@@ -1048,10 +1048,10 @@ export const assessApplicationSourceRound = async (
   const blocked = (reason: string) =>
     finish({
       ...unavailableSourceAssessment(input, reason, "blocked", reviewer),
+      invocation,
       reasoningEffort: reviewer.reasoningEffort,
       reviewPolicyId: policyId,
       reviewRubricDigest: applicationSourceReviewRubricDigest(),
-      invocation,
     });
   try {
     options.abortSignal?.throwIfAborted();
@@ -1089,15 +1089,15 @@ export const assessApplicationSourceRound = async (
     const blockedWithVerifiedFindings = async (reason: string) =>
       await preserveVerifiedFindings(
         {
+          blocked,
+          finish,
           input,
-          state,
           invocation,
-          reviewer,
           policyId,
           prior: continuation?.priorReviewerEvidence,
           readRedactions,
-          finish,
-          blocked,
+          reviewer,
+          state,
         },
         reason,
       );
@@ -1175,13 +1175,13 @@ export const assessApplicationSourceRound = async (
           }
           try {
             options.onRequestStart({
+              messageMeasurements,
               requestOrdinal,
               sdkCallId: z
                 .string()
                 .regex(/^[A-Za-z0-9_.:-]{1,256}$/u)
                 .safeParse(event.callId).data,
               stepNumber: preparedStepNumber,
-              messageMeasurements,
             });
           } catch {
             // Diagnostic measurement or logging must never alter the review.
@@ -1202,7 +1202,7 @@ export const assessApplicationSourceRound = async (
     let contextRejected = false;
     let result: Awaited<ReturnType<typeof agent.generate>> | undefined;
     try {
-      result = await agent.generate({ messages, abortSignal: options.abortSignal });
+      result = await agent.generate({ abortSignal: options.abortSignal, messages });
       // The supported SDK supplies the complete assistant/tool exchange, including errors.
       messages = [...currentMessages, ...result.finalStep.response.messages];
     } catch (error) {
@@ -1235,22 +1235,22 @@ export const assessApplicationSourceRound = async (
       return await completedReview();
     }
     const settled = await settleIncompleteReviewRound({
-      input,
-      state,
-      contextRejected,
+      blocked,
       canContinue: canContinueReviewRound(result?.finalStep),
+      contextRejected,
       currentMessages,
+      finish,
+      input,
       lastRecovery,
       readRedactions,
-      finish,
-      blocked,
       recover: (recovery) => {
         lastRecovery = recovery;
         state.outputRejected = false;
         state.completionRequested = false;
-        messages = [{ role: "user", content: recovery }];
+        messages = [{ content: recovery, role: "user" }];
         invocation.splits += 1;
       },
+      state,
     });
     return await settleReviewWithFallback(
       settled,

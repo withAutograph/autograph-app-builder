@@ -29,21 +29,27 @@ const result = {
   status: "auth-schema-prepared" as const,
 };
 const context: WorkflowToolContext = {
-  callId: "approved-call",
-  toolName: "prepare-app-hosted-runtime",
   abortSignal: new AbortController().signal,
-  ask: () => Promise.reject(new Error("No confirmation is expected")),
+  agent: async () => {
+    throw new Error("No agent call is expected");
+  },
   agents: {},
-  agent: () => Promise.reject(new Error("No agent call is expected")),
-  getToken: () => Promise.reject(new Error("No provider token is expected")),
+  ask: async () => {
+    throw new Error("No confirmation is expected");
+  },
+  callId: "approved-call",
+  getToken: async () => {
+    throw new Error("No provider token is expected");
+  },
   requireAuth: () => {
     throw new Error("No provider authorization is expected");
   },
   session: {
-    id: "adapter-session",
     auth: { current: null, initiator: null },
+    id: "adapter-session",
     turn: { id: "turn", sequence: 0 },
   },
+  toolName: "prepare-app-hosted-runtime",
 };
 
 const deferred = <T>() => Promise.withResolvers<T>();
@@ -54,39 +60,39 @@ const fixture = (conflict = false) => {
   const dispose = vi.fn(() => {
     events.push("dispose");
   });
-  const register = vi.fn<HostedRuntimeIdentityWaitPorts["register"]>(() => {
+  const register = vi.fn<HostedRuntimeIdentityWaitPorts["register"]>(async () => {
     events.push("register");
-    return Promise.resolve({ status: "waiting" });
+    return { status: "waiting" };
   });
-  const acknowledge = vi.fn<HostedRuntimeIdentityWaitPorts["acknowledge"]>(() => {
+  const acknowledge = vi.fn<HostedRuntimeIdentityWaitPorts["acknowledge"]>(async () => {
     events.push("acknowledge");
-    return Promise.resolve({ status: "consumed", eventId: "canonical-event" });
+    return { eventId: "canonical-event", status: "consumed" };
   });
   const prepare = vi
     .fn<typeof prepareHostedRuntimeStep>()
     .mockResolvedValueOnce({ identityInput, result })
-    .mockImplementationOnce(() => {
+    .mockImplementationOnce(async () => {
       events.push("readback");
-      return Promise.resolve({ identityInput: null, result: { ...result, status: "prepared" } });
+      return { identityInput: null, result: { ...result, status: "prepared" } };
     });
   const ports: HostedRuntimeIdentityWaitPorts = {
+    acknowledge,
     createHook: () => ({
       token: "private-hook-token",
       // oxlint-disable-next-line unicorn/no-thenable, github/no-then -- Model the documented Workflow Hook thenable without invoking its VM runtime.
       then: callback.promise.then.bind(callback.promise),
-      getConflict: () => {
+      getConflict: async () => {
         events.push("committed");
-        return Promise.resolve(conflict ? {} : null);
+        return conflict ? {} : null;
       },
       dispose,
     }),
     register,
-    acknowledge,
     sleepUntil: vi.fn(async () => {
       await expiry.promise;
     }),
   };
-  return { callback, expiry, events, dispose, register, acknowledge, prepare, ports };
+  return { acknowledge, callback, dispose, events, expiry, ports, prepare, register };
 };
 
 describe("owner identity continuation", () => {
@@ -99,8 +105,8 @@ describe("owner identity continuation", () => {
     });
     expect(f.events).toEqual(["committed", "register"]);
     expect(f.register).toHaveBeenCalledWith(input, context, {
-      token: "private-hook-token",
       identityInput,
+      token: "private-hook-token",
     });
     const terminal = generator.next();
     f.callback.resolve({ eventId: "canonical-event" });
@@ -119,18 +125,16 @@ describe("owner identity continuation", () => {
     const registerReceivers: boolean[] = [];
     const acknowledgeReceivers: boolean[] = [];
     let registrations = 0;
-    f.ports.register = function register(this: undefined) {
+    f.ports.register = async function register(this: undefined) {
       registerReceivers.push(this === undefined);
       registrations += 1;
-      return Promise.resolve(
-        registrations === 1
-          ? { status: "waiting" as const }
-          : { status: "consumed" as const, eventId: "canonical-event" },
-      );
+      return registrations === 1
+        ? { status: "waiting" as const }
+        : { eventId: "canonical-event", status: "consumed" as const };
     };
-    f.ports.acknowledge = function acknowledge(this: undefined) {
+    f.ports.acknowledge = async function acknowledge(this: undefined) {
       acknowledgeReceivers.push(this === undefined);
-      return Promise.resolve({ status: "consumed", eventId: "canonical-event" });
+      return { eventId: "canonical-event", status: "consumed" };
     };
     const generator = continueHostedRuntimeOwnerPreparation(input, context, f.prepare, f.ports);
     expect(await generator.next()).toMatchObject({ done: false });
@@ -145,7 +149,7 @@ describe("owner identity continuation", () => {
     "re-reads a canonically %s request without showing a stale link",
     async (status) => {
       const f = fixture();
-      f.register.mockResolvedValueOnce({ status, eventId: "canonical-event" });
+      f.register.mockResolvedValueOnce({ eventId: "canonical-event", status });
       const generator = continueHostedRuntimeOwnerPreparation(input, context, f.prepare, f.ports);
       expect(await generator.next()).toMatchObject({ done: true, value: { status: "prepared" } });
       expect(f.acknowledge).toHaveBeenCalledWith(input, context, { eventId: "canonical-event" });
@@ -157,7 +161,7 @@ describe("owner identity continuation", () => {
     const f = fixture();
     f.register
       .mockResolvedValueOnce({ status: "waiting" })
-      .mockResolvedValueOnce({ status: "expired", eventId: "expired-event" });
+      .mockResolvedValueOnce({ eventId: "expired-event", status: "expired" });
     const generator = continueHostedRuntimeOwnerPreparation(input, context, f.prepare, f.ports);
     await generator.next();
     const terminal = generator.next();
@@ -172,8 +176,8 @@ describe("owner identity continuation", () => {
     const f = fixture();
     const checkAfter = "2026-12-31T23:45:05Z";
     f.register
-      .mockResolvedValueOnce({ status: "waiting", checkAfter })
-      .mockResolvedValueOnce({ status: "consumed", eventId: "canonical-event" });
+      .mockResolvedValueOnce({ checkAfter, status: "waiting" })
+      .mockResolvedValueOnce({ eventId: "canonical-event", status: "consumed" });
     const generator = continueHostedRuntimeOwnerPreparation(input, context, f.prepare, f.ports);
     await generator.next();
     const terminal = generator.next();
@@ -194,11 +198,11 @@ describe("owner identity continuation", () => {
     const seconds = [5, 25, 30, 40, 60, 90, 120];
     for (const second of seconds) {
       f.register.mockResolvedValueOnce({
-        status: "waiting",
         checkAfter: new Date(serverTime + second * 1000).toISOString(),
+        status: "waiting",
       });
     }
-    f.register.mockResolvedValueOnce({ status: "consumed", eventId: "canonical-event" });
+    f.register.mockResolvedValueOnce({ eventId: "canonical-event", status: "consumed" });
     const generator = continueHostedRuntimeOwnerPreparation(input, context, f.prepare, f.ports);
     await generator.next();
     const terminal = generator.next();
@@ -231,7 +235,7 @@ describe("owner identity continuation", () => {
     f.register
       .mockResolvedValueOnce({ status: "waiting" })
       .mockResolvedValueOnce({ status: "waiting" })
-      .mockResolvedValueOnce({ status: "expired", eventId: "expired-event" });
+      .mockResolvedValueOnce({ eventId: "expired-event", status: "expired" });
     const generator = continueHostedRuntimeOwnerPreparation(input, context, f.prepare, f.ports);
     await generator.next();
     const terminal = generator.next();

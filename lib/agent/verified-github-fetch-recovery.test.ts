@@ -94,11 +94,11 @@ describe("verified GitHub fetch recovery", () => {
 
 describe("preparation failure cleanup advisory", () => {
   const advisory: DraftWorktreeRetirementAdvisory = {
-    status: "complete",
-    retired: 1,
+    capacity: { after: { bytes: { available: "0", total: "4096" } } },
+    reasons: { private_state: 1, referenced: 1 },
     retained: 2,
-    reasons: { referenced: 1, private_state: 1 },
-    capacity: { after: { bytes: { total: "4096", available: "0" } } },
+    retired: 1,
+    status: "complete",
   };
   const appendedAdvisory = (error: Error, original: string) => {
     expect(error.message.startsWith(original)).toBe(true);
@@ -110,7 +110,7 @@ describe("preparation failure cleanup advisory", () => {
     const f = fixture();
     const cause = new Error("controlled command cause");
     const original = new TypeError("Builder could not create its checkout (exit 128)", { cause });
-    const message = original.message;
+    const { message } = original;
     const prepare = vi.fn().mockRejectedValue(original);
     const run = async () => {
       try {
@@ -155,12 +155,12 @@ describe("preparation failure cleanup advisory", () => {
 
   it("reports unavailable maintenance without replacing an ordinary preparation failure", () => {
     const error = new Error("Original command failed");
-    const message = error.message;
+    const { message } = error;
     const unavailable: DraftWorktreeRetirementAdvisory = {
-      status: "unavailable",
-      retired: 0,
-      retained: 0,
       reasons: {},
+      retained: 0,
+      retired: 0,
+      status: "unavailable",
     };
     annotateDraftWorktreeRetirementError(error, unavailable);
     expect(appendedAdvisory(error, message)).toEqual(unavailable);
@@ -190,8 +190,8 @@ describe("preparation failure cleanup advisory", () => {
     const error = new Error("Original command failed");
     const unsafe = {
       ...advisory,
-      secret: "private-token",
       reasons: { ...advisory.reasons, "/private/source/root": 1 },
+      secret: "private-token",
     };
     expect(() => {
       annotateDraftWorktreeRetirementError(error, unsafe);

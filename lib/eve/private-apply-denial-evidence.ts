@@ -18,12 +18,12 @@ type ToolOutput = Extract<
   { kind: "tool-result" }
 >["output"];
 const deniedResultSchema = z.object({
-  code: z.literal("TOOL_EXECUTION_DENIED"),
-  tool: z.object({ result: z.literal("not_run") }),
   approval: z.object({
     requestId: z.string().min(1),
     status: z.enum(["denied", "ignored", "invalid"]),
   }),
+  code: z.literal("TOOL_EXECUTION_DENIED"),
+  tool: z.object({ result: z.literal("not_run") }),
 });
 /** Parse only the documented runtime-owned denied action payload. */
 export const readFrameworkPrivateApplyDenial = (
@@ -139,11 +139,11 @@ export const observePrivateApplyDenials = (input: {
       continue;
     }
     const unsigned = {
-      sessionId: input.sessionId,
       callId,
-      requestId,
-      outcome: `${results[0].status}-not-run` as const,
       eventIds: [requestEventId, ...resolutionEvents, results[0].eventId],
+      outcome: `${results[0].status}-not-run` as const,
+      requestId,
+      sessionId: input.sessionId,
     };
     result.push({ ...unsigned, evidenceDigest: digest(JSON.stringify(unsigned)) });
   }
@@ -156,11 +156,11 @@ export const createPrivateApplyDenialEvidence = (
   },
 ): PrivateApplyDenialEvidence => {
   const unsigned = {
-    sessionId: input.sessionId,
     callId: input.callId,
-    requestId: input.requestId,
-    outcome: `${input.status}-not-run` as const,
     eventIds: input.eventIds,
+    outcome: `${input.status}-not-run` as const,
+    requestId: input.requestId,
+    sessionId: input.sessionId,
   };
   return { ...unsigned, evidenceDigest: digest(JSON.stringify(unsigned)) };
 };

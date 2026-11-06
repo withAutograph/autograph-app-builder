@@ -39,9 +39,9 @@ const resolveDevelopmentEve = (root: string) => {
       {
         cwd: root,
         encoding: "utf-8",
-        stdio: ["ignore", "pipe", "pipe"],
-        env: { PATH: process.env.PATH, NODE_ENV: "development" },
+        env: { NODE_ENV: "development", PATH: process.env.PATH },
         maxBuffer: 64 * 1024,
+        stdio: ["ignore", "pipe", "pipe"],
       },
     ).trim();
   } catch {

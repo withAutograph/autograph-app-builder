@@ -179,7 +179,7 @@ export function createPreviewCimdTransport(
     );
     request.once("error", reject);
     request.end();
-    return promise;
+    return await promise;
   };
 }
 

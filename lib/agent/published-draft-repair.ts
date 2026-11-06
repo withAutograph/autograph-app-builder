@@ -24,8 +24,8 @@ export const draftCandidateValidationDigest = (
   createHash("sha256")
     .update(
       JSON.stringify({
-        resolvedTree: validation.resolvedTree,
         commands: validation.commands.map(({ command, exitCode }) => ({ command, exitCode })),
+        resolvedTree: validation.resolvedTree,
         validatedByCallId: validation.validatedByCallId,
       }),
     )

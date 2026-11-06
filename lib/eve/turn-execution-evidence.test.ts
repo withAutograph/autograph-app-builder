@@ -7,30 +7,30 @@ let id = 0;
 const meta = (deliveryIds: string[] = []) => {
   id += 1;
   return {
-    id: `event_${id}`,
     at: "2026-11-04T00:03:22.986Z",
     deliveryIds,
+    id: `event_${id}`,
   };
 };
 const start = (turnId: string, sequence: number): MessageStreamEvent => ({
-  type: "turn.started",
-  data: { turnId, sequence },
+  data: { sequence, turnId },
   meta: meta(),
+  type: "turn.started",
 });
 const message = (turnId: string, sequence: number, deliveryId: string): MessageStreamEvent => ({
-  type: "message.received",
-  data: { turnId, sequence, message: "private user message", parts: [] },
+  data: { message: "private user message", parts: [], sequence, turnId },
   meta: meta([deliveryId]),
+  type: "message.received",
 });
 const request = (turnId: string, callId: string, toolName: string): MessageStreamEvent => ({
-  type: "actions.requested",
   data: {
-    turnId,
+    actions: [{ callId, input: { secret: "never retained" }, kind: "tool-call", toolName }],
     sequence: 1,
     stepIndex: 1,
-    actions: [{ kind: "tool-call", callId, toolName, input: { secret: "never retained" } }],
+    turnId,
   },
   meta: meta(),
+  type: "actions.requested",
 });
 const result = (
   turnId: string,
@@ -39,36 +39,36 @@ const result = (
   status: "completed" | "failed" | "rejected",
   commandId?: string,
 ): MessageStreamEvent => ({
-  type: "action.result",
   data: {
-    turnId,
-    sequence: 1,
-    stepIndex: 1,
-    status,
     result: {
-      kind: "tool-result",
       callId,
-      toolName,
+      kind: "tool-result",
       output: { ...(commandId === undefined ? {} : { commandId }), password: "never retained" },
+      toolName,
     },
+    sequence: 1,
+    status,
+    stepIndex: 1,
+    turnId,
   },
   meta: meta(),
+  type: "action.result",
 });
 const complete = (turnId: string, sequence: number): MessageStreamEvent => ({
-  type: "turn.completed",
-  data: { turnId, sequence },
+  data: { sequence, turnId },
   meta: meta(),
+  type: "turn.completed",
 });
 const summarize = (
   events: MessageStreamEvent[],
   selector?: Parameters<typeof summarizeNativeTurnExecution>[0]["selector"],
 ) =>
   summarizeNativeTurnExecution({
-    sessionId: "wrun_original",
-    ownerLineage: ["wrun_original", "wrun_recovered"],
-    nativeCursor: events.length,
     events,
+    nativeCursor: events.length,
+    ownerLineage: ["wrun_original", "wrun_recovered"],
     selector,
+    sessionId: "wrun_original",
   });
 const statusOnly = () => [
   start("turn_16", 16),
@@ -88,24 +88,24 @@ describe("per-turn native execution evidence", () => {
     const before = JSON.stringify(events);
     const evidence = summarize(events, { deliveryId: "delivery_current" });
     expect(evidence).toMatchObject({
-      selectedBy: "delivery-id",
+      lastHistoricalFailedExecution: {
+        callId: "call_old",
+        commandReferences: [{ commandId: "cmd_old", nativeIndex: 2 }],
+        requested: { nativeIndex: 1 },
+        result: { nativeIndex: 2, status: "failed" },
+        turnId: "turn_16",
+      },
       nativeCursor: events.length,
       ownerLineage: ["wrun_original", "wrun_recovered"],
+      selectedBy: "delivery-id",
       selectedTurn: {
-        turnId: "turn_17",
-        sequence: 17,
-        execution: "unexercised",
-        acceptedMessages: [{ nativeIndex: 5, deliveryIds: ["delivery_current"] }],
+        acceptedMessages: [{ deliveryIds: ["delivery_current"], nativeIndex: 5 }],
         attempts: [
           { callId: "call_status", category: "status-read", result: { status: "completed" } },
         ],
-      },
-      lastHistoricalFailedExecution: {
-        turnId: "turn_16",
-        callId: "call_old",
-        requested: { nativeIndex: 1 },
-        result: { nativeIndex: 2, status: "failed" },
-        commandReferences: [{ commandId: "cmd_old", nativeIndex: 2 }],
+        execution: "unexercised",
+        sequence: 17,
+        turnId: "turn_17",
       },
     });
     expect(evidence.selectedTurn.attempts).toHaveLength(1);
@@ -131,14 +131,14 @@ describe("per-turn native execution evidence", () => {
       request("turn_1", "call_pending", "apply_app_creation"),
     ];
     expect(summarize(events).selectedTurn).toMatchObject({
-      execution: "requested",
       attempts: [{ callId: "call_pending" }],
+      execution: "requested",
     });
     expect(summarize(events).selectedTurn.attempts[0].result).toBeUndefined();
     events.push(result("turn_1", "call_pending", "apply_app_creation", "rejected"));
     expect(summarize(events).selectedTurn).toMatchObject({
-      execution: "result-observed",
       attempts: [{ result: { status: "rejected" } }],
+      execution: "result-observed",
     });
   });
   it("keeps an unclassified dynamic tool unassessed and a result without request unproven", () => {
@@ -162,8 +162,8 @@ describe("per-turn native execution evidence", () => {
       result("turn_old", "call_old", "prepare_workspace", "failed"),
     ];
     expect(summarize(events, { deliveryId: "new" })).toMatchObject({
-      selectedTurn: { turnId: "turn_new", execution: "unexercised", attempts: [] },
-      lastHistoricalFailedExecution: { turnId: "turn_old", callId: "call_old" },
+      lastHistoricalFailedExecution: { callId: "call_old", turnId: "turn_old" },
+      selectedTurn: { attempts: [], execution: "unexercised", turnId: "turn_new" },
     });
   });
   it("does not inspect private inputs, outputs, errors or assistant wording", () => {
@@ -187,18 +187,18 @@ describe("per-turn native execution evidence", () => {
     const events = statusOnly();
     expect(() =>
       summarizeNativeTurnExecution({
-        sessionId: "wrun_original",
-        ownerLineage: ["wrun_original"],
         events,
         nativeCursor: events.length + 1,
+        ownerLineage: ["wrun_original"],
+        sessionId: "wrun_original",
       }),
     ).toThrow();
     expect(() =>
       summarizeNativeTurnExecution({
-        sessionId: "wrun_original",
-        ownerLineage: ["wrun_foreign"],
         events,
         nativeCursor: events.length,
+        ownerLineage: ["wrun_foreign"],
+        sessionId: "wrun_original",
       }),
     ).toThrow();
   });
@@ -221,14 +221,14 @@ describe("per-turn native execution evidence", () => {
       start("turn_failed", 18),
       message("turn_failed", 18, "delivery_failed"),
       {
-        type: "turn.failed",
         data: {
-          turnId: "turn_failed",
-          sequence: 18,
           code: "model_failed",
           message: "private model failure",
+          sequence: 18,
+          turnId: "turn_failed",
         },
         meta: meta(),
+        type: "turn.failed",
       },
     ];
     const evidence = summarize(events);

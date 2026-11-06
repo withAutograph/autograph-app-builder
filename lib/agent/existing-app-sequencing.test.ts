@@ -26,7 +26,7 @@ describe("existing-app sequencing", () => {
       canInspectExistingApplication({
         phase: "empty",
         version: 17,
-      } as AppBuilderWorkflowState),
+      }),
     ).toBe(false);
     expect(
       canInspectExistingApplication({

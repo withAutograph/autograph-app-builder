@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 const execute = promisify(execFile);
-const readDocumentation = (path: string) => readFile(nodePath.resolve(path), "utf-8");
+const readDocumentation = async (path: string) => await readFile(nodePath.resolve(path), "utf-8");
 const verifiedReleaseInstall = {
   heading: "## Install before shared marketplace publication",
   path: "docs/installing.md",
@@ -16,7 +16,7 @@ const verifiedReleaseInstall = {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function firstShellBlock(documentation: string, heading: string) {
   const section = documentation.slice(documentation.indexOf(heading));
-  const match = section.match(/```sh\n(?<shell>[\s\S]*?)\n```/u);
+  const match = /```sh\n(?<shell>[\s\S]*?)\n```/u.exec(section);
   if (!match) {
     throw new Error(`${heading} has no shell block.`);
   }

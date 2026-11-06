@@ -72,13 +72,13 @@ export const activatePrivateComputeProfile = async <T extends PrivateComputeNati
   const write = async (phase: PrivateComputeActivation["phase"]) => {
     await ports.assertCurrent();
     await ports.writeActivation({
-      sandboxId: profile.target.sandboxId,
-      workspaceDrive: profile.target.workspaceDrive,
-      proposalDigest: input.proposalDigest,
       appId: input.appId,
-      sessionId: input.sessionId,
-      profileId: profile.id,
       phase,
+      profileId: profile.id,
+      proposalDigest: input.proposalDigest,
+      sandboxId: profile.target.sandboxId,
+      sessionId: input.sessionId,
+      workspaceDrive: profile.target.workspaceDrive,
       ...(phase === "ready" ? { completedByCallId: input.callId } : {}),
     });
     previous = await ports.readActivation();
@@ -180,10 +180,10 @@ export const applyApprovedPrivateComputeProfile = async (input: {
     );
   }
   const journal = await createLocalPrivateComputeJournal({
+    assertCurrent,
     authority,
     sandboxId: input.profile.target.sandboxId,
     workspaceDrive: input.profile.target.workspaceDrive,
-    assertCurrent,
   });
   let checkpoint = await journal.read();
   const original = peekVercelPreviewProvider(input.profile.target.sandboxId);
@@ -192,11 +192,11 @@ export const applyApprovedPrivateComputeProfile = async (input: {
     replacement = await activatePrivateComputeProfile(input, {
       assertCurrent,
       read: async () => await Sandbox.get({ name: input.profile.target.sandboxId, resume: false }),
-      resume: async () => await Sandbox.get({ name: input.profile.target.sandboxId, resume: true }),
       readActivation: async () => {
         checkpoint = await journal.read();
         return checkpoint.record;
       },
+      resume: async () => await Sandbox.get({ name: input.profile.target.sandboxId, resume: true }),
       writeActivation: async (record) => {
         checkpoint = await journal.append(record, checkpoint);
       },
@@ -211,10 +211,10 @@ export const applyApprovedPrivateComputeProfile = async (input: {
     replaceVercelPreviewProvider(input.profile.target.sandboxId, original, replacement);
   }
   return {
-    profileId: input.profile.id,
-    vcpus: replacement.currentSession().vcpus,
     memoryMiB: replacement.currentSession().memory,
+    profileId: input.profile.id,
     sandboxId: replacement.name,
+    vcpus: replacement.currentSession().vcpus,
     workspaceDrive: input.profile.target.workspaceDrive,
   };
 };

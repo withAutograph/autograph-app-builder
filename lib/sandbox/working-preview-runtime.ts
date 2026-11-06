@@ -662,8 +662,8 @@ export const startWorkingPreview = async (input: {
     await provider.fs.writeFile(configurationPath, access.configuration, { signal });
     await waitForPreview({
       ...waitOptions,
-      check: (observe, readinessSignal) =>
-        openApp({
+      check: async (observe, readinessSignal) =>
+        await openApp({
           fetch: input.fetch ?? fetch,
           launchUrl: access.launchUrl,
           observe,
@@ -696,7 +696,7 @@ export const startWorkingPreview = async (input: {
     }
     return runtime;
   } catch (error) {
-    return cleanupPreviewAttempt({
+    return await cleanupPreviewAttempt({
       attempt,
       command,
       diagnosticsPath: input.signal?.aborted ? undefined : diagnosticsPath,

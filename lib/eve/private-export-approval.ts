@@ -26,9 +26,9 @@ export const tenantExportApprovalInputSchema = z
       parseHostedTenantExportRequestForPlan(
         {
           action: value.action,
-          planRef: value.planRef,
-          planDigest: value.planDigest,
           idempotencyKey: value.idempotencyKey,
+          planDigest: value.planDigest,
+          planRef: value.planRef,
         },
         value.plan,
       );
@@ -48,12 +48,12 @@ export const createPrivateTenantExportApprovalCapture = (input: {
 }) => {
   parseHostedTenantExportRequestForPlan(input.request, input.plan);
   const { issuer, audience, workspaceId, ownerUserId } = input.principal;
-  if (!isDeepStrictEqual(input.plan.authority, { issuer, audience, workspaceId, ownerUserId })) {
+  if (!isDeepStrictEqual(input.plan.authority, { audience, issuer, ownerUserId, workspaceId })) {
     throw new Error("Private approval owner differs from its frozen plan.");
   }
   const capture = createPrivateOperatorApprovalCapture({
-    request: input.request,
     ownerUserId: input.principal.ownerUserId,
+    request: input.request,
     ...(input.callId === undefined ? {} : { callId: input.callId }),
     ...(input.state === undefined ? {} : { state: input.state }),
   });
@@ -84,11 +84,11 @@ export const createPrivateTenantExportApprovalCapture = (input: {
       }
       capture.settle(event);
     },
+    proveComplete: capture.proveComplete,
     read: (): ExportApproval | null => {
       const receipt = capture.read();
       return receipt === null ? null : { ...input.request, ...receipt };
     },
     snapshot: capture.snapshot,
-    proveComplete: capture.proveComplete,
   };
 };

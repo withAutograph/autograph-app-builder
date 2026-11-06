@@ -102,7 +102,7 @@ const sourcePosition = (starts: readonly number[], offset: number) => {
       high = middle - 1;
     }
   }
-  return { line: low + 1, column: offset - starts[low] + 1 };
+  return { column: offset - starts[low] + 1, line: low + 1 };
 };
 const sourceCursorOffset = (
   text: string,
@@ -132,14 +132,14 @@ interface SourceReadWindow {
   endOffset: number;
 }
 const restoredSourceReadSchema = z.object({
+  contentDigest: z.string(),
+  digest: z.string(),
+  endColumn: z.number().int().positive(),
+  endLine: z.number().int().positive(),
   kind: z.literal("source"),
   path: z.string(),
-  digest: z.string(),
-  startLine: z.number().int().positive(),
-  endLine: z.number().int().positive(),
   startColumn: z.number().int().positive(),
-  endColumn: z.number().int().positive(),
-  contentDigest: z.string(),
+  startLine: z.number().int().positive(),
 });
 type RestoredSourceRead = z.infer<typeof restoredSourceReadSchema>;
 
@@ -155,8 +155,8 @@ const restoredReadWindow = (
   let startOffset: number;
   try {
     startOffset = sourceCursorOffset(text, starts, {
-      line: reference.startLine,
       column: reference.startColumn,
+      line: reference.startLine,
     });
   } catch (error) {
     if (error instanceof ApplicationReviewSelectionError) {
@@ -182,7 +182,7 @@ const restoredReadWindow = (
     return undefined;
   }
   const digest = createHash("sha256").update(text.slice(startOffset, endOffset)).digest("hex");
-  return digest === reference.contentDigest ? { startOffset, endOffset } : undefined;
+  return digest === reference.contentDigest ? { endOffset, startOffset } : undefined;
 };
 const mergeReadWindow = (
   windows: readonly SourceReadWindow[],
@@ -236,25 +236,25 @@ export const applicationReviewVisibility = (input: {
 }) => {
   const { unexposedReleasePrefixes } = input;
   if (!input.hasSelectedBaseline) {
-    return { paths: [...input.observedPaths], omissions: [] };
+    return { omissions: [], paths: [...input.observedPaths] };
   }
   if (unexposedReleasePrefixes === undefined) {
     const changed = new Set(input.changedPaths);
     return {
-      paths: input.observedPaths.filter((path) => changed.has(path)),
       omissions: [
         "Selected baseline visibility metadata is unavailable; review exposes the normalized changed paths only. Unchanged baseline context remains unassessed.",
       ],
+      paths: input.observedPaths.filter((path) => changed.has(path)),
     };
   }
   return {
+    omissions: [],
     paths: input.observedPaths.filter(
       (path) =>
         !unexposedReleasePrefixes.some(
           (prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix),
         ),
     ),
-    omissions: [],
   };
 };
 
@@ -305,10 +305,10 @@ export const createApplicationReviewEvidence = (input: {
   }
   const loadVerifiedSource = async (path: string, digest: string): Promise<string> => {
     const text = await verifiedSourceText({
-      sandbox: input.sandbox,
-      path: `${input.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
-      digest,
       abortSignal: input.abortSignal,
+      digest,
+      path: `${input.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
+      sandbox: input.sandbox,
     });
     const references = restoredReads.get(path);
     if (references !== undefined) {
@@ -325,7 +325,7 @@ export const createApplicationReviewEvidence = (input: {
     }
     return text;
   };
-  const loadSource = (path: string): Promise<string> => {
+  const loadSource = async (path: string): Promise<string> => {
     const file = fileByPath.get(path);
     if (file === undefined) {
       throw new ApplicationReviewSelectionError("Requested path is not available review source.");
@@ -335,12 +335,12 @@ export const createApplicationReviewEvidence = (input: {
       pending = loadVerifiedSource(path, file.digest);
       sourceText.set(path, pending);
     }
-    return pending;
+    return await pending;
   };
   const documents = new Map<string, () => Promise<string>>();
-  documents.set("original", () => Promise.resolve(input.reviewInput.originalRequest ?? ""));
+  documents.set("original", async () => input.reviewInput.originalRequest ?? "");
   for (const [index, text] of input.reviewInput.clarifications.entries()) {
-    documents.set(`clarification-${index}`, () => Promise.resolve(text));
+    documents.set(`clarification-${index}`, async () => text);
   }
   documents.set("app-spec", async () => {
     if (input.appSpecParts === undefined) {
@@ -354,7 +354,7 @@ export const createApplicationReviewEvidence = (input: {
     return parts.join("");
   });
   const requirementText = new Map<string, Promise<string>>();
-  const loadRequirement = (id: string): Promise<string> => {
+  const loadRequirement = async (id: string): Promise<string> => {
     input.abortSignal?.throwIfAborted();
     const load = documents.get(id);
     if (load === undefined) {
@@ -365,19 +365,15 @@ export const createApplicationReviewEvidence = (input: {
       pending = load();
       requirementText.set(id, pending);
     }
-    return pending;
+    return await pending;
   };
   return {
     changedPaths: input.changedPaths,
-    sourceFiles: files,
-    requirements: [...documents.keys()].map((id, order) => ({
-      id,
-      kind: requirementKind(id),
-      order,
-    })),
     async readRedactionTexts() {
       input.abortSignal?.throwIfAborted();
-      const texts = await Promise.all([...documents.keys()].map((id) => loadRequirement(id)));
+      const texts = await Promise.all(
+        [...documents.keys()].map(async (id) => await loadRequirement(id)),
+      );
       input.abortSignal?.throwIfAborted();
       return texts;
     },
@@ -397,7 +393,7 @@ export const createApplicationReviewEvidence = (input: {
       input.abortSignal?.throwIfAborted();
       const starts = lineStarts.get(path) ?? sourceLineStarts(text);
       lineStarts.set(path, starts);
-      const position = cursor ?? { line: startLine, column: 1 };
+      const position = cursor ?? { column: 1, line: startLine };
       const startOffset = sourceCursorOffset(text, starts, position);
       const requestedEnd = cursor?.endLine ?? endLine;
       if (
@@ -445,19 +441,25 @@ export const createApplicationReviewEvidence = (input: {
           ? makePayload("")
           : largestUtf8PayloadChunk({
               content: text.slice(startOffset, windowEnd),
-              offsetBytes: 0,
-              maxBytes: APPLICATION_REVIEW_SOURCE_PAGE_BYTES,
               makePayload,
+              maxBytes: APPLICATION_REVIEW_SOURCE_PAGE_BYTES,
+              offsetBytes: 0,
             }).payload;
       readWindows.set(
         path,
         mergeReadWindow(readWindows.get(path) ?? [], {
-          startOffset,
           endOffset: startOffset + result.content.length,
+          startOffset,
         }),
       );
       return result;
     },
+    requirements: [...documents.keys()].map((id, order) => ({
+      id,
+      kind: requirementKind(id),
+      order,
+    })),
+    sourceFiles: files,
     async verifyRequirementQuote({ documentId, quote }) {
       if (quote.length === 0) {
         return false;
@@ -482,12 +484,12 @@ export const createApplicationReviewEvidence = (input: {
       }
       const starts = lineStarts.get(path) ?? sourceLineStarts(text);
       return matchesReadWindow({
-        text,
-        starts,
-        windows: readWindows.get(path) ?? [],
-        startLine,
         endLine,
         excerpt,
+        startLine,
+        starts,
+        text,
+        windows: readWindows.get(path) ?? [],
       });
     },
   };

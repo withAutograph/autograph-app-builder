@@ -84,7 +84,7 @@ export function createPostgresOAuthMembershipAuthority(database: Database) {
       workspaceId: string;
       ownerUserId: string;
     }): Promise<boolean> {
-      return createPostgresWorkspaceMembership(database).isMember({
+      return await createPostgresWorkspaceMembership(database).isMember({
         principal: {
           audience: input.audience,
           issuer: input.issuer,

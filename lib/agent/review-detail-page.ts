@@ -86,6 +86,10 @@ export const readOwnedReviewDetailPage = (input: {
         nextOffsetBytes < totalBytes ? { digest, offsetBytes: nextOffsetBytes } : undefined;
       return {
         complete: nextOffsetBytes === totalBytes,
+        content: piece,
+        detailCursor,
+        digest,
+        mediaType: "application/json" as const,
         nextCall:
           detailCursor === undefined
             ? undefined
@@ -98,18 +102,14 @@ export const readOwnedReviewDetailPage = (input: {
                   : { sourceAssessmentBindingDigest: sourceAssessment.bindingDigest }),
                 detailCursor,
               },
-        detailCursor,
+        offsetBytes,
         reviewReference: {
           digest: input.details.reviewReceipt.digest,
           kind: "current-session-reviewed-change-set" as const,
           sessionId: input.sessionId,
         },
-        digest,
-        mediaType: "application/json" as const,
         section,
-        offsetBytes,
         totalBytes,
-        content: piece,
       };
     },
     maxBytes,

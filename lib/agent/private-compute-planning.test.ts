@@ -7,26 +7,26 @@ import {
 
 const profile = () =>
   privateComputeProfileSchema.parse({
-    version: 1,
-    id: "private-checks-16gib-v1",
-    vcpus: 8,
-    memoryMiB: 16_384,
-    lintWorkers: 1,
-    target: { sandboxId: "same", workspaceDrive: "same-drive" },
     checkPolicy: {
-      path: "apps/example/.config/mise/tasks/check",
-      beforeSha256: "a".repeat(64),
       afterSha256: "b".repeat(64),
+      beforeSha256: "a".repeat(64),
+      path: "apps/example/.config/mise/tasks/check",
     },
+    id: "private-checks-16gib-v1",
     limits: {
-      version: 1,
-      teamId: "team_owned",
-      projectId: "prj_owned",
-      plan: "pro",
-      maxVcpus: 8,
       limited: false,
+      maxVcpus: 8,
       observedAt: "2026-11-03T12:00:00.000Z",
+      plan: "pro",
+      projectId: "prj_owned",
+      teamId: "team_owned",
+      version: 1,
     },
+    lintWorkers: 1,
+    memoryMiB: 16_384,
+    target: { sandboxId: "same", workspaceDrive: "same-drive" },
+    vcpus: 8,
+    version: 1,
   });
 describe("private compute planning identity", () => {
   it("requires new planning for a first selection or changed physical target", () => {
@@ -59,8 +59,8 @@ describe("private compute planning identity", () => {
     expect(
       samePrivateComputeIntent(next, {
         ...next,
-        limits: { ...next.limits, observedAt: "2026-11-04T12:00:00.000Z" },
         checkPolicy: { ...next.checkPolicy, beforeSha256: next.checkPolicy.afterSha256 },
+        limits: { ...next.limits, observedAt: "2026-11-04T12:00:00.000Z" },
       }),
     ).toBe(true);
   });
@@ -70,15 +70,15 @@ describe("private compute planning identity", () => {
     expect(() =>
       readPrivateComputeLimits({
         APP_BUILDER_PRIVATE_COMPUTE_LIMITS: JSON.stringify(next.limits),
-        VERCEL_TEAM_ID: "team_other",
         VERCEL_PROJECT_ID: next.limits.projectId,
+        VERCEL_TEAM_ID: "team_other",
       }),
     ).toThrow("does not match");
     expect(
       readPrivateComputeLimits({
         APP_BUILDER_PRIVATE_COMPUTE_LIMITS: JSON.stringify(next.limits),
-        VERCEL_TEAM_ID: next.limits.teamId,
         VERCEL_PROJECT_ID: next.limits.projectId,
+        VERCEL_TEAM_ID: next.limits.teamId,
       }),
     ).toEqual(next.limits);
   });

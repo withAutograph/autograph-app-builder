@@ -14,38 +14,38 @@ const manifestSchema = z.object({
 });
 
 const capturedActors = () => ({
-  origin: "https://apps-preview.example.test",
+  files: {
+    "member.storage.json": JSON.stringify({
+      cookies: [
+        {
+          domain: "apps-preview.example.test",
+          name: "session",
+          path: "/",
+          secure: true,
+          value: "captured-private-session",
+        },
+      ],
+      origins: [
+        {
+          localStorage: [{ name: "selected-org", value: "captured-private-org" }],
+          origin: "https://apps-preview.example.test",
+        },
+      ],
+    }),
+  },
   identities: {
-    version: 1 as const,
     actors: [
       {
-        actorKey: "member",
         actorId: "actual-member-id",
+        actorKey: "member",
         organizationId: "actual-org-id",
         roles: ["member"],
         storageState: "member.storage.json",
       },
     ],
+    version: 1 as const,
   },
-  files: {
-    "member.storage.json": JSON.stringify({
-      cookies: [
-        {
-          name: "session",
-          domain: "apps-preview.example.test",
-          value: "captured-private-session",
-          path: "/",
-          secure: true,
-        },
-      ],
-      origins: [
-        {
-          origin: "https://apps-preview.example.test",
-          localStorage: [{ name: "selected-org", value: "captured-private-org" }],
-        },
-      ],
-    }),
-  },
+  origin: "https://apps-preview.example.test",
 });
 
 describe("private normal actor browser state", () => {
@@ -70,9 +70,9 @@ describe("private normal actor browser state", () => {
     const captured = capturedActors();
     const prepared = normalActorBrowserFiles(captured, "/private-state", captured.origin);
     expect(prepared.files).toContainEqual({
-      path: "/private-state/normal-actors/member.storage.json",
-      mode: 0o600,
       content: captured.files["member.storage.json"],
+      mode: 0o600,
+      path: "/private-state/normal-actors/member.storage.json",
     });
     const manifest = manifestSchema.parse(
       JSON.parse(

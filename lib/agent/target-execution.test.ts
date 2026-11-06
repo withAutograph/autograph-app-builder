@@ -219,7 +219,9 @@ describe("target command readiness", () => {
   it("requires the exact planned proposal receipt", () => {
     expect(plannedProposalForExecution(state, state.proposal.digest)).toBe(state.proposal);
     expect(() => plannedProposalForExecution(state, "0".repeat(64))).toThrow("proposal changed");
-    expect(() => assertProposalExecutionBindings(state)).toThrow("durable execution bindings");
+    expect(() => {
+      assertProposalExecutionBindings(state);
+    }).toThrow("durable execution bindings");
   });
 
   it("denies target commands when the immutable toolchain proof is absent", () => {

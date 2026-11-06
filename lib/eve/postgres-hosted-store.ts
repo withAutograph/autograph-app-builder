@@ -677,7 +677,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             false,
           ),
         // Observation needs one coherent source/child/receipt snapshot, without write authority.
-        { isolationLevel: "repeatable read", accessMode: "read only" },
+        { accessMode: "read only", isolationLevel: "repeatable read" },
       );
     },
     async attachBuilderDestination(input) {
@@ -723,10 +723,10 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
                 builderProvisioningJournals.requestId,
                 nativeTargetOnboardingRegistryId(
                   {
-                    issuer: principal.issuer,
                     audience: principal.audience,
-                    workspaceId: principal.workspaceId,
+                    issuer: principal.issuer,
                     ownerUserId: principal.ownerUserId,
+                    workspaceId: principal.workspaceId,
                   },
                   input.destination.appId,
                 ),
@@ -767,13 +767,13 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async getSession(principalInput, sessionId) {
       const principal = hostedPrincipalSchema.parse(principalInput);
-      return sessionById(database, principal, sessionId);
+      return await sessionById(database, principal, sessionId);
     },
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning store interface.
     async getSessionByAdapterSessionId(principalInput, adapterSessionId) {
       const principal = hostedPrincipalSchema.parse(principalInput);
-      return sessionByAdapterSessionId(database, principal, adapterSessionId);
+      return await sessionByAdapterSessionId(database, principal, adapterSessionId);
     },
 
     async getStartOperation(principalInput, clientRequestId) {
@@ -802,7 +802,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async observeSession(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const rows = await transaction
           .select()
           .from(agentSessions)
@@ -1124,9 +1124,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
     },
 
-    recordCancellationIntent(input) {
+    async recordCancellationIntent(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const row = await sessionById(transaction, principal, input.sessionId, true);
         if (row === null) {
           throw new Error(SESSION_NOT_FOUND);
@@ -1154,7 +1154,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- Keep the canonical asynchronous transaction API, including validation rejection.
     async recordSendDelivery(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const operationRow = await operationRowById(
           transaction,
           principal,
@@ -1251,8 +1251,8 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       const acknowledgements = rows.slice(0, limit).map((inputRow) => {
         const row = operationRowSchema.parse(inputRow);
         return {
-          operation: parseHostedOperationRow(row),
           cancellationRevisionAtDispatch: row.sendCancellationRevisionAtDispatch,
+          operation: parseHostedOperationRow(row),
         };
       });
       const last = acknowledgements.at(-1)?.operation;
@@ -1320,7 +1320,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async replaceSessionAdapter(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const row = await sessionById(transaction, principal, input.sessionId, true);
         if (row === null) {
           throw new Error(SESSION_NOT_FOUND);
@@ -1460,7 +1460,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         return { disposition: "conflict" };
       }
 
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const existing = await operationById(transaction, principal, candidate.operationId);
         if (existing !== null) {
           return isExactReservation(existing, candidate)
@@ -1619,7 +1619,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       const descriptor = nativeRecoveryDescriptorSchema.parse(input.descriptor);
       const receipt = nativeRecoveryBindingSchema.parse(input.recoveryBinding);
       assertNativeRecoveryReceipt(descriptor, receipt);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, descriptor.operationId, true);
         if (operation === null) {
           throw new Error("Native recovery reservation is unavailable.");
@@ -1745,7 +1745,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- Preserve the existing Promise-returning store interface.
     async settleSucceeded(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);
         if (operation === null || operation.requestDigest !== input.requestDigest) {
           throw new Error(OPERATION_CANNOT_SETTLE);
@@ -1773,11 +1773,11 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           current.checkpointRef !== undefined
         ) {
           const page = await checkpointHistory.readPage({
-            principal,
-            sessionId: current.sessionId,
             checkpointId: current.checkpointRef.id,
             cursor: current.checkpointRef.eventCount,
             limit: 1,
+            principal,
+            sessionId: current.sessionId,
             transaction,
           });
           if (
@@ -1915,7 +1915,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       ) {
         throw new Error("Paged hosted session creation needs an uncheckpointed tenant session.");
       }
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);
         if (operation === null || operation.requestDigest !== input.requestDigest) {
           throw new Error(OPERATION_CANNOT_SETTLE);
@@ -2014,7 +2014,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async settleUnsuccessful(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      return database.transaction(async (transaction) => {
+      return await database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);
         assertReserved(operation, input.requestDigest);
         const settled = hostedOperationRecordSchema.parse({

@@ -13,17 +13,17 @@ it("drops oversized secret lines completely before retaining a redacted diagnost
     });
   const suffix = "credential-suffix-must-never-remain";
   const spawn = vi.fn().mockResolvedValue({
-    stdout: stream([]),
+    kill: async () => {},
     stderr: stream([
       `https://user:password@private.example/${"x".repeat(5900)}`,
       `${"x".repeat(900) + suffix}\nThe recorded Auth origin cannot change\n`,
     ]),
-    wait: () => Promise.resolve({ exitCode: 1 }),
-    kill: () => Promise.resolve(),
+    stdout: stream([]),
+    wait: async () => ({ exitCode: 1 }),
   });
   const result = await runSandboxCommandWithExcerpt({
-    sandbox: { spawn, run: vi.fn() },
     options: { command: "approved setup" },
+    sandbox: { run: vi.fn(), spawn },
     sanitize: (value) => value.replaceAll(/https?:\/\/\S+/gu, "[URL REDACTED]"),
   });
   expect(result.stderr).toContain("Long diagnostic line omitted");

@@ -41,23 +41,23 @@ export const uploadApplicationSource = async (input: {
   const manifestBytes = new TextEncoder().encode(JSON.stringify(artifact.manifest));
   const manifestDigest = await hash(manifestBytes.buffer);
   const declared = {
-    kind: "application-source-candidate-v1" as const,
-    uploadId: input.uploadIdForDigest(artifactDigest),
     appId: artifact.manifest.appId,
-    manifestDigest,
-    artifactDigest,
     artifactBytes: bytes.byteLength,
+    artifactDigest,
     chunkCount: Math.ceil(bytes.byteLength / SOURCE_UPLOAD_CHUNK_BYTES),
+    kind: "application-source-candidate-v1" as const,
+    manifestDigest,
+    uploadId: input.uploadIdForDigest(artifactDigest),
   };
   const reference = await input.ports.begin(declared);
   if (
     JSON.stringify(reference) !==
     JSON.stringify(
       sourceCandidateReferenceSchema.parse({
-        kind: declared.kind,
-        uploadId: declared.uploadId,
         appId: declared.appId,
+        kind: declared.kind,
         manifestDigest: declared.manifestDigest,
+        uploadId: declared.uploadId,
       }),
     )
   ) {
@@ -70,11 +70,11 @@ export const uploadApplicationSource = async (input: {
   ) {
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Ordered bounded chunks provide upload backpressure and same-ID retry progress.
     await input.ports.put({
-      reference,
       chunkIndex: index,
       contentBase64: base64(
         new Uint8Array(bytes.slice(offset, offset + SOURCE_UPLOAD_CHUNK_BYTES)),
       ),
+      reference,
     });
     input.onProgress?.(
       `Uploaded ${Math.min(offset + SOURCE_UPLOAD_CHUNK_BYTES, bytes.byteLength)} of ${bytes.byteLength} bytes`,
@@ -94,8 +94,8 @@ export const uploadApplicationSource = async (input: {
     throw new Error("source_upload_conflict");
   }
   return {
-    reference: completed,
     displayName: artifact.manifest.displayName,
     omissions: artifact.manifest.omissions.length,
+    reference: completed,
   };
 };

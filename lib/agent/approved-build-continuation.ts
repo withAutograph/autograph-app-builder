@@ -33,9 +33,8 @@ export const approvedBuildDecisionSchema = z.strictObject({
       workspaceId: z.string(),
     })
     .optional(),
-  existingRepositorySource: repositoryAccessReceiptSchema.optional(),
-
   decision: z.enum(["working", "runnable", "waiting-input", "blocked", "settled"]),
+  existingRepositorySource: repositoryAccessReceiptSchema.optional(),
   reason: z.literal("build_no_progress").optional(),
   scope: approvedBuildScopeSchema.optional(),
   sourcePrerequisite: localSourcePrerequisiteObservationSchema.optional(),
@@ -46,8 +45,8 @@ export const approvedBuildDecisionSchema = z.strictObject({
       attemptDigest: digest,
       command: z.enum(["check-build", "test"]),
       exitCode: z.number().int(),
-      reason: z.enum(["command-failed", "tooling-prerequisite"]),
       failureClass: z.enum(["native-tool-panic", "missing-app-task"]).optional(),
+      reason: z.enum(["command-failed", "tooling-prerequisite"]),
     })
     .optional(),
   version: z.literal(1),
@@ -197,9 +196,9 @@ export const decideApprovedBuildContinuation = (input: {
     return { ...base, decision: "waiting-input" };
   }
   const sourcePrerequisite = matchingLocalSourcePrerequisite({
-    state: input.state,
-    sessionId: input.adapterSessionId,
     observations: input.sourcePrerequisite === undefined ? [] : [input.sourcePrerequisite],
+    sessionId: input.adapterSessionId,
+    state: input.state,
   });
   if (sourcePrerequisite !== undefined) {
     return { ...base, decision: "blocked", sourcePrerequisite };
@@ -242,8 +241,8 @@ export const decideApprovedBuildContinuation = (input: {
         attemptDigest: failure.attemptDigest,
         command: command.name,
         exitCode: command.exitCode,
-        reason: failure.reason,
         failureClass: command.failureClass,
+        reason: failure.reason,
       },
     });
   }

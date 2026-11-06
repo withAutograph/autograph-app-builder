@@ -52,7 +52,7 @@ vi.mock("../repository/source-receipt", () => ({ SOURCE_RECEIPT_VERSION: 4 }));
 vi.mock("../repository/supported-template", () => ({
   prepareDevelopmentSandboxWorkspace: vi.fn(),
   prepareSupportedSandboxWorkspace: vi.fn(),
-  readPreparedSandboxWorkspaceRecord: () => Promise.resolve(mocks.workspace),
+  readPreparedSandboxWorkspaceRecord: async () => mocks.workspace,
 }));
 vi.mock("../repository/sandbox-github-source", () => ({
   inspectGitHubSourceSandboxWorkspace: mocks.inspectGitHub,
@@ -91,9 +91,9 @@ describe("hosted workspace source acquisition", () => {
     mocks.source = { phase: "empty" };
     mocks.workflow = { phase: "empty" };
     mocks.inspectGitHub.mockResolvedValue(mocks.workspace);
-    mocks.acquire.mockImplementation(() => {
+    mocks.acquire.mockImplementation(async () => {
       mocks.source = selectedSource();
-      return Promise.resolve(mocks.source);
+      return mocks.source;
     });
   });
   it("requires hosted source selection before preparing a workspace", async () => {

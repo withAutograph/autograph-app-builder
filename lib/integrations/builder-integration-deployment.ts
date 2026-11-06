@@ -43,8 +43,9 @@ function databaseFor(databaseUrl: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadBuilderIntegrationState(
   input: BuilderIntegrationRequest,
-  loadModels: (input: { force?: boolean }) => Promise<BuilderIntegrationState["models"]> = () =>
-    loadGatewayModels(),
+  loadModels: (input: {
+    force?: boolean;
+  }) => Promise<BuilderIntegrationState["models"]> = async () => await loadGatewayModels(),
 ): Promise<BuilderIntegrationState> {
   const environment = providerEmulationEnvironment(input.environment);
   const modelsPromise = loadModels({

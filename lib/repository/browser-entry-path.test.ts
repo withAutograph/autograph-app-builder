@@ -26,15 +26,15 @@ it("uses checked catalog paths and leaves ambiguity or invalid explicit choices 
 });
 it("preserves nullable browser readiness while the normal app description remains usable", () => {
   const result = appDescriptionSchema.parse({
-    version: 1,
     app: {
-      id: "example",
-      workspacePath: "apps/example",
-      routes: ["/one", "/two"],
       browserEntryPath: null,
+      id: "example",
+      routes: ["/one", "/two"],
+      workspacePath: "apps/example",
     },
     backend: { kind: "static" },
     validation: { browser: null, check: { task: "check" }, test: null },
+    version: 1,
   });
   expect(result.app.browserEntryPath).toBeNull();
   expect(result.backend.kind).toBe("static");
