@@ -165,6 +165,43 @@ describe("behavior evidence invalidation during validation repair", () => {
     expect(mocks.hostSource).not.toHaveBeenCalled();
   });
 
+  it("writes an approved app repair without starting repository validation", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const current = workflow("validated");
+      const scope = {
+        appId: "app",
+        appSpecDigest: "a",
+        proposalDigest: "approved-proposal",
+        sessionId: "session",
+        workspaceId: "workspace",
+      };
+      mocks.state.current = {
+        ...current,
+        proposal: { ...current.proposal, digest: scope.proposalDigest },
+        workspace: { workspaceId: scope.workspaceId },
+      };
+      const writeTextFile = vi.fn().mockResolvedValue(null);
+      const getSandbox = vi.fn().mockResolvedValue({ writeTextFile });
+      // SAFETY: The repair branch reads only the call identity and Sandbox file writer.
+      const context = { callId: "repair-preview", getSandbox, session: { id: "session" } } as never;
+      const input = { implementationFiles, repairOnly: true };
+      await expect(validateAppCreation.execute(input, context)).rejects.toThrow("approved build");
+      expect(getSandbox).not.toHaveBeenCalled();
+
+      requestPrivateApplyApproval(scope, "original-build");
+      recordApprovedPrivateApply(scope, "original-build");
+      await expect(validateAppCreation.execute(input, context)).resolves.toEqual({
+        status: "repair_applied",
+      });
+      expect(writeTextFile).toHaveBeenCalledWith({
+        content: "updated",
+        path: "repository/apps/app/page.tsx",
+      });
+      expect(mocks.execute).not.toHaveBeenCalled();
+      expect(mocks.state.current).toMatchObject({ phase: "applied" });
+    });
+  });
+
   it("rejects deletion of an approved profile check before sandbox resolution or source writes", async () => {
     const current = workflow("validated");
     mocks.state.current = {

@@ -266,6 +266,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    After apply and any requested integration installation
    succeed, start a requested private preview directly with `start_app_preview`.
    Lint is advisory for private previews and must not precede or block startup.
+   If the applied app is still a scaffold or its preview needs a repair, use
+   `validate_app_creation` with `repairOnly: true` and the corrected
+   `implementationFiles`. This writes under the original Build approval and
+   returns before running repository checks. Then open the updated app with
+   `start_app_preview`. Keep the existing proposal for these repairs.
    For reviewed delivery, continue with `validate_app_creation`. It runs the repository's normal
    commands against the current applied app. When it
    reports a repairable failure, provide corrected `implementationFiles` to
@@ -309,6 +314,10 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
    do not replace a requested backend outcome with a simulated transition.
+   Use the user's GitHub repository URL or owner/name as the delivery destination.
+   Carry it into `prepare_github_draft_review` for a fresh-template app. Show the
+   resolved repository during review. If access is missing, use the GitHub
+   connection flow for that repository.
    Before initial draft publication, run `prepare_github_draft_review` to bind the
    actual destination snapshot. Inspect its before/after content as needed with
    `change_set_status`, `view: "next-page"`, and the selected `contentSide`.
@@ -393,7 +402,19 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    hosted delivery of changed source, publish technically validated and reviewed
    source through the
    existing publication approval flow without waiting for successful private UI
-   startup. Report actual startup failures and claim a working local or hosted
+   startup.
+   Once the publication records its source, continue hosted setup in this
+   session. Use the accepted behavior and backend kind to decide whether the
+   app needs storage. For persistent apps, call `plan-app-hosted-runtime` and
+   continue its exact approved plan through `prepare-app-hosted-runtime`. The
+   protected operator selects storage and installs the checked schema. For a
+   static app, use its native Preview delivery path and skip app database setup.
+   Ask about intended users when access policy needs a product decision. Keep
+   database identifiers, credentials and resource selection inside the operator
+   workflow. If platform setup is unavailable, preserve the session and report
+   the missing capability for the platform operator. Use the saved operation
+   reference to resume an interrupted preparation. Show setup and access
+   verification as separate steps before reporting the app ready. Report actual startup failures and claim a working local or hosted
    Preview only after exercising that actual app.
    For private local preview or candidate checks, if the repository defines
    `app:local` for the selected app and needs local data, use
