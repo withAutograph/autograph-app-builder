@@ -28,8 +28,8 @@ describe("Autograph App Builder contextual MCP App", () => {
 
   it("uses focused product language without an event log", () => {
     expect(sessionUiHtml).toContain("<title>Autograph App Builder</title>");
-    expect(sessionUiHtml).toContain("Review the request and choose how to proceed.");
-    expect(sessionUiHtml).toContain("Loading requested controls");
+    expect(sessionUiHtml).toContain("Review the request below and choose how to proceed.");
+    expect(sessionUiHtml).toContain("Loading your request…");
     expect(sessionUiHtml).toContain("Answer in chat to continue");
     expect(sessionUiHtml).not.toContain("Build updates will appear here");
     expect(sessionUiHtml).not.toContain(" events");

@@ -68,6 +68,8 @@ describe("separate native operator host", () => {
       { destination: { service: "operator" }, source: "/v1/app-integrations" },
       { destination: { service: "operator" }, source: "/v1/central-integrations" },
       { destination: { service: "operator" }, source: "/v1/central-deployment-events" },
+      { destination: { service: "operator" }, source: "/v1/repository-production" },
+      { destination: { service: "operator" }, source: "/v1/repository-production/access/complete" },
     ]);
     expect(readFileSync(path.join(root, "vercel.json"), "utf-8")).toContain("next build");
   });
@@ -77,6 +79,17 @@ describe("separate native operator host", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({ code: "protected_operator_required" });
   });
+  it.each(["/v1/repository-production", "/v1/repository-production/access/complete"])(
+    "dispatches Production ingress independently of Preview configuration: %s",
+    async (route) => {
+      const response = await entrypoint.fetch(
+        new Request(`https://operator.example.test${route}`, { method: "POST" }),
+      );
+      expect(response.status).toBe(503);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.json()).toEqual({ code: "app_access_unavailable" });
+    },
+  );
   it("dispatches the exact possession ingress before full runtime initialization", async () => {
     const response = await entrypoint.fetch(
       new Request("https://operator.example.test/v1/key-custody/possession"),

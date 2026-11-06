@@ -171,6 +171,13 @@ describe("private custody enrollment CLI", () => {
     expect(result.stdout).not.toContain("source-deployment");
     expect(result.stdout).not.toContain("ownerUserId");
   });
+  it("rejects a Production recipient configuration paired with a Preview approval", async () => {
+    const mismatch = structuredClone(packet);
+    mismatch.setup.recipient.workload.environment = "production";
+    expectPrivateFailure(
+      run(["plan", "--request-file", await requestFile(JSON.stringify(mismatch))]),
+    );
+  });
   it("plans exact retirement revision and digest without printing owner or grant details", async () => {
     const result = run([
       "retire-plan",

@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/max-union-size -- The closed worker transport enumerates all supported command families. */
 import { isDeepStrictEqual } from "node:util";
 import { verifyOperatorWorkerSourceCapture } from "./operator-worker-source-capture";
 import type { OperatorWorkerSourceCapture } from "./operator-worker-source-capture";
@@ -148,6 +149,7 @@ const workerScopeSchema = z.enum([
   ACCESS_SCOPE,
   "app-integration-bootstrap-v1",
   "central-integration-bootstrap-v1",
+  "auth-app-access-v1",
 ]);
 const workerSubcommandSchema = z.enum([
   HC_COMMAND,
@@ -175,6 +177,8 @@ const workerSubcommandSchema = z.enum([
   "central-integration-schema",
   "central-integration-schema-readback",
   "central-integration-source-capture",
+  "auth-protected-app-access",
+  "auth-protected-app-access-readback",
 ]);
 
 export interface ProtectedInstallerWorkerDescriptor {
@@ -212,7 +216,7 @@ export interface ProtectedInstallContextWire {
   app_id: string;
   resource: {
     resource_id: string;
-    environment: "preview";
+    environment: "preview" | "production";
     hostname: string;
     port: 5432;
     database: string;
@@ -804,6 +808,9 @@ const requestMatchesWorkerScope = (
   context: WorkerContext,
   worker: ProtectedInstallerWorkerDescriptor,
 ) => {
+  if (worker.operationScope === "auth-app-access-v1") {
+    return effectId === "auth-app-invitation" && tenantId === null;
+  }
   if (worker.operationScope === RESOURCES_SCOPE) {
     return (
       [RESOURCES_COMMAND, RESOURCES_RETIRE_COMMAND].includes(worker.subcommand) &&
@@ -1320,6 +1327,8 @@ type SharedSpoolInput = Pick<SandboxWorkerInput, "signal" | "readbackOnly" | "fe
   membershipProof?: PrivateSandboxWorkerInput["membershipProof"];
   accessConnections?: PrivateSandboxWorkerInput["accessConnections"];
   startupFiles?: Readonly<Record<string, Buffer>>;
+  /** Only the closed repository Production wrapper can supply these fixed worker files. */
+  repositoryProduction?: true;
 };
 interface SharedSpoolSetup {
   context: WorkerContext;
@@ -1365,7 +1374,7 @@ const runPinnedFileSpoolTransport = async (
     generatedFiles,
     authPlanBytes,
   } = setup;
-  if (membership && !input.legacyPlan) {
+  if (membership && !input.legacyPlan && !input.repositoryProduction) {
     throw resourceMismatch();
   }
   const leaseAbort = new AbortController();
@@ -1732,6 +1741,17 @@ const runPinnedFileSpoolTransport = async (
     }
     if (input.startupFiles) {
       const allowed = new Set([
+        ...(input.repositoryProduction
+          ? [
+              "approved-access-plan.json",
+              "access-connections.json",
+              "operator-plan.json",
+              "membership-effect.json",
+              "auth-database-resource.json",
+              "realm-identity-proof.json",
+              "gateway-readback-oidc.json",
+            ]
+          : []),
         "app-integration-approved-plan.json",
         "app-integration-connections.json",
         "app-integration-authority.json",
@@ -1874,7 +1894,10 @@ const runPinnedFileSpoolTransport = async (
     }
     const needsAccessConnections =
       access || installReadback || (resources && input.effectKind === "retire");
-    if (worker.operationScope === GENERATED_APP_SCOPE || needsAccessConnections) {
+    if (
+      (worker.operationScope === GENERATED_APP_SCOPE || needsAccessConnections) &&
+      !input.repositoryProduction
+    ) {
       const legacyPlan = input.legacyPlan;
       if (legacyPlan === undefined) {
         throw resourceMismatch();
@@ -1976,12 +1999,13 @@ const runPinnedFileSpoolTransport = async (
     }
     execution.stage = "readback";
     if (
-      input.readbackOnly === true &&
+      (input.readbackOnly === true || worker.operationScope === "auth-app-access-v1") &&
       (access ||
         installReadback ||
         membership ||
         worker.operationScope === "app-integration-bootstrap-v1" ||
-        worker.operationScope === "central-integration-bootstrap-v1")
+        worker.operationScope === "central-integration-bootstrap-v1" ||
+        worker.operationScope === "auth-app-access-v1")
     ) {
       await assertCurrent();
       const raw = await readSpoolJson(sandbox, path.posix.join(spool, "readback.json"), signal);
@@ -1993,7 +2017,9 @@ const runPinnedFileSpoolTransport = async (
                 worker.operationScope,
               )
             ? accessReadbackSchema.extend({ receipt: z.unknown() })
-            : accessReadbackSchema;
+            : worker.operationScope === "auth-app-access-v1"
+              ? accessReadbackSchema.extend({ result: z.json() })
+              : accessReadbackSchema;
       /* oxlint-enable eslint/no-nested-ternary, sonarjs/no-nested-conditional */
       const observed = schema.parse(raw);
       if (
@@ -2255,4 +2281,179 @@ export const runCentralIntegrationFileSpool = async (
     throw resourceMismatch();
   }
   return await runAppIntegrationFileSpool(configuration, input, dependencies);
+};
+
+/** An explicit Production entry point for the same fixed, credential-isolated worker transport.
+ * It cannot repurpose a Preview context, launch arbitrary commands, or mutate shared Auth schema.
+ */
+export const runRepositoryProductionFileSpool = async (
+  configuration: HostedOperatorSandboxConfiguration,
+  input: {
+    operation: "storage" | "schema" | "access" | "membership" | "auth-management";
+    worker: ProtectedInstallerWorkerDescriptor;
+    context: ProtectedInstallContextWire | ResourceBootstrapContextWire;
+    startupFiles: Readonly<Record<string, Buffer>>;
+    directDatabaseUrl: string;
+    resourceCredentialBytes?: Buffer;
+    generatedRelease?: GeneratedAppReleaseFiles;
+    readOnly: boolean;
+    runId: string;
+    signal: AbortSignal;
+    assertCurrent: () => Promise<void>;
+    recordCheckpoint?: RecordWorkerCheckpoint;
+  },
+  dependencies: { createSandbox?: CreateSandbox } = {},
+) => {
+  const modes = {
+    storage: {
+      scope: RESOURCES_SCOPE,
+      id: RESOURCES_SCOPE,
+      command: RESOURCES_COMMAND,
+      read: RESOURCES_INSPECT_COMMAND,
+    },
+    schema: {
+      scope: GENERATED_APP_SCOPE,
+      id: "generated-app-protected-installer-v1",
+      command: GENERATED_COMMAND,
+      read: GENERATED_INSPECT_COMMAND,
+    },
+    access: {
+      scope: ACCESS_SCOPE,
+      id: "generated-app-protected-installer-v1",
+      command: ACCESS_COMMAND,
+      read: ACCESS_INSPECT_COMMAND,
+    },
+    membership: {
+      scope: MEMBERSHIP_SCOPE,
+      id: "auth-owned-organization-v1",
+      command: MEMBERSHIP_COMMAND,
+      read: MEMBERSHIP_INSPECT_COMMAND,
+    },
+    "auth-management": {
+      scope: "auth-app-access-v1",
+      id: "auth-app-access-v1",
+      command: "auth-protected-app-access",
+      read: "auth-protected-app-access-readback",
+    },
+  } as const;
+  const mode = modes[input.operation];
+  const worker = { ...input.worker, subcommand: input.readOnly ? mode.read : mode.command };
+  const { context } = input;
+  if (
+    context.resource.environment !== "production" ||
+    worker.operationScope !== mode.scope ||
+    worker.id !== mode.id ||
+    context.installer.id !== worker.id ||
+    context.installer.sha256 !== worker.sha256 ||
+    !Number.isSafeInteger(context.operation.fence_generation) ||
+    context.operation.fence_generation < 1 ||
+    !input.directDatabaseUrl ||
+    /[\0\r\n]/u.test(input.directDatabaseUrl) ||
+    (input.readOnly ? input.recordCheckpoint !== undefined : input.recordCheckpoint === undefined)
+  ) {
+    throw resourceMismatch();
+  }
+  if (
+    input.operation === "storage" &&
+    (!("kind" in context) ||
+      context.kind !== "neon_resource_bootstrap" ||
+      context.resource.scope !== "app_database" ||
+      input.resourceCredentialBytes === undefined ||
+      sha256(input.resourceCredentialBytes) !== context.resource.credentials_sha256)
+  ) {
+    throw resourceMismatch();
+  }
+  if (input.operation !== "storage" && "kind" in context) {
+    throw resourceMismatch();
+  }
+  let required: string[];
+  if (input.operation === "membership") {
+    required = [
+      "operator-plan.json",
+      "membership-effect.json",
+      "auth-database-resource.json",
+      "realm-identity-proof.json",
+      "gateway-readback-oidc.json",
+    ];
+  } else if (input.operation === "auth-management") {
+    required = ["operator-plan.json", "auth-database-resource.json"];
+  } else if (input.operation === "storage") {
+    required = [];
+  } else {
+    required = ["approved-access-plan.json"];
+    if (input.operation === "access" || input.readOnly) {
+      required.push("access-connections.json");
+    }
+  }
+  const allowed = new Set(required);
+  if (
+    required.some((name) => input.startupFiles[name] === undefined) ||
+    Object.keys(input.startupFiles).some((name) => !allowed.has(name))
+  ) {
+    throw resourceMismatch();
+  }
+  const release = input.generatedRelease;
+  let generatedMetadata: GeneratedAppReleaseMetadata | undefined;
+  let generatedFiles: { member: string; content: Buffer }[] = [];
+  if (input.operation === "schema" || input.operation === "access") {
+    if (!release || GENERATED_RELEASE_MEMBERS.some((name) => !Buffer.isBuffer(release[name]))) {
+      throw resourceMismatch();
+    }
+    const manifest = sha256(release["release-manifest.json"]);
+    if (manifest !== context.release.sha256) {
+      throw resourceMismatch();
+    }
+    generatedMetadata = {
+      version: 1,
+      app_id: context.app_id,
+      release_id: context.release.id,
+      release_manifest_sha256: manifest,
+      app_artifact_sha256: sha256(release["app-artifact.json"]),
+      sql_bundle_sha256: sha256(release["sql-bundle.sql"]),
+    };
+    generatedFiles = GENERATED_RELEASE_MEMBERS.map((member) => ({
+      member,
+      content: release[member],
+    }));
+  }
+  const bytes = canonicalContextBytes(context);
+  if (bytes.length > MAX_PROTOCOL_FRAME_BYTES) {
+    throw resourceMismatch();
+  }
+  await input.assertCurrent();
+  return await runPinnedFileSpoolTransport(
+    configuration,
+    dependencies.createSandbox ??
+      (async (options) =>
+        await Sandbox.create({
+          ...options,
+          token: await getVercelOidcToken({ project: options.projectId, team: options.teamId }),
+        })),
+    {
+      directDatabaseUrl: input.directDatabaseUrl,
+      readbackOnly: input.readOnly ? true : undefined,
+      fenceGeneration: context.operation.fence_generation,
+      signal: input.signal,
+      startupFiles: input.startupFiles,
+      repositoryProduction: true,
+    },
+    { stage: "sandbox_create", mode: input.readOnly ? "inspect" : "execute" },
+    {
+      context,
+      contextDigest: sha256(bytes),
+      worker,
+      runId: workerRunIdSchema.parse(input.runId),
+      assertCurrent: input.assertCurrent,
+      allowedResources: new Set([context.resource.resource_id]),
+      allowedTenants: new Set(context.tenant_targets),
+      recordCheckpoint: input.recordCheckpoint,
+      resources: input.operation === "storage",
+      resourceCredentialBytes: input.resourceCredentialBytes,
+      access: input.operation === "access",
+      membership: input.operation === "membership",
+      installReadback: input.operation === "schema" && input.readOnly,
+      generatedMetadata,
+      generatedFiles,
+    },
+  );
 };

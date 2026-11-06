@@ -42,9 +42,12 @@ const listSchema = z.object({
     }),
   ),
 });
-const previewRelevant = (row: z.infer<typeof listSchema>["envs"][number]) =>
+const relevantTo = (
+  row: z.infer<typeof listSchema>["envs"][number],
+  environment: CustodyPlan["destination"]["environment"],
+) =>
   row.target === undefined ||
-  (Array.isArray(row.target) ? row.target.includes("preview") : row.target === "preview");
+  (Array.isArray(row.target) ? row.target.includes(environment) : row.target === environment);
 const isConfig = (row: z.infer<typeof providerRow>) =>
   row.visibility === "config" ||
   (row.visibility === undefined && ["plain", "encrypted"].includes(row.type));
@@ -128,7 +131,11 @@ export const createCustodySecretPort = (input: {
     }
   };
   const safeRow = (row: z.infer<typeof providerRow>) => {
-    if (!isSecret(row)) {
+    if (
+      !isSecret(row) ||
+      row.target.length !== 1 ||
+      row.target[0] !== plan.destination.environment
+    ) {
       throw new CustodyReconciliationRequiredError();
     }
     return custodySecretMetadataSchema.parse({
@@ -141,11 +148,11 @@ export const createCustodySecretPort = (input: {
       type: "sensitive",
     });
   };
-  const previewConfig = (row: z.infer<typeof providerRow>) =>
+  const destinationConfig = (row: z.infer<typeof providerRow>) =>
     [
       row.gitBranch === null || row.gitBranch === undefined,
       row.target.length === 1,
-      row.target[0] === "preview",
+      row.target[0] === plan.destination.environment,
       isConfig(row),
     ].every(Boolean);
   const inspect: CustodySecretPort["inspect"] = async (owned) => {
@@ -155,13 +162,13 @@ export const createCustodySecretPort = (input: {
         await request(`/v10/projects/${encodeURIComponent(plan.destination.projectId)}/env`),
       ).envs;
       const versionRows = rows.filter(
-        (row) => row.key === custodyVersionKey && previewRelevant(row),
+        (row) => row.key === custodyVersionKey && relevantTo(row, plan.destination.environment),
       );
       if (versionRows.length !== 1) {
         throw new CustodyUnavailableError();
       }
       const version = providerRow.parse(versionRows[0]);
-      if (!previewConfig(version)) {
+      if (!destinationConfig(version)) {
         throw new CustodyUnavailableError();
       }
       let versionValue = version.value;
@@ -175,7 +182,7 @@ export const createCustodySecretPort = (input: {
         if (
           decrypted.id !== version.id ||
           decrypted.key !== custodyVersionKey ||
-          !previewConfig(decrypted)
+          !destinationConfig(decrypted)
         ) {
           throw new CustodyUnavailableError();
         }
@@ -184,7 +191,9 @@ export const createCustodySecretPort = (input: {
       if (versionValue !== "v1") {
         throw new CustodyUnavailableError();
       }
-      const keys = rows.filter((row) => row.key === custodySecretKey && previewRelevant(row));
+      const keys = rows.filter(
+        (row) => row.key === custodySecretKey && relevantTo(row, plan.destination.environment),
+      );
       if (keys.length === 0) {
         // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absence shares the metadata-returning function contract.
         return undefined;
@@ -228,7 +237,7 @@ export const createCustodySecretPort = (input: {
                   comment: marker(plan, input.planDigest, input.grantDigest),
                   gitBranch: null,
                   key: custodySecretKey,
-                  target: ["preview"],
+                  target: [plan.destination.environment],
                   type: "sensitive",
                   value: key.toString("base64"),
                 }),
@@ -284,7 +293,7 @@ export const createCustodySecretPort = (input: {
             ownerId: z.string(),
             projectId: z.string(),
             readyState: z.string(),
-            target: z.null(),
+            target: z.union([z.null(), z.literal("production")]),
             url: z.string(),
           })
           .parse(await request(`/v13/deployments/${encodeURIComponent(selected)}`));
@@ -293,7 +302,7 @@ export const createCustodySecretPort = (input: {
           [
             row.projectId !== plan.destination.projectId,
             row.ownerId !== plan.destination.teamId,
-            row.target !== null,
+            row.target !== (plan.destination.environment === "production" ? "production" : null),
             row.readyState !== "READY",
             savedDeploymentId !== undefined && row.id !== savedDeploymentId,
           ].some(Boolean)

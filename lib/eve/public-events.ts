@@ -72,6 +72,9 @@ const visibleOperations = new Map([
   ["install-app-integrations", "Installing the app's requested integrations"],
   ["prepare-app-local-preview", "Preparing the app's local preview dependencies"],
   ["prepare-app-hosted-runtime", "Setting up your app’s data"],
+  ["plan-app-production", "Preparing your app’s setup"],
+  ["prepare-app-production", "Setting up your app’s data and access"],
+  ["get-app-production", "Checking your app’s setup"],
   ["cleanup-app-hosted-runtime", "Removing the app's Preview resources"],
   ["export-app-hosted-data", "Exporting approved app data privately"],
   ["run-app-continuity-tests", "Checking that the app stays connected after restart"],
@@ -201,6 +204,7 @@ const publicBuilderFailure = (failure: { code: string; message: string }, operat
   const operationLabels = {
     apply_app_creation: "the private build",
     "prepare-app-hosted-runtime": "Preview setup",
+    "prepare-app-production": "app setup",
     "cleanup-app-hosted-runtime": "Preview cleanup",
     validate_app_creation: "app validation",
     "validate-app-creation": "app validation",
@@ -1178,6 +1182,7 @@ const inputRequest = (request: {
     apply_app_creation: "Build this app?",
     "cleanup-app-hosted-runtime": "Remove this app's Preview resources?",
     "prepare-app-hosted-runtime": "Do you approve creating a preview?",
+    "prepare-app-production": "Set up your app’s data and access?",
     "prepare-app-native-target": "Create this app's Preview project?",
     "export-app-hosted-data": "Export this customer’s app data privately?",
     "run-app-continuity-tests": "Run this app continuity suite?",
@@ -1200,6 +1205,21 @@ const inputRequest = (request: {
       ? approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
   let description: string | undefined;
+  if (request.kind === "tool-approval" && toolName === "prepare-app-production") {
+    const setup = z
+      .object({
+        scope: z.object({ appId: z.string(), repositoryFullName: z.string() }),
+        intent: z.object({
+          creatorRoles: z.array(z.string()),
+          storage: z.object({ kind: z.enum(["none", "postgres"]) }),
+        }),
+      })
+      .safeParse(request.action?.input);
+    if (setup.success) {
+      const { scope, intent } = setup.data;
+      description = `Set up ${scope.appId} in ${scope.repositoryFullName}. ${intent.storage.kind === "postgres" ? "Builder prepares the app’s database and keeps it for future updates. " : "This app does not need a database. "}Connect your app account once to receive access. Other people get access only when invited.`;
+    }
+  }
   if (request.kind === "tool-approval" && toolName === "apply_app_creation") {
     // Use the standard card copy when the optional summary does not fit the card.
     description =
@@ -1254,7 +1274,7 @@ const hostedIdentityInvitation = (value: unknown): string | undefined => {
   if (url.username !== "" || url.password !== "" || /[\r\n<>]/u.test(url.href)) {
     return undefined;
   }
-  return `Sign in to connect your account: <${url.href}>. The approved preparation resumes automatically.`;
+  return `Sign in or create your app account: <${url.href}>. Builder sets up your access and continues automatically.`;
 };
 
 /** Converts only the installed Eve 0.68 events that belong in the public MCP projection. */

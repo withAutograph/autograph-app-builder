@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
 
-import { createBoundedAuthorizationRefresh } from "./automatic-refresh";
+import {
+  createBoundedAuthorizationRefresh,
+  sessionAuthorizationRefreshKey,
+} from "./automatic-refresh";
 
 describe("authorization focus refresh", () => {
+  it("refreshes pending app identity links even without a human response request", () => {
+    const result = { sessionId: "session", cursor: 1, events: [], status: "working" as const };
+    const key = sessionAuthorizationRefreshKey(result, [
+      {
+        callId: "call",
+        url: "https://apps.example.com/sign-in",
+        expiresAt: "2099-01-01T00:00:00Z",
+      },
+    ]);
+    const refresh = createBoundedAuthorizationRefresh();
+    refresh.reset(key);
+    expect(refresh.claim(key, 1000)).toBe(true);
+    expect(sessionAuthorizationRefreshKey(result, [])).toBe("");
+  });
   it("rate-limits refreshes without exhausting an authorization request", () => {
     const refresh = createBoundedAuthorizationRefresh({
       minimumIntervalMs: 1000,

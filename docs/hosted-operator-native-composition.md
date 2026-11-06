@@ -468,15 +468,32 @@ They remain unavailable without a separate trusted global custody enrollment.
 The receiver path dispatches before ordinary runtime composition and requires
 neither full operator configuration nor a Realm callback or Auth signing secret.
 Both endpoints verify the configured Source Production workload; Source also
-verifies its own exact enrolled deployment. Receiver verifies its trusted Preview
-workload and its own exact persisted receiving deployment before reading the key.
+verifies its own exact enrolled deployment. Receiver verifies its explicitly
+approved Preview or Production workload and its own exact persisted receiving
+deployment before reading the key.
 
-`PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION` is nonsecret, deployment-owned
-setup: version 1, one `operationRef` and `grantRef`, the captured canonical
-`capturedOwner` context, and fixed `source` and `recipient` HTTPS origins and
-workload policies. Source is Production and recipient is Preview, in the same
-team and separate projects. The recipient origin must be an existing stable,
-team-owned alias that will resolve to the separately approved refreshed Preview.
+`PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION` remains the nonsecret,
+deployment-owned Preview recipient profile.
+`PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_PRODUCTION_CONFIGURATION` is a separate,
+explicit Production recipient profile. Each contains version 1, one
+`operationRef` and `grantRef`, the captured canonical `capturedOwner` context,
+and fixed `source` and `recipient` HTTPS origins and workload policies. Both may
+coexist; each route selects exactly the requested saved `operationRef` and
+rejects duplicate selectors or a recipient environment placed in the wrong
+profile. Source remains Production, in the same team and a separate project.
+The owner review GET `/api/hosted-operator/key-custody/invoke` preserves its
+legacy Preview default. Production review requires the sole query parameter
+`?operationRef=<saved Production UUID>`. Sign-in and reload links retain that
+selector; the native POST contains only the same hidden saved operation selector.
+There is no automatic fallback from a missing or unknown selector to Production. The
+recipient origin must be an existing stable, team-owned alias that resolves to the
+separately approved refreshed deployment. Preview plans retain action
+`transfer-active-vercel-token-key-to-operator-preview`; a Production recipient
+requires `transfer-active-vercel-token-key-to-operator-production` and a matching
+Production destination. These actions are not interchangeable. Slot locks,
+provider Secret metadata, recipient OIDC policy and native deployment target all
+include the approved environment, so a Preview grant cannot authorize a
+Production write or possession receipt.
 This source change creates no alias, deployment or enrollment. Operator needs
 approved read access to the original session, membership and saved custody row;
 it does not need journal mutation permission for possession.
@@ -537,19 +554,20 @@ uncertainty. No table, migration, sequence privilege or new admin URL is added.
 
 Source rechecks the original actor/session/membership and existing active v1
 owner-bound Vercel installation. It requires destination VERSION Config `v1` in
-the exact project Preview scope with no branch override, and validates the
+the exact approved project/environment scope with no branch override, and validates the
 original installation's team binding and fresh destination project ownership.
 Only a validated readable VERSION row may use the exact single-row decrypted
 Config GET; app values and Secret key bytes are never decrypted from provider
 storage. The Secret port sends one fixed create-only REST request with
-`type: sensitive`, target Preview, null branch and `upsert=false`, using in-memory
+`type: sensitive`, the approved Preview or Production target, null branch and
+`upsert=false`, using in-memory
 active key bytes. Its `comment` binds the operation/plan/grant metadata for safe
 unknown-outcome reconciliation. Config visibility cannot substitute for Secret
 visibility. Current APIs may report Secret storage as encrypted with
 `visibility: secret`; this normalizes to the logical sensitive receipt type.
 
-The fixed lock covers team, Operator project, Preview/null branch, and the KEY
-and VERSION pair across all actor/session/operation tuples. The transaction keeps
+The fixed lock covers team, Operator project, approved environment/null branch,
+and the KEY and VERSION pair across all actor/session/operation tuples. The transaction keeps
 backend/held-lock/active-connection checks while the independent journal pool
 commits attempted state before POST. A timed durable lease and CAS fence govern
 each continuation. Transport failure or nondefinitive/partial success retains
@@ -560,8 +578,9 @@ provider bearer, previous keyring or raw provider body.
 
 After the separately approved refreshed receiver is available, Source resolves
 the configured alias through the native alias API, then independently reads its
-exact deployment. It requires the fixed project/team, native Preview target
-(null), READY state, and creation after the attempted Secret write, and freezes
+exact deployment. It requires the fixed project/team, approved native target
+(`null` for Preview or `production` for Production), READY state, and creation
+after the attempted Secret write, and freezes
 its exact deployment ID and unique origin. READY only permits this possession
 checkpoint; it does not prove key equality. A server nonce and expiry bind the
 current fence, plan/grant digests, both workloads, active v1 and exact receiver.

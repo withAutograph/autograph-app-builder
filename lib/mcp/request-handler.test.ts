@@ -664,6 +664,7 @@ describe("branded public tool mapping", () => {
     } satisfies EveSessionService;
     const handler = createAutographMcpHandler(service, {
       requestUrl: auth.resourceUrl,
+      appAccessOrigin: "https://builder.example.test",
     });
     const response = await handler(
       mcpToolRequest("autograph_get", {
@@ -674,6 +675,7 @@ describe("branded public tool mapping", () => {
     );
     const callResult = await mcpResult<{
       structuredContent: Omit<typeof result, "prototype"> & {
+        appAccessUrl: string;
         prototype: typeof result.prototype & { previewUrl: string };
       };
       _meta?: unknown;
@@ -681,6 +683,9 @@ describe("branded public tool mapping", () => {
 
     expect(callResult.structuredContent.prototype.previewUrl).toBe(
       `https://builder.example.test/preview/session-one/${result.prototype.digest}`,
+    );
+    expect(callResult.structuredContent.appAccessUrl).toBe(
+      "https://builder.example.test/builds/session-one/access",
     );
     expect(callResult._meta).toBeUndefined();
   });

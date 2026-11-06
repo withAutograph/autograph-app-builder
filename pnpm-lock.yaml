@@ -95,6 +95,9 @@ importers:
       '@vercel/connect':
         specifier: 1.0.0
         version: 1.0.0(@ai-sdk/mcp@2.0.71(zod@4.5.4))(ai@7.0.105(zod@4.5.4))(better-auth@1.7.2(@opentelemetry/api@1.9.1)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.4(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.10))(eve@0.68.0(patch_hash=e2bae8efc474c3e2ac4a88287d6bdf3183d78305a4acdb6c8e7c096036ed664e)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10))
+      '@vercel/functions':
+        specifier: 3.9.5
+        version: 3.9.5(ws@8.21.3)
       '@vercel/oidc':
         specifier: 3.8.5
         version: 3.8.5

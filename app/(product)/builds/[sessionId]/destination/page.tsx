@@ -11,6 +11,7 @@ import {
   selectBuilderSessionDestination,
 } from "@/app/actions/builder-session-destination";
 import { SavedSessionDestinationForm } from "@/app/ui/saved-session-destination-form";
+import { appAccessPath } from "@/lib/app-access/contracts";
 
 export default async function SavedSessionDestinationPage({
   params,
@@ -40,6 +41,9 @@ export default async function SavedSessionDestinationPage({
   return (
     <main>
       <h1>Publish {data.title}</h1>
+      <p>
+        <a href={appAccessPath(sessionId)}>Manage app access and people</a>
+      </p>
       <p>
         Choose where Builder stores and deploys this saved app. Its public domain uses the app’s own
         sign-in.
