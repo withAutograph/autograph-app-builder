@@ -1,5 +1,6 @@
 import { capturedGenericWorkerFixture } from "./operator-worker-source-capture.test-fixture";
 import type { OperatorWorkerSourceCapture } from "./operator-worker-source-capture";
+/* oxlint-disable unicorn/no-useless-undefined -- Explicit empty registry results and void async mocks preserve the production port contracts. */
 import { describe, expect, it, vi } from "vitest";
 import { validateHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
 
@@ -235,14 +236,7 @@ const context = (appId = "new-app"): HostedOperatorContext => ({
     sessionId: ownerContext.sessionId,
   },
 });
-const readRegistration = async (
-  value: NativeTargetReadyRegistration | undefined,
-): Promise<NativeTargetReadyRegistration | undefined> => {
-  await Promise.resolve();
-  return value;
-};
 const unavailable = async (): Promise<never> => {
-  await Promise.resolve();
   throw new Error("Unexpected effect");
 };
 const dependencies = (): ProtectedHostedOperatorDependencies => ({
@@ -281,7 +275,7 @@ describe("owner-authorized native target configuration", () => {
       appId: registration.appId,
       configuration: configuration(),
       invocation: ownerContext,
-      readReady: async () => await readRegistration(registration),
+      readReady: async () => registration,
     });
     expect(effective.sandbox.workers[registration.appId]?.sourceCapture).toEqual(
       capturedGenericWorkerFixture.sourceCapture,
@@ -510,6 +504,7 @@ describe("owner-authorized native target configuration", () => {
     expect(resolveConfiguration).toHaveBeenCalledOnce();
     expect(incoming.bodyUsed).toBe(false);
     expect(openControlPlane).toHaveBeenCalledExactlyOnceWith({
+      environment: undefined,
       request: incoming,
       sourceConfiguration: effective,
       workloadPolicy: effective.workloadPolicy,
@@ -609,7 +604,7 @@ describe("ready target selected resource custody", () => {
       appId: "new-app",
       configuration: f.base,
       invocation: ownerContext,
-      readReady: async () => await readRegistration(f.registration),
+      readReady: async () => f.registration,
       selectResourceConfiguration,
     });
     expect(selectResourceConfiguration).toHaveBeenCalledExactlyOnceWith(f.registration);
@@ -640,7 +635,7 @@ describe("ready target selected resource custody", () => {
         appId: "new-app",
         configuration: f.base,
         invocation: ownerContext,
-        readReady: async () => await readRegistration(f.registration),
+        readReady: async () => f.registration,
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
     expect(f.base.applications["new-app"]).toBeUndefined();
@@ -664,7 +659,7 @@ describe("ready target selected resource custody", () => {
           appId: "new-app",
           configuration: f.base,
           invocation: ownerContext,
-          readReady: async () => await readRegistration(f.registration),
+          readReady: async () => f.registration,
           selectResourceConfiguration: () => f.selected,
         }),
       ).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -695,7 +690,7 @@ it.each(["auth-database", "gateway-origin"] as const)(
         appId: "new-app",
         configuration: f.base,
         invocation: ownerContext,
-        readReady: async () => await readRegistration(f.registration),
+        readReady: async () => f.registration,
         selectResourceConfiguration: () => f.selected,
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -741,7 +736,7 @@ it("accepts ordinary source, deployment and worker-byte changes while retaining 
     appId: "new-app",
     configuration: f.base,
     invocation: ownerContext,
-    readReady: async () => await readRegistration(f.registration),
+    readReady: async () => f.registration,
     selectResourceConfiguration: () => f.selected,
   });
   expect(effective.gateway.gitSha).toBe("e".repeat(40));
@@ -769,7 +764,7 @@ it.each(["operator", "builder-callback"] as const)(
         appId: "new-app",
         configuration: f.base,
         invocation: ownerContext,
-        readReady: async () => await readRegistration(f.registration),
+        readReady: async () => f.registration,
         selectResourceConfiguration: () => f.selected,
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -897,6 +892,7 @@ describe("explicit standard single-project destination", () => {
 });
 
 describe("explicit standard single-project destination", () => {
+  // oxlint-disable-next-line sonarjs/no-identical-functions -- Preserve existing independently named standard-destination regression scenarios.
   const standard = (): HostedOperatorSourceConfiguration => {
     const value = configuration();
     value.composition = "single-project-services";

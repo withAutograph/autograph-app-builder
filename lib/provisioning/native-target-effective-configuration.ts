@@ -13,6 +13,7 @@ export type ReadReadyNativeTarget<Invocation> = (
 ) => Promise<NativeTargetReadyRegistration | undefined>;
 
 const freezeConfiguration = <Value>(value: Value): Value => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Recursive freezing traverses an already typed private configuration, not untrusted input.
   if (value !== null && typeof value === "object") {
     for (const child of Object.values(value)) {
       freezeConfiguration(child);
@@ -99,24 +100,15 @@ export const resolveNativeTargetEffectiveConfiguration = async <Invocation>(inpu
   const existing = configuration.applications[input.appId];
   // Retain optional static publication/policy metadata only for the same actual target.
   const sameTarget = existing?.projectId === observed.projectId && existing.branch === plan.branch;
-  const application =
-    sameTarget && existing !== undefined
-      ? structuredClone(existing)
-      : {
-          accessRoles: structuredClone(plan.productRoles),
-          appDatabase: structuredClone(plan.appDatabase),
-          branch: plan.branch,
-          nativeTargetRegistration: true,
-          projectId: observed.projectId,
-          projectSettings: structuredClone(observed.projectSettings),
-        };
-  application.accessRoles = structuredClone(plan.productRoles);
-  application.appDatabase = structuredClone(plan.appDatabase);
-  application.branch = plan.branch;
-  application.nativeTargetRegistration = true;
-  application.projectId = observed.projectId;
-  application.projectSettings = structuredClone(observed.projectSettings);
-  configuration.applications[input.appId] = application;
+  configuration.applications[input.appId] = {
+    ...(sameTarget ? existing : {}),
+    accessRoles: structuredClone(plan.productRoles),
+    appDatabase: structuredClone(plan.appDatabase),
+    branch: plan.branch,
+    nativeTargetRegistration: true,
+    projectId: observed.projectId,
+    projectSettings: structuredClone(observed.projectSettings),
+  };
   configuration.sandbox.workers[input.appId] = structuredClone(plan.worker);
   configuration.catalogAppIds = [...new Set([...configuration.catalogAppIds, input.appId])];
   configuration.gateway.protectedApplicationIds = [

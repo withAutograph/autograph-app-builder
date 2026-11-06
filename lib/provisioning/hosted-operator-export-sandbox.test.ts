@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await -- Public SDK adapters are controlled in-memory fixtures; no Sandbox or provider is created. */
 import { runInNewContext } from "node:vm";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,7 +34,10 @@ const runCommand = vi.fn(
       };
     }
     if (input.cmd === "node") {
-      const [, script, target, content] = input.args ?? [];
+      const args = input.args ?? [];
+      const script = args[1];
+      const target = args[2];
+      const content = args[3];
       if (script === undefined || target === undefined || content === undefined) {
         throw new Error("Missing fixed metadata arguments");
       }
@@ -61,6 +65,7 @@ const runCommand = vi.fn(
           metadata.set(handle, Buffer.from(value));
         },
       };
+      // oxlint-disable-next-line sonarjs/code-eval -- Execute only the source-owned fixed metadata writer against a virtual filesystem, never app code.
       runInNewContext(script, {
         process: {
           argv: ["node", target, content],

@@ -27,28 +27,16 @@ const drives = vi.hoisted(() => ({
   list: vi.fn(),
 }));
 const authority = vi.hoisted(() => vi.fn());
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Mock only the external SDK boundary so this test cannot create provider resources.
 vi.mock("@vercel/sandbox", async () => ({
   ...(await vi.importActual<{ APIError: typeof APIError }>("@vercel/sandbox")),
   DEFAULT_SANDBOX_REGION: "iad1",
   Drive: drives,
   Sandbox: sdk,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- The persistent authority store is a terminal provider boundary in these lifecycle tests.
 vi.mock("./deployment-execution-lease", () => ({ assertHostedSandboxCommandAuthority: authority }));
-const context = {
-  host: {
-    loadOptionalPackage: async () => {
-      await Promise.resolve();
-      throw new Error("Not used by provider fixture");
-    },
-    resolveProjectPath: (filePath) => filePath,
-  },
-  session: {
-    auth: { current: null, initiator: null },
-    id: "provider-test",
-    turn: { id: "turn-test", sequence: 1 },
-  },
-  storagePath: "/workspace",
-} satisfies SandboxProviderSessionContext;
+const context = { session: { id: "provider-test" } } as SandboxProviderSessionContext;
 const nativeFixture = () => ({
   delete: vi.fn().mockResolvedValue(null),
   fs: {
@@ -56,7 +44,7 @@ const nativeFixture = () => ({
     mkdir: vi.fn().mockResolvedValue(null),
   },
   mounts: {
-    "/workspace": { drive: "drive-owned", mode: "read-write" },
+    "/workspace": { drive: "drive-owned", mode: "read-write" as "read-write" | "snapshot" },
   },
   name: "owned-name",
   persistent: true,
@@ -64,19 +52,12 @@ const nativeFixture = () => ({
   region: "iad1",
   runCommand: vi.fn().mockResolvedValue({
     exitCode: 0,
-    kill: vi.fn(async () => {}),
-    stderr: async () => {
+    kill: vi.fn(async () => {
       await Promise.resolve();
-      return "";
-    },
-    stdout: async () => {
-      await Promise.resolve();
-      return "/home/vercel\n";
-    },
-    wait: async () => {
-      await Promise.resolve();
-      return { exitCode: 0 };
-    },
+    }),
+    stderr: async () => "",
+    stdout: async () => "/home/vercel\n",
+    wait: async () => ({ exitCode: 0 }),
   }),
   status: "running",
   stop: vi.fn().mockResolvedValue(null),
@@ -119,7 +100,6 @@ const seedStorage = (
       for (const file of values) {
         files.set(file.path, Buffer.from(file.content));
       }
-      await Promise.resolve();
       return null;
     },
   );
@@ -152,8 +132,8 @@ describe("Builder Vercel provider", () => {
     try {
       const record = {
         appId: "example",
-        phase: "configuring",
-        profileId: "private-checks-16gib-v1",
+        phase: "configuring" as const,
+        profileId: "private-checks-16gib-v1" as const,
         proposalDigest: "a".repeat(64),
         sandboxId: "owned-name",
         sessionId: context.session.id,
@@ -169,11 +149,11 @@ describe("Builder Vercel provider", () => {
       const stopped = {
         ...nativeFixture(),
         memory: 4096,
-        status: "stopped",
+        status: "stopped" as "stopped" | "running",
         vcpus: 2,
       };
       sdk.get.mockResolvedValue(stopped);
-      const saved = { name: stopped.name, version: 1, workspaceDrive: driveState };
+      const saved = { name: stopped.name, version: 1 as const, workspaceDrive: driveState };
       await expect(
         createBuilderVercelProvider().resume(context, { files: [] }, saved),
       ).rejects.toThrow("pending private compute operation");
@@ -221,12 +201,12 @@ describe("Builder Vercel provider", () => {
         },
         {
           assertCurrent: () => {},
-          read: () => configured,
+          read: async () => configured,
           readActivation: async () => {
             checkpoint = await journal.read();
             return checkpoint.record;
           },
-          resume: () => active,
+          resume: async () => active,
           writeActivation: async (value) => {
             checkpoint = await journal.append(value, checkpoint);
           },
@@ -246,9 +226,9 @@ describe("Builder Vercel provider", () => {
     sdk.create.mockReset();
     sdk.get.mockReset();
     authority.mockReset();
-    drives.getOrCreate.mockReset().mockImplementation((options: { name: string }) => ({
-      ...driveFixture(options.name),
-    }));
+    drives.getOrCreate
+      .mockReset()
+      .mockImplementation(async (options: { name: string }) => driveFixture(options.name));
     drives.list.mockReset().mockResolvedValue(listedDrives(driveFixture()));
   });
   it("uploads multiple skill seeds together with their exact binary bytes and resolved paths", async () => {
@@ -424,18 +404,9 @@ describe("Builder Vercel provider", () => {
     const provider = createBuilderVercelProvider();
     const artifact = await provider.prepare({
       files: {
-        list: async () => {
-          await Promise.resolve();
-          return [];
-        },
-        read: async () => {
-          await Promise.resolve();
-          return Buffer.alloc(0);
-        },
-        readText: async () => {
-          await Promise.resolve();
-          return "";
-        },
+        list: async () => [],
+        read: async () => Buffer.alloc(0),
+        readText: async () => "",
       },
       host: {
         loadOptionalPackage: async () => {
@@ -934,7 +905,7 @@ describe("Builder Vercel provider", () => {
       if ("projectId" in options && options.projectId !== undefined) {
         throw new Error("Missing credentials parameters");
       }
-      return await Promise.resolve(options.resume === true ? running : stopped);
+      return options.resume === true ? running : stopped;
     });
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [{ content: Buffer.from("seed").toString("base64"), path: "/workspace/private.txt" }],

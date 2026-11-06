@@ -1,4 +1,5 @@
 import { assertOwnedAppProductionEnvironment } from "./owned-app-auth-environment";
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop, react-doctor/server-sequential-independent-await, sonarjs/expression-complexity, eslint/complexity, sonarjs/cognitive-complexity -- Provider reads, durable per-key dispatch receipts and authority rechecks must remain ordered. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
@@ -10,9 +11,6 @@ import { vercelProvisionDiagnosticSchema } from "./contracts";
 import { PublicReleaseProviderError } from "./public-release-provider-error";
 
 const id = z.string().min(1);
-const vercelApiOrigin = "https://api.vercel.com";
-const productionTarget = "production";
-const vercelIdHeader = "x-vercel-id";
 const rowSchema = z.object({
   comment: z.string().optional(),
   configurationId: z.string().nullable().optional(),
@@ -79,6 +77,7 @@ const boundedJson = async (
   response: Response,
   signal: AbortSignal,
   maxBytes = 1_048_576,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Private bounded JSON input is immediately parsed by each provider-owned response schema.
 ): Promise<unknown> => {
   if (!response.body) {
     throw fail();
@@ -162,25 +161,22 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     ) {
       throw fail();
     }
-    const url = new URL(route, vercelApiOrigin);
-    if (url.origin !== vercelApiOrigin) {
+    const url = new URL(route, "https://api.vercel.com");
+    if (url.origin !== "https://api.vercel.com") {
       throw fail();
     }
     url.searchParams.set("teamId", plan.project.teamId);
-    const requestInit: RequestInit = {
-      headers: { authorization: `Bearer ${credential.token}`, "content-type": "application/json" },
+    const response = await (deps.fetch ?? fetch)(url, {
       method,
+      headers: { authorization: `Bearer ${credential.token}`, "content-type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       redirect: "error",
       signal: invocation.signal,
-    };
-    if (body !== undefined) {
-      requestInit.body = JSON.stringify(body);
-    }
-    const response = await (deps.fetch ?? fetch)(url, requestInit);
+    });
     await check(invocation, plan, approval);
     if (!response.ok) {
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
-        response.headers.get(vercelIdHeader),
+        response.headers.get("x-vercel-id"),
       );
       let code: string | undefined;
       try {
@@ -190,21 +186,18 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
           .object({ error: z.object({ code: vercelProvisionDiagnosticSchema.shape.code }) })
           .safeParse(errorBody);
         if (parsed.success) {
-          const { error } = parsed.data;
-          const { code: parsedCode } = error;
-          code = parsedCode;
+          code = parsed.data.error.code;
         }
       } catch {
         invocation.signal.throwIfAborted();
         // Non-JSON, oversized and malformed errors still preserve safe HTTP facts.
       }
       await check(invocation, plan, approval);
-      const diagnosticData = {
-        code,
-        requestRef: requestRef.success ? requestRef.data : undefined,
+      const diagnostic = vercelProvisionDiagnosticSchema.parse({
         statusCode: response.status,
-      } satisfies z.input<typeof vercelProvisionDiagnosticSchema>;
-      const diagnostic = vercelProvisionDiagnosticSchema.parse(diagnosticData);
+        ...(code === undefined ? {} : { code }),
+        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
+      });
       throw new PublicReleaseProviderError(diagnostic);
     }
     const result = await boundedJson(response, invocation.signal);
@@ -240,8 +233,8 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     }
     return current;
   };
-  const rows = async (context: PublicReleaseEffectContext) => {
-    const { envs } = z
+  const rows = async (context: PublicReleaseEffectContext) =>
+    z
       .object({ envs: z.array(rowSchema) })
       .parse(
         await request(
@@ -250,18 +243,17 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
           `/v10/projects/${encodeURIComponent(context.plan.project.projectId)}/env`,
           true,
         ),
-      );
-    return envs;
-  };
+      ).envs;
   const findRow = (context: PublicReleaseEffectContext, all: Row[], key: string) => {
     const matches = all.filter((row) => row.key === key && row.target.includes("production"));
     if (matches.length > 1) {
       throw fail();
     }
     if (matches.length === 0) {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing provider state is a distinct reconciliation observation.
       return undefined;
     }
-    const [row] = matches;
+    const row = matches[0];
     const entry = context.plan.environment.find((item) => item.key === key);
     const owned =
       row.comment === marker(context.operationRef) ||
@@ -334,13 +326,10 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       }
       const valuesByKey = new Map(values.map((item) => [item.key, item.value]));
       const all = await rows(context);
-      const productionKeys: string[] = [];
-      for (const row of all) {
-        if (row.target.includes(productionTarget)) {
-          productionKeys.push(row.key);
-        }
-      }
-      assertOwnedAppProductionEnvironment(context.plan, productionKeys);
+      assertOwnedAppProductionEnvironment(
+        context.plan,
+        all.flatMap((row) => (row.target.includes("production") ? [row.key] : [])),
+      );
       const existing = new Map(
         context.plan.environment.map((entry) => [entry.key, findRow(context, all, entry.key)]),
       );
@@ -425,13 +414,10 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
             false,
           ),
         );
-      const productionKeys: string[] = [];
-      for (const row of environment.envs) {
-        if (row.target.includes(productionTarget)) {
-          productionKeys.push(row.key);
-        }
-      }
-      assertOwnedAppProductionEnvironment(plan, productionKeys);
+      assertOwnedAppProductionEnvironment(
+        plan,
+        environment.envs.flatMap((row) => (row.target.includes("production") ? [row.key] : [])),
+      );
       const deploymentId = current.targets?.production?.id;
       if (deploymentId === undefined || deploymentId.length === 0) {
         return { status: "pending" };
@@ -496,7 +482,7 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       if (
         deployment.id !== deploymentId ||
         deployment.projectId !== plan.project.projectId ||
-        deployment.target !== productionTarget
+        deployment.target !== "production"
       ) {
         throw fail();
       }
@@ -538,13 +524,10 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     ): Promise<"applied" | "not-applied" | "unknown"> {
       await project(context.invocation, context.plan, true);
       const all = await rows(context);
-      const productionKeys: string[] = [];
-      for (const row of all) {
-        if (row.target.includes(productionTarget)) {
-          productionKeys.push(row.key);
-        }
-      }
-      assertOwnedAppProductionEnvironment(context.plan, productionKeys);
+      assertOwnedAppProductionEnvironment(
+        context.plan,
+        all.flatMap((row) => (row.target.includes("production") ? [row.key] : [])),
+      );
       const states = await context.bindings.read();
       let applied = 0;
       for (const entry of context.plan.environment) {
@@ -612,7 +595,7 @@ export const createPublicReleaseVercelBindingSnapshot =
       ) {
         throw fail();
       }
-      const url = new URL(route, vercelApiOrigin);
+      const url = new URL(route, "https://api.vercel.com");
       url.searchParams.set("teamId", scope.teamId);
       const response = await (deps.fetch ?? fetch)(url, {
         headers: { authorization: `Bearer ${credential.token}` },
@@ -648,13 +631,9 @@ export const createPublicReleaseVercelBindingSnapshot =
     const all = z
       .object({ envs: z.array(rowSchema) })
       .parse(await read(`/v10/projects/${encodeURIComponent(scope.projectId)}/env`)).envs;
-    const productionKeys: string[] = [];
-    for (const row of all) {
-      if (row.target.includes(productionTarget)) {
-        productionKeys.push(row.key);
-      }
-    }
-    deps.assertProjectKeys?.(productionKeys);
+    deps.assertProjectKeys?.(
+      all.flatMap((row) => (row.target.includes("production") ? [row.key] : [])),
+    );
     const snapshots: { key: string; id: string; operationRef: string; sha256: string }[] = [];
     for (const key of scope.keys) {
       const rows = all.filter((row) => row.key === key && row.target.includes("production"));
@@ -664,7 +643,7 @@ export const createPublicReleaseVercelBindingSnapshot =
       if (rows.length !== 1) {
         throw fail();
       }
-      const [row] = rows;
+      const row = rows[0];
       const markerMatch = /^autograph:public-app-release:(?<operationRef>[0-9a-f-]{36})$/u.exec(
         row.comment ?? "",
       );
@@ -728,7 +707,10 @@ export const createPublicReleaseVercelActiveDeploymentSnapshot =
     ) {
       throw fail();
     }
-    const url = new URL(`/v9/projects/${encodeURIComponent(scope.projectId)}`, vercelApiOrigin);
+    const url = new URL(
+      `/v9/projects/${encodeURIComponent(scope.projectId)}`,
+      "https://api.vercel.com",
+    );
     url.searchParams.set("teamId", scope.teamId);
     const response = await (deps.fetch ?? fetch)(url, {
       headers: { authorization: `Bearer ${credential.token}` },

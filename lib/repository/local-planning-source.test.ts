@@ -25,25 +25,21 @@ import {
 } from "./local-planning-git-base";
 import { planningSourceReconciliationProgram } from "./planning-source-reconciliation";
 
-const git = (root: string, ...args: string[]) =>
-  execFileSync(
-    "/usr/bin/git",
-    ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-C", root, ...args],
-    { encoding: "utf-8" },
-  ).trim();
-const write = (root: string, file: string, bytes: string) => {
-  mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-  writeFileSync(path.join(root, file), bytes);
-};
-const unavailable = () => {
-  throw new Error("Unexpected process/stream operation in source-only fixture");
-};
-
 const fixture = () => {
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "owned-local-source-")));
   const source = path.join(directory, "source");
   const candidate = path.join(directory, "candidate");
   mkdirSync(source);
+  const git = (root: string, ...args: string[]) =>
+    execFileSync(
+      "/usr/bin/git",
+      ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-C", root, ...args],
+      { encoding: "utf-8" },
+    ).trim();
+  const write = (root: string, file: string, bytes: string) => {
+    mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    writeFileSync(path.join(root, file), bytes);
+  };
   git(source, "init", "--quiet");
   git(source, "config", "user.name", "Fixture");
   git(source, "config", "user.email", "fixture@example.test");
@@ -298,7 +294,7 @@ describe("retained dirty planning baseline", () => {
       f.write(snapshot, "dirty-initial.txt", "later mutable snapshot file\n");
       f.write(f.source, "dirty-initial.txt", "new platform bytes\n");
       capture = await captureLocalPlanningSource(f.source, f.originalSha, {
-        readAuthority: () => ({
+        readAuthority: async () => ({
           kind: "local",
           ownerUid: process.getuid?.() ?? -1,
           stateRoot,
@@ -402,7 +398,7 @@ describe("retained dirty planning baseline", () => {
       const snapshotSha = f.git(snapshot, "rev-parse", "HEAD");
       f.write(f.source, "shared.txt", "new platform source\n");
       capture = await captureLocalPlanningSource(f.source, originalSha, {
-        readAuthority: () => ({
+        readAuthority: async () => ({
           kind: "local",
           ownerUid: process.getuid?.() ?? -1,
           stateRoot,
@@ -449,7 +445,7 @@ describe("retained dirty planning baseline", () => {
     const stateRoot = path.join(directory, "baseline-custody");
     mkdirSync(stateRoot, { mode: 0o700 });
     const authority = { kind: "local" as const, ownerUid: process.getuid?.() ?? -1, stateRoot };
-    const readAuthority = () => authority;
+    const readAuthority = async () => authority;
     const localPath = (name: string) => {
       const mapped = name
         .replaceAll("/workspace/repository", f.candidate)
@@ -460,9 +456,12 @@ describe("retained dirty planning baseline", () => {
       }
       return resolved;
     };
+    const unavailable = async () => {
+      throw new Error("Unexpected process/stream operation in source-only fixture");
+    };
     const sandbox: SandboxSession & { id: string } = {
       id: "saved-workspace",
-      readBinaryFile: ({ path: name }) => {
+      readBinaryFile: async ({ path: name }) => {
         try {
           return readFileSync(localPath(name));
         } catch (error) {
@@ -473,7 +472,7 @@ describe("retained dirty planning baseline", () => {
         }
       },
       readFile: unavailable,
-      readTextFile: ({ path: name }) => {
+      readTextFile: async ({ path: name }) => {
         try {
           return readFileSync(localPath(name), "utf-8");
         } catch (error) {
@@ -483,11 +482,11 @@ describe("retained dirty planning baseline", () => {
           throw error;
         }
       },
-      removePath: ({ path: name, recursive, force }) => {
+      removePath: async ({ path: name, recursive, force }) => {
         rmSync(localPath(name), { force, recursive });
       },
       resolvePath: localPath,
-      run: ({ command, workingDirectory }) => {
+      run: async ({ command, workingDirectory }) => {
         const mapped = command
           .replaceAll("/workspace/repository", f.candidate)
           .replaceAll("/workspace", directory);
@@ -506,7 +505,7 @@ describe("retained dirty planning baseline", () => {
         };
       },
       spawn: unavailable,
-      writeBinaryFile: ({ path: name, content }) => {
+      writeBinaryFile: async ({ path: name, content }) => {
         const file = localPath(name);
         mkdirSync(path.dirname(file), { recursive: true });
         writeFileSync(file, content);
@@ -516,7 +515,7 @@ describe("retained dirty planning baseline", () => {
         mkdirSync(path.dirname(file), { recursive: true });
         writeFileSync(file, Buffer.from(await new Response(content).arrayBuffer()));
       },
-      writeTextFile: ({ path: name, content }) => {
+      writeTextFile: async ({ path: name, content }) => {
         const file = localPath(name);
         mkdirSync(path.dirname(file), { recursive: true });
         writeFileSync(file, content);
@@ -524,11 +523,7 @@ describe("retained dirty planning baseline", () => {
     };
     const retainedReceipts: { sourceSha: string; workspaceDigest: string; sourceTree: string }[] =
       [];
-    const reconcile: typeof reconcileLocalPlanningSource = async (
-      previousSha: string,
-      previousDigest: string,
-      revision: number,
-    ) => {
+    const reconcile = async (previousSha: string, previousDigest: string, revision: number) => {
       const capture = await captureLocalPlanningSource(f.source, previousSha, { readAuthority });
       try {
         const result = await reconcileLocalPlanningSource(
@@ -619,15 +614,8 @@ describe("retained dirty planning baseline", () => {
         second.workspace.workspaceDigest,
         3,
       );
-      const restoredBase = z
-        .object({
-          originalSourceSha: z.string(),
-          sourceSha: z.string(),
-          sourceTree: z.string(),
-        })
-        .parse(third.restoredOriginalBase);
-      expect(restoredBase?.originalSourceSha).toBe(second.workspace.sourceSha);
-      expect(restoredBase?.sourceSha).not.toBe(second.workspace.sourceSha);
+      expect(third.restoredOriginalBase?.originalSourceSha).toBe(second.workspace.sourceSha);
+      expect(third.restoredOriginalBase?.sourceSha).not.toBe(second.workspace.sourceSha);
       expect(readFileSync(path.join(f.candidate, "second-dirty.txt"), "utf-8")).toBe(
         "genuine uncommitted generation two source\n",
       );

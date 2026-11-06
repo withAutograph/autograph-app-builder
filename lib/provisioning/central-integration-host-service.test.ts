@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await, eslint/no-await-in-loop -- Deterministic async authority and CAS ports exercise the actual service/schema/transition code without hosted effects. */
 import { isDeepStrictEqual } from "node:util";
 import { expect, test } from "vitest";
 import { plan as original, ready as originalReady } from "./central-integration-host-test-fixture";
@@ -29,10 +30,6 @@ import {
 import { retainCentralNativeDeploymentReceipt } from "./central-integration-deployment-receipt";
 
 const id = "11111111-1111-4111-a111-111111111111";
-const approval = (callId: string) => ({
-  approvedAt: "2026-11-03T00:00:00Z",
-  approvedByCallId: callId,
-});
 const receiptFor = (context: CentralHostEffectContext): CentralEffectReceipt => {
   const { plan } = context;
   if (plan.kind === "central-integration-host-caller-v1") {
@@ -118,6 +115,10 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
     sessionId: plan.selection.sessionId,
     signal: new AbortController().signal,
   };
+  const approval = (callId: string) => ({
+    approvedAt: "2026-11-03T00:00:00Z",
+    approvedByCallId: callId,
+  });
   const store: CentralHostServicePorts["store"] = {
     compareAndSet: async (before, raw): Promise<CentralHostRow | undefined> => {
       if (conflict) {
@@ -141,21 +142,16 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
     reserve: async (selected) => {
       row ??= {
         operationRef: centralHostOperationRef(selected),
-        record: centralHostRecordSchema.parse(
-          (() => {
-            const record = {
-              attempts: {},
-              effects: Object.fromEntries(selected.effects.map((effect) => [effect, "idle"])),
-              kind: "central-integration-host-journal-v1",
-              plan: selected,
-              planDigest: centralHostPlanDigest(selected),
-            };
-            if (selected.kind === "central-integration-host-setup-v1") {
-              Object.assign(record, { nativeDeployment: { status: "empty" } });
-            }
-            return record;
-          })(),
-        ),
+        record: centralHostRecordSchema.parse({
+          attempts: {},
+          effects: Object.fromEntries(selected.effects.map((effect) => [effect, "idle"])),
+          kind: "central-integration-host-journal-v1",
+          plan: selected,
+          planDigest: centralHostPlanDigest(selected),
+          ...(selected.kind === "central-integration-host-setup-v1"
+            ? { nativeDeployment: { status: "empty" } }
+            : {}),
+        }),
         revision: 1,
       };
       return structuredClone(row);

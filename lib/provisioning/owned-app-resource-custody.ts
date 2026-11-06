@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-await-in-loop -- Each metadata page and owner/source check follows its durable cursor; no provider writes occur here. */
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
@@ -30,14 +31,8 @@ import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const fail = () => new HostedOperatorError("reconciliation_required");
-const ownedAppResourceSourceKind = "owned-app-resource-source-v1";
-const singleProjectResources = "single-project-resources-v1";
-const appRuntimeKind = "app-runtime";
-const ownedAppResourcesKind = "owned-app-resources-v1";
-const completed = (record: HostedRuntimeJournalRecord) =>
-  record.retainedAuth ?? retainedOperatorAuthFromJournal(record);
 const recordSchema = z.strictObject({
-  kind: z.literal(ownedAppResourceSourceKind),
+  kind: z.literal("owned-app-resource-source-v1"),
   reference: ownedAppResourceSourceSchema,
   scope: z.record(z.string(), z.unknown()),
 });
@@ -60,7 +55,7 @@ export const createOwnedAppResourceCustody = (deps: {
     const normal = deps.configuration.standardRuntime;
     if (
       normal === undefined ||
-      plan.runtimePreparation !== singleProjectResources ||
+      plan.runtimePreparation !== "single-project-resources-v1" ||
       plan.authAdoption !== undefined
     ) {
       throw fail();
@@ -75,7 +70,7 @@ export const createOwnedAppResourceCustody = (deps: {
       resources: ownedAppResourceIdentity(plan),
       teamId: context.target.scopeId,
     };
-    const digest = hash(JSON.stringify([ownedAppResourceSourceKind, scope]));
+    const digest = hash(JSON.stringify(["owned-app-resource-source-v1", scope]));
     const requestId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
     return { digest, requestId, scope };
   };
@@ -92,12 +87,12 @@ export const createOwnedAppResourceCustody = (deps: {
           eq(builderProvisioningJournals.workspaceId, context.authority.workspaceId),
           eq(builderProvisioningJournals.ownerUserId, context.authority.ownerUserId),
           eq(builderProvisioningJournals.requestId, identity.requestId),
-          sql`${builderProvisioningJournals.record}->>'kind' = ${ownedAppResourceSourceKind}`,
+          sql`${builderProvisioningJournals.record}->>'kind' = 'owned-app-resource-source-v1'`,
         ),
       )
       .limit(1);
     await deps.assertCurrentOwner(context);
-    const [row] = rows;
+    const row = rows[0];
     if (row === undefined) {
       return { identity };
     }
@@ -112,6 +107,8 @@ export const createOwnedAppResourceCustody = (deps: {
     }
     return { identity, reference: record.reference };
   };
+  const completed = (record: HostedRuntimeJournalRecord) =>
+    record.retainedAuth ?? retainedOperatorAuthFromJournal(record);
   const sourceInput = async (
     context: HostedOperatorContext,
     plan: HostedOperatorPlan,
@@ -139,7 +136,7 @@ export const createOwnedAppResourceCustody = (deps: {
           row.record.operator?.pendingEffectAttempt === undefined),
       isDeepStrictEqual(sourceContext.authority, context.authority),
       isDeepStrictEqual(ownedAppResourceIdentity(setup.plan), ownedAppResourceIdentity(plan)),
-      setup.plan.runtimePreparation === singleProjectResources,
+      setup.plan.runtimePreparation === "single-project-resources-v1",
       setup.plan.selection.projectId === context.target.projectId,
     ].every(Boolean);
     if (!same) {
@@ -188,7 +185,7 @@ export const createOwnedAppResourceCustody = (deps: {
             eq(builderProvisioningJournals.audience, context.authority.audience),
             eq(builderProvisioningJournals.workspaceId, context.authority.workspaceId),
             eq(builderProvisioningJournals.ownerUserId, context.authority.ownerUserId),
-            sql`${builderProvisioningJournals.record}->>'kind' = ${appRuntimeKind}`,
+            sql`${builderProvisioningJournals.record}->>'kind' = 'app-runtime'`,
             sql`${builderProvisioningJournals.record}->'request'->>'appId' = ${context.target.appId}`,
             sql`${builderProvisioningJournals.record}->'request'->>'projectId' = ${context.target.projectId}`,
             sql`${builderProvisioningJournals.record}->'operator'->'plan'->'appDatabase' = ${JSON.stringify(plan.appDatabase)}::jsonb`,
@@ -208,7 +205,7 @@ export const createOwnedAppResourceCustody = (deps: {
         if (
           setup === undefined ||
           record.privateState === undefined ||
-          setup.plan.runtimePreparation !== singleProjectResources
+          setup.plan.runtimePreparation !== "single-project-resources-v1"
         ) {
           continue;
         }
@@ -216,7 +213,7 @@ export const createOwnedAppResourceCustody = (deps: {
           throw fail();
         }
         selected = ownedAppResourceSourceSchema.parse({
-          kind: ownedAppResourcesKind,
+          kind: "owned-app-resources-v1",
           scopeDigest,
           source: {
             checkpointSha256: hash(JSON.stringify(record.privateState)),
@@ -229,9 +226,7 @@ export const createOwnedAppResourceCustody = (deps: {
       if (rows.length < 128) {
         break;
       }
-      const [, ...remainingRows] = rows;
-      const lastRow = remainingRows.at(-1);
-      cursor = lastRow?.requestId;
+      cursor = rows.at(-1)?.requestId;
     }
     if (selected === undefined) {
       throw fail();
@@ -246,6 +241,7 @@ export const createOwnedAppResourceCustody = (deps: {
       return reference;
     }
     if (!(await deps.isExistingRevision(context))) {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- A new app has no prior resource custodian.
       return undefined;
     }
     return await fallback(context, plan, identity.digest);
@@ -267,7 +263,7 @@ export const createOwnedAppResourceCustody = (deps: {
       .values({
         ...context.authority,
         createdAt: new Date(),
-        record: { kind: ownedAppResourceSourceKind, reference, scope: identity.scope },
+        record: { kind: "owned-app-resource-source-v1", reference, scope: identity.scope },
         requestDigest: identity.digest,
         requestId: identity.requestId,
         revision: 1,
@@ -349,7 +345,7 @@ export const createOwnedAppResourceCustody = (deps: {
       const next =
         plan.existingResources ??
         ownedAppResourceSourceSchema.parse({
-          kind: ownedAppResourcesKind,
+          kind: "owned-app-resources-v1",
           scopeDigest: identity.digest,
           source: {
             checkpointSha256: hash(JSON.stringify(row.record.privateState)),

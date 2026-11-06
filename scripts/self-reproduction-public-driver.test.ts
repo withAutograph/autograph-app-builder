@@ -1,8 +1,9 @@
+/* eslint-disable eslint/no-await-in-loop -- Sequential batch cases preserve isolated fake state. */
+/* eslint-disable eslint/require-await -- Async transport fakes implement the network interface. */
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 import {
   makePublicTransport,
   publicObservationReport,
@@ -12,57 +13,11 @@ import {
   parsePublicStartFile,
 } from "../evals/support/self-reproduction-public";
 import type { PublicState } from "../evals/support/self-reproduction-public";
-import type { EveSessionResult } from "../lib/mcp/contracts";
 
 const session = (
-  status: EveSessionResult["status"],
-  inputRequests: EveSessionResult["inputRequests"] = [],
+  status: "working" | "completed" | "input_required" | "waiting",
+  inputRequests: unknown[] = [],
 ) => ({ cursor: 1, events: [], inputRequests, sessionId: "one-session", status });
-interface CallArgs {
-  clientRequestId?: string;
-  prompt?: string;
-  handoffId?: string;
-  sessionId?: string;
-  cursor?: number;
-  observationCursor?: number;
-  message?: string;
-  responses?: NonNullable<PublicState["pendingResponse"]>["responses"];
-}
-interface PublicCall {
-  name: string;
-  args: CallArgs;
-}
-interface McpRequest {
-  id?: string | number;
-  method: string;
-  params?: { name?: string; arguments?: CallArgs };
-}
-const mcpRequestSchema = z.object({
-  id: z.union([z.string(), z.number()]).optional(),
-  method: z.string(),
-  params: z.looseObject({ name: z.string().optional() }).optional(),
-});
-const parseMcpRequest = (body: BodyInit | null | undefined): McpRequest =>
-  mcpRequestSchema.parse(JSON.parse(z.string().parse(body)));
-const savedStateSchema = z.looseObject({
-  pendingMessage: z.object({ clientRequestId: z.string(), message: z.string() }).optional(),
-  pendingResponse: z.object({ clientRequestId: z.string() }).optional(),
-});
-const transcriptEntrySchema = z.looseObject({
-  arguments: z.unknown().optional(),
-  direction: z.string().optional(),
-  name: z.string().optional(),
-  page: z.number().optional(),
-  receipt: z.unknown().optional(),
-  result: z
-    .looseObject({
-      structuredContent: z.unknown().optional(),
-    })
-    .optional(),
-  text: z.string().optional(),
-});
-const parseSavedState = (value: string) => savedStateSchema.parse(JSON.parse(value));
-const parseTranscriptEntry = (value: string) => transcriptEntrySchema.parse(JSON.parse(value));
 const state = (): PublicState => ({
   answered: [],
   clientRequestId: "stable-start",
@@ -77,7 +32,7 @@ const approval = {
   kind: "approval",
   requestId: "approve-build",
   title: "Build?",
-} as const;
+};
 const unresolvedStart = (code = "submission_unknown") => ({
   cursor: 0,
   error: { code, message: "Keep the same original start request." },
@@ -170,7 +125,7 @@ describe("public self-reproduction driver", () => {
         },
       }),
     ).rejects.toThrow("connection lost");
-    expect(parseSavedState(saved).pendingResponse?.clientRequestId).toBeTruthy();
+    expect(JSON.parse(saved).pendingResponse.clientRequestId).toBeTruthy();
     const original = current.pendingResponse;
     const calls: unknown[] = [];
     await runPublicSession({
@@ -221,7 +176,7 @@ describe("public self-reproduction driver", () => {
   });
   it("recovers a lost prompt-start response by its original request ID without dispatching another start", async () => {
     const current = state();
-    const calls: PublicCall[] = [];
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
     const options = { pollMs: 1, save: () => {}, state: current, timeoutMs: 1000 };
     await expect(
       runPublicSession({
@@ -260,7 +215,7 @@ describe("public self-reproduction driver", () => {
     };
     current.originalStart = original;
     current.startSubmitted = true;
-    const calls: PublicCall[] = [];
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
     await runPublicSession({
       pollMs: 1,
       save: () => {},
@@ -295,7 +250,7 @@ describe("public self-reproduction driver", () => {
       current.startSubmitted = true;
       current.outcome = "blocked_missing_public_session";
       current.unresolvedStartResult = unresolvedStart("internal_error");
-      const calls: PublicCall[] = [];
+      const calls: { name: string; args: Record<string, unknown> }[] = [];
       await runPublicSession({
         pollMs: 1,
         save: () => {},
@@ -326,7 +281,7 @@ describe("public self-reproduction driver", () => {
   );
   it("preserves an unresolved no-handle response without ever polling an empty session", async () => {
     const current = state();
-    const calls: PublicCall[] = [];
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
     const saved: PublicState[] = [];
     await runPublicSession({
       pollMs: 1,
@@ -352,7 +307,7 @@ describe("public self-reproduction driver", () => {
   it("repairs a legacy saved empty handle through request lookup", async () => {
     const current = state();
     current.session = { ...unresolvedStart(), status: "failed" };
-    const calls: PublicCall[] = [];
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
     await runPublicSession({
       pollMs: 1,
       save: () => {},
@@ -373,7 +328,7 @@ describe("public self-reproduction driver", () => {
     const output = mkdtempSync(path.join(tmpdir(), "public-start-recovery-"));
     const current = state();
     globalThis.fetch = async (_url, options) => {
-      const body = parseMcpRequest(options?.body);
+      const body = JSON.parse(String(options?.body));
       const result =
         body.method === "initialize"
           ? {}
@@ -407,7 +362,7 @@ describe("public self-reproduction driver", () => {
       const transcript = readFileSync(path.join(output, "transcript.private.jsonl"), "utf-8")
         .trim()
         .split("\n")
-        .map(parseTranscriptEntry);
+        .map((line) => JSON.parse(line));
       expect(
         transcript.find(
           (entry) => entry.direction === "response" && entry.name === "autograph_start",
@@ -435,7 +390,7 @@ describe("public self-reproduction driver", () => {
     );
     current.originalStart = original;
     current.startSubmitted = true;
-    const calls: PublicCall[] = [];
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
     await runPublicSession({
       pollMs: 1,
       save: () => {},
@@ -459,7 +414,7 @@ describe("public self-reproduction driver", () => {
     const original = globalThis.fetch;
     const messages: { method: string }[] = [];
     globalThis.fetch = async (_url, options) => {
-      const body = parseMcpRequest(options?.body);
+      const body = JSON.parse(String(options?.body));
       messages.push(body);
       return new Response(
         body.method === "notifications/initialized"
@@ -501,7 +456,7 @@ describe("public self-reproduction driver", () => {
     const headers: Headers[] = [];
     globalThis.fetch = async (_url, options) => {
       headers.push(new Headers(options?.headers));
-      const body = parseMcpRequest(options?.body);
+      const body = JSON.parse(String(options?.body));
       return new Response(
         body.method === "notifications/initialized"
           ? null
@@ -550,8 +505,7 @@ describe("public self-reproduction driver", () => {
     const records: unknown[] = [];
     const methods: string[] = [];
     globalThis.fetch = async (_url, options) => {
-      const body = parseMcpRequest(options?.body);
-      methods.push(body.method);
+      methods.push(JSON.parse(String(options?.body)).method);
       return new Response(`Do not record ${token}`, { status: 401 });
     };
     try {
@@ -619,7 +573,7 @@ describe("public self-reproduction driver", () => {
     current.session = { ...session("waiting"), inputRequests: [] };
     const message = "Yes, build this app. Do not publish.";
     let saved = "";
-    const calls: PublicCall[] = [];
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
     const options = {
       message,
       pollMs: 1,
@@ -643,11 +597,11 @@ describe("public self-reproduction driver", () => {
         },
       }),
     ).rejects.toThrow("lost response");
-    const pending = parseSavedState(saved);
-    expect(pending.pendingMessage?.message).toBe(message);
+    const pending = JSON.parse(saved).pendingMessage;
+    expect(pending.message).toBe(message);
     await runPublicSession({
       ...options,
-      message: null,
+      message: undefined,
       transport: {
         call: async (name, args) => {
           calls.push({ args, name });
@@ -657,8 +611,8 @@ describe("public self-reproduction driver", () => {
     });
     expect(calls.filter((call) => call.name === "autograph_send").map((call) => call.args)).toEqual(
       [
-        { ...pending.pendingMessage, observationCursor: 1, sessionId: "one-session" },
-        { ...pending.pendingMessage, observationCursor: 1, sessionId: "one-session" },
+        { ...pending, observationCursor: 1, sessionId: "one-session" },
+        { ...pending, observationCursor: 1, sessionId: "one-session" },
       ],
     );
     expect(current.pendingMessage).toBeUndefined();
@@ -670,7 +624,7 @@ describe("public self-reproduction driver", () => {
       clientRequestId: "same-accepted-message",
       message: "Continue the saved app",
     };
-    const calls: PublicCall[] = [];
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
     const savedCursors: number[] = [];
     await runPublicSession({
       pollMs: 1,
@@ -816,7 +770,10 @@ describe("public self-reproduction preview reporting", () => {
       recordPublicObservation(output, { page: 1, receipt });
       recordPublicObservation(output, { page: 2, text: `Open ${receipt.url}` });
       expect(statSync(privatePath).mode % 0o1000).toBe(0o600);
-      const raw = readFileSync(privatePath, "utf-8").trim().split("\n").map(parseTranscriptEntry);
+      const raw = readFileSync(privatePath, "utf-8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
       expect(raw).toEqual([
         { page: 1, receipt },
         { page: 2, text: `Open ${receipt.url}` },

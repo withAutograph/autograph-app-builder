@@ -13,7 +13,7 @@ const facts = (program = runtimeResourceDiagnosticProgram) => {
 describe("bounded runtime resource diagnostics", () => {
   it("runs the actual fixed observation program and preserves advisory scope", async () => {
     const observed = await inspectSandboxRuntimeResources({
-      run: () => facts(),
+      run: async () => facts(),
     });
     expect(observed.available).toBe(true);
     if (!observed.available) {
@@ -36,6 +36,7 @@ describe("bounded runtime resource diagnostics", () => {
       ],
       ["/proc/sys/vm/overcommit_memory", "2\n"],
     ]);
+    // oxlint-disable-next-line sonarjs/code-eval -- Execute only the repository-owned fixed diagnostic program with closed fixture I/O.
     runInNewContext(runtimeResourceDiagnosticProgram, {
       process: {
         stdout: {
@@ -80,7 +81,7 @@ describe("bounded runtime resource diagnostics", () => {
   });
   it("preserves command refusal without retaining raw output or guessing capacity", async () => {
     const result = await inspectSandboxRuntimeResources({
-      run: () => ({ exitCode: 1, stderr: "private stderr", stdout: "private stdout" }),
+      run: async () => ({ exitCode: 1, stderr: "private stderr", stdout: "private stdout" }),
     });
     expect(result).toEqual({ available: false, exitCode: 1 });
   });

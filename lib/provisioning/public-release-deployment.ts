@@ -34,6 +34,7 @@ import {
   reconcilePublicReleasePlanHistory,
   readPublicReleasePlanHistory,
 } from "./public-release-plan-reuse";
+/* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity, sonarjs/no-nested-functions, sonarjs/expression-complexity -- Native public release composition keeps owner, immutable source, approval and private custody checks together. */
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
@@ -92,30 +93,6 @@ interface Bindings {
   authDatabase: { runtimeUrl: string };
 }
 const fail = () => new Error("public_release_unavailable");
-const integrationPrivateScope = (attachment: AppIntegrationReleaseAttachment | undefined) => {
-  if (attachment === undefined) {
-    return {};
-  }
-  return {
-    integrationCapability: {
-      capabilitySha256: createHash("sha256")
-        .update(JSON.stringify(attachment.capability))
-        .digest("hex"),
-      configurationSha256: attachment.capability.privateConfiguration.sha256,
-      operationRef: attachment.operationRef,
-      planDigest: attachment.planDigest,
-    },
-  };
-};
-const INTEGRATION_CAPABILITY_ENV_KEY = "APP_INTEGRATIONS_CAPABILITY";
-const INTEGRATION_CONFIGURATION_ENV_KEY = "APP_INTEGRATIONS_RUNTIME_CONFIGURATION";
-const INTEGRATION_CAPABILITY_REQUIRED = "public_release_integration_capability_required";
-const PUBLIC_RELEASE_PLAN_KIND = "public-app-release-v1";
-const FENCE_APP_INTEGRATION_AUTHORITY = "fence-app-integration-authority";
-const BIND_PRODUCTION_RUNTIME = "bind-production-runtime";
-const PUBLISH_RELEASE_SOURCE = "publish-release-source";
-const INTEGRATION_REMOVAL_REQUIRED = "public_release_integration_removal_required";
-const AUTH_BOOTSTRAP_PURPOSE = "auth-bootstrap";
 
 /** Actual native composition; no fixture, alternate project, ambient repository credential or Preview cast. */
 export const createPublicReleaseDeployment = (input: {
@@ -296,15 +273,29 @@ export const createPublicReleaseDeployment = (input: {
       transport.action === "public-release-plan"
         ? transport.integrationCapability
         : transport.input.plan.integrationCapability;
+    const integrationPrivateScope = (attachment: AppIntegrationReleaseAttachment | undefined) =>
+      attachment === undefined
+        ? {}
+        : {
+            integrationCapability: {
+              capabilitySha256: createHash("sha256")
+                .update(JSON.stringify(attachment.capability))
+                .digest("hex"),
+              configurationSha256: attachment.capability.privateConfiguration.sha256,
+              operationRef: attachment.operationRef,
+              planDigest: attachment.planDigest,
+            },
+          };
     const readSelectedIntegration = async (
       current: PublicReleaseInvocation,
       expected?: AppIntegrationReleaseAttachment,
     ) => {
       if (requestedIntegration === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- No selected optional capability is an explicit read result.
         return undefined;
       }
       if (input.readCentralReady === undefined && input.readExistingPlatformReady === undefined) {
-        throw new PublicReleasePrerequisiteError(INTEGRATION_CAPABILITY_REQUIRED);
+        throw new PublicReleasePrerequisiteError("public_release_integration_capability_required");
       }
       try {
         const prepared = await readAppIntegrationCapabilityForRelease({
@@ -335,7 +326,9 @@ export const createPublicReleaseDeployment = (input: {
         return prepared;
       } catch (error) {
         if (error instanceof AppIntegrationCapabilityPrerequisiteError) {
-          throw new PublicReleasePrerequisiteError(INTEGRATION_CAPABILITY_REQUIRED);
+          throw new PublicReleasePrerequisiteError(
+            "public_release_integration_capability_required",
+          );
         }
         throw error;
       }
@@ -344,18 +337,25 @@ export const createPublicReleaseDeployment = (input: {
       current: PublicReleaseInvocation,
       expected?: PublicReleasePlan,
     ) => {
-      const retainedInput: Parameters<typeof readOptionalIntegrationRetention>[0] = {
+      const retained = await readOptionalIntegrationRetention({
+        database: input.database,
+        owner,
+        authority: input.owner,
+        owned: original,
+        ...(original.purpose === "application" ? { allowApplicationRemoval: true as const } : {}),
+        publicOrigin,
+        request,
+        builderOrigin: new URL(configuration.builderCallbackOrigin).origin,
         assertCurrent: async () => {
           await base(current);
           await heldFence?.();
         },
-        authority: input.owner,
-        builderOrigin: new URL(configuration.builderCallbackOrigin).origin,
-        database: input.database,
-        fetch: input.fetch,
-        owned: original,
-        owner,
-        publicOrigin,
+        ...(readSourceOwner === undefined
+          ? {}
+          : {
+              readSourceOwner: async (target: { appId: string; sessionId: string }) =>
+                await readSourceOwner(runtimeContext, target),
+            }),
         readProviderBindings: async () =>
           await createPublicReleaseVercelBindingSnapshot({
             assertCurrent: async () => {
@@ -372,44 +372,36 @@ export const createPublicReleaseDeployment = (input: {
               }),
           })({
             installationId: project.installationId,
-            keys: [INTEGRATION_CAPABILITY_ENV_KEY, INTEGRATION_CONFIGURATION_ENV_KEY],
+            keys: ["APP_INTEGRATIONS_CAPABILITY", "APP_INTEGRATIONS_RUNTIME_CONFIGURATION"],
             projectId: project.projectId,
             signal: current.signal,
             teamId: project.teamId,
           }),
-        request,
-      };
-      if (original.purpose === "application") {
-        retainedInput.allowApplicationRemoval = true;
-      }
-      if (readSourceOwner !== undefined) {
-        retainedInput.readSourceOwner = async (target) =>
-          await readSourceOwner(runtimeContext, target);
-      }
-      const retained = await readOptionalIntegrationRetention(retainedInput);
+        fetch: input.fetch,
+      });
       if (retained === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- No retained binding is distinct from unavailable authority.
         return undefined;
       }
       const removal =
         original.purpose === "application"
-          ? await (async () => {
-              const removalInput: Parameters<typeof readPublicReleaseIntegrationRemoval>[0] = {
-                assertCurrent: async () => {
-                  await base(current);
-                  await heldFence?.();
-                },
-                invocation: current,
-                ports: input.integrationRemoval,
-                sourceCapability: retained.sourceCapability,
-              };
-              if (expected?.integrationRemoval !== undefined) {
-                removalInput.expected = {
-                  operationRef: publicReleaseOperationRef(expected),
-                  removal: expected.integrationRemoval,
-                };
-              }
-              return await readPublicReleaseIntegrationRemoval(removalInput);
-            })()
+          ? await readPublicReleaseIntegrationRemoval({
+              ports: input.integrationRemoval,
+              invocation: current,
+              sourceCapability: retained.sourceCapability,
+              ...(expected?.integrationRemoval === undefined
+                ? {}
+                : {
+                    expected: {
+                      operationRef: publicReleaseOperationRef(expected),
+                      removal: expected.integrationRemoval,
+                    },
+                  }),
+              assertCurrent: async () => {
+                await base(current);
+                await heldFence?.();
+              },
+            })
           : undefined;
       return { bindings: retained.bindings, removal };
     };
@@ -435,14 +427,11 @@ export const createPublicReleaseDeployment = (input: {
       await base(current, plan);
       const privateScope = {
         ...scope,
+        ...(plan.runtime.realmEnrollmentRef === undefined
+          ? {}
+          : { realmEnrollmentRef: plan.runtime.realmEnrollmentRef }),
+        ...integrationPrivateScope(plan.integrationCapability),
       };
-      const integrationScope = integrationPrivateScope(plan.integrationCapability);
-      if ("integrationCapability" in integrationScope) {
-        privateScope.integrationCapability = integrationScope.integrationCapability;
-      }
-      if (plan.runtime.realmEnrollmentRef !== undefined) {
-        Object.assign(privateScope, { realmEnrollmentRef: plan.runtime.realmEnrollmentRef });
-      }
       const values = await privateStore.read(privateScope);
       if (
         values === undefined ||
@@ -472,7 +461,7 @@ export const createPublicReleaseDeployment = (input: {
           : await readSelectedIntegration(current, plan.integrationCapability);
       if (
         integrations !== undefined &&
-        values[INTEGRATION_CONFIGURATION_ENV_KEY] !== integrations.serializedConfiguration
+        values.APP_INTEGRATIONS_RUNTIME_CONFIGURATION !== integrations.serializedConfiguration
       ) {
         throw fail();
       }
@@ -504,6 +493,7 @@ export const createPublicReleaseDeployment = (input: {
     const assertApproved: PublicReleasePorts["assertApproved"] = async (current, plan) => {
       await base(current, plan);
       const receipt = await approval(plan, current.callId);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read the CAS row after complete native consent so a long history read cannot overwrite newer receipts.
       const row = await store.read(current.authority, publicReleaseOperationRef(plan));
       if (row === undefined) {
         throw fail();
@@ -536,18 +526,16 @@ export const createPublicReleaseDeployment = (input: {
       if (plan.integrationCapability !== undefined) {
         await readSelectedIntegration(current, plan.integrationCapability);
       }
-      let expectedRetained: Awaited<ReturnType<typeof readRetainedIntegrations>>;
-      if (plan.retainedOptionalBindings !== undefined) {
-        expectedRetained = {
-          bindings: plan.retainedOptionalBindings,
-          removal: plan.integrationRemoval,
-        };
-      }
       if (
-        (plan.purpose === AUTH_BOOTSTRAP_PURPOSE || plan.integrationRemoval !== undefined) &&
-        !isDeepStrictEqual(await readRetainedIntegrations(current, plan), expectedRetained)
+        (plan.purpose === "auth-bootstrap" || plan.integrationRemoval !== undefined) &&
+        !isDeepStrictEqual(
+          await readRetainedIntegrations(current, plan),
+          plan.retainedOptionalBindings === undefined
+            ? undefined
+            : { bindings: plan.retainedOptionalBindings, removal: plan.integrationRemoval },
+        )
       ) {
-        throw new PublicReleasePrerequisiteError(INTEGRATION_CAPABILITY_REQUIRED);
+        throw new PublicReleasePrerequisiteError("public_release_integration_capability_required");
       }
 
       if (consent) {
@@ -640,6 +628,7 @@ export const createPublicReleaseDeployment = (input: {
             throw fail();
           }
           for (const receipt of row.record.approvalReceipts ?? []) {
+            // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Refresh each retained approval in order under the same current physical fence.
             await approval(effect.plan, receipt.approvedByCallId);
           }
         }
@@ -681,9 +670,10 @@ export const createPublicReleaseDeployment = (input: {
       },
       readDeliveredRelease: async (current, plan) => {
         if (!(await observeAuth(current, plan))) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Unobserved native Auth leaves the selected deployment pending.
           return undefined;
         }
-        if ((plan.purpose ?? "application") === AUTH_BOOTSTRAP_PURPOSE) {
+        if ((plan.purpose ?? "application") === "auth-bootstrap") {
           return { releaseId: plan.runtime.releaseId };
         }
         if (plan.integrationCapability !== undefined) {
@@ -701,11 +691,12 @@ export const createPublicReleaseDeployment = (input: {
               signal: current.signal,
             }))
           ) {
+            // oxlint-disable-next-line unicorn/no-useless-undefined -- Failed optional runtime readback cannot produce an application readiness observation.
             return undefined;
           }
         }
 
-        const readinessDependencies: Parameters<typeof createHostedOperatorAppReadiness>[0] = {
+        const readiness = createHostedOperatorAppReadiness({
           assertAuthorized: async () => {
             await check(current, plan, false);
             await assertRuntimeAuthorized(runtimeContext);
@@ -713,22 +704,23 @@ export const createPublicReleaseDeployment = (input: {
           readReleaseManifest: async () =>
             await Promise.resolve(original.captured.files["release-manifest.json"]),
           readRuntimeUrl: async () => {
+            // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Resolve private credentials only after the active provider snapshot and its final owner check.
             const bindings = await readResourceBindings(runtimeContext);
             return bindings.appDatabase.runtimeUrl;
           },
-        };
-        if (readInstallationScopes !== undefined) {
-          readinessDependencies.readInstallationScopes = async (readyContext) =>
-            await readInstallationScopes(readyContext, original.operator.plan);
-        }
-        const readiness = createHostedOperatorAppReadiness(readinessDependencies);
-        const readinessInput = {
+          ...(readInstallationScopes === undefined
+            ? {}
+            : {
+                readInstallationScopes: async (readyContext) =>
+                  await readInstallationScopes(readyContext, original.operator.plan),
+              }),
+        });
+        const observed = await readiness({
           ...runtimeContext,
           assertCurrent: async () => {
             await check(current, plan, false);
           },
-        };
-        const observed = await readiness(readinessInput);
+        });
         return { releaseId: observed.releaseId };
       },
       readRuntimeBindings: async (current, plan) =>
@@ -736,7 +728,7 @@ export const createPublicReleaseDeployment = (input: {
     });
     return {
       applyEffect: async (effect) => {
-        if (effect.effect === FENCE_APP_INTEGRATION_AUTHORITY) {
+        if (effect.effect === "fence-app-integration-authority") {
           await requireIntegrationRemovalPorts(input.integrationRemoval).apply(
             removalContext(effect, true),
           );
@@ -746,12 +738,12 @@ export const createPublicReleaseDeployment = (input: {
           effect.plan.integrationRemoval !== undefined &&
           (await requireIntegrationRemovalPorts(input.integrationRemoval).reconcile({
             ...removalContext(effect, false),
-            effect: FENCE_APP_INTEGRATION_AUTHORITY,
+            effect: "fence-app-integration-authority",
           })) !== "applied"
         ) {
-          throw new PublicReleasePrerequisiteError(INTEGRATION_REMOVAL_REQUIRED);
+          throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");
         }
-        await (effect.effect === BIND_PRODUCTION_RUNTIME
+        await (effect.effect === "bind-production-runtime"
           ? vercel.bindRuntime(effect)
           : github.publish(effect));
       },
@@ -762,7 +754,7 @@ export const createPublicReleaseDeployment = (input: {
         return await vercel.observe(current, plan);
       },
       reconcileEffect: async (effect) => {
-        if (effect.effect === FENCE_APP_INTEGRATION_AUTHORITY) {
+        if (effect.effect === "fence-app-integration-authority") {
           return await requireIntegrationRemovalPorts(input.integrationRemoval).reconcile(
             removalContext(effect, false),
           );
@@ -771,12 +763,12 @@ export const createPublicReleaseDeployment = (input: {
           effect.plan.integrationRemoval !== undefined &&
           (await requireIntegrationRemovalPorts(input.integrationRemoval).reconcile({
             ...removalContext(effect, false),
-            effect: FENCE_APP_INTEGRATION_AUTHORITY,
+            effect: "fence-app-integration-authority",
           })) !== "applied"
         ) {
-          throw new PublicReleasePrerequisiteError(INTEGRATION_REMOVAL_REQUIRED);
+          throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");
         }
-        return effect.effect === BIND_PRODUCTION_RUNTIME
+        return effect.effect === "bind-production-runtime"
           ? await vercel.reconcileBindings(effect)
           : await github.reconcile(effect);
       },
@@ -815,6 +807,7 @@ export const createPublicReleaseDeployment = (input: {
           signal: current.signal,
           teamId: project.teamId,
         });
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Resolve private credentials only after the active provider snapshot and its final owner check.
         const bindings = await readResourceBindings(runtimeContext);
         await base(current);
         assertOwnedAppAuthRuntimeScope({
@@ -840,10 +833,8 @@ export const createPublicReleaseDeployment = (input: {
           schema: "public" as const,
         };
         const originalSetup =
-          original.purpose === AUTH_BOOTSTRAP_PURPOSE
-            ? original.operator
-            : original.record.retainedAuth;
-        if (originalSetup === undefined || originalSetup.plan.stage !== AUTH_BOOTSTRAP_PURPOSE) {
+          original.purpose === "auth-bootstrap" ? original.operator : original.record.retainedAuth;
+        if (originalSetup === undefined || originalSetup.plan.stage !== "auth-bootstrap") {
           throw new PublicReleasePrerequisiteError("public_auth_enrollment_required");
         }
         const enrollment = await resolvePublicRealmEnrollment({
@@ -856,6 +847,7 @@ export const createPublicReleaseDeployment = (input: {
           owner: { appId, authority: owner.authority, sessionId: owner.sessionId },
           publicOrigin,
         });
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Enrollment and stable secret custody are durably acknowledged in sequence before any runtime configuration is frozen.
         const seed = await reservePublicReleaseAuthSeed({
           assertCurrentOwner,
           database: input.database,
@@ -880,7 +872,7 @@ export const createPublicReleaseDeployment = (input: {
         }
         const integrations = await readSelectedIntegration(current);
         const retention =
-          original.purpose === AUTH_BOOTSTRAP_PURPOSE ||
+          original.purpose === "auth-bootstrap" ||
           (original.purpose === "application" && original.description.integrations === undefined)
             ? await readRetainedIntegrations(current)
             : undefined;
@@ -893,46 +885,42 @@ export const createPublicReleaseDeployment = (input: {
             integrations === undefined) ||
           (original.purpose !== "application" && integrations !== undefined)
         ) {
-          throw new PublicReleasePrerequisiteError(INTEGRATION_CAPABILITY_REQUIRED);
+          throw new PublicReleasePrerequisiteError(
+            "public_release_integration_capability_required",
+          );
         }
-        const privateScope = {
-          ...scope,
-          realmEnrollmentRef: enrollment.enrollmentRef,
-        };
-        const integrationScope = integrationPrivateScope(integrations?.attachment);
-        if ("integrationCapability" in integrationScope) {
-          privateScope.integrationCapability = integrationScope.integrationCapability;
-        }
-        const prepared = await privateStore.reserve(privateScope, () => {
-          const values = {
-            ...createFreshPublicAuthValues({
-              appId,
-              authResource,
-              authRuntimeUrl: bindings.authDatabase.runtimeUrl,
-              productionDatabaseIdentity: runtime.data.standardRuntime.productionDatabaseIdentity,
-              publicOrigin,
-              seed,
-            }),
-            [appKey]: bindings.appDatabase.runtimeUrl,
-            PLATFORM_REALM_OPERATOR_LINK_CONFIG: JSON.stringify(enrollment.linkConfiguration),
-          };
-          ownedAppPublicEnvironmentManifest(appId, values);
-          const releaseValues = { ...values };
-          if (integrations !== undefined) {
-            Object.assign(releaseValues, integrations.environment);
-          }
-          ownedAppReleaseEnvironmentManifest(appId, releaseValues, integrations?.attachment);
-          return releaseValues;
-        });
+        const prepared = await privateStore.reserve(
+          {
+            ...scope,
+            realmEnrollmentRef: enrollment.enrollmentRef,
+            ...integrationPrivateScope(integrations?.attachment),
+          },
+          () => {
+            const values = {
+              ...createFreshPublicAuthValues({
+                appId,
+                authResource,
+                authRuntimeUrl: bindings.authDatabase.runtimeUrl,
+                productionDatabaseIdentity: runtime.data.standardRuntime.productionDatabaseIdentity,
+                publicOrigin,
+                seed,
+              }),
+              [appKey]: bindings.appDatabase.runtimeUrl,
+              PLATFORM_REALM_OPERATOR_LINK_CONFIG: JSON.stringify(enrollment.linkConfiguration),
+            };
+            ownedAppPublicEnvironmentManifest(appId, values);
+            const releaseValues = { ...values, ...integrations?.environment };
+            ownedAppReleaseEnvironmentManifest(appId, releaseValues, integrations?.attachment);
+            return releaseValues;
+          },
+        );
         await base(current);
-        const candidateInput = {
+        const candidate = publicReleasePlanSchema.parse({
+          version: 1,
+          kind: "public-app-release-v1",
+          purpose: original.purpose,
           authority: owner.authority,
-          effects:
-            integrationRemoval === undefined
-              ? [BIND_PRODUCTION_RUNTIME, PUBLISH_RELEASE_SOURCE]
-              : [FENCE_APP_INTEGRATION_AUTHORITY, BIND_PRODUCTION_RUNTIME, PUBLISH_RELEASE_SOURCE],
-          environment: prepared.environment,
-          kind: PUBLIC_RELEASE_PLAN_KIND,
+          selection: context.target,
           project: {
             deploymentAccess: "public-app",
             environment: "production",
@@ -945,8 +933,7 @@ export const createPublicReleaseDeployment = (input: {
             rootDirectory: ".",
             teamId: project.teamId,
           },
-          publicOrigin,
-          purpose: original.purpose,
+          source: { ...refs, reviewDigest: source.reviewDigest },
           runtime: {
             configurationRef: prepared.configurationRef,
             operationRef: original.operator.operationRef,
@@ -956,20 +943,20 @@ export const createPublicReleaseDeployment = (input: {
             releaseId: original.selection.releaseId,
             syntheticOnly: true,
           },
-          selection: context.target,
-          source: { ...refs, reviewDigest: source.reviewDigest },
-          version: 1,
-        } satisfies PublicReleasePlan;
-        if (integrations !== undefined) {
-          candidateInput.integrationCapability = integrations.attachment;
-        }
-        if (retainedOptionalBindings !== undefined) {
-          candidateInput.retainedOptionalBindings = retainedOptionalBindings;
-        }
-        if (integrationRemoval !== undefined) {
-          candidateInput.integrationRemoval = integrationRemoval;
-        }
-        const candidate = publicReleasePlanSchema.parse(candidateInput);
+          publicOrigin,
+          ...(integrations === undefined ? {} : { integrationCapability: integrations.attachment }),
+          ...(retainedOptionalBindings === undefined ? {} : { retainedOptionalBindings }),
+          environment: prepared.environment,
+          ...(integrationRemoval === undefined ? {} : { integrationRemoval }),
+          effects:
+            integrationRemoval === undefined
+              ? ["bind-production-runtime", "publish-release-source"]
+              : [
+                  "fence-app-integration-authority",
+                  "bind-production-runtime",
+                  "publish-release-source",
+                ],
+        });
         const snapshots = await createPublicReleaseVercelBindingSnapshot({
           assertCurrent: async () => {
             await base(current);
@@ -992,6 +979,7 @@ export const createPublicReleaseDeployment = (input: {
           signal: current.signal,
           teamId: project.teamId,
         });
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- The canonical journal is reread after the provider snapshot and owner checks, before freezing any prior binding.
         const history = await readPublicReleasePlanHistory({
           assertCurrentOwner,
           candidate,

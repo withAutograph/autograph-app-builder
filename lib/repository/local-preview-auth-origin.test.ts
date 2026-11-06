@@ -17,15 +17,6 @@ import {
   readLocalPreviewAuthOrigin,
 } from "./local-preview-auth-origin";
 
-const runLocalPreviewAuthOriginRead = (target: string, optionalBrowserOrigin = false) =>
-  spawnSync(
-    process.execPath,
-    ["-e", localPreviewAuthOriginReadProgram(target, optionalBrowserOrigin)],
-    {
-      encoding: "utf-8",
-    },
-  );
-
 describe("owned previous local preview Auth origin", () => {
   it("reads only the actual private origin and refuses permissive files or symlinks", () => {
     const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "builder-auth-origin-")));
@@ -37,41 +28,42 @@ describe("owned previous local preview Auth origin", () => {
       BETTER_AUTH_URL: "https://old-owned-preview.vercel.run",
     };
     writeFileSync(file, JSON.stringify(contents), { mode: 0o600 });
+    const run = (target = file, optionalBrowserOrigin = false) =>
+      spawnSync(
+        process.execPath,
+        ["-e", localPreviewAuthOriginReadProgram(target, optionalBrowserOrigin)],
+        {
+          encoding: "utf-8",
+        },
+      );
     try {
-      const read = runLocalPreviewAuthOriginRead(file);
+      const read = run();
       expect(read.status).toBe(0);
       expect(JSON.parse(read.stdout)).toBe(contents.BETTER_AUTH_URL);
       expect(read.stdout).not.toContain("private");
-      expect(
-        JSON.parse(runLocalPreviewAuthOriginRead(path.join(directory, "absent.json"), true).stdout),
-      ).toBeNull();
-      expect(runLocalPreviewAuthOriginRead(file, true).status).not.toBe(0);
+      expect(JSON.parse(run(path.join(directory, "absent.json"), true).stdout)).toBeNull();
+      expect(run(file, true).status).not.toBe(0);
       const matching = { ...contents, APP_TEST_BASE_URL: contents.BETTER_AUTH_URL };
       writeFileSync(file, JSON.stringify(matching));
-      expect(JSON.parse(runLocalPreviewAuthOriginRead(file, true).stdout)).toBe(
-        contents.BETTER_AUTH_URL,
-      );
+      expect(JSON.parse(run(file, true).stdout)).toBe(contents.BETTER_AUTH_URL);
       writeFileSync(file, JSON.stringify(contents));
       chmodSync(file, 0o644);
-      expect(runLocalPreviewAuthOriginRead(file).status).not.toBe(0);
+      expect(run().status).not.toBe(0);
       chmodSync(file, 0o600);
       const link = path.join(directory, "link.json");
       symlinkSync(file, link);
-      expect(runLocalPreviewAuthOriginRead(link).status).not.toBe(0);
+      expect(run(link).status).not.toBe(0);
       expect(readFileSync(file, "utf-8")).toBe(JSON.stringify(contents));
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
   });
   it("binds a bounded provider read to the server-derived state path and cancellation", async () => {
-    const run = vi.fn<SandboxSession["run"]>(async () => {
-      await Promise.resolve();
-      return {
-        exitCode: 0,
-        stderr: "",
-        stdout: JSON.stringify("https://old-owned-preview.vercel.run"),
-      };
-    });
+    const run = vi.fn<SandboxSession["run"]>(async () => ({
+      exitCode: 0,
+      stderr: "",
+      stdout: JSON.stringify("https://old-owned-preview.vercel.run"),
+    }));
     const controller = new AbortController();
     await expect(
       readLocalPreviewAuthOrigin({
@@ -81,6 +73,7 @@ describe("owned previous local preview Auth origin", () => {
         signal: controller.signal,
       }),
     ).resolves.toBe("https://old-owned-preview.vercel.run");
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Assert the server-owned private runtime path, never open a caller path.
     expect(run.mock.calls[0]?.[0].command).toContain("/tmp/autograph-app-runtime/");
     expect(run.mock.calls[0]?.[0].abortSignal).toBe(controller.signal);
     run.mockResolvedValueOnce({

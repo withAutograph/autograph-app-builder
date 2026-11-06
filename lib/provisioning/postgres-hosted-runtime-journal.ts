@@ -66,24 +66,23 @@ export const createPostgresHostedRuntimeJournalStore = (
     async reserve(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const identity = hostedRuntimeIdentity(authority, input.target);
-      const record = {
-        approvedByCallId: input.approvedByCallId,
-        kind: "app-runtime" as const,
-        operator: input.operator,
-        request: input.target,
-        status: "pending" as const,
-        step: "reserved" as const,
-        version: 1 as const,
-      };
-      if (input.environmentGitBranch !== undefined) {
-        record.environmentGitBranch = input.environmentGitBranch;
-      }
       const [created] = await database
         .insert(builderProvisioningJournals)
         .values({
           ...authority,
           createdAt: input.now,
-          record: hostedRuntimeJournalRecordSchema.parse(record),
+          record: hostedRuntimeJournalRecordSchema.parse({
+            approvedByCallId: input.approvedByCallId,
+            ...(input.environmentGitBranch === undefined
+              ? {}
+              : { environmentGitBranch: input.environmentGitBranch }),
+            kind: "app-runtime",
+            operator: input.operator,
+            request: input.target,
+            status: "pending",
+            step: "reserved",
+            version: 1,
+          }),
           requestDigest: identity.digest,
           requestId: identity.requestId,
           revision: 1,

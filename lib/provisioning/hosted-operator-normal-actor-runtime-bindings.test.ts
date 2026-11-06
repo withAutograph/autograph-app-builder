@@ -1,6 +1,9 @@
+/* oxlint-disable eslint/require-await, unicorn/no-useless-undefined -- Fixture authority and CAS preserve the asynchronous real journal interfaces. */
 import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Observe the maintained diagnostic boundary without changing runtime authority.
 import * as diagnostics from "./hosted-operator-consent-diagnostic";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Exercise concurrent client failures without changing the runtime reader.
 import * as normalAuthClient from "./hosted-operator-normal-auth-client";
 import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 import {
@@ -43,16 +46,6 @@ const target = {
   sessionId: "owner-session",
 };
 const context = { authority, target };
-const observe = () => {
-  const report = diagnostics.reportOperatorRuntimeIdentityFailure;
-  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
-  vi.spyOn(diagnostics, "reportOperatorRuntimeIdentityFailure").mockImplementation(
-    (sessionId, failure) => {
-      report(sessionId, failure, sink);
-    },
-  );
-  return sink;
-};
 const program = normalActorProgramSchema.parse({
   actors: [
     {
@@ -302,28 +295,22 @@ const fixture = async (
     origins: [],
   });
   const state = initialNormalActorState(program, accountOperationRef);
-  state.actors = program.actors.map((actor, index) => {
-    const savedActor = {
-      actorKey: actor.actorKey,
-      session: {
-        activeOrganizationId: actor.actorKey === "unassigned" ? (opaqueOrganization ?? null) : null,
-        actorId: `id-${actor.actorKey}`,
-        expiresAt: "2030-01-01T00:00:00.000Z",
-        origin: program.origin,
-        realmSessionId: `base-${actor.actorKey}`,
-        reference: `33333333-3333-4333-8333-${String(index + 1).padStart(12, "0")}`,
-      },
-      signup: "complete" as const,
-      storageState: storage(`private-base-${actor.actorKey}`),
-    };
-    if (actor.account === "create-email-password") {
-      return {
-        ...savedActor,
-        credentials: { password: randomBytes(32).toString("base64url") },
-      };
-    }
-    return savedActor;
-  });
+  state.actors = program.actors.map((actor, index) => ({
+    actorKey: actor.actorKey,
+    signup: "complete",
+    ...(actor.account === "create-email-password"
+      ? { credentials: { password: randomBytes(32).toString("base64url") } }
+      : {}),
+    session: {
+      activeOrganizationId: actor.actorKey === "unassigned" ? (opaqueOrganization ?? null) : null,
+      actorId: `id-${actor.actorKey}`,
+      expiresAt: "2030-01-01T00:00:00.000Z",
+      origin: program.origin,
+      realmSessionId: `base-${actor.actorKey}`,
+      reference: `33333333-3333-4333-8333-${String(index + 1).padStart(12, "0")}`,
+    },
+    storageState: storage(`private-base-${actor.actorKey}`),
+  }));
   state.organizations = state.organizations.map((entry) => ({ ...entry, status: "complete" }));
   state.memberships = state.memberships.map((entry) => ({ ...entry, status: "complete" }));
   state.organizationSessions = program.memberships.map((membership, index) => ({
@@ -687,16 +674,15 @@ describe("fresh authenticated normal actor runtime bindings", () => {
   });
   it("returns legacy undefined without journal or HTTP authorization effects", async () => {
     const f = await fixture();
-    const legacyPlan = { ...plan };
-    delete legacyPlan.normalActorProgram;
     const legacy = hostedOperatorPlanSchema.parse({
-      ...legacyPlan,
+      ...plan,
       effects: [
         { description: "Fixture resources", id: "resources", kind: "resources" },
         { description: "Fixture app", id: "install", kind: "install" },
         { description: "Fixture access", id: "access", kind: "access" },
         { description: "Fixture binding", id: "bindings", kind: "bindings" },
       ],
+      normalActorProgram: undefined,
       stage: "app",
     });
     expect(await f.runtime({ ...f.input, plan: legacy })).toBeUndefined();
@@ -707,6 +693,16 @@ describe("fresh authenticated normal actor runtime bindings", () => {
 
 describe("closed runtime identity refusal diagnostics", () => {
   afterEach(() => vi.restoreAllMocks());
+  const observe = () => {
+    const report = diagnostics.reportOperatorRuntimeIdentityFailure;
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    vi.spyOn(diagnostics, "reportOperatorRuntimeIdentityFailure").mockImplementation(
+      (sessionId, failure) => {
+        report(sessionId, failure, sink);
+      },
+    );
+    return sink;
+  };
   it.each([
     ["revoked", "get_session", "unavailable"],
     ["wrong-actor", "identity", "actor_mismatch"],
@@ -757,7 +753,7 @@ describe("closed runtime identity refusal diagnostics", () => {
         f.input.plan.normalActorPreparation.accountPlanDigest = "f".repeat(64);
       }
       if (stage === "projection") {
-        const [actor] = f.state.actors;
+        const actor = f.state.actors[0];
         if (actor === undefined) {
           throw new Error("missing fixture actor");
         }

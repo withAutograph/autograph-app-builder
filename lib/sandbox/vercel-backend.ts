@@ -1,5 +1,5 @@
 import { assertPrivateComputeResumeAllowed } from "./private-compute-resume";
-import { DEFAULT_SANDBOX_REGION, Drive, Sandbox } from "@vercel/sandbox";
+import { APIError, DEFAULT_SANDBOX_REGION, Drive, Sandbox } from "@vercel/sandbox";
 import type {
   SandboxProviderHandle,
   SandboxProviderTargetFile,
@@ -18,96 +18,69 @@ import { createVercelSdkSession } from "./vercel-sdk-session";
 import { materializeVercelGitSource } from "./vercel-git-source";
 
 const PROVIDER_RETRY_DELAY_MS = 250;
-const FETCH_FAILED_MESSAGE = /fetch failed|network|timed? ?out|econnreset|eai_again|socket/iu;
-interface ProviderErrorInput extends Error {
-  readonly status?: number;
-  readonly cause?: unknown;
-  readonly code?: string;
-}
 
-interface ProviderFailure {
-  readonly name: string;
-  readonly message: string;
-  readonly status?: number;
-  readonly cause?: { readonly message: string; readonly code?: string };
-}
-
-const parseProviderError = (providerError: ProviderErrorInput): ProviderFailure => {
-  const status = Number.isFinite(providerError.status) ? providerError.status : undefined;
-  const parsedCause = providerError.cause;
-  let cause: { message: string; code?: string } | undefined;
-  if (parsedCause instanceof Error) {
-    cause = { message: parsedCause.message };
-  }
-
-  const failure = {
-    message: providerError.message,
-    name: providerError.name,
-  } satisfies Pick<ProviderFailure, "message" | "name"> &
-    Partial<Pick<ProviderFailure, "status" | "cause">>;
-  if (status !== undefined) {
-    failure.status = status;
-  }
-  if (cause !== undefined) {
-    failure.cause = cause;
-  }
-  return failure;
-};
-
-function retryableProviderFailure(failure: ProviderFailure | undefined): boolean {
-  if (failure === undefined) {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function retryableProviderFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) {
     return false;
   }
-  const { status, cause, message } = failure;
-  if (status !== undefined && (status === 429 || status >= 500)) {
+  const { status } = error as Error & { status?: unknown };
+  if (typeof status === "number" && (status === 429 || status >= 500)) {
     return true;
   }
-  return FETCH_FAILED_MESSAGE.test(`${message} ${cause?.message ?? ""}`);
+  return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/iu.test(
+    `${error.message} ${(error as Error & { cause?: unknown }).cause instanceof Error ? (error as Error & { cause: Error }).cause.message : ""}`,
+  );
 }
 
-function providerDiagnostic(failure: ProviderFailure | undefined): string {
-  if (failure === undefined) {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function providerDiagnostic(error: unknown): string {
+  if (!(error instanceof Error)) {
     return "unknown";
   }
-  const { cause } = failure;
-  const code = cause?.code ?? "provider_error";
+  const { cause } = error as Error & { cause?: unknown };
+  const code =
+    cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string"
+      ? cause.code
+      : "provider_error";
   return `Vercel Sandbox request failed (${code})`;
 }
 
 type ProviderFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createProviderFetch(fetchImpl: typeof fetch = fetch): ProviderFetch {
   return async (input, init) => {
     const original = new Request(input, init);
-    let attempt = 0;
-    while (attempt < 2) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const response = await fetchImpl(original.clone(), { signal: original.signal });
         if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await response.body?.cancel();
           console.warn(
             `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: provider_status_${response.status}; retrying once`,
           );
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await delay(PROVIDER_RETRY_DELAY_MS);
-          attempt += 1;
-        } else {
-          return response;
+          continue;
         }
+        return response;
       } catch (error) {
-        const providerError = error instanceof Error ? parseProviderError(error) : undefined;
         const callerCancelled = original.signal.aborted;
-        if (attempt === 0 && !callerCancelled && retryableProviderFailure(providerError)) {
+        if (attempt === 0 && !callerCancelled && retryableProviderFailure(error)) {
           console.warn(
-            `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(providerError)}; retrying once`,
+            `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}; retrying once`,
           );
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await delay(PROVIDER_RETRY_DELAY_MS);
-          attempt += 1;
-        } else {
-          console.warn(
-            `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(providerError)}`,
-          );
-          throw error;
+          continue;
         }
+        console.warn(
+          `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}`,
+        );
+        throw error;
       }
     }
     throw new Error("unreachable");
@@ -118,6 +91,7 @@ export interface BuilderVercelEnvironmentOptions {
   readonly sandboxEnvironment?: Readonly<Record<string, string>>;
 }
 
+// oxlint-disable-next-line typescript/consistent-type-definitions -- Eve JSON artifacts require the implicit index signature of an object type alias.
 type BuilderArtifact = {
   readonly files: readonly { readonly path: string; readonly content: string }[];
 };
@@ -142,15 +116,20 @@ const matchesWorkspaceMount = (
   return mount?.mode === "read-write" && (mount.drive === drive.name || mount.drive === drive.id);
 };
 
-const ambiguousCreateFailure = (failure: ProviderFailure): boolean => {
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- SDK create can reject with any throw value; reconcile only recognized ambiguous outcomes.
+const ambiguousCreateFailure = (error: unknown): boolean => {
   try {
-    if (failure.name === "AbortError") return false;
-    const { status } = failure;
-    if (status === undefined) return retryableProviderFailure(failure);
+    if (!(error instanceof Error) || error.name === "AbortError") {
+      return false;
+    }
+    if (!(error instanceof APIError)) {
+      return retryableProviderFailure(error);
+    }
+    const { status } = error.response;
     // Vercel reports an existing named sandbox as HTTP 400 as well as 409.
     if (
       (status === 400 &&
-        /sandbox with the name .+ already exists for this project/iu.test(failure.message)) ||
+        /sandbox with the name .+ already exists for this project/iu.test(error.message)) ||
       status === 409 ||
       status >= 500
     ) {
@@ -183,8 +162,9 @@ const shouldInitializeSeed = async (
 
 // Limit decoded bytes held for an upload, not the total seed tree or a file's size.
 const SEED_UPLOAD_BATCH_BYTES = 8 * 1024 * 1024;
-const WORKSPACE_ROOT = "/workspace";
 
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Preserve retained-file probes and bounded upload backpressure in source order. */
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Preserve retained-file probes and bounded upload backpressure in source order. */
 const initializeSeeds = async (input: {
   native: Sandbox;
   files: BuilderArtifact["files"];
@@ -206,31 +186,25 @@ const initializeSeeds = async (input: {
   };
   for (const file of input.files) {
     const destination = path.posix.resolve(
-      WORKSPACE_ROOT,
+      "/workspace",
       file.path.replace(/^\$HOME(?=\/|$)/u, input.homePath),
     );
     const preserveExisting =
-      input.recovered ||
-      destination === WORKSPACE_ROOT ||
-      destination.startsWith(`${WORKSPACE_ROOT}/`);
+      input.recovered || destination === "/workspace" || destination.startsWith("/workspace/");
     // Preserve the original sequential first-seed-wins behavior for retained paths.
-    const alreadyInitialized = preserveExisting && initialized.has(destination);
-    const shouldInitialize =
-      !alreadyInitialized &&
-      (await shouldInitializeSeed(input.native, destination, preserveExisting));
-    if (shouldInitialize) {
-      const content = Buffer.from(file.content, "base64");
-      if (bytes + content.byteLength > SEED_UPLOAD_BATCH_BYTES) await flush();
-      const directory = path.posix.dirname(destination);
-      if (!directories.has(directory)) {
-        await input.native.fs.mkdir(directory, { recursive: true });
-        directories.add(directory);
-      }
-      batch.push({ content, path: destination });
-      initialized.add(destination);
-      bytes += content.byteLength;
-      if (bytes >= SEED_UPLOAD_BATCH_BYTES) await flush();
+    if (preserveExisting && initialized.has(destination)) continue;
+    if (!(await shouldInitializeSeed(input.native, destination, preserveExisting))) continue;
+    const content = Buffer.from(file.content, "base64");
+    if (bytes + content.byteLength > SEED_UPLOAD_BATCH_BYTES) await flush();
+    const directory = path.posix.dirname(destination);
+    if (!directories.has(directory)) {
+      await input.native.fs.mkdir(directory, { recursive: true });
+      directories.add(directory);
     }
+    batch.push({ content, path: destination });
+    initialized.add(destination);
+    bytes += content.byteLength;
+    if (bytes >= SEED_UPLOAD_BATCH_BYTES) await flush();
   }
   await flush();
 };
@@ -254,8 +228,7 @@ export const createBuilderVercelProvider = (
     try {
       return { native: await input.create(), recovered: false };
     } catch (error) {
-      const providerError = error instanceof Error ? parseProviderError(error) : undefined;
-      if (providerError === undefined || !ambiguousCreateFailure(providerError)) {
+      if (!ambiguousCreateFailure(error)) {
         throw error;
       }
       try {
@@ -310,27 +283,30 @@ export const createBuilderVercelProvider = (
       sortBy: "name",
     });
     for await (const drive of drives) {
-      if (drive.driveId === binding.id || drive.name === binding.name) {
-        if (
-          drive.driveId === binding.id &&
-          drive.name === binding.name &&
-          drive.projectId === binding.projectId &&
-          drive.region === binding.region
-        ) {
-          if (drive.currentSandboxName !== undefined || drive.currentSessionId !== undefined) {
-            throw new Error(
-              "Builder workspace storage cleanup is incomplete because the drive is still attached. Retry this session deletion.",
-            );
-          }
-          await drive.delete({ signal });
-          return;
-        }
-        throw new Error(
-          "Builder workspace storage cleanup could not verify the saved drive identity. The drive was retained.",
-        );
+      if (drive.driveId !== binding.id && drive.name !== binding.name) {
+        continue;
       }
+      if (
+        drive.driveId === binding.id &&
+        drive.name === binding.name &&
+        drive.projectId === binding.projectId &&
+        drive.region === binding.region
+      ) {
+        if (drive.currentSandboxName !== undefined || drive.currentSessionId !== undefined) {
+          throw new Error(
+            "Builder workspace storage cleanup is incomplete because the drive is still attached. Retry this session deletion.",
+          );
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Delete only this exact detached owned drive, then end enumeration.
+        await drive.delete({ signal });
+        return;
+      }
+      throw new Error(
+        "Builder workspace storage cleanup could not verify the saved drive identity. The drive was retained.",
+      );
     }
   };
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep native handle lifecycle next to its provider environment.
   const handle = (
     native: Sandbox,
     sessionId: string,
@@ -393,25 +369,21 @@ export const createBuilderVercelProvider = (
       // Only public resource targets are persisted. Preparation does not contact
       // Vercel or freeze live repository bytes into a provider snapshot.
       const files: SandboxProviderTargetFile[] = [];
-      const trees = [context.resources.workspace, context.resources.skills];
-      for (const tree of trees) {
-        if (tree !== undefined) {
-          for (const file of tree.files) {
-            files.push({
-              content: file.content,
-              path: path.posix.join(tree.targetPath, file.relativePath),
-            });
-          }
+      for (const tree of [context.resources.workspace, context.resources.skills]) {
+        if (tree === undefined) continue;
+        for (const file of tree.files) {
+          files.push({
+            content: file.content,
+            path: path.posix.join(tree.targetPath, file.relativePath),
+          });
         }
       }
-      const prepared = {
+      return {
         files: files.map((file) => ({
           content: Buffer.from(file.content).toString("base64"),
           path: file.path,
         })),
       };
-      await Promise.resolve();
-      return prepared;
     },
     async resume(context, _artifact, state) {
       // Reconnect only: do not recreate source selection or initialization.
@@ -439,23 +411,20 @@ export const createBuilderVercelProvider = (
       ) {
         throw new Error("The Builder workspace drive belongs to another sandbox.");
       }
-      const sandboxConfiguration = {
-        ...transport,
-        image: "vcr.vercel.com/vercel/eve/base:0.68.0",
-        mounts: { "/workspace": drive },
-        name,
-        networkPolicy: "allow-all" as const,
-        persistent: true,
-        region: DEFAULT_SANDBOX_REGION,
-      };
-      const sandboxEnvironment = options?.sandboxEnvironment;
       const { native, recovered } = await createOrRecoverSandbox({
         create: async () =>
-          await Sandbox.create(
-            sandboxEnvironment === undefined
-              ? sandboxConfiguration
-              : { ...sandboxConfiguration, env: { ...sandboxEnvironment } },
-          ),
+          await Sandbox.create({
+            ...transport,
+            image: "vcr.vercel.com/vercel/eve/base:0.68.0",
+            mounts: { "/workspace": drive },
+            name,
+            networkPolicy: "allow-all",
+            persistent: true,
+            region: DEFAULT_SANDBOX_REGION,
+            ...(options?.sandboxEnvironment === undefined
+              ? {}
+              : { env: { ...options.sandboxEnvironment } }),
+          }),
         drive,
         name,
       });

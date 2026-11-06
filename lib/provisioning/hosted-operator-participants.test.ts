@@ -1,4 +1,5 @@
 import { createParticipantSuccessorPlan } from "./hosted-operator-participant-successor";
+/* oxlint-disable eslint/require-await -- In-memory service authority ports resolve immediately and perform no provider or database calls. */
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import { createHostedOperatorClient } from "./hosted-operator-client";
@@ -176,6 +177,7 @@ const fixture = () => {
   const store: HostedRuntimeJournalStore = {
     async compareAndSet(input) {
       if (row?.revision !== input.expectedRevision) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS failure is the explicit optional-row return contract.
         return undefined;
       }
       row = {
@@ -204,6 +206,7 @@ const fixture = () => {
     },
     async reserveFenceGeneration(input) {
       if (row === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- The journal CAS reports no allocated row.
         return undefined;
       }
       if (
@@ -212,6 +215,7 @@ const fixture = () => {
         row.record.operator?.operationRef !== input.operationRef ||
         row.record.operator.fenceGeneration !== undefined
       ) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS must not allocate a generation.
         return undefined;
       }
       nextFenceGeneration += 1;
@@ -673,17 +677,12 @@ const captureSuccessorFixture = () => {
         operationRef: "22222222-2222-4222-8222-222222222222",
         plan: appPlan,
         planDigest: operatorPlanDigest(appPlan),
-        receipts: appPlan.effects.map((effect) => {
-          const receipt = {
-            effectId: effect.id,
-            observedAt: "2026-10-14T12:00:00.000Z",
-            resourceVersion: "observed",
-          };
-          if (effect.kind === "access") {
-            Object.assign(receipt, { fenceGeneration: 1 });
-          }
-          return receipt;
-        }),
+        receipts: appPlan.effects.map((effect) => ({
+          effectId: effect.id,
+          observedAt: "2026-10-14T12:00:00.000Z",
+          resourceVersion: "observed",
+          ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
+        })),
       },
       privateState: {
         encryptedToken: "original-resources",

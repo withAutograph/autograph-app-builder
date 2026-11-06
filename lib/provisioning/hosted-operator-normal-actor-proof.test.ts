@@ -1,8 +1,8 @@
+/* oxlint-disable eslint/require-await, unicorn/no-useless-undefined -- Fixture CAS and key ports preserve their asynchronous production interfaces. */
 import { createHash } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { generateKeyPair, SignJWT, jwtVerify } from "jose";
-import type { JWTVerifyOptions, JWTPayload } from "jose";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -37,28 +37,6 @@ import type { OperatorRequest } from "./hosted-operator-contract";
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
 
 import type { OperatorArtifactStore } from "./hosted-operator-artifact-store";
-
-type OperatorProofPayload = JWTPayload & {
-  authResourceId: string | null;
-  bootstrapPlanDigest: string | null;
-  nonceSha256: string;
-  organizationId: null;
-  ownerSessionId: string | null;
-  purpose: string;
-  publicRelease?: {
-    enrollmentRef: string | null;
-    operationRef: string | null;
-    planDigest: string | null;
-  };
-  resource: string;
-  sessionId: string;
-};
-
-type OperatorVerificationOptions = JWTVerifyOptions & {
-  audience: string;
-  currentDate?: Date;
-  issuer: string;
-};
 
 const requiredFixture = <T>(value: T | undefined): T => {
   if (value === undefined) {
@@ -326,7 +304,7 @@ const fixture = async (publicRelease?: {
       return new Response(null, { status: 401 });
     }
     cookies.set(actual.session.id, request.headers.get("cookie") ?? "");
-    const proofPayload: OperatorProofPayload = {
+    const proof = await new SignJWT({
       authResourceId: values.get("authResourceId"),
       bootstrapPlanDigest: values.get("bootstrapPlanDigest"),
       nonceSha256: createHash("sha256")
@@ -337,15 +315,16 @@ const fixture = async (publicRelease?: {
       purpose: "realm-operator-link-v1",
       resource,
       sessionId: actual.session.id,
-    };
-    if (values.has("publicEnrollmentRef")) {
-      proofPayload.publicRelease = {
-        enrollmentRef: values.get("publicEnrollmentRef"),
-        operationRef: values.get("publicOperationRef"),
-        planDigest: values.get("publicPlanDigest"),
-      };
-    }
-    const proof = await new SignJWT(proofPayload)
+      ...(values.has("publicEnrollmentRef")
+        ? {
+            publicRelease: {
+              enrollmentRef: values.get("publicEnrollmentRef"),
+              operationRef: values.get("publicOperationRef"),
+              planDigest: values.get("publicPlanDigest"),
+            },
+          }
+        : {}),
+    })
       .setProtectedHeader({
         alg: "EdDSA",
         kid: "fixture-key",
@@ -414,95 +393,92 @@ const fixture = async (publicRelease?: {
       context: { authority, target: { appId: target.appId, sessionId: target.sessionId } },
       store: artifactStore,
     }),
-    resolveRealmBinding: async () => {
-      const binding = {
-        audience: "https://operator.example.com",
-        authResourceId: plan.authDatabase.resourceId,
-        bootstrapPlanDigest: operatorPlanDigest(plan),
-        builderCallbackOrigin: "https://builder.example.com",
-        endpointOrigin,
-        getKey: async () => {
-          if (keyError !== undefined) {
-            throw keyError;
-          }
-          return publicKey;
-        },
-        issuer: program.origin,
-        readback: async (request: Request) => {
-          if (proofReadbackResponse !== undefined) {
-            return proofReadbackResponse;
-          }
-          expect(new URL(request.url).origin).toBe(endpointOrigin);
-          expect(new URL(request.url).pathname).toBe(
-            "/api/auth/platform/operator-identity/readback",
-          );
-          const values = new URLSearchParams(await request.text());
-          const proof = values.get("proof");
-          if (proof === null) {
-            return new Response(null, { status: 401 });
-          }
-          const verificationOptions: OperatorVerificationOptions = {
-            audience: "https://operator.example.com",
-            issuer: program.origin,
-          };
-          if (values.has("attestation")) {
-            verificationOptions.currentDate = new Date(
-              z
-                .object({ capturedAt: z.iso.datetime() })
-                .parse(JSON.parse(values.get("attestation") ?? "{}")).capturedAt,
-            );
-          }
-          const { payload } = await jwtVerify(proof, publicKey, verificationOptions);
-          const cookie = cookies.get(String(payload.sessionId));
-          const actual = await auth.api.getSession({
-            headers: new Headers({ cookie: cookie ?? "" }),
-          });
-          if (actual === null) {
-            return new Response(null, { status: 401 });
-          }
-          return Response.json({
-            identity: {
-              actorId: actual.user.id,
-              expiresAt: actual.session.expiresAt.toISOString(),
-              organizationId: null,
-              sessionId: actual.session.id,
-              version: 1,
+    resolveRealmBinding: async () => ({
+      authResourceId: plan.authDatabase.resourceId,
+      bootstrapPlanDigest: operatorPlanDigest(plan),
+      ...(publicRelease === undefined ? {} : { publicRelease }),
+
+      issuer: program.origin,
+      audience: "https://operator.example.com",
+      endpointOrigin,
+      ...(bootstrapSnapshot === undefined
+        ? {}
+        : {
+            assertBootstrapCurrent: async () => {
+              await assertAuthorized();
+              await journal.read(context);
+              await assertCompletedParticipantBootstrapApproval(
+                context,
+                requiredFixture(bootstrapSnapshot),
+                async (value) => ({
+                  action: value.action,
+                  approvalId: "bootstrap-approval",
+                  approved: bootstrapApproved,
+                  callId: value.callId,
+                  planDigest: value.planDigest,
+                }),
+              );
             },
-            resource,
-          });
-        },
-        resource,
-        transportSource: {
+            bootstrap: bootstrapSnapshot,
+          }),
+      builderCallbackOrigin: "https://builder.example.com",
+      resource,
+      getKey: async () => {
+        if (keyError !== undefined) {
+          throw keyError;
+        }
+        return publicKey;
+      },
+      transportSource: {
+        audience: "https://operator.example.com",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com",
+        ownerId: "team",
+        projectId: "prj_operator",
+      },
+      readback: async (request) => {
+        if (proofReadbackResponse !== undefined) {
+          return proofReadbackResponse;
+        }
+        expect(new URL(request.url).origin).toBe(endpointOrigin);
+        expect(new URL(request.url).pathname).toBe("/api/auth/platform/operator-identity/readback");
+        const values = new URLSearchParams(await request.text());
+        const proof = values.get("proof");
+        if (proof === null) {
+          return new Response(null, { status: 401 });
+        }
+        const { payload } = await jwtVerify(proof, publicKey, {
           audience: "https://operator.example.com",
-          environment: "preview",
-          issuer: "https://oidc.vercel.com",
-          ownerId: "team",
-          projectId: "prj_operator",
-        },
-      };
-      if (bootstrapSnapshot !== undefined) {
-        binding.assertBootstrapCurrent = async () => {
-          await assertAuthorized();
-          await journal.read(context);
-          await assertCompletedParticipantBootstrapApproval(
-            context,
-            requiredFixture(bootstrapSnapshot),
-            async (value) => ({
-              action: value.action,
-              approvalId: "bootstrap-approval",
-              approved: bootstrapApproved,
-              callId: value.callId,
-              planDigest: value.planDigest,
-            }),
-          );
-        };
-        binding.bootstrap = bootstrapSnapshot;
-      }
-      if (publicRelease !== undefined) {
-        binding.publicRelease = publicRelease;
-      }
-      return binding;
-    },
+          issuer: program.origin,
+          ...(values.has("attestation")
+            ? {
+                currentDate: new Date(
+                  z
+                    .object({ capturedAt: z.iso.datetime() })
+                    .parse(JSON.parse(values.get("attestation") ?? "{}")).capturedAt,
+                ),
+              }
+            : {}),
+        });
+        const cookie = cookies.get(String(payload.sessionId));
+        const actual = await auth.api.getSession({
+          headers: new Headers({ cookie: cookie ?? "" }),
+        });
+        if (actual === null) {
+          return new Response(null, { status: 401 });
+        }
+        return Response.json({
+          identity: {
+            actorId: actual.user.id,
+            expiresAt: actual.session.expiresAt.toISOString(),
+            organizationId: null,
+            sessionId: actual.session.id,
+            version: 1,
+          },
+          resource,
+        });
+      },
+    }),
   });
   const input = async (organizationId: string) => {
     const prepared = await journal.read(context);
@@ -674,9 +650,9 @@ const fixture = async (publicRelease?: {
       }),
     ).toMatchObject({ status: "auth-schema-prepared" });
     endpointOrigin = "https://new-gateway.example.test";
-    const [candidate] = requiredFixture(
+    const candidate = requiredFixture(
       requiredFixture(row.record.operator).gatewayDeliveryCandidates,
-    );
+    )[0];
     bootstrapSnapshot = completedParticipantBootstrapSchema.parse({
       auth: retainedOperatorAuthFromJournal(row.record),
       candidate,
@@ -694,6 +670,7 @@ const fixture = async (publicRelease?: {
       await assertAuthorized();
     };
     // SAFETY: Only the selected app metadata and Gateway workload are read by this planning path; real Auth and proof ports remain above.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Closed synthetic configuration supplies exactly the metadata consumed by participant plan resolution.
     const configuration = {
       applications: {
         [target.appId]: {
@@ -721,6 +698,7 @@ const fixture = async (publicRelease?: {
         readNormalActorOrganizationProofs: async () => {
           const results = [];
           for (const selectedOrganization of program.organizations) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Each real proof preserves sequential journal CAS and nonce ownership.
             results.push(await collect(await input(selectedOrganization.organizationId)));
           }
           return results;

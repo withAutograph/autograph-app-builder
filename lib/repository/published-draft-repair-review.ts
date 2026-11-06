@@ -9,8 +9,6 @@ type DigestMaterial =
   | readonly OverlayChange[]
   | Omit<PublishedDraftRepairReview, "digest">
   | Omit<PublishedDraftRepairReview, "digest" | "changeSetDigest" | "reviewedByCallId">;
-type CanonicalChange = OverlayChange;
-const repairKind = "published-draft-repair" as const;
 const hash = (value: DigestMaterial) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -32,7 +30,7 @@ const schema = z.strictObject({
   digest,
   headSha: objectId,
   headTree: objectId,
-  kind: z.literal(repairKind),
+  kind: z.literal("published-draft-repair"),
   originReviewDigest: digest,
   originSourceReceiptDigest: digest,
   publicationDigest: digest,
@@ -48,7 +46,8 @@ export type PublishedDraftRepairReview = z.infer<typeof schema>;
 export type DraftUpdateReview = ReviewedChangeSetReceipt | PublishedDraftRepairReview;
 export const isPublishedDraftRepairReview = (
   review: DraftUpdateReview,
-): review is PublishedDraftRepairReview => "kind" in review && review.kind === repairKind;
+): review is PublishedDraftRepairReview =>
+  "kind" in review && review.kind === "published-draft-repair";
 
 type Input = Omit<
   PublishedDraftRepairReview,
@@ -74,16 +73,12 @@ const inputSchema = schema.omit({
 
 const canonicalChanges = (changes: readonly OverlayChange[]) =>
   changes
-    .map(({ kind, path, before, after }) => {
-      const canonicalChange: CanonicalChange = { kind, path };
-      if (before !== undefined) {
-        canonicalChange.before = before;
-      }
-      if (after !== undefined) {
-        canonicalChange.after = after;
-      }
-      return canonicalChange;
-    })
+    .map(({ kind, path, before, after }) => ({
+      kind,
+      path,
+      ...(before === undefined ? {} : { before }),
+      ...(after === undefined ? {} : { after }),
+    }))
     .toSorted((a, b) => compareOverlayPaths(a.path, b.path));
 
 export const assertPublishedDraftRepairReview = (input: PublishedDraftRepairReview): void => {
@@ -123,12 +118,12 @@ export const createPublishedDraftRepairReview = (input: Input): PublishedDraftRe
     changes: canonicalChanges(input.changes),
   });
   const changeSet = {
+    kind: "published-draft-repair" as const,
+    version: 1 as const,
+    ...evidence,
+    changes,
     approvedPaths: changes.map(({ path }) => path),
     changedContentDigest: hash(changes),
-    changes,
-    ...evidence,
-    kind: repairKind,
-    version: 1 as const,
   };
   const unsigned = { ...changeSet, changeSetDigest: hash(changeSet), reviewedByCallId };
   const review = schema.parse({ ...unsigned, digest: hash(unsigned) });

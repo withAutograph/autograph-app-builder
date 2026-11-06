@@ -167,29 +167,21 @@ const readVerifiedOwnerNativeStore = async (
     httpStatus?: number,
   ) => {
     try {
-      const planningFailure = {
-        errorClass: "unexpected",
-        stage: "neon_native_store",
-      } as Parameters<
-        ReturnType<typeof createHostedOperatorConsentDiagnostic>
-      >[0]["planningFailure"];
-      if (nativeStoreFailure !== undefined) {
-        planningFailure.nativeStoreFailure = nativeStoreFailure;
-      }
-      const diagnostic: Parameters<ReturnType<typeof createHostedOperatorConsentDiagnostic>>[0] = {
-        boundary: "operator" as const,
-        outcome: "setup_unavailable" as const,
-        phase: "inline" as const,
-        planningFailure,
-        stage: "operator_request" as const,
-      };
-      if (httpStatus !== undefined) {
-        diagnostic.httpStatus = httpStatus;
-      }
       createHostedOperatorConsentDiagnostic(
         context.target.sessionId,
         input.diagnosticSink,
-      )(diagnostic);
+      )({
+        boundary: "operator",
+        phase: "inline",
+        stage: "operator_request",
+        outcome: "setup_unavailable",
+        ...(httpStatus === undefined ? {} : { httpStatus }),
+        planningFailure: {
+          errorClass: "unexpected",
+          stage: "neon_native_store",
+          ...(nativeStoreFailure === undefined ? {} : { nativeStoreFailure }),
+        },
+      });
     } catch {
       /* Diagnostic failures preserve native authorization behavior. */
     }
@@ -409,8 +401,9 @@ const createAuthority = (
           await canonicalOwner(effect);
           await assertApprovedObservationPhase(context);
         };
-  const callbacks: Callbacks = {
+  return {
     assertApprovedScope,
+    ...(assertApprovedOwner === undefined ? {} : { assertApprovedOwner }),
     async readCurrentOwnerNativeStore(context, binding) {
       return await readVerifiedOwnerNativeStore(
         {
@@ -426,10 +419,6 @@ const createAuthority = (
       );
     },
   };
-  if (assertApprovedOwner !== undefined) {
-    callbacks.assertApprovedOwner = assertApprovedOwner;
-  }
-  return callbacks;
 };
 
 /** Construct only inside the existing leased resources worker; no request selects this authority. */

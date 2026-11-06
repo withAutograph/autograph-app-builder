@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/sort-keys, eslint/consistent-type-definitions, eslint/require-await, eslint/object-shorthand, eslint/func-names, eslint/curly, eslint/no-await-in-loop, unicorn/no-useless-undefined, unicorn/no-useless-spread, typescript/no-non-null-assertion, typescript/strict-boolean-expressions, typescript/no-unsafe-type-assertion, typescript/no-unnecessary-type-assertion, anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-conditional-empty-object-spread, anti-slop/require-safety-comment-for-type-assertion -- Synthetic SDK fakes use minimal opaque fixtures to exercise the real protocol boundary without provider calls. */
 import { createHash } from "node:crypto";
 import {
   receipt as sourceReceipt,
@@ -122,6 +123,7 @@ const fixtureStartupFact = (
   failure === undefined
     ? { kind: "worker_started", auth_startup: advisory }
     : { kind: "worker_failed", failure_code: failure.code, auth_startup: failure.metadata };
+/* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity -- One owned SDK fixture covers the closed installer and guard-only protocol variants. */
 const makeFixture = (
   options: {
     access?: boolean;

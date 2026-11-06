@@ -6,25 +6,27 @@ import nodePath from "node:path";
 import { createServer, request } from "node:http";
 import type { IncomingHttpHeaders, Server } from "node:http";
 import { connect } from "node:net";
-import type { Socket } from "node:net";
-import { z } from "zod";
+import type { AddressInfo, Socket } from "node:net";
 
 import { describe, expect, it } from "vitest";
 import { blockCrossSiteDEV } from "next/dist/server/lib/router-utils/block-cross-site-dev";
 
 import { createWorkingPreviewAccess } from "./working-preview-access";
 
-const listen = async (server: Server): Promise<number> =>
-  await new Promise<number>((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      const address = z.object({ port: z.number().int().positive() }).parse(server.address());
-      resolve(address.port);
-    });
-  });
+const listen = async (server: Server): Promise<number> => {
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  return (server.address() as AddressInfo).port;
+};
 
 const close = async (server: Server): Promise<void> => {
-  server.close();
-  await once(server, "close");
+  // oxlint-disable-next-line promise/avoid-new -- Adapt the Node server close callback.
+  await new Promise((resolve, reject) => {
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Node close has a callback API.
+    server.close((error) => {
+      error ? reject(error) : resolve();
+    });
+  });
 };
 
 const unusedPort = async (): Promise<number> => {
@@ -40,6 +42,7 @@ const call = async (
   headers: IncomingHttpHeaders = {},
   method = "GET",
 ) =>
+  // oxlint-disable-next-line promise/avoid-new -- Collect an actual Node HTTP response.
   await new Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>(
     (resolve, reject) => {
       const outgoing = request(
@@ -101,6 +104,7 @@ const withGateway = async (
   const configuredPort = observedPortPath === undefined ? appPort : await unusedPort();
   let port = await unusedPort();
   while (port === configuredPort) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Reserve a distinct gateway port.
     port = await unusedPort();
   }
   const access = createWorkingPreviewAccess({
@@ -110,10 +114,7 @@ const withGateway = async (
     gatewayPort: port,
     landingPath,
     observedPortPath,
-    origin:
-      configurationPath !== undefined && configurationPath !== ""
-        ? "https://pending.invalid"
-        : "https://preview.example",
+    origin: configurationPath ? "https://pending.invalid" : "https://preview.example",
   });
   const child = spawn(
     process.execPath,
@@ -360,17 +361,8 @@ const openUpgrade = async (
 const untilText = async (socket: Socket, expected: string) => {
   let text = "";
   while (!text.includes(expected)) {
-    const chunk: Buffer = await new Promise((resolve) => {
-      socket.once("data", (data: Buffer) => {
-        resolve(data);
-      });
-      socket.once("error", () => {
-        resolve(Buffer.alloc(0));
-      });
-      setTimeout(() => {
-        resolve(Buffer.alloc(0));
-      }, 3000);
-    });
+    // oxlint-disable-next-line no-await-in-loop -- Read consecutive chunks from one socket.
+    const [chunk] = await once(socket, "data", { signal: AbortSignal.timeout(3000) });
     text += chunk.toString();
   }
   return text;
@@ -391,8 +383,10 @@ describe("working preview WebSocket upgrade", () => {
         { cookie },
       ];
       for (const headers of attempts) {
+        // oxlint-disable-next-line no-await-in-loop -- Exercise isolated rejected handshakes sequentially.
         const socket = await openUpgrade(port, headers);
         try {
+          // oxlint-disable-next-line no-await-in-loop -- Read the current rejected handshake.
           expect(await untilText(socket, "403")).toContain("403");
         } finally {
           socket.destroy();
@@ -407,17 +401,13 @@ describe("working preview WebSocket upgrade", () => {
       await withGateway(
         async ({ app, port, launch, shutdown }) => {
           let observed: IncomingHttpHeaders | undefined;
-          let peerClosed = false;
-          const peerClosedWaiter = Promise.withResolvers<void>();
+          const peerClosed = Promise.withResolvers<null>();
           app.on("upgrade", (incoming, socket, head) => {
             observed = incoming.headers;
             socket.on("close", () => {
-              peerClosed = true;
-              peerClosedWaiter.resolve();
+              peerClosed.resolve(null);
             });
-            socket.on("end", () => {
-              socket.destroy();
-            });
+            socket.on("end", () => socket.destroy());
             socket.on("error", () => {});
             socket.write(
               "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSet-Cookie: __Host-autograph-preview=forged\r\n\r\nupstream-head",
@@ -425,9 +415,7 @@ describe("working preview WebSocket upgrade", () => {
             if (head.length) {
               socket.write(head);
             }
-            socket.on("data", (chunk) => {
-              socket.write(chunk);
-            });
+            socket.on("data", (chunk) => socket.write(chunk));
           });
           const entry = await call(port, launch);
           const [cookie] = (entry.headers["set-cookie"]?.[0] ?? "").split(";");
@@ -461,9 +449,7 @@ describe("working preview WebSocket upgrade", () => {
               shutdown();
             }
             await closed;
-            if (!peerClosed) {
-              await peerClosedWaiter.promise;
-            }
+            await peerClosed.promise;
           } finally {
             socket.destroy();
           }
@@ -482,9 +468,7 @@ it.each(["/_next/hmr", "/apps/builder/_next/hmr"])(
       app.on("upgrade", (incoming, socket) => {
         origins.push(incoming.headers.origin);
         socket.on("error", () => {});
-        socket.on("end", () => {
-          socket.destroy();
-        });
+        socket.on("end", () => socket.destroy());
         if (blockCrossSiteDEV(incoming, socket, undefined, "0.0.0.0")) {
           return;
         }

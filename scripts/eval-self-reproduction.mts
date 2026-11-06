@@ -252,6 +252,7 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
           side,
         })),
     );
+    // oxlint-disable-next-line eslint/no-use-before-define -- artifact writer is initialized before runtime execution
     await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
     return;
   }
@@ -291,9 +292,11 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
       outputRoot: output,
     });
     trustedFrameworkReceipts = framework.receipts;
+    // oxlint-disable-next-line eslint/no-use-before-define -- writer is initialized before runtime execution
     await jsonFile("trusted-framework-receipts.json", trustedFrameworkReceipts);
   } finally {
     await browser.close();
+    // oxlint-disable-next-line eslint/no-use-before-define -- artifact writer is initialized before runtime execution
     await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
   }
 };
@@ -686,7 +689,7 @@ const runtimeObservations = (existingRequirementIds: ReadonlySet<string>): Obser
     return candidateRuntimeFailureObservations({
       existingRequirementIds,
       receipt: candidateRuntime,
-    });
+    }) as Observation[];
   }
   // Readiness and a guessed /docs route are diagnostics, not workflow evidence.
   // Only the evaluator adapter that activates the actual controls can assess docs.

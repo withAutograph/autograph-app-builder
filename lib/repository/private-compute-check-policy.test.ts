@@ -66,7 +66,7 @@ const fixture = async (content = LEGACY_PRIVATE_COMPUTE_CHECK_TASK, mode = 0o755
   await writeFile(file, content, { mode });
   const calls: string[] = [];
   const sandbox = {
-    run: (input: { command: string; workingDirectory?: string }) => {
+    run: async (input: { command: string; workingDirectory?: string }) => {
       calls.push(input.command);
       expect(input.workingDirectory).toBe("/workspace/repository");
       try {
@@ -159,7 +159,7 @@ describe("reviewed private check task", () => {
       applyPrivateComputeCheckPolicy({
         applyRoot: "/workspace/repository",
         profile: profile(),
-        sandbox: { run: () => ({ exitCode: 0, stderr: "", stdout }) },
+        sandbox: { run: async () => ({ exitCode: 0, stderr: "", stdout }) },
       }),
     ).rejects.toThrow("readback");
   });
@@ -169,7 +169,7 @@ describe("reviewed private check task", () => {
         applyRoot: "/workspace/repository",
         profile: profile(),
         sandbox: {
-          run: () => {
+          run: async () => {
             throw new Error("owner cancelled");
           },
         },
@@ -184,7 +184,7 @@ describe("reviewed private check task", () => {
       applyRoot: "/workspace/repository",
       profile: profile(),
       sandbox: {
-        run: (options: { abortSignal?: AbortSignal }) => {
+        run: async (options: { abortSignal?: AbortSignal }) => {
           calls += 1;
           expect(options.abortSignal).toBe(controller.signal);
           controller.abort(new Error("cancelled during install"));

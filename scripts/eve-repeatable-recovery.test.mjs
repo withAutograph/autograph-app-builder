@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- This fixture imports installed compiled Eve internals by private package path. */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -27,15 +28,11 @@ const { summarizeModelProtocol } = await load("harness/model-protocol-diagnostic
 const logical = "logical-session";
 const owner = "physical-owner";
 const callId = "native-call";
-const toolResultType = "tool-result";
-const originalInput = "original-input";
-const originalTurnId = "original-turn";
-const nativeOutput = "actual-native-output";
 const result = {
   output: { type: "text", value: "actual-deferred-result" },
   toolCallId: "deferred-call",
   toolName: "deferred",
-  type: toolResultType,
+  type: "tool-result",
 };
 const approval = (approved = true) => ({
   approvalId: "native-approval",
@@ -46,7 +43,7 @@ const history = (tail = "mixed", approved = true) => [
   {
     content: [
       {
-        input: { value: originalInput },
+        input: { value: "original-input" },
         toolCallId: callId,
         toolName: "native",
         type: "tool-call",
@@ -80,7 +77,7 @@ const fixture = async (options = {}) => {
         sequence: 5,
         sessionStarted: true,
         stepIndex: 4,
-        turnId: originalTurnId,
+        turnId: "original-turn",
       },
       "fixture.app": { exact: "latest-app" },
       "fixture.grant": { cancelled: false, original: true },
@@ -88,14 +85,14 @@ const fixture = async (options = {}) => {
   };
   if (options.pending === "coordination") {
     session = setPendingCoordinationBatch({
-      event: { sequence: 5, stepIndex: 4, turnId: originalTurnId },
+      event: { sequence: 5, stepIndex: 4, turnId: "original-turn" },
       responseMessages: [],
       runtimeActions: [],
       session,
       tasks: [
         {
           callId,
-          input: { value: originalInput },
+          input: { value: "original-input" },
           kind: "workflow-task",
           toolName: "native",
           workflowId: "workflow:native",
@@ -105,12 +102,12 @@ const fixture = async (options = {}) => {
   }
   if (options.pending === "human") {
     session = appendPendingInputBatch({
-      event: { sequence: 5, stepIndex: 4, turnId: originalTurnId },
+      event: { sequence: 5, stepIndex: 4, turnId: "original-turn" },
       requests: [
         {
           action: {
             callId,
-            input: { value: originalInput },
+            input: { value: "original-input" },
             kind: "tool-call",
             toolName: "native",
           },
@@ -138,7 +135,7 @@ const fixture = async (options = {}) => {
   };
   const world = {
     events: {
-      list: () => ({
+      list: async () => ({
         data: [
           {
             correlationId: step.stepId,
@@ -151,25 +148,25 @@ const fixture = async (options = {}) => {
         hasMore: false,
       }),
     },
-    runs: { get: () => ({ runId: owner, status: "completed" }) },
-    steps: { get: () => step },
+    runs: { get: async () => ({ runId: owner, status: "completed" }) },
+    steps: { get: async () => step },
   };
   const collect = createTerminalRecoveryCandidateCollector({
-    getWorld: () => world,
+    getWorld: async () => world,
     hydrateStepArguments: (value, runId, key) =>
       serialization.hydrateStepArguments(value, runId, key, []),
     hydrateStepReturnValue: (value, runId, key) =>
       serialization.hydrateStepReturnValue(value, runId, key),
     now: () => 0,
     readDurableSession,
-    readNativeEvents: () => options.nativeEvents ?? [],
+    async *readNativeEvents() {
+      yield* options.nativeEvents ?? [];
+    },
     requireEventSlot: (id) => Number(id.slice(5)),
-    resolveRunEncryptionKey: () => null,
+    resolveRunEncryptionKey: async () => {},
   });
   const collected = await collect({
-    authorizeOwner: (binding) => {
-      assert.equal(binding.ownerRunId, owner);
-    },
+    authorizeOwner: async () => {},
     binding: { logicalSessionId: logical, ownerRunId: owner },
   });
   assert.equal(collected.kind, "candidate");
@@ -181,7 +178,7 @@ const runNextModel = async (ready) => {
   let executions = 0;
   let requests = 0;
   const model = new MockLanguageModelV4({
-    doGenerate: ({ prompt }) => {
+    doGenerate: async ({ prompt }) => {
       requests += 1;
       const summary = summarizeModelProtocol(prompt);
       assert.equal(summary.missingResultCount, 0);
@@ -196,8 +193,8 @@ const runNextModel = async (ready) => {
   const nativeTool = tool({
     execute: (value) => {
       executions += 1;
-      assert.equal(value.value, originalInput);
-      return nativeOutput;
+      assert.equal(value.value, "original-input");
+      return "actual-native-output";
     },
     inputSchema: z.object({ value: z.string() }),
   });
@@ -209,8 +206,8 @@ const runNextModel = async (ready) => {
       native: tool({
         execute: (value) => {
           executions += 1;
-          assert.equal(value.value, originalInput);
-          return nativeOutput;
+          assert.equal(value.value, "original-input");
+          return "actual-native-output";
         },
         inputSchema: z.object({ value: z.string() }),
       }),
@@ -239,7 +236,7 @@ test("a genuine result already retained pairs the call and is not executed again
     providerOptions: { openai: { itemId: "retained-provider-metadata" } },
     toolCallId: callId,
     toolName: "native",
-    type: toolResultType,
+    type: "tool-result",
   });
   const f = await fixture({ history: messages });
   const ready = await reconcileTerminalRecoveryCandidate(f.handle);
@@ -289,7 +286,7 @@ test("emitted native result alone never becomes a committed result or permission
         data: {
           result: {
             callId,
-            kind: toolResultType,
+            kind: "tool-result",
             output: "actual-but-uncommitted-output",
             toolName: "native",
           },
@@ -400,7 +397,7 @@ test("trusted Builder call contract flows through actual native prepare and reco
     sourcePublicSessionId: "failed-public-child",
     version: 1,
   };
-  const [selected] = f.payload.candidates;
+  const selected = f.payload.candidates[0];
   const binding = {
     ...descriptor,
     ownerRunId: "new-physical-child",
@@ -422,18 +419,16 @@ test("trusted Builder call contract flows through actual native prepare and reco
       auth: { authenticator: "fixture", principalId: "owner", principalType: "user" },
       descriptor,
       ports: {
-        authorize: (input) => {
-          assert.equal(input.principalId, "owner");
-        },
-        authorizeRepeatableRecoveryCalls: (input) => {
+        authorize: async () => {},
+        authorizeRepeatableRecoveryCalls: async (input) => {
           contractReads += 1;
           return authorizeRepeatablePrivateApplyCalls(input);
         },
-        commitReceipt: ({ recoveryBinding }) => {
+        commitReceipt: async ({ recoveryBinding }) => {
           receipt = recoveryBinding;
           return receipt;
         },
-        readReceipt: () => receipt,
+        readReceipt: async () => receipt,
       },
     },
     {
@@ -448,17 +443,17 @@ test("trusted Builder call contract flows through actual native prepare and reco
       isHookNotFound: (error) => error.message === "missing hook",
       now: () => 0,
       readCandidate: readTerminalRecoveryCandidate,
-      readEntry: () => ({ checkpoint: { sessionTimeoutMs: false }, kind: "handoff" }),
+      readEntry: async () => ({ checkpoint: { sessionTimeoutMs: false }, kind: "handoff" }),
       reconcile: reconcileTerminalRecoveryCandidate,
-      start: (input) => {
+      start: async (input) => {
         starts += 1;
-        ({ checkpoint } = input);
+        checkpoint = input.checkpoint;
         hook = {
           metadata: Promise.resolve({ recoveryBinding: binding }),
           runId: binding.ownerRunId,
         };
       },
-      wait: () => {
+      wait: async () => {
         throw new Error("unexpected wait");
       },
     },

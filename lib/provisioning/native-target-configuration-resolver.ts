@@ -18,6 +18,7 @@ import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 import { resolveNativeTargetResourceProfile } from "./native-target-resource-profile";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- The existing Drizzle stores share the complete database schema.
 import * as databaseSchema from "../db/schema";
 import { hostedRuntimePostgresOptions } from "../db/postgres-connection-policy";
 import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
@@ -59,9 +60,6 @@ import {
 import { readNeonAuthorizationConfiguration } from "./hosted-operator-neon-authorization";
 import type { HostedOperatorRequestDependencyLoader } from "./hosted-operator-native";
 import { reportHostedOperatorNativeFailure } from "./hosted-operator-native-diagnostic";
-
-const SINGLE_PROJECT_SERVICES_COMPOSITION = "single-project-services";
-const RESOURCE_MISMATCH = "resource_mismatch";
 
 // Identity projection only: the existing protected handler validates the complete operation.
 // Onboarding/consent actions have their own authority and do not need a configured app yet.
@@ -213,20 +211,15 @@ export const resolveOwnedStandardRuntimeConfiguration = async (input: {
   ) {
     throw new HostedOperatorError("resource_mismatch");
   }
-  const runtimeConfigurationInput: Parameters<
-    typeof assembleStandardBuilderRuntimeConfiguration
-  >[0] = {
+  const result = assembleStandardBuilderRuntimeConfiguration({
     appId: input.context.target.appId,
     authority: input.context.authority,
+    base: input.configuration,
     captured,
     destination,
     environment: input.environment,
-  };
-  runtimeConfigurationInput.base = input.configuration;
-  if (verifiedPublicOrigin !== undefined) {
-    runtimeConfigurationInput.verifiedPublicOrigin = verifiedPublicOrigin;
-  }
-  const result = assembleStandardBuilderRuntimeConfiguration(runtimeConfigurationInput);
+    ...(verifiedPublicOrigin === undefined ? {} : { verifiedPublicOrigin }),
+  });
   await input.resources.owner.assertCanonicalAppOwner(input.context);
   if (
     (await input.resources.readStandardOriginSelection?.(input.context, destination)) !==
@@ -244,6 +237,7 @@ export const createNativeTargetConfigurationResolver =
     openResources: () => Promise<NativeTargetConfigurationResources>;
     environment?: Readonly<Record<string, string | undefined>>;
   }) =>
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Preserve frozen legacy dispatch branches and ordered current-owner checks while adding the generic normal path.
   async (request: Request): Promise<HostedOperatorSourceConfiguration> => {
     let stage: Parameters<typeof reportHostedOperatorNativeFailure>[0] = "resolver_configuration";
     try {
@@ -311,7 +305,7 @@ export const createNativeTargetConfigurationResolver =
           await resources.owner.assertCanonicalAppOwner(context);
           return configuration;
         }
-        if (input.configuration.composition === SINGLE_PROJECT_SERVICES_COMPOSITION) {
+        if (input.configuration.composition === "single-project-services") {
           await resources.owner.verifyWorkload(request);
           await resources.owner.assertCanonicalAppOwner({
             authority: ownerContext.authority,
@@ -338,12 +332,12 @@ export const createNativeTargetConfigurationResolver =
         }
         // Public delivery cannot borrow a historical dedicated Preview registration.
         if (isPublicReleaseRequest(parsed.data)) {
-          if (input.configuration.composition !== SINGLE_PROJECT_SERVICES_COMPOSITION) {
+          if (input.configuration.composition !== "single-project-services") {
             throw new HostedOperatorError("builder_destination_configuration_required");
           }
           return structuredClone(input.configuration);
         }
-        if (input.configuration.composition === SINGLE_PROJECT_SERVICES_COMPOSITION) {
+        if (input.configuration.composition === "single-project-services") {
           await resources.owner.verifyWorkload(request);
           await resources.owner.assertCanonicalAppOwner({
             authority: ownerContext.authority,
@@ -370,7 +364,7 @@ export const createNativeTargetConfigurationResolver =
         }
         // Public delivery cannot borrow a historical dedicated Preview registration.
         if (isPublicReleaseRequest(parsed.data)) {
-          if (input.configuration.composition !== SINGLE_PROJECT_SERVICES_COMPOSITION) {
+          if (input.configuration.composition !== "single-project-services") {
             throw new HostedOperatorError("builder_destination_configuration_required");
           }
           return structuredClone(input.configuration);
@@ -569,34 +563,31 @@ export const openNativeTargetConfigurationResources = async (
           authority: context.authority,
           scope: choiceScope,
         });
-        const publicOriginInput: Parameters<typeof readStandardBuilderPublicOrigin>[0] = {
+        return await readStandardBuilderPublicOrigin({
+          destination,
+          ...(selectedPublicOrigin === undefined ? {} : { selectedPublicOrigin }),
           assertCurrent: async () => {
             if (
               (await choiceStore.read({ authority: context.authority, scope: choiceScope })) !==
               selectedPublicOrigin
             ) {
-              throw new HostedOperatorError(RESOURCE_MISMATCH);
+              throw new HostedOperatorError("resource_mismatch");
             }
             const current = await readStandardBuilderDestination(destinationDependencies, context, {
               requirePublicAppConfiguration: true,
             });
             if (!isDeepStrictEqual(current, destination)) {
-              throw new HostedOperatorError(RESOURCE_MISMATCH);
+              throw new HostedOperatorError("resource_mismatch");
             }
           },
-          destination,
-        };
-        publicOriginInput.readCredential = async () =>
-          await readActiveVercelInstallationToken({
-            authority: context.authority,
-            config: tokenKeyring,
-            database,
-            installationId: destination.installationId,
-          });
-        if (selectedPublicOrigin !== undefined) {
-          publicOriginInput.selectedPublicOrigin = selectedPublicOrigin;
-        }
-        return await readStandardBuilderPublicOrigin(publicOriginInput);
+          readCredential: async () =>
+            await readActiveVercelInstallationToken({
+              authority: context.authority,
+              config: tokenKeyring,
+              database,
+              installationId: destination.installationId,
+            }),
+        });
       },
       registry: createPostgresNativeTargetOnboardingStore(database),
     };
@@ -623,9 +614,7 @@ export const createNativeTargetRequestDependencies =
     ) {
       try {
         return {
-          close: async () => {
-            await Promise.resolve();
-          },
+          close: async () => {},
           dependencies: composeHostedOperatorAuthorizationDependencies(
             readNeonAuthorizationConfiguration(environment),
           ),

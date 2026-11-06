@@ -43,6 +43,7 @@ type ClonedTemplateReceipt = Extract<SourceReceipt, { version: 4 }>;
 
 type TemplateAcquisitionFailureStage = "reader" | "sandbox_clone" | "workspace_record";
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function acquisitionStage<T>(
   stage: TemplateAcquisitionFailureStage,
   operation: () => Promise<T>,
@@ -60,25 +61,10 @@ async function acquisitionStage<T>(
   }
 }
 
-function receiptReadinessDigest(input: { sourceSha: string; sourceTree: string }) {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function receiptReadinessDigest(input: Record<string, unknown>) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
-
-const canonicalAcquisitionFailure = () =>
-  new Error(
-    "Fresh canonical source must match the observed origin/main commit and tree. Preserve this checkout and select a new source acquisition; no saved receipt was changed.",
-  );
-
-const matchesCanonicalAcquisitionProof = (proof: {
-  sourceSha: string;
-  sourceTree: string;
-  mainSha: string;
-  mainTree: string;
-}) => proof.sourceSha === proof.mainSha && proof.sourceTree === proof.mainTree;
-
-const isSandboxSession = (
-  value: SandboxSession | (() => Promise<SandboxSession>),
-): value is SandboxSession => typeof value !== "function";
 
 /** New acquisitions only: independently bind the actual checkout to its cloned canonical main ref. */
 export const canonicalMainAcquisitionProofProgram = (root = SANDBOX_WORKSPACE) => `
@@ -107,12 +93,16 @@ const assertNewCanonicalMain = async (
     command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 node -e ${quoteAcquisitionProgram(canonicalMainAcquisitionProofProgram())}`,
     workingDirectory: "/workspace",
   });
-  if (result.exitCode !== 0) throw canonicalAcquisitionFailure();
+  const fail = () =>
+    new Error(
+      "Fresh canonical source must match the observed origin/main commit and tree. Preserve this checkout and select a new source acquisition; no saved receipt was changed.",
+    );
+  if (result.exitCode !== 0) throw fail();
   let raw: unknown;
   try {
     raw = JSON.parse(result.stdout);
   } catch {
-    throw canonicalAcquisitionFailure();
+    throw fail();
   }
   const proof = z
     .strictObject({
@@ -127,9 +117,10 @@ const assertNewCanonicalMain = async (
     !proof.success ||
     proof.data.sourceSha !== snapshot.sourceSha ||
     proof.data.sourceTree !== snapshot.sourceTree ||
-    !matchesCanonicalAcquisitionProof(proof.data)
+    proof.data.sourceSha !== proof.data.mainSha ||
+    proof.data.sourceTree !== proof.data.mainTree
   )
-    throw canonicalAcquisitionFailure();
+    throw fail();
 };
 
 /**
@@ -137,6 +128,7 @@ const assertNewCanonicalMain = async (
  * session workspace. Its closed inspection snapshot produces the V4 receipt
  * and the same checkout is sealed for later target commands.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function acquireCanonicalArrustedTemplate(input: {
   sandbox: SandboxSession | (() => Promise<SandboxSession>);
   sessionId?: string;
@@ -145,7 +137,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
 }): Promise<SourceReceipt> {
   const reader = input.reader ?? deploymentArrustedTemplateReader();
   const access = await acquisitionStage("reader", async () => await reader.acquire());
-  if (!isSandboxSession(input.sandbox)) {
+  if (typeof input.sandbox === "function") {
     if (input.sessionId === undefined) {
       throw new Error("The App Builder session is unavailable.");
     }
@@ -154,7 +146,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
       source: { revision: "main", token: access.token, url: ARRUSTED_TEMPLATE_REPOSITORY },
     });
   }
-  const sandbox = isSandboxSession(input.sandbox) ? input.sandbox : await input.sandbox();
+  const sandbox = typeof input.sandbox === "function" ? await input.sandbox() : input.sandbox;
   const snapshot = await acquisitionStage(
     "sandbox_clone",
     async () =>
@@ -198,6 +190,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
 }
 
 /** Re-inspect the already-cloned workspace without fetching or cloning. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectCanonicalArrustedSandboxWorkspace(input: {
   sandbox: SandboxSession;
   receipt: ClonedTemplateReceipt;
@@ -214,30 +207,28 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
       cause: error,
     });
   }
-  const hasCanonicalReceiptIdentity =
-    receipt.sourcePath === SANDBOX_WORKSPACE &&
-    receipt.provenance.repository === ARRUSTED_TEMPLATE_REPOSITORY &&
-    receipt.provenance.ref === ARRUSTED_TEMPLATE_REF;
-  const hasValidReceiptDigests =
-    SHA.test(receipt.sourceSha) &&
-    SHA.test(receipt.sourceTree) &&
-    DIGEST.test(receipt.eligibilityDigest) &&
-    DIGEST.test(receipt.provenance.readinessDigest);
-  if (!hasCanonicalReceiptIdentity || !hasValidReceiptDigests) {
+  if (
+    receipt.sourcePath !== SANDBOX_WORKSPACE ||
+    receipt.provenance.repository !== ARRUSTED_TEMPLATE_REPOSITORY ||
+    receipt.provenance.ref !== ARRUSTED_TEMPLATE_REF ||
+    !SHA.test(receipt.sourceSha) ||
+    !SHA.test(receipt.sourceTree) ||
+    !DIGEST.test(receipt.eligibilityDigest) ||
+    !DIGEST.test(receipt.provenance.readinessDigest)
+  ) {
     throw new Error("Canonical Arrusted clone receipt is invalid.");
   }
   const observed = await readPreparedSandboxWorkspaceRecord(input.sandbox);
   if (observed === undefined) {
     throw new Error("The canonical Arrusted workspace is missing.");
   }
-  const matchesWorkspaceIdentity =
-    observed.workspaceId === getBuilderSandboxId(input.sandbox) &&
-    observed.sourcePath === SANDBOX_WORKSPACE;
-  const matchesSourceSnapshot =
-    observed.sourceSha === receipt.sourceSha &&
-    observed.sourceTree === receipt.sourceTree &&
-    observed.eligibilityDigest === receipt.eligibilityDigest;
-  if (!matchesWorkspaceIdentity || !matchesSourceSnapshot) {
+  if (
+    observed.workspaceId !== getBuilderSandboxId(input.sandbox) ||
+    observed.sourcePath !== SANDBOX_WORKSPACE ||
+    observed.sourceSha !== receipt.sourceSha ||
+    observed.sourceTree !== receipt.sourceTree ||
+    observed.eligibilityDigest !== receipt.eligibilityDigest
+  ) {
     throw new Error("The canonical Arrusted workspace drifted.");
   }
   return observed;
@@ -248,6 +239,7 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
  * workspace as current planning input; hosted release adapters retain their
  * closed receipt checks until the moving-source policy reaches those paths.
  */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectSourceBoundSandboxWorkspace(input: {
   sandbox: SandboxSession;
   receipt: SourceReceipt;
@@ -287,30 +279,27 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
       throw new Error("The prepared source workspace is missing.");
     }
     observed = status.workspace;
-    const workspaceMatchesReceipt =
-      observed.workspaceId === getBuilderSandboxId(input.sandbox) &&
-      observed.sourcePath === receipt.sourcePath &&
-      observed.sourceSha === receipt.sourceSha &&
-      observed.sourceTree === receipt.sourceTree;
-    const expectedWorkspaceMatches =
-      input.expectedWorkspace === undefined ||
-      samePreparedWorkspaceSourceContext(observed, input.expectedWorkspace);
-    if (!workspaceMatchesReceipt || !expectedWorkspaceMatches) {
+    if (
+      observed.workspaceId !== getBuilderSandboxId(input.sandbox) ||
+      observed.sourcePath !== receipt.sourcePath ||
+      observed.sourceSha !== receipt.sourceSha ||
+      observed.sourceTree !== receipt.sourceTree ||
+      (input.expectedWorkspace !== undefined &&
+        !samePreparedWorkspaceSourceContext(observed, input.expectedWorkspace))
+    ) {
       throw new Error("The prepared workspace no longer matches its durable source receipt.");
     }
     return observed;
   }
-  const workspaceMatchesReceipt =
-    observed.workspaceId === getBuilderSandboxId(input.sandbox) &&
-    observed.sourcePath === receipt.sourcePath &&
-    observed.sourceSha === receipt.sourceSha;
-  const workspaceMatchesReceiptTree =
-    observed.sourceTree === receipt.sourceTree &&
-    observed.eligibilityDigest === receipt.eligibilityDigest;
-  const expectedWorkspaceMatches =
-    input.expectedWorkspace === undefined ||
-    JSON.stringify(observed) === JSON.stringify(input.expectedWorkspace);
-  if (!workspaceMatchesReceipt || !workspaceMatchesReceiptTree || !expectedWorkspaceMatches) {
+  if (
+    observed.workspaceId !== getBuilderSandboxId(input.sandbox) ||
+    observed.sourcePath !== receipt.sourcePath ||
+    observed.sourceSha !== receipt.sourceSha ||
+    observed.sourceTree !== receipt.sourceTree ||
+    observed.eligibilityDigest !== receipt.eligibilityDigest ||
+    (input.expectedWorkspace !== undefined &&
+      JSON.stringify(observed) !== JSON.stringify(input.expectedWorkspace))
+  ) {
     throw new Error("The prepared workspace no longer matches its durable source receipt.");
   }
   return observed;

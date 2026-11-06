@@ -3,7 +3,7 @@ import path from "node:path";
 
 const originIndex = process.argv.indexOf("--origin");
 const originValue = originIndex === -1 ? undefined : process.argv[originIndex + 1];
-if (originValue === undefined || originValue === "") {
+if (!originValue) {
   throw new Error("Usage: pnpm configure --origin https://agent.example.com");
 }
 const origin = new URL(originValue);
@@ -12,9 +12,7 @@ if (origin.protocol !== "https:" || origin.pathname !== "/") {
 }
 
 const manifestPath = path.resolve("mcp.json");
-const manifest: { mcpServers: Record<string, { url: string }> } = JSON.parse(
-  await readFile(manifestPath, "utf-8"),
-);
+const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
 manifest.mcpServers["app-builder"].url = `${origin.origin}/mcp`;
 await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`Configured MCP endpoint: ${origin.origin}/mcp`);

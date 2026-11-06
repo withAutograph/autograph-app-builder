@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-bitwise, eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Exact ordered Git streams and owner-only filesystem publication are deliberate. */
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import type { ChildProcess } from "node:child_process";
@@ -20,15 +21,9 @@ import { localSourceBaselineManifestSchema } from "./local-source-baseline-contr
 import type { LocalSourceBaselineManifest } from "./local-source-baseline-contract";
 import type { LocalOperatorArtifactAuthority } from "../provisioning/hosted-operator-artifact-store";
 
-const GIT_CONFIG_ENV = "/dev/null";
-const TEST_NODE_ENV = "test";
-const MANIFEST_FILE = "manifest.json";
-const GIT_EXECUTABLE = "/usr/bin/git";
-const GIT_HOOKS_DISABLED = "core.hooksPath=/dev/null";
-const SOURCE_GIT_DIRECTORY = "source.git";
-const RESTRICTED_PATH = "/usr/bin:/bin";
-
+// oxlint-disable-next-line promise/avoid-new -- Convert the concrete child-process close/error callbacks into one typed completion value.
 export const localBaselineProcessExit = async (child: ChildProcess): Promise<number> =>
+  // oxlint-disable-next-line promise/avoid-new -- Typed adaptation of native child-process lifecycle callbacks.
   await new Promise((resolve, reject) => {
     child.once("error", reject);
     child.once("close", (code) => {
@@ -47,17 +42,17 @@ const ensureDirectory = async (directory: string) => {
 
 export const localBaselineGit = (root: string, args: string[], input?: Uint8Array | string) =>
   execFileSync(
-    GIT_EXECUTABLE,
-    ["-c", GIT_HOOKS_DISABLED, "-c", "core.fsmonitor=false", "--git-dir", root, ...args],
+    "/usr/bin/git",
+    ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "--git-dir", root, ...args],
     {
       env: {
-        GIT_CONFIG_GLOBAL: GIT_CONFIG_ENV,
+        GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
         GIT_TERMINAL_PROMPT: "0",
         HOME: path.dirname(root),
-        NODE_ENV: TEST_NODE_ENV,
-        PATH: RESTRICTED_PATH,
+        NODE_ENV: "test",
+        PATH: "/usr/bin:/bin",
       },
       input,
       maxBuffer: 32 * 1024 * 1024,
@@ -72,66 +67,8 @@ const ownedDirectory = async (root: string, uid: number) => {
   }
 };
 
-const consumeBlobBuffer = (
-  buffer: Buffer,
-  remaining: number,
-  index: number,
-  entries: { mode: string; oid: string; path: string }[],
-  hash: ReturnType<typeof createHash>,
-  files: { mode: string; objectId: string; path: string; sha256: string }[],
-) => {
-  let pending = buffer;
-  let bytesRemaining = remaining;
-  let entryIndex = index;
-  let currentHash = hash;
-  while (pending.length > 0) {
-    if (bytesRemaining === -1) {
-      const newline = pending.indexOf(10);
-      if (newline === -1) {
-        bytesRemaining = -2;
-      } else {
-        const header = pending.subarray(0, newline).toString("utf-8").split(" ");
-        if (
-          header[0] !== entries[entryIndex]?.oid ||
-          header[1] !== "blob" ||
-          !/^\d+$/u.test(header[2] ?? "")
-        ) {
-          throw new Error("source_baseline_blob_unavailable");
-        }
-        bytesRemaining = Number(header[2]);
-        currentHash = createHash("sha256");
-        pending = pending.subarray(newline + 1);
-      }
-    }
-    const take = bytesRemaining < 0 ? 0 : Math.min(Math.max(bytesRemaining, 0), pending.length);
-    currentHash.update(pending.subarray(0, take));
-    bytesRemaining -= take;
-    pending = pending.subarray(take);
-    if (bytesRemaining !== 0 || pending.length === 0) {
-      break;
-    }
-    if (pending[0] !== 10) {
-      throw new Error("source_baseline_blob_stream_invalid");
-    }
-    pending = pending.subarray(1);
-    const entry = entries[entryIndex];
-    if (entry === undefined) {
-      throw new Error("source_baseline_blob_stream_invalid");
-    }
-    const digest = currentHash.digest("hex");
-    files.push({
-      mode: entry.mode ?? "",
-      objectId: digest.slice(0, 40),
-      path: entry.path ?? "",
-      sha256: digest,
-    });
-    entryIndex += 1;
-    bytesRemaining = -1;
-  }
-  return { buffer: pending, hash: currentHash, index: entryIndex, remaining: bytesRemaining };
-};
-
 /** Hash actual committed blobs in the existing development inventory format. No source executes. */
+// oxlint-disable-next-line sonarjs/cognitive-complexity -- One ordered Git blob framing state machine validates headers, lengths and delimiters before accepting each digest.
 export const committedDevelopmentInventory = async (gitRoot: string, sourceSha: string) => {
   const entries = localBaselineGit(gitRoot, ["ls-tree", "-rz", "--full-tree", sourceSha])
     .toString("utf-8")
@@ -156,13 +93,13 @@ export const committedDevelopmentInventory = async (gitRoot: string, sourceSha: 
       }
       return 0;
     });
-  const child = spawn(GIT_EXECUTABLE, ["--git-dir", gitRoot, "cat-file", "--batch"], {
+  const child = spawn("/usr/bin/git", ["--git-dir", gitRoot, "cat-file", "--batch"], {
     env: {
-      GIT_CONFIG_GLOBAL: GIT_CONFIG_ENV,
+      GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
-      NODE_ENV: TEST_NODE_ENV,
-      PATH: RESTRICTED_PATH,
+      NODE_ENV: "test",
+      PATH: "/usr/bin:/bin",
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -176,14 +113,49 @@ export const committedDevelopmentInventory = async (gitRoot: string, sourceSha: 
   const files: { mode: string; objectId: string; path: string; sha256: string }[] = [];
   for await (const data of child.stdout) {
     buffer = Buffer.concat([buffer, Buffer.from(data)]);
-    ({ buffer, hash, index, remaining } = consumeBlobBuffer(
-      buffer,
-      remaining,
-      index,
-      entries,
-      hash,
-      files,
-    ));
+    while (buffer.length > 0) {
+      if (remaining === -1) {
+        const newline = buffer.indexOf(10);
+        if (newline === -1) {
+          break;
+        }
+        const header = buffer.subarray(0, newline).toString("utf-8").split(" ");
+        if (
+          header[0] !== entries[index]?.oid ||
+          header[1] !== "blob" ||
+          !/^\d+$/u.test(header[2] ?? "")
+        ) {
+          throw new Error("source_baseline_blob_unavailable");
+        }
+        remaining = Number(header[2]);
+        hash = createHash("sha256");
+        buffer = buffer.subarray(newline + 1);
+      }
+      const take = Math.min(remaining, buffer.length);
+      hash.update(buffer.subarray(0, take));
+      remaining -= take;
+      buffer = buffer.subarray(take);
+      if (remaining !== 0 || buffer.length === 0) {
+        break;
+      }
+      if (buffer[0] !== 10) {
+        throw new Error("source_baseline_blob_stream_invalid");
+      }
+      buffer = buffer.subarray(1);
+      const entry = entries[index];
+      if (entry === undefined) {
+        throw new Error("source_baseline_blob_stream_invalid");
+      }
+      const digest = hash.digest("hex");
+      files.push({
+        mode: entry.mode ?? "",
+        objectId: digest.slice(0, 40),
+        path: entry.path ?? "",
+        sha256: digest,
+      });
+      index += 1;
+      remaining = -1;
+    }
   }
   const code = await closed;
   if (code !== 0 || index !== entries.length || remaining !== -1 || buffer.length !== 0) {
@@ -222,7 +194,7 @@ const fsyncTree = async (root: string) => {
 const readOwnedManifest = async (root: string, uid: number) => {
   await ownedDirectory(root, uid);
   const handle = await open(
-    path.join(root, MANIFEST_FILE),
+    path.join(root, "manifest.json"),
     constants.O_RDONLY | constants.O_NOFOLLOW,
   );
   try {
@@ -237,7 +209,7 @@ const readOwnedManifest = async (root: string, uid: number) => {
 };
 const validateStored = async (root: string, manifest: LocalSourceBaselineManifest, uid: number) => {
   await ownedDirectory(root, uid);
-  await ownedDirectory(path.join(root, SOURCE_GIT_DIRECTORY), uid);
+  await ownedDirectory(path.join(root, "source.git"), uid);
   const stored = await readOwnedManifest(root, uid);
   if (
     stored.originalSourceSha !== manifest.originalSourceSha ||
@@ -247,7 +219,7 @@ const validateStored = async (root: string, manifest: LocalSourceBaselineManifes
   ) {
     throw new Error("source_baseline_conflict");
   }
-  const gitRoot = path.join(root, SOURCE_GIT_DIRECTORY);
+  const gitRoot = path.join(root, "source.git");
   if (
     localBaselineGit(gitRoot, ["rev-parse", "HEAD"]).toString().trim() !== manifest.sourceSha ||
     localBaselineGit(gitRoot, ["rev-parse", "HEAD^{tree}"]).toString().trim() !==
@@ -305,7 +277,7 @@ export const retainLocalSourceBaseline = async (input: {
     }
   }
   const temporary = await mkdtemp(path.join(parent, ".capture-"));
-  const gitRoot = path.join(temporary, SOURCE_GIT_DIRECTORY);
+  const gitRoot = path.join(temporary, "source.git");
   await mkdir(gitRoot, { mode: 0o700 });
   localBaselineGit(gitRoot, ["init", "--bare", "--quiet"]);
   await writeFile(
@@ -313,13 +285,13 @@ export const retainLocalSourceBaseline = async (input: {
     `${[...new Set([manifest.originalSourceSha, manifest.sourceSha])].join("\n")}\n`,
     { flag: "wx", mode: 0o600 },
   );
-  const child = spawn(GIT_EXECUTABLE, ["--git-dir", gitRoot, "index-pack", "--stdin", "--strict"], {
+  const child = spawn("/usr/bin/git", ["--git-dir", gitRoot, "index-pack", "--stdin", "--strict"], {
     env: {
-      GIT_CONFIG_GLOBAL: GIT_CONFIG_ENV,
+      GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
-      NODE_ENV: TEST_NODE_ENV,
-      PATH: RESTRICTED_PATH,
+      NODE_ENV: "test",
+      PATH: "/usr/bin:/bin",
     },
     stdio: ["pipe", "ignore", "pipe"],
   });
@@ -349,7 +321,7 @@ export const retainLocalSourceBaseline = async (input: {
   }
   localBaselineGit(gitRoot, ["update-ref", "refs/heads/source", manifest.sourceSha]);
   localBaselineGit(gitRoot, ["symbolic-ref", "HEAD", "refs/heads/source"]);
-  await writeFile(path.join(temporary, MANIFEST_FILE), `${JSON.stringify(manifest)}\n`, {
+  await writeFile(path.join(temporary, "manifest.json"), `${JSON.stringify(manifest)}\n`, {
     flag: "wx",
     mode: 0o600,
   });

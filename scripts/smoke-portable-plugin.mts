@@ -1,30 +1,37 @@
 import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
-import { z } from "zod";
-import { portableReleaseReceiptSchema } from "./portable-proof-artifact";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 import { sha256, TOOL_NAMES } from "./portable-release";
 
-const argument = (name: string): string => {
+const argument = (name: string) => {
   const index = process.argv.indexOf(name);
   if (index === -1) {
-    throw new Error(`Missing value for ${name}.`);
+    return;
   }
   const value = process.argv[index + 1];
-  if (value === undefined || value === "" || value.startsWith("--")) {
+  if (!value || value.startsWith("--")) {
     throw new Error(`Missing value for ${name}.`);
   }
   return value;
 };
 const releaseValue = argument("--release");
 const installValue = argument("--install-root");
+if (!releaseValue || !installValue) {
+  throw new Error("Usage: --release RELEASE_ROOT --install-root DIRECTORY");
+}
 const releaseRoot = path.resolve(releaseValue);
 const installRoot = path.resolve(installValue);
-const missingFileErrorSchema = z.object({ code: z.literal("ENOENT") });
-const receiptValue: unknown = JSON.parse(
-  await readFile(path.join(releaseRoot, "release-receipt.json"), "utf-8"),
-);
-const receipt = portableReleaseReceiptSchema.parse(receiptValue);
+const receipt = JSON.parse(await readFile(path.join(releaseRoot, "release-receipt.json"), "utf-8"));
+if (
+  receipt.format !== "autograph-portable-plugin-release-v3" ||
+  receipt.specification !== "1.0.0" ||
+  !/^[0-9a-f]{40}$/u.test(receipt.source?.sha ?? "") ||
+  !/^[0-9a-f]{40}$/u.test(receipt.source?.tree ?? "") ||
+  !Array.isArray(receipt.tools) ||
+  JSON.stringify(receipt.tools) !== JSON.stringify(TOOL_NAMES)
+) {
+  throw new Error("Portable release receipt was invalid.");
+}
 const archive = await readFile(path.join(releaseRoot, receipt.archive.name));
 if (sha256(archive) !== receipt.archive.sha256) {
   throw new Error("Portable archive digest did not match its receipt.");
@@ -35,21 +42,11 @@ const marketplaceArchive = await readFile(
 if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256) {
   throw new Error("Codex marketplace digest did not match its receipt.");
 }
-const discoveryValue: unknown = JSON.parse(
+const discovery = JSON.parse(
   await readFile(path.join(releaseRoot, "mock/tools-list.json"), "utf-8"),
 );
-const discoverySchema = z.object({
-  result: z.object({ tools: z.array(z.object({ name: z.string() })) }),
-});
-const discoveryResult = discoverySchema.safeParse(discoveryValue);
-if (!discoveryResult.success) {
-  throw new Error("Offline MCP discovery did not return the exact five tools.");
-}
-const discovered = discoveryResult.data.result.tools.map(({ name }) => name);
-if (
-  discovered.length !== TOOL_NAMES.length ||
-  discovered.some((name, index) => name !== TOOL_NAMES[index])
-) {
+const discovered = discovery.result?.tools?.map((tool: { name?: unknown }) => tool.name);
+if (JSON.stringify(discovered) !== JSON.stringify(TOOL_NAMES)) {
   throw new Error("Offline MCP discovery did not return the exact five tools.");
 }
 
@@ -64,19 +61,21 @@ await Promise.all(
         release: true,
         repositoryRoot: path.resolve("."),
       }),
-      ...Object.entries(receipt.coreFiles).map(async ([filePath, digest]) => {
-        const relativePath = filePath.replace(/^app-builder\//u, "");
-        const bytes = await readFile(path.join(pluginRoot, relativePath));
-        if (sha256(bytes) !== digest) {
-          throw new Error(`${client} installed bytes drifted at ${relativePath}.`);
-        }
-      }),
+      ...Object.entries(receipt.coreFiles as Record<string, string>).map(
+        async ([filePath, digest]) => {
+          const relativePath = filePath.replace(/^app-builder\//u, "");
+          const bytes = await readFile(path.join(pluginRoot, relativePath));
+          if (sha256(bytes) !== digest) {
+            throw new Error(`${client} installed bytes drifted at ${relativePath}.`);
+          }
+        },
+      ),
       ...[".codex-plugin", ".app.json"].map(async (forbidden) => {
         try {
           await lstat(path.join(pluginRoot, forbidden));
           throw new Error(`${client} portable root contains ${forbidden}.`);
         } catch (error) {
-          if (!missingFileErrorSchema.safeParse(error).success) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
             throw error;
           }
         }
@@ -86,47 +85,17 @@ await Promise.all(
       readFile(path.join(root, "client-harness.json"), "utf-8"),
       readFile(path.join(root, "installation-receipt.json"), "utf-8"),
     ]);
-    const harnessValue: unknown = JSON.parse(harnessBytes);
-    const installationValue: unknown = JSON.parse(installationBytes);
-    const harnessSchema = z.object({
-      client: z.string(),
-      format: z.string(),
-      mcp: z.string(),
-      oauth: z.object({ protectedResourceMetadata: z.string() }),
-      pluginRoot: z.string(),
-      transport: z.object({ type: z.string(), url: z.string() }),
-    });
-    const installationSchema = z.object({
-      client: z.string(),
-      releaseArchive: z.object({ sha256: z.string() }),
-    });
-    const harnessResult = harnessSchema.safeParse(harnessValue);
-    const installationResult = installationSchema.safeParse(installationValue);
-    if (!harnessResult.success) {
-      throw new Error(`${client} offline harness metadata was invalid.`);
-    }
-    if (!installationResult.success) {
-      throw new Error(`${client} offline harness metadata was invalid.`);
-    }
-    const harness = harnessResult.data;
-    const installation = installationResult.data;
-    if (harness.format !== "agent-plugins-client-harness-v2") {
-      throw new Error(`${client} offline harness metadata was invalid.`);
-    }
-    if (harness.client !== client || harness.pluginRoot !== "./app-builder") {
-      throw new Error(`${client} offline harness metadata was invalid.`);
-    }
-    if (harness.mcp !== "./app-builder/mcp.json" || harness.transport.type !== "streamable-http") {
-      throw new Error(`${client} offline harness metadata was invalid.`);
-    }
+    const harness = JSON.parse(harnessBytes);
+    const installation = JSON.parse(installationBytes);
     if (
-      harness.transport.url !== receipt.endpoint ||
-      harness.oauth.protectedResourceMetadata !==
-        `${new URL(receipt.endpoint).origin}/.well-known/oauth-protected-resource`
-    ) {
-      throw new Error(`${client} offline harness metadata was invalid.`);
-    }
-    if (
+      harness.format !== "agent-plugins-client-harness-v2" ||
+      harness.client !== client ||
+      harness.pluginRoot !== "./app-builder" ||
+      harness.mcp !== "./app-builder/mcp.json" ||
+      harness.transport?.type !== "streamable-http" ||
+      harness.transport?.url !== receipt.endpoint ||
+      harness.oauth?.protectedResourceMetadata !==
+        `${new URL(receipt.endpoint).origin}/.well-known/oauth-protected-resource` ||
       installation.client !== client ||
       installation.releaseArchive.sha256 !== receipt.archive.sha256
     ) {
@@ -134,7 +103,6 @@ await Promise.all(
     }
   }),
 );
-
 console.log(
   "Portable VS Code, Cursor, and Codex package loading plus exact-five-tool discovery passed.",
 );

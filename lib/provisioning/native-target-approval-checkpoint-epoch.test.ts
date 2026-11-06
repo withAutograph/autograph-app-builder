@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await -- Model asynchronous database and authority ports. */
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
@@ -72,8 +73,8 @@ const fixture = () => {
   const rows: Row[] = [];
   const dialect = new PgDialect();
   let currentAdapter = "old-adapter";
-  let beforeUpdate: (() => Promise<void>) | null = null;
-  let beforeInsert: (() => Promise<void>) | null = null;
+  let beforeUpdate: (() => Promise<void>) | undefined;
+  let beforeInsert: (() => Promise<void>) | undefined;
   let updates = 0;
   const matching = (predicate: SQL) => {
     const { params } = dialect.sqlToQuery(predicate);
@@ -100,7 +101,7 @@ const fixture = () => {
   const insertValues = (value: Row) => ({
     onConflictDoNothing: async () => {
       const wait = beforeInsert;
-      beforeInsert = null;
+      beforeInsert = undefined;
       await wait?.();
       const duplicate = rows.some((row) =>
         [
@@ -120,7 +121,7 @@ const fixture = () => {
     where: (predicate: SQL) => ({
       returning: async () => {
         const wait = beforeUpdate;
-        beforeUpdate = null;
+        beforeUpdate = undefined;
         await wait?.();
         const row = matching(predicate);
         if (row === undefined) {
@@ -150,6 +151,7 @@ const fixture = () => {
   };
   // SAFETY: This fixture models only the three Drizzle chains used by the checkpoint,
   // including tenant/request predicates and revision CAS; no production database is opened.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Narrow in-memory implementation of the exercised database ports.
   const database = databasePort as unknown as Parameters<
     typeof createNativeTargetApprovalCheckpoint
   >[0];

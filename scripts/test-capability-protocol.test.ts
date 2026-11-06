@@ -10,12 +10,13 @@ describe("non-authorizing structural test protocol relay", () => {
     let output = "";
     let writes = 0;
     // Writable's implementation contract is callback-based.
+    // oxlint-disable promise/prefer-await-to-callbacks
     const target = new Writable({
       highWaterMark: 1,
       write(chunk, _encoding, callback) {
         writes += 1;
         setTimeout(() => {
-          output += Buffer.isBuffer(chunk) ? chunk.toString("utf-8") : chunk;
+          output += chunk.toString("utf-8");
           callback();
         }, 2);
       },
@@ -36,6 +37,7 @@ describe("non-authorizing structural test protocol relay", () => {
       const target = new PassThrough();
       const relay = relayBoundedFrames({ expectedFrames: 1, source, target });
       source.end(sourceText);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(relay).rejects.toThrow(/Protocol/u);
     }
   });

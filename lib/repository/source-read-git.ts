@@ -1,21 +1,17 @@
 import { existsSync } from "node:fs";
 import { captureProcessStdout, streamProcessStdout } from "./captured-process-output";
 
-const DEV_NULL = "/dev/null";
-const GIT_ATTRIBUTES_FILE_CONFIG = `core.attributesfile=${DEV_NULL}`;
-const gitExecutable = () => (existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git");
-
 export const git = function git(path: string, args: string[]): string {
-  const executable = gitExecutable();
+  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
   return captureProcessStdout(
     executable,
     [
       "-c",
-      `core.hooksPath=${DEV_NULL}`,
+      "core.hooksPath=/dev/null",
       "-c",
       "core.fsmonitor=false",
       "-c",
-      GIT_ATTRIBUTES_FILE_CONFIG,
+      "core.attributesfile=/dev/null",
       "-C",
       path,
       ...args,
@@ -23,16 +19,16 @@ export const git = function git(path: string, args: string[]): string {
     {
       env: {
         GIT_ATTR_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: DEV_NULL,
+        GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_SYSTEM: DEV_NULL,
-        HOME: DEV_NULL,
+        GIT_CONFIG_SYSTEM: "/dev/null",
+        HOME: "/dev/null",
         LANG: "C.UTF-8",
         LC_ALL: "C.UTF-8",
         NODE_ENV: process.env.NODE_ENV ?? "production",
         PATH: "/usr/bin:/bin",
         TMPDIR: "/tmp",
-        XDG_CONFIG_HOME: DEV_NULL,
+        XDG_CONFIG_HOME: "/dev/null",
       },
     },
   )
@@ -43,11 +39,11 @@ export const git = function git(path: string, args: string[]): string {
 export const gitByteInvocation = (path: string, args: string[]) => ({
   args: [
     "-c",
-    `core.hooksPath=${DEV_NULL}`,
+    "core.hooksPath=/dev/null",
     "-c",
     "core.fsmonitor=false",
     "-c",
-    GIT_ATTRIBUTES_FILE_CONFIG,
+    "core.attributesfile=/dev/null",
     "-c",
     "credential.helper=",
     "-c",
@@ -56,22 +52,22 @@ export const gitByteInvocation = (path: string, args: string[]) => ({
     path,
     ...args,
   ],
-  command: gitExecutable(),
+  command: existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git",
   options: {
     env: {
       GIT_ATTR_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: DEV_NULL,
+      GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_SYSTEM: DEV_NULL,
+      GIT_CONFIG_SYSTEM: "/dev/null",
       GIT_NO_LAZY_FETCH: "1",
       GIT_TERMINAL_PROMPT: "0",
-      HOME: DEV_NULL,
+      HOME: "/dev/null",
       LANG: "C.UTF-8",
       LC_ALL: "C.UTF-8",
       NODE_ENV: process.env.NODE_ENV ?? "production",
       PATH: "/usr/bin:/bin",
       TMPDIR: "/tmp",
-      XDG_CONFIG_HOME: DEV_NULL,
+      XDG_CONFIG_HOME: "/dev/null",
     },
   },
 });

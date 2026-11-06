@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-await-in-loop -- Viewport observations are intentionally sequential. */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -17,15 +18,6 @@ import type {
 
 import { observePreviewWebSockets } from "./self-reproduction-preview-websockets";
 
-const REPORT_KIND = "self-reproduction-working-preview-observation/v1";
-
-const hasPageErrors = (
-  consoleErrors: string[],
-  pageErrors: string[],
-  brief: PreviewViewportObservation["brief"],
-): boolean => consoleErrors.length > 0 || pageErrors.length > 0 || brief?.status === "failed";
-const REPORT_FILENAME = "index.html";
-
 const { values } = parseArgs({
   options: {
     "brief-file": { type: "string" },
@@ -36,18 +28,13 @@ const { values } = parseArgs({
   },
   strict: true,
 });
-if (values.help === true) {
+if (values.help) {
   console.log(
     "Observe an existing delivered preview. --state-file OWNER_STATE_JSON --output-dir EXTERNAL_PATH [--brief-file PATH] [--timeout-ms 30000]",
   );
   process.exit(0);
 }
-if (
-  values["state-file"] === undefined ||
-  values["state-file"] === "" ||
-  values["output-dir"] === undefined ||
-  values["output-dir"] === ""
-) {
+if (!values["state-file"] || !values["output-dir"]) {
   throw new Error("--state-file and --output-dir are required.");
 }
 const statePath = path.resolve(values["state-file"]);
@@ -57,17 +44,16 @@ if (output === path.dirname(statePath)) {
 }
 const repository = path.resolve(import.meta.dirname, "..");
 const relative = path.relative(repository, output);
-if (relative === "" || (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))) {
+if (!relative || (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))) {
   throw new Error("Observation output must remain outside the reference source tree.");
 }
 const timeoutMs = Number(values["timeout-ms"]);
 if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
   throw new Error("--timeout-ms must be a positive integer.");
 }
-const syntheticBrief =
-  values["brief-file"] !== undefined && values["brief-file"] !== ""
-    ? await readFile(path.resolve(values["brief-file"]), "utf-8")
-    : undefined;
+const syntheticBrief = values["brief-file"]
+  ? await readFile(path.resolve(values["brief-file"]), "utf-8")
+  : undefined;
 const finding = await loadWorkingPreview(statePath);
 
 if (finding.status === "ready") {
@@ -116,11 +102,11 @@ if (finding.status === "ready") {
           timeout: timeoutMs,
           waitUntil: "domcontentloaded",
         });
-        try {
-          await page.waitForLoadState("networkidle", { timeout: Math.min(timeoutMs, 10_000) });
-        } catch {
-          // A quiet network is advisory; the rendered page remains observable.
-        }
+        await page
+          .waitForLoadState("networkidle", { timeout: Math.min(timeoutMs, 10_000) })
+          .catch(() => {
+            // A quiet network is advisory; the rendered page remains observable.
+          });
         controls.push(
           ...(await page
             .locator("button,a,input,textarea,select,[role=button],[role=link]")
@@ -155,31 +141,15 @@ if (finding.status === "ready") {
             .getByLabel(/your app brief|description/iu)
             .or(page.getByPlaceholder(/your app brief|description/iu))
             .first();
-          let fieldVisible = false;
-          try {
-            fieldVisible = await field.isVisible();
-          } catch {
-            // An unavailable field is treated as unsupported UI.
-          }
-          if (fieldVisible) {
+          if (await field.isVisible().catch(() => false)) {
             await field.fill(syntheticBrief);
             const actualValue = await field.inputValue();
             const continuation = page.getByRole("button", { name: /continue/iu }).first();
             const valueMatched = actualValue === syntheticBrief;
-            let continuationVisible = false;
-            try {
-              continuationVisible = await continuation.isVisible();
-            } catch {
-              // An unavailable control is treated as absent.
-            }
-            let enabled = false;
-            if (continuationVisible) {
-              try {
-                enabled = await continuation.isEnabled();
-              } catch {
-                // An unavailable control is treated as disabled.
-              }
-            }
+            const continuationVisible = await continuation.isVisible().catch(() => false);
+            const enabled = continuationVisible
+              ? await continuation.isEnabled().catch(() => false)
+              : false;
             brief = continuationVisible
               ? {
                   actualValue,
@@ -210,7 +180,11 @@ if (finding.status === "ready") {
         await mkdir(path.join(output, "screenshots"), { mode: 0o700, recursive: true });
         await page.screenshot({ fullPage: true, path: path.join(output, screenshot) });
         const failed =
-          response === null || !response.ok() || hasPageErrors(consoleErrors, pageErrors, brief);
+          response === null ||
+          !response.ok() ||
+          consoleErrors.length > 0 ||
+          pageErrors.length > 0 ||
+          brief?.status === "failed";
         viewports.push({
           brief,
           consoleErrors,
@@ -244,11 +218,9 @@ if (finding.status === "ready") {
           )}\n`,
           { mode: 0o600 },
         );
-        try {
-          await context.close();
-        } catch {
+        await context.close().catch(() => {
           // Observation receipts survive cleanup failures.
-        }
+        });
       }
     }
     const rows = summarizePreviewRows(viewports, syntheticBrief !== undefined);
@@ -261,7 +233,7 @@ if (finding.status === "ready") {
     });
     const report: PreviewObservationReport = {
       generatedAt: new Date().toISOString(),
-      kind: REPORT_KIND,
+      kind: "self-reproduction-working-preview-observation/v1",
       note: "Observation only. Existing delivered preview; no hosting, installation, repair, publication, provider action, aggregate score, or parity credit.",
       provenance: finding.provenance,
       rows,
@@ -269,14 +241,14 @@ if (finding.status === "ready") {
       viewports,
     };
     await writePreviewObservationReport(output, report);
-    console.log(`Preview observation complete; report: ${path.join(output, REPORT_FILENAME)}`);
+    console.log(`Preview observation complete; report: ${path.join(output, "index.html")}`);
     if (rows.some((row) => row.status === "failed" || row.status === "blocked")) {
       process.exitCode = 1;
     }
   } catch (error) {
     const report: PreviewObservationReport = {
       generatedAt: new Date().toISOString(),
-      kind: REPORT_KIND,
+      kind: "self-reproduction-working-preview-observation/v1",
       note: "Observation stopped after an evaluator error. Partial viewport evidence is retained; no hosting, repair, or parity credit.",
       provenance: finding.provenance,
       rows: summarizePreviewRows(viewports, syntheticBrief !== undefined),
@@ -291,21 +263,15 @@ if (finding.status === "ready") {
       browserRow.reason += ` Observation stopped after an evaluator error: ${sanitizePreviewEvidence(String(error)).slice(0, 1000)}`;
     }
     await writePreviewObservationReport(output, report);
-    console.error(`Preview observation blocked; report: ${path.join(output, REPORT_FILENAME)}`);
+    console.error(`Preview observation blocked; report: ${path.join(output, "index.html")}`);
     process.exitCode = 75;
   } finally {
-    if (browser) {
-      try {
-        await browser.close();
-      } catch {
-        // Report writing is already complete.
-      }
-    }
+    await browser?.close().catch(() => {
+      // Report writing is already complete.
+    });
   }
 } else {
   await writePreviewObservationReport(output, unavailablePreviewReport(statePath, finding));
-  console.log(
-    `Preview observation ${finding.status}; report: ${path.join(output, REPORT_FILENAME)}`,
-  );
+  console.log(`Preview observation ${finding.status}; report: ${path.join(output, "index.html")}`);
   process.exitCode = finding.status === "expired" ? 75 : 1;
 }

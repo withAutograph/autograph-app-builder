@@ -17,39 +17,6 @@ import type { ExecutionDependencyLayout } from "./dependency-cache";
 import type { TargetProposal, TargetIterationChange } from "./target-planning";
 
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
-const omittedApplyAuthorities = [
-  "provider-provisioning",
-  "deployment",
-  "production-readiness",
-] as const;
-const invalidManifestMessage = "The prepared workspace manifest is invalid.";
-const workspacePrefix = "/workspace/";
-const staleProposalKind = "stale-proposal";
-const preparedSourceManifestSchema = z.array(
-  z.object({
-    mode: z.string().optional(),
-    path: z.string().refine(safeSourcePath),
-  }),
-);
-const commandFailureKindSchema = z.enum([
-  "timeout",
-  "permission-denied",
-  "missing-command-or-file",
-  "dependency",
-  "validation",
-  "repository-task",
-  staleProposalKind,
-  "proposal-blocked",
-  "app-already-exists",
-  "app-lock",
-  "partial-state",
-  "projected-repository",
-  "empty-output",
-  "unknown",
-]);
-const appRootPath = "/workspace/repository";
-const packageNamePrefix = "@autograph/";
-const iterationReceiptMutation = "microfrontends.json" as const;
 const repositoryPath = z
   .string()
   .refine(safeSourcePath, "path must remain inside the apply overlay");
@@ -60,17 +27,17 @@ const repositoryPath = z
 
 export const targetApplyCommandReceiptSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  mutations: z.tuple([repositoryPath, z.literal(iterationReceiptMutation)]),
+  mutations: z.tuple([repositoryPath, z.literal("microfrontends.json")]),
   omittedAuthorities: z.tuple([
-    z.literal(omittedApplyAuthorities[0]),
-    z.literal(omittedApplyAuthorities[1]),
-    z.literal(omittedApplyAuthorities[2]),
+    z.literal("provider-provisioning"),
+    z.literal("deployment"),
+    z.literal("production-readiness"),
   ]),
   recovered: z.boolean(),
   topology: z.strictObject({
     newDigest: digestSchema,
     oldDigest: digestSchema,
-    path: z.literal(iterationReceiptMutation),
+    path: z.literal("microfrontends.json"),
   }),
   version: z.literal(1),
   workspacePath: repositoryPath,
@@ -89,10 +56,12 @@ export interface OverlaySnapshot {
   files: readonly OverlayFile[];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function compareOverlayPaths(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left, "utf-8"), Buffer.from(right, "utf-8"));
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function canonicalOverlayFiles(files: readonly OverlayFile[]): OverlayFile[] {
   return files
     .map(({ path, mode, digest }) => ({ digest, mode, path }))
@@ -223,7 +192,12 @@ export type TargetApplyReceipt = ApplyResultBase &
 export type TargetApplyFailureReceipt = ApplyResultBase &
   (
     | (ObservedApplyResult & {
-        reason: ObservedApplyFailureReason;
+        reason:
+          | "command-failed"
+          | "output-limit"
+          | "invalid-receipt"
+          | "unexpected-path"
+          | "missing-required-change";
       })
     | {
         reason: "post-snapshot-failed";
@@ -235,28 +209,32 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
   ) & {
     status: "partial-failure";
     recoveryRequired: true;
-    commandFailureKind?: CommandFailureKind;
+    commandFailureKind?:
+      | "timeout"
+      | "permission-denied"
+      | "missing-command-or-file"
+      | "dependency"
+      | "validation"
+      | "repository-task"
+      | "stale-proposal"
+      | "proposal-blocked"
+      | "app-already-exists"
+      | "app-lock"
+      | "partial-state"
+      | "projected-repository"
+      | "empty-output"
+      | "unknown";
     failedCommand?: string;
     output?: { stdout: string; stderr: string; truncated: boolean };
     missingDependency?: string;
     digest: string;
   };
 
-type CommandFailureKind = z.infer<typeof commandFailureKindSchema>;
-type ObservedApplyFailureReason =
-  | "command-failed"
-  | "output-limit"
-  | "invalid-receipt"
-  | "unexpected-path"
-  | "missing-required-change";
-
 export type TargetApplyResult =
   | { ok: true; receipt: TargetApplyReceipt }
   | { ok: false; receipt: TargetApplyFailureReceipt };
 
-const areDigestsValid = (...digests: (string | undefined)[]): boolean =>
-  digests.every((digest) => digestSchema.safeParse(digest).success);
-
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertCurrentTargetApplyReceipt(input: {
   version: number;
   appSpecPath?: string;
@@ -271,7 +249,8 @@ export function assertCurrentTargetApplyReceipt(input: {
     input.version !== 2 ||
     input.appSpecPath === undefined ||
     !safeSourcePath(input.appSpecPath) ||
-    !areDigestsValid(input.appSpecDigest, input.preparedTreeDigest)
+    !digestSchema.safeParse(input.appSpecDigest).success ||
+    !digestSchema.safeParse(input.preparedTreeDigest).success
   ) {
     throw new Error("A canonical V2 target apply receipt is required.");
   }
@@ -279,9 +258,10 @@ export function assertCurrentTargetApplyReceipt(input: {
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function commandFailureKind(stderr: string): TargetApplyFailureReceipt["commandFailureKind"] {
   if (/stale iteration preimage/iu.test(stderr)) {
-    return staleProposalKind;
+    return "stale-proposal";
   }
   if (/timeout|timed out|aborted/iu.test(stderr)) {
     return "timeout";
@@ -299,7 +279,7 @@ function commandFailureKind(stderr: string): TargetApplyFailureReceipt["commandF
     return "validation";
   }
   if (/proposal is stale or noncanonical/iu.test(stderr)) {
-    return staleProposalKind;
+    return "stale-proposal";
   }
   if (/proposal must have no blockers/iu.test(stderr)) {
     return "proposal-blocked";
@@ -325,6 +305,7 @@ function commandFailureKind(stderr: string): TargetApplyFailureReceipt["commandF
   return "unknown";
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function missingDependency(output: string): string | undefined {
   const match =
     /(?:Cannot find (?:package|module)|Module not found[^:]*:)\s*["']?(?<dependency>@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?)/iu.exec(
@@ -333,6 +314,7 @@ function missingDependency(output: string): string | undefined {
   return match?.[1];
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function applyOverlayRoot(proposalDigest: string): string {
   if (!digestSchema.safeParse(proposalDigest).success) {
     throw new Error("The target proposal digest is invalid.");
@@ -340,6 +322,7 @@ export function applyOverlayRoot(proposalDigest: string): string {
   return `.app-builder/apply/${proposalDigest}/repository`;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function materializeFreshApplyOverlay(input: {
   sandbox: SandboxSession;
   artifactRevision: string;
@@ -359,7 +342,7 @@ export async function materializeFreshApplyOverlay(input: {
   try {
     const appSpecPath = input.proposal.contract.appSpec.path;
     const acceptedAppSpec = await input.sandbox.readBinaryFile({
-      path: `${planningRoot.replace(workspacePrefix, "")}/${appSpecPath}`,
+      path: `${planningRoot.replace(/^\/workspace\//u, "")}/${appSpecPath}`,
     });
     if (
       acceptedAppSpec === null ||
@@ -370,7 +353,7 @@ export async function materializeFreshApplyOverlay(input: {
     return {
       acceptedAppSpec,
       appSpecPath,
-      applyRoot: appRootPath,
+      applyRoot: "/workspace/repository",
     };
   } catch (error) {
     await input.sandbox.removePath({
@@ -381,8 +364,6 @@ export async function materializeFreshApplyOverlay(input: {
     throw error;
   }
 }
-
-type FreshApplyOverlay = Awaited<ReturnType<typeof materializeFreshApplyOverlay>>;
 
 const snapshotLine = /^(?<mode>[0-7]{3,4})\t(?<digest>[0-9a-f]{64})\t(?<path>.+)$/u;
 
@@ -447,6 +428,7 @@ for (const file of files)
   process.stdout.write(file.mode + "\t" + file.digest + "\t" + file.path + "\n");
 `;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function overlaySnapshotCommand(exactRoot?: "/workspace/repository"): string {
   const script =
     exactRoot === undefined
@@ -474,6 +456,7 @@ const snapshotFailureDetail = (value: string): string =>
     )
     .trim();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectApplyOverlay(
   sandbox: {
     run: (input: { command: string; workingDirectory: string }) => PromiseLike<ApplyCommandResult>;
@@ -526,6 +509,7 @@ export async function inspectApplyOverlay(
   return { files: normalized, treeDigest: sha256(JSON.stringify(normalized)) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectFixtureApplyOverlay(
   sandbox: SandboxSession,
   applyRoot: string,
@@ -537,16 +521,25 @@ export async function inspectFixtureApplyOverlay(
   if (sourceManifest === null) {
     throw new Error("The prepared workspace manifest is missing.");
   }
-  // SAFETY: JSON.parse returns unknown; the schema validates every path and optional mode before use.
-  const sourceManifestValue: unknown = JSON.parse(sourceManifest);
-  const sourceFilesResult = preparedSourceManifestSchema.safeParse(sourceManifestValue);
-  if (!sourceFilesResult.success) {
-    throw new Error(invalidManifestMessage);
+  const parsed = JSON.parse(sourceManifest) as unknown;
+  if (!Array.isArray(parsed)) {
+    throw new TypeError("The prepared workspace manifest is invalid.");
   }
-  const sourceFiles = sourceFilesResult.data.map(({ path, mode }) => ({
-    mode: mode === "100755" ? "755" : "644",
-    path,
-  }));
+  const sourceFiles = parsed.map((candidate) => {
+    if (
+      typeof candidate !== "object" ||
+      candidate === null ||
+      !("path" in candidate) ||
+      typeof candidate.path !== "string" ||
+      !safeSourcePath(candidate.path)
+    ) {
+      throw new Error("The prepared workspace manifest is invalid.");
+    }
+    return {
+      mode: "mode" in candidate && candidate.mode === "100755" ? "755" : "644",
+      path: candidate.path,
+    };
+  });
   const candidates = [
     ...sourceFiles,
     { mode: "644", path: `prototype/${appId}/app-spec.md` },
@@ -557,18 +550,16 @@ export async function inspectFixtureApplyOverlay(
     { mode: "644", path: `apps/${appId}/app/page.tsx` },
     { mode: "644", path: `apps/${appId}/package.json` },
   ];
-  const relativeRoot = applyRoot.replace(workspacePrefix, "");
+  const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
   const candidateFiles = await Promise.all(
     candidates.map(async ({ path, mode }) => {
       const content = await sandbox.readBinaryFile({
         path: `${relativeRoot}/${path}`,
       });
-      return { content, mode, path };
+      return content === null ? undefined : { digest: sha256(content), mode, path };
     }),
   );
-  const files = candidateFiles
-    .filter(({ content }) => content !== null)
-    .map(({ content, mode, path }) => ({ digest: sha256(content), mode, path }));
+  const files = candidateFiles.filter((file): file is OverlayFile => file !== undefined);
   const normalized = canonicalOverlayFiles(files);
   return {
     files: normalized,
@@ -576,6 +567,7 @@ export async function inspectFixtureApplyOverlay(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot): OverlayChange[] {
   const beforeFiles = new Map(before.files.map((file) => [file.path, file]));
   const afterFiles = new Map(after.files.map((file) => [file.path, file]));
@@ -620,25 +612,7 @@ export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot):
     });
 }
 
-const digestMatches = (expected: string | undefined, actual: string): boolean =>
-  expected === undefined || expected === actual;
-
-const receiptMatchesProposal = (
-  receipt: TargetApplyCommandReceipt,
-  proposal: TargetProposal,
-): boolean => {
-  const { topology } = proposal.plan;
-  const identityMatches =
-    receipt.appId === proposal.contract.appId &&
-    receipt.workspacePath === proposal.plan.source.workspacePath &&
-    receipt.mutations[0] === proposal.plan.source.workspacePath;
-  const topologyMatches =
-    receipt.topology.path === topology.configPath &&
-    digestMatches(topology.currentDigest, receipt.topology.oldDigest) &&
-    digestMatches(topology.proposedDigest, receipt.topology.newDigest);
-  return identityMatches && topologyMatches;
-};
-
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseTargetReceipt(
   result: ApplyCommandResult,
   proposal: TargetProposal,
@@ -648,7 +622,7 @@ function parseTargetReceipt(
   }
   let candidate: unknown;
   try {
-    candidate = JSON.parse(result.stdout);
+    candidate = JSON.parse(result.stdout) as unknown;
   } catch {
     return undefined;
   }
@@ -657,20 +631,30 @@ function parseTargetReceipt(
     return undefined;
   }
   const receipt = parsed.data;
-  if (!receiptMatchesProposal(receipt, proposal)) {
+  if (
+    receipt.appId !== proposal.contract.appId ||
+    receipt.workspacePath !== proposal.plan.source.workspacePath ||
+    receipt.topology.path !== proposal.plan.topology.configPath ||
+    (proposal.plan.topology.currentDigest !== undefined &&
+      receipt.topology.oldDigest !== proposal.plan.topology.currentDigest) ||
+    (proposal.plan.topology.proposedDigest !== undefined &&
+      receipt.topology.newDigest !== proposal.plan.topology.proposedDigest) ||
+    receipt.mutations[0] !== proposal.plan.source.workspacePath
+  ) {
     return undefined;
   }
   return receipt;
 }
 
 /** Persist the accepted product snapshot only as an output of successful new-app creation. */
-const stageCreatedAppSpec = async (input: {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function stageCreatedAppSpec(input: {
   sandbox: SandboxSession;
   applyRoot: string;
   proposal: TargetProposal;
   acceptedAppSpec: Uint8Array;
   command: ApplyCommandResult;
-}): Promise<void> => {
+}): Promise<void> {
   if (
     "operation" in input.proposal ||
     input.command.exitCode !== 0 ||
@@ -678,210 +662,130 @@ const stageCreatedAppSpec = async (input: {
   ) {
     return;
   }
-  const relativeRoot = input.applyRoot.replace(workspacePrefix, "");
+  const relativeRoot = input.applyRoot.replace(/^\/workspace\//u, "");
   const directory = `${relativeRoot}/apps/${input.proposal.contract.appId}/.config`;
   await ensureSandboxDirectories(input.sandbox, [directory]);
   await input.sandbox.writeBinaryFile({
     content: input.acceptedAppSpec,
     path: `${directory}/app-spec.md`,
   });
-};
+}
 
-const isStaleIterationChange = (
-  change: TargetIterationChange,
-  current: Uint8Array | null,
-): boolean => {
-  const currentDigest = current === null ? null : sha256(current);
-  const beforeMatches =
-    change.before === undefined ? current === null : currentDigest === change.before.digest;
-  const afterMatches = change.after !== undefined && currentDigest === change.after.digest;
-  const contentMatches =
-    change.after === undefined || change.after.digest === sha256(change.after.content);
-  return !(beforeMatches || afterMatches) || !contentMatches;
-};
-
-const applyIterationChange = async (
-  sandbox: SandboxSession,
-  relativeRoot: string,
-  change: TargetIterationChange,
-): Promise<void> => {
-  const path = `${relativeRoot}/${change.path}`;
-  if (change.after === undefined) {
-    await sandbox.removePath({ force: true, path });
-    return;
-  }
-  await sandbox.writeTextFile({ content: change.after.content, path });
-};
-
-const applyIterationProposal = async (
-  sandbox: SandboxSession,
-  applyRoot: string,
-  proposal: TargetProposal,
-): Promise<ApplyCommandResult | undefined> => {
-  if (!("operation" in proposal)) {
-    return undefined;
-  }
-  const relativeRoot = applyRoot.replace(workspacePrefix, "");
-  const currentFiles = await Promise.all(
-    proposal.iteration.changes.map(async (change) => ({
-      change,
-      content: await sandbox.readBinaryFile({ path: `${relativeRoot}/${change.path}` }),
-    })),
-  );
-  if (currentFiles.some(({ change, content }) => isStaleIterationChange(change, content))) {
-    return {
-      exitCode: 2,
-      failedCommand: "verify current app file preimage",
-      stderr: "stale iteration preimage",
-      stdout: "",
-    };
-  }
-  await Promise.all(
-    proposal.iteration.changes.map(async (change) => {
-      await applyIterationChange(sandbox, relativeRoot, change);
-    }),
-  );
-  return undefined;
-};
-
-const applyImportedRegistration = async (
-  sandbox: SandboxSession,
-  appId: string,
-  applyRoot: string,
-  proposal: TargetProposal,
-): Promise<ApplyCommandResult | undefined> => {
-  if (!("operation" in proposal) || proposal.applicationSourceImport === undefined) {
-    return undefined;
-  }
-  const { registration } = proposal.applicationSourceImport;
-  if (
-    registration === undefined ||
-    registration.projectName !== appId ||
-    sha256(registration.proposedBytes) !== registration.newDigest
-  ) {
-    return {
-      exitCode: 2,
-      failedCommand: "verify approved application registration",
-      stderr: "Imported app registration is missing from the approved proposal.",
-      stdout: "",
-    };
-  }
-  const topologyPath = `${applyRoot.replace(workspacePrefix, "")}/microfrontends.json`;
-  const currentTopology = await sandbox.readTextFile({ path: topologyPath });
-  if (
-    currentTopology === null ||
-    ![registration.oldDigest, registration.newDigest].includes(sha256(currentTopology))
-  ) {
-    return {
-      exitCode: 2,
-      failedCommand: "verify approved application registration",
-      stderr: "Imported app registration preimage changed.",
-      stdout: "",
-    };
-  }
-  await sandbox.writeTextFile({ content: registration.proposedBytes, path: topologyPath });
-  return undefined;
-};
-
-const repositoryInstallFailureReason = (output: string): string => {
-  if (/lockfile had changes|frozen lockfile/iu.test(output)) {
-    return "frozen-lockfile";
-  }
-  if (/ENOSPC|no space left/iu.test(output)) {
-    return "disk-space";
-  }
-  if (/EACCES|permission denied/iu.test(output)) {
-    return "permissions";
-  }
-  if (/timed? out|timeout/iu.test(output)) {
-    return "network-timeout";
-  }
-  if (/failed to resolve|package not found|module not found/iu.test(output)) {
-    return "package-resolution";
-  }
-  if (/fetch|connection|certificate|network/iu.test(output)) {
-    return "network";
-  }
-  return "unclassified";
-};
-
-const installRepositoryDependencies = async (
-  sandbox: SandboxSession,
-  applyRoot: string,
-  appId: string,
-  proposal: TargetProposal,
-): Promise<ApplyCommandResult | undefined> => {
-  await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
-  if (proposal.frameworkUpgrade !== undefined) {
-    const upgradeCommand = frameworkUpgradeCommand(proposal.frameworkUpgrade, appId);
-    const upgraded = await sandbox.run({ command: upgradeCommand, workingDirectory: applyRoot });
-    if (upgraded.exitCode !== 0) {
-      return { ...upgraded, failedCommand: upgradeCommand };
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
+  return async ({ sandbox, appId, applyRoot, proposal }) => {
+    if ("operation" in proposal) {
+      const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
+      for (const change of proposal.iteration.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const current = await sandbox.readBinaryFile({
+          path: `${relativeRoot}/${change.path}`,
+        });
+        if (
+          ((change.before === undefined
+            ? current !== null
+            : current === null || sha256(current) !== change.before.digest) &&
+            (change.after === undefined
+              ? current !== null
+              : current === null || sha256(current) !== change.after.digest)) ||
+          (change.after !== undefined && change.after.digest !== sha256(change.after.content))
+        ) {
+          return {
+            exitCode: 2,
+            failedCommand: "verify current app file preimage",
+            stderr: "stale iteration preimage",
+            stdout: "",
+          };
+        }
+      }
+      for (const change of proposal.iteration.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        await (change.after === undefined
+          ? sandbox.removePath({ force: true, path: `${relativeRoot}/${change.path}` })
+          : sandbox.writeTextFile({
+              content: change.after.content,
+              path: `${relativeRoot}/${change.path}`,
+            }));
+      }
     }
-  }
-
-  const installCommand =
-    proposal.frameworkUpgrade === undefined ? "bun install" : "bun install --frozen-lockfile";
-  const install = await sandbox.run({
-    command: workspaceBinInstallCommand(applyRoot, proposal.frameworkUpgrade !== undefined),
-    workingDirectory: applyRoot,
-  });
-  if (install.exitCode !== 0) {
-    const output = `${install.stderr}\n${install.stdout}`;
-    const reason = repositoryInstallFailureReason(output);
-    console.error("[app-builder apply] repository install failed", {
-      exitCode: install.exitCode,
-      reason,
-    });
-    return { ...install, failedCommand: installCommand };
-  }
-
-  const cueCommand = sourceDeclaredToolchainActivationCommand();
-  const cue = await sandbox.run({ command: cueCommand, workingDirectory: applyRoot });
-  return cue.exitCode === 0 ? undefined : { ...cue, failedCommand: cueCommand };
-};
-
-const logRepositoryGeneratorFailure = (generated: ApplyCommandResult): void => {
-  const output = `${generated.stderr}\n${generated.stdout}`;
-  let reason = "unclassified";
-  if (/EACCES|permission denied/iu.test(output)) {
-    reason = "permissions";
-  } else if (/cannot find module|module_not_found|failed to resolve/iu.test(output)) {
-    reason = "module-resolution";
-  } else if (/timed? out|timeout/iu.test(output)) {
-    reason = "timeout";
-  } else if (/network|fetch|connection|certificate/iu.test(output)) {
-    reason = "network";
-  } else if (/format/iu.test(output)) {
-    reason = "formatting";
-  } else if (/lifecycle|validation|test|build/iu.test(output)) {
-    reason = "generated-app-validation";
-  }
-  console.error("[app-builder apply] repository generator failed", {
-    exitCode: generated.exitCode,
-    reason,
-  });
-};
-
-export const sandboxApplyCommandExecutor =
-  (): ApplyCommandExecutor =>
-  async ({ sandbox, appId, applyRoot, proposal }) => {
-    const iterationResult = await applyIterationProposal(sandbox, applyRoot, proposal);
-    if (iterationResult !== undefined) {
-      return iterationResult;
-    }
-    const registrationResult = await applyImportedRegistration(sandbox, appId, applyRoot, proposal);
-    if (registrationResult !== undefined) {
-      return registrationResult;
+    if ("operation" in proposal && proposal.applicationSourceImport !== undefined) {
+      const { registration } = proposal.applicationSourceImport;
+      if (
+        registration === undefined ||
+        registration.projectName !== appId ||
+        sha256(registration.proposedBytes) !== registration.newDigest
+      ) {
+        return {
+          exitCode: 2,
+          failedCommand: "verify approved application registration",
+          stderr: "Imported app registration is missing from the approved proposal.",
+          stdout: "",
+        };
+      }
+      const topologyPath = `${applyRoot.replace(/^\/workspace\//u, "")}/microfrontends.json`;
+      const currentTopology = await sandbox.readTextFile({ path: topologyPath });
+      if (
+        currentTopology === null ||
+        ![registration.oldDigest, registration.newDigest].includes(sha256(currentTopology))
+      ) {
+        return {
+          exitCode: 2,
+          failedCommand: "verify approved application registration",
+          stderr: "Imported app registration preimage changed.",
+          stdout: "",
+        };
+      }
+      await sandbox.writeTextFile({ content: registration.proposedBytes, path: topologyPath });
     }
     // The writable checkout is the execution environment. Prepared dependency
     // roots are only a cache optimization; a checkout-backed flow can have no
     // roots at all. Let Bun establish the repository's actual dependency state
     // after iteration writes or before invoking its generator, and treat Bun's
     // real result as authority. Failed installs retain partial-apply evidence.
-    const installResult = await installRepositoryDependencies(sandbox, applyRoot, appId, proposal);
-    if (installResult !== undefined) {
-      return installResult;
+    await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
+    if (proposal.frameworkUpgrade !== undefined) {
+      const upgradeCommand = frameworkUpgradeCommand(proposal.frameworkUpgrade, appId);
+      const upgraded = await sandbox.run({ command: upgradeCommand, workingDirectory: applyRoot });
+      if (upgraded.exitCode !== 0) {
+        return { ...upgraded, failedCommand: upgradeCommand };
+      }
+    }
+    // The repository operation owns lockfile generation. Install that selected
+    // closure into this sandbox before compilation or preview uses it.
+    const installCommand =
+      proposal.frameworkUpgrade === undefined ? "bun install" : "bun install --frozen-lockfile";
+    const install = await sandbox.run({
+      command: workspaceBinInstallCommand(applyRoot, proposal.frameworkUpgrade !== undefined),
+      workingDirectory: applyRoot,
+    });
+    if (install.exitCode !== 0) {
+      const output = `${install.stderr}\n${install.stdout}`;
+      let reason = "unclassified";
+      if (/lockfile had changes|frozen lockfile/iu.test(output)) {
+        reason = "frozen-lockfile";
+      } else if (/ENOSPC|no space left/iu.test(output)) {
+        reason = "disk-space";
+      } else if (/EACCES|permission denied/iu.test(output)) {
+        reason = "permissions";
+      } else if (/timed? out|timeout/iu.test(output)) {
+        reason = "network-timeout";
+      } else if (/failed to resolve|package not found|module not found/iu.test(output)) {
+        reason = "package-resolution";
+      } else if (/fetch|connection|certificate|network/iu.test(output)) {
+        reason = "network";
+      }
+      console.error("[app-builder apply] repository install failed", {
+        exitCode: install.exitCode,
+        reason,
+      });
+      return { ...install, failedCommand: installCommand };
+    }
+    const cue = await sandbox.run({
+      command: sourceDeclaredToolchainActivationCommand(),
+      workingDirectory: applyRoot,
+    });
+    if (cue.exitCode !== 0) {
+      return { ...cue, failedCommand: sourceDeclaredToolchainActivationCommand() };
     }
     if ("operation" in proposal) {
       const oldDigest =
@@ -890,8 +794,8 @@ export const sandboxApplyCommandExecutor =
         "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId: proposal.contract.appId,
-        mutations: [proposal.plan.source.workspacePath, iterationReceiptMutation],
-        omittedAuthorities: omittedApplyAuthorities,
+        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
         recovered: false,
         topology: {
           newDigest:
@@ -899,7 +803,7 @@ export const sandboxApplyCommandExecutor =
             proposal.plan.topology.proposedDigest ??
             oldDigest,
           oldDigest,
-          path: iterationReceiptMutation,
+          path: "microfrontends.json",
         },
         version: 1,
         workspacePath: proposal.plan.source.workspacePath,
@@ -911,33 +815,56 @@ export const sandboxApplyCommandExecutor =
       workingDirectory: applyRoot,
     });
     if (generated.exitCode !== 0) {
-      logRepositoryGeneratorFailure(generated);
+      const output = `${generated.stderr}\n${generated.stdout}`;
+      let reason = "unclassified";
+      if (/EACCES|permission denied/iu.test(output)) {
+        reason = "permissions";
+      } else if (/cannot find module|module_not_found|failed to resolve/iu.test(output)) {
+        reason = "module-resolution";
+      } else if (/timed? out|timeout/iu.test(output)) {
+        reason = "timeout";
+      } else if (/network|fetch|connection|certificate/iu.test(output)) {
+        reason = "network";
+      } else if (/format/iu.test(output)) {
+        reason = "formatting";
+      } else if (/lifecycle|validation|test|build/iu.test(output)) {
+        reason = "generated-app-validation";
+      }
+      console.error("[app-builder apply] repository generator failed", {
+        exitCode: generated.exitCode,
+        reason,
+      });
     }
     return generated.exitCode === 0
       ? generated
       : { ...generated, failedCommand: `mise run create:app ${appId}` };
   };
+}
 
-export const fixtureApplyCommandExecutor =
-  (): ApplyCommandExecutor =>
-  async ({ sandbox, appId, applyRoot, proposal }) => {
-    const relativeRoot = applyRoot.replace(workspacePrefix, "");
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
+  return async ({ sandbox, appId, applyRoot, proposal }) => {
+    const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
     if ("operation" in proposal) {
-      await Promise.all(
-        proposal.iteration.changes.map(async (change) => {
-          await applyIterationChange(sandbox, relativeRoot, change);
-        }),
-      );
+      for (const change of proposal.iteration.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        await (change.after === undefined
+          ? sandbox.removePath({ force: true, path: `${relativeRoot}/${change.path}` })
+          : sandbox.writeTextFile({
+              content: change.after.content,
+              path: `${relativeRoot}/${change.path}`,
+            }));
+      }
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId,
-        mutations: [proposal.plan.source.workspacePath, iterationReceiptMutation],
-        omittedAuthorities: omittedApplyAuthorities,
+        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
         recovered: false,
         topology: {
           newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
           oldDigest,
-          path: iterationReceiptMutation,
+          path: "microfrontends.json",
         },
         version: 1,
         workspacePath: proposal.plan.source.workspacePath,
@@ -957,7 +884,7 @@ export const fixtureApplyCommandExecutor =
       path: `${relativeRoot}/apps/${appId}/.config/app-spec.md`,
     });
     await sandbox.writeTextFile({
-      content: `${JSON.stringify({ name: packageNamePrefix + appId }, null, 2)}\n`,
+      content: `${JSON.stringify({ name: `@autograph/${appId}` }, null, 2)}\n`,
       path: `${relativeRoot}/apps/${appId}/package.json`,
     });
     await sandbox.writeTextFile({
@@ -976,104 +903,103 @@ export const fixtureApplyCommandExecutor =
     const newDigest = proposal.plan.topology.proposedDigest ?? "1".repeat(64);
     const receipt: TargetApplyCommandReceipt = {
       appId,
-      mutations: [proposal.plan.source.workspacePath, iterationReceiptMutation],
-      omittedAuthorities: omittedApplyAuthorities,
+      mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+      omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
       recovered: false,
       topology: {
         newDigest,
         oldDigest,
-        path: iterationReceiptMutation,
+        path: "microfrontends.json",
       },
       version: 1,
       workspacePath: proposal.plan.source.workspacePath,
     };
     return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
   };
+}
 
-const appSpecBindingMatches = (binding: TargetApplyBinding, proposal: TargetProposal): boolean =>
-  binding.appSpecDigest === proposal.contract.appSpec.sha256 &&
-  binding.appSpecPath === proposal.contract.appSpec.path &&
-  safeSourcePath(binding.appSpecPath);
-
-const installDependencyCache = async (
-  sandbox: SandboxSession,
-  dependencyLayout: ExecutionDependencyLayout,
-): Promise<void> => {
-  try {
-    await Promise.all(
-      dependencyLayout.roots.map(async (root) => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function executeProposalBoundApply(input: {
+  sandbox: SandboxSession;
+  executor: ApplyCommandExecutor;
+  snapshotter?: (sandbox: SandboxSession, applyRoot: string) => Promise<OverlaySnapshot>;
+  binding: TargetApplyBinding;
+  artifactRevision: string;
+  dependencyLayout?: ExecutionDependencyLayout;
+  proposal: TargetProposal;
+  appliedByCallId: string;
+  environment?: Readonly<Record<string, string | undefined>>;
+}): Promise<TargetApplyResult> {
+  if (
+    input.binding.appSpecDigest !== input.proposal.contract.appSpec.sha256 ||
+    input.binding.appSpecPath !== input.proposal.contract.appSpec.path ||
+    !safeSourcePath(input.binding.appSpecPath)
+  ) {
+    throw new Error("The accepted AppSpec binding or path differs from the target proposal.");
+  }
+  const snapshotter = input.snapshotter ?? inspectApplyOverlay;
+  const overlay = await materializeFreshApplyOverlay({
+    artifactRevision: input.artifactRevision,
+    dependencyLayout: input.dependencyLayout,
+    environment: input.environment,
+    proposal: input.proposal,
+    proposalDigest: input.binding.proposalDigest,
+    sandbox: input.sandbox,
+  });
+  if (input.dependencyLayout !== undefined) {
+    try {
+      for (const root of input.dependencyLayout.roots) {
         const target = `repository/${root.path}`;
-        await sandbox.removePath({ force: true, path: target, recursive: true });
-        const linked = await sandbox.run({
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        await input.sandbox.removePath({
+          force: true,
+          path: target,
+          recursive: true,
+        });
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const linked = await input.sandbox.run({
           command: `ln -s ${root.cachePath} ${root.path}`,
-          workingDirectory: appRootPath,
+          workingDirectory: "/workspace/repository",
         });
         if (linked.exitCode !== 0) {
           throw new Error("dependency cache miss");
         }
-      }),
-    );
-  } catch {
-    // The repository install below remains authoritative. A missing or stale
-    // cache is an optimization miss, not a reason to block the build.
+      }
+    } catch {
+      // The repository install below remains authoritative. A missing or stale
+      // cache is an optimization miss, not a reason to block the build.
+    }
   }
-};
-
-interface ApplySnapshots {
-  planning: OverlaySnapshot;
-  prepared: OverlaySnapshot;
-  before: OverlaySnapshot;
-}
-
-const captureApplySnapshots = async (
-  sandbox: SandboxSession,
-  proposalDigest: string,
-  proposal: TargetProposal,
-  overlay: FreshApplyOverlay,
-  snapshotter: (sandbox: SandboxSession, applyRoot: string) => Promise<OverlaySnapshot>,
-): Promise<ApplySnapshots> => {
+  let planning: OverlaySnapshot;
+  let prepared: OverlaySnapshot;
+  let before: OverlaySnapshot;
   try {
-    const [planning, prepared, initialBefore] = await Promise.all([
-      snapshotter(sandbox, overlay.applyRoot),
-      snapshotter(sandbox, "/workspace/repository"),
-      snapshotter(sandbox, overlay.applyRoot),
-    ]);
-    let before = initialBefore;
-    if ("operation" in proposal) {
-      before = iterationBaselineSnapshot(before, proposal.iteration.changes);
-      if (proposal.applicationSourceImport !== undefined) {
+    planning = await snapshotter(input.sandbox, overlay.applyRoot);
+    prepared = await snapshotter(input.sandbox, "/workspace/repository");
+    before = await snapshotter(input.sandbox, overlay.applyRoot);
+    if ("operation" in input.proposal) {
+      before = iterationBaselineSnapshot(before, input.proposal.iteration.changes);
+      if (input.proposal.applicationSourceImport !== undefined) {
         before = applicationImportBaselineSnapshot(
           before,
-          `apps/${proposal.applicationSourceImport.appId}`,
+          `apps/${input.proposal.applicationSourceImport.appId}`,
         );
       }
     }
-    if (proposal.frameworkUpgrade !== undefined) {
-      before = iterationBaselineSnapshot(before, proposal.frameworkUpgrade.baseline);
+    if (input.proposal.frameworkUpgrade !== undefined) {
+      before = iterationBaselineSnapshot(before, input.proposal.frameworkUpgrade.baseline);
     }
-    return { before, planning, prepared };
   } catch (error) {
-    await sandbox.removePath({
+    await input.sandbox.removePath({
       force: true,
-      path: applyOverlayRoot(proposalDigest),
+      path: applyOverlayRoot(input.binding.proposalDigest),
       recursive: true,
     });
     throw error;
   }
-};
-
-const executeApplyCommand = async (
-  input: {
-    sandbox: SandboxSession;
-    executor: ApplyCommandExecutor;
-    proposal: TargetProposal;
-    binding: TargetApplyBinding;
-    appliedByCallId: string;
-  },
-  overlay: FreshApplyOverlay,
-): Promise<ApplyCommandResult> => {
+  let command: ApplyCommandResult;
   try {
-    const command = await input.executor({
+    command = await input.executor({
       appId: input.proposal.contract.appId,
       applyRoot: overlay.applyRoot,
       proposal: input.proposal,
@@ -1093,88 +1019,19 @@ const executeApplyCommand = async (
       proposal: input.proposal,
       sandbox: input.sandbox,
     });
-    return command;
   } catch (error) {
-    return {
+    command = {
       exitCode: -1,
       failedCommand: "target apply executor",
       stderr: error instanceof Error ? `${error.name}: ${error.message}` : "TargetApplyError",
       stdout: "",
     };
   }
-};
-
-const executeAndCaptureAfter = async (
-  input: {
-    sandbox: SandboxSession;
-    executor: ApplyCommandExecutor;
-    proposal: TargetProposal;
-    binding: TargetApplyBinding;
-    appliedByCallId: string;
-  },
-  overlay: FreshApplyOverlay,
-  snapshotter: (sandbox: SandboxSession, applyRoot: string) => Promise<OverlaySnapshot>,
-): Promise<{ command: ApplyCommandResult; after: OverlaySnapshot | null }> => {
-  const command = await executeApplyCommand(input, overlay);
-  return await snapshotter(input.sandbox, overlay.applyRoot)
-    .then((after) => ({ after, command }))
-    .catch(() => ({ after: null, command }));
-};
-
-const postSnapshotFailure = (
-  input: {
-    binding: TargetApplyBinding;
-    proposal: TargetProposal;
-    appliedByCallId: string;
-  },
-  overlay: FreshApplyOverlay,
-  snapshots: ApplySnapshots,
-  command: ApplyCommandResult,
-): TargetApplyResult => {
-  const { before, planning, prepared } = snapshots;
-  const unsigned = {
+  const attemptBase = {
     ...input.binding,
-    appliedByCallId: input.appliedByCallId,
-    applyRoot: overlay.applyRoot,
-    command: {
-      exitCode: command.exitCode,
-      name: "operation" in input.proposal ? "iterate-existing-app" : "create-app",
-      stderrDigest: sha256(command.stderr),
-      stdoutDigest: sha256(command.stdout),
-    },
-    planningTreeDigest: planning.treeDigest,
-    preTree: before.files,
-    preTreeDigest: before.treeDigest,
-    preparedTreeDigest: prepared.treeDigest,
     ...(input.proposal.frameworkUpgrade === undefined
       ? {}
       : { frameworkUpgrade: input.proposal.frameworkUpgrade.versions }),
-    version: 2 as const,
-    changedContentDigest: null,
-    changes: null,
-    postTree: null,
-    postTreeDigest: null,
-    reason: "post-snapshot-failed" as const,
-    recoveryRequired: true as const,
-    status: "partial-failure" as const,
-  };
-  return { ok: false, receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) } };
-};
-
-const createApplyResult = (
-  input: {
-    binding: TargetApplyBinding;
-    proposal: TargetProposal;
-    appliedByCallId: string;
-  },
-  overlay: FreshApplyOverlay,
-  snapshots: ApplySnapshots,
-  command: ApplyCommandResult,
-  after: OverlaySnapshot,
-): TargetApplyResult => {
-  const { before, planning, prepared } = snapshots;
-  const attemptBase: ApplyResultBase = {
-    ...input.binding,
     appliedByCallId: input.appliedByCallId,
     applyRoot: overlay.applyRoot,
     command: {
@@ -1187,113 +1044,12 @@ const createApplyResult = (
     preTree: before.files,
     preTreeDigest: before.treeDigest,
     preparedTreeDigest: prepared.treeDigest,
-    version: 2,
+    version: 2 as const,
   };
-  if (input.proposal.frameworkUpgrade !== undefined) {
-    attemptBase.frameworkUpgrade = input.proposal.frameworkUpgrade.versions;
-  }
-  const changes = overlayChanges(before, after);
-  const targetReceipt = parseTargetReceipt(command, input.proposal);
-  const base = {
-    ...attemptBase,
-    changedContentDigest: sha256(JSON.stringify(changes)),
-    changes,
-    postTree: after.files,
-    postTreeDigest: after.treeDigest,
-  };
-  if (command.exitCode !== 0 || targetReceipt === undefined) {
-    const commandOutput = `${command.stderr}\n${command.stdout}`;
-    const output = validationOutputExcerpt(command.stdout, command.stderr);
-    const unsigned: ApplyResultBase &
-      ObservedApplyResult & {
-        commandFailureKind: CommandFailureKind;
-        reason: "invalid-receipt" | "command-failed";
-        recoveryRequired: true;
-        status: "partial-failure";
-        failedCommand?: string;
-        output?: { stdout: string; stderr: string; truncated: boolean };
-        missingDependency?: string;
-      } = {
-      ...base,
-      commandFailureKind: commandFailureKind(commandOutput),
-      reason: command.exitCode === 0 ? "invalid-receipt" : "command-failed",
-      recoveryRequired: true,
-      status: "partial-failure",
-    };
-    if (command.failedCommand !== undefined) {
-      unsigned.failedCommand = command.failedCommand;
-    }
-    if (output.stderr !== "" || output.stdout !== "") {
-      unsigned.output = output;
-    }
-    const dependency = missingDependency(commandOutput);
-    if (dependency !== undefined) {
-      unsigned.missingDependency = dependency;
-    }
-    return {
-      ok: false,
-      receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },
-    };
-  }
-  const unsigned = { ...base, status: "applied" as const, targetReceipt };
-  return { ok: true, receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) } };
-};
-
-export const executeProposalBoundApply = async (input: {
-  sandbox: SandboxSession;
-  executor: ApplyCommandExecutor;
-  snapshotter?: (sandbox: SandboxSession, applyRoot: string) => Promise<OverlaySnapshot>;
-  binding: TargetApplyBinding;
-  artifactRevision: string;
-  dependencyLayout?: ExecutionDependencyLayout;
-  proposal: TargetProposal;
-  appliedByCallId: string;
-  environment?: Readonly<Record<string, string | undefined>>;
-}): Promise<TargetApplyResult> => {
-  if (!appSpecBindingMatches(input.binding, input.proposal)) {
-    throw new Error("The accepted AppSpec binding or path differs from the target proposal.");
-  }
-  const snapshotter = input.snapshotter ?? inspectApplyOverlay;
-  const overlay = await materializeFreshApplyOverlay({
-    artifactRevision: input.artifactRevision,
-    dependencyLayout: input.dependencyLayout,
-    environment: input.environment,
-    proposal: input.proposal,
-    proposalDigest: input.binding.proposalDigest,
-    sandbox: input.sandbox,
-  });
-  if (input.dependencyLayout !== undefined) {
-    await installDependencyCache(input.sandbox, input.dependencyLayout);
-  }
-  const snapshots = await captureApplySnapshots(
-    input.sandbox,
-    input.binding.proposalDigest,
-    input.proposal,
-    overlay,
-    snapshotter,
-  );
-  const command = await executeApplyCommand(input, overlay);
   let after: OverlaySnapshot;
   try {
     after = await snapshotter(input.sandbox, overlay.applyRoot);
   } catch {
-    const { before, planning, prepared } = snapshots;
-    const attemptBase: ApplyResultBase = {
-      ...input.binding,
-      appliedByCallId: input.appliedByCallId,
-      applyRoot: overlay.applyRoot,
-      command: {
-        exitCode: command.exitCode,
-        name: "operation" in input.proposal ? "iterate-existing-app" : "create-app",
-        stderrDigest: sha256(command.stderr),
-        stdoutDigest: sha256(command.stdout),
-      },
-      planningTreeDigest: planning.treeDigest,
-      preTree: before.files,
-      preTreeDigest: before.treeDigest,
-      preparedTreeDigest: prepared.treeDigest,
-      version: 2,
-    };
     const unsigned = {
       ...attemptBase,
       changedContentDigest: null,
@@ -1309,5 +1065,42 @@ export const executeProposalBoundApply = async (input: {
       receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },
     };
   }
-  return createApplyResult(input, overlay, snapshots, command, after);
-};
+  const changes = overlayChanges(before, after);
+  const targetReceipt = parseTargetReceipt(command, input.proposal);
+  const base = {
+    ...attemptBase,
+    changedContentDigest: sha256(JSON.stringify(changes)),
+    changes,
+    postTree: after.files,
+    postTreeDigest: after.treeDigest,
+  };
+  if (command.exitCode !== 0 || targetReceipt === undefined) {
+    const commandOutput = `${command.stderr}\n${command.stdout}`;
+    const output = validationOutputExcerpt(command.stdout, command.stderr);
+    const unsigned = {
+      ...base,
+      commandFailureKind: commandFailureKind(commandOutput),
+      ...(command.failedCommand === undefined ? {} : { failedCommand: command.failedCommand }),
+      ...(output.stderr === "" && output.stdout === "" ? {} : { output }),
+      reason: command.exitCode === 0 ? ("invalid-receipt" as const) : ("command-failed" as const),
+      recoveryRequired: true as const,
+      status: "partial-failure" as const,
+      ...(missingDependency(commandOutput) === undefined
+        ? {}
+        : { missingDependency: missingDependency(commandOutput) }),
+    };
+    return {
+      ok: false,
+      receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },
+    };
+  }
+  const unsigned = {
+    ...base,
+    status: "applied" as const,
+    targetReceipt,
+  };
+  return {
+    ok: true,
+    receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },
+  };
+}

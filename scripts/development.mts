@@ -62,11 +62,7 @@ interface DevelopmentSupervisorState {
   snapshot?: DevelopmentSnapshot;
 }
 
-const exitOutcome = async (exit: Promise<number>, kind: "eve-exit" | "next-exit" | "web-exit") => ({
-  code: await exit,
-  kind,
-});
-
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredEnvironment(name: string, description = "executable") {
   const value = process.env[name];
   if (value === undefined || !value.startsWith("/")) {
@@ -75,20 +71,25 @@ function requiredEnvironment(name: string, description = "executable") {
   return value;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function privateRoot(path: string) {
   await mkdir(path, { mode: 0o700, recursive: true });
   const canonical = await realpath(path);
   const info = await lstat(canonical);
-  const isNotPrivateDirectory = !info.isDirectory() || info.isSymbolicLink();
-  const permissionMode = info.mode.toString(8).slice(-3);
-  const isNotOwnedOrPrivate = info.uid !== process.getuid?.() || /[1-7]/u.test(permissionMode);
-  const isNotCanonical = canonical !== path;
-  if (isNotCanonical || isNotPrivateDirectory || isNotOwnedOrPrivate) {
+  if (
+    canonical !== path ||
+    !info.isDirectory() ||
+    info.isSymbolicLink() ||
+    info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
+    (info.mode & 0o077) !== 0
+  ) {
     throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${path}`);
   }
   return canonical;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function nextEnvironment(input: {
   cycleFile: string;
   evePort: number;
@@ -114,7 +115,7 @@ function nextEnvironment(input: {
     NEXT_TELEMETRY_DISABLED: "1",
     NODE_ENV: "development" as const,
     PATH: `${nodePath.dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
-    TMPDIR: input.runtimeHome,
+    TMPDIR: process.env.TMPDIR ?? "/tmp",
     TZ: process.env.TZ ?? "UTC",
     // Next's env loader preserves explicitly supplied values. Empty values
     // prevent .env.local from projecting provider credentials into this child.
@@ -123,6 +124,7 @@ function nextEnvironment(input: {
   } satisfies NodeJS.ProcessEnv;
 }
 
+// oxlint-disable-next-line eslint/func-style, eslint/complexity -- Explicit retained-cycle recovery shares the same owned process shutdown path.
 async function runEveCycle(input: {
   cycleFile: string;
   sourceRoot: string;
@@ -156,8 +158,7 @@ async function runEveCycle(input: {
   // any response stream owned by the child we are replacing.
   await rotateLocalEveCycleBinding(input.cycleFile);
   const cycleStartedAt = performance.now();
-  const activeRunPath = await mkdtemp(nodePath.join(input.runsRoot, "run-"));
-  const activeRun = await privateRoot(activeRunPath);
+  const activeRun = await realpath(await mkdtemp(nodePath.join(input.runsRoot, "run-")));
   const cycle =
     input.resumeCycle === undefined
       ? await createDevelopmentCycle({ repositoryRoot, supervisorRoot: input.supervisorRoot })
@@ -307,18 +308,20 @@ async function runEveCycle(input: {
         );
       }
     })();
-    const eveExited = exitOutcome(developmentChildExit(eve), "eve-exit");
+    // This derived promise is an input to the shared race below.
+    // oxlint-disable-next-line promise/prefer-await-to-then
+    const eveExited = developmentChildExit(eve).then((code) => ({
+      code,
+      kind: "eve-exit" as const,
+    }));
     const stopping = waitForDevelopmentShutdown(input.signal, input.shutdownExitCode);
     try {
       const startup = await Promise.race([
-        (async () => {
-          await waitForDevelopmentMcp({
-            endpoint: packageResult.receipt.endpoint,
-            fetcher: input.web?.fetcher,
-            signal: watchers.signal,
-          });
-          return { code: 0, kind: "ready" as const };
-        })(),
+        waitForDevelopmentMcp({
+          endpoint: packageResult.receipt.endpoint,
+          fetcher: input.web?.fetcher,
+          signal: watchers.signal,
+        }).then(() => ({ code: 0, kind: "ready" as const })),
         eveExited,
         input.nextExited,
         stopping,
@@ -438,25 +441,33 @@ try {
       stdio: "inherit",
     },
   );
-  const nextProcessExited = exitOutcome(developmentChildExit(next), "next-exit");
-  const webExited = web === undefined ? undefined : exitOutcome(web.exited, "web-exit");
+  // This derived promise is an input to the shared race below.
+  // oxlint-disable-next-line promise/prefer-await-to-then
+  const nextProcessExited = developmentChildExit(next).then((code) => ({
+    code,
+    kind: "next-exit" as const,
+  }));
+  // Both owned services participate in the same supervisor exit race.
+  // oxlint-disable-next-line promise/prefer-await-to-then -- Preserve a live process exit handle.
+  const webExited = web?.exited.then((code) => ({ code, kind: "web-exit" as const }));
   const nextExited =
     webExited === undefined ? nextProcessExited : Promise.race([nextProcessExited, webExited]);
-  const supervise = async (): Promise<void> => {
-    if (shutdown.signal.aborted) return;
-    const codexRoot = await privateRoot(nodePath.join(cacheRoot, "codex"));
+  while (!shutdown.signal.aborted) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const outcome = await runEveCycle({
-      codexRoot,
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      codexRoot: await privateRoot(nodePath.join(cacheRoot, "codex")),
       cycleFile,
       destinationRoot,
       evePort: args.evePort,
-      hostedSession,
       installPlugin: args.installPlugin,
       nextExited,
       nextPort: args.nextPort,
+      hostedSession,
       packageState,
-      resumeCycle: args.resumeCycle,
       runsRoot,
+      resumeCycle: args.resumeCycle,
+
       shutdownExitCode: shutdown.exitCode,
       signal: shutdown.signal,
       sourceRoot,
@@ -470,11 +481,9 @@ try {
       outcome.kind === "stop"
     ) {
       process.exitCode = outcome.code;
-      return;
+      break;
     }
-    await supervise();
-  };
-  await supervise();
+  }
 } catch (error) {
   if (!shutdown.signal.aborted) {
     throw error;

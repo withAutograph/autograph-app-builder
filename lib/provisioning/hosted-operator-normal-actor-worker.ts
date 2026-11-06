@@ -61,8 +61,6 @@ interface TestDependencies {
 }
 const mismatch = () => new HostedOperatorError("resource_mismatch");
 const unavailable = () => new HostedOperatorError("operator_unavailable");
-const APP_STAGE = "app";
-const AUTH_MEMBERSHIP_EFFECT = "auth-membership";
 const privateOperation = async <T>(operation: () => Promise<T>): Promise<T> => {
   try {
     return await operation();
@@ -81,9 +79,9 @@ const selectedSpec = (input: OrganizationWorkerInput) => {
   }
   if (
     ![
-      effect.effect.kind === AUTH_MEMBERSHIP_EFFECT,
-      effect.effect.id === `${AUTH_MEMBERSHIP_EFFECT}:${input.organizationId}`,
-      effect.plan.stage === APP_STAGE,
+      effect.effect.kind === "auth-membership",
+      effect.effect.id === `auth-membership:${input.organizationId}`,
+      effect.plan.stage === "app",
       sameOperatorSelection(effect.plan.selection, effect.target),
     ].every(Boolean)
   ) {
@@ -209,10 +207,8 @@ const assertHistoricalInspection = (
   );
   const matches = [
     captured,
-    historical.effect.kind === AUTH_MEMBERSHIP_EFFECT,
-    [AUTH_MEMBERSHIP_EFFECT, `${AUTH_MEMBERSHIP_EFFECT}:${input.organizationId}`].includes(
-      historical.effect.id,
-    ),
+    historical.effect.kind === "auth-membership",
+    ["auth-membership", `auth-membership:${input.organizationId}`].includes(historical.effect.id),
     spec.actorId === input.owner.actorId,
     spec.identityProof.reference ===
       `_protected-operator/artifacts/realm-identity-proof/${input.effect.target.appId}/${spec.identityProof.sha256}`,
@@ -306,19 +302,16 @@ export const createNormalActorOrganizationWorkers = (
             assertHistoricalInspection(input, historical, original);
           }
           await assertCurrent(input);
-          const inspectionInput = {
+          const observed = await launcher.inspect({
             ...input.effect,
             ...prepared,
-          };
-          if (historical !== undefined && original !== undefined) {
-            Object.assign(inspectionInput, {
-              effect: historical.effect,
-              membershipProof: { ...prepared.membershipProof, proof: original.proof },
-              plan: historical.plan,
-            });
-          }
-          const observed = await launcher.inspect({
-            ...inspectionInput,
+            ...(historical === undefined || original === undefined
+              ? {}
+              : {
+                  effect: historical.effect,
+                  membershipProof: { ...prepared.membershipProof, proof: original.proof },
+                  plan: historical.plan,
+                }),
             // Only the observed marker uses historical plan bytes. Authority and
             // every execution fence still belong to the current approved effect.
             assertCurrent: currentFence,
@@ -332,11 +325,14 @@ export const createNormalActorOrganizationWorkers = (
             organizationId: input.organizationId,
           });
           for (const candidate of historical) {
+            // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each candidate must recheck the same live owner and journal fence before private reads.
             await assertCurrent(input);
             try {
+              // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Original proof reads share the current authority journal and precede their selected worker inspection.
               const original = await deps.readMembershipInspectionProof(input.effect, candidate, {
                 organizationId: input.organizationId,
               });
+              // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect one authorized marker at a time under the shared fence and stop on its exact live match.
               if ((await inspect(candidate, original)) === "applied") {
                 return "applied";
               }

@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await -- Controlled asynchronous boundaries exercise the actual client, dispatcher, journal and native approval capture. */
 import { isDeepStrictEqual } from "node:util";
 import type { MessageStreamEvent } from "eve/client";
 import { expect, it } from "vitest";
@@ -27,11 +28,6 @@ const ownerContext = {
 };
 const unexpected = async () => {
   throw new Error("Approval recovery must not prepare another app or resource");
-};
-const verifyWorkload = async (request: Request) => {
-  if (request.headers.get("authorization") !== "Bearer controlled-workload") {
-    throw new HostedOperatorError("authorization_required");
-  }
 };
 
 const composed = async () => {
@@ -77,29 +73,18 @@ const composed = async () => {
   let historyUnavailable = false;
   let loseExecuteResponse = false;
   const starts: number[] = [];
-  f.deps.readApproval = async (_ctx, request, callId, observation) => {
-    const capture = (
-      state: Parameters<typeof createPrivateContinuityApprovalCapture>[0]["state"],
-    ) => {
-      const captureInput: Parameters<typeof createPrivateContinuityApprovalCapture>[0] = {
-        plan: saved.plan,
-        principal: ownerContext.principal,
-        request,
-      };
-      if (callId !== undefined) {
-        captureInput.callId = callId;
-      }
-      if (state !== undefined) {
-        captureInput.state = state;
-      }
-      return createPrivateContinuityApprovalCapture(captureInput);
-    };
-    const approvalInput: Parameters<typeof readPrivateOperatorApproval>[0] = {
-      assertOwner: async () => {
-        await f.deps.assertOwner(context);
-      },
-      capture,
+  f.deps.readApproval = async (_ctx, request, callId, observation) =>
+    await readPrivateOperatorApproval({
       owner: ownerContext,
+      ...(observation === undefined ? {} : { observation }),
+      capture: (state) =>
+        createPrivateContinuityApprovalCapture({
+          plan: saved.plan,
+          principal: ownerContext.principal,
+          request,
+          ...(callId === undefined ? {} : { callId }),
+          ...(state === undefined ? {} : { state }),
+        }),
       readHistory: async (startIndex, onEvent) => {
         starts.push(startIndex);
         if (historyUnavailable) {
@@ -115,11 +100,14 @@ const composed = async () => {
           nextNativeIndex: end,
         };
       },
-    };
-    if (observation !== undefined) {
-      approvalInput.observation = observation;
+      assertOwner: async () => {
+        await f.deps.assertOwner(context);
+      },
+    });
+  const verifyWorkload = async (request: Request) => {
+    if (request.headers.get("authorization") !== "Bearer controlled-workload") {
+      throw new HostedOperatorError("authorization_required");
     }
-    return await readPrivateOperatorApproval(approvalInput);
   };
   const authorize: ProtectedHostedOperatorDependencies["authorize"] = async (
     request,
@@ -215,8 +203,7 @@ it("recovers the original native approval after a paginated interruption, then d
     recoveryProgressAdvanced: true,
     recoveryStage: "native_history",
   });
-  const { nextNativeIndex } = c.f.rows.get(c.saved.plan.intentId)?.approvalObservation ?? {};
-  expect(nextNativeIndex).toBe(1);
+  expect(c.f.rows.get(c.saved.plan.intentId)?.approvalObservation?.nextNativeIndex).toBe(1);
   expect(c.f.events).toEqual([]);
   expect(await c.client().continuityApproval(c.saved.request)).toEqual({ approved: true });
   expect(c.starts).toEqual([0, 1]);
@@ -279,6 +266,7 @@ it("reconciles the exact receipt when another approval reader wins the journal w
     if (!raced && input.record.approval !== undefined) {
       raced = true;
       await compareAndSet(input);
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- A lost CAS returns no journal winner.
       return undefined;
     }
     return await compareAndSet(input);
@@ -316,7 +304,7 @@ it.each(["cancelled", "foreign", "different-request", "changed-digest", "conflic
   "never dispatches from %s native evidence",
   async (failure) => {
     const c = await composed();
-    const [, settlement] = c.events;
+    const settlement = c.events[1];
     if (settlement?.type !== "approval.settled") {
       throw new Error("Missing controlled native settlement");
     }
@@ -324,28 +312,25 @@ it.each(["cancelled", "foreign", "different-request", "changed-digest", "conflic
       settlement.data.outcome = "cancelled";
     }
     if (failure === "foreign") {
-      const { data } = settlement;
-      data.responderPrincipalId = "different-owner";
+      settlement.data.responderPrincipalId = "different-owner";
     }
     if (failure === "different-request") {
-      const { data } = settlement;
-      data.requestId = "unrelated-approval";
+      settlement.data.requestId = "unrelated-approval";
     }
     if (failure === "conflicting-settlement") {
-      const [events] = [c.events];
-      events.push({
+      c.events.push({
         ...settlement,
         data: { ...settlement.data, outcome: "cancelled", sequence: 3 },
         meta: { at: "2026-10-20T14:00:03Z", id: "conflicting-native-settlement" },
       });
-      c.setPageSize(events.length);
+      c.setPageSize(c.events.length);
     }
     if (failure === "changed-digest") {
-      const [requested] = c.events;
+      const requested = c.events[0];
       if (requested?.type !== "input.requested") {
         throw new Error("Missing controlled request");
       }
-      const [first] = requested.data.requests;
+      const first = requested.data.requests[0];
       if (first?.kind !== "tool-approval") {
         throw new Error("Missing controlled tool approval");
       }

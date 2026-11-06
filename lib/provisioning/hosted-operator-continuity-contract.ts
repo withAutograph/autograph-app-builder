@@ -112,8 +112,6 @@ export const continuityApprovalSchema = hostedContinuityRequestSchema.extend({
   approvedByCallId: id,
 });
 export type ContinuityApproval = z.infer<typeof continuityApprovalSchema>;
-const reconciliationRequiredState = "reconciliation-required";
-const expiredState = "expired";
 export const continuityIdentitySchema = z.strictObject({
   appId: id,
   approvalRef: id,
@@ -131,8 +129,8 @@ export const continuityCurrentSchema = continuityIdentitySchema.extend({
     "ready",
     "restarting",
     "revoked",
-    expiredState,
-    reconciliationRequiredState,
+    "expired",
+    "reconciliation-required",
   ]),
 });
 export type ContinuityCurrent = z.infer<typeof continuityCurrentSchema>;
@@ -235,7 +233,7 @@ export const continuityRecordSchema = z
       "revoking",
       "revoked",
       "settled",
-      reconciliationRequiredState,
+      "reconciliation-required",
     ]),
     suiteCommandId: id.optional(),
     suiteDispatched: z.boolean().optional(),
@@ -264,7 +262,7 @@ export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord)
     return false;
   }
   return [
-    ["starting", reconciliationRequiredState].includes(record.state),
+    ["starting", "reconciliation-required"].includes(record.state),
     record.pendingStage === "runtime",
     record.supersededBy === undefined,
     record.cancelled !== true,
@@ -297,52 +295,23 @@ export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord)
   ].every(Boolean);
 };
 
-export const continuityStatus = (record: ContinuityRecord) => {
-  const status = {
-    intentId: record.requestId,
-    planRef: record.plan.planRef,
-    state: record.state,
-  };
-
-  if (record.supersededBy !== undefined) {
-    Object.defineProperty(status, "supersededBy", {
-      configurable: true,
-      enumerable: true,
-      value: record.supersededBy,
-      writable: true,
-    });
-  }
-  if (record.outcome !== undefined) {
-    Object.defineProperty(status, "outcome", {
-      configurable: true,
-      enumerable: true,
-      value: record.outcome,
-      writable: true,
-    });
-  }
-  if (record.failure !== undefined) {
-    Object.defineProperty(status, "failure", {
-      configurable: true,
-      enumerable: true,
-      value: record.failure,
-      writable: true,
-    });
-  }
-  if (record.current !== undefined) {
-    Object.defineProperty(status, "runtime", {
-      configurable: true,
-      enumerable: true,
-      value: {
-        leaseExpiresAt: record.current.leaseExpiresAt,
-        runtimeAttemptId: record.current.runtimeAttemptId,
-        state: record.current.state,
-      },
-      writable: true,
-    });
-  }
-
-  return status;
-};
+export const continuityStatus = (record: ContinuityRecord) => ({
+  intentId: record.requestId,
+  planRef: record.plan.planRef,
+  state: record.state,
+  ...(record.supersededBy === undefined ? {} : { supersededBy: record.supersededBy }),
+  ...(record.outcome === undefined ? {} : { outcome: record.outcome }),
+  ...(record.failure === undefined ? {} : { failure: record.failure }),
+  ...(record.current === undefined
+    ? {}
+    : {
+        runtime: {
+          leaseExpiresAt: record.current.leaseExpiresAt,
+          runtimeAttemptId: record.current.runtimeAttemptId,
+          state: record.current.state,
+        },
+      }),
+});
 
 export const continuityStatusSchema = z.strictObject({
   failure: continuityRecordSchema.shape.failure,

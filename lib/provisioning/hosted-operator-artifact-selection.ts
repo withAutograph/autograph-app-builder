@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- The owned Drizzle schema defines this existing table.
 import type * as databaseSchema from "../db/schema";
 import { prototypeArtifactChunks } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
@@ -197,8 +198,6 @@ export interface OperatorArtifactSelections {
   ) => Promise<CompiledOperatorReleaseSelection>;
 }
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
-const recordedStatus = "recorded" as const;
-const selectionChangedStatus = { status: "selection-changed" } as const;
 const scoped = (context: OperatorArtifactContext, appSpecDigest: string) => ({
   ...hostedTenantAuthoritySchema.parse(context.authority),
   path: `_protected-operator/selections/generated-release/${appId.parse(context.target.appId)}/${digest.parse(appSpecDigest)}`,
@@ -268,19 +267,19 @@ export const createPostgresOperatorArtifactSelections = (input: {
             )
             .limit(1);
           if (latest === undefined) {
-            return selectionChangedStatus;
+            return { status: "selection-changed" };
           }
           if (latest.chunkDigest !== hash(latest.content)) {
             throw operatorArtifactUnavailable();
           }
           const current = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(latest.content));
           if (!isEquivalentCompiledOperatorRelease(current, approved)) {
-            return selectionChangedStatus;
+            return { status: "selection-changed" };
           }
           if (current.publishedSource !== undefined) {
             return isDeepStrictEqual(current.publishedSource, source)
-              ? { selection: current, status: recordedStatus }
-              : selectionChangedStatus;
+              ? { selection: current, status: "recorded" }
+              : { status: "selection-changed" };
           }
           const selection = { ...current, publishedSource: source };
           const content = JSON.stringify(selection);
@@ -308,7 +307,7 @@ export const createPostgresOperatorArtifactSelections = (input: {
           if (recorded?.content !== content || recorded.chunkDigest !== hash(content)) {
             throw operatorArtifactUnavailable();
           }
-          return { selection, status: recordedStatus };
+          return { selection, status: "recorded" };
         },
       );
     },
@@ -508,6 +507,7 @@ export const readExactCompiledOperatorRelease = async (input: {
   const selection = await input.selections.readExact(input.context, lookup);
   await input.assertCurrentOwner(input.context);
   if (selection === undefined) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Absence is the explicit optional historical read contract.
     return undefined;
   }
   if (

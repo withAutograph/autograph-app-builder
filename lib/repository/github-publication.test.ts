@@ -47,29 +47,34 @@ import { parseGitHubPublicationProposalRow } from "./postgres-github-publication
 import { sealExistingDraftUpdate, updateExistingDraft } from "./github-draft-update";
 import type { ExistingDraftObservation, ExistingDraftUpdateAdapter } from "./github-draft-update";
 
-type PublicationHashValue =
-  | DraftPullRequestProposal
-  | FreshRepositoryProposal
-  | GitHubInstallationIdentity
-  | GitHubRepositoryObservation
-  | NormalizedChangeSet["changes"]
-  | Omit<DraftPullRequestProposal, "digest">
-  | Omit<FreshRepositoryProposal, "digest">
-  | Omit<GitHubInstallationIdentity, "digest">
-  | Omit<GitHubRepositoryObservation, "digest">
-  | Omit<NormalizedChangeSet, "digest">;
-const hash = (value: PublicationHashValue) =>
-  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const sha = "1".repeat(40);
 const templateBytes = new TextEncoder().encode("# Template\n");
 const templateDigest = createHash("sha256").update(templateBytes).digest("hex");
-const templateObjectId = "b".repeat(40);
-const tree = "c".repeat(40);
+const templateObjectId = createHash("sha1")
+  .update(Buffer.from(`blob ${templateBytes.byteLength}\0`))
+  .update(templateBytes)
+  .digest("hex");
+const treeContent = Buffer.concat([
+  Buffer.from("100644 README.md\0"),
+  Buffer.from(templateObjectId, "hex"),
+]);
+const tree = createHash("sha1")
+  .update(Buffer.from(`tree ${treeContent.byteLength}\0`))
+  .update(treeContent)
+  .digest("hex");
 const branchSha = "3".repeat(40);
 const branchTree = "4".repeat(40);
 const reviewedBytes = new TextEncoder().encode("export default 'demo';\n");
 const reviewedBytesDigest = createHash("sha256").update(reviewedBytes).digest("hex");
-const reviewedAfter = () => ({ digest: reviewedBytesDigest, mode: "644" as const });
+const reviewedAfter = (): { mode: "644"; digest: string } =>
+  Object.fromEntries([
+    ["mode", "644"],
+    ["digest", reviewedBytesDigest],
+  ]) as {
+    mode: "644";
+    digest: string;
+  };
 const reviewedChange = (
   change: NormalizedChangeSet["changes"][number],
 ): NormalizedChangeSet["changes"][number] => {
@@ -77,27 +82,53 @@ const reviewedChange = (
     if (change.after === undefined) {
       throw new Error("Added change is missing its postimage.");
     }
-    return { after: change.after, kind: change.kind, path: change.path };
+    const { after: postimage } = change;
+    const after = Object.fromEntries([
+      ["mode", postimage.mode],
+      ["digest", postimage.digest],
+    ]);
+    return Object.fromEntries([
+      ["path", change.path],
+      ["kind", change.kind],
+      ["after", after],
+    ]) as NormalizedChangeSet["changes"][number];
   }
   if (change.kind === "modified") {
     if (change.after === undefined) {
       throw new Error("Modified change is missing its postimage.");
     }
-    return { after: change.after, before: change.before, kind: change.kind, path: change.path };
+    const { after: postimage } = change;
+    const after = Object.fromEntries([
+      ["mode", postimage.mode],
+      ["digest", postimage.digest],
+    ]);
+    return Object.fromEntries([
+      ["path", change.path],
+      ["kind", change.kind],
+      ["before", change.before],
+      ["after", after],
+    ]) as NormalizedChangeSet["changes"][number];
   }
-  return { before: change.before, kind: change.kind, path: change.path };
+  return Object.fromEntries([
+    ["path", change.path],
+    ["kind", change.kind],
+    ["before", change.before],
+  ]) as NormalizedChangeSet["changes"][number];
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function publicationContentSource(
   bytes: Uint8Array | null = reviewedBytes,
   onRead?: (path: string) => void,
   mode = "644",
 ) {
   return {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async readFile(path: string) {
       onRead?.(path);
       return bytes === null ? null : { bytes, digest: reviewedBytesDigest, mode };
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async readFreshTree() {
       onRead?.("README.md");
       return {
@@ -119,6 +150,7 @@ function publicationContentSource(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function source(
   sourceKind: SourceReceiptEvidence["sourceKind"] = "fresh-template",
 ): SourceReceiptEvidence {
@@ -135,6 +167,7 @@ function source(
   return { ...unsigned, digest: hash(unsigned) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function review(
   inputChanges: NormalizedChangeSet["changes"] = [
     {
@@ -192,6 +225,7 @@ function review(
   return createReviewedChangeSetReceipt(changeSet, "review-call");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installation(
   operation: GitHubOperation,
   repositoryIds: readonly string[] = ["100"],
@@ -207,6 +241,7 @@ function installation(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function repository(
   identity: GitHubInstallationIdentity,
   overrides: Partial<Omit<GitHubRepositoryObservation, "version" | "digest">> = {},
@@ -228,6 +263,7 @@ function repository(
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshReadBack(
   proposal: FreshRepositoryProposal,
   identity: GitHubInstallationIdentity,
@@ -252,6 +288,7 @@ function freshReadBack(
   return { ...unsigned, digest: hash(unsigned) };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function draftReadBack(
   proposal: DraftPullRequestProposal,
   repo: GitHubRepositoryObservation,
@@ -299,12 +336,14 @@ function draftReadBack(
 }
 
 class Adapter implements GitHubPublicationAdapter {
+  // oxlint-disable-next-line eslint/require-await -- in-memory test double
   async inspectExistingDraft(): Promise<never> {
     throw new Error(
       `Existing draft inspection is not configured for ${this.identities.publish.digest}.`,
     );
   }
 
+  // oxlint-disable-next-line eslint/require-await -- in-memory test double
   async updateExistingDraft(): Promise<never> {
     throw new Error(
       `Existing draft update is not configured for ${this.identities.publish.digest}.`,
@@ -337,6 +376,7 @@ class Adapter implements GitHubPublicationAdapter {
   freshContent: GitHubFreshRepositoryContent | undefined;
   draftContent: GitHubDraftPullRequestContent | undefined;
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectInstallation(operation: GitHubOperation) {
     if (operation === "resolve-existing-source") {
       return this.identities.resolve;
@@ -347,14 +387,17 @@ class Adapter implements GitHubPublicationAdapter {
     return this.identities.publish;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectRepository() {
     return this.resolveRepo;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectDestination() {
     return this.destination;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectFreshRepositoryOutcome() {
     if (this.throwFreshReadBack) {
       throw new Error("read-back-failed");
@@ -362,6 +405,7 @@ class Adapter implements GitHubPublicationAdapter {
     return this.freshOutcome;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async createPrivateFreshHistoryRepository(
     proposal: FreshRepositoryProposal,
     content: GitHubFreshRepositoryContent,
@@ -377,6 +421,7 @@ class Adapter implements GitHubPublicationAdapter {
     return this.freshAcknowledgement;
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectDraftPublication(proposal: DraftPullRequestProposal) {
     if (this.throwDraftReadBack) {
       throw new Error("read-back-failed");
@@ -384,6 +429,7 @@ class Adapter implements GitHubPublicationAdapter {
     return this.draftOutcome ?? draftReadBack(proposal, this.publishRepo);
   }
 
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async publishDraftPullRequest(
     proposal: DraftPullRequestProposal,
     content: GitHubDraftPullRequestContent,
@@ -400,6 +446,7 @@ class Adapter implements GitHubPublicationAdapter {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshProposal(adapter: Adapter) {
   return createFreshRepositoryProposal({
     destinationName: "new-app",
@@ -410,6 +457,7 @@ function freshProposal(adapter: Adapter) {
   });
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function draftProposal(adapter: Adapter, reviewed = review()) {
   return createDraftPullRequestProposal({
     changedPathsSinceBase: [],
@@ -437,7 +485,7 @@ describe("closed GitHub publication contract", () => {
     expect(() =>
       parseGitHubPublicationProposalRow({
         ...row,
-        proposal: { ...proposal, unexpectedField: true },
+        proposal: { ...(row.proposal as object), unexpectedField: true },
       }),
     ).toThrow();
   });
@@ -521,8 +569,10 @@ describe("closed GitHub publication contract", () => {
     expect(() => {
       assertExactInstallationIdentity(identity);
     }).not.toThrow();
-    const reordered = { ...identity };
-    reordered.permissions = Object.fromEntries(Object.entries(identity.permissions).toReversed());
+    const reordered = Object.fromEntries(Object.entries(identity).toReversed()) as typeof identity;
+    reordered.permissions = Object.fromEntries(
+      Object.entries(identity.permissions).toReversed(),
+    ) as typeof identity.permissions;
     expect(() => {
       assertExactInstallationIdentity(reordered);
     }).not.toThrow();
@@ -530,12 +580,11 @@ describe("closed GitHub publication contract", () => {
 
   it("rejects unknown keys and permission escalation", () => {
     const identity = installation("publish-draft-pull-request");
-    const unknownIdentity: GitHubInstallationIdentity & { token: string } = {
-      ...structuredClone(identity),
-      token: "secret",
-    };
     expect(() => {
-      assertExactInstallationIdentity(unknownIdentity);
+      assertExactInstallationIdentity({
+        ...identity,
+        token: "secret",
+      } as never);
     }).toThrow(/schema/u);
     expect(() => {
       assertExactInstallationIdentity({
@@ -588,12 +637,8 @@ describe("closed GitHub publication contract", () => {
 
   it("accepts exact active release-gate observations and rejects schema or digest drift", () => {
     const repo = repository(installation("resolve-existing-source"));
-    const unknownRepository: GitHubRepositoryObservation & { url: string } = {
-      ...structuredClone(repo),
-      url: "private",
-    };
     expect(() => {
-      assertExactRepositoryObservation(unknownRepository);
+      assertExactRepositoryObservation({ ...repo, url: "private" } as never);
     }).toThrow(/schema/u);
     expect(() => {
       assertExactRepositoryObservation({ ...repo, headTree: "9".repeat(40) });
@@ -605,8 +650,10 @@ describe("closed GitHub publication contract", () => {
     expect(() => {
       assertExactRepositoryObservation(active);
     }).not.toThrow();
-    const reordered = { ...active };
-    reordered.releaseGate = Object.fromEntries(Object.entries(active.releaseGate).toReversed());
+    const reordered = Object.fromEntries(Object.entries(active).toReversed()) as typeof active;
+    reordered.releaseGate = Object.fromEntries(
+      Object.entries(active.releaseGate).toReversed(),
+    ) as typeof active.releaseGate;
     expect(() => {
       assertExactRepositoryObservation(reordered);
     }).not.toThrow();
@@ -622,14 +669,13 @@ describe("closed GitHub publication contract", () => {
         name: "REPOSITORY_RELEASE_ENABLED" as const,
       },
     };
-    const { digest: _digest, ...unsignedProposal } = unsigned;
+    delete (unsigned as Partial<typeof proposal>).digest;
     const releaseEnabled = {
-      ...unsignedProposal,
-      digest: hash(unsignedProposal),
+      ...unsigned,
+      digest: hash(unsigned),
     };
-    void _digest;
     expect(() => {
-      assertExactFreshRepositoryProposal(releaseEnabled);
+      assertExactFreshRepositoryProposal(releaseEnabled as never);
     }).toThrow(/malformed/u);
   });
 
@@ -663,21 +709,18 @@ describe("closed GitHub publication contract", () => {
     const canonicalReview = review(changes, {}, true);
     const reordered = {
       ...canonicalReview,
-      changes: canonicalReview.changes.map((change) => {
-        const reorderedChange = {
-          kind: change.kind,
-          path: change.path,
-          ...Object.fromEntries(Object.entries(change).toReversed()),
-        };
-        if (change.before !== undefined) {
-          reorderedChange.before = Object.fromEntries(Object.entries(change.before).toReversed());
-        }
-        if (change.after !== undefined) {
-          reorderedChange.after = Object.fromEntries(Object.entries(change.after).toReversed());
-        }
-        return reorderedChange satisfies NormalizedChangeSet["changes"][number];
-      }),
-    } satisfies typeof canonicalReview;
+      changes: canonicalReview.changes.map((change) => ({
+        kind: change.kind,
+        path: change.path,
+        ...Object.fromEntries(Object.entries(change).toReversed()),
+        ...(change.before === undefined
+          ? {}
+          : { before: Object.fromEntries(Object.entries(change.before).toReversed()) }),
+        ...(change.after === undefined
+          ? {}
+          : { after: Object.fromEntries(Object.entries(change.after).toReversed()) }),
+      })),
+    } as typeof canonicalReview;
 
     expect(changes[0]).toEqual({
       after: { digest: reviewedBytesDigest, mode: "100644" },
@@ -697,7 +740,7 @@ describe("closed GitHub publication contract", () => {
       assertExactDraftPullRequestProposal({
         ...draft,
         endpoint: "https://example.com",
-      });
+      } as never);
     }).toThrow(/schema/u);
     expect(() =>
       createFreshRepositoryProposal({
@@ -778,7 +821,7 @@ describe("closed GitHub publication contract", () => {
     }
     expect(() => {
       assertExactGitHubPublicationContent({
-        content: { ...content, token: "secret" },
+        content: { ...content, token: "secret" } as never,
         proposal,
         review: review(),
       });
@@ -856,6 +899,7 @@ describe("closed GitHub publication contract", () => {
     expect(content.files[0]?.bytes).toEqual(templateBytes);
 
     for (const drift of ["mode", "object", "bytes", "tree"] as const) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         readExactGitHubFreshRepositoryContent({
           proposal,
@@ -866,13 +910,18 @@ describe("closed GitHub publication contract", () => {
               if (file === undefined) {
                 throw new Error("missing fixture file");
               }
-              const changedFile = { ...file };
-              if (drift === "mode") changedFile.mode = "100755";
-              if (drift === "object") changedFile.objectId = "0".repeat(40);
-              if (drift === "bytes") changedFile.bytes = new TextEncoder().encode("drift\n");
-              const changedTree = { ...exact, files: [changedFile] };
-              if (drift === "tree") changedTree.sourceTree = "0".repeat(40);
-              return changedTree;
+              return {
+                ...exact,
+                ...(drift === "tree" ? { sourceTree: "0".repeat(40) } : {}),
+                files: [
+                  {
+                    ...file,
+                    ...(drift === "mode" ? { mode: "100755" as const } : {}),
+                    ...(drift === "object" ? { objectId: "0".repeat(40) } : {}),
+                    ...(drift === "bytes" ? { bytes: new TextEncoder().encode("drift\n") } : {}),
+                  },
+                ],
+              };
             },
           },
         }),
@@ -949,6 +998,7 @@ describe("closed GitHub publication contract", () => {
       } else {
         store.rejectTerminal = true;
       }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         createApprovedFreshRepository({
           adapter,
@@ -959,6 +1009,7 @@ describe("closed GitHub publication contract", () => {
           store,
         }),
       ).rejects.toBeInstanceOf(GitHubOutcomeUnknownError);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const pending = await store.read(proposal.digest);
       expect(pending?.status).toBe("pending");
     }
@@ -1213,6 +1264,7 @@ describe("closed GitHub publication contract", () => {
         message: /content source failed/u,
         name: "source-error",
         source: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async readFile(): Promise<never> {
             throw new Error("raw-content-source-secret");
           },
@@ -1223,29 +1275,24 @@ describe("closed GitHub publication contract", () => {
       const adapter = new Adapter();
       const store = new Store();
       const proposal = draftProposal(adapter);
-      let failure: unknown;
-      try {
-        await publishApprovedDraftPullRequest({
-          adapter,
-          approvedByCallId: `approve-${fixture.name}`,
-          contentSource: fixture.source,
-          proposal,
-          review: review(),
-          store,
-        });
-      } catch (error: unknown) {
-        failure = error;
-      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      const failure = await publishApprovedDraftPullRequest({
+        adapter,
+        approvedByCallId: `approve-${fixture.name}`,
+        contentSource: fixture.source,
+        proposal,
+        review: review(),
+        store,
+      }).catch((error: unknown) => error);
       expect(failure).toBeInstanceOf(Error);
-      if (!(failure instanceof Error)) {
-        throw new Error("Expected publication failure to be an Error.");
-      }
-      expect(failure.message).toMatch(fixture.message);
+      expect((failure as Error).message).toMatch(fixture.message);
       expect(JSON.stringify(failure)).not.toContain("raw-content-source-secret");
       expect(adapter.draftCalls).toBe(0);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const pending = await store.read(proposal.digest);
       expect(pending?.status).toBe("pending");
 
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const recovered = await publishApprovedDraftPullRequest({
         adapter,
         approvedByCallId: `recover-${fixture.name}`,
@@ -1397,9 +1444,8 @@ describe("closed GitHub publication contract", () => {
     const mutations: ((adapter: Adapter, proposal: DraftPullRequestProposal) => void)[] = [
       (adapter, proposal) => {
         const value = draftReadBack(proposal, adapter.publishRepo);
-        const { digest: _digest, ...unsigned } = value;
-        void _digest;
-        unsigned.changedPathsSinceBase = ["apps/demo"];
+        const unsigned = { ...value, changedPathsSinceBase: ["apps/demo"] };
+        delete (unsigned as Partial<DraftPublicationReadBack>).digest;
         adapter.draftOutcome = {
           ...unsigned,
           digest: hash(unsigned),
@@ -1421,6 +1467,7 @@ describe("closed GitHub publication contract", () => {
       const adapter = new Adapter();
       const proposal = draftProposal(adapter);
       mutate(adapter, proposal);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         publishApprovedDraftPullRequest({
           adapter,
@@ -1600,6 +1647,7 @@ describe("closed GitHub publication contract", () => {
       { ...proposal, idempotencyKey: "9".repeat(64) },
       { ...proposal, approvedPaths: ["../unsafe"] },
     ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         publishApprovedDraftPullRequest({
           adapter,
@@ -1634,15 +1682,13 @@ describe("existing draft PR updates", () => {
     repositoryId: "100",
     state: "open",
   };
-  // SAFETY: This exact receipt fixture contains every required success receipt field with valid values.
-  // SAFETY: This exact prior publication stub is consumed only for its identity and digest by the update proposal builder.
   const priorPublication = {
     branchName: initial.headBranch,
     branchSha: initial.headSha,
     digest: "a".repeat(64),
     pullRequestNumber: initial.number,
     repositoryId: initial.repositoryId,
-  } satisfies DraftPullRequestSuccessReceipt;
+  } as DraftPullRequestSuccessReceipt;
   const origin = {
     appId: "123",
     authorId: "900",
@@ -1664,15 +1710,19 @@ describe("existing draft PR updates", () => {
     let updates = 0;
     let loseResponse = false;
     const port: ExistingDraftUpdateAdapter = {
+      // oxlint-disable-next-line eslint/require-await -- in-memory test provider
       async inspectAppliedUpdate(_proposal, _content, candidate) {
         return candidate.headSha === "6".repeat(40) && candidate.headTree === "7".repeat(40);
       },
+      // oxlint-disable-next-line eslint/require-await -- in-memory test provider
       async inspectDraft() {
         return observed;
       },
+      // oxlint-disable-next-line eslint/require-await -- in-memory test provider
       async inspectInstallation() {
         return identity;
       },
+      // oxlint-disable-next-line eslint/require-await -- in-memory test provider
       async updateDraft() {
         updates += 1;
         observed = { ...observed, headSha: "6".repeat(40), headTree: "7".repeat(40) };

@@ -8,7 +8,6 @@ import {
 import type { PrivateComputeProfile } from "../sandbox/private-compute-profile";
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 // The provider file-upload API does not preserve executable modes. Mutate the
 // already approved regular file through one no-follow handle, then read it back.
 const installProgram = String.raw`
@@ -79,6 +78,7 @@ export const applyPrivateComputeCheckPolicy = async (input: {
 }) => {
   input.abortSignal?.throwIfAborted();
   const policy = privateComputeProfileSchema.parse(input.profile).checkPolicy;
+  const hash = (text: string) => createHash("sha256").update(text).digest("hex");
   if (policy.afterSha256 !== hash(PRIVATE_COMPUTE_CHECK_TASK)) {
     throw new Error(
       "The reviewed compute check policy does not match its installed implementation.",

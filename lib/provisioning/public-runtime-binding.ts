@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/complexity, sonarjs/expression-complexity -- Keep the complete public release, binding and current authorization predicate visible without changing admission semantics. */
 import { browserEntryPathSchema } from "../repository/browser-entry-path";
 import { z } from "zod";
 import { operatorPlanDigest, HostedOperatorError } from "./hosted-operator-contract";
@@ -69,7 +70,7 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
   if (rows.length !== 1) {
     throw fail();
   }
-  const [row] = rows;
+  const row = rows[0];
   const record: PublicReleaseRecord = publicReleaseRecordSchema.parse(row.record);
   const { plan } = record;
   if (
@@ -96,6 +97,7 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
   }
   for (const receipt of record.approvalReceipts ?? []) {
     // Consent is re-read sequentially from the actual owner's native history.
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each complete consent is independently verified before the public read.
     await input.assertApproved(plan, receipt);
   }
   const observed = await input.observe(plan);
@@ -109,22 +111,19 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
   ) {
     throw fail();
   }
-  const bindingInput = {
-    deploymentId: observed.deploymentId,
-    environment: observed.environment,
-    kind: "public-application-runtime-v1" as const,
+  const binding = publicRuntimeBindingSchema.parse({
+    kind: "public-application-runtime-v1",
     operationRef: row.requestId,
     planDigest: row.requestDigest,
-    projectId: observed.projectId,
-    publicOrigin: observed.publicOrigin,
-    releaseId: observed.releaseId,
     runtimeOperationRef: input.operationRef,
     runtimePlanDigest: operatorPlanDigest(input.plan),
-  };
-  if (input.appEntryPath !== undefined) {
-    bindingInput.appEntryPath = input.appEntryPath;
-  }
-  const binding = publicRuntimeBindingSchema.parse(bindingInput);
+    projectId: observed.projectId,
+    environment: observed.environment,
+    publicOrigin: observed.publicOrigin,
+    ...(input.appEntryPath === undefined ? {} : { appEntryPath: input.appEntryPath }),
+    deploymentId: observed.deploymentId,
+    releaseId: observed.releaseId,
+  });
   assertPublicRuntimeBinding(binding, input.plan, input.operationRef);
   return binding;
 };

@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/no-useless-undefined -- Mocked optional owner/project reads preserve their real absence contracts. */
 import { describe, expect, it, vi } from "vitest";
 import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { operatorOwnerContextSchema } from "./hosted-operator-contract";
@@ -26,15 +27,16 @@ const request = () =>
     method: "POST",
   });
 const fixture = () => {
-  const limit = vi.fn().mockResolvedValue([]);
+  const limit = vi.fn(async () => []);
   const select = vi.fn(() => ({ from: () => ({ where: () => ({ limit }) }) }));
   // SAFETY: This test supplies only the exact read-only Drizzle query chain consumed by the readiness reader; no write/effect method exists.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The deliberately partial read-only database fixture exercises the real HTTP prerequisite path.
   const database = { select } as unknown as ReturnType<typeof openHostedPostgresDatabase>;
   const owner = {
     assertCanonicalAppOwner: vi.fn(async () => {}),
-    readStandardDestination: vi
-      .fn<Parameters<typeof createPublicReleaseDeployment>[0]["owner"]["readStandardDestination"]>()
-      .mockResolvedValue({ ...plan.project }),
+    readStandardDestination: vi.fn<
+      Parameters<typeof createPublicReleaseDeployment>[0]["owner"]["readStandardDestination"]
+    >(async () => ({ ...plan.project })),
     verifyWorkload: vi.fn(async () => {}),
   };
   return { handler: createPublicReleaseDeployment({ database, owner }), owner, select };

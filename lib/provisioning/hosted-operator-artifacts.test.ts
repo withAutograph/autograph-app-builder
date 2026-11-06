@@ -1,8 +1,10 @@
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Deferred barriers intentionally release one complete wave at a time. */
 import {
   readExactCompiledOperatorRelease,
   selectExactCompiledOperatorRelease,
 } from "./hosted-operator-artifact-selection";
 import type { OperatorArtifactSelections } from "./hosted-operator-artifact-selection";
+/* oxlint-disable unicorn/no-await-expression-member -- Concise assertions inspect the returned private release snapshots. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
@@ -65,6 +67,7 @@ const fixture = () => {
   let writes = 0;
   let interruptAt = Infinity;
   const rows = new Map<string, string>();
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Faithful store fixtures own their row-key construction.
   const key = (c: OperatorArtifactContext, ref: string, index: number) =>
     JSON.stringify([c.authority, c.target.sessionId, c.target.appId, ref, index]);
   const assertCurrentOwner = async () => {
@@ -146,8 +149,9 @@ const seedGeneratedEnvelope = (
   const manifestSha256 = createHash("sha256")
     .update(f.files["release-manifest.json"])
     .digest("hex");
-  const envelope = {
+  const content = JSON.stringify({
     appId: "spend-review",
+    ...(capturedDescription === undefined ? {} : { description: capturedDescription }),
     files: Object.fromEntries(
       Object.entries(f.files).map(([name, bytes]) => [name, bytes.toString("base64")]),
     ),
@@ -156,11 +160,7 @@ const seedGeneratedEnvelope = (
     releaseId: "historical-v12",
     schemaSha256: schemaHash,
     version: 1,
-  };
-  if (capturedDescription !== undefined) {
-    Object.assign(envelope, { description: capturedDescription });
-  }
-  const content = JSON.stringify(envelope);
+  });
   const artifactRef =
     retainedArtifactRef ??
     `_protected-operator/artifacts/generated-release/spend-review/${createHash("sha256").update(content).digest("hex")}`;
@@ -623,6 +623,7 @@ describe("immutable private operator artifacts", () => {
       },
     );
     // SAFETY: Public getPrototypeChunk rejects the namespace before reading any database method; this proxy makes unintended access observable.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Negative public namespace boundary, never used as a functioning database.
     const guardedDatabase = publicDatabase as never;
     await expect(
       getPrototypeChunk(guardedDatabase, {

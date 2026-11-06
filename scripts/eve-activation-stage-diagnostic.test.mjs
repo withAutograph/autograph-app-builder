@@ -1,3 +1,6 @@
+/* oxlint-disable typescript/only-throw-error, typescript/prefer-promise-reject-errors -- Negative fixtures intentionally throw hostile non-Error values; compiled error constructors load through installed private JavaScript. */
+/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- Exercises installed native SDK modules with synthetic authority and hook ports. */
+/* oxlint-disable eslint/require-await -- Synthetic asynchronous ports perform no live I/O. */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -12,7 +15,6 @@ const { WorkflowWorldError, RunExpiredError, HookNotFoundError, RuntimeDecryptio
   await import(`${sdk}compiled/@workflow/errors/index.js`);
 const canary = "NEVER_LOG_private_token_auth_ID_URL_state";
 const prefix = "[eve:terminal-recovery-activation] ";
-const failureEvent = "eve.terminal_recovery_activation_failed";
 const fixture = () => {
   const descriptor = {
     logicalSessionId: `${canary}-logical`,
@@ -79,7 +81,7 @@ const captureFailure = async (f, original, expectedStage) => {
   assert.equal(line.startsWith(prefix), true);
   assert.equal(line.includes(canary), false);
   const summary = JSON.parse(line.slice(prefix.length));
-  assert.equal(summary.event, failureEvent);
+  assert.equal(summary.event, "eve.terminal_recovery_activation_failed");
   assert.equal(summary.stage, expectedStage);
   assert.equal(
     Object.keys(summary).every((key) =>
@@ -104,7 +106,7 @@ test("receipt read errors retain identity and log only closed compiled error fac
   assert.deepEqual(await captureFailure(f, failure, "receipt_read"), {
     code: "TRANSPORT",
     errorClass: "WorkflowWorldError",
-    event: failureEvent,
+    event: "eve.terminal_recovery_activation_failed",
     stage: "receipt_read",
     status: 503,
   });
@@ -126,7 +128,7 @@ test("an actual expired hook lookup remains a failure and is never treated as a 
   assert.deepEqual(await captureFailure(f, failure, "hook_lookup"), {
     code: "run-expired",
     errorClass: "RunExpiredError",
-    event: failureEvent,
+    event: "eve.terminal_recovery_activation_failed",
     stage: "hook_lookup",
     status: 410,
   });
@@ -143,7 +145,7 @@ test("metadata decryption errors never expose their message or private context",
   });
   assert.deepEqual(await captureFailure(f, failure, "hook_metadata"), {
     errorClass: "RuntimeDecryptionError",
-    event: failureEvent,
+    event: "eve.terminal_recovery_activation_failed",
     stage: "hook_metadata",
   });
   assert.equal(f.state.resumes, 0);
@@ -196,7 +198,7 @@ test("unknown names, arbitrary codes, invalid status and deep causes cannot leak
   };
   assert.deepEqual(await captureFailure(f, failure, "receipt_read"), {
     errorClass: "other",
-    event: failureEvent,
+    event: "eve.terminal_recovery_activation_failed",
     stage: "receipt_read",
   });
 });

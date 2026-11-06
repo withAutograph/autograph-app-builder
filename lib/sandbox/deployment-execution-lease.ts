@@ -25,15 +25,6 @@ export interface SandboxCleanupEvidence {
   timedOut: boolean;
 }
 
-interface SandboxCleanupError extends Error {
-  [cleanupEvidenceKey]?: SandboxCleanupEvidence;
-}
-
-const parseError = (cause: unknown): SandboxCleanupError =>
-  cause instanceof Error
-    ? cause
-    : new Error("Hosted sandbox execution acquisition failed.", { cause });
-
 interface CommandAuthority {
   lease: SandboxExecutionLease;
   store: SandboxExecutionLeaseStore;
@@ -50,8 +41,9 @@ interface RuntimeDependencies {
 }
 
 const commandAuthorities = new Map<string, CommandAuthority>();
-let database: ReturnType<typeof openHostedPostgresDatabase> | null = null;
+let database: ReturnType<typeof openHostedPostgresDatabase> | undefined;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isHostedSandboxExecutionEnabled(
   environment: Readonly<Record<string, string | undefined>>,
 ) {
@@ -61,6 +53,7 @@ export function isHostedSandboxExecutionEnabled(
   );
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function hostedLeaseEnabled(environment: Readonly<Record<string, string | undefined>>) {
   if (!isHostedSandboxExecutionEnabled(environment)) {
     return false;
@@ -69,6 +62,7 @@ function hostedLeaseEnabled(environment: Readonly<Record<string, string | undefi
   return true;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function hostedLeaseDatabase(environment: Readonly<Record<string, string | undefined>>) {
   database ??= openHostedPostgresDatabase(parseHostedDatabaseUrl(environment.DATABASE_URL));
   return database;
@@ -76,6 +70,7 @@ function hostedLeaseDatabase(environment: Readonly<Record<string, string | undef
 
 const defaultDependencies: RuntimeDependencies = {
   enabled: hostedLeaseEnabled,
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async isMember({ principal, workspaceId, environment }) {
     return await createPostgresWorkspaceMembership(hostedLeaseDatabase(environment)).isMember({
       principal,
@@ -88,50 +83,50 @@ const defaultDependencies: RuntimeDependencies = {
 
 let dependencies = defaultDependencies;
 
-function errorWithCleanupEvidence(
-  error: Error,
-  evidence: SandboxCleanupEvidence,
-): SandboxCleanupError {
-  Object.defineProperty(error, cleanupEvidenceKey, {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEvidence) {
+  const preserved =
+    error instanceof Error
+      ? error
+      : new Error("Hosted sandbox execution acquisition failed.", {
+          cause: error,
+        });
+  Object.defineProperty(preserved, cleanupEvidenceKey, {
     configurable: true,
     enumerable: false,
     value: evidence,
   });
-  return error;
+  return preserved;
 }
 
-export function sandboxCleanupEvidence(cause: unknown): SandboxCleanupEvidence | undefined {
-  if (!(cause instanceof Error)) return undefined;
-  return cause instanceof Error && cleanupEvidenceKey in cause
-    ? cause[cleanupEvidenceKey]
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function sandboxCleanupEvidence(error: unknown) {
+  return error instanceof Error
+    ? ((error as unknown as Record<PropertyKey, unknown>)[cleanupEvidenceKey] as
+        | SandboxCleanupEvidence
+        | undefined)
     : undefined;
 }
 
-const stopOutcome = async (stop: Promise<unknown>): Promise<"stopped" | "failed"> => {
-  try {
-    await stop;
-    return "stopped";
-  } catch {
-    return "failed";
-  }
-};
-
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function stopWithin(
   sandbox: Pick<RuntimeSandboxSession, "stop">,
   timeoutMs = SANDBOX_EXECUTION_POLICY.lease.cleanupTimeoutMs,
 ): Promise<SandboxCleanupEvidence> {
   const timeoutController = new AbortController();
-  const stop = (async () => {
-    await sandbox.stop();
-  })();
+  const stop = Promise.resolve(sandbox.stop());
   // Intentionally observe stop failure without awaiting it before the timeout race.
+  // oxlint-disable-next-line promise/prefer-await-to-then
+  stop.catch(() => null);
   const timeout = delay(timeoutMs, "timeout" as const, {
     ref: false,
     signal: timeoutController.signal,
   });
-  const outcome = stopOutcome(stop);
   try {
-    const result = await Promise.race([outcome, timeout]);
+    const result = await Promise.race([
+      stop.then(() => "stopped" as const).catch(() => "failed" as const),
+      timeout,
+    ]);
     return {
       attempted: true,
       stopped: result === "stopped",
@@ -143,23 +138,24 @@ async function stopWithin(
 }
 
 /** Acquire one epoch at Eve's awaited `turn.started` boundary. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function acquireHostedSandboxExecutionLease(input: {
   sessionId: string;
   sessionAuth: unknown;
   sandbox: RuntimeSandboxSession;
   environment?: Readonly<Record<string, string | undefined>>;
   nowEpochMs?: number;
-}): Promise<SandboxExecutionLease | null> {
+}) {
   const environment = input.environment ?? process.env;
   let enabled: boolean;
   try {
     enabled = dependencies.enabled(environment);
   } catch (error) {
     const evidence = await stopWithin(input.sandbox);
-    throw errorWithCleanupEvidence(parseError(error), evidence);
+    throw errorWithCleanupEvidence(error, evidence);
   }
   if (!enabled) {
-    return null;
+    return;
   }
   try {
     const { authority, principal } = exactForwardedSessionAuthority(input.sessionAuth);
@@ -190,19 +186,20 @@ export async function acquireHostedSandboxExecutionLease(input: {
     return result.lease;
   } catch (error) {
     const evidence = await stopWithin(input.sandbox);
-    throw errorWithCleanupEvidence(parseError(error), evidence);
+    throw errorWithCleanupEvidence(error, evidence);
   }
 }
 
 /** Reassert the current durable epoch immediately before command dispatch. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function assertHostedSandboxCommandAuthority(input: {
   sessionId: string;
   environment?: Readonly<Record<string, string | undefined>>;
   nowEpochMs?: number;
-}): Promise<SandboxExecutionLease | null> {
+}) {
   const environment = input.environment ?? process.env;
   if (!dependencies.enabled(environment)) {
-    return null;
+    return;
   }
   const active = commandAuthorities.get(input.sessionId);
   if (active === undefined) {
@@ -230,6 +227,7 @@ export async function assertHostedSandboxCommandAuthority(input: {
 }
 
 /** Stop compute and release without consulting process-local command state. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function releaseHostedSandboxExecutionLease(input: {
   sessionId: string;
   sessionAuth: unknown;
@@ -247,7 +245,7 @@ export async function releaseHostedSandboxExecutionLease(input: {
     ({ principal } = exactForwardedSessionAuthority(input.sessionAuth));
   } catch (error) {
     const evidence = await stopWithin(input.sandbox);
-    throw errorWithCleanupEvidence(parseError(error), evidence);
+    throw errorWithCleanupEvidence(error, evidence);
   }
   const evidence = await stopWithin(input.sandbox);
   if (!evidence.stopped) {
@@ -270,14 +268,16 @@ export async function releaseHostedSandboxExecutionLease(input: {
     : ({ lease: released, released: true } as const);
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function setHostedSandboxExecutionLeaseDependenciesForTest(
   replacement: RuntimeDependencies,
 ) {
   dependencies = replacement;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function clearHostedSandboxExecutionLeaseCacheForTest() {
   commandAuthorities.clear();
-  database = null;
+  database = undefined;
   dependencies = defaultDependencies;
 }

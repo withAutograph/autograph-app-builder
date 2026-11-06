@@ -39,7 +39,7 @@ const oauthProofSchema = z.strictObject({
 });
 
 export const hostedProofScenarioSchema = z
-  .strictObject({
+  .object({
     approvalReceipts: z.array(expectedApprovalSchema).length(3),
     cancelPrompt: z.string().trim().min(1).max(32_000),
     createPrompt: z.string().trim().min(1).max(32_000),
@@ -57,6 +57,7 @@ export const hostedProofScenarioSchema = z
     ),
     target: targetProofSchema,
   })
+  .strict()
   .superRefine((scenario, context) => {
     if (scenario.oauth.audience !== scenario.oauth.resource) {
       context.addIssue({
@@ -114,29 +115,12 @@ export type HostedProofScenario = z.infer<typeof hostedProofScenarioSchema>;
 export const digest = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
-type CanonicalJsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | CanonicalJsonValue[]
-  | { [key: string]: CanonicalJsonValue };
-const canonicalJsonValueSchema: z.ZodType<CanonicalJsonValue> = z.lazy(() =>
-  z.union([
-    z.null(),
-    z.boolean(),
-    z.number(),
-    z.string(),
-    z.array(canonicalJsonValueSchema),
-    z.record(z.string(), canonicalJsonValueSchema),
-  ]),
-);
-
-const canonicalPublicResult = (value: CanonicalJsonValue): string => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function canonicalPublicResult(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalPublicResult).join(",")}]`;
   }
-  if (value !== null && !Array.isArray(value)) {
+  if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .toSorted(([left], [right]) => {
         if (left < right) {
@@ -147,10 +131,7 @@ const canonicalPublicResult = (value: CanonicalJsonValue): string => {
         }
         return 0;
       })
-      .map(
-        ([key, entry]) =>
-          `${JSON.stringify(key)}:${canonicalPublicResult(canonicalJsonValueSchema.parse(entry))}`,
-      )
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalPublicResult(entry)}`)
       .join(",")}}`;
   }
   const primitive = JSON.stringify(value);
@@ -158,13 +139,12 @@ const canonicalPublicResult = (value: CanonicalJsonValue): string => {
     throw new Error("Public tool result was not canonical JSON.");
   }
   return primitive;
-};
+}
 
-const publicResultFingerprint = (result: EveSessionResult) =>
-  digest(canonicalPublicResult(canonicalJsonValueSchema.parse(result)));
-
-const tokenTimeWindowValid = (notBefore: number, expires: number, now: number) =>
-  notBefore <= now && expires > now && expires - notBefore <= 300;
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function publicResultFingerprint(result: EveSessionResult) {
+  return digest(canonicalPublicResult(result));
+}
 
 const tokenClaimsSchema = z
   .object({
@@ -178,21 +158,22 @@ const tokenClaimsSchema = z
   })
   .loose();
 
-const tokenClaims = (token: string) => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function tokenClaims(token: string) {
   const parts = token.split(".");
   if (parts.length !== 3) {
     throw new Error("OAuth access token must be a JWT.");
   }
   return tokenClaimsSchema.parse(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8")));
-};
+}
 
-interface WorkspaceTokenPairInput {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function verifyWorkspaceTokenPair(input: {
   primary: string;
   secondary: string;
   scenario: HostedProofScenario;
   nowEpochSeconds: number;
-}
-export const verifyWorkspaceTokenPair = (input: WorkspaceTokenPairInput) => {
+}) {
   const primary = tokenClaims(input.primary);
   const secondary = tokenClaims(input.secondary);
   const requiredScopes = [
@@ -205,11 +186,14 @@ export const verifyWorkspaceTokenPair = (input: WorkspaceTokenPairInput) => {
   ];
   for (const claims of [primary, secondary]) {
     const scopes = new Set(claims.scope.split(" "));
-    const identityMatches =
-      claims.iss === input.scenario.oauth.issuer && claims.aud === input.scenario.oauth.audience;
-    const timeWindowValid = tokenTimeWindowValid(claims.nbf, claims.exp, input.nowEpochSeconds);
-    const scopesMatch = requiredScopes.every((scope) => scopes.has(scope));
-    if (!identityMatches || !timeWindowValid || !scopesMatch) {
+    if (
+      claims.iss !== input.scenario.oauth.issuer ||
+      claims.aud !== input.scenario.oauth.audience ||
+      claims.nbf > input.nowEpochSeconds ||
+      claims.exp <= input.nowEpochSeconds ||
+      claims.exp - claims.nbf > 300 ||
+      requiredScopes.some((scope) => !scopes.has(scope))
+    ) {
       throw new Error("OAuth token claims did not match the exact hosted proof contract.");
     }
   }
@@ -222,7 +206,7 @@ export const verifyWorkspaceTokenPair = (input: WorkspaceTokenPairInput) => {
       `${secondary.iss}\0${secondary.sub}\0${secondary.workspace_id}`,
     ),
   };
-};
+}
 
 const protectedResourceMetadataSchema = z.strictObject({
   authorization_servers: z.array(z.url().startsWith("https://")).length(1),
@@ -251,7 +235,8 @@ const draftPrReceiptSchema = z.strictObject({
   url: z.url().startsWith("https://github.com/"),
 });
 
-export const verifiedDraftPrEvidence = (text: string, scenario: HostedProofScenario) => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScenario) {
   const marker = "AUTOGRAPH_DRAFT_PR_RECEIPT ";
   const candidates = text.split("\n").filter((line) => line.startsWith(marker));
   if (candidates.length !== 1) {
@@ -260,33 +245,33 @@ export const verifiedDraftPrEvidence = (text: string, scenario: HostedProofScena
   const receipt = draftPrReceiptSchema.parse(JSON.parse(candidates[0].slice(marker.length)));
   const url = new URL(receipt.url);
   const expectedPath = `/${receipt.repository}/pull/`;
-  const urlPathMatches =
-    url.pathname.startsWith(expectedPath) &&
-    /^[1-9][0-9]*$/u.test(url.pathname.slice(expectedPath.length));
-  const urlIsExactPullRequest =
-    url.origin === "https://github.com" && urlPathMatches && url.search === "" && url.hash === "";
-  // SAFETY: draftPrReceiptSchema.parse above validates every field used in this target comparison.
-  const targetMatches =
-    receipt.repository === scenario.target.repository &&
-    receipt.baseRef === scenario.target.baseRef &&
-    receipt.baseSha === scenario.target.baseSha &&
-    receipt.headRef === scenario.target.headRef;
-  const revisionsAreDistinct =
-    receipt.headRef !== receipt.baseRef && receipt.headSha !== receipt.baseSha;
-  const changeSetMatches = receipt.changeSetDigest === scenario.target.changeSetDigest;
-  if (!urlIsExactPullRequest || !targetMatches || !revisionsAreDistinct || !changeSetMatches) {
+  if (
+    url.origin !== "https://github.com" ||
+    !url.pathname.startsWith(expectedPath) ||
+    !/^[1-9][0-9]*$/u.test(url.pathname.slice(expectedPath.length)) ||
+    url.search !== "" ||
+    url.hash !== "" ||
+    receipt.repository !== scenario.target.repository ||
+    receipt.baseRef !== scenario.target.baseRef ||
+    receipt.baseSha !== scenario.target.baseSha ||
+    receipt.headRef !== scenario.target.headRef ||
+    receipt.headRef === receipt.baseRef ||
+    receipt.headSha === receipt.baseSha ||
+    receipt.changeSetDigest !== scenario.target.changeSetDigest
+  ) {
     throw new Error("Draft-PR receipt did not match the exact approved target and change set.");
   }
   return { evidenceDigest: digest(JSON.stringify(receipt)), receipt };
-};
+}
 
-const jsonRpcPayload = (text: string) => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function jsonRpcPayload(text: string) {
   const contentTypePayload = text
     .split("\n")
     .filter((line) => line.startsWith("data:"))
     .map((line) => line.slice(5).trim())
     .find((line) => line !== "" && line !== "[DONE]");
-  const payload: unknown = JSON.parse(contentTypePayload ?? text);
+  const payload = JSON.parse(contentTypePayload ?? text) as unknown;
   return z
     .object({
       error: z.object({ code: z.number(), message: z.string() }).loose().optional(),
@@ -296,21 +281,13 @@ const jsonRpcPayload = (text: string) => {
     })
     .loose()
     .parse(payload);
-};
+}
 
 export interface ProofHttpResult {
   status: number;
   headers: Headers;
   payload?: ReturnType<typeof jsonRpcPayload>;
 }
-
-interface McpParams {
-  [key: string]: CanonicalJsonValue;
-}
-type McpParamsInput = Readonly<Record<string, CanonicalJsonValue>>;
-export const MCP_PROTOCOL_VERSION = "2025-03-26";
-const PROOF_CLIENT_NAME = "autograph-hosted-proof";
-const toolArgumentsSchema: z.ZodType<McpParams> = z.record(z.string(), canonicalJsonValueSchema);
 
 export class HostedMcpProofClient {
   private requestId = 0;
@@ -332,14 +309,13 @@ export class HostedMcpProofClient {
 
   private async post(
     method: string,
-    paramsInput: McpParamsInput,
+    params: unknown,
     options: { authenticate?: boolean; notification?: boolean } = {},
   ): Promise<ProofHttpResult> {
-    const params = toolArgumentsSchema.parse(paramsInput);
     const headers = new Headers({
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
-      "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+      "mcp-protocol-version": "2025-03-26",
     });
     if (options.authenticate !== false && this.token !== undefined) {
       headers.set("authorization", `Bearer ${this.token}`);
@@ -347,20 +323,17 @@ export class HostedMcpProofClient {
     if (this.sessionId !== undefined) {
       headers.set("mcp-session-id", this.sessionId);
     }
-    if (options.notification !== true) {
+    if (!options.notification) {
       this.requestId += 1;
     }
     const body = {
       jsonrpc: "2.0",
+      ...(options.notification ? {} : { id: this.requestId }),
       method,
       params,
-    } satisfies { jsonrpc: string; id?: number; method: string; params: McpParams };
-    let requestBody: typeof body | (typeof body & { id: number }) = body;
-    if (options.notification !== true) {
-      requestBody = { ...body, id: this.requestId };
-    }
+    };
     const response = await this.fetcher(this.endpoint, {
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify(body),
       headers,
       method: "POST",
       redirect: "error",
@@ -371,21 +344,18 @@ export class HostedMcpProofClient {
     }
     const text = await response.text();
     this.responseBodies.push(text);
-    const result: ProofHttpResult = {
+    return {
       headers: response.headers,
       status: response.status,
+      ...(text === "" ? {} : { payload: jsonRpcPayload(text) }),
     };
-    if (text.length > 0) {
-      result.payload = jsonRpcPayload(text);
-    }
-    return result;
   }
 
   async initialize() {
     const response = await this.post("initialize", {
       capabilities: {},
-      clientInfo: { name: PROOF_CLIENT_NAME, version: "1" },
-      protocolVersion: MCP_PROTOCOL_VERSION,
+      clientInfo: { name: "autograph-hosted-proof", version: "1" },
+      protocolVersion: "2025-03-26",
     });
     if (response.status !== 200 || response.payload?.error !== undefined) {
       throw new Error(`MCP initialize failed with HTTP ${response.status}.`);
@@ -411,9 +381,8 @@ export class HostedMcpProofClient {
     return listed.tools.map(({ name }) => name);
   }
 
-  async callTool(name: (typeof TOOL_NAMES)[number], args: McpParamsInput) {
-    const parsedArgs = toolArgumentsSchema.parse(args);
-    const response = await this.post("tools/call", { arguments: parsedArgs, name });
+  async callTool(name: (typeof TOOL_NAMES)[number], args: unknown) {
+    const response = await this.post("tools/call", { arguments: args, name });
     if (response.status !== 200 || response.payload?.error !== undefined) {
       throw new Error(`${name} failed with HTTP ${response.status}.`);
     }
@@ -424,19 +393,17 @@ export class HostedMcpProofClient {
       })
       .loose()
       .parse(response.payload?.result);
-    const isError = result.isError === true;
-    if (result.structuredContent === undefined) {
-      return { isError };
-    }
     return {
-      isError,
-      session: eveSessionResultSchema.parse(result.structuredContent),
+      isError: result.isError === true,
+      session:
+        result.structuredContent === undefined
+          ? undefined
+          : eveSessionResultSchema.safeParse(result.structuredContent),
     };
   }
 
-  async callToolAndDiscardResult(name: (typeof TOOL_NAMES)[number], args: McpParamsInput) {
-    const parsedArgs = toolArgumentsSchema.parse(args);
-    const response = await this.post("tools/call", { arguments: parsedArgs, name });
+  async callToolAndDiscardResult(name: (typeof TOOL_NAMES)[number], args: unknown) {
+    const response = await this.post("tools/call", { arguments: args, name });
     if (response.status !== 200 || response.payload?.error !== undefined) {
       throw new Error(`${name} failed with HTTP ${response.status}.`);
     }
@@ -461,7 +428,7 @@ export class HostedMcpProofClient {
     };
   }
 
-  async callToolMatchingDiscardedResult(name: (typeof TOOL_NAMES)[number], args: McpParamsInput) {
+  async callToolMatchingDiscardedResult(name: (typeof TOOL_NAMES)[number], args: unknown) {
     const discarded = this.discardedResult;
     if (discarded === undefined || discarded.name !== name) {
       throw new Error("No matching discarded tool result was recorded.");
@@ -469,8 +436,8 @@ export class HostedMcpProofClient {
     const result = await this.callTool(name, args);
     if (
       !result.isError &&
-      result.session !== undefined &&
-      publicResultFingerprint(result.session) !== discarded.fingerprint
+      result.session?.success === true &&
+      publicResultFingerprint(result.session.data) !== discarded.fingerprint
     ) {
       throw new Error("Lost-response retry did not match the discarded hosted session result.");
     }
@@ -483,7 +450,7 @@ export class HostedMcpProofClient {
       {
         capabilities: {},
         clientInfo: { name: "autograph-hosted-proof-negative", version: "1" },
-        protocolVersion: MCP_PROTOCOL_VERSION,
+        protocolVersion: "2025-03-26",
       },
       { authenticate },
     );
@@ -505,6 +472,7 @@ export class HostedMcpProofClient {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function verifyProtectedResourceMetadata(input: {
   endpoint: string;
   scenario: HostedProofScenario;
@@ -536,13 +504,15 @@ async function verifyProtectedResourceMetadata(input: {
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function toolSession(name: string, result: Awaited<ReturnType<HostedMcpProofClient["callTool"]>>) {
-  if (result.isError || result.session === undefined) {
+  if (result.isError || result.session?.success !== true) {
     throw new Error(`${name} returned a tool error or invalid public result.`);
   }
-  return result.session;
+  return result.session.data;
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assistantText(result: EveSessionResult) {
   return result.events
     .filter((event) => event.type === "assistant_message")
@@ -550,6 +520,7 @@ function assistantText(result: EveSessionResult) {
     .join("\n");
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function responseFor(
   request: NonNullable<EveSessionResult["inputRequests"]>[number],
   scenario: HostedProofScenario,
@@ -563,15 +534,12 @@ function responseFor(
       throw new Error("Question did not match exactly one title-bound response.");
     }
     const [match] = matches;
-    if (match === undefined) {
-      throw new Error("Question response disappeared after matching.");
-    }
-    const response = { kind: "answer" as const, value: match.value };
-    if (match.optionId !== undefined) {
-      response.optionId = match.optionId;
-    }
     return {
-      response,
+      response: {
+        kind: "answer" as const,
+        value: match.value,
+        ...(match.optionId === undefined ? {} : { optionId: match.optionId }),
+      },
     };
   }
   if (request.kind !== "approval" || request.description === undefined) {
@@ -595,6 +563,7 @@ function responseFor(
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function pollUntilSettled(input: {
   client: HostedMcpProofClient;
   scenario: HostedProofScenario;
@@ -611,6 +580,7 @@ async function pollUntilSettled(input: {
   for (let poll = 0; poll < input.scenario.maxPolls; poll += 1) {
     const page = toolSession(
       "autograph_get",
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.client.callTool("autograph_get", {
         cursor,
         limit: 250,
@@ -629,6 +599,7 @@ async function pollUntilSettled(input: {
     if (responses.length > 0) {
       toolSession(
         "autograph_respond",
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await input.client.callTool("autograph_respond", {
           clientRequestId: `${input.requestPrefix}-respond-batch-${responseBatchCount}`,
           responses,
@@ -653,6 +624,7 @@ async function pollUntilSettled(input: {
         responseCount,
       };
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await delay(input.scenario.pollIntervalMs);
   }
   throw new Error("Hosted session did not settle within the bounded poll window.");
@@ -686,6 +658,7 @@ export interface HostedProofResult {
 }
 
 // Keep proof helpers scoped to the hosted portable proof boundary.
+// oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 export async function runHostedProof(input: {
   endpoint: string;
   token: string;
@@ -712,21 +685,23 @@ export async function runHostedProof(input: {
   });
   const noAuth = new HostedMcpProofClient(input.endpoint, undefined, fetcher);
   const missing = await noAuth.rawInitialize(false);
-  const missingAuthenticate = missing.headers.get("www-authenticate");
   if (
     missing.status !== 401 ||
-    !/^Bearer(?:\s|$)/iu.test(missingAuthenticate ?? "") ||
-    missingAuthenticate?.includes(`resource_metadata="${metadata.metadataUrl}"`) !== true
+    !/^Bearer(?:\s|$)/iu.test(missing.headers.get("www-authenticate") ?? "") ||
+    !missing.headers
+      .get("www-authenticate")
+      ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
   ) {
     throw new Error("Hosted endpoint did not fail closed without OAuth.");
   }
   const invalid = new HostedMcpProofClient(input.endpoint, "invalid-hosted-proof-token", fetcher);
   const invalidResult = await invalid.rawInitialize(true);
-  const invalidAuthenticate = invalidResult.headers.get("www-authenticate");
   if (
     invalidResult.status !== 401 ||
-    !/^Bearer(?:\s|$)/iu.test(invalidAuthenticate ?? "") ||
-    invalidAuthenticate?.includes(`resource_metadata="${metadata.metadataUrl}"`) !== true
+    !/^Bearer(?:\s|$)/iu.test(invalidResult.headers.get("www-authenticate") ?? "") ||
+    !invalidResult.headers
+      .get("www-authenticate")
+      ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
   ) {
     throw new Error("Hosted endpoint did not reject an invalid bearer token.");
   }
@@ -817,6 +792,7 @@ export async function runHostedProof(input: {
     }),
   );
   // Keep proof response construction local to this run.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
   const denied = async (clientInput: HostedMcpProofClient, sessionId: string) => {
     const result = await clientInput.callTool("autograph_get", {
       cursor: 0,

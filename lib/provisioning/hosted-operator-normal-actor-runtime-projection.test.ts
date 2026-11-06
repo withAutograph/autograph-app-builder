@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-hardcoded-passwords -- Synthetic stored normal-session fixtures only. */
 import { describe, expect, it } from "vitest";
 import {
   initialNormalActorState,
@@ -215,19 +216,15 @@ describe("actual normal actor runtime projection", () => {
     "rejects a scoped session with a changed actual %s",
     (kind) => {
       const fixture = completed();
-      fixture.state.organizationSessions = fixture.state.organizationSessions?.map((entry) => {
-        const session = { ...entry.session };
-        if (kind === "actor") {
-          session.actorId = "other-real-user";
-        }
-        if (kind === "origin") {
-          session.origin = "https://other.example.test";
-        }
-        if (kind === "active-organization") {
-          session.activeOrganizationId = "other-real-org";
-        }
-        return { ...entry, session };
-      });
+      fixture.state.organizationSessions = fixture.state.organizationSessions?.map((entry) => ({
+        ...entry,
+        session: {
+          ...entry.session,
+          ...(kind === "actor" ? { actorId: "other-real-user" } : {}),
+          ...(kind === "origin" ? { origin: "https://other.example.test" } : {}),
+          ...(kind === "active-organization" ? { activeOrganizationId: "other-real-org" } : {}),
+        },
+      }));
       expect(() => projectNormalActorRuntime(fixture)).toThrow("normal_actor_program_mismatch");
     },
   );

@@ -23,18 +23,10 @@ const origin = z.url().refine((value) => {
     parsed.origin === value,
   ].every(Boolean);
 }, "An exact public HTTPS origin is required");
-const fenceAppIntegrationAuthorityEffect = "fence-app-integration-authority";
-const bindProductionRuntimeEffect = "bind-production-runtime";
-const publishReleaseSourceEffect = "publish-release-source";
 export const publicReleaseEffects = [
-  fenceAppIntegrationAuthorityEffect,
-  bindProductionRuntimeEffect,
-  publishReleaseSourceEffect,
-] as const;
-const publicReleaseEffectTuple = [
-  z.literal(fenceAppIntegrationAuthorityEffect),
-  z.literal(bindProductionRuntimeEffect),
-  z.literal(publishReleaseSourceEffect),
+  "fence-app-integration-authority",
+  "bind-production-runtime",
+  "publish-release-source",
 ] as const;
 export const publicReleaseEffectSchema = z.enum(publicReleaseEffects);
 export type PublicReleaseEffect = z.infer<typeof publicReleaseEffectSchema>;
@@ -51,8 +43,12 @@ export const publicReleasePlanSchema = z
   .strictObject({
     authority: hostedTenantAuthoritySchema,
     effects: z.union([
-      z.tuple(publicReleaseEffectTuple.slice(1)),
-      z.tuple([...publicReleaseEffectTuple]),
+      z.tuple([z.literal("bind-production-runtime"), z.literal("publish-release-source")]),
+      z.tuple([
+        z.literal("fence-app-integration-authority"),
+        z.literal("bind-production-runtime"),
+        z.literal("publish-release-source"),
+      ]),
     ]),
     environment: z
       .array(
@@ -135,7 +131,7 @@ export const publicReleasePlanSchema = z
       plan.retainedOptionalBindings === undefined,
     ].some(Boolean);
     if (
-      removing !== plan.effects.some((effect) => effect === fenceAppIntegrationAuthorityEffect) ||
+      removing !== plan.effects.some((effect) => effect === "fence-app-integration-authority") ||
       (removing && invalidRemoval)
     ) {
       context.addIssue({
@@ -228,7 +224,7 @@ export const publicReleaseRecordSchema = z.strictObject({
   bindings: z.record(z.string(), publicReleaseBindingStateSchema),
   effects: z.strictObject({
     "bind-production-runtime": z.enum(["idle", "pending", "applied"]),
-    [fenceAppIntegrationAuthorityEffect]: z.enum(["idle", "pending", "applied"]).optional(),
+    "fence-app-integration-authority": z.enum(["idle", "pending", "applied"]).optional(),
     "publish-release-source": z.enum(["idle", "pending", "applied"]),
   }),
   executionLease: z

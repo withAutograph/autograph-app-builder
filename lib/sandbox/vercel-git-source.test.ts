@@ -15,6 +15,7 @@ import {
   configureVercelSessionGitSource,
 } from "./vercel-session-source";
 
+/* oxlint-disable sonarjs/no-os-command-from-path -- Run real Git only in disposable local repository fixtures. */
 
 const sdk = vi.hoisted(() => ({
   create:
@@ -30,12 +31,14 @@ const drives = vi.hoisted(() => ({
   list: vi.fn(),
 }));
 const authority = vi.hoisted(() => vi.fn());
+// oxlint-disable-next-line anti-slop/no-module-mocking -- External provider boundary; fixtures never create Vercel resources.
 vi.mock("@vercel/sandbox", async () => ({
   ...(await vi.importActual<{ APIError: typeof APIError }>("@vercel/sandbox")),
   DEFAULT_SANDBOX_REGION: "iad1",
   Drive: drives,
   Sandbox: sdk,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Persistent command authority is the external boundary in this provider fixture.
 vi.mock("./deployment-execution-lease", () => ({ assertHostedSandboxCommandAuthority: authority }));
 
 const remote = "https://github.com/acme/private.git";
@@ -119,9 +122,9 @@ const fixture = () => {
           return {
             exitCode: 0,
             kill: vi.fn().mockResolvedValue(null),
-            stderr: () => "",
-            stdout: () => "/home/vercel\n",
-            wait: () => ({ exitCode: 0 }),
+            stderr: async () => "",
+            stdout: async () => "/home/vercel\n",
+            wait: async () => ({ exitCode: 0 }),
           };
         }
         const cloned = options.cmd === "git" && args.includes("clone");
@@ -151,10 +154,10 @@ fs.renameSync(process.argv[1],process.argv[2]);`;
         }
         return {
           exitCode: result.status ?? 1,
-          kill: vi.fn().mockReturnValue(null),
-          stderr: () => result.stderr,
-          stdout: () => result.stdout,
-          wait: () => ({ exitCode: result.status ?? 1 }),
+          kill: vi.fn().mockResolvedValue(null),
+          stderr: async () => await Promise.resolve(result.stderr),
+          stdout: async () => await Promise.resolve(result.stdout),
+          wait: async () => await Promise.resolve({ exitCode: result.status ?? 1 }),
         };
       },
     ),
@@ -170,7 +173,7 @@ fs.renameSync(process.argv[1],process.argv[2]);`;
     ...native,
     runCommand: vi.fn().mockImplementation(native.runCommand),
   } satisfies VercelSdkSessionNative;
-  drives.getOrCreate.mockImplementation((options: { name: string }) => ({
+  drives.getOrCreate.mockImplementation(async (options: { name: string }) => ({
     driveId: "source-drive",
     name: options.name,
     projectId: "source-project",
@@ -188,6 +191,7 @@ describe("late source acquisition on an existing Builder VM", () => {
       authority.mockImplementation(f.authorize);
       const provider = createBuilderVercelProvider();
       // SAFETY: start reads only session.id; this fixture supplies that exact field.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Fixture supplies the field consumed by start.
       const context = { session: { id: "late-source-fixture" } } as SandboxProviderSessionContext;
       const started = await provider.start(context, undefined, { files: [] });
       expect(sdk.create.mock.calls[0]?.[0]).not.toHaveProperty("source");
@@ -258,6 +262,7 @@ describe("late source acquisition on an existing Builder VM", () => {
       source: { revision: f.sha, token, url: remote },
     });
     // SAFETY: the provider reads only the supplied native session identity.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only session.id is consumed by this provider lifecycle fixture.
     const context = { session: { id: "late-source-fixture" } } as SandboxProviderSessionContext;
     const started = await createBuilderVercelProvider().start(context, undefined, { files: [] });
     const snapshot = await readSandboxGitHubSourceSnapshot(started.handle.sandbox, {
@@ -306,6 +311,7 @@ describe("late source acquisition on an existing Builder VM", () => {
       source: { revision: f.sha, token, url: remote },
     });
     // SAFETY: the provider reads only the supplied native session identity.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only session.id is consumed by this provider lifecycle fixture.
     const context = { session: { id: "late-source-fixture" } } as SandboxProviderSessionContext;
     const run = f.native.runCommand.getMockImplementation();
     if (run === undefined) {
@@ -372,6 +378,7 @@ describe("late source acquisition on an existing Builder VM", () => {
       source: { token, url: remote },
     });
     // SAFETY: the provider reads only the supplied native session identity.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only session.id is consumed by this provider lifecycle fixture.
     const context = { session: { id: "late-source-fixture" } } as SandboxProviderSessionContext;
     const run = f.native.runCommand.getMockImplementation();
     if (run === undefined) {
@@ -452,6 +459,7 @@ describe("late source acquisition on an existing Builder VM", () => {
       });
       sdk.create.mockResolvedValue(f.native);
       // SAFETY: the provider reads only the supplied native session identity.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only session.id is consumed by this provider lifecycle fixture.
       const context = { session: { id: "late-source-fixture" } } as SandboxProviderSessionContext;
       await expect(
         createBuilderVercelProvider().start(context, undefined, { files: [] }),

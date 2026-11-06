@@ -229,17 +229,17 @@ const membershipInspectionFixture = () => {
     version: 2,
   });
   const eve: Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts"> = {
-    getSession: vi.fn(() => session),
-    recordPrivateApprovalReceipts: vi.fn(() => {}),
+    getSession: vi.fn(async () => session),
+    recordPrivateApprovalReceipts: vi.fn(async () => {}),
   };
-  const observe = vi.fn(() => ({
+  const observe = vi.fn(async () => ({
     artifactProjectionRequiresLegacyReadback: false,
     installedEventCount: 0,
     pendingRequests: [],
     publicEventCount: 0,
     status: "waiting" as const,
   }));
-  const journal = { read: vi.fn(() => ({ record, revision: 1 })) };
+  const journal = { read: vi.fn(async () => ({ record, revision: 1 })) };
   const readApproval = createHostedOperatorReadApproval({ eve, journal, observe });
   const context = {
     action: "prepare" as const,
@@ -349,7 +349,7 @@ const approvedInspectionFixture = () => {
     workerCheckpoints: [],
   };
   const readApproval = vi.fn(f.readApproval);
-  const readCurrentRecord = vi.fn(() => f.record);
+  const readCurrentRecord = vi.fn(async () => f.record);
   return { ...f, context, readApproval, readCurrentRecord };
 };
 
@@ -565,7 +565,7 @@ describe("approved retained membership inspection", () => {
   it("propagates a current owner authorization failure without classifying it as an old approval denial", async () => {
     const f = selectedInspectionFixture();
     const failure = new HostedOperatorError("authorization_required");
-    f.context.assertCurrent = vi.fn(() => {
+    f.context.assertCurrent = vi.fn(async () => {
       throw failure;
     });
     await expect(
@@ -586,7 +586,7 @@ describe("approved retained membership inspection", () => {
       readApprovedRetainedMembershipInspections({
         effect: f.context,
         organizationId: f.organizationId,
-        readApproval: () => {
+        readApproval: async () => {
           throw failure;
         },
         readCurrentRecord: f.readCurrentRecord,
@@ -652,7 +652,7 @@ describe("approved retained membership inspection", () => {
       await expect(
         readApprovedRetainedMembershipInspection({
           effect: f.context,
-          readApproval: () => (mismatch === "null" ? null : approval),
+          readApproval: async () => (mismatch === "null" ? null : approval),
           readCurrentRecord: f.readCurrentRecord,
         }),
       ).rejects.toMatchObject({ code: "authorization_required" });
@@ -663,7 +663,7 @@ describe("approved retained membership inspection", () => {
   it("checks the live execution lease before looking up historical approval", async () => {
     const f = approvedInspectionFixture();
     const failure = new Error("Current execution lease was revoked");
-    f.context.assertCurrent = vi.fn(() => {
+    f.context.assertCurrent = vi.fn(async () => {
       throw failure;
     });
     await expect(

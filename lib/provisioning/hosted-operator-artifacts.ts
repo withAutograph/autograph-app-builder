@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Serial capture and drained chunk waves recheck owner authority and commit completion last. */
 import { createHash } from "node:crypto";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -9,40 +10,18 @@ import {
   operatorArtifactReferenceSchema,
   operatorArtifactUnavailable,
 } from "./hosted-operator-artifact-store";
-
 import type {
   OperatorArtifactContext,
   OperatorArtifactStore,
 } from "./hosted-operator-artifact-store";
 
-interface PublishedGeneratedRelease {
-  artifactRef: string;
-  description?: AppDescription;
-  files: GeneratedAppReleaseFiles;
-}
-
 const generatedKind = "generated-release";
-const releaseManifestMember = "release-manifest.json";
 const requiredMember = <T>(files: Readonly<Record<string, T>>, name: string): T => {
   const value = files[name];
   if (value === undefined) {
     throw operatorArtifactUnavailable();
   }
   return value;
-};
-const decodeReleaseMember = (
-  envelope: Extract<z.infer<typeof envelopeSchema>, { kind: typeof generatedKind }>,
-  member: (typeof GENERATED_RELEASE_MEMBERS)[number],
-): Buffer => {
-  const content = envelope.files[member];
-  if (!content) {
-    throw operatorArtifactUnavailable();
-  }
-  const bytes = Buffer.from(content, "base64");
-  if (bytes.toString("base64") !== content) {
-    throw operatorArtifactUnavailable();
-  }
-  return bytes;
 };
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -350,7 +329,7 @@ export const createOperatorArtifactPublication = (
           files[member] = bytes.toString("base64");
           void observe({ bytes: bytes.byteLength, member, outcome: "completed", stage: "capture" });
         }
-        const manifestBytes = Buffer.from(requiredMember(files, releaseManifestMember), "base64");
+        const manifestBytes = Buffer.from(requiredMember(files, "release-manifest.json"), "base64");
         const manifest = manifestSchema.parse(JSON.parse(manifestBytes.toString("utf-8")));
         if (
           manifest.app !== description.app.id ||
@@ -438,32 +417,29 @@ export const createOperatorArtifactPublication = (
             throw operatorArtifactUnavailable();
           }
         }
-        const decodedFiles = new Map(
-          GENERATED_RELEASE_MEMBERS.map((member) => [
-            member,
-            decodeReleaseMember(envelope, member),
-          ]),
+        const files = Object.fromEntries(
+          GENERATED_RELEASE_MEMBERS.map((member) => {
+            const content = envelope.files[member];
+            if (!content) {
+              throw operatorArtifactUnavailable();
+            }
+            const bytes = Buffer.from(content, "base64");
+            if (bytes.toString("base64") !== content) {
+              throw operatorArtifactUnavailable();
+            }
+            return [member, bytes];
+          }),
         );
-        const files: GeneratedAppReleaseFiles = {
-          "app-artifact.json": requiredMember(decodedFiles, "app-artifact.json"),
-          [releaseManifestMember]: requiredMember(decodedFiles, releaseManifestMember),
-          "runtime-coverage.json": requiredMember(decodedFiles, "runtime-coverage.json"),
-          "sql-bundle.sql": requiredMember(decodedFiles, "sql-bundle.sql"),
-          "sql-manifest.json": requiredMember(decodedFiles, "sql-manifest.json"),
-          "transition-contract.json": requiredMember(decodedFiles, "transition-contract.json"),
-          "transition-plan.json": requiredMember(decodedFiles, "transition-plan.json"),
-        };
-        if (hash(requiredMember(files, releaseManifestMember)) !== expected.manifestSha256) {
+        if (hash(requiredMember(files, "release-manifest.json")) !== expected.manifestSha256) {
           throw operatorArtifactUnavailable();
         }
-        const artifact: PublishedGeneratedRelease = {
+        return {
           artifactRef: expected.artifactRef,
-          files,
+          ...(envelope.description === undefined ? {} : { description: envelope.description }),
+          // SAFETY: Exactly every member has been decoded and checked above.
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- All closed worker release members have been checked.
+          files: files as GeneratedAppReleaseFiles,
         };
-        if (envelope.description !== undefined) {
-          artifact.description = envelope.description;
-        }
-        return artifact;
       } catch {
         throw operatorArtifactUnavailable();
       }

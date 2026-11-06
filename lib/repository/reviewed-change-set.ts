@@ -77,11 +77,9 @@ export const assertExistingAppReviewScope = (
   }
 };
 
-type DigestInput = Record<string, unknown>;
+const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
-const digest = (value: DigestInput) =>
-  createHash("sha256").update(JSON.stringify(value)).digest("hex");
-
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deriveNormalizedChangeSet(
   apply: TargetApplyReceipt,
   validation: TargetValidationReceipt,
@@ -90,6 +88,7 @@ export function deriveNormalizedChangeSet(
 ): NormalizedChangeSet {
   const canonicalChanges = apply.changes;
   const unsigned = {
+    ...(apply.frameworkUpgrade === undefined ? {} : { frameworkUpgrade: apply.frameworkUpgrade }),
     appSpecDigest: apply.appSpecDigest,
     appSpecPath: apply.appSpecPath,
     applyDigest: apply.digest,
@@ -119,15 +118,13 @@ export function deriveNormalizedChangeSet(
     version: 2 as const,
     workspaceDigest: apply.workspaceDigest,
   };
-  if (apply.frameworkUpgrade !== undefined) {
-    Object.assign(unsigned, { frameworkUpgrade: apply.frameworkUpgrade });
-  }
   return {
     ...unsigned,
     digest: digest(unsigned),
   };
 }
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createReviewedChangeSetReceipt(
   changeSet: NormalizedChangeSet,
   reviewedByCallId: string,

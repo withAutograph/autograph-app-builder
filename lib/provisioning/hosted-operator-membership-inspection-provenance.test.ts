@@ -365,7 +365,7 @@ describe("retained membership inspection provenance", () => {
     };
     operator.plan = plan;
     operator.planDigest = operatorPlanDigest(plan);
-    const [candidate] = retainedMembershipInspectionProvenance(record, plan, "org_second");
+    const candidate = retainedMembershipInspectionProvenance(record, plan, "org_second")[0];
     expect(candidate?.effect.id).toBe("auth-membership:org_second");
     expect(candidate?.operator.plan).toBe(prior);
   });
@@ -376,7 +376,7 @@ describe("retained membership inspection provenance", () => {
     if (plan.authMembership?.kind !== "create-owned-organizations") {
       throw new Error("Expected participant organizations");
     }
-    const [current] = plan.authMembership.organizations;
+    const current = plan.authMembership.organizations[0];
     if (current === undefined) {
       throw new Error("Expected owner organization");
     }
@@ -388,11 +388,11 @@ describe("retained membership inspection provenance", () => {
     operator.plan = hostedOperatorPlanSchema.parse(plan);
     operator.planDigest = operatorPlanDigest(operator.plan);
     original.operator.receipts = [];
-    const [candidate] = retainedMembershipInspectionProvenance(
+    const candidate = retainedMembershipInspectionProvenance(
       record,
       operator.plan,
       "org_fixture",
-    );
+    )[0];
     expect(candidate?.operator.plan.authMembership).toEqual(originalPlan.authMembership);
   });
 
@@ -452,7 +452,7 @@ describe("retained membership inspection provenance", () => {
     expect(retainedMembershipInspectionProvenance(record, currentPlan)).toEqual([]);
     expect(record).toEqual(before);
     expect(
-      retainedMembershipInspectionProvenance({ ...record, operator: null }, currentPlan),
+      retainedMembershipInspectionProvenance({ ...record, operator: undefined }, currentPlan),
     ).toEqual([]);
   });
 
@@ -529,7 +529,7 @@ describe("retained membership inspection provenance", () => {
     const { record, operator } = fixture();
     const ordinary = hostedOperatorPlanSchema.parse({
       ...currentPlan,
-      authMembership: null,
+      authMembership: undefined,
       effects: currentPlan.effects.filter((effect) => effect.kind !== "auth-membership"),
     });
     operator.plan = ordinary;
@@ -711,7 +711,7 @@ describe("retained membership inspection provenance", () => {
     [
       "actual ownership readback",
       ({ original }) => {
-        const [receipt] = original.operator.receipts;
+        const receipt = original.operator.receipts[0];
         if (receipt === undefined) {
           throw new Error("Expected the original ownership receipt");
         }

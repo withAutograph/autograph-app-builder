@@ -92,6 +92,7 @@ describe("retained first local planning baseline", () => {
     expect(dispose).toHaveBeenCalledOnce();
   });
   it("does not introduce local authority in hosted or ordinary source preparation", async () => {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicitly simulate absent local authority.
     mock.authority.mockResolvedValueOnce(undefined);
     await retainPreparedLocalSourceBaseline(expected, dependencies);
     expect(mock.capture).not.toHaveBeenCalled();
@@ -123,7 +124,7 @@ describe("retained first local planning baseline", () => {
       writeFileSync(path.join(source, "dirty.txt"), "actual initial dirty bytes\n");
       const initial = await inspectDevelopmentSourceGeneration(source);
       const authority = { kind: "local" as const, ownerUid: process.getuid?.() ?? -1, stateRoot };
-      const readAuthority = () => authority;
+      const readAuthority = async () => authority;
       await retainPreparedLocalSourceBaseline(initial, { readAuthority });
       const manifestPath = path.join(
         stateRoot,

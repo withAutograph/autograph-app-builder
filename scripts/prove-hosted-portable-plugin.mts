@@ -5,10 +5,10 @@ import { hostedProofScenarioSchema, runHostedProof } from "./hosted-portable-pro
 import { verifyPortableProofArtifact } from "./portable-proof-artifact";
 import { sha256 } from "./portable-release";
 
-const argument = (name: string): string | undefined => {
+const argument = (name: string) => {
   const index = process.argv.indexOf(name);
   if (index === -1) {
-    return undefined;
+    return;
   }
   const value = process.argv[index + 1];
   if (!value || value.startsWith("--")) {
@@ -25,12 +25,14 @@ const required = (name: string) => {
   return value;
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function secretFile(pathValue: string) {
   const requested = path.resolve(pathValue);
   const info = await lstat(requested);
   if (!info.isFile() || info.isSymbolicLink()) {
     throw new Error("OAuth token input must be a regular, non-symbolic file.");
   }
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if ((info.mode & 0o077) !== 0 || info.uid !== process.getuid?.()) {
     throw new Error("OAuth token input must be owner-bound with mode 0600.");
   }
@@ -77,7 +79,7 @@ try {
   await lstat(output);
   throw new Error(`Proof receipt already exists: ${output}`);
 } catch (error) {
-  if (!Error.isError(error) || !("code" in error) || error.code !== "ENOENT") {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
     throw error;
   }
 }

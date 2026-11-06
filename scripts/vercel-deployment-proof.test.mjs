@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- This JavaScript subprocess fixture reads synthetic JSON and executes the actual workflow shell with local mock binaries. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -6,17 +7,15 @@ import path from "node:path";
 import { test } from "vitest";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf-8");
-const [, workflowAfterProofName] = workflow.split(
-  "      - name: Require exact Vercel Git deployment\n",
-);
-const [block] = workflowAfterProofName.split("      - uses: actions/upload-artifact@v4");
+const block = workflow
+  .split("      - name: Require exact Vercel Git deployment\n")[1]
+  .split("      - uses: actions/upload-artifact@v4")[0];
 const script = block
   .split("        run: |\n")[1]
   .split("\n")
   .map((line) => line.slice(10))
   .join("\n");
 const sha = "a".repeat(40);
-const deploymentStatusesEndpoint = "repos/example/builder/deployments/1/statuses";
 const deployment = (id, environment = "Production", source = sha) => ({
   created_at: `2026-10-21T10:00:0${id}Z`,
   environment,
@@ -125,7 +124,8 @@ test("same exact-source record can become successful after a duplicate cancellat
     url: "https://exact-source.vercel.app",
   });
   assert.equal(
-    observed.calls.filter((args) => args.includes(deploymentStatusesEndpoint)).length > 1,
+    observed.calls.filter((args) => args.includes("repos/example/builder/deployments/1/statuses"))
+      .length > 1,
     true,
   );
   assert.equal(
@@ -150,7 +150,8 @@ test("historical success beneath current inactive or error is never accepted", (
   assert.equal(observed.proof, "");
   assert.equal(observed.probes.length, 0);
   assert.equal(
-    observed.calls.filter((args) => args.includes(deploymentStatusesEndpoint)).length > 1,
+    observed.calls.filter((args) => args.includes("repos/example/builder/deployments/1/statuses"))
+      .length > 1,
     true,
   );
 });
@@ -169,7 +170,8 @@ test("pending deployment can become successful on a subsequent observation", () 
   });
   assert.equal(observed.result.status, 0, observed.result.stderr);
   assert.equal(
-    observed.calls.filter((args) => args.includes(deploymentStatusesEndpoint)).length > 1,
+    observed.calls.filter((args) => args.includes("repos/example/builder/deployments/1/statuses"))
+      .length > 1,
     true,
   );
   assert.equal(JSON.parse(observed.proof).sha, sha);

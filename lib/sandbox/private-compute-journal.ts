@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await, sonarjs/expression-complexity -- The promise-shaped journal factory rejects invalid ownership asynchronously and checks the complete immutable causal prefix in order. */
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { constants } from "node:fs";
@@ -52,25 +53,24 @@ export const createLocalPrivateComputeJournal = async (input: {
     let previous: string | null = null;
     let record: PrivateComputeActivation | undefined;
     for (;;) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Read the complete immutable journal prefix in causal order.
       const content = await localOperatorPrivateIo.read(path.join(directory, `${revision}.json`));
       if (content === undefined) {
         break;
       }
-      const contentHash = hash(content);
       const entry = entrySchema.parse(JSON.parse(content));
-      const { record: entryRecord } = entry;
       if (
         entry.revision !== revision ||
         entry.previous !== previous ||
-        entryRecord.sandboxId !== input.sandboxId ||
-        (input.workspaceDrive !== undefined && entryRecord.workspaceDrive !== input.workspaceDrive)
+        entry.record.sandboxId !== input.sandboxId ||
+        (input.workspaceDrive !== undefined && entry.record.workspaceDrive !== input.workspaceDrive)
       ) {
         throw new Error(
           "The private compute resource journal does not match its preserved causal history.",
         );
       }
-      previous = contentHash;
-      record = entryRecord;
+      previous = hash(content);
+      record = entry.record;
       revision += 1;
     }
     await input.assertCurrent();

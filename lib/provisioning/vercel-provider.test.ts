@@ -26,6 +26,7 @@ const github = {
   visibility: "private",
 } satisfies GitHubProvisionResult;
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installation(scopeType: "team" | "user") {
   return {
     active: true,
@@ -39,19 +40,6 @@ function installation(scopeType: "team" | "user") {
   } as const;
 }
 
-const bodyText = (body: BodyInit | null | undefined): string => {
-  if (body === null || body === undefined) return "";
-  if (body instanceof ReadableStream) return "";
-  if (body instanceof Blob) return "";
-  if (body instanceof ArrayBuffer) return new TextDecoder().decode(body);
-  if (ArrayBuffer.isView(body)) return new TextDecoder().decode(body);
-  if (body instanceof URLSearchParams) return body.toString();
-  return body;
-};
-
-const requestUrl = (url: RequestInfo | URL): string =>
-  new URL(url instanceof Request ? url.url : url).href;
-
 describe("Vercel project provisioning", () => {
   it.each([
     ["prod_deployment_urls_and_all_previews", true, "team", "succeeded"],
@@ -64,9 +52,10 @@ describe("Vercel project provisioning", () => {
     async (deploymentType, enabled, issuerMode, status) => {
       let created = false;
       const writes: unknown[] = [];
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
       const request = vi.fn<typeof fetch>(async (_url, init) => {
         if (init?.method === "POST") {
-          writes.push(JSON.parse(bodyText(init.body)));
+          writes.push(JSON.parse(String(init.body)));
           created = true;
           return Response.json({ id: "prj_public" }, { status: 201 });
         }
@@ -119,6 +108,7 @@ describe("Vercel project provisioning", () => {
     ],
     ["not-json", "iad1::failure_123", { requestRef: "iad1::failure_123", statusCode: 403 }],
   ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method !== "POST") return Response.json({}, { status: 404 });
       return new Response(body, { headers: { "x-vercel-id": requestRef }, status: 403 });
@@ -155,9 +145,10 @@ describe("Vercel project provisioning", () => {
     async (deploymentType, enabled, issuerMode, status) => {
       let created = false;
       const writes: unknown[] = [];
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
       const request = vi.fn<typeof fetch>(async (_url, init) => {
         if (init?.method === "POST") {
-          writes.push(JSON.parse(bodyText(init.body)));
+          writes.push(JSON.parse(String(init.body)));
           created = true;
           return Response.json({ id: "prj_public" }, { status: 201 });
         }
@@ -210,8 +201,10 @@ describe("Vercel project provisioning", () => {
     ],
     ["not-json", "iad1::failure_123", { requestRef: "iad1::failure_123", statusCode: 403 }],
   ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method !== "POST") return Response.json({}, { status: 404 });
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This negative table deliberately supplies raw text and structured provider error bodies to the actual sanitizer.
       return typeof body === "string"
         ? new Response(body, { headers: { "x-vercel-id": requestRef }, status: 403 })
         : Response.json(body, { headers: { "x-vercel-id": requestRef }, status: 403 });
@@ -238,6 +231,7 @@ describe("Vercel project provisioning", () => {
   });
 
   it("pauses when an expired write may already have created a project", async () => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async () =>
       Response.json({
         framework: "services",
@@ -269,6 +263,7 @@ describe("Vercel project provisioning", () => {
 
   it("does not retry an uncertain project write after a read-only 404", async () => {
     let created = false;
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method === "POST") {
         created = true;
@@ -305,6 +300,7 @@ describe("Vercel project provisioning", () => {
   });
   it("preserves provider retry delay and stops on a rate limit", async () => {
     const observed: number[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (_url, init) =>
       init?.method === "POST"
         ? Response.json(
@@ -340,10 +336,11 @@ describe("Vercel project provisioning", () => {
     const created = new Set<string>();
     let suffixNumber = 0;
     const candidates: string[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url, init) => {
-      const path = new URL(requestUrl(url)).pathname;
+      const path = new URL(String(url)).pathname;
       if (init?.method === "POST") {
-        const body = z.object({ name: z.string() }).parse(JSON.parse(bodyText(init.body)));
+        const body = z.object({ name: z.string() }).parse(JSON.parse(String(init.body)));
         created.add(body.name);
         return Response.json({ id: "prj_7" }, { status: 201 });
       }
@@ -371,6 +368,7 @@ describe("Vercel project provisioning", () => {
       githubSelected: false,
       installation: installation("user"),
       persistAbsent: vi.fn(),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       persistCandidate: async (value) => {
         candidates.push(value);
       },
@@ -385,13 +383,14 @@ describe("Vercel project provisioning", () => {
     "creates and reads back one linked %s project without a deployment call",
     async (scopeType) => {
       let created = false;
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const request = vi.fn<typeof fetch>(async (url, init) => {
-        const value = new URL(requestUrl(url));
+        const value = new URL(String(url));
         expect(value.searchParams.has("teamId")).toBe(scopeType === "team");
         expect(value.pathname).not.toContain("deployments");
         if (init?.method === "POST") {
           created = true;
-          const body: unknown = JSON.parse(bodyText(init.body));
+          const body = JSON.parse(String(init.body));
           expect(body).not.toHaveProperty("ssoProtection");
           expect(body).not.toHaveProperty("oidcTokenConfig");
           expect(body).toMatchObject({
@@ -428,9 +427,11 @@ describe("Vercel project provisioning", () => {
         github,
         githubSelected: true,
         installation: installation(scopeType),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         persistAbsent: async (value) => {
           absent.push(value);
         },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         persistCandidate: async (value) => {
           candidates.push(value);
         },
@@ -445,9 +446,7 @@ describe("Vercel project provisioning", () => {
       });
       expect(candidates[0]).toBe("apps-vendor-portal");
       expect(absent).toEqual(["apps-vendor-portal"]);
-      expect(request.mock.calls.every(([url]) => !requestUrl(url).includes("deployments"))).toBe(
-        true,
-      );
+      expect(request.mock.calls.every(([url]) => !String(url).includes("deployments"))).toBe(true);
     },
   );
 
@@ -479,9 +478,10 @@ describe("Vercel project provisioning", () => {
 
   it("reports Git-access rejection without creating an unlinked fallback", async () => {
     const bodies: unknown[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method === "POST") {
-        bodies.push(JSON.parse(bodyText(init.body)));
+        bodies.push(JSON.parse(String(init.body)));
         return Response.json({ error: { code: "repo_not_found" } }, { status: 400 });
       }
       return Response.json({}, { status: 404 });
@@ -511,11 +511,12 @@ describe("Vercel project provisioning", () => {
     const candidates: string[] = [];
     const absent: string[] = [];
     let created = false;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url, init) => {
-      const path = new URL(requestUrl(url)).pathname;
+      const path = new URL(String(url)).pathname;
       if (init?.method === "POST") {
-        const body: unknown = JSON.parse(bodyText(init.body));
-        expect(body).toMatchObject({ name: "apps-vendor-portal-a1b2c3" });
+        const body = JSON.parse(String(init.body));
+        expect(body.name).toBe("apps-vendor-portal-a1b2c3");
         expect(body).not.toHaveProperty("gitRepository");
         created = true;
         return Response.json({ id: "prj_2" }, { status: 201 });
@@ -543,9 +544,11 @@ describe("Vercel project provisioning", () => {
       },
       githubSelected: false,
       installation: installation("user"),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       persistAbsent: async (value) => {
         absent.push(value);
       },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       persistCandidate: async (value) => {
         candidates.push(value);
       },

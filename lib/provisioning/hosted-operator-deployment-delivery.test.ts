@@ -167,6 +167,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
   const calls: { method: string; path: string; body?: unknown }[] = [];
   const checkpoint = vi.fn<HostedOperatorDeploymentContext["checkpointDelivery"]>(async (rows) => {
     await Promise.resolve();
+    // oxlint-disable-next-line eslint/no-use-before-define -- This callback runs only after the fixture context is initialized.
     input.deliveryCandidates = operatorDeploymentCandidatesSchema.parse(rows);
   });
   const input: HostedOperatorDeploymentContext = {
@@ -266,31 +267,18 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     url,
   });
   const aliasState = {
-    ...({
-      applyWrite: true,
-      deploymentId: "dpl_previous",
-      differentDeploymentStatus: 200,
-      failNextRead: false,
-      failReads: false,
-      missing: false,
-      name: "approved-gateway.example.test",
-      projectId: "prj_gateway",
-      redirect: null,
-      rejectStatus: 0,
-      throwOnWrite: false,
-    } satisfies {
-      applyWrite: boolean;
-      deploymentId: string;
-      differentDeploymentStatus: number;
-      failNextRead: boolean;
-      failReads: boolean;
-      missing: boolean;
-      name: string;
-      projectId: string;
-      rejectStatus: number;
-      redirect: string | null;
-      throwOnWrite: boolean;
-    }),
+    name: "approved-gateway.example.test",
+    projectId: "prj_gateway",
+    deploymentId: "dpl_previous",
+    applyWrite: true,
+    throwOnWrite: false,
+    failReads: false,
+    missing: false,
+    rejectStatus: 0,
+    // SAFETY: Provider fixtures exercise both absent and nonempty redirect metadata.
+    redirect: null as string | null,
+    failNextRead: false,
+    differentDeploymentStatus: 200,
   };
   const differentDeployment = {
     ...deployment,
@@ -415,7 +403,9 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
   const observeAlias = vi.fn(async () => {
     await Promise.resolve();
   });
-  const writerOptions: Parameters<typeof createHostedOperatorDeploymentDelivery>[0] = {
+  const writer = createHostedOperatorDeploymentDelivery({
+    observeAlias,
+    wait,
     assertAuthorized: vi.fn(async () => {
       await Promise.resolve();
     }),
@@ -423,7 +413,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
       await Promise.resolve();
     }),
     fetch: fetcher,
-    observeAlias,
+    ...(gateway ? { target: "gateway" as const } : {}),
     readCredential: async () =>
       await Promise.resolve({
         binding: {
@@ -438,12 +428,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
         },
         token: "fixture-only",
       }),
-    wait,
-  };
-  if (gateway) {
-    Object.assign(writerOptions, { target: "gateway" as const });
-  }
-  const writer = createHostedOperatorDeploymentDelivery(writerOptions);
+  });
   return {
     aliasState,
     calls,
@@ -897,11 +882,30 @@ const readyGateway = async () => {
 };
 
 const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
-  const appTrustedSources = {
-    gatewayPreview: { from: "preview", projectId: "prj_gateway", to: "preview" },
-  };
-  const originalInput = {
+  const original = hostedOperatorPlanSchema.parse({
     ...gatewayPlan,
+    stage: "app",
+    ...(addAppGrant
+      ? {}
+      : {
+          appTrustedSources: {
+            gatewayPreview: { from: "preview", projectId: "prj_gateway", to: "preview" },
+          },
+        }),
+    gatewayBindings: {
+      authBrowserOrigin: "https://auth-preview.example.test",
+      builderCallbackOrigin: "https://builder.example",
+      catalogAppIds: [selection.appId],
+      operatorOrigin: "https://operator.example",
+      sourceWorkload: {
+        audience: "https://vercel.com",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/team",
+        ownerId: "team",
+        projectId: "prj_gateway",
+        subject: "fixture-gateway",
+      },
+    },
     effects: [
       ...plan.effects.map((effect) =>
         effect.kind === "bindings"
@@ -917,27 +921,8 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
       { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
       gatewayPlan.effects[5],
     ],
-    gatewayBindings: {
-      authBrowserOrigin: "https://auth-preview.example.test",
-      builderCallbackOrigin: "https://builder.example",
-      catalogAppIds: [selection.appId],
-      operatorOrigin: "https://operator.example",
-      sourceWorkload: {
-        audience: "https://vercel.com",
-        environment: "preview",
-        issuer: "https://oidc.vercel.com/team",
-        ownerId: "team",
-        projectId: "prj_gateway",
-        subject: "fixture-gateway",
-      },
-    },
-    stage: "app",
-  };
-  if (!addAppGrant) {
-    originalInput.appTrustedSources = appTrustedSources;
-  }
-  const original = hostedOperatorPlanSchema.parse(originalInput);
-  const currentInput = {
+  });
+  const current = hostedOperatorPlanSchema.parse({
     ...original,
     effects: original.effects.map((effect) => {
       if (effect.kind === "gateway-bindings") {
@@ -964,11 +949,14 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
       },
     },
     retention: { ...original.retention, expiresAt: "2027-01-02T00:00:00Z" },
-  };
-  if (addAppGrant) {
-    currentInput.appTrustedSources = appTrustedSources;
-  }
-  const current = hostedOperatorPlanSchema.parse(currentInput);
+    ...(addAppGrant
+      ? {
+          appTrustedSources: {
+            gatewayPreview: { from: "preview", projectId: "prj_gateway", to: "preview" },
+          },
+        }
+      : {}),
+  });
   const f = fixture(current, null, gateway);
   const delivery = gateway ? current.gatewayDelivery : current.delivery;
   if (delivery === undefined) {
@@ -977,15 +965,13 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
   const retained = {
     branch: delivery.branch,
     deploymentId: "dpl_new",
+    ...(gateway ? { gatewayAliasAttempted: true } : {}),
     operationRef: f.input.operationRef,
     origin: "https://new-native.vercel.app",
     projectId: delivery.projectId,
     readyState: "READY",
     repoId: delivery.repoId,
   };
-  if (gateway) {
-    Object.assign(retained, { gatewayAliasAttempted: true });
-  }
   f.input.renewalDeliveryProvenance = [
     {
       approvalId: "original-approval",
@@ -1124,7 +1110,7 @@ it.each(["absent", "operation", "digest", "approval", "call", "changed-source", 
     switch (failure) {
       case "absent": {
         f.input.deliveryCandidates = [...provenance.gatewayDeliveryCandidates];
-        f.input.renewalDeliveryProvenance = null;
+        f.input.renewalDeliveryProvenance = undefined;
         break;
       }
       case "operation": {
@@ -1282,7 +1268,7 @@ const narrowedGateway = async () => {
   });
   const current = hostedOperatorPlanSchema.parse({
     ...original,
-    gatewayBindings: { ...original.gatewayBindings, trustedSources: null },
+    gatewayBindings: { ...original.gatewayBindings, trustedSources: undefined },
   });
   const f = fixture(current, null, true);
   f.input.gatewayDeliveryProvenance = [
@@ -1370,12 +1356,12 @@ it.each([
       break;
     }
     case "project-account": {
-      Object.assign(f.differentDeployment, { ownerId: null });
+      Object.assign(f.differentDeployment, { ownerId: undefined });
       f.project.accountId = "another-owner";
       break;
     }
     case "team": {
-      Object.assign(f.differentDeployment, { ownerId: null });
+      Object.assign(f.differentDeployment, { ownerId: undefined });
       f.team.id = "another-team";
       break;
     }
@@ -1414,7 +1400,7 @@ it.each([
 
 it("uses independently observed project and team ownership when the different alias deployment omits ownerId", async () => {
   const f = await narrowedGateway();
-  Object.assign(f.differentDeployment, { ownerId: null });
+  Object.assign(f.differentDeployment, { ownerId: undefined });
   expect(await f.writer.deliver(f.input)).toMatchObject({
     selected: { deploymentId: "dpl_new" },
     status: "applied",
@@ -1437,7 +1423,7 @@ it.each(["absent", "operation", "digest", "approval", "call", "changed-source"])
     const changed = { ...provenance };
     switch (failure) {
       case "absent": {
-        f.input.gatewayDeliveryProvenance = null;
+        f.input.gatewayDeliveryProvenance = undefined;
         break;
       }
       case "operation": {

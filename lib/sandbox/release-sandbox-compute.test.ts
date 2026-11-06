@@ -2,18 +2,30 @@ import { readFile } from "node:fs/promises";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { HookContext } from "eve/hooks";
+import hook from "../../agent/hooks/release-sandbox-compute";
+import type * as WorkingPreviewModule from "../agent/working-preview-state";
 import {
   clearHostedSandboxExecutionLeaseCacheForTest,
-  isHostedSandboxExecutionEnabled,
   setHostedSandboxExecutionLeaseDependenciesForTest,
 } from "./deployment-execution-lease";
+
+// These direct hook calls do not run inside Eve's durable state context.
+// An absent preview is the normal initial state for this gate-only fixture.
+vi.mock("../agent/working-preview-state", async (importOriginal) => {
+  const actual = await importOriginal<typeof WorkingPreviewModule>();
+  return {
+    ...actual,
+    workingPreviewAttemptState: { get: () => null, update: vi.fn() },
+    workingPreviewState: { get: () => null, update: vi.fn() },
+  };
+});
 
 const originalEnvironment = {
   EVE_HOSTED_ADAPTER: process.env.EVE_HOSTED_ADAPTER,
   EVE_HOSTED_SANDBOX_EXECUTION: process.env.EVE_HOSTED_SANDBOX_EXECUTION,
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function restoreEnvironment() {
   for (const [key, value] of Object.entries(originalEnvironment)) {
     if (value === undefined) {
@@ -70,17 +82,20 @@ describe("Eve durable turn execution envelope", () => {
       delete process.env.EVE_HOSTED_SANDBOX_EXECUTION;
       Object.assign(process.env, environment);
 
-      const enabled = vi.fn(isHostedSandboxExecutionEnabled);
+      const enabled = vi.fn(() => true);
       const store = vi.fn(() => {
         throw new Error("database must remain unopened");
       });
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const isMember = vi.fn(async () => true);
       setHostedSandboxExecutionLeaseDependenciesForTest({
         enabled,
         isMember,
         store,
       });
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const stop = vi.fn(async () => {});
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const getSandbox = vi.fn(async () => ({
         id: "provider_session_1",
         stop,
@@ -88,12 +103,14 @@ describe("Eve durable turn execution envelope", () => {
       const context = {
         getSandbox,
         session: { auth: {}, id: "session_1" },
-      } satisfies Pick<HookContext, "getSandbox" | "session">;
+      } as never;
+      const events = hook.events as Record<
+        string,
+        (event: never, context: never) => void | Promise<void>
+      >;
 
-      if (enabled(process.env)) {
-        await context.getSandbox();
-        await stop();
-      }
+      await events["turn.started"]?.({} as never, context);
+      await events["turn.completed"]?.({} as never, context);
 
       expect(getSandbox).not.toHaveBeenCalled();
       expect(stop).not.toHaveBeenCalled();

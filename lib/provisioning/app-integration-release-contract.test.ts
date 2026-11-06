@@ -83,8 +83,10 @@ test("fresh Auth bootstrap retains proven optional rows read-only while its writ
     assertOwnedAppProductionEnvironment(bootstrap, Object.keys(values));
   }).not.toThrow();
   expect(() => {
-    const withoutRetainedBindings = { ...bootstrap, retainedOptionalBindings: null };
-    assertOwnedAppProductionEnvironment(withoutRetainedBindings, Object.keys(values));
+    assertOwnedAppProductionEnvironment(
+      { ...bootstrap, retainedOptionalBindings: undefined },
+      Object.keys(values),
+    );
   }).toThrow();
   expect(publicReleasePlanSchema.safeParse({ ...bootstrap, purpose: "application" }).success).toBe(
     false,

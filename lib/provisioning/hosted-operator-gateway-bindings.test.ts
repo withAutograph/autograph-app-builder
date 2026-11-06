@@ -1,4 +1,5 @@
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
+/* oxlint-disable typescript/no-non-null-assertion, eslint/no-use-before-define, eslint/sort-keys, eslint/require-await, eslint/prefer-const -- Provider fixtures deliberately preserve source-shaped rows and async callbacks. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
@@ -245,6 +246,7 @@ const fixture = (
   );
   input = {
     assertCurrent,
+    ...(observationGuards ? { assertCurrentObservation } : {}),
     authority,
     checkpoint: vi.fn(async () => {}),
     checkpointGatewayEnvironment,
@@ -278,14 +280,12 @@ const fixture = (
     target: structuredClone(target),
     workerCheckpoints: [],
   };
-  if (observationGuards) {
-    input.assertCurrentObservation = assertCurrentObservation;
-  }
   const project: FixtureProject = {
     id: gateway.projectId,
     accountId: target.scopeId,
     link: { productionBranch },
   };
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- One synthetic provider transport preserves the existing env API and narrow project protection responses.
   const fetcher = vi.fn(async (url: URL | string | Request, init?: RequestInit) => {
     const parsed = new URL(url instanceof Request ? url.url : url.toString());
     const method = init?.method ?? "GET";
@@ -370,18 +370,15 @@ const fixture = (
     rows: structuredClone(canonicalRows),
   }));
   const diagnostics = vi.fn<HostedOperatorConsentDiagnosticSink>();
-  const writerInput = {
+  const writer = createHostedOperatorGatewayBindings({
     diagnosticSink: diagnostics,
     assertAuthorized,
+    ...(observationGuards ? { assertCanonicalOwner } : {}),
     readCanonicalGatewayRows,
     fetch: fetcher,
     readAuthRuntimeUrl,
     readCredential,
-  };
-  if (observationGuards) {
-    writerInput.assertCanonicalOwner = assertCanonicalOwner;
-  }
-  const writer = createHostedOperatorGatewayBindings(writerInput);
+  });
   return {
     project,
     setLoseProtectionPatchResponse: (value: boolean) => (loseProtectionPatchResponse = value),
@@ -614,18 +611,15 @@ it("keeps legacy plans free of Trusted Sources writes", async () => {
 });
 
 const approveAppSource = (f: ReturnType<typeof fixture>, includeLegacy = false) => {
-  const trustedSources = {
-    appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
-  };
-  if (includeLegacy) {
-    Object.assign(trustedSources, approvedSources);
-  }
   f.input.plan = hostedOperatorPlanSchema.parse({
     ...f.input.plan,
     stage: "app",
     gatewayBindings: {
       ...f.input.plan.gatewayBindings,
-      trustedSources,
+      trustedSources: {
+        ...(includeLegacy ? approvedSources : {}),
+        appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
+      },
     },
   });
 };
@@ -2630,6 +2624,7 @@ it("observes literal error terms and validation fields on a rejected POST withou
     subject.fetcher.mockImplementation(async (url, init) =>
       init?.method === "POST" ? Response.json(body, { status: 400 }) : await original(url, init),
     );
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Compare two isolated fixture runs in order.
     await expect(subject.writer.bind(subject.input)).rejects.toThrow("operator_unavailable");
   }
   expect(

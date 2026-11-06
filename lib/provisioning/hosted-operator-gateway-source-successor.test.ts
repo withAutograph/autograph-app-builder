@@ -9,6 +9,7 @@ import {
   sharedHostProtectionDeliveryProvenance,
   isSharedHostProtectionDeliveryProvenance,
 } from "./hosted-operator-shared-host-protection-successor";
+/* oxlint-disable eslint/require-await -- Typed in-memory journal and provider callbacks intentionally resolve without external I/O. */
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -184,6 +185,7 @@ const fixture = () => {
   const store: HostedRuntimeJournalStore = {
     async compareAndSet(input) {
       if (row?.revision !== input.expectedRevision) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS failure is the explicit optional-row return contract.
         return undefined;
       }
       row = {
@@ -212,6 +214,7 @@ const fixture = () => {
     },
     async reserveFenceGeneration(input) {
       if (row === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- The journal CAS reports no allocated row.
         return undefined;
       }
       if (
@@ -220,6 +223,7 @@ const fixture = () => {
         row.record.operator?.operationRef !== input.operationRef ||
         row.record.operator.fenceGeneration !== undefined
       ) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS must not allocate a generation.
         return undefined;
       }
       nextFenceGeneration += 1;
@@ -744,7 +748,7 @@ describe("shared host protection plan successor", () => {
           ? { ...effect, description: "Bind shared Gateway environment" }
           : effect,
       ),
-      gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: null },
+      gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
     });
     f.deps.plan = async () => successorPlan;
     return { execute, f, original, originalPlan, previous, successorPlan };
@@ -756,7 +760,7 @@ describe("shared host protection plan successor", () => {
     const candidate = createSharedHostProtectionSuccessorPlan(previous.record, now);
     expect(candidate).toEqual({
       ...originalPlan,
-      gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: null },
+      gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
       retention: {
         ...originalPlan.retention,
         expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
@@ -842,8 +846,8 @@ describe("shared host protection plan successor", () => {
         leaseId: original.operationRef,
         operator: {
           ...record.operator,
-          pendingEffectAttempt: null,
-          pendingEffectId: null,
+          pendingEffectAttempt: undefined,
+          pendingEffectId: undefined,
           receipts: candidate.effects.map((effect) => ({
             effectId: effect.id,
             observedAt: new Date().toISOString(),
@@ -1475,7 +1479,7 @@ describe("pending native app project settings repair", () => {
       ...originalPlan,
       delivery: {
         ...originalPlan.delivery,
-        projectSettings: null,
+        projectSettings: undefined,
       },
     });
     previous.record.operator.retainedProjectSettingsOperations = [
@@ -1742,6 +1746,7 @@ describe("APP Gateway source continuation", () => {
     return { execute, f, original, previous };
   };
 
+  // oxlint-disable-next-line eslint/complexity -- This sequential recovery journey checks the original and successor authority at each durable boundary.
   it("reconciles the original pending context then yields before any next effect and re-exposes one source proposal", async () => {
     const { f, original, previous, execute } = await interrupted();
     const pending = previous.record.operator;

@@ -61,6 +61,7 @@ cc --version`,
 } as const;
 
 /** Installs the builder-owned validation toolchain at most once for each live sandbox. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedRuntimeInstaller() {
   const installs = new Map<string, Promise<void>>();
 
@@ -71,9 +72,12 @@ export function createHostedRuntimeInstaller() {
       return;
     }
 
-    const install = (async () => {
-      try {
-        const result = await sandbox.run(hostedBunRuntimeInstallRequest);
+    // Promise composition preserves the shared install handle and cleanup identity.
+    // oxlint-disable promise/prefer-await-to-callbacks
+    // oxlint-disable promise/prefer-await-to-then
+    // oxlint-disable-next-line promise/prefer-await-to-then
+    const install: Promise<void> = Promise.resolve(sandbox.run(hostedBunRuntimeInstallRequest))
+      .then(async (result) => {
         if (result.exitCode !== 0) {
           throw new Error(
             `The hosted Bun and mise runtime could not be installed: ${sanitizeHostedRuntimeFailure(result.stderr || result.stdout)}`,
@@ -85,13 +89,18 @@ export function createHostedRuntimeInstaller() {
             `The hosted Rust toolchain could not be installed: ${sanitizeHostedRuntimeFailure(rust.stderr || rust.stdout)}`,
           );
         }
-      } catch {
+      })
+      // Preserve the shared lazy promise while clearing it after a failed install.
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks
+      // oxlint-disable-next-line promise/prefer-await-to-then
+      .catch((error: unknown) => {
         if (installs.get(sandbox.id) === install) {
           installs.delete(sandbox.id);
         }
-        throw new Error("The hosted runtime installation failed.");
-      }
-    })();
+        throw error;
+      });
+    // oxlint-enable promise/prefer-await-to-callbacks
+    // oxlint-enable promise/prefer-await-to-then
     installs.set(sandbox.id, install);
     await install;
   };

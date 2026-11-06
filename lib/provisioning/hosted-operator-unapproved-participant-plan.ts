@@ -32,8 +32,19 @@ export const createUnapprovedParticipantPlan = (
   const { gatewayBindings } = candidate.priorOperator.plan;
   const trustedSources = gatewayBindings?.trustedSources;
   const { auth } = candidate.bootstrap;
-  const plan = {
+  return hostedOperatorPlanSchema.parse({
     ...base,
+    ...(gatewayBindings === undefined
+      ? {}
+      : {
+          gatewayBindings: {
+            ...gatewayBindings,
+            trustedSources:
+              trustedSources !== undefined && "gatewayPreview" in trustedSources
+                ? { gatewayPreview: trustedSources.gatewayPreview }
+                : undefined,
+          },
+        }),
     access: [],
     effects: [
       {
@@ -49,26 +60,18 @@ export const createUnapprovedParticipantPlan = (
       bootstrapOperationRef: auth.operationRef,
       bootstrapPlanDigest: auth.planDigest,
       preparation: normalActorPreparationSchema.strip().parse(candidate.account),
+      ...(candidate.bootstrap.gateway === undefined
+        ? {}
+        : {
+            gateway: {
+              approvalId: candidate.bootstrap.gateway.approvalId,
+              approvedByCallId: candidate.bootstrap.gateway.approvedByCallId,
+              operationRef: candidate.bootstrap.gateway.operationRef,
+              planDigest: candidate.bootstrap.gateway.planDigest,
+            },
+          }),
     },
     normalActorProgram: program,
     stage: "auth-participants",
-  };
-  if (gatewayBindings !== undefined) {
-    plan.gatewayBindings = {
-      ...gatewayBindings,
-      trustedSources:
-        trustedSources !== undefined && "gatewayPreview" in trustedSources
-          ? { gatewayPreview: trustedSources.gatewayPreview }
-          : undefined,
-    };
-  }
-  if (candidate.bootstrap.gateway !== undefined) {
-    plan.normalActorCapturePredecessor.gateway = {
-      approvalId: candidate.bootstrap.gateway.approvalId,
-      approvedByCallId: candidate.bootstrap.gateway.approvedByCallId,
-      operationRef: candidate.bootstrap.gateway.operationRef,
-      planDigest: candidate.bootstrap.gateway.planDigest,
-    };
-  }
-  return hostedOperatorPlanSchema.parse(plan);
+  });
 };

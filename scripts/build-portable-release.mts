@@ -1,7 +1,6 @@
 import { cp, lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { z } from "zod";
 import { codexClientId, codexRedirectUri } from "../lib/auth/codex-client-metadata.ts";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 import {
@@ -17,7 +16,7 @@ import { readTrackedTreeBlob } from "./git-tree-blob";
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
   if (index === -1) {
-    return null;
+    return;
   }
   const value = process.argv[index + 1];
   if (!value || value.startsWith("--")) {
@@ -25,22 +24,6 @@ const argument = (name: string) => {
   }
   return value;
 };
-
-const mcpServerName = "app-builder";
-const pluginManifestFile = "plugin.json";
-const mcpManifestFile = "mcp.json";
-const codexPluginDirectory = ".codex-plugin";
-const mcpManifestSchema = z.looseObject({
-  mcpServers: z.looseObject({
-    [mcpServerName]: z.looseObject({ url: z.string() }),
-  }),
-});
-const pluginManifestSchema = z.looseObject({ name: z.string(), version: z.string() });
-const codexManifestSchema = z.looseObject({
-  interface: z.looseObject({ composerIcon: z.string().optional(), logo: z.string().optional() }),
-  name: z.string(),
-  version: z.string(),
-});
 
 const repositoryRoot = path.resolve(".");
 const git = (...args: string[]) =>
@@ -71,13 +54,13 @@ const source = {
 };
 const endpoint = releaseEndpoint(argument("--endpoint"));
 const requestedOutput = path.resolve(
-  argument("--output") ?? `.artifacts/portable-release/${mcpServerName}`,
+  argument("--output") ?? ".artifacts/portable-release/app-builder",
 );
 try {
   await lstat(requestedOutput);
   throw new Error(`Release output already exists: ${requestedOutput}`);
 } catch (error) {
-  if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
     throw error;
   }
 }
@@ -86,10 +69,10 @@ await mkdir(requestedParent, { mode: 0o700, recursive: true });
 const canonicalRequestedParent = await realpath(requestedParent);
 const output = path.join(canonicalRequestedParent, path.basename(requestedOutput));
 await mkdir(output, { mode: 0o700 });
-const core = path.join(output, mcpServerName);
+const core = path.join(output, "app-builder");
 await mkdir(core, { mode: 0o755 });
 await Promise.all(
-  [pluginManifestFile, mcpManifestFile, "LICENSE", "skills"].map(async (sourcePath) => {
+  ["plugin.json", "mcp.json", "LICENSE", "skills"].map(async (sourcePath) => {
     const sourceFile = path.resolve(repositoryRoot, sourcePath);
     const sourceFileStatus = await lstat(sourceFile);
     if (sourceFileStatus.isSymbolicLink()) {
@@ -98,11 +81,9 @@ await Promise.all(
     await cp(sourceFile, path.join(core, sourcePath), { recursive: true });
   }),
 );
-const mcp = mcpManifestSchema.parse(
-  JSON.parse(await readFile(path.join(core, mcpManifestFile), "utf-8")),
-);
-mcp.mcpServers[mcpServerName].url = `${endpoint}/mcp`;
-await writeFile(path.join(core, mcpManifestFile), `${JSON.stringify(mcp, null, 2)}\n`);
+const mcp = JSON.parse(await readFile(path.join(core, "mcp.json"), "utf-8"));
+mcp.mcpServers["app-builder"].url = `${endpoint}/mcp`;
+await writeFile(path.join(core, "mcp.json"), `${JSON.stringify(mcp, null, 2)}\n`);
 await validateAgentPluginPackage({
   packageKind: "generated-artifact",
   pluginRoot: core,
@@ -137,11 +118,11 @@ await Promise.all(
         {
           client,
           format: "agent-plugins-client-harness-v2",
-          mcp: `../${mcpServerName}/${mcpManifestFile}`,
+          mcp: "../app-builder/mcp.json",
           oauth: {
             protectedResourceMetadata: `${endpoint}/.well-known/oauth-protected-resource`,
           },
-          pluginRoot: `../${mcpServerName}`,
+          pluginRoot: "../app-builder",
           transport: { type: "streamable-http", url: `${endpoint}/mcp` },
         },
         null,
@@ -151,6 +132,7 @@ await Promise.all(
   }),
 );
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function collectFiles(root: string, directory: string): Promise<Map<string, Uint8Array>> {
   const directoryEntries = await readdir(directory);
   const entries = await Promise.all(
@@ -167,32 +149,28 @@ async function collectFiles(root: string, directory: string): Promise<Map<string
 }
 const files = await collectFiles(output, core);
 const archive = deterministicGzip(deterministicTar(files));
-const portable = pluginManifestSchema.parse(
-  JSON.parse(await readFile(path.join(core, pluginManifestFile), "utf-8")),
-);
-const portableName = portable.name;
-const portableVersion = portable.version;
-const archiveName = `${portableName}-${portableVersion}.tar.gz`;
+const portable = JSON.parse(await readFile(path.join(core, "plugin.json"), "utf-8"));
+const archiveName = `${portable.name}-${portable.version}.tar.gz`;
 await writeFile(path.join(output, archiveName), archive);
 
 const marketplaceRoot = path.join(output, "codex-marketplace");
-const marketplacePluginRoot = path.join(marketplaceRoot, "plugins", portableName);
-await mkdir(path.join(marketplacePluginRoot, codexPluginDirectory), {
+const marketplacePluginRoot = path.join(marketplaceRoot, "plugins", portable.name);
+await mkdir(path.join(marketplacePluginRoot, ".codex-plugin"), {
   mode: 0o755,
   recursive: true,
 });
 await cp(core, marketplacePluginRoot, { recursive: true });
-const codexManifest = codexManifestSchema.parse(
-  JSON.parse(await readFile(path.resolve(".codex-plugin", pluginManifestFile), "utf-8")),
+const codexManifest = JSON.parse(
+  await readFile(path.resolve(".codex-plugin/plugin.json"), "utf-8"),
 );
-if (codexManifest.name !== portableName || codexManifest.version !== portableVersion) {
+if (codexManifest.name !== portable.name || codexManifest.version !== portable.version) {
   throw new Error("The Codex adapter name and version must match the portable manifest.");
 }
-const codexAssetReferences = [codexManifest.interface.composerIcon, codexManifest.interface.logo];
+const codexAssetReferences = [codexManifest.interface?.composerIcon, codexManifest.interface?.logo];
 const codexMarketplaceAssetPaths = await Promise.all(
   [...new Set(codexAssetReferences)].map(async (reference) => {
     if (
-      reference === undefined ||
+      typeof reference !== "string" ||
       !reference.startsWith("./") ||
       reference.includes("\\") ||
       reference
@@ -211,11 +189,11 @@ const codexMarketplaceAssetPaths = await Promise.all(
     const destinationAsset = path.join(marketplacePluginRoot, relativeAssetPath);
     await mkdir(path.dirname(destinationAsset), { mode: 0o755, recursive: true });
     await writeFile(destinationAsset, sourceAsset.bytes, { mode: 0o644 });
-    return `plugins/${portableName}/${relativeAssetPath}`;
+    return `plugins/${portable.name}/${relativeAssetPath}`;
   }),
 );
 await writeFile(
-  path.join(marketplacePluginRoot, codexPluginDirectory, pluginManifestFile),
+  path.join(marketplacePluginRoot, ".codex-plugin", "plugin.json"),
   `${JSON.stringify(codexManifest, null, 2)}\n`,
 );
 await writeFile(
@@ -223,7 +201,7 @@ await writeFile(
   `${JSON.stringify(
     {
       mcpServers: {
-        [portableName]: {
+        [portable.name]: {
           oauth: { callback_url: codexRedirectUri, client_id: codexClientId },
           oauth_resource: `${endpoint}/mcp`,
           type: "http",
@@ -246,13 +224,13 @@ await writeFile(
       plugins: [
         {
           category: "Developer Tools",
-          name: portableName,
+          name: portable.name,
           policy: {
             authentication: "ON_USE",
             installation: "AVAILABLE",
           },
           source: {
-            path: `./plugins/${portableName}`,
+            path: `./plugins/${portable.name}`,
             source: "local",
           },
         },
@@ -264,23 +242,23 @@ await writeFile(
 );
 const marketplaceFiles = await collectFiles(marketplaceRoot, marketplaceRoot);
 const marketplaceArchive = deterministicGzip(deterministicTar(marketplaceFiles));
-const marketplaceArchiveName = `${portableName}-codex-marketplace-${portableVersion}.tar.gz`;
+const marketplaceArchiveName = `${portable.name}-codex-marketplace-${portable.version}.tar.gz`;
 await writeFile(path.join(output, marketplaceArchiveName), marketplaceArchive);
 
 const auxiliaryFiles = new Map<string, Uint8Array>();
 for (const directory of [mockRoot, clientRoot]) {
+  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   const directoryEntries = await readdir(directory);
   for (const entry of directoryEntries.toSorted()) {
     const filePath = path.join(directory, entry);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     auxiliaryFiles.set(path.relative(output, filePath), await readFile(filePath));
   }
 }
 const receipt = {
   archive: { name: archiveName, sha256: sha256(archive) },
   auxiliaryFiles: Object.fromEntries(
-    [...auxiliaryFiles]
-      .toSorted(([left], [right]) => left.localeCompare(right))
-      .map(([filePath, content]) => [filePath, sha256(content)]),
+    [...auxiliaryFiles].toSorted().map(([filePath, content]) => [filePath, sha256(content)]),
   ),
   codexMarketplaceArchive: {
     name: marketplaceArchiveName,
@@ -296,17 +274,15 @@ const receipt = {
     }),
   ),
   coreFiles: Object.fromEntries(
-    [...files]
-      .toSorted(([left], [right]) => left.localeCompare(right))
-      .map(([filePath, content]) => [filePath, sha256(content)]),
+    [...files].toSorted().map(([filePath, content]) => [filePath, sha256(content)]),
   ),
   endpoint: `${endpoint}/mcp`,
   format: "autograph-portable-plugin-release-v3",
-  name: portableName,
+  name: portable.name,
   source,
   specification: "1.0.0",
   tools,
-  version: portableVersion,
+  version: portable.version,
 };
 await writeFile(path.join(output, "release-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
 await writeFile(
