@@ -49,6 +49,18 @@
       "destination": {
         "service": "operator"
       }
+    },
+    {
+      "source": "/v1/repository-production",
+      "destination": {
+        "service": "operator"
+      }
+    },
+    {
+      "source": "/v1/repository-production/access/complete",
+      "destination": {
+        "service": "operator"
+      }
     }
   ]
 }
