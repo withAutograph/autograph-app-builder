@@ -69,18 +69,17 @@ const hasUniqueApprovedBinding = (parts: z.infer<typeof partSchema>[], id: strin
   if (requests.length !== 1) {
     return false;
   }
-  const [{ approvalId }] = requests;
+  const { approvalId } = requests[0];
   if (approvalId === undefined || approvalId.length === 0) {
     return false;
   }
   const responses = parts.filter(
     (part) => part.type === "tool-approval-response" && part.approvalId === approvalId,
   );
-  const [response] = responses;
   const unique =
     parts.filter((part) => part.type === "tool-approval-request" && part.approvalId === approvalId)
       .length === 1;
-  return unique && responses.length === 1 && response.approved === true;
+  return unique && responses.length === 1 && responses[0].approved === true;
 };
 const hasCallReceipt = (workflow: z.infer<typeof workflowSchema>, id: string): boolean => {
   let receipt: z.infer<typeof receiptSchema> | undefined;
@@ -115,23 +114,6 @@ const matchingLatestIdentity = (
 ): boolean =>
   latest.serializedContext["eve.sessionId"] === logical &&
   latest.sessionState.snapshot.session.sessionId === logical;
-const isEligibleApplyCall = (
-  call: z.infer<typeof partSchema>,
-  id: string | undefined,
-  parts: z.infer<typeof partSchema>[],
-  results: Set<string | undefined>,
-): id is string => {
-  if (call.type !== "tool-call" || call.toolName !== "apply_app_creation") {
-    return false;
-  }
-  if (id === undefined || id.length === 0 || call.providerExecuted === true) {
-    return false;
-  }
-  if (results.has(id)) {
-    return false;
-  }
-  return hasUniqueApprovedBinding(parts, id);
-};
 
 // Validate every history, but release parsed older copies after selecting the latest.
 const readLatestCandidate = (values: unknown[]): z.infer<typeof candidateSchema> | undefined => {
@@ -193,16 +175,26 @@ export const authorizeRepeatablePrivateApplyCalls = (
   );
   const authorized: string[] = [];
   for (const call of parts) {
+    if (call.type !== "tool-call" || call.toolName !== "apply_app_creation") {
+      continue;
+    }
     const id = call.toolCallId;
-    if (isEligibleApplyCall(call, id, parts, results)) {
-      const pending = authority.pending.filter((entry) => entry.callId === id);
-      const boundToCall =
-        pending.length > 0
-          ? pending.length === 1 && isDeepStrictEqual(pending[0].scope, expected)
-          : isDeepStrictEqual(authority.grant, expected) && hasCallReceipt(workflow, id);
-      if (boundToCall) {
-        authorized.push(id);
-      }
+    if (id === undefined || id.length === 0) {
+      continue;
+    }
+    if (call.providerExecuted === true || results.has(id)) {
+      continue;
+    }
+    if (!hasUniqueApprovedBinding(parts, id)) {
+      continue;
+    }
+    const pending = authority.pending.filter((entry) => entry.callId === id);
+    const boundToCall =
+      pending.length > 0
+        ? pending.length === 1 && isDeepStrictEqual(pending[0].scope, expected)
+        : isDeepStrictEqual(authority.grant, expected) && hasCallReceipt(workflow, id);
+    if (boundToCall) {
+      authorized.push(id);
     }
   }
   return authorized;

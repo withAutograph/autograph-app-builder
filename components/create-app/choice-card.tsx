@@ -38,7 +38,7 @@ export function ChoiceCard({
       {icon}
       <span>
         {children}
-        {typeof badge === "string" && badge.length > 0 ? <small>{badge}</small> : null}
+        {badge ? <small>{badge}</small> : null}
       </span>
       <input
         type={inputType}

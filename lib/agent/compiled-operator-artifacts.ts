@@ -43,26 +43,17 @@ import type {
 import { describeSelectedApp } from "../repository/app-description";
 import type { AppDescription } from "../repository/app-description";
 
-const WORKSPACE_ROOT_PREFIX = "/workspace/";
-const REPOSITORY_PATH_PREFIX = "repository/";
-const NOT_REQUIRED_STATUS = "not-required" as const;
-
-interface CompiledArtifactCaptureAuthority {
-  context: OperatorArtifactContext;
-  privateApplyScope?: PrivateApplyScope;
-}
-
 /** Validates an internal approved root before adapting the fixed repository-relative capture API. */
 export const compiledArtifactSandboxRelativePath = (root: string): string => {
   if (
     root.includes("\\") ||
     root.includes("\0") ||
     path.posix.normalize(root) !== root ||
-    !root.startsWith(WORKSPACE_ROOT_PREFIX)
+    !root.startsWith("/workspace/")
   ) {
     throw operatorArtifactUnavailable();
   }
-  const relative = root.slice(WORKSPACE_ROOT_PREFIX.length);
+  const relative = root.slice("/workspace/".length);
   if (relative.length === 0) {
     throw operatorArtifactUnavailable();
   }
@@ -179,16 +170,15 @@ const resolveCompiledArtifactSession = async (
       if (!("applyReceipt" in state)) {
         throw operatorArtifactUnavailable();
       }
-      const { proposal } = state;
       privateApplyScope = {
         appId: input.appId,
         appSpecDigest: input.appSpecDigest,
-        proposalDigest: proposal.digest,
+        proposalDigest: state.proposal.digest,
         sessionId: input.adapterSessionId,
         workspaceId: state.workspace.workspaceId,
       };
     } else {
-      ({ privateApplyScope } = completion.compilation);
+      privateApplyScope = completion.compilation.privateApplyScope;
     }
     assertCurrentOwner = async (current) => {
       assertCompilation();
@@ -227,10 +217,10 @@ const resolveCompiledArtifactSession = async (
     throw operatorArtifactUnavailable();
   }
   await assertCurrentOwner(context);
-  const captureAuthority: CompiledArtifactCaptureAuthority = { context };
-  if (privateApplyScope !== undefined) {
-    captureAuthority.privateApplyScope = privateApplyScope;
-  }
+  const captureAuthority = {
+    context,
+    ...(privateApplyScope === undefined ? {} : { privateApplyScope }),
+  };
   return { assertCurrentOwner, captureAuthority, context, localAuthority };
 };
 
@@ -272,11 +262,10 @@ export const recordPublishedOperatorSourceForSession = async (
     backendKind?: AppDescription["backend"]["kind"];
   },
 ): Promise<
-  | { status: typeof NOT_REQUIRED_STATUS }
-  | { status: "recorded"; selection: CompiledOperatorReleaseSelection }
+  { status: "not-required" } | { status: "recorded"; selection: CompiledOperatorReleaseSelection }
 > => {
   if (input.backendKind === "static") {
-    return { status: NOT_REQUIRED_STATUS };
+    return { status: "not-required" };
   }
   const binding = await resolveCompiledArtifactSession(input);
   const storage = await openCompiledArtifactStorage(binding);
@@ -355,8 +344,8 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
   try {
     await binding.assertCurrentOwner(binding.context);
     const { release } = completion.compilation;
-    if (release.status === NOT_REQUIRED_STATUS) {
-      return { status: NOT_REQUIRED_STATUS };
+    if (release.status === "not-required") {
+      return { status: "not-required" as const };
     }
     const storage = await openCompiledArtifactStorage(binding);
     const retained = await readExactCompiledOperatorRelease({
@@ -518,9 +507,9 @@ export const publishCompiledOperatorArtifactsForSession = async (
       return {
         compilation: {
           ...binding.captureAuthority,
-          release: { status: NOT_REQUIRED_STATUS },
+          release: { status: "not-required" as const },
         } satisfies ReconciliationCompilation,
-        status: NOT_REQUIRED_STATUS,
+        status: "not-required" as const,
       };
     }
     observe({ outcome: "started", stage: "storage" });
@@ -538,14 +527,14 @@ export const publishCompiledOperatorArtifactsForSession = async (
       description,
       source: {
         readBinaryFile: async (request) => {
-          if (!request.path.startsWith(REPOSITORY_PATH_PREFIX)) {
+          if (!request.path.startsWith("repository/")) {
             throw operatorArtifactUnavailable();
           }
           await assertCurrentOwner(context);
           return await input.sandbox.readBinaryFile({
             ...request,
             abortSignal: input.signal,
-            path: `${relativeRoot}/${request.path.slice(REPOSITORY_PATH_PREFIX.length)}`,
+            path: `${relativeRoot}/${request.path.slice("repository/".length)}`,
           });
         },
       },

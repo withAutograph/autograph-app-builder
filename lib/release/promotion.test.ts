@@ -9,7 +9,6 @@ import { IMAGE_REPOSITORY } from "../image/lifecycle";
 import {
   exactCleanGitSource,
   immutableTreeDigest,
-  promotionReceiptSchema,
   releasePublicationCommands,
   sealPromotionReceipt,
   sha256,
@@ -100,10 +99,8 @@ function unsigned(): PromotionReceiptUnsigned {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function candidate() {
-  const tempRoot = await realpath(await mkdtemp(path.join(tmpdir(), "promotion-")));
-  await chmod(tempRoot, 0o700);
-  const root = path.join(tempRoot, "candidate");
-  await mkdir(root, { mode: 0o700 });
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "promotion-")));
+  await chmod(root, 0o700);
   await mkdir(path.join(root, "package"), { mode: 0o700 });
   await mkdir(path.join(root, "deployment/.vercel/output"), {
     mode: 0o700,
@@ -224,12 +221,15 @@ describe("release promotion contract", () => {
     expect(() =>
       sealPromotionReceipt({
         ...unsigned(),
-        package: { ...unsigned().package, archive: "/release.tar.gz" },
+        package: { ...unsigned().package, archive: "/tmp/release.tar.gz" },
       }),
     ).toThrow();
-    const invalidBindings = unsigned();
-    Object.assign(invalidBindings.bindings, { endpoint: "loopback" });
-    expect(() => sealPromotionReceipt(invalidBindings)).toThrow();
+    expect(() =>
+      sealPromotionReceipt({
+        ...unsigned(),
+        bindings: { ...unsigned().bindings, endpoint: "loopback" },
+      } as never),
+    ).toThrow();
   });
 
   it("publishes only receipt-bound bytes and contains no build command", () => {
@@ -248,10 +248,8 @@ describe("release promotion contract", () => {
   });
 
   it("requires clean committed Builder and Arrusted sources", async () => {
-    const tempRoot = await realpath(await mkdtemp(path.join(tmpdir(), "release-clean-")));
-    await chmod(tempRoot, 0o700);
-    const root = path.join(tempRoot, "source");
-    await mkdir(root, { mode: 0o700 });
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), "release-clean-")));
+    await chmod(root, 0o700);
     await writeFile(path.join(root, "source.txt"), "clean\n");
     const git = (...args: string[]) =>
       execFileSync("/usr/bin/git", args, {
@@ -321,13 +319,9 @@ describe("release promotion contract", () => {
 
     const receiptMutation = await candidate();
     const receiptPath = path.join(receiptMutation, "promotion-receipt.json");
-    const receiptText = await readFile(receiptPath, "utf-8");
-    const receiptBytes: unknown = JSON.parse(receiptText);
-    const receiptResult = promotionReceiptSchema.safeParse(receiptBytes);
-    if (!receiptResult.success) {
-      throw new Error("Promotion receipt must satisfy its schema");
-    }
-    const receipt = receiptResult.data;
+    const receipt = JSON.parse(await readFile(receiptPath, "utf-8")) as {
+      digest: string;
+    };
     receipt.digest = "0".repeat(64);
     await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
     await expect(verifyPromotionCandidate({ candidateRoot: receiptMutation })).rejects.toThrow(

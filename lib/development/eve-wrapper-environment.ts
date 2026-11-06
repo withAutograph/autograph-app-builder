@@ -31,13 +31,7 @@ export const prepareDevelopmentEveWrapperEnvironment = async (input: {
     // The unselected default footprint needs no resource-change observation.
   }
   input.signal.throwIfAborted();
-  const environment: NodeJS.ProcessEnv = {
-    APP_BUILDER_DEV_EVE_ROOT: input.applicationRoot,
-    APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
-    APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
-    APP_BUILDER_DEV_SUPERVISOR_ROOT: input.supervisorRoot,
-    APP_BUILDER_EVE_PORT: new URL(input.closed.EVE_AGENT_HOST).port,
-    APP_BUILDER_LOCAL_EVE_CYCLE_FILE: input.cycleFile,
+  return {
     HOME: input.runtimeHome,
     LANG: input.environment.LANG ?? "C",
     LC_ALL: input.environment.LC_ALL ?? "C",
@@ -45,14 +39,17 @@ export const prepareDevelopmentEveWrapperEnvironment = async (input: {
     PATH: `${path.dirname(input.nodeExecutable)}:/usr/bin:/bin`,
     TMPDIR: input.environment.TMPDIR ?? "/tmp",
     TZ: input.environment.TZ ?? "UTC",
+    ...input.closed,
+    ...(limits === undefined ? {} : { APP_BUILDER_PRIVATE_COMPUTE_LIMITS: JSON.stringify(limits) }),
+    APP_BUILDER_LOCAL_EVE_CYCLE_FILE: input.cycleFile,
+    APP_BUILDER_DEV_EVE_ROOT: input.applicationRoot,
+    APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
+    APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
+    APP_BUILDER_DEV_SUPERVISOR_ROOT: input.supervisorRoot,
+    APP_BUILDER_EVE_PORT: new URL(input.closed.EVE_AGENT_HOST).port,
     // Keep workflow redelivery on the same explicit loopback Eve endpoint.
     WORKFLOW_LOCAL_BASE_URL: input.closed.EVE_AGENT_HOST,
     WORKFLOW_LOCAL_DATA_DIR: input.workflowData,
     WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
   };
-  Object.assign(environment, input.closed);
-  if (limits !== undefined) {
-    environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS = JSON.stringify(limits);
-  }
-  return environment;
 };

@@ -27,13 +27,13 @@ const fixture = (files: Record<string, string>) => {
         await Promise.resolve(files[path.replace(/^\/workspace\/repository\//u, "")] ?? null),
     ),
   };
-  return { files, metadata, paths: Object.keys(files), sandbox };
+  return { baseline: undefined, files, metadata, paths: Object.keys(files), sandbox };
 };
 const drain = async (input: Parameters<typeof readRepositoryInspectionPage>[0]) => {
   const pages: Awaited<ReturnType<typeof readRepositoryInspectionPage>>[] = [];
   const files = new Map<string, string>();
   const missingPaths: string[] = [];
-  let cursor = null;
+  let cursor;
   do {
     const page = await readRepositoryInspectionPage({ ...input, ...cursor });
     expect(serializedNativeActionResultBytes(page, input.metadata)).toBeLessThanOrEqual(

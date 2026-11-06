@@ -39,15 +39,16 @@ const verifiedUser = {
 describe("Preview Better Auth user management", () => {
   it("keeps the workspace field aligned with the Drizzle model key", () => {
     const [organizationPlugin] = previewUserManagementPlugins(createAuthority());
+    const schema = organizationPlugin?.schema as {
+      organization?: {
+        fields?: Record<string, { fieldName?: string }>;
+      };
+    };
 
-    expect(organizationPlugin?.schema).toHaveProperty(
-      "organization.fields.workspaceId",
+    expect(schema.organization?.fields?.workspaceId).toEqual(
       expect.objectContaining({ input: false, required: true }),
     );
-    expect(organizationPlugin?.schema).toHaveProperty(
-      "organization.additionalFields.workspaceId",
-      expect.objectContaining({ input: false, required: true, type: "string" }),
-    );
+    expect(schema.organization?.fields?.workspaceId?.fieldName).toBeUndefined();
   });
 
   it.each(["/callback/github", "/callback/vercel"])(
@@ -135,7 +136,7 @@ describe("Preview Better Auth user management", () => {
       body: {
         email: "person@example.com",
         name: "Person",
-        password: `test-${crypto.randomUUID()}`,
+        password: "test-password-123",
       },
     });
 

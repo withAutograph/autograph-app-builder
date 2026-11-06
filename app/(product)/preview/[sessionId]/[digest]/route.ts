@@ -6,11 +6,12 @@ const requestHandler = createDeploymentPrototypePreviewRequestHandler({
   workloadIdentity: createVercelWorkloadIdentity(),
 });
 
-const handleGet = async (
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function GET(
   request: Request,
   context: {
     params: Promise<{ sessionId: string; digest: string }>;
   },
-) => await requestHandler(request, await context.params);
-
-export { handleGet as GET };
+) {
+  return await requestHandler(request, await context.params);
+}

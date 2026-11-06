@@ -1,16 +1,16 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { oauthClient, oauthClientResource, oauthResource } from "../db/schema";
+import * as schema from "../db/schema";
 import { readPrivateDatabaseUrl } from "../db/private-database-url";
 import { hostedTaskPostgresOptions } from "../db/postgres-connection-policy";
 import { setupCursorClient } from "./cursor-client";
 import { readPreviewOAuthContractConfig } from "./preview-oauth-contract";
 
 const [flag, fd, resourceFlag, resource] = process.argv.slice(2);
-const validPrivateTransport = flag === "--database-url-fd" && fd === "0";
 if (
   process.argv.length !== 6 ||
-  !validPrivateTransport ||
+  flag !== "--database-url-fd" ||
+  fd !== "0" ||
   resourceFlag !== "--resource" ||
   !resource
 ) {
@@ -24,14 +24,7 @@ readPreviewOAuthContractConfig({
 });
 const client = postgres(readPrivateDatabaseUrl(0), hostedTaskPostgresOptions);
 try {
-  console.log(
-    JSON.stringify(
-      await setupCursorClient(
-        drizzle(client, { schema: { oauthClient, oauthClientResource, oauthResource } }),
-        resource,
-      ),
-    ),
-  );
+  console.log(JSON.stringify(await setupCursorClient(drizzle(client, { schema }), resource)));
 } catch {
   console.error(
     "Cursor client setup failed. Check OAuth resource initialization and dedicated client configuration.",

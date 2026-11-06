@@ -11,16 +11,20 @@ import {
   getBuilderHandoffRenewDeploymentHandler,
 } from "@/lib/handoff/deployment";
 
-const renewalInputSchema = z.strictObject({
-  creationRequestId: z.uuid(),
-  handoffId: z.uuid(),
-});
+const renewalInputSchema = z
+  .object({
+    creationRequestId: z.uuid(),
+    handoffId: z.uuid(),
+  })
+  .strict();
 
-const renewedHandoffSchema = z.strictObject({
-  expiresAt: z.iso.datetime(),
-  handoffId: z.uuid(),
-  version: z.literal(1),
-});
+const renewedHandoffSchema = z
+  .object({
+    expiresAt: z.iso.datetime(),
+    handoffId: z.uuid(),
+    version: z.literal(1),
+  })
+  .strict();
 
 export interface HandoffControlData {
   version: 1;
@@ -57,17 +61,18 @@ async function sameOriginHeaders() {
 function toControlData(
   value: Awaited<ReturnType<typeof getBuilderHandoffPageData>>,
 ): HandoffControlData | undefined {
-  return value
-    ? {
-        cursorInstallReady: value.cursorInstallReady,
-        destination: value.destination,
-        expiresAt: value.expiresAt,
-        handoffId: value.handoffId,
-        mcpUrl: value.mcpUrl,
-        status: value.status,
-        version: 1 as const,
-      }
-    : undefined;
+  if (!value) {
+    return;
+  }
+  return {
+    cursorInstallReady: value.cursorInstallReady,
+    destination: value.destination,
+    expiresAt: value.expiresAt,
+    handoffId: value.handoffId,
+    mcpUrl: value.mcpUrl,
+    status: value.status,
+    version: 1 as const,
+  };
 }
 
 /**

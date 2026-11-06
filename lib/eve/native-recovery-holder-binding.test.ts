@@ -96,13 +96,13 @@ const fixture = () => {
   const binding = createNativeRecoveryBinding({
     assertOwner: async () => {
       if (!allowed) {
-        await Promise.reject(new Error("current-owner-revoked"));
+        throw new Error("current-owner-revoked");
       }
+      return;
     },
     store: {
       // oxlint-disable-next-line eslint/require-await -- The in-memory read follows the store's asynchronous port.
-      getPrivateOperation: async (_principal, operationId) =>
-        await Promise.resolve(operations.get(operationId) ?? null),
+      getPrivateOperation: async (_principal, operationId) => operations.get(operationId) ?? null,
       // oxlint-disable-next-line eslint/require-await -- The in-memory read follows the store's asynchronous port.
       getSession: async (_principal, sessionId) =>
         sessionId === source.sessionId ? currentSource : (sessions.get(sessionId) ?? null),

@@ -15,8 +15,8 @@ import { localSourcePrerequisiteResponse } from "./local-source-prerequisite-res
 const mocks = vi.hoisted(() => ({
   captureDigest: vi.fn(() => "9".repeat(64)),
   dispose: vi.fn(),
-  history: vi.fn(() => {}),
-  project: vi.fn(() => {}),
+  history: vi.fn(async () => {}),
+  project: vi.fn(async () => {}),
   reconcile: vi.fn(),
 }));
 vi.mock("./local-source-transport-history", () => ({
@@ -24,7 +24,7 @@ vi.mock("./local-source-transport-history", () => ({
 }));
 vi.mock("../repository/development-source", () => ({
   canAutoSelectDevelopmentSource: () => true,
-  developmentSourceReceipt: () => ({
+  developmentSourceReceipt: async () => ({
     sourcePath: "/owned-current-source",
     sourceSha: "9".repeat(40),
   }),
@@ -37,20 +37,14 @@ vi.mock("./local-planning-source-base", () => ({
   }),
 }));
 vi.mock("../repository/local-planning-source", () => ({
-  captureLocalPlanningSource: async () => {
-    await Promise.resolve();
-    return {
-      dispose: mocks.dispose,
-      generation: { workspaceDigest: mocks.captureDigest() },
-    };
-  },
+  captureLocalPlanningSource: async () => ({
+    dispose: mocks.dispose,
+    generation: { workspaceDigest: mocks.captureDigest() },
+  }),
   reconcileLocalPlanningSource: mocks.reconcile,
 }));
 vi.mock("./source-bound-sandbox", () => ({
-  getSourceBoundSandbox: async () => {
-    await Promise.resolve();
-    return { id: "owned-workspace" };
-  },
+  getSourceBoundSandbox: async () => ({ id: "owned-workspace" }),
 }));
 vi.mock("./approved-build-continuation-runtime", () => ({
   emitCurrentBuildWorkflowProjection: mocks.project,

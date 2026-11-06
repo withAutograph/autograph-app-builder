@@ -138,7 +138,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         authority,
         draftId: continuationId,
       });
-      return { kind: builderDraft === true ? "none" : AUTHORIZATION_EXPIRED } as const;
+      return { kind: builderDraft ? "none" : AUTHORIZATION_EXPIRED } as const;
     }
     const access = await input.repositoryAccess.classify({
       authority,
@@ -164,7 +164,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           scope.installationId === target.selectedInstallationId),
     );
     const configurationUrl =
-      matchingScopes.length === 1 && matchingScopes[0] !== undefined
+      matchingScopes.length === 1 && matchingScopes[0]
         ? installationSettingsUrl(matchingScopes[0])
         : undefined;
     return { configurationUrl, kind: "missing", target } as const;
@@ -250,18 +250,9 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         if (result.status === "redirect") {
           return redirectLocation(result.redirectUrl);
         }
-        if (result.status === "bound") {
-          const returnParameters = new URLSearchParams();
-          returnParameters.set("returnTo", result.returnState.returnTo);
-          if (result.returnState.resumeKey !== undefined) {
-            returnParameters.set("resumeKey", result.returnState.resumeKey);
-          }
-          const returnState = providerConnectionReturnFromFormData(new FormData(returnParameters));
-          return await finishConnection(authority, returnState, result.via, (reason) =>
-            fail(reason, undefined, returnState),
-          );
-        }
-        return redirect("connected");
+        return await finishConnection(authority, result.returnState, result.via, (reason) =>
+          fail(reason, undefined, result.returnState),
+        );
       } catch (error) {
         let reason: ProviderConnectionFailureReason = "callback-invalid";
         if (
@@ -351,13 +342,9 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           return redirectLocation(access.configurationUrl);
         }
         const target = access.kind === "missing" ? access.target : undefined;
-        const authorizationTarget =
-          target === undefined
-            ? undefined
-            : {
-                accountLogin: target.repository.owner,
-                installationId: target.selectedInstallationId,
-              };
+        const authorizationTarget = target
+          ? { accountLogin: target.repository.owner, installationId: target.selectedInstallationId }
+          : undefined;
         if (authorizationTarget !== undefined && authorizationTarget.installationId === undefined) {
           delete authorizationTarget.installationId;
         }
@@ -377,17 +364,12 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         return fail("authorization-failed");
       }
     },
-    async target(
-      request: Request,
-      continuationId: string,
-    ): Promise<
-      | { repository: { fullName: string; owner: string }; selectedInstallationId?: string }
-      | undefined
-    > {
+    async target(request: Request, continuationId: string) {
       const authority = await input.authorityForRequest(request);
-      return authority !== undefined && input.repositoryAccess !== undefined
-        ? await input.repositoryAccess.inspect({ authority, continuationId })
-        : undefined;
+      if (!authority || !input.repositoryAccess) {
+        return;
+      }
+      return await input.repositoryAccess.inspect({ authority, continuationId });
     },
   };
 }
@@ -422,7 +404,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const installations = createPostgresHostedGitHubInstallationStore(database);
   const providerFetch = emulation
     ? async (resource: string | URL | Request, init?: RequestInit) => {
-        const url = resource instanceof Request ? new URL(resource.url) : new URL(resource);
+        const url = new URL(resource instanceof Request ? resource.url : resource);
         return await providerEmulationFetch(
           `${emulation.githubOrigin}${url.pathname}${url.search}`,
           init,
@@ -435,11 +417,8 @@ export function getGitHubAppInstallationDeploymentHandlers(
     credentialStore,
     emulation,
     fetch: emulation
-      ? async (resource, init) => {
-          const url = new URL(resource instanceof Request ? resource.url : resource);
-          // SAFETY: URL parsing above preserves the request URL while removing Request-only fields before emulation.
-          return await providerEmulationFetch(url, init, emulation);
-        }
+      ? async (resource, init) =>
+          await providerEmulationFetch(resource as string | URL, init, emulation)
       : undefined,
     installationStore: installations,
     membership: {
@@ -481,24 +460,26 @@ export function getGitHubAppInstallationDeploymentHandlers(
         environment: resolvedEnvironment,
         headers: request.headers,
       });
-      return session === undefined
-        ? undefined
-        : {
-            audience: config.resource,
-            issuer: config.issuer,
-            ownerUserId: session.user.id,
-            workspaceId: session.organization.workspaceId,
-          };
+      if (session === undefined) {
+        return;
+      }
+      return {
+        audience: config.resource,
+        issuer: config.issuer,
+        ownerUserId: session.user.id,
+        workspaceId: session.organization.workspaceId,
+      };
     },
     authorization,
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async onConnected({ authority, returnState }) {
-      return returnState.resumeKey !== undefined && returnState.resumeKey !== ""
-        ? await repositoryAccessContinuations.authorize({
-            authority,
-            continuationId: returnState.resumeKey,
-          })
-        : undefined;
+      if (!returnState.resumeKey) {
+        return;
+      }
+      return await repositoryAccessContinuations.authorize({
+        authority,
+        continuationId: returnState.resumeKey,
+      });
     },
     origin: new URL(config.issuer).origin,
     repositoryAccess: {
@@ -545,9 +526,7 @@ export async function verifiedGitHubConnectionTarget(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
   resumeKey: string;
-}): Promise<Awaited<
-  ReturnType<ReturnType<typeof createGitHubAppInstallationRouteHandlers>["target"]>
-> | null> {
+}) {
   try {
     const config = readGitHubAppInstallationEnvironment(
       providerEmulationEnvironment(input.environment),
@@ -558,6 +537,5 @@ export async function verifiedGitHubConnectionTarget(input: {
     );
   } catch {
     // No verified target is available for this page load.
-    return null;
   }
 }

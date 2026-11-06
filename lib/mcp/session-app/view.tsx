@@ -37,7 +37,7 @@ const binaryDecisionOptions = (request: PublicInputRequest) => {
   const positive = /^(?:accept|approve|confirm|publish|update|yes)\b/iu;
   const negative = /^(?:cancel|decline|deny|no|do not|don't)\b/iu;
   const [first, second] = request.options;
-  if (first === undefined || second === undefined) {
+  if (!first || !second) {
     return null;
   }
   if (positive.test(first.label) && negative.test(second.label)) {
@@ -84,7 +84,7 @@ export function InputControl({
     );
   }
 
-  if ((request.options?.length ?? 0) > 0) {
+  if (request.options?.length) {
     return (
       <div className="choices" role="radiogroup" aria-label={request.title}>
         {request.options.map((option) => {
@@ -147,36 +147,21 @@ export function AuthorizationControl({
 }) {
   const [opened, setOpened] = useState(false);
   const [error, setError] = useState("");
-  const { authorization: challenge, description: requestDescriptionText, title } = request;
-  const authorizationUrl = challenge?.url;
-  const storeIn =
-    challenge?.repositoryAccess === undefined
-      ? undefined
-      : githubRepositoryAccessViewModel(challenge.repositoryAccess);
+  const challenge = request.authorization;
+  const storeIn = challenge?.repositoryAccess
+    ? githubRepositoryAccessViewModel(challenge.repositoryAccess)
+    : undefined;
   const isGitHub = storeIn !== undefined;
-  const displayName = challenge?.displayName;
-  let provider = title;
-  if (isGitHub) {
-    provider = "Connect GitHub";
-  } else if (displayName !== undefined && displayName.length > 0) {
-    provider = displayName;
-  }
-  const instructions = challenge?.instructions;
-  let description = requestDescriptionText;
-  if (isGitHub) {
-    description = githubConnectionPrompt(storeIn.desiredRepository);
-  } else if (instructions !== undefined && instructions.length > 0) {
-    description = instructions;
-  }
+  const provider = isGitHub ? "Connect GitHub" : challenge?.displayName || request.title;
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function connect() {
-    if (authorizationUrl === undefined || authorizationUrl.length === 0 || !canOpen) {
+    if (!challenge?.url || !canOpen) {
       return;
     }
     setError("");
     try {
-      await onOpenLink(authorizationUrl);
+      await onOpenLink(challenge.url);
       setOpened(true);
     } catch {
       setError("The GitHub page could not be opened. Try again.");
@@ -190,18 +175,20 @@ export function AuthorizationControl({
       </span>
       <div className="authorization-content">
         <strong>{provider}</strong>
-        <p>{description}</p>
-        {challenge?.userCode !== undefined && challenge.userCode.length > 0 ? (
-          <code>{challenge.userCode}</code>
+        <p>
+          {isGitHub
+            ? githubConnectionPrompt(storeIn.desiredRepository)
+            : challenge?.instructions || request.description}
+        </p>
+        {challenge?.userCode ? (
+          <code aria-label="Authorization code">{challenge.userCode}</code>
         ) : null}
       </div>
-      {authorizationUrl !== undefined && authorizationUrl.length > 0 ? (
+      {challenge?.url ? (
         <button
           type="button"
           className="authorization-action"
-          onClick={() => {
-            void connect();
-          }}
+          onClick={connect}
           disabled={!canOpen}
         >
           {isGitHub ? "Continue with GitHub" : "Continue"}
@@ -213,10 +200,10 @@ export function AuthorizationControl({
           confirmed.
         </p>
       ) : null}
-      {!canOpen && authorizationUrl !== undefined && authorizationUrl.length > 0 ? (
+      {!canOpen && challenge?.url ? (
         <p className="fallback">Open the authorization link from chat.</p>
       ) : null}
-      {error.length > 0 ? (
+      {error ? (
         <p className="error" role="alert">
           {error}
         </p>
@@ -225,17 +212,8 @@ export function AuthorizationControl({
   );
 }
 
-const requestDescription = (request: PublicInputRequest) => {
-  if (request.description !== undefined && request.description.length > 0) {
-    return request.description;
-  }
-  if (request.kind === "authorization") {
-    return "Connect to continue.";
-  }
-  return "Choose an option to continue.";
-};
-
-const SessionRequestControl = ({
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function SessionRequestControl({
   answer,
   canOpenLinks,
   isSubmitting,
@@ -253,7 +231,7 @@ const SessionRequestControl = ({
   onDecision: (response: SessionAnswer) => void;
   onOpenLink: (url: string) => Promise<void>;
   request: PublicInputRequest;
-}) => {
+}) {
   if (request.kind === "approval") {
     return (
       <InputControl
@@ -295,9 +273,14 @@ const SessionRequestControl = ({
   }
   return (
     <SectionShell
-      section={request.presentation?.section ?? "connections"}
+      section={request.presentation?.section || "connections"}
       title={request.title}
-      description={requestDescription(request)}
+      description={
+        request.description ||
+        (request.kind === "authorization"
+          ? "Connect to continue."
+          : "Choose an option to continue.")
+      }
     >
       {request.kind === "authorization" ? (
         <AuthorizationControl
@@ -310,7 +293,7 @@ const SessionRequestControl = ({
       )}
     </SectionShell>
   );
-};
+}
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function answerIsComplete(answer?: SessionAnswer) {
@@ -328,9 +311,7 @@ function guidanceForAnswers(canCallTools: boolean, unansweredCount: number) {
   if (!canCallTools) {
     guidance = "Answer in chat to continue.";
   } else if (unansweredCount > 0) {
-    const remainingLabel =
-      unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`;
-    guidance = `Answer ${remainingLabel} to continue.`;
+    guidance = `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`;
   }
   return guidance;
 }
@@ -349,17 +330,16 @@ function SessionOutcome({
 }) {
   if (decisionOutcome?.status === "failed") {
     const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
-    let heading = "Your response could not be submitted";
-    if (pullRequestNumber !== undefined) {
-      heading = `Draft PR ${pullRequestNumber} could not be updated`;
-    }
+    const heading = pullRequestNumber
+      ? `Draft PR ${pullRequestNumber} could not be updated`
+      : "Your response could not be submitted";
     return (
       <main className="mcpApp shell outcome outcome--failure" role="alert">
         <span aria-hidden="true">!</span>
         <div>
           <strong>{heading}</strong>
           <p>
-            {decisionOutcome.error ??
+            {decisionOutcome.error ||
               "Builder could not complete the update. Check chat for the specific diagnostic before retrying."}
           </p>
         </div>
@@ -374,7 +354,7 @@ function SessionOutcome({
         <div>
           <strong>{authorizationOpened ? "GitHub connection failed" : "Request failed"}</strong>
           <p>
-            {result.error?.message ?? "Autograph could not confirm repository access. Try again."}
+            {result.error?.message || "Autograph could not confirm repository access. Try again."}
           </p>
         </div>
       </main>
@@ -399,7 +379,7 @@ function SessionOutcome({
     }
 
     const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
-    if (pullRequestNumber !== undefined) {
+    if (pullRequestNumber) {
       return (
         <main className="mcpApp shell outcome outcome--success" role="status">
           <span aria-hidden="true">✓</span>
@@ -522,7 +502,7 @@ const useIdentityInvitationTime = (invitations: PublicIdentityInvitation[]) => {
   return now;
 };
 
-const invitationOrOutcome = (invitations: ReactNode[], outcome: ReactNode): ReactNode =>
+const invitationOrOutcome = (invitations: ReactNode[], outcome: ReactNode) =>
   invitations.length > 0 ? <main className="mcpApp shell">{invitations}</main> : outcome;
 
 const sessionAccessControls = (input: {
@@ -567,42 +547,6 @@ const sessionAccessControls = (input: {
   return controls;
 };
 
-const shouldShowOutcome = (
-  result: EveSessionResult,
-  decisionOutcome: DecisionOutcome | undefined,
-  state: "idle" | "submitting" | "submitted",
-) =>
-  result.status === "failed" ||
-  decisionOutcome?.status === "failed" ||
-  state === "submitted" ||
-  result.status !== "input_required";
-
-const singleAuthorizationRequest = (requests: PublicInputRequest[]) =>
-  requests.length === 1 && requests[0]?.kind === "authorization" ? requests[0] : undefined;
-
-const SingleAuthorizationView = ({
-  canOpenLinks,
-  invitations,
-  onOpenLink,
-  request,
-}: {
-  canOpenLinks: boolean;
-  invitations: ReactNode[];
-  onOpenLink: (url: string) => Promise<void>;
-  request: PublicInputRequest;
-}) => (
-  <main className="mcpApp shell authorization-shell">
-    {invitations}
-    <div className="request-list">
-      <AuthorizationControl
-        request={request}
-        canOpen={canOpenLinks && Boolean(request.authorization?.url)}
-        onOpenLink={onOpenLink}
-      />
-    </div>
-  </main>
-);
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function SessionAppView({
   canCallTools,
@@ -618,7 +562,7 @@ export function SessionAppView({
   onRespond: (responses: SessionResponse[]) => Promise<void>;
   result?: EveSessionResult;
   identityInvitations?: PublicIdentityInvitation[];
-}): ReactNode {
+}) {
   const [answers, setAnswers] = useState<Record<string, SessionAnswer>>({});
   const [state, setState] = useState<"idle" | "submitting" | "submitted">("idle");
   const [authorizationOpened, setAuthorizationOpened] = useState(false);
@@ -636,7 +580,7 @@ export function SessionAppView({
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function submitDecision(request: PublicInputRequest, response: SessionAnswer) {
-    if (result === undefined || !canCallTools || state === "submitting") {
+    if (!result || !canCallTools || state === "submitting") {
       return;
     }
     setState("submitting");
@@ -662,7 +606,7 @@ export function SessionAppView({
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function submit() {
-    if (result === undefined || !complete || !canCallTools || state === "submitting") {
+    if (!result || !complete || !canCallTools || state === "submitting") {
       return;
     }
     setState("submitting");
@@ -687,7 +631,7 @@ export function SessionAppView({
     setAuthorizationOpened(true);
   }
 
-  if (result === undefined) {
+  if (!result) {
     return (
       <main className="mcpApp shell" aria-busy="true">
         <p role="status">Loading your request…</p>
@@ -709,21 +653,31 @@ export function SessionAppView({
     canOpenLinks,
     onOpenLink,
   });
-  if (shouldShowOutcome(result, decisionOutcome, state)) {
+  if (
+    result.status === "failed" ||
+    decisionOutcome?.status === "failed" ||
+    state === "submitted" ||
+    result.status !== "input_required"
+  ) {
     return invitationOrOutcome(invitations, outcome);
   }
 
   const onlyRequest = requests.length === 1 ? requests[0] : undefined;
   const onlyDecision = isDecisionRequest(onlyRequest);
-  const singleAuthorization = singleAuthorizationRequest(requests);
+  const singleAuthorization =
+    requests.length === 1 && requests[0]?.kind === "authorization" ? requests[0] : undefined;
   if (singleAuthorization) {
     return (
-      <SingleAuthorizationView
-        request={singleAuthorization}
-        invitations={invitations}
-        canOpenLinks={canOpenLinks}
-        onOpenLink={openAuthorization}
-      />
+      <main className="mcpApp shell authorization-shell">
+        {invitations}
+        <div className="request-list">
+          <AuthorizationControl
+            request={singleAuthorization}
+            canOpen={canOpenLinks && Boolean(singleAuthorization.authorization?.url)}
+            onOpenLink={openAuthorization}
+          />
+        </div>
+      </main>
     );
   }
 
@@ -766,23 +720,17 @@ export function SessionAppView({
             type="button"
             className="primary"
             disabled={!complete || !canCallTools || state === "submitting"}
-            aria-describedby={
-              continueGuidance !== undefined && continueGuidance.length > 0
-                ? "continue-guidance"
-                : undefined
-            }
-            onClick={() => {
-              void submit();
-            }}
+            aria-describedby={continueGuidance ? "continue-guidance" : undefined}
+            onClick={submit}
           >
             {state === "submitting" ? "Submitting…" : "Continue"}
           </button>
-          {continueGuidance !== undefined && continueGuidance.length > 0 ? (
+          {continueGuidance ? (
             <p className="continue-guidance" id="continue-guidance">
               {continueGuidance}
             </p>
           ) : null}
-          {submissionError.length > 0 ? (
+          {submissionError ? (
             <p className="error" role="alert">
               {submissionError}
             </p>

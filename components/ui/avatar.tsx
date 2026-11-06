@@ -1,7 +1,7 @@
 "use client";
 
-import type { ComponentProps } from "react";
-import { AvatarFallback, AvatarImage, AvatarRoot } from "@base-ui/react/avatar";
+import * as React from "react";
+import { Avatar as AvatarPrimitive } from "@base-ui/react/avatar";
 
 import { cn } from "@/lib/utils";
 
@@ -10,11 +10,11 @@ function Avatar({
   className,
   size = "default",
   ...props
-}: AvatarRoot.Props & {
+}: AvatarPrimitive.Root.Props & {
   size?: "default" | "sm" | "lg";
 }) {
   return (
-    <AvatarRoot
+    <AvatarPrimitive.Root
       data-slot="avatar"
       data-size={size}
       className={cn(
@@ -27,9 +27,9 @@ function Avatar({
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function AvatarImageComponent({ className, ...props }: AvatarImage.Props) {
+function AvatarImage({ className, ...props }: AvatarPrimitive.Image.Props) {
   return (
-    <AvatarImage
+    <AvatarPrimitive.Image
       data-slot="avatar-image"
       className={cn("aspect-square size-full rounded-full object-cover", className)}
       {...props}
@@ -38,9 +38,9 @@ function AvatarImageComponent({ className, ...props }: AvatarImage.Props) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function AvatarFallbackComponent({ className, ...props }: AvatarFallback.Props) {
+function AvatarFallback({ className, ...props }: AvatarPrimitive.Fallback.Props) {
   return (
-    <AvatarFallback
+    <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"
       className={cn(
         "flex size-full items-center justify-center rounded-full bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs",
@@ -52,7 +52,7 @@ function AvatarFallbackComponent({ className, ...props }: AvatarFallback.Props) 
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function AvatarBadge({ className, ...props }: ComponentProps<"span">) {
+function AvatarBadge({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="avatar-badge"
@@ -69,7 +69,7 @@ function AvatarBadge({ className, ...props }: ComponentProps<"span">) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function AvatarGroup({ className, ...props }: ComponentProps<"div">) {
+function AvatarGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="avatar-group"
@@ -83,7 +83,7 @@ function AvatarGroup({ className, ...props }: ComponentProps<"div">) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function AvatarGroupCount({ className, ...props }: ComponentProps<"div">) {
+function AvatarGroupCount({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="avatar-group-count"
@@ -96,11 +96,4 @@ function AvatarGroupCount({ className, ...props }: ComponentProps<"div">) {
   );
 }
 
-export {
-  Avatar,
-  AvatarImageComponent as AvatarImage,
-  AvatarFallbackComponent as AvatarFallback,
-  AvatarGroup,
-  AvatarGroupCount,
-  AvatarBadge,
-};
+export { Avatar, AvatarImage, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarBadge };

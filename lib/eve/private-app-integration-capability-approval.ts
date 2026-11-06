@@ -27,7 +27,7 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
     plan: input.plan,
     planDigest: appIntegrationCapabilityPlanDigest(input.plan),
   });
-  const captureInput = {
+  const capture = createPrivateOperatorApprovalCapture({
     callId: input.callId,
     ownerUserId: input.plan.authority.ownerUserId,
     request: {
@@ -36,11 +36,8 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
       planDigest: expected.planDigest,
       planRef: expected.operationRef,
     },
-  };
-  if (input.state !== undefined) {
-    Object.assign(captureInput, { state: input.state });
-  }
-  const capture = createPrivateOperatorApprovalCapture(captureInput);
+    ...(input.state === undefined ? {} : { state: input.state }),
+  });
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
@@ -90,25 +87,16 @@ export const readPrivateAppIntegrationCapabilityApproval = async (input: {
   ) {
     throw new Error("Integration capability approval owner changed");
   }
-  const approvalInput = {
-    assertOwner: input.assertOwner,
-    capture: (state: PrivateOperatorApprovalCapture | undefined) => {
-      const captureInput: Parameters<
-        typeof createPrivateAppIntegrationCapabilityApprovalCapture
-      >[0] = {
+  return await readPrivateOperatorApproval({
+    owner: input.owner,
+    ...(input.observation === undefined ? {} : { observation: input.observation }),
+    capture: (state) =>
+      createPrivateAppIntegrationCapabilityApprovalCapture({
         callId: input.callId,
         plan: input.plan,
-      };
-      if (state !== undefined) {
-        captureInput.state = state;
-      }
-      return createPrivateAppIntegrationCapabilityApprovalCapture(captureInput);
-    },
-    owner: input.owner,
+        ...(state === undefined ? {} : { state }),
+      }),
     readHistory: input.readHistory,
-  };
-  if (input.observation !== undefined) {
-    Object.assign(approvalInput, { observation: input.observation });
-  }
-  return await readPrivateOperatorApproval(approvalInput);
+    assertOwner: input.assertOwner,
+  });
 };

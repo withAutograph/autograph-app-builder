@@ -1,31 +1,13 @@
-import { readHostedMcpAuthConfig } from "../../../lib/mcp/request-auth";
+import {
+  protectedResourceMetadata,
+  readHostedMcpAuthConfig,
+  unavailableResponse,
+} from "@/lib/mcp/request-auth";
 
-const getMetadata = (): Response => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function GET(): Response {
   try {
-    const environment: Record<string, string | undefined> = {};
-    for (const key of [
-      "MCP_OAUTH_ALGORITHM",
-      "MCP_OAUTH_AUDIENCE",
-      "MCP_OAUTH_ISSUER",
-      "MCP_OAUTH_JWKS_URL",
-      "MCP_RESOURCE_URL",
-    ]) {
-      environment[key] = process.env[key];
-    }
-    const config = readHostedMcpAuthConfig(environment);
-    const metadata = {
-      authorization_servers: [config.issuer],
-      bearer_methods_supported: ["header"],
-      resource: config.resourceUrl,
-      scopes_supported: [
-        "autograph:session",
-        "autograph:start",
-        "autograph:get",
-        "autograph:send",
-        "autograph:respond",
-        "autograph:cancel",
-      ],
-    };
+    const metadata = protectedResourceMetadata(readHostedMcpAuthConfig(process.env));
     return Response.json(metadata, {
       headers: {
         "Access-Control-Allow-Origin": "*",
@@ -33,17 +15,13 @@ const getMetadata = (): Response => {
       },
     });
   } catch {
-    return Response.json(
-      { error: "service_unavailable" },
-      { headers: { "Cache-Control": "no-store" }, status: 503 },
-    );
+    return unavailableResponse();
   }
-};
+}
 
-export const GET = getMetadata;
-
-const getOptions = (): Response =>
-  new Response(null, {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function OPTIONS(): Response {
+  return new Response(null, {
     headers: {
       "Access-Control-Allow-Headers": "Authorization, Content-Type",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -52,5 +30,4 @@ const getOptions = (): Response =>
     },
     status: 204,
   });
-
-export const OPTIONS = getOptions;
+}

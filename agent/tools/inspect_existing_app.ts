@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/filename-case -- Preserve the registered Eve tool name and public workflow identity. */
 import { inspectCurrentProposalSource } from "@/lib/agent/proposed-source-inspection";
 import { defineDynamic, defineTool } from "eve/tools";
 import { createHash } from "node:crypto";
@@ -42,11 +41,6 @@ interface SourceInspectionListing {
   pathListing?: string;
 }
 
-interface SourceInspectionResult {
-  listing: SourceInspectionListing;
-  nextPathIndex: number;
-}
-
 interface SourceInspectionOutput extends SourceInspectionListing {
   appId: string;
   continuation?: SourceInspectionContinuation;
@@ -55,21 +49,10 @@ interface SourceInspectionOutput extends SourceInspectionListing {
   nextPathIndex?: number;
 }
 
-interface SourceFileReadResult {
-  continuation?: SourceInspectionContinuation;
-  file?: SourceInspectionFile;
-}
-
-const sourceInspectionToolName = "inspect_existing_app";
-const currentProposalSource = ["current", "proposal"].join("-");
-const applicationSourcePathPrefix = "apps/";
-const sourceManifestEntrySchema = z.object({ path: z.string() });
-const sourceManifestSchema = z.array(sourceManifestEntrySchema);
-
 const sourceInspectionEvent = function sourceInspectionEvent(output: SourceInspectionOutput) {
   return {
     data: {
-      result: { kind: "tool-result", output, toolName: sourceInspectionToolName },
+      result: { kind: "tool-result", output, toolName: "inspect_existing_app" },
     },
     type: "action.result",
   };
@@ -111,7 +94,7 @@ const sourceInspectionListing = function sourceInspectionListing(
   availablePaths: string[],
   pathIndex: number,
   contentRequested: boolean,
-): SourceInspectionResult {
+): { listing: SourceInspectionListing; nextPathIndex: number } {
   if (contentRequested) {
     return {
       listing: {
@@ -137,7 +120,7 @@ const readSourceFilePage = async function readSourceFilePage(
     offsetBytes: number;
     path: string;
   },
-): Promise<SourceFileReadResult | null> {
+): Promise<{ continuation?: SourceInspectionContinuation; file?: SourceInspectionFile } | null> {
   const { appId, expectedDigest, files, listing, missingPaths, offsetBytes, path } = input;
   const content = await sandbox.readTextFile({ path: `repository/${path}` });
   if (content === null) {
@@ -161,16 +144,14 @@ const readSourceFilePage = async function readSourceFilePage(
   try {
     chunk = largestUtf8PayloadChunk({
       content,
-      makePayload: (chunkContent, nextOffsetBytes) => {
-        const output: SourceInspectionOutput = {
+      makePayload: (chunkContent, nextOffsetBytes) =>
+        sourceInspectionEvent({
           ...payloadBase,
           files: [...files, { content: chunkContent, digest, offsetBytes, path }],
-        };
-        if (nextOffsetBytes < Buffer.byteLength(content, "utf-8")) {
-          output.continuation = { digest, offsetBytes: nextOffsetBytes, path };
-        }
-        return sourceInspectionEvent(output);
-      },
+          ...(nextOffsetBytes < Buffer.byteLength(content, "utf-8")
+            ? { continuation: { digest, offsetBytes: nextOffsetBytes, path } }
+            : {}),
+        }),
       offsetBytes,
     });
   } catch (error) {
@@ -183,13 +164,12 @@ const readSourceFilePage = async function readSourceFilePage(
     }
     throw error;
   }
-  const result: SourceFileReadResult = {
+  return {
     file: { content: chunk.content, digest, offsetBytes, path },
+    ...(chunk.nextOffsetBytes < Buffer.byteLength(content, "utf-8")
+      ? { continuation: { digest, offsetBytes: chunk.nextOffsetBytes, path } }
+      : {}),
   };
-  if (chunk.nextOffsetBytes < Buffer.byteLength(content, "utf-8")) {
-    result.continuation = { digest, offsetBytes: chunk.nextOffsetBytes, path };
-  }
-  return result;
 };
 
 type AppBuilderState = ReturnType<typeof appBuilderWorkflowState.get>;
@@ -214,7 +194,7 @@ export const listCurrentAppSourcePaths = async function listCurrentAppSourcePath
   sandbox: AppSourceFileRunner,
   appId: string,
 ) {
-  const prefix = `${applicationSourcePathPrefix}${appId}/`;
+  const prefix = `apps/${appId}/`;
   const escaped = prefix.replaceAll("'", "'\"'\"'");
   const quoted = `'${escaped}'`;
   const listed = await sandbox.run({
@@ -242,14 +222,24 @@ const listAvailableSourcePaths = async function listAvailableSourcePaths(
     return await listCurrentAppSourcePaths(sandbox, appId);
   }
   const manifestSource = await sandbox.readTextFile({ path: ".app-builder/source-files.json" });
-  let manifest = sourceManifestSchema.parse([]);
+  let manifest: unknown = [];
   try {
-    const parsedManifest = sourceManifestSchema.parse(JSON.parse(manifestSource ?? "[]"));
-    manifest = parsedManifest;
+    manifest = manifestSource === null ? [] : JSON.parse(manifestSource);
   } catch {
     manifest = [];
   }
-  const allowedPaths: string[] = manifest.map(({ path }) => path);
+  const entries = Array.isArray(manifest) ? manifest : [];
+  const allowedPaths = entries.flatMap((candidate): string[] => {
+    if (
+      typeof candidate === "object" &&
+      candidate !== null &&
+      "path" in candidate &&
+      typeof candidate.path === "string"
+    ) {
+      return [candidate.path];
+    }
+    return [];
+  });
   return [...new Set(allowedPaths)]
     .filter((path) => path.startsWith(prefix))
     .filter(safeSourcePath)
@@ -327,17 +317,11 @@ export const buildSourceInspectionOutput = async function buildSourceInspectionO
   const response: SourceInspectionOutput = {
     appId,
     ...listing,
+    ...(nextPathIndex < availablePaths.length ? { nextPathIndex } : {}),
     files,
+    ...(missingPaths.length === 0 ? {} : { missingPaths }),
+    ...(continuation === undefined ? {} : { continuation }),
   };
-  if (nextPathIndex < availablePaths.length) {
-    response.nextPathIndex = nextPathIndex;
-  }
-  if (missingPaths.length > 0) {
-    response.missingPaths = missingPaths;
-  }
-  if (continuation !== undefined) {
-    response.continuation = continuation;
-  }
   if (serializedPayloadBytes(sourceInspectionEvent(response)) > EVE_MAX_PAYLOAD_BYTES) {
     throw new Error(
       "The requested source inspection metadata exceeds Eve's provider transport envelope. Request fewer paths in one call, then continue with the returned file digest and byte offset.",
@@ -365,7 +349,7 @@ export default defineDynamic({
           },
           ctx,
         ) {
-          if (source === currentProposalSource) {
+          if (source === "current-proposal") {
             return inspectCurrentProposalSource(
               {
                 appId,
@@ -401,7 +385,7 @@ export default defineDynamic({
             }
             state = appBuilderWorkflowState.get();
           }
-          const prefix = `${applicationSourcePathPrefix}${appId}/`;
+          const prefix = `apps/${appId}/`;
           if (!safeSourcePath(appId) || appId.includes("/")) {
             throw new Error("The requested application cannot be read safely.");
           }

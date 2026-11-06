@@ -81,6 +81,7 @@ describe("explicit reviewed compute task validation repair", () => {
       const sandbox = {} as SandboxSession;
       await repair?.applyPolicy(sandbox);
       expect(installPolicy).toHaveBeenCalledWith({
+        abortSignal: undefined,
         applyRoot: state.applyReceipt.applyRoot,
         profile: state.proposal.target.privateCompute,
         sandbox,

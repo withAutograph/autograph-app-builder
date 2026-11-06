@@ -7,14 +7,10 @@ const options = [
   { detail: "Pro", label: "Autograph", value: "autograph" },
   { detail: "Hobby", label: "Sandbox", value: "sandbox" },
 ];
-const teamLabel = "Select a Vercel Team";
-const connectTeamLabel = "Connect another Vercel team";
 const meta = {
   args: {
-    label: teamLabel,
-    onChange: (...args) => {
-      void fn()(...args);
-    },
+    label: "Select a Vercel Team",
+    onChange: fn(),
     options,
     prefix: <span>●</span>,
     value: "autograph",
@@ -39,22 +35,20 @@ export const Empty: Story = {
 export const SelectOption: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByLabelText(teamLabel));
+    await userEvent.click(canvas.getByLabelText("Select a Vercel Team"));
     await userEvent.click(canvas.getByRole("option", { name: /Sandbox/u }));
     await expect(args.onChange).toHaveBeenCalledWith("sandbox");
   },
 };
 export const FooterAction: Story = {
   args: {
-    menuFooter: { label: connectTeamLabel, value: "create-team" },
-    onFooterSelect: (...args) => {
-      void fn()(...args);
-    },
+    menuFooter: { label: "Connect another Vercel team", value: "create-team" },
+    onFooterSelect: fn(),
   },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByLabelText(teamLabel));
-    await userEvent.click(canvas.getByRole("button", { name: connectTeamLabel }));
+    await userEvent.click(canvas.getByLabelText("Select a Vercel Team"));
+    await userEvent.click(canvas.getByRole("button", { name: "Connect another Vercel team" }));
     await expect(args.onFooterSelect).toHaveBeenCalledOnce();
   },
 };

@@ -109,9 +109,6 @@ const candidate = (ctx: Context) =>
     sessionId: ctx.session.id,
   });
 
-const withoutInspectionCallId = (value: Observation) =>
-  Object.fromEntries(Object.entries(value).filter(([key]) => key !== "inspectionCallId"));
-
 /** Called only after both internal marker verifiers reject the native user message. */
 export const observePlannedAuthoringRequest = (
   ctx: Context,
@@ -141,7 +138,8 @@ export const observePlannedAuthoringRequest = (
     prior.requestTurnId === input.turnId &&
     prior.requestMessageSequence === input.sequence
   ) {
-    if (next && isDeepStrictEqual(withoutInspectionCallId(prior), withoutInspectionCallId(next))) {
+    const comparable = { ...prior, inspectionCallId: undefined };
+    if (next && isDeepStrictEqual(comparable, { ...next, inspectionCallId: undefined })) {
       return;
     }
     // A replay with substituted bytes or a changed immutable target is not a new request.

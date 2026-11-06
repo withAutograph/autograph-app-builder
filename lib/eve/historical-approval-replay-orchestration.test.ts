@@ -63,9 +63,9 @@ const progress = (complete: boolean) => ({
   version: 1 as const,
 });
 const fixture = () => {
-  const assertOwner = vi.fn(() => {});
-  const persistPartial = vi.fn(() => true);
-  const publishVerified = vi.fn(() => true);
+  const assertOwner = vi.fn(async () => {});
+  const persistPartial = vi.fn(async () => true);
+  const publishVerified = vi.fn(async () => true);
   return {
     assertOwner,
     binding,
@@ -82,7 +82,7 @@ describe("historical approval replay orchestration", () => {
     await expect(
       runHistoricalApprovalReplay({
         ...f,
-        observe: () => ({
+        observe: async () => ({
           nativeTail: { complete: false, nativeTailIndex: 4, nextNativeIndex: 3 },
           progress: first,
         }),
@@ -90,7 +90,7 @@ describe("historical approval replay orchestration", () => {
     ).resolves.toEqual({ status: "partial" });
     expect(f.persistPartial).toHaveBeenCalledWith(first, checkpoint);
     expect(f.publishVerified).not.toHaveBeenCalled();
-    const observe = vi.fn((prior: ApprovalReplayProgress | undefined) => {
+    const observe = vi.fn(async (prior: ApprovalReplayProgress | undefined) => {
       expect(prior).toEqual(first);
       return {
         nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
@@ -122,7 +122,7 @@ describe("historical approval replay orchestration", () => {
       await expect(
         runHistoricalApprovalReplay({
           ...f,
-          observe: () => ({
+          observe: async () => ({
             nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
             progress: p,
           }),
@@ -136,7 +136,7 @@ describe("historical approval replay orchestration", () => {
     await expect(
       runHistoricalApprovalReplay({
         ...f,
-        observe: () => ({
+        observe: async () => ({
           nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
           progress: p,
         }),
@@ -150,7 +150,7 @@ describe("historical approval replay orchestration", () => {
     await expect(
       runHistoricalApprovalReplay({
         ...f,
-        observe: () => ({
+        observe: async () => ({
           nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
           progress: progress(true),
         }),
@@ -163,7 +163,7 @@ describe("historical approval replay orchestration", () => {
     await expect(
       runHistoricalApprovalReplay({
         ...f,
-        observe: () => ({
+        observe: async () => ({
           nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 3 },
           progress: progress(false),
         }),

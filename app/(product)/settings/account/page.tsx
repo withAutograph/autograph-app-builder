@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
+
 import { AccountSettings } from "@/components/auth/settings/account/account-settings";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "@/lib/auth/preview-oauth-deployment";
 import {
@@ -8,15 +10,15 @@ import {
   workspaceOnboardingRedirect,
 } from "@/lib/auth/workspace-onboarding";
 
-export default async function AccountSettingsPage() {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function RedirectAccountVisitor() {
   const requestHeaders = await headers();
   const { origin } = new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000/api/auth");
-  const state = await resolveWorkspaceOnboardingState(
-    async () =>
-      await ensurePreviewOAuthDeploymentSessionOrganization({
-        environment: process.env,
-        headers: requestHeaders,
-      }),
+  const state = await resolveWorkspaceOnboardingState(async () =>
+    ensurePreviewOAuthDeploymentSessionOrganization({
+      environment: process.env,
+      headers: requestHeaders,
+    }),
   );
   if (state.status === "anonymous") {
     redirect(signInForWorkspaceRedirect(origin));
@@ -25,10 +27,19 @@ export default async function AccountSettingsPage() {
     redirect(workspaceOnboardingRedirect(origin, state.status));
   }
 
+  return null;
+}
+
+export default function AccountSettingsPage() {
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Account settings</h1>
-      <AccountSettings />
-    </main>
+    <>
+      <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 p-6">
+        <h1 className="text-2xl font-semibold">Account settings</h1>
+        <AccountSettings />
+      </main>
+      <Suspense fallback={null}>
+        <RedirectAccountVisitor />
+      </Suspense>
+    </>
   );
 }

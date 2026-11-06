@@ -19,6 +19,10 @@ const localTrustedForwarders: Parameters<typeof eveChannel>[0]["trustedForwarder
     : (forwarder, assertion) => localRecovery.trustForwarder(forwarder, assertion);
 
 export default eveChannel({
+  terminalRecovery:
+    hostedForwarderSubject === undefined
+      ? localRecovery?.ports
+      : createHostedNativeRecoveryBinding(process.env),
   auth: [
     // Lets the eve TUI and your Vercel deployments reach the deployed agent.
     vercelOidc(),
@@ -29,10 +33,6 @@ export default eveChannel({
     // or use none() for a public demo.
     placeholderAuth(),
   ],
-  terminalRecovery:
-    hostedForwarderSubject === undefined
-      ? localRecovery?.ports
-      : createHostedNativeRecoveryBinding(process.env),
   // Hosted MCP forwarding stays pinned to the exact configured workload.
   // Local recovery accepts only the local-dev principal in its private cycle.
   trustedForwarders: trustedForwarders ?? localTrustedForwarders,

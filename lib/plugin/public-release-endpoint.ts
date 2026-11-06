@@ -10,7 +10,7 @@ const isLoopbackOrUnspecifiedIpv4 = (host: string) => {
 const mappedIpv4 = (host: string) => {
   const match = /^::ffff:(?<high>[0-9a-f]{1,4}):(?<low>[0-9a-f]{1,4})$/u.exec(host);
   if (!match) {
-    return "";
+    return;
   }
   const high = Number.parseInt(match[1], 16);
   const low = Number.parseInt(match[2], 16);
@@ -32,7 +32,7 @@ export const isReservedPublicReleaseHostname = (hostname: string) => {
       return true;
     }
     const mapped = mappedIpv4(host);
-    if (mapped.length > 0 && isLoopbackOrUnspecifiedIpv4(mapped)) {
+    if (mapped && isLoopbackOrUnspecifiedIpv4(mapped)) {
       return true;
     }
   }

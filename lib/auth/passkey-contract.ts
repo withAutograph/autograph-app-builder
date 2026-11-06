@@ -1,30 +1,29 @@
 export const PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED = "PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED";
 
 interface PasskeyErrorEnvelope {
-  code?: string;
-  error?: PasskeyErrorEnvelope | null;
+  code?: unknown;
+  error?: unknown;
 }
 
-export type PasskeyErrorValue = PasskeyErrorEnvelope | Error | null | undefined;
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function passkeyErrorCode(value: PasskeyErrorValue): string | undefined {
-  if (value === null || value === undefined) {
+export function passkeyErrorCode(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") {
     return undefined;
   }
 
-  const envelope: PasskeyErrorEnvelope = value;
-  if (envelope.code !== undefined) {
+  const envelope = value as PasskeyErrorEnvelope;
+  if (typeof envelope.code === "string") {
     return envelope.code;
   }
-  if (envelope.error === null || envelope.error === undefined) {
+  if (!envelope.error || typeof envelope.error !== "object") {
     return undefined;
   }
 
-  return envelope.error.code;
+  const nestedCode = (envelope.error as PasskeyErrorEnvelope).code;
+  return typeof nestedCode === "string" ? nestedCode : undefined;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function isPasskeyOnboardingAlreadyAuthenticated(value: PasskeyErrorValue) {
+export function isPasskeyOnboardingAlreadyAuthenticated(value: unknown) {
   return passkeyErrorCode(value) === PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED;
 }

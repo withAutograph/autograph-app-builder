@@ -32,7 +32,7 @@ export function Passkeys({ className }: PasskeysProps) {
   let passkeyContent;
   if (isPending) {
     passkeyContent = <PasskeySkeleton />;
-  } else if (passkeys !== null && passkeys !== undefined && passkeys.length > 0) {
+  } else if (passkeys?.length) {
     passkeyContent = (
       <ItemGroup className="gap-0">
         {passkeys.map((passkey, index) => (

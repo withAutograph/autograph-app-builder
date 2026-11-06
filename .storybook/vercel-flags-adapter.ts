@@ -9,7 +9,7 @@ export function createVercelAdapter() {
   return <ValueType, EntitiesType>(): Adapter<ValueType, EntitiesType> => ({
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
     async decide({ defaultValue }) {
-      return defaultValue;
+      return defaultValue as ValueType;
     },
   });
 }

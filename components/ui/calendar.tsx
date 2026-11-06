@@ -1,80 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import type { ComponentProps } from "react";
-import { DayPicker } from "react-day-picker";
-import type { ClassNames, DayButton, Locale } from "react-day-picker";
+import * as React from "react";
+import { DayPicker, getDefaultClassNames } from "react-day-picker";
+import type { DayButton, Locale } from "react-day-picker";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react";
-
-const defaultClassNames: ClassNames = {
-  button_next: "rdp-button_next",
-  button_previous: "rdp-button_previous",
-  caption_after_enter: "rdp-caption_after_enter",
-  caption_after_exit: "rdp-caption_after_exit",
-  caption_before_enter: "rdp-caption_before_enter",
-  caption_before_exit: "rdp-caption_before_exit",
-  caption_label: "rdp-caption_label",
-  chevron: "rdp-chevron",
-  day: "rdp-day",
-  day_button: "rdp-day_button",
-  disabled: "rdp-disabled",
-  dropdown: "rdp-dropdown",
-  dropdown_root: "rdp-dropdown_root",
-  dropdowns: "rdp-dropdowns",
-  focused: "rdp-focused",
-  footer: "rdp-footer",
-  hidden: "rdp-hidden",
-  month: "rdp-month",
-  month_caption: "rdp-month_caption",
-  month_grid: "rdp-month_grid",
-  months: "rdp-months",
-  months_dropdown: "rdp-months_dropdown",
-  nav: "rdp-nav",
-  outside: "rdp-outside",
-  range_end: "rdp-range_end",
-  range_middle: "rdp-range_middle",
-  range_start: "rdp-range_start",
-  root: "rdp-root",
-  selected: "rdp-selected",
-  today: "rdp-today",
-  week: "rdp-week",
-  week_number: "rdp-week_number",
-  week_number_header: "rdp-week_number_header",
-  weekday: "rdp-weekday",
-  weekdays: "rdp-weekdays",
-  weeks: "rdp-weeks",
-  weeks_after_enter: "rdp-weeks_after_enter",
-  weeks_after_exit: "rdp-weeks_after_exit",
-  weeks_before_enter: "rdp-weeks_before_enter",
-  weeks_before_exit: "rdp-weeks_before_exit",
-  years_dropdown: "rdp-years_dropdown",
-};
-
-const getNavButtonVariantClass = (variant: ComponentProps<typeof Button>["variant"]): string => {
-  switch (variant) {
-    case "default": {
-      return "bg-primary text-primary-foreground hover:bg-primary/80";
-    }
-    case "destructive": {
-      return "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40";
-    }
-    case "ghost": {
-      return "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50";
-    }
-    case "link": {
-      return "text-primary underline-offset-4 hover:underline";
-    }
-    case "outline": {
-      return "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50";
-    }
-    case "secondary": {
-      return "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground";
-    }
-  }
-};
 
 const CalendarDayButton = ({
   className: dayClassName,
@@ -82,9 +14,11 @@ const CalendarDayButton = ({
   modifiers,
   locale,
   ...props
-}: ComponentProps<typeof DayButton> & { locale?: Partial<Locale> }) => {
-  const ref = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
+}: React.ComponentProps<typeof DayButton> & { locale?: Partial<Locale> }) => {
+  const defaultClassNames = getDefaultClassNames();
+
+  const ref = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => {
     if (modifiers.focused) {
       ref.current?.focus();
     }
@@ -124,10 +58,10 @@ const Calendar = ({
   formatters,
   components,
   ...props
-}: ComponentProps<typeof DayPicker> & {
-  buttonVariant?: ComponentProps<typeof Button>["variant"];
+}: React.ComponentProps<typeof DayPicker> & {
+  buttonVariant?: React.ComponentProps<typeof Button>["variant"];
 }) => {
-  const navButtonVariantClass = getNavButtonVariantClass(buttonVariant);
+  const defaultClassNames = getDefaultClassNames();
 
   return (
     <DayPicker
@@ -146,12 +80,12 @@ const Calendar = ({
       }}
       classNames={{
         button_next: cn(
-          navButtonVariantClass,
+          buttonVariants({ variant: buttonVariant }),
           "size-(--cell-size) p-0 select-none aria-disabled:opacity-50",
           defaultClassNames.button_next,
         ),
         button_previous: cn(
-          navButtonVariantClass,
+          buttonVariants({ variant: buttonVariant }),
           "size-(--cell-size) p-0 select-none aria-disabled:opacity-50",
           defaultClassNames.button_previous,
         ),
@@ -164,7 +98,7 @@ const Calendar = ({
         ),
         day: cn(
           "group/day relative aspect-square h-full w-full rounded-(--cell-radius) p-0 text-center select-none [&:last-child[data-selected=true]_button]:rounded-r-(--cell-radius)",
-          props.showWeekNumber === true
+          props.showWeekNumber
             ? "[&:nth-child(2)[data-selected=true]_button]:rounded-l-(--cell-radius)"
             : "[&:first-child[data-selected=true]_button]:rounded-l-(--cell-radius)",
           defaultClassNames.day,

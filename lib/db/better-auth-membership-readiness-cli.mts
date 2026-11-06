@@ -17,18 +17,17 @@ const client = postgres(databaseUrl, hostedTaskPostgresOptions);
 try {
   const readBack = await client.begin(async (transaction) => {
     await transaction`SET TRANSACTION READ ONLY`;
-    const [mode, activeLegacyRows, migratedRows, countsResult] = await Promise.all([
-      transaction<{ transactionReadOnly: string }[]>`
+    const mode = await transaction<{ transactionReadOnly: string }[]>`
       SELECT current_setting('transaction_read_only') AS "transactionReadOnly"
-      `,
-      transaction<
-        {
-          issuer: string;
-          audience: string;
-          workspaceId: string;
-          userId: string;
-        }[]
-      >`
+    `;
+    const activeLegacyRows = await transaction<
+      {
+        issuer: string;
+        audience: string;
+        workspaceId: string;
+        userId: string;
+      }[]
+    >`
       SELECT
         issuer,
         audience,
@@ -37,16 +36,16 @@ try {
       FROM hosted_workspace_membership
       WHERE active = true
       ORDER BY issuer, audience, workspace_id, owner_user_id
-      `,
-      transaction<
-        {
-          issuer: string;
-          audience: string;
-          workspaceId: string;
-          userId: string;
-          role: "owner";
-        }[]
-      >`
+    `;
+    const migratedRows = await transaction<
+      {
+        issuer: string;
+        audience: string;
+        workspaceId: string;
+        userId: string;
+        role: "owner";
+      }[]
+    >`
       SELECT
         organization.issuer,
         organization.audience,
@@ -63,15 +62,15 @@ try {
           AND workspace_id = organization.workspace_id
       )
       ORDER BY issuer, audience, "workspaceId", "userId"
-      `,
-      transaction<
-        {
-          inactiveLegacyCount: number;
-          pendingInvitationCount: number;
-          nativeOrganizationCount: number;
-          orphanedActiveSessionCount: number;
-        }[]
-      >`
+    `;
+    const [counts] = await transaction<
+      {
+        inactiveLegacyCount: number;
+        pendingInvitationCount: number;
+        nativeOrganizationCount: number;
+        orphanedActiveSessionCount: number;
+      }[]
+    >`
       SELECT
         (SELECT count(*)::int FROM hosted_workspace_membership
           WHERE active = false) AS "inactiveLegacyCount",
@@ -92,10 +91,8 @@ try {
               WHERE member.organization_id = auth_session.active_organization_id
                 AND member.user_id = auth_session.user_id
             )) AS "orphanedActiveSessionCount"
-      `,
-    ]);
-    const [counts] = countsResult;
-    if (counts === undefined) {
+    `;
+    if (!counts) {
       throw new Error("Better Auth membership counts were not readable.");
     }
     return {

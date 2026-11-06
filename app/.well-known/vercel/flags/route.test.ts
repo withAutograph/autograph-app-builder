@@ -1,45 +1,59 @@
 import { createAccessProof } from "flags";
-import { createFlagsDiscoveryEndpoint } from "flags/next";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GET } from "./route";
 
 import { builderConnectionsFlag, selfServiceSignupFlag } from "../../../../lib/feature-flags";
+import type * as FlagsVercel from "@flags-sdk/vercel";
 
-const providerData = {
-  definitions: {
-    "builder-connections": { defaultValue: false },
-    "self-service-signup": { defaultValue: false },
-  },
-  hints: [],
-};
+const getProviderData = vi.hoisted(() => vi.fn());
 
-const getProviderData = (_flags: {
-  builderConnectionsFlag: typeof builderConnectionsFlag;
-  selfServiceSignupFlag: typeof selfServiceSignupFlag;
-}) => providerData;
+vi.mock("@flags-sdk/vercel", async (importOriginal) => ({
+  ...(await importOriginal<typeof FlagsVercel>()),
+  getProviderData,
+}));
 
 describe("Vercel Flags discovery route", () => {
+  beforeEach(() => {
+    getProviderData.mockResolvedValue({
+      definitions: {
+        "builder-connections": { defaultValue: false },
+        "self-service-signup": { defaultValue: false },
+      },
+      hints: [],
+    });
+  });
+
   it("rejects unauthenticated discovery requests", async () => {
-    const get = createFlagsDiscoveryEndpoint(() => providerData);
-    const response = await get(new Request("https://agent.example.com/.well-known/vercel/flags"));
+    const response = await GET(new Request("https://agent.example.com/.well-known/vercel/flags"));
 
     expect(response.status).toBe(401);
+    expect(getProviderData).not.toHaveBeenCalled();
   });
 
   it("returns the declared flags to an authenticated Vercel request", async () => {
     const secret = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE";
     vi.stubEnv("FLAGS_SECRET", secret);
     const proof = await createAccessProof(secret);
-    const get = createFlagsDiscoveryEndpoint(() =>
-      getProviderData({ builderConnectionsFlag, selfServiceSignupFlag }),
-    );
 
-    const response = await get(
+    const response = await GET(
       new Request("https://agent.example.com/.well-known/vercel/flags", {
         headers: { Authorization: `Bearer ${proof}` },
       }),
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual(providerData);
+    await expect(response.json()).resolves.toEqual({
+      definitions: {
+        "builder-connections": { defaultValue: false },
+        "self-service-signup": { defaultValue: false },
+      },
+      hints: [],
+    });
+    expect(getProviderData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        builderConnectionsFlag,
+        selfServiceSignupFlag,
+      }),
+    );
   });
 });

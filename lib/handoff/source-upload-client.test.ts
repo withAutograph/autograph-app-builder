@@ -24,13 +24,14 @@ it("uploads multiple bounded chunks, reconciles unknown completion and retains i
   };
   const rows = new Map<string, string>();
   const store = createImmutableSourceArtifactStore({
-    get: (key) => rows.get(JSON.stringify(key)),
-    put: (key, value) => {
+    get: async (key) => rows.get(JSON.stringify(key)),
+    put: async (key, value) => {
       const id = JSON.stringify(key);
       if (rows.has(id) && rows.get(id) !== value) {
         throw new SourceUploadError("source_upload_conflict");
       }
       rows.set(id, value);
+      return;
     },
   });
   const authority = {

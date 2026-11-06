@@ -178,7 +178,7 @@ describe("native approval coordinator recovery", () => {
     }
   });
   it.each(["denied", "failure"])("keeps %s authorization fail-closed", async (mode) => {
-    const f = await setup(() => {
+    const f = await setup(async () => {
       if (mode === "failure") {
         throw new Error("owner verification unavailable");
       }
@@ -189,10 +189,10 @@ describe("native approval coordinator recovery", () => {
   });
   it("does not invoke the authorizer when tool preparation cancels the turn", async () => {
     const controller = new AbortController();
-    const f = await setup(() => ({ status: "allowed" }), controller.signal);
+    const f = await setup(async () => ({ status: "allowed" }), controller.signal);
     const cancelled = new Error("cancelled during preparation");
     await expect(
-      f.run(() => {
+      f.run(async () => {
         controller.abort(cancelled);
         return f.tools;
       }),

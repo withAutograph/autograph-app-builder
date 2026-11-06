@@ -7,7 +7,7 @@ import {
 const handler = createGitHubAppInstallationDeploymentHandler("callback", process.env);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function get(request: Request) {
+export async function GET(request: Request) {
   const fixture = applyLocalGitHubCallbackFixture(request, process.env);
   const response = await handler(fixture.request);
   if (fixture.applied) {
@@ -15,5 +15,3 @@ async function get(request: Request) {
   }
   return response;
 }
-
-export { get as GET };

@@ -37,13 +37,13 @@ export const SavedSessionDestinationForm = (
         request:
           props.request === undefined
             ? {
+                version: 1,
+                operation: "vercel",
+                requestId: props.requestId,
                 appName: props.appId,
                 deploymentAccess: "public-app",
-                operation: "vercel",
-                providers: { githubInstallationId: github, vercelInstallationId: vercel },
                 repository: { name: repository, private: privateRepository },
-                requestId: props.requestId,
-                version: 1,
+                providers: { githubInstallationId: github, vercelInstallationId: vercel },
               }
             : { ...props.request, operation: "vercel" },
         sessionId: props.sessionId,

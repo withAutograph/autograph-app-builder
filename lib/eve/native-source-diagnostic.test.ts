@@ -63,13 +63,17 @@ describe("private source diagnostic transport relay", () => {
   ])(
     "parses actual postMutation response without exposing $label data",
     async ({ diagnostic, outcome, reason }) => {
-      const responseBody = {
-        ok: true,
-        sessionId: "anchor",
-        status: "accepted",
-        ...(diagnostic === undefined ? {} : { sourceDiagnostic: diagnostic }),
-      };
-      const request = vi.fn<typeof fetch>(async () => Response.json(responseBody, { status: 202 }));
+      const request = vi.fn<typeof fetch>(async () =>
+        Response.json(
+          {
+            ok: true,
+            sessionId: "anchor",
+            status: "accepted",
+            ...(diagnostic === undefined ? {} : { sourceDiagnostic: diagnostic }),
+          },
+          { status: 202 },
+        ),
+      );
       const adapter = createSameOriginEveTransport({
         config: { baseUrl: "https://builder.example.test" },
         fetchImplementation: request,

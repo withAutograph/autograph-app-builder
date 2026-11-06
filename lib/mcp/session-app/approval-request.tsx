@@ -56,7 +56,7 @@ export function ApprovalRequest({
           <h2>{readyToBuild ? "Ready to build your app?" : title}</h2>
         </>
       )}
-      {supportingCopy !== undefined && supportingCopy !== "" ? (
+      {supportingCopy ? (
         <div className="approval-request__description">
           {supportingCopy.split("\n\n").map((section) => {
             const lines = section.split("\n");
@@ -80,7 +80,7 @@ export function ApprovalRequest({
               </details>
             ) : (
               <section key={section}>
-                {heading !== undefined && heading !== "" ? <h3>{heading}</h3> : null}
+                {heading ? <h3>{heading}</h3> : null}
                 {content}
               </section>
             );

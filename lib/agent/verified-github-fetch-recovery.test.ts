@@ -24,12 +24,6 @@ const fixture = () => {
   };
 };
 
-const appendedAdvisory = (error: Error, original: string) => {
-  expect(error.message.startsWith(original)).toBe(true);
-  const suffix = error.message.slice(original.length);
-  return z.json().parse(JSON.parse(suffix.slice(suffix.indexOf("{"))));
-};
-
 describe("verified GitHub fetch recovery", () => {
   it("prepares normally with one credential and restores sandbox networking", async () => {
     const { acquireCredential, sandbox, setNetworkPolicy } = fixture();
@@ -106,6 +100,12 @@ describe("preparation failure cleanup advisory", () => {
     retired: 1,
     status: "complete",
   };
+  const appendedAdvisory = (error: Error, original: string) => {
+    expect(error.message.startsWith(original)).toBe(true);
+    const suffix = error.message.slice(original.length);
+    return z.json().parse(JSON.parse(suffix.slice(suffix.indexOf("{"))));
+  };
+
   it("preserves the actual command error identity and cause while adding sanitized maintenance evidence", async () => {
     const f = fixture();
     const cause = new Error("controlled command cause");

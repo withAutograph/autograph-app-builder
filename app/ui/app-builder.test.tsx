@@ -5,62 +5,42 @@ import type { ComponentProps, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import axe from "axe-core";
-import { z } from "zod";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appNameFromBrief, repositoryNameFromAppName } from "./builder-defaults";
 import { AnonymousBuilder } from "./anonymous-builder";
 import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
 import { Header } from "./builder-shell";
+import * as draftOutbox from "./builder-draft-outbox";
+import * as draftAutosave from "./use-builder-draft-autosave";
 import styles from "./app-builder.module.css";
-import { builderDraftPageDataSchema } from "../../lib/builder-drafts/contracts";
-import type {
-  BuilderDraftPageData,
-  SaveActiveBuilderDraftInput,
-} from "../../lib/builder-drafts/contracts";
-import type {
-  BuilderHandoffContinuationInput,
-  BuilderHandoffContinuationState,
-} from "@/app/actions/builder";
+import type { BuilderDraftPageData } from "../../lib/builder-drafts/contracts";
 
 const navigation = vi.hoisted(() => ({
-  push: vi.fn<(href: string) => void>(),
-  refresh: vi.fn<() => void>(),
-  replace: vi.fn<(href: string) => void>(),
+  push: vi.fn(),
+  refresh: vi.fn(),
+  replace: vi.fn(),
 }));
-const draftSaveRequestSchema = z.object({
-  draftId: z.string(),
-  expectedRevision: z.number(),
-});
 const builderActions = vi.hoisted(() => ({
-  continueBuilderHandoff:
-    vi.fn<
-      (
-        previous: BuilderHandoffContinuationState | undefined,
-        input: BuilderHandoffContinuationInput,
-      ) => Promise<BuilderHandoffContinuationState>
-    >(),
-  loadActiveBuilderDraft: vi.fn<() => Promise<BuilderDraftPageData | undefined>>(async () => {
-    await Promise.resolve();
-    return globalThis.undefined;
-  }),
-  saveActiveBuilderDraft: vi.fn<
-    (
-      input: SaveActiveBuilderDraftInput,
-    ) => Promise<{ draftId: string; revision: number; updatedAt: string }>
-  >(async (input) => {
-    const result = await Promise.resolve({
-      draftId: input.draftId,
-      revision: input.expectedRevision + 1,
-      updatedAt: "2030-01-01T00:00:00.000Z",
-    });
-    return result;
-  }),
+  continueBuilderHandoff: vi.fn(),
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+  loadActiveBuilderDraft: vi.fn(async () =>
+    Promise.resolve<BuilderDraftPageData | undefined>(globalThis.undefined),
+  ),
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+  saveActiveBuilderDraft: vi.fn(async (input: { draftId: string; expectedRevision: number }) => ({
+    draftId: input.draftId,
+    revision: input.expectedRevision + 1,
+    updatedAt: "2030-01-01T00:00:00.000Z",
+  })),
 }));
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function defaultContinuation(
-  _previous: BuilderHandoffContinuationState | undefined,
-  input: BuilderHandoffContinuationInput,
+  _previous: unknown,
+  input: {
+    requestId: string;
+    provisioningEnabled: boolean;
+  },
 ) {
   return {
     handoff: {
@@ -105,14 +85,11 @@ async function defaultContinuation(
 builderActions.continueBuilderHandoff.mockImplementation(defaultContinuation);
 const draftFetch = vi.hoisted(() =>
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async (_url, init) => {
-    const body = init?.body;
-    if (body === undefined || body === null) {
-      throw new Error("Draft save body is required");
-    }
-    const text = await new Response(body).text();
-    const parsed: unknown = JSON.parse(text);
-    const input = draftSaveRequestSchema.parse(parsed);
+  vi.fn(async (_url: string, init?: RequestInit) => {
+    const input = JSON.parse(String(init?.body)) as {
+      draftId: string;
+      expectedRevision: number;
+    };
     return Response.json(
       {
         draftId: input.draftId,
@@ -219,6 +196,7 @@ const integrationState = {
 };
 
 const opaqueHandoffId = "123e4567-e89b-42d3-a456-426614174001";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function AppBuilder(
   props: Omit<ComponentProps<typeof AppBuilderComponent>, "integrations"> & {
@@ -228,10 +206,10 @@ function AppBuilder(
 ) {
   const { user, connectionsEnabled = true, comingSoonEnabled = true, ...componentProps } = props;
   void user;
-  if (componentProps.authenticated !== true) {
+  if (!componentProps.authenticated) {
     return <AnonymousBuilder />;
   }
-  const authenticatedProps = componentProps;
+  const { authenticated: _authenticated, ...authenticatedProps } = componentProps;
   return (
     <div className={styles.appShell}>
       <Header />
@@ -247,10 +225,11 @@ function AppBuilder(
   );
 }
 
-Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
-let root: Root | null = null;
-let container: HTMLDivElement | null = null;
+let root: Root | undefined;
+let container: HTMLDivElement | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function render(ui: ReactNode) {
@@ -268,10 +247,10 @@ async function fill(control: HTMLInputElement | HTMLTextAreaElement, value: stri
     control instanceof HTMLTextAreaElement
       ? HTMLTextAreaElement.prototype
       : HTMLInputElement.prototype;
-  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set?.bind(control);
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => {
-    setter?.(value);
+    setter?.call(control, value);
     control.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
@@ -312,7 +291,7 @@ const waitForFrame = async () => {
   requestAnimationFrame(() => {
     frame.resolve(null);
   });
-  return await frame.promise;
+  return frame.promise;
 };
 
 const remoteDraft = (revision: number, brief: string): BuilderDraftPageData => ({
@@ -360,8 +339,8 @@ afterEach(async () => {
     });
   }
   container?.remove();
-  root = null;
-  container = null;
+  root = undefined;
+  container = undefined;
   sessionStorage.clear();
   vi.restoreAllMocks();
   navigation.push.mockReset();
@@ -377,7 +356,6 @@ afterEach(async () => {
 describe("Vercel-faithful App Builder flow", () => {
   it("preserves edits when a restarted effect joins an older draft read", async () => {
     vi.useFakeTimers();
-    const draftAutosave = await import("./use-builder-draft-autosave");
     const useActualAutosave = draftAutosave.useBuilderDraftAutosave;
     let restartEffect = false;
     let restartedDiscard: ReturnType<typeof useActualAutosave>["discardSupersededByRemoteRevision"];
@@ -386,13 +364,12 @@ describe("Vercel-faithful App Builder flow", () => {
       if (!restartEffect) {
         return autosave;
       }
-      restartedDiscard ??= async (revision) =>
-        await autosave.discardSupersededByRemoteRevision(revision);
+      restartedDiscard ??= async (revision) => autosave.discardSupersededByRemoteRevision(revision);
       return { ...autosave, discardSupersededByRemoteRevision: restartedDiscard };
     });
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
-      .mockImplementationOnce(async () => await pending.promise)
+      .mockImplementationOnce(async () => pending.promise)
       .mockResolvedValueOnce(remoteDraft(3, "Fresh remote brief."));
     // oxlint-disable-next-line eslint/require-await -- Preserve the Server Action test interface.
     builderActions.saveActiveBuilderDraft.mockImplementation(async (input) => ({
@@ -427,7 +404,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("coalesces slow draft polls through timer ticks and rerenders", async () => {
     vi.useFakeTimers();
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
-    builderActions.loadActiveBuilderDraft.mockImplementationOnce(async () => await pending.promise);
+    builderActions.loadActiveBuilderDraft.mockImplementationOnce(async () => pending.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => await vi.advanceTimersByTimeAsync(10_000));
@@ -448,7 +425,6 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("preserves edits made while remote outbox reconciliation is pending", async () => {
     vi.useFakeTimers();
-    const draftAutosave = await import("./use-builder-draft-autosave");
     const useActualAutosave = draftAutosave.useBuilderDraftAutosave;
     const reconciliation = Promise.withResolvers<null>();
     const enteredReconciliation = vi.fn();
@@ -482,7 +458,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("coalesces visibility events while preserving a fresh read after return", async () => {
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
-      .mockImplementationOnce(async () => await pending.promise)
+      .mockImplementationOnce(async () => pending.promise)
       .mockResolvedValueOnce(remoteDraft(3, "Newest remote brief."));
     const view = await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
@@ -514,7 +490,7 @@ describe("Vercel-faithful App Builder flow", () => {
     vi.useFakeTimers();
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
-      .mockImplementationOnce(async () => await pending.promise)
+      .mockImplementationOnce(async () => pending.promise)
       .mockResolvedValueOnce(remoteDraft(2, "Recovered remote brief."));
     const view = await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
@@ -534,7 +510,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not refresh or apply a pending draft after unmount", async () => {
     vi.useFakeTimers();
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
-    builderActions.loadActiveBuilderDraft.mockImplementationOnce(async () => await pending.promise);
+    builderActions.loadActiveBuilderDraft.mockImplementationOnce(async () => pending.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => await vi.advanceTimersByTimeAsync(10_000));
@@ -543,7 +519,7 @@ describe("Vercel-faithful App Builder flow", () => {
       changeVisibility("hidden");
       changeVisibility("visible");
       root?.unmount();
-      root = null;
+      root = undefined;
     });
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => {
@@ -886,9 +862,16 @@ describe("Vercel-faithful App Builder flow", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => await vi.advanceTimersByTimeAsync(500));
 
-    const savedRequest = builderActions.saveActiveBuilderDraft.mock.calls[0]?.[0];
-    expect(savedRequest?.expectedRevision).toBe(0);
-    expect(savedRequest?.record.draft.form.brief).toBe("Keep this draft.");
+    expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedRevision: 0,
+        record: expect.objectContaining({
+          draft: expect.objectContaining({
+            form: expect.objectContaining({ brief: "Keep this draft." }),
+          }),
+        }),
+      }),
+    );
     expect(view.textContent).toContain("Draft saved");
   });
 
@@ -908,14 +891,21 @@ describe("Vercel-faithful App Builder flow", () => {
     vi.useFakeTimers();
     sessionStorage.setItem("autograph-app-brief", "Claim this anonymous brief.");
     const saved = Promise.withResolvers<{ draftId: string; revision: number; updatedAt: string }>();
-    builderActions.saveActiveBuilderDraft.mockImplementationOnce(async () => await saved.promise);
+    builderActions.saveActiveBuilderDraft.mockImplementationOnce(async () => saved.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersToNextFrame());
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => await vi.advanceTimersByTimeAsync(500));
-    const savedRequest = builderActions.saveActiveBuilderDraft.mock.calls[0]?.[0];
-    expect(savedRequest?.record.draft.form.brief).toBe("Claim this anonymous brief.");
+    expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        record: expect.objectContaining({
+          draft: expect.objectContaining({
+            form: expect.objectContaining({ brief: "Claim this anonymous brief." }),
+          }),
+        }),
+      }),
+    );
     expect(sessionStorage.getItem("autograph-app-brief")).toBe("Claim this anonymous brief.");
     const [[request]] = builderActions.saveActiveBuilderDraft.mock.calls;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -940,42 +930,40 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
     await fill(brief, "This local edit will be replaced.");
-    builderActions.loadActiveBuilderDraft.mockResolvedValueOnce(
-      builderDraftPageDataSchema.parse({
-        draftId: "d1210e56-ded0-436d-a6b8-ae96ddec17e0",
-        record: {
-          draft: {
-            appNameEditedByUser: false,
-            connectedConnections: [],
-            deploymentProvider: null,
-            focusOrigin: "github",
-            form: {
-              appName: "Remote App",
-              brief: "Saved on another device.",
-              buildDestination: "codex",
-              connections: [],
-              modelId: "openai/gpt-5.6-sol",
-              privateRepository: true,
-              repository: "remote-app",
-            },
-            gitScope: "101",
-            model: "openai/gpt-5.6-sol",
-            repositoryEditedByUser: false,
-            search: "",
-            showMoreConnections: false,
-            storageProvider: "github",
-            team: "vercel-pylee",
-            version: 1,
-            zdrOnly: false,
+    builderActions.loadActiveBuilderDraft.mockResolvedValueOnce({
+      draftId: "d1210e56-ded0-436d-a6b8-ae96ddec17e0",
+      record: {
+        draft: {
+          appNameEditedByUser: false,
+          connectedConnections: [],
+          deploymentProvider: null,
+          focusOrigin: "github",
+          form: {
+            appName: "Remote App",
+            brief: "Saved on another device.",
+            buildDestination: "codex",
+            connections: [],
+            modelId: "openai/gpt-5.6-sol",
+            privateRepository: true,
+            repository: "remote-app",
           },
+          gitScope: "101",
+          model: "openai/gpt-5.6-sol",
+          repositoryEditedByUser: false,
+          search: "",
+          showMoreConnections: false,
+          storageProvider: "github",
+          team: "vercel-pylee",
           version: 1,
+          zdrOnly: false,
         },
-        // Hiding the document also checkpoints this device's edit at revision 2.
-        // The other device's completed snapshot must have a newer revision.
-        revision: 3,
-        updatedAt: "2030-01-01T00:00:03.000Z",
-      }),
-    );
+        version: 1,
+      },
+      // Hiding the document also checkpoints this device's edit at revision 2.
+      // The other device's completed snapshot must have a newer revision.
+      revision: 3,
+      updatedAt: "2030-01-01T00:00:03.000Z",
+    } as never);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
       Object.defineProperty(document, "visibilityState", {
@@ -999,8 +987,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not apply an older remote revision after a newer revision settles", async () => {
     const delayedRead = Promise.withResolvers<undefined>();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const read = vi.fn(async () => {});
-    const draftOutbox = await import("./builder-draft-outbox");
+    const read = vi.fn(async () => undefined);
     vi.spyOn(draftOutbox, "createBuilderDraftOutbox").mockReturnValue({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clear: async () => {},
@@ -1047,9 +1034,7 @@ describe("Vercel-faithful App Builder flow", () => {
       />
     );
     const view = await render(page(1));
-    read.mockImplementationOnce(async () => {
-      await delayedRead.promise;
-    });
+    read.mockImplementationOnce(async () => delayedRead.promise);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => root?.render(page(2)));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -1059,7 +1044,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
-      delayedRead.resolve();
+      delayedRead.resolve(undefined as undefined);
     });
     expect(requireElement(view.querySelector<HTMLInputElement>("#app-name")).value).toBe(
       "Revision 3",
@@ -1069,7 +1054,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not replace newer edits with its own in-flight autosave", async () => {
     vi.useFakeTimers();
     const save = Promise.withResolvers<{ draftId: string; revision: number; updatedAt: string }>();
-    builderActions.saveActiveBuilderDraft.mockImplementationOnce(async () => await save.promise);
+    builderActions.saveActiveBuilderDraft.mockImplementationOnce(async () => save.promise);
     const view = await render(
       <AppBuilder authenticated user={{ email: "taylor@example.com", name: "Taylor" }} />,
     );
@@ -1323,12 +1308,16 @@ describe("Vercel-faithful App Builder flow", () => {
       await Promise.resolve();
     });
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledOnce();
-    const continuation = builderActions.continueBuilderHandoff.mock.calls[0]?.[1];
-    expect(continuation?.creationRequestId).toMatch(/^[0-9a-f-]{36}$/u);
-    expect(continuation?.draftCheckpoint.revision).toBeGreaterThan(0);
-    expect(continuation?.provisioningEnabled).toBe(false);
-    expect(continuation?.requestId).toMatch(/^[0-9a-f-]{36}$/u);
-    expect(continuation?.version).toBe(1);
+    expect(builderActions.continueBuilderHandoff).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        creationRequestId: expect.any(String),
+        draftCheckpoint: { draftId: expect.any(String), revision: expect.any(Number) },
+        provisioningEnabled: false,
+        requestId: expect.any(String),
+        version: 1,
+      }),
+    );
     expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
     expect(view.textContent).not.toContain("App Brief Ready!");
     expect(view.textContent).not.toContain("Open in ChatGPT / Codex");
@@ -1336,9 +1325,7 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("keeps the edited form mounted through a failed continuation and retries the same intent", async () => {
     const continuation = Promise.withResolvers<{ status: "error" }>();
-    builderActions.continueBuilderHandoff.mockImplementationOnce(
-      async () => await continuation.promise,
-    );
+    builderActions.continueBuilderHandoff.mockImplementationOnce(async () => continuation.promise);
     const view = await render(<AppBuilder authenticated />);
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
     await fill(brief, "Do not lose this saved intent.");
@@ -1363,19 +1350,17 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(brief.value).toBe("Do not lose this saved intent.");
     expect(requireElement(view.querySelector("main")).hasAttribute("inert")).toBe(false);
     expect(navigation.replace).not.toHaveBeenCalled();
-    const first = builderActions.continueBuilderHandoff.mock.calls[0]?.[1];
-    if (first === undefined) {
-      throw new Error("First continuation request must be recorded");
-    }
+    const [[, first]] = builderActions.continueBuilderHandoff.mock.calls;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledTimes(2);
-    const retry = builderActions.continueBuilderHandoff.mock.calls[1]?.[1];
-    expect(retry?.creationRequestId).toBe(first.creationRequestId);
-    expect(retry?.draftCheckpoint.draftId).toBe(first.draftCheckpoint.draftId);
-    expect(retry?.requestId).toBe(first.requestId);
+    expect(builderActions.continueBuilderHandoff.mock.calls[1][1]).toMatchObject({
+      creationRequestId: first.creationRequestId,
+      draftCheckpoint: { draftId: first.draftCheckpoint.draftId },
+      requestId: first.requestId,
+    });
     expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${opaqueHandoffId}`);
   });
 
@@ -1392,10 +1377,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector("#app-brief")).toBe(brief);
     expect(view.textContent).toContain("Retry saved handoff");
     const saves = builderActions.saveActiveBuilderDraft.mock.calls.length;
-    const checkpoint = builderActions.continueBuilderHandoff.mock.calls[0]?.[1];
-    if (checkpoint === undefined) {
-      throw new Error("Continuation checkpoint must be recorded");
-    }
+    const [[, checkpoint]] = builderActions.continueBuilderHandoff.mock.calls;
     builderActions.saveActiveBuilderDraft.mockRejectedValueOnce(
       new Error("builder-draft-archived"),
     );

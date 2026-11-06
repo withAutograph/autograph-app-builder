@@ -63,16 +63,17 @@ export function createBuilderDraftService(input: { store: BuilderDraftStore; now
       draftId: string,
       expectedRevision?: number,
     ) {
-      const archiveInput: Parameters<BuilderDraftStore["archive"]>[0] = {
+      return await input.store.archive({
         authority: hostedTenantAuthoritySchema.parse(authorityInput),
         draftId: saveActiveBuilderDraftInputSchema.shape.draftId.parse(draftId),
         now: now(),
-      };
-      if (expectedRevision !== undefined) {
-        archiveInput.expectedRevision =
-          saveActiveBuilderDraftInputSchema.shape.expectedRevision.parse(expectedRevision);
-      }
-      return await input.store.archive(archiveInput);
+        ...(expectedRevision === undefined
+          ? {}
+          : {
+              expectedRevision:
+                saveActiveBuilderDraftInputSchema.shape.expectedRevision.parse(expectedRevision),
+            }),
+      });
     },
     /** Invoke only from scheduled maintenance; request paths must never purge drafts. */
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

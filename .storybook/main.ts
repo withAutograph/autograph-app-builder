@@ -1,7 +1,6 @@
 import path from "node:path";
 
 import type { StorybookConfig } from "@storybook/nextjs-vite";
-import type { Alias, AliasOptions } from "vite";
 
 import {
   builderComingSoonFlag,
@@ -9,19 +8,18 @@ import {
   builderResourceProvisioningFlag,
 } from "../lib/feature-flags.ts";
 
-const isAliasList = (value: AliasOptions): value is Alias[] => Array.isArray(value);
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function resolveFlagForStorybook(flag: {
   run: (context: { identify: Record<string, never>; request: Request }) => Promise<boolean>;
 }) {
-  const configuredSdkKey = process.env.FLAGS;
-  if (configuredSdkKey === undefined || configuredSdkKey.length === 0) return false;
+  if (!process.env.FLAGS) return false;
   try {
-    return await flag.run({
-      identify: {},
-      request: new Request("https://storybook.local"),
-    });
+    return (
+      (await flag.run({
+        identify: {},
+        request: new Request("https://storybook.local"),
+      })) === true
+    );
   } catch {
     return false;
   }
@@ -48,18 +46,13 @@ const config: StorybookConfig = {
     "../lib/mcp/session-app/**/*.stories.@(ts|tsx)",
   ],
   async viteFinal(viteConfig) {
-    const existingAliases: AliasOptions = viteConfig.resolve?.alias ?? [];
-    const aliases: Alias[] = [];
-    if (isAliasList(existingAliases)) {
-      for (const alias of existingAliases) aliases.push(alias);
-    } else {
-      aliases.push(
-        ...Object.entries(existingAliases).map(([find, replacement]) => ({
+    const existingAliases = viteConfig.resolve?.alias ?? [];
+    const aliases = Array.isArray(existingAliases)
+      ? existingAliases
+      : Object.entries(existingAliases).map(([find, replacement]) => ({
           find,
-          replacement: String(replacement),
-        })),
-      );
-    }
+          replacement,
+        }));
     const storybookBuilderActions = path.join(import.meta.dirname, "builder-actions.ts");
     const storybookSourceActions = path.join(import.meta.dirname, "source-handoff-actions.ts");
     const storybookBuilderDraftActions = path.join(import.meta.dirname, "builder-draft-actions.ts");

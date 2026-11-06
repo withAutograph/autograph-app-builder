@@ -111,7 +111,7 @@ const workerConfig = () => {
 const emit = (event: WorkerEvent) =>
   process.stdout.write(`${eventPrefix}${JSON.stringify(event)}\n`);
 
-const waitForCommand = async (commandName: string) => {
+const waitForCommand = async (commandName: string) =>
   await new Promise<void>((resolve, reject) => {
     let timeout: NodeJS.Timeout | null = null;
     const onData = (chunk: Buffer | string) => {
@@ -131,7 +131,6 @@ const waitForCommand = async (commandName: string) => {
     process.stdin.on("data", onData);
     process.stdin.resume();
   });
-};
 
 const runWorker = async (config: Exclude<ReturnType<typeof workerConfig>, null>) => {
   emit({ kind: "WORKER_BOOTED", role: config.role });

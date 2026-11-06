@@ -105,13 +105,11 @@ describe("canonical preapproval authoring", () => {
     const f = await fixture();
     let operationId = "";
     let message = "";
-    f.sendAccepted.mockImplementation(
-      async ({ operationId: acceptedOperationId, message: acceptedMessage }) => {
-        ({ operationId } = { operationId: acceptedOperationId });
-        ({ message } = { message: acceptedMessage });
-        throw new Error("lost ack");
-      },
-    );
+    f.sendAccepted.mockImplementation(async (request) => {
+      operationId = request.operationId;
+      message = request.message;
+      throw new Error("lost ack");
+    });
     expect((await continueHostedPreapprovalAuthoring(f)).error?.code).toBe(
       "preapproval_authoring_continuation_unknown",
     );

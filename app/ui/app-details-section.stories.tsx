@@ -11,9 +11,9 @@ const meta = {
   args: {
     appName: "Vendor Portal",
     brief: "Build a vendor onboarding portal.",
-    onAppNameChange: fn<(value: string) => void>(),
-    onBriefChange: fn<(value: string) => void>(),
-    onCycleBrief: fn<() => void>(),
+    onAppNameChange: fn(),
+    onBriefChange: fn(),
+    onCycleBrief: fn(),
   },
   component: AppDetailsSection,
   decorators: [
@@ -56,9 +56,7 @@ function GeneratedNameHarness() {
     <AppDetailsSection
       appName={appName}
       brief={brief}
-      onAppNameChange={(value) => {
-        setAppName(value);
-      }}
+      onAppNameChange={setAppName}
       onCycleBrief={() => {
         // Story fixture callback.
       }}

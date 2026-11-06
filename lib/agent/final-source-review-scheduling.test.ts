@@ -33,7 +33,6 @@ import {
   unavailableSourceAssessment,
 } from "./product-source-review";
 import { applicationSourceReviewRubricDigest } from "./application-source-review";
-import type { SandboxSession } from "eve/sandbox";
 import {
   prepareAppliedProductSourceReview,
   finalizeAppliedProductSourceReview,
@@ -136,10 +135,11 @@ const context = (callId: string) =>
   // SAFETY: These tool executions use only callId, getSandbox, session identity/turn and cancellation; actual Eve state is bound by contextStorage.run.
   ({
     callId,
-    getSandbox: () => ({
-      id: "local-fixture",
-      readTextFile: () => JSON.stringify({ scripts: { test: "vitest run" } }),
-    }),
+    getSandbox: async () =>
+      await Promise.resolve({
+        id: "local-fixture",
+        readTextFile: async () => JSON.stringify({ scripts: { test: "vitest run" } }),
+      }),
     session: { auth: null, id: "local-session", turn: { id: "turn" } },
   }) as unknown as Parameters<ReturnType<typeof createAppValidationTool>["execute"]>[1];
 const emptyJudgment = z.object({
@@ -589,12 +589,16 @@ it("captures parent evidence and finalizes a private durable outcome without rer
       const input = {
         appSpec,
         applyReceipt: apply,
-        getSandbox: async (): Promise<SandboxSession> => ({
-          id: "server-captured-sandbox",
-          run: async () => await Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }),
-        }),
         normalizedChanges: [],
         observed,
+        // SAFETY: This controlled fixture provides the only consumed provider id and structured snapshot command; no Sandbox network methods are invoked.
+        getSandbox: async () =>
+          await Promise.resolve({
+            id: "server-captured-sandbox",
+            run: async () => await Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }),
+          } as unknown as Awaited<
+            ReturnType<Parameters<typeof prepareAppliedProductSourceReview>[0]["getSandbox"]>
+          >),
         sessionAuth: {},
         sessionId: "native-parent",
       };
@@ -623,7 +627,6 @@ it("captures parent evidence and finalizes a private durable outcome without rer
       });
       expect(result).toMatchObject({ reviewCompleted: false, status: "blocked" });
       const policy = sourceReviewPolicy();
-      // SAFETY: policy values and the literal status are assembled above; the resulting object matches the persisted review outcome shape.
       const completed = {
         ...unassessed,
         modelId: policy.primary.modelId,

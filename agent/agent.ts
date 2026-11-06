@@ -14,7 +14,6 @@ import { developmentInspectionPath } from "@/lib/development/source-routing";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import { builderModelConfiguration } from "@/lib/agent/builder-model-routing";
 import { builderSessionUsageLimits } from "@/lib/agent/session-usage-policy";
-import { z } from "zod";
 
 export const vendorOnboardingPrototype = `<!doctype html>
 <html lang="en">
@@ -327,21 +326,16 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const acceptanceResults = toolResults.filter(({ name }) => name === "accept_app_spec");
     const latestAcceptance = acceptanceResults.at(-1);
     const repairDiagnostic = (() => {
-      const output = z.string().safeParse(latestAcceptance?.output);
-      if (latestAcceptance?.isError !== true || !output.success) {
+      if (latestAcceptance?.isError !== true || typeof latestAcceptance.output !== "string") {
         return;
       }
       try {
-        const parsed = JSON.parse(output.data.replace(/^Error:\s*/u, ""));
-        return z
-          .object({
-            code: z.string().optional(),
-            issues: z.array(z.object({ code: z.string().optional() })).optional(),
-          })
-          .safeParse(parsed).data;
+        return JSON.parse(latestAcceptance.output.replace(/^Error:\s*/u, "")) as {
+          code?: string;
+          issues?: { code?: string }[];
+        };
       } catch {
         // Invalid acceptance output has no repair diagnostic.
-        return;
       }
     })();
     if (
@@ -1125,9 +1119,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     const output = latestStatus.output as Record<string, unknown>;
     const proposal = { ...output };
-    const proposalDigest = z.string().safeParse(proposal.proposalDigest);
-    if (proposalDigest.success) {
-      proposal.digest = proposalDigest.data;
+    if (typeof proposal.proposalDigest === "string") {
+      proposal.digest = proposal.proposalDigest;
     }
     for (const key of [
       "workflowPhase",
@@ -1159,8 +1152,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       if (output.status === "succeeded") {
         return "The separately approved recovery completed the exact durable branch-worktree intent without a commit, push, remote publication, provider, deployment, or release action.";
       }
-      const digest = z.string().safeParse(output.digest);
-      if (!digest.success) {
+      if (typeof output.digest !== "string") {
         return "The exact durable recovery journal digest is unavailable.";
       }
       if (toolResults.at(-1)?.name !== "recover_branch_worktree_publication") {
@@ -1168,7 +1160,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           toolCalls: [
             {
               input: {
-                expectedJournalDigest: digest.data,
+                expectedJournalDigest: output.digest,
                 publication: proposal,
               },
               name: "recover_branch_worktree_publication",
@@ -1365,9 +1357,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const publicationProposal = {
       ...(proposal.output as Record<string, unknown>),
     };
-    const publicationProposalDigest = z.string().safeParse(publicationProposal.proposalDigest);
-    if (publicationProposalDigest.success) {
-      publicationProposal.digest = publicationProposalDigest.data;
+    if (typeof publicationProposal.proposalDigest === "string") {
+      publicationProposal.digest = publicationProposal.proposalDigest;
     }
     delete publicationProposal.workflowPhase;
     delete publicationProposal.recoveryAllowed;
@@ -1457,7 +1448,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         | undefined;
       return output?.path === artifact?.path &&
         output?.digest === artifact?.digest &&
-        z.string().safeParse(output?.content).success
+        typeof output?.content === "string"
         ? "The exact content-addressed prototype artifact was read without a target command."
         : "The prototype artifact readback did not match its recorded receipt.";
     }

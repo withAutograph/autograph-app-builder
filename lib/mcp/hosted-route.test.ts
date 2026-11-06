@@ -1,5 +1,7 @@
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
+import type * as databaseSchema from "../db/schema";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
 import { createDeploymentMcpRequestHandler, readHostedDeploymentConfig } from "./hosted-route";
 
@@ -26,11 +28,7 @@ const workloadIdentity: HostedWorkloadIdentity = {
   },
 };
 
-type OpenDatabase = (databaseUrl: string) => unknown;
-
-const openDatabase = vi.fn<OpenDatabase>(() => {
-  throw new Error("The test request must not query the database.");
-});
+type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function request() {
@@ -63,7 +61,7 @@ describe("hosted route composition", () => {
   });
 
   it("opens no connection during construction and reuses one principal-free runtime", async () => {
-    openDatabase.mockClear();
+    const openDatabase = vi.fn(() => ({}) as unknown as Database);
     const handler = createDeploymentMcpRequestHandler({
       environment,
       now: () => nowEpochMs,
@@ -84,10 +82,10 @@ describe("hosted route composition", () => {
   it("fails closed without constructing storage when hosted configuration is invalid", async () => {
     await Promise.all(
       [
-        { ...environment, MCP_RESOURCE_URL: "https://local/mcp" },
+        { ...environment, MCP_RESOURCE_URL: "http://local/mcp" },
         { ...environment, EVE_HOSTED_VERCEL_ENVIRONMENT: "production" },
       ].map(async (invalidEnvironment) => {
-        openDatabase.mockClear();
+        const openDatabase = vi.fn(() => ({}) as unknown as Database);
         const handler = createDeploymentMcpRequestHandler({
           environment: invalidEnvironment,
           now: () => nowEpochMs,
@@ -105,7 +103,7 @@ describe("hosted route composition", () => {
   });
 
   it("binds every hosted request to the exact configured MCP resource before opening storage", async () => {
-    openDatabase.mockClear();
+    const openDatabase = vi.fn(() => ({}) as unknown as Database);
     const handler = createDeploymentMcpRequestHandler({
       environment,
       now: () => nowEpochMs,
@@ -141,19 +139,19 @@ describe("hosted route composition", () => {
   });
 
   it("never falls back after a hosted storage composition failure", async () => {
-    const failingOpenDatabase = vi.fn(() => {
+    const openDatabase = vi.fn(() => {
       throw new Error("database unavailable");
     });
     const handler = createDeploymentMcpRequestHandler({
       environment,
       now: () => nowEpochMs,
-      openDatabase: failingOpenDatabase,
+      openDatabase,
       workloadIdentity,
     });
 
     const response = await handler(request());
     expect(response.status).toBe(503);
-    expect(failingOpenDatabase).toHaveBeenCalledTimes(1);
+    expect(openDatabase).toHaveBeenCalledTimes(1);
   });
 
   it("accepts only a bounded PostgreSQL deployment URL", () => {

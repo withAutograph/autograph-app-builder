@@ -88,7 +88,7 @@ export default defineTool({
           ],
           nonAppIndexDigest: result.receipt.nonAppIndexDigest,
         },
-        dependencyCatalogPending: null,
+        dependencyCatalogPending: undefined,
       }),
     });
     return {
@@ -100,4 +100,4 @@ export default defineTool({
   inputSchema: z.strictObject({ dependency: catalogDependencyName }),
 });
 
-// normalize-github-draft-pr-dependency-catalog.ts maps to the public snake_case Eve tool name.
+// oxlint-disable github/filenames-match-regex -- Eve tool discovery requires the public snake_case tool name.

@@ -16,25 +16,19 @@ export async function freshBootstrapSourceWorkspace(input: {
   sandbox: SandboxSession;
   receipt: SourceReceipt;
   workspace: PreparedSandboxWorkspace;
-  dependencies?: {
-    inspectSourceBoundSandboxWorkspace: typeof inspectSourceBoundSandboxWorkspace;
-    readPreparedSandboxSourceManifest: typeof readPreparedSandboxSourceManifest;
-  };
 }): Promise<FreshBootstrapSourceWorkspace | undefined> {
   if (input.receipt.version !== SOURCE_RECEIPT_VERSION) {
     return undefined;
   }
-  const inspect = input.dependencies?.inspectSourceBoundSandboxWorkspace ?? inspectSourceBoundSandboxWorkspace;
-  const readManifest = input.dependencies?.readPreparedSandboxSourceManifest ?? readPreparedSandboxSourceManifest;
   const reverify = async () => {
-    await inspect({
+    await inspectSourceBoundSandboxWorkspace({
       expectedWorkspace: input.workspace,
       receipt: input.receipt,
       sandbox: input.sandbox,
     });
   };
   await reverify();
-  const files = await readManifest(input.sandbox, input.workspace);
+  const files = await readPreparedSandboxSourceManifest(input.sandbox, input.workspace);
   return {
     files,
     readSourceFile: async (path) =>

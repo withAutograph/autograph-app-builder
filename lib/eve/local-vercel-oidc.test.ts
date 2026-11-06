@@ -51,7 +51,7 @@ interface InstalledEveFixture {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function token(payload: typeof claims & { [key: string]: string | number } = claims): string {
+function token(payload: Record<string, unknown> = claims): string {
   return [
     Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url"),
     Buffer.from(JSON.stringify(payload)).toString("base64url"),
@@ -244,7 +244,7 @@ describe("installed Eve command identity", () => {
   });
 
   it.each([
-    ["absolute link", path.join(mkdtempSync(path.join(tmpdir(), "external-eve-")), "eve")],
+    ["absolute link", "/tmp/external-eve"],
     ["parent traversal", "../external-eve"],
   ])("rejects an %s", (_name, target) => {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), "installed-eve-link-")));

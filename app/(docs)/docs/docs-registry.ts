@@ -4,7 +4,7 @@ export interface DocsTableOfContentsItem {
 }
 
 export interface DocsDocument {
-  slug: string;
+  slug: "overview" | "install-autograph" | "connect-access" | "create-an-app" | "troubleshooting";
   title: string;
   description: string;
   toc: DocsTableOfContentsItem[];

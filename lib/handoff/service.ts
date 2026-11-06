@@ -15,10 +15,6 @@ import { BuilderHandoffConflictError, BuilderHandoffUnavailableError } from "./e
 export { BuilderHandoffConflictError, BuilderHandoffUnavailableError } from "./errors";
 
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
-interface ExpectedHandoffOwner {
-  authority: Authority;
-  handoffId?: string;
-}
 
 export interface BuilderHandoffStore {
   reserve: (record: BuilderHandoffRecord) => Promise<{
@@ -59,20 +55,22 @@ export interface BuilderHandoffStore {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function requireOwnedRecord(value: BuilderHandoffRecord, expected: ExpectedHandoffOwner) {
+function requireOwnedRecord(
+  value: unknown,
+  expected: { authority: Authority; handoffId?: string },
+) {
   const parsed = builderHandoffRecordSchema.safeParse(value);
   if (!parsed.success) {
     throw new BuilderHandoffUnavailableError();
   }
   const record = parsed.data;
-  const authorityMatches =
-    record.authority.issuer === expected.authority.issuer &&
-    record.authority.audience === expected.authority.audience &&
-    record.authority.workspaceId === expected.authority.workspaceId &&
-    record.authority.ownerUserId === expected.authority.ownerUserId;
-  const handoffMatches =
-    expected.handoffId === undefined || record.handoffId === expected.handoffId;
-  if (!authorityMatches || !handoffMatches) {
+  if (
+    (expected.handoffId !== undefined && record.handoffId !== expected.handoffId) ||
+    record.authority.issuer !== expected.authority.issuer ||
+    record.authority.audience !== expected.authority.audience ||
+    record.authority.workspaceId !== expected.authority.workspaceId ||
+    record.authority.ownerUserId !== expected.authority.ownerUserId
+  ) {
     throw new BuilderHandoffUnavailableError();
   }
   return record;
@@ -175,7 +173,7 @@ export function createBuilderHandoffService(input: {
       intent: BuilderHandoffIntent;
     }) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const creationRequestId = z.uuid().parse(value.creationRequestId);
+      const creationRequestId = z.string().uuid().parse(value.creationRequestId);
       const intent = builderHandoffIntentSchema.parse(value.intent);
       if (intent.sourceCandidate !== undefined) {
         if (input.validateSourceCandidate === undefined) throw new BuilderHandoffUnavailableError();
@@ -198,11 +196,10 @@ export function createBuilderHandoffService(input: {
         version: 1,
       });
       const reserved = await input.store.reserve(candidate);
-      const expectedRecord: ExpectedHandoffOwner = { authority };
-      if (reserved.disposition === "created") {
-        expectedRecord.handoffId = candidate.handoffId;
-      }
-      const record = requireOwnedRecord(reserved.record, expectedRecord);
+      const record = requireOwnedRecord(reserved.record, {
+        authority,
+        ...(reserved.disposition === "created" ? { handoffId: candidate.handoffId } : {}),
+      });
       if (
         record.requestDigest !== requestDigest ||
         record.creationRequestId !== creationRequestId
@@ -218,9 +215,10 @@ export function createBuilderHandoffService(input: {
 
     async findLatestPending(value: { authority: Authority }) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const stored = input.store.findLatestPending
-        ? await input.store.findLatestPending({ authority })
-        : undefined;
+      if (!input.store.findLatestPending) {
+        return;
+      }
+      const stored = await input.store.findLatestPending({ authority });
       return stored ? requireOwnedRecord(stored, { authority }) : undefined;
     },
 
@@ -228,7 +226,7 @@ export function createBuilderHandoffService(input: {
     read,
 
     async renew(value: { authority: Authority; handoffId: string; creationRequestId: string }) {
-      z.uuid().parse(value.creationRequestId);
+      z.string().uuid().parse(value.creationRequestId);
       const record = await read(value);
       const timestamp = now();
       if (record.sessionId !== undefined || timestamp < record.expiresAt) {

@@ -155,16 +155,18 @@ const startGitDiagnosticCapture =
   };
 
 const redactGitDiagnosticLine = function redactGitDiagnosticLine(line: string): string {
-  return line
-    .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
-    .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, "?")
-    .replaceAll(/\b(?:https?|postgres(?:ql)?|redis):\/\/[^\s"'<>]+/giu, REDACTED_URL)
-    .replaceAll(/\bBearer\s+[^\s"',;]+/giu, `Bearer ${REDACTED_TOKEN}`)
-    .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[JWT REDACTED]")
-    .replaceAll(
-      /\b(?<name>(?:[A-Z_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|AUTHORIZATION|COOKIE)[A-Z_]*))(?<separator>["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)/giu,
-      `$<name>$<separator>${REDACTED_TOKEN}`,
-    );
+  return (
+    line
+      .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+      .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, "?")
+      .replaceAll(/\b(?:https?|postgres(?:ql)?|redis):\/\/[^\s"'<>]+/giu, REDACTED_URL)
+      .replaceAll(/\bBearer\s+[^\s"',;]+/giu, `Bearer ${REDACTED_TOKEN}`)
+      .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[JWT REDACTED]")
+      .replaceAll(
+        /\b(?<name>(?:[A-Z_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|AUTHORIZATION|COOKIE)[A-Z_]*))(?<separator>["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)/giu,
+        `$<name>$<separator>${REDACTED_TOKEN}`,
+      )
+  );
 };
 
 const finishGitDiagnosticCapture = async function finishGitDiagnosticCapture(

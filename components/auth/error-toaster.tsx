@@ -7,21 +7,12 @@ import {
 } from "@better-auth-ui/core";
 import { oneTapMutationKeys } from "@better-auth-ui/core/plugins/one-tap";
 import { matchMutation, matchQuery, useQueryClient } from "@tanstack/react-query";
+import type { BetterFetchError } from "better-auth/react";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { z } from "zod";
 
-const betterFetchErrorSchema = z.object({
-  error: z
-    .object({
-      code: z.string().optional(),
-      message: z.string().optional(),
-    })
-    .optional(),
-  message: z.string().optional(),
-});
-
-const errorToaster = () => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function ErrorToaster() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -41,12 +32,12 @@ const errorToaster = () => {
         return;
       }
 
-      const parsedError = betterFetchErrorSchema.safeParse(error);
-      if (parsedError.success && parsedError.data.error?.code === "EMAIL_NOT_VERIFIED") {
+      const err = error as BetterFetchError;
+      if (err?.error?.code === "EMAIL_NOT_VERIFIED") {
         return;
       }
-      if (parsedError.success && parsedError.data.error !== undefined) {
-        toast.error(parsedError.data.error.message);
+      if (err?.error) {
+        toast.error(err.error.message);
       }
     };
 
@@ -71,17 +62,14 @@ const errorToaster = () => {
         return;
       }
 
-      const parsedError = betterFetchErrorSchema.safeParse(error);
+      const err = error as BetterFetchError;
       if (
-        parsedError.success &&
-        parsedError.data.error?.code === "EMAIL_NOT_VERIFIED" &&
+        err.error?.code === "EMAIL_NOT_VERIFIED" &&
         !matchMutation({ mutationKey: oneTapMutationKeys.prompt }, mutation)
       ) {
         return;
       }
-      const message = parsedError.success ? parsedError.data.error?.message : undefined;
-      const rootMessage = parsedError.success ? parsedError.data.message : undefined;
-      toast.error(message !== undefined && message.length > 0 ? message : rootMessage);
+      toast.error(err.error?.message || err.message);
     };
 
     return () => {
@@ -91,6 +79,4 @@ const errorToaster = () => {
   }, [queryClient]);
 
   return null;
-};
-
-export { errorToaster as ErrorToaster };
+}

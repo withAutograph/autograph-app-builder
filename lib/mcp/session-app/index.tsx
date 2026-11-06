@@ -34,28 +34,22 @@ function publishResult(result?: EveSessionResult) {
   }
 }
 
-app.addEventListener("toolresult", ({ structuredContent }) => {
-  const parsedResult = eveSessionResultSchema.safeParse(structuredContent);
-  publishResult(parsedResult.success ? parsedResult.data : undefined);
-});
+app.ontoolresult = ({ structuredContent }) => {
+  publishResult(structuredContent as EveSessionResult | undefined);
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function SessionAppContainer() {
   const result = useSyncExternalStore(
     (listener) => {
       resultListeners.add(listener);
-      return () => {
-        resultListeners.delete(listener);
-      };
+      return () => resultListeners.delete(listener);
     },
     () => latestResult,
     () => latestResult,
   );
   const capabilities = app.getHostCapabilities();
-  const automaticRefresh = useRef<ReturnType<typeof createBoundedAuthorizationRefresh> | null>(
-    null,
-  );
-  const refreshController = (automaticRefresh.current ??= createBoundedAuthorizationRefresh());
+  const automaticRefresh = useRef(createBoundedAuthorizationRefresh());
   const authorizationRequestKey = sessionAuthorizationRefreshKey(
     result,
     identityInvitationState?.invitations ?? [],
@@ -74,28 +68,24 @@ function SessionAppContainer() {
       name: "autograph_get",
     });
     if (response.structuredContent) {
-      const parsedResult = eveSessionResultSchema.safeParse(response.structuredContent);
-      if (parsedResult.success) {
-        publishResult(parsedResult.data);
-      }
+      publishResult(response.structuredContent as EveSessionResult);
     }
   }, [capabilities?.serverTools, result]);
 
   useEffect(() => {
-    refreshController.reset(authorizationRequestKey);
-  }, [authorizationRequestKey, refreshController]);
+    automaticRefresh.current.reset(authorizationRequestKey);
+  }, [authorizationRequestKey]);
 
   useEffect(() => {
+    if (!authorizationRequestKey || !capabilities?.serverTools) {
+      return;
+    }
     const checkAfterReturn = () => {
-      if (
-        !authorizationRequestKey ||
-        !capabilities?.serverTools ||
-        document.visibilityState === "hidden"
-      ) {
+      if (document.visibilityState === "hidden") {
         return;
       }
       const now = Date.now();
-      if (!refreshController.claim(authorizationRequestKey, now)) {
+      if (!automaticRefresh.current.claim(authorizationRequestKey, now)) {
         return;
       }
       // Refresh is deliberately fire-and-forget from the focus handler.
@@ -113,7 +103,7 @@ function SessionAppContainer() {
       window.removeEventListener("focus", checkAfterReturn);
       document.removeEventListener("visibilitychange", checkAfterReturn);
     };
-  }, [authorizationRequestKey, capabilities?.serverTools, refresh, refreshController]);
+  }, [authorizationRequestKey, capabilities?.serverTools, refresh]);
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function respond(responses: SessionResponse[]) {
@@ -137,10 +127,7 @@ function SessionAppContainer() {
       );
     }
     if (response.structuredContent) {
-      const parsedResult = eveSessionResultSchema.safeParse(response.structuredContent);
-      if (parsedResult.success) {
-        publishResult(parsedResult.data);
-      }
+      publishResult(response.structuredContent as EveSessionResult);
     }
   }
 

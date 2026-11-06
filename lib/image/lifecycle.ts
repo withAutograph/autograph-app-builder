@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { z } from "zod";
 
 export const IMAGE_PLATFORM = "linux/arm64";
 export const IMAGE_OS = "linux";
@@ -12,12 +11,8 @@ export const ARRUSTED_IMAGE_TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0
 
 const sha40 = /^[0-9a-f]{40}$/u;
 const sha256 = /^[0-9a-f]{64}$/u;
-const nodeModulesIgnoredEntry = "!! node_modules/";
-const dockerBuildxVersionArgument = "version";
 const secretKey = /(?<key>authorization|cookie|credential|password|secret|token)/iu;
 const secretValue = /(?<value>bearer\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_)/iu;
-const ociManifestMediaType = "application/vnd.oci.image.manifest.v1+json";
-const sha256Digest = /^sha256:[0-9a-f]{64}$/u;
 const digestReference = new RegExp(
   `^${IMAGE_REPOSITORY.replaceAll(".", "[.]")}@sha256:[0-9a-f]{64}$`,
   "u",
@@ -41,7 +36,7 @@ export const IMAGE_TOOL_VERSIONS = {
 export type ImageTool = keyof typeof IMAGE_TOOL_VERSIONS;
 
 export const imageToolVersionCommand = (tool: ImageTool): CommandSpec => ({
-  args: tool === "docker-buildx" ? [dockerBuildxVersionArgument] : ["--version"],
+  args: tool === "docker-buildx" ? ["version"] : ["--version"],
   program: tool,
 });
 
@@ -113,8 +108,7 @@ export type ExactProvenanceInput = Readonly<{
 
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
-type CanonicalProvenance = Omit<ImageProvenance, "digest">;
-const canonical = (value: CanonicalProvenance): string => JSON.stringify(value);
+const canonical = (value: unknown): string => JSON.stringify(value);
 
 const exactSha = (value: string, pattern: RegExp, label: string): void => {
   if (!pattern.test(value)) {
@@ -144,7 +138,7 @@ export const assertCleanStatus = (status: string, label: string): void => {
 
 export const assertProofRuntimeIgnoredInventory = (status: string): void => {
   const ignored = status.split("\n").filter((line) => line.startsWith("!! "));
-  if (ignored.length !== 1 || ignored[0] !== nodeModulesIgnoredEntry) {
+  if (ignored.length !== 1 || ignored[0] !== "!! node_modules/") {
     throw new Error("Proof runtime permits only the exact Builder node_modules/ ignored entry.");
   }
 };
@@ -157,53 +151,28 @@ export const assertStandaloneGitMetadata = (isDirectory: boolean, label: string)
   }
 };
 
-type SecretScanValue =
-  | string
-  | number
-  | boolean
-  | null
-  | readonly SecretScanValue[]
-  | { readonly [key: string]: SecretScanValue };
-
-const secretScanSchema: z.ZodType<SecretScanValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(secretScanSchema),
-    z.record(z.string(), secretScanSchema),
-  ]),
-);
-
-export const assertNoSecretMaterial = (value: SecretScanValue, receiptPath = "receipt"): void => {
-  const parsed = secretScanSchema.parse(value);
-  const scan = (entry: SecretScanValue, entryPath: string): void => {
-    const parsedString = z.string().safeParse(entry);
-    if (parsedString.success) {
-      if (secretValue.test(parsedString.data)) {
-        throw new Error(`${entryPath} contains secret-like material.`);
-      }
-      return;
+export const assertNoSecretMaterial = (value: unknown, receiptPath = "receipt"): void => {
+  if (typeof value === "string") {
+    if (secretValue.test(value)) {
+      throw new Error(`${receiptPath} contains secret-like material.`);
     }
-    if (Array.isArray(entry)) {
-      const children = z.array(secretScanSchema).parse(entry);
-      for (const [index, child] of children.entries()) {
-        scan(child, `${entryPath}[${index}]`);
-      }
-      return;
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const [index, entry] of value.entries()) {
+      assertNoSecretMaterial(entry, `${receiptPath}[${index}]`);
     }
-    if (entry !== null) {
-      const children = z.record(z.string(), secretScanSchema).parse(entry);
-      for (const key of Object.keys(children)) {
-        if (secretKey.test(key)) {
-          throw new Error(`${entryPath}.${key} is a forbidden secret field.`);
-        }
-        scan(children[key], `${entryPath}.${key}`);
-      }
+    return;
+  }
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    if (secretKey.test(key)) {
+      throw new Error(`${receiptPath}.${key} is a forbidden secret field.`);
     }
-  };
-  scan(parsed, receiptPath);
+    assertNoSecretMaterial(entry, `${receiptPath}.${key}`);
+  }
 };
 
 export const createExactImageProvenance = (input: ExactProvenanceInput): ImageProvenance => {
@@ -372,28 +341,20 @@ export const sandboxProofCommand = (reference: string, sourceRoot: string): Comm
   program: "node",
 });
 
-const stringRecordSchema = z.record(z.string(), z.string());
-const imageInspectSchema = z
-  .object({
-    Architecture: z.string().optional(),
-    Config: z.object({ Labels: stringRecordSchema.optional() }).optional(),
-    Descriptor: z
-      .object({
-        digest: z.string().optional(),
-        mediaType: z.string().optional(),
-        platform: z
-          .object({ architecture: z.string().optional(), os: z.string().optional() })
-          .optional(),
-        size: z.number().optional(),
-      })
-      .optional(),
-    Id: z.string().optional(),
-    Os: z.string().optional(),
-    RepoTags: z.array(z.string()).optional(),
-    RootFS: z.object({ Layers: z.array(z.string()).optional() }).optional(),
-  })
-  .loose();
-type ImageInspect = z.infer<typeof imageInspectSchema>;
+interface ImageInspect {
+  Id?: unknown;
+  Architecture?: unknown;
+  Os?: unknown;
+  RepoTags?: unknown;
+  Config?: { Labels?: Record<string, unknown> };
+  RootFS?: { Layers?: unknown };
+  Descriptor?: {
+    digest?: unknown;
+    mediaType?: unknown;
+    size?: unknown;
+    platform?: unknown;
+  };
+}
 
 const hasExactKeys = <Value extends object>(
   value: Value,
@@ -404,51 +365,21 @@ const hasExactKeys = <Value extends object>(
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 };
 
-type Digest = `sha256:${string}`;
-const isExactDigest = (value: string | undefined): value is Digest =>
-  value !== undefined && sha256Digest.test(value);
-const isDigest = (value: string): value is Digest => sha256Digest.test(value);
-const isPositiveSize = (value: number | undefined): value is number =>
-  value !== undefined && Number.isSafeInteger(value) && value > 0;
-const isExactLocalDescriptor = (
-  descriptor: ImageInspect["Descriptor"],
-  imageId: string,
-): boolean => {
-  if (descriptor === undefined) {
-    return false;
-  }
-  if (!hasExactKeys(descriptor, ["digest", "mediaType", "platform", "size"])) {
-    return false;
-  }
-  if (descriptor.digest !== imageId || descriptor.mediaType !== ociManifestMediaType) {
-    return false;
-  }
-  if (!isPositiveSize(descriptor.size) || descriptor.platform === undefined) {
-    return false;
-  }
-  return (
-    JSON.stringify(descriptor.platform) ===
-    JSON.stringify({ architecture: IMAGE_ARCHITECTURE, os: IMAGE_OS })
-  );
-};
-
-type LocalImageInspection = Readonly<{
+export const parseLocalImageInspection = (
+  raw: string,
+  provenance: ImageProvenance,
+): Readonly<{
   platform: typeof IMAGE_PLATFORM;
   tag: string;
   revision: string;
   imageId: string;
   rootFsLayers: readonly string[];
-}>;
-
-export const parseLocalImageInspection = (
-  raw: string,
-  provenance: ImageProvenance,
-): LocalImageInspection => {
-  const parsed = z.array(imageInspectSchema).parse(JSON.parse(raw));
-  if (parsed.length !== 1) {
+}> => {
+  const parsed = JSON.parse(raw) as unknown;
+  if (!Array.isArray(parsed) || parsed.length !== 1) {
     throw new Error("Local image inspection returned an unexpected image set.");
   }
-  const [image] = parsed;
+  const image = parsed[0] as ImageInspect;
   if (image.Os !== IMAGE_OS || image.Architecture !== IMAGE_ARCHITECTURE) {
     throw new Error("Local image platform does not match linux/arm64.");
   }
@@ -458,22 +389,34 @@ export const parseLocalImageInspection = (
   const labels = image.Config?.Labels;
   if (
     labels?.["org.opencontainers.image.revision"] !== provenance.builder.commit ||
-    labels?.["org.opencontainers.image.version"] !== IMAGE_VERSION
+    labels["org.opencontainers.image.version"] !== IMAGE_VERSION
   ) {
     throw new Error("Local image OCI provenance labels do not match.");
   }
-  if (!isExactDigest(image.Id)) {
+  if (typeof image.Id !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(image.Id)) {
     throw new Error("Local image inspection did not return an exact image ID.");
   }
   const descriptor = image.Descriptor;
-  if (!isExactLocalDescriptor(descriptor, image.Id)) {
+  if (
+    typeof descriptor !== "object" ||
+    descriptor === null ||
+    !hasExactKeys(descriptor, ["digest", "mediaType", "platform", "size"]) ||
+    descriptor.digest !== image.Id ||
+    descriptor.mediaType !== "application/vnd.oci.image.manifest.v1+json" ||
+    !Number.isSafeInteger(descriptor.size) ||
+    Number(descriptor.size) <= 0 ||
+    typeof descriptor.platform !== "object" ||
+    descriptor.platform === null ||
+    JSON.stringify(descriptor.platform) !==
+      JSON.stringify({ architecture: IMAGE_ARCHITECTURE, os: IMAGE_OS })
+  ) {
     throw new Error("Local image descriptor does not match the exact platform manifest.");
   }
   const rootFsLayers = image.RootFS?.Layers;
   if (
     !Array.isArray(rootFsLayers) ||
     rootFsLayers.length === 0 ||
-    rootFsLayers.some((layer) => !isDigest(layer))
+    rootFsLayers.some((layer) => typeof layer !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(layer))
   ) {
     throw new Error("Local image inspection did not return exact rootfs layers.");
   }
@@ -481,77 +424,57 @@ export const parseLocalImageInspection = (
     imageId: image.Id,
     platform: IMAGE_PLATFORM,
     revision: provenance.builder.commit,
-    rootFsLayers,
+    rootFsLayers: rootFsLayers as string[],
     tag: provenance.image.tag,
   };
 };
 
 const ociIndexMediaType = "application/vnd.oci.image.index.v1+json";
+const ociManifestMediaType = "application/vnd.oci.image.manifest.v1+json";
 const ociConfigMediaType = "application/vnd.oci.image.config.v1+json";
 const ociLayerMediaType = "application/vnd.oci.image.layer.v1.tar+gzip";
 
-const remotePlatformSchema = z.looseObject({
-  architecture: z.string().optional(),
-  os: z.string().optional(),
-});
-const remoteDescriptorSchema = z.looseObject({
-  annotations: stringRecordSchema.optional(),
-  digest: z.string().optional(),
-  mediaType: z.string().optional(),
-  platform: remotePlatformSchema.optional(),
-  size: z.number().optional(),
-});
-const remoteIndexSchema = z.looseObject({
-  digest: z.string().optional(),
-  manifests: z.array(remoteDescriptorSchema).optional(),
-  mediaType: z.string().optional(),
-  schemaVersion: z.number().optional(),
-  size: z.number().optional(),
-});
-const remoteManifestDescriptorSchema = z.looseObject({
-  digest: z.string().optional(),
-  mediaType: z.string().optional(),
-  size: z.number().optional(),
-});
-const remoteManifestSchema = z.looseObject({
-  config: remoteManifestDescriptorSchema.optional(),
-  layers: z.array(remoteManifestDescriptorSchema).optional(),
-  mediaType: z.string().optional(),
-  schemaVersion: z.number().optional(),
-});
-const remoteImageSchema = z.looseObject({
-  architecture: z.string().optional(),
-  config: z.object({ Labels: stringRecordSchema.optional() }).optional(),
-  os: z.string().optional(),
-  rootfs: z.object({ diff_ids: z.array(z.string()).optional() }).optional(),
-});
-type RemoteIndex = z.infer<typeof remoteIndexSchema>;
-type RemoteManifest = z.infer<typeof remoteManifestSchema>;
-type RemoteManifestDescriptor = NonNullable<RemoteManifest["layers"]>[number];
-type RemoteIndexDescriptor = NonNullable<RemoteIndex["manifests"]>[number];
+const isExactDigest = (value: unknown): value is string =>
+  typeof value === "string" && /^sha256:[0-9a-f]{64}$/u.test(value);
 
-const isExactIndexDescriptor = (descriptor: RemoteIndex): boolean => {
-  if (!hasExactKeys(descriptor, ["digest", "manifests", "mediaType", "schemaVersion", "size"])) {
-    return false;
-  }
-  return (
-    descriptor.schemaVersion === 2 &&
-    descriptor.mediaType === ociIndexMediaType &&
-    isPositiveSize(descriptor.size) &&
-    Array.isArray(descriptor.manifests)
-  );
-};
+const isPositiveSize = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && Number(value) > 0;
 
-const isPlatformPlatform = (entry: RemoteIndexDescriptor): boolean =>
-  entry.platform?.os === IMAGE_OS && entry.platform.architecture === IMAGE_ARCHITECTURE;
-
-const isAttestationPlatform = (entry: RemoteIndexDescriptor): boolean =>
-  entry.platform?.os === "unknown" && entry.platform.architecture === "unknown";
-
-const isExactLayerDescriptor = (layer: RemoteManifestDescriptor): boolean =>
-  layer.mediaType === ociLayerMediaType &&
-  isExactDigest(layer.digest) &&
-  isPositiveSize(layer.size);
+interface RemotePlatform {
+  architecture?: unknown;
+  os?: unknown;
+}
+interface RemoteIndexEntry {
+  annotations?: unknown;
+  digest?: unknown;
+  mediaType?: unknown;
+  platform?: RemotePlatform;
+  size?: unknown;
+}
+interface RemoteIndex {
+  digest?: unknown;
+  manifests?: unknown;
+  mediaType?: unknown;
+  schemaVersion?: unknown;
+  size?: unknown;
+}
+interface RemoteManifestDescriptor {
+  digest?: unknown;
+  mediaType?: unknown;
+  size?: unknown;
+}
+interface RemoteManifest {
+  config?: RemoteManifestDescriptor;
+  layers?: unknown;
+  mediaType?: unknown;
+  schemaVersion?: unknown;
+}
+interface RemoteImage {
+  architecture?: unknown;
+  os?: unknown;
+  config?: { Labels?: Record<string, unknown> };
+  rootfs?: { diff_ids?: unknown };
+}
 
 export type RemoteIndexSelection = Readonly<{
   indexDigest: string;
@@ -562,140 +485,29 @@ export type RemoteIndexSelection = Readonly<{
   attestationManifestDigest: string;
 }>;
 
-type RemoteIndexDescriptorResult = Readonly<{ indexDigest: string; indexReference: string }>;
-type RemoteImageInspectionResult = Readonly<{
-  digest: string;
-  reference: string;
+export const parseRemoteIndexDescriptor = (
+  descriptorRaw: string,
+): Readonly<{
   indexDigest: string;
   indexReference: string;
-  platform: typeof IMAGE_PLATFORM;
-  platformManifestDigest: string;
-  platformReference: string;
-  attestationManifestDigest: string;
-  attestationPolicy: "descriptor-bound-not-trusted";
-  revision: string;
-}>;
-
-export const parseRemoteIndexDescriptor = (descriptorRaw: string): RemoteIndexDescriptorResult => {
-  const descriptor = remoteIndexSchema.parse(JSON.parse(descriptorRaw));
+}> => {
+  const descriptor = JSON.parse(descriptorRaw) as RemoteIndex;
   if (!isExactDigest(descriptor.digest)) {
     throw new Error("Remote registry inspection did not return an exact manifest digest.");
   }
-  if (!isExactIndexDescriptor(descriptor)) {
+  if (
+    !hasExactKeys(descriptor, ["digest", "manifests", "mediaType", "schemaVersion", "size"]) ||
+    descriptor.schemaVersion !== 2 ||
+    descriptor.mediaType !== ociIndexMediaType ||
+    !isPositiveSize(descriptor.size) ||
+    !Array.isArray(descriptor.manifests)
+  ) {
     throw new Error("Remote registry did not return the exact OCI image index descriptor.");
   }
   return {
     indexDigest: descriptor.digest,
     indexReference: exactDigestReference(`${IMAGE_REPOSITORY}@${descriptor.digest}`),
   };
-};
-
-const isExactRemoteIndexPair = (
-  descriptor: RemoteIndex,
-  index: RemoteIndex,
-  indexRaw: string,
-): boolean => {
-  if (!isExactIndexDescriptor(descriptor)) {
-    return false;
-  }
-  if (descriptor.size !== Buffer.byteLength(indexRaw)) {
-    return false;
-  }
-  if (!hasExactKeys(index, ["manifests", "mediaType", "schemaVersion"])) {
-    return false;
-  }
-  if (index.schemaVersion !== 2 || index.mediaType !== ociIndexMediaType) {
-    return false;
-  }
-  if (!Array.isArray(index.manifests)) {
-    return false;
-  }
-  return JSON.stringify(descriptor.manifests) === JSON.stringify(index.manifests);
-};
-
-const isPlatformDescriptor = (entry: RemoteIndexDescriptor, localImageId: Digest): boolean => {
-  if (!hasExactKeys(entry, ["digest", "mediaType", "platform", "size"])) {
-    return false;
-  }
-  if (entry.platform === undefined || !hasExactKeys(entry.platform, ["architecture", "os"])) {
-    return false;
-  }
-  return (
-    entry.mediaType === ociManifestMediaType &&
-    entry.digest === localImageId &&
-    isPositiveSize(entry.size)
-  );
-};
-
-const isAttestationDescriptor = (
-  entry: RemoteIndexDescriptor,
-  platformEntry: RemoteIndexDescriptor,
-): entry is RemoteIndexDescriptor & { digest: Digest; annotations: Record<string, string> } => {
-  if (!hasExactKeys(entry, ["annotations", "digest", "mediaType", "platform", "size"])) {
-    return false;
-  }
-  if (entry.platform === undefined || !hasExactKeys(entry.platform, ["architecture", "os"])) {
-    return false;
-  }
-  if (entry.annotations === undefined) {
-    return false;
-  }
-  if (
-    !hasExactKeys(entry.annotations, ["vnd.docker.reference.digest", "vnd.docker.reference.type"])
-  ) {
-    return false;
-  }
-  return (
-    entry.mediaType === ociManifestMediaType &&
-    isExactDigest(entry.digest) &&
-    entry.digest !== platformEntry.digest &&
-    isPositiveSize(entry.size) &&
-    entry.annotations["vnd.docker.reference.digest"] === platformEntry.digest &&
-    entry.annotations["vnd.docker.reference.type"] === "attestation-manifest"
-  );
-};
-
-const isExactManifestDescriptor = (
-  manifest: RemoteManifest,
-  raw: string,
-  selection: RemoteIndexSelection,
-): boolean => {
-  const { config, layers } = manifest;
-  if (!hasExactKeys(manifest, ["config", "layers", "mediaType", "schemaVersion"])) {
-    return false;
-  }
-  if (manifest.schemaVersion !== 2 || manifest.mediaType !== ociManifestMediaType) {
-    return false;
-  }
-  if (selection.platformManifestSize !== Buffer.byteLength(raw)) {
-    return false;
-  }
-  if (config === undefined || !hasExactKeys(config, ["digest", "mediaType", "size"])) {
-    return false;
-  }
-  if (config.mediaType !== ociConfigMediaType || !isExactDigest(config.digest)) {
-    return false;
-  }
-  if (!isPositiveSize(config.size) || !Array.isArray(layers) || layers.length === 0) {
-    return false;
-  }
-  return layers.every(isExactLayerDescriptor);
-};
-
-const assertLocalImageBinding = (
-  local: Readonly<{ imageId: string; rootFsLayers: readonly string[] }>,
-  selection: RemoteIndexSelection,
-): asserts local is Readonly<{ imageId: Digest; rootFsLayers: readonly string[] }> => {
-  const imageIdIsExact = isExactDigest(local.imageId);
-  const imageMatchesSelection = selection.platformManifestDigest === local.imageId;
-  const referenceMatchesImage =
-    selection.platformReference === exactDigestReference(`${IMAGE_REPOSITORY}@${local.imageId}`);
-  const layersAreExact =
-    local.rootFsLayers.length > 0 &&
-    local.rootFsLayers.every((digest) => sha256Digest.test(digest));
-  if (!imageIdIsExact || !imageMatchesSelection || !referenceMatchesImage || !layersAreExact) {
-    throw new Error("Remote platform selection is not bound to the local image identity.");
-  }
 };
 
 const assertOciContentDigest = (raw: string, expectedDigest: string, label: string): void => {
@@ -715,31 +527,64 @@ export const parseRemoteIndexInspection = (
   if (!isExactDigest(localImageId)) {
     throw new Error("Local image identity is not an exact digest.");
   }
-  const descriptor = remoteIndexSchema.parse(JSON.parse(descriptorRaw));
-  const index = remoteIndexSchema.parse(JSON.parse(indexRaw));
+  const descriptor = JSON.parse(descriptorRaw) as RemoteIndex;
+  const index = JSON.parse(indexRaw) as RemoteIndex;
   if (!isExactDigest(descriptor.digest)) {
     throw new Error("Remote registry inspection did not return an exact manifest digest.");
   }
-  if (!isExactRemoteIndexPair(descriptor, index, indexRaw)) {
+  if (
+    !hasExactKeys(descriptor, ["digest", "manifests", "mediaType", "schemaVersion", "size"]) ||
+    descriptor.schemaVersion !== 2 ||
+    descriptor.mediaType !== ociIndexMediaType ||
+    !isPositiveSize(descriptor.size) ||
+    descriptor.size !== Buffer.byteLength(indexRaw) ||
+    !hasExactKeys(index, ["manifests", "mediaType", "schemaVersion"]) ||
+    index.schemaVersion !== 2 ||
+    index.mediaType !== ociIndexMediaType ||
+    !Array.isArray(descriptor.manifests) ||
+    !Array.isArray(index.manifests) ||
+    JSON.stringify(descriptor.manifests) !== JSON.stringify(index.manifests)
+  ) {
     throw new Error("Remote registry did not return the exact OCI image index.");
   }
   assertOciContentDigest(indexRaw, descriptor.digest, "Remote OCI image index");
-  const entries = index.manifests;
+  const entries = index.manifests as RemoteIndexEntry[];
   if (entries.length !== 2) {
     throw new Error("Remote OCI image index has an unexpected descriptor set.");
   }
-  const platformEntry = entries.find(isPlatformPlatform);
-  const attestationEntry = entries.find(isAttestationPlatform);
-  if (platformEntry === undefined) {
+  const platformEntry = entries.find(
+    (entry) =>
+      entry.platform?.os === IMAGE_OS && entry.platform.architecture === IMAGE_ARCHITECTURE,
+  );
+  const attestationEntry = entries.find(
+    (entry) => entry.platform?.os === "unknown" && entry.platform.architecture === "unknown",
+  );
+  if (
+    platformEntry === undefined ||
+    attestationEntry === undefined ||
+    !hasExactKeys(platformEntry, ["digest", "mediaType", "platform", "size"]) ||
+    !hasExactKeys(platformEntry.platform ?? {}, ["architecture", "os"]) ||
+    platformEntry.mediaType !== ociManifestMediaType ||
+    platformEntry.digest !== localImageId ||
+    !isPositiveSize(platformEntry.size)
+  ) {
     throw new Error("Remote platform manifest does not match the inspected local image.");
   }
-  if (!isPlatformDescriptor(platformEntry, localImageId)) {
-    throw new Error("Remote platform manifest does not match the inspected local image.");
-  }
-  if (attestationEntry === undefined) {
-    throw new Error("Remote attestation manifest is not exactly bound to the platform image.");
-  }
-  if (!isAttestationDescriptor(attestationEntry, platformEntry)) {
+  const { annotations } = attestationEntry;
+  if (
+    !hasExactKeys(attestationEntry, ["annotations", "digest", "mediaType", "platform", "size"]) ||
+    !hasExactKeys(attestationEntry.platform ?? {}, ["architecture", "os"]) ||
+    attestationEntry.mediaType !== ociManifestMediaType ||
+    !isExactDigest(attestationEntry.digest) ||
+    attestationEntry.digest === platformEntry.digest ||
+    !isPositiveSize(attestationEntry.size) ||
+    typeof annotations !== "object" ||
+    annotations === null ||
+    !hasExactKeys(annotations, ["vnd.docker.reference.digest", "vnd.docker.reference.type"]) ||
+    (annotations as Record<string, unknown>)["vnd.docker.reference.digest"] !==
+      platformEntry.digest ||
+    (annotations as Record<string, unknown>)["vnd.docker.reference.type"] !== "attestation-manifest"
+  ) {
     throw new Error("Remote attestation manifest is not exactly bound to the platform image.");
   }
   const indexReference = exactDigestReference(`${IMAGE_REPOSITORY}@${descriptor.digest}`);
@@ -760,11 +605,55 @@ export const parseRemoteImageInspection = (
   provenance: ImageProvenance,
   local: Readonly<{ imageId: string; rootFsLayers: readonly string[] }>,
   selection: RemoteIndexSelection,
-): RemoteImageInspectionResult => {
-  assertLocalImageBinding(local, selection);
-  const manifest = remoteManifestSchema.parse(JSON.parse(manifestRaw));
-  const image = remoteImageSchema.parse(JSON.parse(imageRaw));
-  if (!isExactManifestDescriptor(manifest, manifestRaw, selection)) {
+): Readonly<{
+  digest: string;
+  reference: string;
+  indexDigest: string;
+  indexReference: string;
+  platform: typeof IMAGE_PLATFORM;
+  platformManifestDigest: string;
+  platformReference: string;
+  attestationManifestDigest: string;
+  attestationPolicy: "descriptor-bound-not-trusted";
+  revision: string;
+}> => {
+  if (
+    !isExactDigest(local.imageId) ||
+    selection.platformManifestDigest !== local.imageId ||
+    selection.platformReference !== exactDigestReference(`${IMAGE_REPOSITORY}@${local.imageId}`) ||
+    !Array.isArray(local.rootFsLayers) ||
+    local.rootFsLayers.length === 0 ||
+    local.rootFsLayers.some((digest) => !isExactDigest(digest))
+  ) {
+    throw new Error("Remote platform selection is not bound to the local image identity.");
+  }
+  const manifest = JSON.parse(manifestRaw) as RemoteManifest;
+  const image = JSON.parse(imageRaw) as RemoteImage;
+  const { config } = manifest;
+  const { layers } = manifest;
+  if (
+    !hasExactKeys(manifest, ["config", "layers", "mediaType", "schemaVersion"]) ||
+    manifest.schemaVersion !== 2 ||
+    manifest.mediaType !== ociManifestMediaType ||
+    selection.platformManifestSize !== Buffer.byteLength(manifestRaw) ||
+    typeof config !== "object" ||
+    config === null ||
+    !hasExactKeys(config, ["digest", "mediaType", "size"]) ||
+    config.mediaType !== ociConfigMediaType ||
+    !isExactDigest(config.digest) ||
+    !isPositiveSize(config.size) ||
+    !Array.isArray(layers) ||
+    layers.length === 0 ||
+    layers.some(
+      (layer) =>
+        typeof layer !== "object" ||
+        layer === null ||
+        !hasExactKeys(layer, ["digest", "mediaType", "size"]) ||
+        (layer as RemoteManifestDescriptor).mediaType !== ociLayerMediaType ||
+        !isExactDigest((layer as RemoteManifestDescriptor).digest) ||
+        !isPositiveSize((layer as RemoteManifestDescriptor).size),
+    )
+  ) {
     throw new Error("Remote platform reference did not return the exact OCI image manifest.");
   }
   assertOciContentDigest(
@@ -778,13 +667,13 @@ export const parseRemoteImageInspection = (
   const labels = image.config?.Labels;
   if (
     labels?.["org.opencontainers.image.revision"] !== provenance.builder.commit ||
-    labels?.["org.opencontainers.image.version"] !== IMAGE_VERSION
+    labels["org.opencontainers.image.version"] !== IMAGE_VERSION
   ) {
     throw new Error("Remote image OCI provenance labels do not match.");
   }
   const remoteDiffIds = image.rootfs?.diff_ids;
   if (
-    remoteDiffIds === undefined ||
+    !Array.isArray(remoteDiffIds) ||
     remoteDiffIds.length !== local.rootFsLayers.length ||
     remoteDiffIds.some((digest, index) => digest !== local.rootFsLayers[index])
   ) {

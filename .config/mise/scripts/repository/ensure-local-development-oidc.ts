@@ -1,6 +1,5 @@
 import { realpathSync } from "node:fs";
-import * as path from "node:path";
-import process, { argv, cwd, stderr } from "node:process";
+import path from "node:path";
 
 import {
   ensureLocalDevelopmentOidc,
@@ -8,12 +7,16 @@ import {
 } from "../../../../lib/development/local-oidc-startup";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../../../../");
-if (cwd() !== repositoryRoot || realpathSync(cwd()) !== repositoryRoot || argv.length !== 4) {
+if (
+  process.cwd() !== repositoryRoot ||
+  realpathSync(process.cwd()) !== repositoryRoot ||
+  process.argv.length !== 4
+) {
   throw new Error("The local Development OIDC startup invocation was invalid.");
 }
 
 try {
-  const [vercelExecutable, miseExecutable] = argv.slice(2);
+  const [vercelExecutable, miseExecutable] = process.argv.slice(2) as [string, string];
 
   ensureLocalDevelopmentOidc({
     miseExecutable,
@@ -22,7 +25,7 @@ try {
   });
 } catch (error) {
   if (error instanceof LocalOidcRefreshFailedError) {
-    stderr.write(
+    process.stderr.write(
       "dev: project OIDC is missing or near expiry and could not be refreshed. Allow this checkout's Vercel OIDC refresh, then rerun `mise run dev`; static credentials are unsupported.\n",
     );
     process.exitCode = 78;

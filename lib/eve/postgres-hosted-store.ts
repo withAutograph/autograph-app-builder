@@ -42,6 +42,7 @@ import { and, asc, count, desc, eq, gt, inArray, lte, ne, or, sql } from "drizzl
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
+import type * as databaseSchema from "../db/schema";
 import { agentOperations, agentSessions, builderProvisioningJournals } from "../db/schema";
 import {
   nativeTargetOnboardingRegistryId,
@@ -60,11 +61,7 @@ import { mergePrivateHostedApprovalReceipts } from "./private-hosted-approval";
 import type { PrivateResourceApprovalReceipt } from "./private-hosted-approval";
 import { createPostgresHostedCheckpointHistory } from "./postgres-hosted-checkpoint-history";
 
-type Database = PostgresJsDatabase<{
-  agentOperations: typeof agentOperations;
-  agentSessions: typeof agentSessions;
-  builderProvisioningJournals: typeof builderProvisioningJournals;
-}>;
+type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 const SESSION_NOT_FOUND = "Hosted session was not found.";
 const OPERATION_CANNOT_SETTLE = "Hosted operation cannot settle at this digest.";
@@ -83,44 +80,49 @@ const replayReceiptsMatchCapture = (
   );
 };
 
-const sessionRowSchema = z.strictObject({
-  adapterGeneration: z.number().int().nullable(),
-  adapterSessionId: z.string(),
-  audience: z.string(),
-  checkpointDigest: z.string().nullable(),
-  checkpointId: z.string().nullable(),
-  checkpointProgressDigest: z.string().nullable(),
-  createdAt: z.date(),
-  issuer: z.string(),
-  lastProgressAt: z.date().nullable(),
-  ownerUserId: z.string(),
-  parentSessionId: z.string().nullable(),
-  record: z.unknown(),
-  resumabilityState: z.string().nullable(),
-  sessionId: z.string(),
-  stage: z.string().nullable(),
-  title: z.string().nullable(),
-  updatedAt: z.date(),
-  workspaceId: z.string(),
-});
+const sessionRowSchema = z
+  .object({
+    adapterGeneration: z.number().int().nullable(),
+    adapterSessionId: z.string(),
+    audience: z.string(),
+    checkpointDigest: z.string().nullable(),
+    checkpointId: z.string().nullable(),
+    checkpointProgressDigest: z.string().nullable(),
+    createdAt: z.date(),
+    issuer: z.string(),
+    lastProgressAt: z.date().nullable(),
+    ownerUserId: z.string(),
+    parentSessionId: z.string().nullable(),
+    record: z.unknown(),
+    resumabilityState: z.string().nullable(),
+    sessionId: z.string(),
+    stage: z.string().nullable(),
+    title: z.string().nullable(),
+    updatedAt: z.date(),
+    workspaceId: z.string(),
+  })
+  .strict();
 
-const operationRowSchema = z.strictObject({
-  audience: z.string(),
-  clientRequestId: z.string(),
-  createdAt: z.date(),
-  issuer: z.string(),
-  kind: z.string(),
-  operationId: z.string(),
-  ownerUserId: z.string(),
-  record: z.unknown(),
-  requestDigest: z.string(),
-  sendCancellationRevisionAtDispatch: z.number().int().nonnegative().nullable(),
-  sessionId: z.string().nullable(),
-  state: z.string(),
-  updatedAt: z.date(),
-  workspaceId: z.string(),
-});
+const operationRowSchema = z
+  .object({
+    audience: z.string(),
+    clientRequestId: z.string(),
+    createdAt: z.date(),
+    issuer: z.string(),
+    kind: z.string(),
+    operationId: z.string(),
+    ownerUserId: z.string(),
+    record: z.unknown(),
+    requestDigest: z.string(),
+    sendCancellationRevisionAtDispatch: z.number().int().nonnegative().nullable(),
+    sessionId: z.string().nullable(),
+    state: z.string(),
+    updatedAt: z.date(),
+    workspaceId: z.string(),
+  })
+  .strict();
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tenantPredicate(principal: HostedPrincipal) {
   return and(
     eq(agentOperations.issuer, principal.issuer),
@@ -140,96 +142,64 @@ function sessionTenantPredicate(principal: HostedPrincipal) {
   );
 }
 
-function assertOperationRowBinding(
-  row: z.infer<typeof operationRowSchema>,
-  record: HostedOperationRecord,
-) {
-  const identityMatches =
-    row.issuer === record.principal.issuer &&
-    row.audience === record.principal.audience &&
-    row.workspaceId === record.principal.workspaceId &&
-    row.ownerUserId === record.principal.ownerUserId;
-  const operationMatches =
-    row.operationId === record.operationId &&
-    row.sessionId === (record.sessionId ?? null) &&
-    row.kind === record.kind &&
-    row.clientRequestId === record.clientRequestId &&
-    row.requestDigest === record.requestDigest &&
-    row.state === record.state;
-  const timestampsMatch =
-    row.createdAt.getTime() === record.createdAtEpochMs &&
-    row.updatedAt.getTime() === record.updatedAtEpochMs;
-  if (!identityMatches || !operationMatches || !timestampsMatch) {
-    throw new Error("Hosted operation row is not canonically bound.");
-  }
-}
-
-function sessionRowMatchesRecord(
-  row: z.infer<typeof sessionRowSchema>,
-  record: HostedSessionRecord,
-) {
-  if (record.version === 1) {
-    return (
-      row.adapterGeneration === null &&
-      row.title === null &&
-      row.stage === null &&
-      row.resumabilityState === null &&
-      row.checkpointDigest === null &&
-      row.checkpointId === null &&
-      row.checkpointProgressDigest === null &&
-      row.parentSessionId === null &&
-      row.lastProgressAt === null
-    );
-  }
-  return (
-    row.adapterGeneration === record.adapterGeneration &&
-    row.title === record.title &&
-    row.stage === record.stage &&
-    row.resumabilityState === record.resumability &&
-    row.checkpointDigest === (record.checkpointDigest ?? null) &&
-    row.checkpointId === (record.checkpointRef?.id ?? null) &&
-    row.checkpointProgressDigest === (record.checkpointProgressDigest ?? null) &&
-    row.parentSessionId === (record.parentSessionId ?? null) &&
-    row.lastProgressAt?.getTime() === record.lastProgressAtEpochMs
-  );
-}
-
-function assertSessionRowBinding(
-  row: z.infer<typeof sessionRowSchema>,
-  record: HostedSessionRecord,
-) {
-  const identityMatches =
-    row.issuer === record.principal.issuer &&
-    row.audience === record.principal.audience &&
-    row.workspaceId === record.principal.workspaceId &&
-    row.ownerUserId === record.principal.ownerUserId &&
-    row.sessionId === record.sessionId &&
-    row.adapterSessionId === record.adapterSessionId;
-  const timestampsMatch =
-    row.createdAt.getTime() === record.createdAtEpochMs &&
-    row.updatedAt.getTime() === record.updatedAtEpochMs;
-  if (!identityMatches || !sessionRowMatchesRecord(row, record) || !timestampsMatch) {
-    throw new Error("Hosted session row is not canonically bound.");
-  }
-}
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parseHostedOperationRow(
-  input: Parameters<typeof operationRowSchema.parse>[0],
-): HostedOperationRecord {
+export function parseHostedOperationRow(input: unknown): HostedOperationRecord {
   const row = operationRowSchema.parse(input);
   const record = hostedOperationRecordSchema.parse(row.record);
-  assertOperationRowBinding(row, record);
+  if (
+    row.issuer !== record.principal.issuer ||
+    row.audience !== record.principal.audience ||
+    row.workspaceId !== record.principal.workspaceId ||
+    row.ownerUserId !== record.principal.ownerUserId ||
+    row.operationId !== record.operationId ||
+    row.sessionId !== (record.sessionId ?? null) ||
+    row.kind !== record.kind ||
+    row.clientRequestId !== record.clientRequestId ||
+    row.requestDigest !== record.requestDigest ||
+    row.state !== record.state ||
+    row.createdAt.getTime() !== record.createdAtEpochMs ||
+    row.updatedAt.getTime() !== record.updatedAtEpochMs
+  ) {
+    throw new Error("Hosted operation row is not canonically bound.");
+  }
   return record;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parseHostedSessionRow(
-  input: Parameters<typeof sessionRowSchema.parse>[0],
-): HostedSessionRecord {
+export function parseHostedSessionRow(input: unknown): HostedSessionRecord {
   const row = sessionRowSchema.parse(input);
   const record = hostedSessionRecordSchema.parse(row.record);
-  assertSessionRowBinding(row, record);
+  if (
+    row.issuer !== record.principal.issuer ||
+    row.audience !== record.principal.audience ||
+    row.workspaceId !== record.principal.workspaceId ||
+    row.ownerUserId !== record.principal.ownerUserId ||
+    row.sessionId !== record.sessionId ||
+    row.adapterSessionId !== record.adapterSessionId ||
+    (record.version === 1
+      ? row.adapterGeneration !== null ||
+        row.title !== null ||
+        row.stage !== null ||
+        row.resumabilityState !== null ||
+        row.checkpointDigest !== null ||
+        row.checkpointId !== null ||
+        row.checkpointProgressDigest !== null ||
+        row.parentSessionId !== null ||
+        row.lastProgressAt !== null
+      : row.adapterGeneration !== record.adapterGeneration ||
+        row.title !== record.title ||
+        row.stage !== record.stage ||
+        row.resumabilityState !== record.resumability ||
+        row.checkpointDigest !== (record.checkpointDigest ?? null) ||
+        row.checkpointId !== (record.checkpointRef?.id ?? null) ||
+        row.checkpointProgressDigest !== (record.checkpointProgressDigest ?? null) ||
+        row.parentSessionId !== (record.parentSessionId ?? null) ||
+        row.lastProgressAt?.getTime() !== record.lastProgressAtEpochMs) ||
+    row.createdAt.getTime() !== record.createdAtEpochMs ||
+    row.updatedAt.getTime() !== record.updatedAtEpochMs
+  ) {
+    throw new Error("Hosted session row is not canonically bound.");
+  }
   return record;
 }
 
@@ -493,10 +463,6 @@ async function withRecoveryBuildDecision(
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isExactReservation(existing: HostedOperationRecord, candidate: HostedOperationRecord) {
-  const sameStartBinding =
-    existing.startAlias?.canonicalClientRequestId ===
-      candidate.startAlias?.canonicalClientRequestId &&
-    existing.startAlias?.sourceHandoffId === candidate.startAlias?.sourceHandoffId;
   return (
     existing.operationId === candidate.operationId &&
     existing.requestDigest === candidate.requestDigest &&
@@ -505,65 +471,10 @@ function isExactReservation(existing: HostedOperationRecord, candidate: HostedOp
     (candidate.kind === "start" || existing.sessionId === candidate.sessionId) &&
     existing.resumeSessionId === candidate.resumeSessionId &&
     JSON.stringify(existing.nativeRecovery) === JSON.stringify(candidate.nativeRecovery) &&
-    sameStartBinding
+    existing.startAlias?.canonicalClientRequestId ===
+      candidate.startAlias?.canonicalClientRequestId &&
+    existing.startAlias?.sourceHandoffId === candidate.startAlias?.sourceHandoffId
   );
-}
-
-function isReplayableStart(operation: HostedOperationRecord) {
-  return operation.kind === "start" && operation.state === "submission_unknown";
-}
-
-function isAuthorizedSettlementState(
-  operation: HostedOperationRecord,
-  replayableStart: boolean,
-  deliveredInternal: boolean,
-  proved: boolean,
-) {
-  if (operation.state === "reserved" || replayableStart || deliveredInternal) {
-    return true;
-  }
-  return operation.state === "submission_unknown" && proved;
-}
-
-function shouldLockSessionForSettlement(
-  operation: HostedOperationRecord,
-  hasApprovalResolution: boolean,
-) {
-  return (
-    operation.internalSessionLimitResponse !== undefined ||
-    operation.kind === "send" ||
-    hasApprovalResolution
-  );
-}
-
-function resumableRowMatches(
-  current: HostedSessionRecord | null,
-  revision: number | undefined,
-  storedRevision: number | null,
-) {
-  if (revision === undefined) {
-    return true;
-  }
-  if (current === null) {
-    return false;
-  }
-  if (revision !== (toDurableHostedSessionRecord(current).cancellationRevision ?? 0)) {
-    return false;
-  }
-  return storedRevision === null || storedRevision === revision;
-}
-
-function hasUncheckpointedPagedSession(base: HostedSessionRecord, principal: HostedPrincipal) {
-  if (base.version !== 2) {
-    return false;
-  }
-  if (base.checkpoint !== undefined || base.checkpointRef !== undefined) {
-    return false;
-  }
-  if (base.checkpointDigest !== undefined || base.checkpointProgressDigest !== undefined) {
-    return false;
-  }
-  return tenantKeyFor(base.principal) === tenantKeyFor(principal);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -646,15 +557,15 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Lock the current owner before the marker operation to keep a consistent transaction order.
         const operation = await operationById(transaction, principal, input.operationId, true);
         const marker = operation?.internalBuildContinuation;
-        const validClaim =
-          operation !== null &&
-          marker !== undefined &&
-          operation.state !== "rejected" &&
-          operation.sessionId === current.sessionId &&
-          marker.decision.adapterSessionId === current.adapterSessionId &&
-          marker.nonce === input.nonce &&
-          input.turnSequence > marker.decision.turnSequence;
-        if (!validClaim) {
+        if (
+          operation === null ||
+          marker === undefined ||
+          operation.state === "rejected" ||
+          operation.sessionId !== current.sessionId ||
+          marker.decision.adapterSessionId !== current.adapterSessionId ||
+          marker.nonce !== input.nonce ||
+          input.turnSequence <= marker.decision.turnSequence
+        ) {
           return false;
         }
         if (marker.deliveredTurnId !== undefined) {
@@ -707,18 +618,18 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Lock the current owner before the marker operation to keep a consistent transaction order.
         const operation = await operationById(transaction, principal, input.operationId, true);
         const marker = operation?.internalAuthoringContinuation;
-        const validClaim =
-          current.status !== "cancelled" &&
-          (current.cancellationRevision ?? 0) === (current.resumedCancellationRevision ?? 0) &&
-          operation !== null &&
-          marker !== undefined &&
-          operation.state !== "rejected" &&
-          operation.sessionId === current.sessionId &&
-          marker.decision.adapterSessionId === current.adapterSessionId &&
-          marker.decision.scopeDigest === input.scopeDigest &&
-          marker.nonce === input.nonce &&
-          input.turnSequence > marker.decision.turnSequence;
-        if (!validClaim) {
+        if (
+          current.status === "cancelled" ||
+          (current.cancellationRevision ?? 0) !== (current.resumedCancellationRevision ?? 0) ||
+          operation === null ||
+          marker === undefined ||
+          operation.state === "rejected" ||
+          operation.sessionId !== current.sessionId ||
+          marker.decision.adapterSessionId !== current.adapterSessionId ||
+          marker.decision.scopeDigest !== input.scopeDigest ||
+          marker.nonce !== input.nonce ||
+          input.turnSequence <= marker.decision.turnSequence
+        ) {
           return false;
         }
         if (marker.deliveredTurnId !== undefined) {
@@ -921,11 +832,15 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         const checkpointProgressDigest = hostedSessionCheckpointProgressDigest(input.checkpoint);
         const { checkpointRef: priorCheckpointRef, ...inlineBase } = current;
         void priorCheckpointRef;
-        const observedInput: Record<string, unknown> = {
+        const observed = durableHostedSessionRecordSchema.parse({
           ...inlineBase,
+          ...(provedResume
+            ? { resumedCancellationRevision: current.cancellationRevision ?? 0 }
+            : {}),
           checkpoint: input.checkpoint,
           checkpointDigest,
           checkpointProgressDigest,
+          ...(input.appId === undefined ? {} : { appId: input.appId }),
           lastProgressAtEpochMs:
             current.checkpointProgressDigest === checkpointProgressDigest
               ? current.lastProgressAtEpochMs
@@ -934,14 +849,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           stage: input.stage,
           status: input.checkpoint.status,
           updatedAtEpochMs: input.nowEpochMs,
-        };
-        if (provedResume) {
-          observedInput.resumedCancellationRevision = current.cancellationRevision ?? 0;
-        }
-        if (input.appId !== undefined) {
-          observedInput.appId = input.appId;
-        }
-        const observed = durableHostedSessionRecordSchema.parse(observedInput);
+        });
         const updated = await transaction
           .update(agentSessions)
           .set(sessionValues(observed))
@@ -1022,8 +930,20 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           });
           const { checkpoint: priorInlineCheckpoint, ...pagedBase } = durable;
           void priorInlineCheckpoint;
-          const observedInput: Record<string, unknown> = {
+          const observed = durableHostedSessionRecordSchema.parse({
             ...pagedBase,
+            ...(input.verifiedReplayReceipts === undefined
+              ? {}
+              : {
+                  privateApprovalReceipts: mergePrivateHostedApprovalReceipts(
+                    input.sessionId,
+                    durable.privateApprovalReceipts,
+                    input.verifiedReplayReceipts,
+                  ),
+                }),
+            ...(provedResume
+              ? { resumedCancellationRevision: durable.cancellationRevision ?? 0 }
+              : {}),
             checkpointDigest: staged.checkpointDigest,
             checkpointProgressDigest: staged.checkpointProgressDigest,
             checkpointRef: {
@@ -1031,6 +951,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
               eventCount: staged.eventCount,
               id: staged.checkpointId,
             },
+            ...(input.appId === undefined ? {} : { appId: input.appId }),
             lastProgressAtEpochMs:
               durable.checkpointProgressDigest === staged.checkpointProgressDigest
                 ? durable.lastProgressAtEpochMs
@@ -1039,21 +960,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             stage: input.stage,
             status: metadataStatus,
             updatedAtEpochMs: input.nowEpochMs,
-          };
-          if (input.verifiedReplayReceipts !== undefined) {
-            observedInput.privateApprovalReceipts = mergePrivateHostedApprovalReceipts(
-              input.sessionId,
-              durable.privateApprovalReceipts,
-              input.verifiedReplayReceipts,
-            );
-          }
-          if (provedResume) {
-            observedInput.resumedCancellationRevision = durable.cancellationRevision ?? 0;
-          }
-          if (input.appId !== undefined) {
-            observedInput.appId = input.appId;
-          }
-          const observed = durableHostedSessionRecordSchema.parse(observedInput);
+          });
           const updated = await transaction
             .update(agentSessions)
             .set(sessionValues(observed))
@@ -1276,13 +1183,15 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           ...bindSendDelivery(operation, current, input.delivery),
           updatedAtEpochMs: input.nowEpochMs,
         });
-        const values = operationValues(updated);
-        if (operation.sendDelivery === undefined && revision !== undefined) {
-          values.sendCancellationRevisionAtDispatch = revision;
-        }
         const rows = await transaction
           .update(agentOperations)
-          .set(values)
+          .set({
+            ...operationValues(updated),
+            // An old ACK has no dispatch baseline; retries must never invent one.
+            ...(operation.sendDelivery === undefined && revision !== undefined
+              ? { sendCancellationRevisionAtDispatch: revision }
+              : {}),
+          })
           .where(
             and(
               tenantPredicate(principal),
@@ -1494,7 +1403,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           });
           const { checkpoint: priorInlineCheckpoint, ...pagedBase } = current;
           void priorInlineCheckpoint;
-          const replacedInput: Record<string, unknown> = {
+          const replaced = durableHostedSessionRecordSchema.parse({
             ...pagedBase,
             adapterGeneration: current.adapterGeneration + 1,
             adapterSessionId: input.adapterSessionId,
@@ -1505,16 +1414,13 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
               eventCount: staged.eventCount,
               id: staged.checkpointId,
             },
+            ...(input.appId === undefined ? {} : { appId: input.appId }),
             lastProgressAtEpochMs: input.nowEpochMs,
             resumability: input.resumability,
             stage: input.stage,
             status: metadataStatus,
             updatedAtEpochMs: input.nowEpochMs,
-          };
-          if (input.appId !== undefined) {
-            replacedInput.appId = input.appId;
-          }
-          const replaced = durableHostedSessionRecordSchema.parse(replacedInput);
+          });
           const updated = await transaction
             .update(agentSessions)
             .set(sessionValues(replaced))
@@ -1661,9 +1567,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
                 eq(agentOperations.kind, "start"),
                 or(
                   inArray(agentOperations.state, ["reserved", "submission_unknown"]),
-                  candidate.nativeRecovery === undefined
-                    ? undefined
-                    : sql`${agentOperations.record}->'nativeRecoveryReceipt' is not null`,
+                  ...(candidate.nativeRecovery === undefined
+                    ? []
+                    : [sql`${agentOperations.record}->'nativeRecoveryReceipt' is not null`]),
                 ),
                 sql`${agentOperations.record}->>'resumeSessionId' = ${candidate.resumeSessionId}`,
                 ne(agentOperations.operationId, candidate.operationId),
@@ -1844,13 +1750,14 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         if (operation === null || operation.requestDigest !== input.requestDigest) {
           throw new Error(OPERATION_CANNOT_SETTLE);
         }
-        const replayableStart = isReplayableStart(operation);
+        const replayableStart =
+          operation.kind === "start" && operation.state === "submission_unknown";
         const deliveredInternal = isDeliveredInternalContinuation(operation);
         const current =
-          shouldLockSessionForSettlement(
-            operation,
-            input.resourceApprovalResolution !== undefined,
-          ) && operation.sessionId !== undefined
+          (operation.internalSessionLimitResponse !== undefined ||
+            operation.kind === "send" ||
+            input.resourceApprovalResolution !== undefined) &&
+          operation.sessionId !== undefined
             ? await sessionById(transaction, principal, operation.sessionId, true)
             : null;
         const provedResponse = isProvedSessionLimitResponse(
@@ -1899,11 +1806,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           throw new Error("Canonical SEND delivery is not proved.");
         }
         if (
-          !isAuthorizedSettlementState(
-            operation,
-            replayableStart,
-            deliveredInternal,
-            provedResponse || provedSend || provedApproval,
+          operation.state !== "reserved" &&
+          !replayableStart &&
+          !deliveredInternal &&
+          !(
+            operation.state === "submission_unknown" &&
+            (provedResponse || provedSend || provedApproval)
           )
         ) {
           throw new Error(OPERATION_CANNOT_SETTLE);
@@ -1927,17 +1835,18 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         if (expectedSessionId === undefined || result.sessionId !== expectedSessionId) {
           throw new Error("Hosted operation result session mismatch.");
         }
-        const settledInput: Record<string, unknown> = {
+        const settled = hostedOperationRecordSchema.parse({
           ...withoutHostedOperationError(operation),
           result,
           sessionId: result.sessionId,
           state: "succeeded",
+          ...(session === undefined
+            ? {}
+            : {
+                sessionRecordDigest: hostedSessionCreationDigest(session),
+              }),
           updatedAtEpochMs: input.nowEpochMs,
-        };
-        if (session !== undefined) {
-          settledInput.sessionRecordDigest = hostedSessionCreationDigest(session);
-        }
-        const settled = hostedOperationRecordSchema.parse(settledInput);
+        });
         if (session !== undefined) {
           const insertedSession = await transaction
             .insert(agentSessions)
@@ -1996,7 +1905,14 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     async settleSucceededPaged(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       let base = durableHostedSessionRecordSchema.parse(input.session);
-      if (!hasUncheckpointedPagedSession(base, principal)) {
+      if (
+        base.version !== 2 ||
+        base.checkpoint !== undefined ||
+        base.checkpointRef !== undefined ||
+        base.checkpointDigest !== undefined ||
+        base.checkpointProgressDigest !== undefined ||
+        tenantKeyFor(base.principal) !== tenantKeyFor(principal)
+      ) {
         throw new Error("Paged hosted session creation needs an uncheckpointed tenant session.");
       }
       return await database.transaction(async (transaction) => {
@@ -2004,7 +1920,8 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         if (operation === null || operation.requestDigest !== input.requestDigest) {
           throw new Error(OPERATION_CANNOT_SETTLE);
         }
-        const replayableStart = isReplayableStart(operation);
+        const replayableStart =
+          operation.kind === "start" && operation.state === "submission_unknown";
         const deliveredInternal = isDeliveredInternalContinuation(operation);
         if (operation.state !== "reserved" && !replayableStart && !deliveredInternal) {
           throw new Error(OPERATION_CANNOT_SETTLE);

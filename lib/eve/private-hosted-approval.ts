@@ -15,8 +15,6 @@ import { nativeTargetPreparationRequestSchema } from "../agent/native-target-onb
 import { nativeTargetOnboardingPlanDigest } from "../provisioning/native-target-onboarding-contract";
 
 const hostedRuntimeToolName = z.enum(["prepare-app-hosted-runtime", "cleanup-app-hosted-runtime"]);
-const hostedApprovalFormat = "autograph-hosted-approval-v1";
-const nativeTargetToolName = "prepare-app-native-target";
 const planMismatchMessage =
   "Hosted runtime approval must retain its exact, internally consistent plan.";
 const hostedRuntimeToolInputSchema = z.strictObject({
@@ -61,7 +59,7 @@ const privateHostedPendingApprovalSchema = z
 export const privateHostedApprovalReceiptSchema = z
   .strictObject({
     callId: z.string().min(1),
-    format: z.literal(hostedApprovalFormat),
+    format: z.literal("autograph-hosted-approval-v1"),
     outcome: z.enum(["approved", "cancelled"]),
     requestId: z.string().min(1),
     responderPrincipalId: z.string().min(1),
@@ -101,17 +99,17 @@ const nativePendingApprovalSchema = z.strictObject({
   callId: z.string().min(1),
   requestId: z.string().min(1),
   toolInput: nativeTargetInputSchema,
-  toolName: z.literal(nativeTargetToolName),
+  toolName: z.literal("prepare-app-native-target"),
 });
 const nativeApprovalReceiptSchema = z.strictObject({
   callId: z.string().min(1),
-  format: z.literal(hostedApprovalFormat),
+  format: z.literal("autograph-hosted-approval-v1"),
   outcome: z.enum(["approved", "cancelled"]),
   requestId: z.string().min(1),
   responderPrincipalId: z.string().min(1),
   sequence: z.number().int().nonnegative(),
   toolInput: nativeTargetInputSchema,
-  toolName: z.literal(nativeTargetToolName),
+  toolName: z.literal("prepare-app-native-target"),
   turnId: z.union([z.string().min(1), z.literal("")]),
 });
 export const privateResourcePendingApprovalSchema = z.union([
@@ -127,7 +125,7 @@ type PrivateResourcePendingApproval = z.infer<typeof privateResourcePendingAppro
 export const privateResourceApprovalSessionId = (
   entry: PrivateResourcePendingApproval | PrivateResourceApprovalReceipt,
 ) =>
-  entry.toolName === nativeTargetToolName
+  entry.toolName === "prepare-app-native-target"
     ? entry.toolInput.plan.origin.publicSessionId
     : entry.toolInput.plan.selection.sessionId;
 
@@ -201,7 +199,7 @@ const matchesApprovalScope = (
     requestId?: string;
   },
 ) => {
-  if (candidate.toolName === nativeTargetToolName) {
+  if (candidate.toolName === "prepare-app-native-target") {
     return false;
   }
   const expectedTool =
@@ -222,7 +220,10 @@ const sameReceipt = (
   left: PrivateResourceApprovalReceipt,
   right: PrivateResourceApprovalReceipt,
 ) => {
-  if (left.toolName === nativeTargetToolName || right.toolName === nativeTargetToolName) {
+  if (
+    left.toolName === "prepare-app-native-target" ||
+    right.toolName === "prepare-app-native-target"
+  ) {
     return isDeepStrictEqual(left, right);
   }
   return [
@@ -311,7 +312,7 @@ export const createPrivateHostedApprovalCapture = (
             const { toolName } = request.action;
             if (
               hostedRuntimeToolName.safeParse(toolName).success ||
-              toolName === nativeTargetToolName
+              toolName === "prepare-app-native-target"
             ) {
               const parsed = privateResourcePendingApprovalSchema.parse({
                 callId: request.action.callId,
@@ -336,7 +337,7 @@ export const createPrivateHostedApprovalCapture = (
         const previous = receipts.get(event.data.requestId);
         if (
           // oxlint-disable-next-line sonarjs/expression-complexity -- Every field is part of the settlement identity.
-          previous?.toolName === nativeTargetToolName &&
+          previous?.toolName === "prepare-app-native-target" &&
           (previous.outcome !== event.data.outcome ||
             previous.responderPrincipalId !== event.data.responderPrincipalId ||
             previous.sequence !== event.data.sequence ||
@@ -350,7 +351,7 @@ export const createPrivateHostedApprovalCapture = (
       pending.delete(event.data.requestId);
       const receipt = privateResourceApprovalReceiptSchema.parse({
         ...request,
-        format: hostedApprovalFormat,
+        format: "autograph-hosted-approval-v1",
         outcome: event.data.outcome,
         requestId: event.data.requestId,
         responderPrincipalId: event.data.responderPrincipalId,
@@ -462,7 +463,7 @@ export const readPrivateHostedApproval = async (input: {
   const receipts = session.version === 2 ? session.privateApprovalReceipts : undefined;
   const matches = receipts?.filter(
     (candidate) =>
-      candidate.toolName !== nativeTargetToolName && matchesApprovalScope(candidate, input),
+      candidate.toolName !== "prepare-app-native-target" && matchesApprovalScope(candidate, input),
   );
   if (matches === undefined || matches.length === 0) {
     return null;

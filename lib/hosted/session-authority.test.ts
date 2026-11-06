@@ -6,35 +6,19 @@ import {
   sourceHandoffIdForSessionAuth,
 } from "./session-authority";
 
-interface ForwardedAuth {
+const auth = (overrides: Record<string, unknown> = {}) => ({
   attributes: {
-    "autograph:source-handoff-id"?: string;
-    "eve:forwarded-by"?: string;
-    "mcp:audience": string;
-    "mcp:scopes": string[];
-    "mcp:workspace-id": string;
-  };
-  authenticator: "mcp-oauth-jwks";
-  issuer: string;
-  principalId: string;
-  principalType: "user" | "service";
-  subject: string;
-}
-
-const auth = (overrides: Partial<ForwardedAuth> = {}) =>
-  ({
-    attributes: {
-      "mcp:audience": "https://builder.example.test/mcp",
-      "mcp:scopes": ["eve:start"],
-      "mcp:workspace-id": "workspace_1",
-    },
-    authenticator: "mcp-oauth-jwks",
-    issuer: "https://builder.example.test/api/auth",
-    principalId: "user_1",
-    principalType: "user",
-    subject: "user_1",
-    ...overrides,
-  }) satisfies ForwardedAuth;
+    "mcp:audience": "https://builder.example.test/mcp",
+    "mcp:scopes": ["eve:start"],
+    "mcp:workspace-id": "workspace_1",
+  },
+  authenticator: "mcp-oauth-jwks",
+  issuer: "https://builder.example.test/api/auth",
+  principalId: "user_1",
+  principalType: "user",
+  subject: "user_1",
+  ...overrides,
+});
 
 describe("exact forwarded session authority", () => {
   it("continues denying a generic service with no specific sealed delegation", () => {

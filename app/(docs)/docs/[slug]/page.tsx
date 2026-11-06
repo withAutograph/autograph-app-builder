@@ -12,13 +12,9 @@ interface PageProps {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function generateStaticParams() {
-  const params: { slug: string }[] = [];
-  for (const document of docs) {
-    if (document.slug !== "overview") {
-      params.push({ slug: document.slug });
-    }
-  }
-  return params;
+  return docs
+    .filter((document) => document.slug !== "overview")
+    .map((document) => ({ slug: document.slug }));
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

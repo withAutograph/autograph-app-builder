@@ -9,7 +9,7 @@ import {
   classifyGitHubRepositoryAccessWithTargetProof,
   parseRepositoryReference,
 } from "./repository-access";
-import type { GitHubRepositoryAccessProvider, RepositoryAccessSnapshot } from "./repository-access";
+import type { GitHubRepositoryAccessProvider } from "./repository-access";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -49,7 +49,7 @@ function provider(
   installation: HostedGitHubInstallationBinding,
   repositoryId?: string,
   repositorySelection: "all" | "selected" = "selected",
-  repositoryOverride: Partial<RepositoryAccessSnapshot> = {},
+  repositoryOverride: Record<string, unknown> = {},
 ): GitHubRepositoryAccessProvider {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -61,13 +61,12 @@ function provider(
         grantedPermissions: requestedPermissions,
         installationId: installation.installationId,
         repositorySelection,
-        selectedRepositoryIds:
-          repositoryId !== undefined && repositoryId !== "" ? [repositoryId] : [],
+        selectedRepositoryIds: repositoryId ? [repositoryId] : [],
       };
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async inspectRepositoryByName() {
-      return repositoryId !== undefined && repositoryId !== ""
+      return repositoryId
         ? {
             archived: false,
             defaultBranch: "main",

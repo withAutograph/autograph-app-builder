@@ -21,33 +21,34 @@ export default defineTool({
       throw new Error("Finish the accepted app's pending work before saving its source");
     }
     const store = createLocalApplicationSourceStore(process.env);
-    const assertCurrent = () => {
+    const assertCurrent = async () => {
       ctx.abortSignal?.throwIfAborted();
       if (!isDeepStrictEqual(current, appBuilderWorkflowState.get())) {
         throw new Error("The accepted app changed while saving source");
       }
+      return Promise.resolve();
     };
     const sandbox = await getSourceBoundSandbox(ctx);
     const captured = await captureApplicationSource({
-      appId: current.appSpec.appId,
-      assertCurrent,
-      displayName,
       sandbox,
-      signal: ctx.abortSignal ?? new AbortController().signal,
-      sourceSessionId: ctx.session.id,
-    });
-    assertCurrent();
-    const saved = await store.put(captured.artifact);
-    assertCurrent();
-    return applicationSourceExportReferenceSchema.parse({
       appId: current.appSpec.appId,
-      bytes: saved.bytes,
+      displayName,
+      sourceSessionId: ctx.session.id,
+      signal: ctx.abortSignal ?? new AbortController().signal,
+      assertCurrent,
+    });
+    await assertCurrent();
+    const saved = await store.put(captured.artifact);
+    await assertCurrent();
+    return applicationSourceExportReferenceSchema.parse({
+      kind: "application-source-export-v1",
+      appId: current.appSpec.appId,
+      sourceSessionId: ctx.session.id,
+      manifestDigest: saved.manifestDigest,
       downloadPath: `/application-source/${encodeURIComponent(ctx.session.id)}/${saved.manifestDigest}`,
       fileCount: captured.files.length,
-      kind: "application-source-export-v1",
-      manifestDigest: saved.manifestDigest,
+      bytes: saved.bytes,
       omissionCount: captured.artifact.manifest.omissions.length,
-      sourceSessionId: ctx.session.id,
     });
   },
   inputSchema: z.object({ displayName: z.string().min(1) }),

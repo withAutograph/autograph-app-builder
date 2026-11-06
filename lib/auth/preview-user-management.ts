@@ -114,7 +114,7 @@ function organizationError(cause: unknown) {
       });
     }
     default: {
-      throw new Error("Unsupported organization provisioning reason");
+      throw new Error(`Unsupported organization provisioning reason: ${cause.reason}`);
     }
   }
 }
@@ -125,22 +125,22 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
     async beforeSessionCreate<T extends { userId: string }>(
       session: T,
       context?: { path?: string } | null,
-    ): Promise<{ data: T & { activeOrganizationId: string } } | undefined> {
+    ) {
       // Passkey onboarding provisions its organization and activates it using
       // the same adapter transaction that creates the credential and session.
       if (context?.path === "/passkey/verify-registration") {
-        return undefined;
+        return;
       }
       try {
         const ensured = await authority.ensureOrganizationForVerifiedUser({
           userId: session.userId,
         });
-        return await Promise.resolve({
+        return {
           data: {
             ...session,
             activeOrganizationId: ensured.organizationId,
           },
-        });
+        };
       } catch (error) {
         console.error(
           JSON.stringify({
@@ -153,12 +153,13 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
       }
     },
 
-    beforeUserCreate<T extends PreviewVerifiedUser>(
-      user: T,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async beforeUserCreate(
+      user: PreviewVerifiedUser & Record<string, unknown>,
       context: { path?: string } | null,
-    ): { data: T } | undefined {
+    ) {
       if (!identityCallbackPaths.has(context?.path ?? "")) {
-        return undefined;
+        return;
       }
       if (!user.emailVerified) {
         throw identityUnavailable();
@@ -225,14 +226,12 @@ export function previewUserManagementPlugins(authority: PreviewOrganizationUserA
             databaseHooks: {
               session: {
                 create: {
-                  before: async (session: { userId: string }, context?: { path?: string } | null) =>
-                    await lifecycle.beforeSessionCreate(session, context),
+                  before: lifecycle.beforeSessionCreate,
                 },
               },
               user: {
                 create: {
-                  before: (user: PreviewVerifiedUser, context: { path?: string } | null) =>
-                    lifecycle.beforeUserCreate(user, context),
+                  before: lifecycle.beforeUserCreate,
                 },
               },
             },

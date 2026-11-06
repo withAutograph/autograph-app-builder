@@ -18,8 +18,8 @@ export default defineWorkflowTool({
           : "user-approval";
       } catch {
         return {
-          reason: "The current owner and exact native target operation could not be verified.",
           type: "denied",
+          reason: "The current owner and exact native target operation could not be verified.",
         };
       }
     },
@@ -29,8 +29,8 @@ export default defineWorkflowTool({
         return { status: "allowed" };
       } catch {
         return {
-          reason: "The responder cannot approve this exact native target operation.",
           status: "rejected",
+          reason: "The responder cannot approve this exact native target operation.",
         };
       }
     },

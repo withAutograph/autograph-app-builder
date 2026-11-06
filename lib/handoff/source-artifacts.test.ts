@@ -16,17 +16,18 @@ const authority = {
   workspaceId: "workspace-one",
 };
 const hash = (v: string | Uint8Array) => createHash("sha256").update(v).digest("hex");
-const key = (k: SourceArtifactChunkKey) => JSON.stringify(k);
 const fixture = () => {
   const rows = new Map<string, string>();
+  const key = (k: SourceArtifactChunkKey) => JSON.stringify(k);
   const store = createImmutableSourceArtifactStore({
-    get: async (k) => await Promise.resolve(rows.get(key(k))),
-    put: (k, v) => {
+    get: async (k) => rows.get(key(k)),
+    put: async (k, v) => {
       const prior = rows.get(key(k));
       if (prior !== undefined && prior !== v) {
         throw new SourceUploadError("source_upload_conflict");
       }
       rows.set(key(k), v);
+      return;
     },
   });
   const bytes = Buffer.from([0, 255, 128, 1]);
@@ -85,7 +86,7 @@ describe("owned immutable source uploads", () => {
     await f.store.complete({ authority, reference });
     expect(f.rows.size).toBe(before);
     const restored = await f.store.readCompleted({ authority, reference });
-    const [restoredFile] = validateApplicationSourceArtifact(restored).files;
+    const restoredFile = validateApplicationSourceArtifact(restored).files[0];
     expect(restoredFile.mode).toBe("100755");
     expect([...restoredFile.bytes]).toEqual([0, 255, 128, 1]);
   });
@@ -130,8 +131,7 @@ describe("owned immutable source uploads", () => {
   it("rechecks membership after an I/O boundary before acknowledging it", async () => {
     const f = fixture();
     let active = true;
-    const context = async () =>
-      await Promise.resolve(active ? { authority, store: f.store } : undefined);
+    const context = async () => (active ? { authority, store: f.store } : undefined);
     await expect(
       withSourceUploadAuthority(context, async ({ store }) => {
         await store.begin({ authority, header: f.header });

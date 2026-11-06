@@ -13,7 +13,6 @@ import {
   requiredToolVersions,
   toolVersionMatches,
 } from "@/lib/sandbox/toolchain";
-import type { RequiredTool } from "@/lib/sandbox/toolchain";
 import { sandboxBackendPlan } from "@/lib/sandbox/backend";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
@@ -23,9 +22,6 @@ import {
 import { targetExecutionBinding } from "@/lib/repository/target-planning";
 
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm", "cargo", "rustc"] as const;
-
-const isRequiredTool = (command: (typeof commands)[number]): command is RequiredTool =>
-  Object.hasOwn(requiredToolVersions, command);
 
 export const inspectSandboxCommand = async (
   sandbox: Pick<SandboxSession, "run">,
@@ -78,29 +74,23 @@ export default defineTool({
       fixture: hasTestCapability("simulated-target"),
       localImageConfigured: image !== undefined,
     });
-    let cache;
-    if (backend.blockers.length === 0) {
-      try {
-        cache = await inspectDependencyCache(sandbox);
-      } catch {
-        cache = globalThis.undefined;
-      }
-    }
-    let execution: ReturnType<typeof targetExecutionBinding> | undefined;
-    if (cache !== undefined) {
-      try {
-        execution = targetExecutionBinding(cache);
-      } catch {
-        execution = globalThis.undefined;
-      }
-    }
-    const requiredCommands: RequiredTool[] = [];
-    for (const command of commands) {
-      if (isRequiredTool(command)) {
-        requiredCommands.push(command);
-      }
-    }
-    const required = requiredCommands.map((command) => {
+    const cache =
+      backend.blockers.length === 0
+        ? await inspectDependencyCache(sandbox).catch(() => globalThis.undefined)
+        : undefined;
+    const execution =
+      cache === undefined
+        ? undefined
+        : (() => {
+            try {
+              return targetExecutionBinding(cache);
+            } catch {
+              return globalThis.undefined;
+            }
+          })();
+    const required = (
+      Object.keys(requiredToolVersions) as (keyof typeof requiredToolVersions)[]
+    ).map((command) => {
       const observed = tools.find((tool) => tool.command === command);
       return {
         available: observed?.available === true,
@@ -110,7 +100,7 @@ export default defineTool({
         version: observed?.available === true ? observed.version : "",
       };
     });
-    const result = {
+    return {
       backend: backend.kind,
       backendBlockers: backend.blockers,
       dependencyCacheDigest:
@@ -124,12 +114,10 @@ export default defineTool({
       toolchainReady:
         execution !== undefined && cache !== undefined && required.every((tool) => tool.matches),
       tools,
+      ...(input.runtimeDiagnostics === true
+        ? { runtimeResources: await inspectSandboxRuntimeResources(sandbox) }
+        : {}),
     };
-    if (input.runtimeDiagnostics === true) {
-      const runtimeResources = await inspectSandboxRuntimeResources(sandbox);
-      return { ...result, runtimeResources };
-    }
-    return result;
   },
   inputSchema: z.object({
     computeState: z.boolean().optional(),

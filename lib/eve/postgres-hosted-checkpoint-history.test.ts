@@ -132,43 +132,35 @@ const historyFixture = () => {
       const name = getTableName(table);
       let predicate: SQL;
       let maximum = Number.POSITIVE_INFINITY;
-      const execute = async <Result>(resolve: (value: FixtureRow[]) => Result) => {
-        const selected = (rows.get(name) ?? [])
-          .filter((row) => matches(row, predicate))
-          .toSorted(
-            (a, b) =>
-              Number(a.itemIndex) - Number(b.itemIndex) ||
-              Number(a.partIndex) - Number(b.partIndex),
-          );
-        const result =
-          selection !== undefined && "chunkCount" in selection
-            ? [{ chunkCount: selected.length }]
-            : selected.slice(0, maximum);
-        calls.push({ kind: "select", rowCount: result.length, table: name });
-        return await resolve(result);
-      };
       const query = {
-        execute,
-        limit: (limit: number) => {
-          maximum = limit;
-          return query;
-        },
-        orderBy: () => query,
         where: (condition: SQL) => {
           predicate = condition;
           return query;
         },
-      };
-      return new Proxy(query, {
-        get(_target, property) {
-          if (property === "then") {
-            return execute;
-          }
-          const members = ["execute", "limit", "orderBy", "where"] as const;
-          const member = members.find((candidate) => candidate === property);
-          return member === undefined ? undefined : query[member];
+        orderBy: () => query,
+        limit: (limit: number) => {
+          maximum = limit;
+          return query;
         },
-      });
+        // oxlint-disable-next-line unicorn/no-thenable -- Drizzle query builders are awaitable as well as chainable.
+        then: async <Result>(resolve: (value: FixtureRow[]) => Result) => {
+          const selected = (rows.get(name) ?? [])
+            .filter((row) => matches(row, predicate))
+            .toSorted(
+              (a, b) =>
+                Number(a.itemIndex) - Number(b.itemIndex) ||
+                Number(a.partIndex) - Number(b.partIndex),
+            );
+          const result =
+            selection !== undefined && "chunkCount" in selection
+              ? [{ chunkCount: selected.length }]
+              : selected.slice(0, maximum);
+          calls.push({ kind: "select", rowCount: result.length, table: name });
+          // oxlint-disable-next-line github/no-then -- Implement the query builder thenable boundary.
+          return await Promise.resolve(result).then(resolve);
+        },
+      };
+      return query;
     },
   });
   const fake = {
@@ -207,16 +199,13 @@ const historyFixture = () => {
       values: async (input: FixtureRow | FixtureRow[]) => {
         const name = getTableName(table);
         if (name === failTable) {
-          failTable = null;
+          failTable = undefined;
           throw new Error("Injected database write failure.");
         }
-        const values = (Array.isArray(input) ? input : [input]).map((row) => {
-          const value = { ...row };
-          if (name === "agent_session_checkpoint_manifest") {
-            value.publishedAt = null;
-          }
-          return value;
-        });
+        const values = (Array.isArray(input) ? input : [input]).map((row) => ({
+          ...row,
+          ...(name === "agent_session_checkpoint_manifest" ? { publishedAt: null } : {}),
+        }));
         calls.push({ kind: "insert", rowCount: values.length, table: name });
         rows.set(name, [...(rows.get(name) ?? []), ...values]);
       },

@@ -1288,7 +1288,7 @@ export async function capturePreview(input: {
           const measurements = await measurePage(page);
           const styles =
             index === 0
-              ? await measureStyles(
+                await measureStyles(
                   page,
                   input.tokens,
                   input.generatedSourcePaths,

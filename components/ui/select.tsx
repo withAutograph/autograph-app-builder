@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentProps } from "react";
+import * as React from "react";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 
 import { cn } from "@/lib/utils";
@@ -51,7 +51,7 @@ const SelectTrigger = ({
 const SelectScrollDownButton = ({
   className,
   ...props
-}: ComponentProps<typeof SelectPrimitive.ScrollDownArrow>) => (
+}: React.ComponentProps<typeof SelectPrimitive.ScrollDownArrow>) => (
   <SelectPrimitive.ScrollDownArrow
     data-slot="select-scroll-down-button"
     className={cn(
@@ -67,7 +67,7 @@ const SelectScrollDownButton = ({
 const SelectScrollUpButton = ({
   className,
   ...props
-}: ComponentProps<typeof SelectPrimitive.ScrollUpArrow>) => (
+}: React.ComponentProps<typeof SelectPrimitive.ScrollUpArrow>) => (
   <SelectPrimitive.ScrollUpArrow
     data-slot="select-scroll-up-button"
     className={cn(

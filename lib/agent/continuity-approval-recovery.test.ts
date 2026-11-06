@@ -22,22 +22,21 @@ it("continues a partial native approval read without granting authority", async 
   expect(await readContinuityApprovalWithRecovery(read, signal)).toEqual({ approved: true });
 });
 it("does not retry an owner denial or unclassified failure", async () => {
-  const errors = [new HostedOperatorError("authorization_required"), new Error("unknown")];
   await Promise.all(
-    errors.map((error) =>
-      expect(
+    [new HostedOperatorError("authorization_required"), new Error("unknown")].map(async (error) => {
+      await expect(
         readContinuityApprovalWithRecovery(
           vi.fn().mockRejectedValue(error),
           new AbortController().signal,
         ),
-      ).rejects.toBe(error),
-    ),
+      ).rejects.toBe(error);
+    }),
   );
 });
 it("respects cancellation during a failed read", async () => {
   const controller = new AbortController();
   await expect(
-    readContinuityApprovalWithRecovery(() => {
+    readContinuityApprovalWithRecovery(async () => {
       controller.abort();
       throw new HostedOperatorError("operator_unavailable");
     }, controller.signal),

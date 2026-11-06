@@ -50,7 +50,7 @@ export const CodeOnly: Story = {
   args: {
     request: {
       ...authorizationRequest,
-      authorization: { ...authorizationRequest.authorization, url: null },
+      authorization: { ...authorizationRequest.authorization, url: undefined },
     },
   },
 };

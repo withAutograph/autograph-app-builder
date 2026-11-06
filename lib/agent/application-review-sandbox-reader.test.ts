@@ -14,9 +14,9 @@ const fixture = () => {
       throw new Error("owner revoked");
     }
   });
-  const readFile = vi.fn<Session["readFile"]>(() => null);
+  const readFile = vi.fn<Session["readFile"]>(async () => null);
   const currentSession = vi.fn(() => ({ readFile }));
-  const get = vi.fn<Lookup>(() => ({ currentSession }));
+  const get = vi.fn<Lookup>(async () => ({ currentSession }));
   return {
     assertCurrentOwner,
     currentSession,
@@ -74,7 +74,7 @@ describe("read-only application review Sandbox reconstruction", () => {
     expect(await reader.readFile({ path: "/workspace/repository/missing.ts" })).toBeNull();
     expect(state.readFile).toHaveBeenCalledWith(
       { path: "/workspace/repository/missing.ts" },
-      { signal: null },
+      { signal: undefined },
     );
   });
 
@@ -118,7 +118,7 @@ describe("read-only application review Sandbox reconstruction", () => {
 
   it("rechecks ownership after lookup and before resolving its session", async () => {
     const state = fixture();
-    state.get.mockImplementation(() => {
+    state.get.mockImplementation(async () => {
       state.revoke();
       return { currentSession: state.currentSession };
     });
@@ -143,7 +143,7 @@ describe("read-only application review Sandbox reconstruction", () => {
     const state = fixture();
     const source = Readable.from([Buffer.from("private source")]);
     const destroyed = vi.spyOn(source, "destroy");
-    state.readFile.mockImplementation(() => {
+    state.readFile.mockImplementation(async () => {
       state.revoke();
       return source;
     });
@@ -169,7 +169,7 @@ describe("read-only application review Sandbox reconstruction", () => {
     const state = fixture();
     const controller = new AbortController();
     const reason = new Error("Stop during lookup");
-    state.get.mockImplementation(() => {
+    state.get.mockImplementation(async () => {
       controller.abort(reason);
       return { currentSession: state.currentSession };
     });
@@ -186,7 +186,7 @@ describe("read-only application review Sandbox reconstruction", () => {
     const reason = new Error("read cancelled");
     const source = Readable.from([Buffer.from("source")]);
     const destroyed = vi.spyOn(source, "destroy");
-    state.readFile.mockImplementation((_file, options) => {
+    state.readFile.mockImplementation(async (_file, options) => {
       expect(options?.signal?.aborted).toBe(false);
       request.abort(reason);
       expect(options?.signal?.aborted).toBe(true);

@@ -54,14 +54,11 @@ export const installAppIntegrations = async (input: {
 }) => {
   const command = appIntegrationsInstallCommand(input.appId);
   try {
-    const options: Parameters<typeof input.sandbox.run>[0] = {
+    const result = await input.sandbox.run({
       command,
       workingDirectory: input.root,
-    };
-    if (input.signal !== undefined) {
-      options.abortSignal = input.signal;
-    }
-    const result = await input.sandbox.run(options);
+      ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+    });
     const stderr = safeCommandOutput(result.stderr);
     if (result.exitCode !== 0) {
       return {
@@ -78,25 +75,22 @@ export const installAppIntegrations = async (input: {
       };
     }
     const receipt = integrationInstallReceipt(input.appId).parse(JSON.parse(result.stdout));
-    const response = {
-      capabilityState:
-        receipt.status === "omitted" ? ("source-omitted" as const) : ("source-installed" as const),
+    return {
       command,
       exitCode: 0,
-      files: receipt.files.map((file) => safeCommandOutput(file)),
+      status: receipt.status,
+      capabilityState:
+        receipt.status === "omitted" ? ("source-omitted" as const) : ("source-installed" as const),
       nextStep:
         receipt.status === "omitted"
           ? "Continue normal app validation and delivery planning. Source opt-in is omitted; preserve retained bindings and resources through their existing release reconciliation."
           : "Validate the installed source. Any runtime capability setup and provider effects remain separate approved operations.",
-      providerReadiness: "unverified" as const,
+      files: receipt.files.map((file) => safeCommandOutput(file)),
       providers: receipt.providers,
-      status: receipt.status,
+      ...(receipt.readiness === undefined ? {} : { readiness: receipt.readiness }),
+      providerReadiness: "unverified" as const,
       stderr,
     };
-    if (receipt.readiness !== undefined) {
-      return { ...response, readiness: receipt.readiness };
-    }
-    return response;
   } catch (error) {
     return {
       command,

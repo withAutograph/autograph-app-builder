@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/filename-case, github/filenames-match-regex -- Preserve the registered Eve tool name and public workflow identity. */
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
@@ -33,7 +32,6 @@ import {
 import type {
   CandidateValidationAttempt,
   DraftReconciliationCandidate,
-  ReconciliationCompilation,
 } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import {
@@ -229,13 +227,12 @@ const runCandidateCommandWithLogs = async <
     unique: randomUUID(),
   };
   let attemptDigest: string | undefined;
-  let store: ValidationLogStore | null | undefined;
+  let store: ValidationLogStore | undefined;
   let writers:
     | {
         stderr: ValidationLogWriter;
         stdout: ValidationLogWriter;
       }
-    | null
     | undefined;
   try {
     const digest = createHash("sha256").update(JSON.stringify(binding)).digest("hex");
@@ -249,7 +246,7 @@ const runCandidateCommandWithLogs = async <
         sessionAuth: input.sessionAuth,
         sessionId: input.sessionId,
       });
-      if (store !== undefined && store !== null) {
+      if (store !== undefined) {
         writers = {
           stderr: new ValidationLogWriter(
             store,
@@ -275,13 +272,13 @@ const runCandidateCommandWithLogs = async <
       }
     }
   } catch {
-    store = null;
-    writers = null;
+    store = undefined;
+    writers = undefined;
   }
   const logs: CandidateValidationAttempt["logs"] = {};
   const finish = async (completion: "complete" | "interrupted", exitCode: number | null) => {
     let durability: CandidateValidationAttempt["durability"] = "unavailable";
-    if (writers !== undefined && writers !== null) {
+    if (writers !== undefined) {
       try {
         const [stdout, stderr] = await Promise.all([
           writers.stdout.finishCapture(completion),
@@ -587,7 +584,7 @@ const runIncrementalValidation = async (
     const acknowledgedSchema = completed.filter((entry) => entry.kind === "schema");
     run = {
       ...run,
-      compilation: null,
+      compilation: undefined,
       nextIndex: acknowledgedSchema.length,
       steps: [
         ...acknowledgedSchema,
@@ -681,7 +678,7 @@ const runIncrementalValidation = async (
   }
   let result: ValidationStepResult;
   let recovery: ValidationStep | undefined;
-  let compilation: ReconciliationCompilation | undefined = run.compilation;
+  let { compilation } = run;
   try {
     if (step.kind === "install") {
       if (step.command !== installCommand) {
@@ -707,12 +704,8 @@ const runIncrementalValidation = async (
       };
     } else if (step.kind === "capture") {
       try {
-        const { compilation: capturedCompilation } = await publishCandidateArtifacts(
-          ctx,
-          candidate,
-          sandbox,
-        );
-        compilation = capturedCompilation;
+        const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
+        compilation = captured.compilation;
       } catch {
         ctx.abortSignal?.throwIfAborted();
         return {
@@ -767,7 +760,7 @@ const runIncrementalValidation = async (
         command: step.command,
         resolvedTree: before.resolvedTree,
         run: async () =>
-          await prepareAppLocalPreview({
+          prepareAppLocalPreview({
             appId: candidate.appId,
             root: candidate.root,
             sandbox,
@@ -817,23 +810,25 @@ const runIncrementalValidation = async (
       const execution =
         step.kind === "check" && planned !== undefined
           ? await runCandidateCommandWithLogs({
-              callId: ctx.callId,
-              candidate,
               category: planned.name,
               command: planned.command,
+              candidate,
+              callId: ctx.callId,
               resolvedTree: before.resolvedTree,
+              sessionAuth: ctx.session.auth,
+              sessionId: ctx.session.id,
+              // Preserve the executor's detached command lifecycle and capture its returned output.
               run: async () =>
-                await sandboxValidationCommandExecutor({
+                sandboxValidationCommandExecutor({
                   alreadyCompiled,
                   testShards,
                 })({
+                  abortSignal: ctx.abortSignal,
                   appId: candidate.appId,
                   command: planned.command,
                   sandbox,
                   validationRoot: candidate.root,
                 }),
-              sessionAuth: ctx.session.auth,
-              sessionId: ctx.session.id,
             })
           : await runCandidateCommandWithLogs({
               callId: ctx.callId,
@@ -842,12 +837,12 @@ const runIncrementalValidation = async (
               command: step.command,
               resolvedTree: before.resolvedTree,
               run: async (onChunk) =>
-                await runAdditionalCandidateCheck({
-                  command: step.command,
-                  onChunk,
-                  root: candidate.root,
+                runAdditionalCandidateCheck({
                   sandbox,
+                  command: step.command,
+                  root: candidate.root,
                   signal: ctx.abortSignal,
+                  onChunk,
                 }),
               sessionAuth: ctx.session.auth,
               sessionId: ctx.session.id,
@@ -924,7 +919,7 @@ const runIncrementalValidation = async (
       }
       const recoveryRun = {
         ...run,
-        compilation: null,
+        compilation: undefined,
         nextIndex: completedRecovery.length,
         resolvedTree: changed.resolvedTree,
         schemaTaskCompleted: recovery.kind === "schema" ? undefined : run.schemaTaskCompleted,

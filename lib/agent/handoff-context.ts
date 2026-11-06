@@ -6,24 +6,16 @@ import {
   sourceHandoffIdForSessionAuth,
 } from "../hosted/session-authority";
 import type { HostedSessionTenantAuthority } from "../hosted/session-authority";
-import { z } from "zod";
-
-const preparedHandoffSessionAuthSchema = z.strictObject({
-  current: z.unknown(),
-  initiator: z.unknown(),
-});
-type PreparedHandoffSessionAuth = z.infer<typeof preparedHandoffSessionAuthSchema>;
-type SessionAuth = Parameters<typeof exactForwardedSessionAuthority>[0];
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreparedHandoffReader(input: {
   read: BuilderHandoffStore["read"];
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
 }) {
-  return async (sessionAuth: PreparedHandoffSessionAuth) => {
+  return async (sessionAuth: unknown) => {
     const handoffId = sourceHandoffIdForSessionAuth(sessionAuth);
     if (handoffId === undefined) {
-      return null;
+      return;
     }
     const { authority } = exactForwardedSessionAuthority(sessionAuth);
     if (!(await input.isActiveMember(authority))) {
@@ -36,17 +28,15 @@ export function createPreparedHandoffReader(input: {
     const record = builderHandoffRecordSchema.parse(stored);
     if (
       record.handoffId !== handoffId ||
-      Object.entries(authority).some(([key, value]) =>
-        Object.entries(record.authority).some(
-          ([recordKey, recordValue]) => recordKey === key && recordValue !== value,
-        ),
+      Object.entries(authority).some(
+        ([key, value]) => record.authority[key as keyof HostedSessionTenantAuthority] !== value,
       )
     ) {
       throw new BuilderHandoffUnavailableError();
     }
     // Initial redemption checks expiry. A trusted session retains its prepared
     // context afterwards, including when its engine is restarted or recovered.
-    return record.intent ?? null;
+    return record.intent;
   };
 }
 
@@ -74,7 +64,7 @@ async function createDeploymentPreparedHandoffReader() {
     read: createPostgresBuilderHandoffStore(database).read,
   });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-  return async (sessionAuth: PreparedHandoffSessionAuth) => {
+  return async (sessionAuth: unknown) => {
     const { authority } = exactForwardedSessionAuthority(sessionAuth);
     if (authority.issuer !== config.issuer || authority.audience !== config.resource) {
       throw new BuilderHandoffUnavailableError();
@@ -85,25 +75,24 @@ async function createDeploymentPreparedHandoffReader() {
 
 // Cache only principal-free infrastructure. Membership, owner-bound context,
 // and provider credentials are always resolved anew for each invocation.
-let deploymentReader: ReturnType<typeof createDeploymentPreparedHandoffReader> | null = null;
+let deploymentReader: ReturnType<typeof createDeploymentPreparedHandoffReader> | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function readPreparedHandoffContext(sessionAuth: SessionAuth) {
+export async function readPreparedHandoffContext(sessionAuth: unknown) {
   if (sourceHandoffIdForSessionAuth(sessionAuth) === undefined) {
-    return null;
+    return;
   }
   // Preserve the shared lazy promise while clearing it after a failed creation.
   // oxlint-disable promise/prefer-await-to-callbacks
   // oxlint-disable-next-line promise/prefer-await-to-callbacks
   // Preserve the shared lazy promise while clearing it after a failed creation.
   // oxlint-disable-next-line promise/prefer-await-to-then
-  deploymentReader ??= createDeploymentPreparedHandoffReader();
-  try {
-    return await (
-      await deploymentReader
-    )(sessionAuth);
-  } catch {
-    deploymentReader = null;
-    throw new BuilderHandoffUnavailableError();
-  }
+  deploymentReader ??= createDeploymentPreparedHandoffReader().catch((error: unknown) => {
+    deploymentReader = undefined;
+    throw error;
+  });
+  // oxlint-enable promise/prefer-await-to-callbacks
+  return await (
+    await deploymentReader
+  )(sessionAuth);
 }

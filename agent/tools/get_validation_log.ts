@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/filename-case -- Eve tool discovery requires the public snake_case tool name. */
 import {
   validationAttemptLogReadInputs,
   validationLogReadInput,

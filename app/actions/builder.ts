@@ -11,10 +11,7 @@ import {
   getBuilderHandoffPageData,
 } from "@/lib/handoff/deployment";
 import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/deployment";
-import {
-  builderProvisionRequestSchema,
-  builderProvisionResponseSchema,
-} from "@/lib/provisioning/contracts";
+import { builderProvisionRequestSchema } from "@/lib/provisioning/contracts";
 import type { BuilderProvisionResponse } from "@/lib/provisioning/contracts";
 import { sourceCandidateReferenceSchema } from "@/lib/handoff/application-source-contract";
 import {
@@ -23,42 +20,45 @@ import {
 } from "@/lib/handoff/source-upload-deployment";
 import { deriveBuilderAppId } from "@/lib/provisioning/names";
 
-const resolvedHandoffContinuationInputSchema = z.strictObject({
-  creationRequestId: z.uuid(),
-  form: z.strictObject({
-    appName: z.string().trim().min(1).max(120),
-    brief: z.string().trim().min(1).max(32_000),
-    buildDestination: z.enum(["web", "codex", "cursor"]),
-    connections: z.array(z.string().trim().min(1).max(100)).max(50),
-    githubInstallationId: z
-      .string()
-      .regex(/^[1-9][0-9]*$/u)
-      .optional(),
-    modelId: z.string().min(1).max(100),
-    privateRepository: z.boolean(),
-    repository: z
-      .string()
-      .trim()
-      .min(1)
-      .max(100)
-      .regex(/^[A-Za-z0-9._-]+$/u),
-    sourceCandidate: sourceCandidateReferenceSchema.optional(),
-    vercelInstallationId: z.string().min(1).max(256).optional(),
-  }),
-  provisioningEnabled: z.boolean(),
-  requestId: z.uuid(),
-  retryProvider: z.enum(["github", "vercel"]).optional(),
-  version: z.literal(1),
-});
+const resolvedHandoffContinuationInputSchema = z
+  .object({
+    creationRequestId: z.uuid(),
+    form: z
+      .object({
+        appName: z.string().trim().min(1).max(120),
+        brief: z.string().trim().min(1).max(32_000),
+        buildDestination: z.enum(["web", "codex", "cursor"]),
+        connections: z.array(z.string().trim().min(1).max(100)).max(50),
+        githubInstallationId: z
+          .string()
+          .regex(/^[1-9][0-9]*$/u)
+          .optional(),
+        modelId: z.string().min(1).max(100),
+        privateRepository: z.boolean(),
+        repository: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .regex(/^[A-Za-z0-9._-]+$/u),
+        sourceCandidate: sourceCandidateReferenceSchema.optional(),
+        vercelInstallationId: z.string().min(1).max(256).optional(),
+      })
+      .strict(),
+    provisioningEnabled: z.boolean(),
+    requestId: z.uuid(),
+    retryProvider: z.enum(["github", "vercel"]).optional(),
+    version: z.literal(1),
+  })
+  .strict();
 
-const handoffContinuationInputSchema = z.strictObject({
-  creationRequestId: z.uuid(),
-  draftCheckpoint: z.strictObject({ draftId: z.uuid(), revision: z.number().int().positive() }),
-  provisioningEnabled: z.boolean(),
-  requestId: z.uuid(),
-  retryProvider: z.enum(["github", "vercel"]).optional(),
-  version: z.literal(1),
-});
+const handoffContinuationInputSchema = resolvedHandoffContinuationInputSchema
+  .omit({ form: true })
+  .extend({
+    draftCheckpoint: z
+      .object({ draftId: z.uuid(), revision: z.number().int().positive() })
+      .strict(),
+  });
 
 export type BuilderHandoffContinuationInput = z.infer<typeof handoffContinuationInputSchema>;
 type ResolvedHandoffContinuationInput = z.infer<typeof resolvedHandoffContinuationInputSchema>;
@@ -71,10 +71,12 @@ export type BuilderHandoffContinuationState =
     }
   | { status: "error" };
 
-const handoffProvisioningContinuationInputSchema = z.strictObject({
-  handoffId: z.uuid(),
-  retryProvider: z.enum(["github", "vercel"]).optional(),
-});
+const handoffProvisioningContinuationInputSchema = z
+  .object({
+    handoffId: z.uuid(),
+    retryProvider: z.enum(["github", "vercel"]).optional(),
+  })
+  .strict();
 
 export type HandoffProvisioningContinuationState = { status: "updated" } | { status: "error" };
 
@@ -90,25 +92,21 @@ async function sameOriginHeaders(contentType?: string) {
   const forwarded = new Headers(incoming);
   const { origin } = new URL(requestUrl("/"));
   forwarded.set("origin", origin);
-  if (contentType !== undefined && contentType !== "") {
+  if (contentType) {
     forwarded.set("content-type", contentType);
   }
   return forwarded;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function readJson<T>(response: Response, fallback: string, schema: z.ZodType<T>): Promise<T> {
+async function readJson<T>(response: Response, fallback: string): Promise<T> {
   if (!response.ok) {
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
+    const payload = (await response.json().catch(() => {
       // Invalid JSON has no error payload.
-    }
-    const error = z.object({ error: z.string().optional() }).safeParse(payload);
-    throw new Error(error.success ? (error.data.error ?? fallback) : fallback);
+    })) as { error?: string } | undefined;
+    throw new Error(payload?.error ?? fallback);
   }
-  return schema.parse(await response.json());
+  return (await response.json()) as T;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -131,7 +129,7 @@ export async function provisionBuilderProvider(input: {
       method: "POST",
     }),
   );
-  return await readJson(response, "provisioning_unavailable", builderProvisionResponseSchema);
+  return await readJson(response, "provisioning_unavailable");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -154,7 +152,7 @@ export async function reserveBuilderProvider(input: {
       method: "POST",
     }),
   );
-  return await readJson(response, "provisioning_unavailable", builderProvisionResponseSchema);
+  return await readJson(response, "provisioning_unavailable");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -166,7 +164,7 @@ export async function readBuilderProviderProvisioning(requestId: string) {
       headers: await sameOriginHeaders(),
     }),
   );
-  return await readJson(response, "provisioning_unavailable", builderProvisionResponseSchema);
+  return await readJson<BuilderProvisionResponse>(response, "provisioning_unavailable");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -190,11 +188,11 @@ export async function createBuilderHandoff(input: {
       method: "POST",
     }),
   );
-  return await readJson(
-    response,
-    "handoff_unavailable",
-    z.strictObject({ expiresAt: z.string(), handoffId: z.string(), version: z.literal(1) }),
-  );
+  return await readJson<{
+    version: 1;
+    handoffId: string;
+    expiresAt: string;
+  }>(response, "handoff_unavailable");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -202,27 +200,25 @@ function provisioningInput(
   input: ResolvedHandoffContinuationInput,
   operation: "github" | "vercel",
 ) {
-  const request = {
+  return builderProvisionRequestSchema.parse({
     appName: input.form.sourceCandidate?.appId ?? input.form.appName,
     deploymentAccess: "public-app",
     operation,
-    providers: {},
+    providers: {
+      ...(input.form.githubInstallationId
+        ? { githubInstallationId: input.form.githubInstallationId }
+        : {}),
+      ...(input.form.vercelInstallationId
+        ? { vercelInstallationId: input.form.vercelInstallationId }
+        : {}),
+    },
     repository: {
       name: input.form.repository,
       private: input.form.privateRepository,
     },
     requestId: input.requestId,
     version: 1,
-  };
-  const providers = {} satisfies NonNullable<typeof request.providers>;
-  if (input.form.githubInstallationId !== undefined && input.form.githubInstallationId !== "") {
-    providers.githubInstallationId = input.form.githubInstallationId;
-  }
-  if (input.form.vercelInstallationId !== undefined && input.form.vercelInstallationId !== "") {
-    providers.vercelInstallationId = input.form.vercelInstallationId;
-  }
-  request.providers = providers;
-  return builderProvisionRequestSchema.parse(request);
+  });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -272,25 +268,25 @@ async function createContinuationHandoff(
   input: ResolvedHandoffContinuationInput,
   provisioning: BuilderProvisionResponse,
 ) {
-  const handoffInput = {
-    appName: input.form.appName,
-    brief: input.form.brief,
-    connections: input.form.connections,
+  return await createBuilderHandoff({
     creationRequestId: input.creationRequestId,
     destination: input.form.buildDestination === "cursor" ? "cursor" : "codex",
+    version: 1,
+    ...(provisioning.requestDigest === "0".repeat(64)
+      ? {}
+      : { provisioningRequestId: provisioning.requestId }),
+    appName: input.form.appName,
+    ...(input.form.sourceCandidate === undefined
+      ? {}
+      : { sourceCandidate: input.form.sourceCandidate }),
+    brief: input.form.brief,
+    connections: input.form.connections,
     modelId: input.form.modelId,
     repository: {
       name: input.form.repository,
       private: input.form.privateRepository,
     },
-  };
-  if (provisioning.requestDigest !== "0".repeat(64)) {
-    Object.assign(handoffInput, { provisioningRequestId: provisioning.requestId });
-  }
-  if (input.form.sourceCandidate !== undefined) {
-    Object.assign(handoffInput, { sourceCandidate: input.form.sourceCandidate });
-  }
-  return await createBuilderHandoff(handoffInput);
+  });
 }
 
 /**
@@ -364,14 +360,10 @@ export async function continueBuilderHandoff(
     );
 
     if (input.provisioningEnabled) {
-      const githubSelected =
-        input.form.githubInstallationId !== undefined && input.form.githubInstallationId !== "";
-      const vercelSelected =
-        input.form.vercelInstallationId !== undefined && input.form.vercelInstallationId !== "";
-      const operation = githubSelected ? "github" : "vercel";
+      const operation = input.form.githubInstallationId ? "github" : "vercel";
       if (
-        (githubSelected && operation === "github") ||
-        (vercelSelected && operation === "vercel")
+        (operation === "github" && input.form.githubInstallationId) ||
+        (operation === "vercel" && input.form.vercelInstallationId)
       ) {
         // Reserve once, before the handoff exists. The visible handoff route
         // subsequently owns lease-safe provider continuation.
@@ -412,18 +404,21 @@ export async function continueHandoffProvisioning(
     });
     const requestId = data?.intent.provisioningRequestId;
     const providers = data?.intent.providers;
-    if (!data || requestId === undefined || requestId === "" || !providers) {
+    if (!data || !requestId || !providers) {
       return { status: "error" };
     }
 
     const run = async (operation: "github" | "vercel") => {
       const selected =
         operation === "github" ? providers.githubInstallationId : providers.vercelInstallationId;
-      if (selected === undefined || selected === "") {
+      if (!selected) {
         return;
       }
-      const providerInput = {
+      await provisionBuilderProvider({
         appName: data.intent.appName,
+        ...(data.intent.provisioning?.deploymentAccess === undefined
+          ? {}
+          : { deploymentAccess: data.intent.provisioning.deploymentAccess }),
         operation,
         providers,
         repository: {
@@ -432,25 +427,19 @@ export async function continueHandoffProvisioning(
         },
         requestId,
         version: 1,
-      };
-      if (data.intent.provisioning?.deploymentAccess !== undefined) {
-        Object.assign(providerInput, {
-          deploymentAccess: data.intent.provisioning.deploymentAccess,
-        });
-      }
-      await provisionBuilderProvider(providerInput);
+      });
     };
 
     if (parsed.data.retryProvider) {
       await run(parsed.data.retryProvider);
     } else {
-      if (providers.githubInstallationId !== undefined && providers.githubInstallationId !== "") {
+      if (providers.githubInstallationId) {
         await run("github");
       }
       // The Vercel operation durably records `github_required` when GitHub
       // has not succeeded, so the journal settles instead of leaving an
       // indefinite pending handoff. A later GitHub retry safely re-runs it.
-      if (providers.vercelInstallationId !== undefined && providers.vercelInstallationId !== "") {
+      if (providers.vercelInstallationId) {
         await run("vercel");
       }
     }

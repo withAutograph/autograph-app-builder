@@ -337,38 +337,35 @@ export const createApplicationReviewEvidence = (input: {
     }
     return await pending;
   };
-  const documents = new Map<string, Promise<string>>();
-  documents.set("original", Promise.resolve(input.reviewInput.originalRequest ?? ""));
+  const documents = new Map<string, () => Promise<string>>();
+  documents.set("original", async () => input.reviewInput.originalRequest ?? "");
   for (const [index, text] of input.reviewInput.clarifications.entries()) {
-    documents.set(`clarification-${index}`, Promise.resolve(text));
+    documents.set(`clarification-${index}`, async () => text);
   }
-  documents.set(
-    "app-spec",
-    (async () => {
-      if (input.appSpecParts === undefined) {
-        return input.reviewInput.appSpec;
-      }
-      const parts: string[] = [];
-      for await (const part of input.appSpecParts()) {
-        input.abortSignal?.throwIfAborted();
-        parts.push(part);
-      }
-      return parts.join("");
-    })(),
-  );
+  documents.set("app-spec", async () => {
+    if (input.appSpecParts === undefined) {
+      return input.reviewInput.appSpec;
+    }
+    const parts: string[] = [];
+    for await (const part of input.appSpecParts()) {
+      input.abortSignal?.throwIfAborted();
+      parts.push(part);
+    }
+    return parts.join("");
+  });
   const requirementText = new Map<string, Promise<string>>();
   const loadRequirement = async (id: string): Promise<string> => {
     input.abortSignal?.throwIfAborted();
-    const pending = documents.get(id);
-    if (pending === undefined) {
+    const load = documents.get(id);
+    if (load === undefined) {
       throw new ApplicationReviewSelectionError("Requested requirement document is unavailable.");
     }
-    let cached = requirementText.get(id);
-    if (cached === undefined) {
-      cached = pending;
-      requirementText.set(id, cached);
+    let pending = requirementText.get(id);
+    if (pending === undefined) {
+      pending = load();
+      requirementText.set(id, pending);
     }
-    return await cached;
+    return await pending;
   };
   return {
     changedPaths: input.changedPaths,
@@ -389,11 +386,7 @@ export const createApplicationReviewEvidence = (input: {
         );
       }
       const end = requirementPageEnd(text, cursor);
-      const page = { text: text.slice(cursor, end) };
-      if (end < text.length) {
-        return { ...page, nextCursor: end };
-      }
-      return page;
+      return { text: text.slice(cursor, end), ...(end < text.length ? { nextCursor: end } : {}) };
     },
     async readSource({ path, startLine = 1, endLine, cursor }) {
       const text = await loadSource(path);
@@ -422,26 +415,26 @@ export const createApplicationReviewEvidence = (input: {
         const endOffset = startOffset + content.length;
         const last = content.length === 0 ? position : sourcePosition(starts, endOffset - 1);
         const next = sourcePosition(starts, endOffset);
-        const payload = {
-          content,
+        return {
+          path,
           digest: fileByPath.get(path)?.digest ?? "",
+          content,
+          startLine: position.line,
+          startColumn: position.column,
           // Lines are inclusive; endColumn is exclusive after the final character on endLine.
           // A terminating newline occupies the final column; nextCursor advances to the next line.
-          endColumn: content.length === 0 ? position.column : last.column + 1,
           endLine: last.line,
-          path,
-          startColumn: position.column,
-          startLine: position.line,
+          endColumn: content.length === 0 ? position.column : last.column + 1,
           totalLines: starts.length,
+          ...(endOffset < rangeEnd
+            ? {
+                nextCursor: {
+                  ...next,
+                  ...(requestedEnd === undefined ? {} : { endLine: requestedEnd }),
+                },
+              }
+            : {}),
         };
-        if (endOffset < rangeEnd) {
-          const nextCursor = { ...next };
-          if (requestedEnd !== undefined) {
-            nextCursor.endLine = requestedEnd;
-          }
-          return { ...payload, nextCursor };
-        }
-        return payload;
       };
       const result =
         startOffset === windowEnd

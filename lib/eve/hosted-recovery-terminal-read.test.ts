@@ -73,18 +73,16 @@ const fixture = async () => {
   const beforeRead = vi.fn<
     NonNullable<Parameters<typeof createHostedEveSessionService>[0]["beforeRead"]>
   >(async () => {
-    await Promise.resolve();
     throw new Error("beforeRead must stay fenced");
   });
   const assertNativeRecoveryOwner = vi.fn(async () => {
-    await Promise.resolve();
-    if (!ownerAllowed) {
-      throw new Error("Current owner revoked");
-    }
+    ownerAllowed
+      ? await Promise.resolve()
+      : await Promise.reject(new Error("Current owner revoked"));
   });
-  const activateRecovery = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(
-    async () => await Promise.reject(new Error("Native activation HTTP 503")),
-  );
+  const activateRecovery = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(async () => {
+    throw new Error("Native activation HTTP 503");
+  });
   const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
     expect(input.adapterSessionId).toBe("run_child");
     expect(input.sessionId).toBe(childSessionId);
@@ -139,23 +137,11 @@ const fixture = async () => {
     });
   const transport: HostedEveTransport = {
     activateRecovery,
-    cancel: vi.fn(async () => {
-      await Promise.resolve();
-      return { events: [], status: "cancelled" as const };
-    }),
-    get: vi.fn(async () => {
-      await Promise.resolve();
-      return working;
-    }),
+    cancel: vi.fn(async () => ({ events: [], status: "cancelled" as const })),
+    get: vi.fn(async () => working),
     observe,
-    respond: vi.fn(async () => {
-      await Promise.resolve();
-      return working;
-    }),
-    send: vi.fn(async () => {
-      await Promise.resolve();
-      return working;
-    }),
+    respond: vi.fn(async () => working),
+    send: vi.fn(async () => working),
     start,
   };
   const seed = createHostedEveSessionService({
@@ -185,7 +171,6 @@ const fixture = async () => {
     },
   );
   const getSession: HostedEveStore["getSession"] = async (owner, sessionId) => {
-    await Promise.resolve();
     if (tenantKeyFor(owner) !== tenantKeyFor(principal)) {
       return null;
     }
@@ -194,7 +179,6 @@ const fixture = async () => {
       : await base.getSession(owner, sessionId);
   };
   const readCheckpointPage: NonNullable<HostedEveStore["readCheckpointPage"]> = async (input) => {
-    await Promise.resolve();
     const current = page;
     if (current === null || current.id !== input.checkpointRef.id) {
       throw new Error("Unknown checkpoint page");
@@ -210,7 +194,6 @@ const fixture = async () => {
   };
   const observeSessionPaged = vi.fn<NonNullable<HostedEveStore["observeSessionPaged"]>>(
     async (input) => {
-      await Promise.resolve();
       const previous = await getSession(input.principal, input.sessionId);
       if (previous?.version !== 2 || previous.checkpointDigest !== input.expectedCheckpointDigest) {
         throw new Error("Paged observation lost canonical child");

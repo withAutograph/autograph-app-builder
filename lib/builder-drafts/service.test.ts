@@ -194,7 +194,6 @@ describe("builder draft service", () => {
       record: { ...record(), unexpected: true },
     };
 
-    // SAFETY: Spreading saveInput() preserves every required SaveActiveBuilderDraftInput field; only record gains the deliberately invalid extra property.
     await expect(
       service.saveActive(authority, invalid as SaveActiveBuilderDraftInput),
     ).rejects.toThrow();

@@ -171,8 +171,8 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       publication: scope.publication,
       source: origin.source,
     };
-    mocks.onOwnedRead = null;
-    mocks.onSourceRead = null;
+    mocks.onOwnedRead = undefined;
+    mocks.onSourceRead = undefined;
     mocks.prepare.mockReset();
     mocks.prepare.mockImplementation(async (request) => ({
       ...structuredClone(mocks.candidate),
@@ -258,7 +258,7 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     });
     expect(result.root).toBe(before.root);
     expect(mocks.prepare).toHaveBeenCalledOnce();
-    const [[request]] = mocks.prepare.mock.calls;
+    const request = mocks.prepare.mock.calls[0][0];
     expect(request.previousCandidate).toEqual(before);
     expect(request.replayPreviousCandidate).toBe(true);
     expect(request.forceFreshCandidate).toBeUndefined();
@@ -381,7 +381,7 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     mocks.onSourceRead = () => {
       mocks.candidate = {
         ...Object.fromEntries(Object.entries(mocks.candidate).toReversed()),
-        review: null,
+        review: undefined,
       } as Candidate;
     };
     const result = await preparePublishedDraftReconciliation({

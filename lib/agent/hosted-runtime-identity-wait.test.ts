@@ -30,18 +30,18 @@ const result = {
 };
 const context: WorkflowToolContext = {
   abortSignal: new AbortController().signal,
-  agent() {
+  agent: async () => {
     throw new Error("No agent call is expected");
   },
   agents: {},
-  ask() {
+  ask: async () => {
     throw new Error("No confirmation is expected");
   },
   callId: "approved-call",
-  getToken() {
+  getToken: async () => {
     throw new Error("No provider token is expected");
   },
-  requireAuth() {
+  requireAuth: () => {
     throw new Error("No provider authorization is expected");
   },
   session: {
@@ -60,32 +60,34 @@ const fixture = (conflict = false) => {
   const dispose = vi.fn(() => {
     events.push("dispose");
   });
-  const register = vi.fn<HostedRuntimeIdentityWaitPorts["register"]>(() => {
+  const register = vi.fn<HostedRuntimeIdentityWaitPorts["register"]>(async () => {
     events.push("register");
     return { status: "waiting" };
   });
-  const acknowledge = vi.fn<HostedRuntimeIdentityWaitPorts["acknowledge"]>(() => {
+  const acknowledge = vi.fn<HostedRuntimeIdentityWaitPorts["acknowledge"]>(async () => {
     events.push("acknowledge");
     return { eventId: "canonical-event", status: "consumed" };
   });
   const prepare = vi
     .fn<typeof prepareHostedRuntimeStep>()
     .mockResolvedValueOnce({ identityInput, result })
-    .mockImplementationOnce(() => {
+    .mockImplementationOnce(async () => {
       events.push("readback");
       return { identityInput: null, result: { ...result, status: "prepared" } };
     });
   const ports: HostedRuntimeIdentityWaitPorts = {
     acknowledge,
     createHook: () => ({
-      dispose,
-      getConflict: () => {
+      token: "private-hook-token",
+      // oxlint-disable-next-line unicorn/no-thenable, github/no-then -- Model the documented Workflow Hook thenable without invoking its VM runtime.
+      then: callback.promise.then.bind(callback.promise),
+      getConflict: async () => {
         events.push("committed");
         return conflict ? {} : null;
       },
-      then: callback.promise.then.bind(callback.promise),
-      token: "private-hook-token",
+      dispose,
     }),
+    register,
     sleepUntil: vi.fn(async () => {
       await expiry.promise;
     }),
@@ -123,14 +125,14 @@ describe("owner identity continuation", () => {
     const registerReceivers: boolean[] = [];
     const acknowledgeReceivers: boolean[] = [];
     let registrations = 0;
-    f.ports.register = function register(this: undefined) {
+    f.ports.register = async function register(this: undefined) {
       registerReceivers.push(this === undefined);
       registrations += 1;
       return registrations === 1
         ? { status: "waiting" as const }
         : { eventId: "canonical-event", status: "consumed" as const };
     };
-    f.ports.acknowledge = function acknowledge(this: undefined) {
+    f.ports.acknowledge = async function acknowledge(this: undefined) {
       acknowledgeReceivers.push(this === undefined);
       return { eventId: "canonical-event", status: "consumed" };
     };

@@ -35,6 +35,7 @@ export type DeploymentGitHubPublicationConfig =
       };
     };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function rejectAmbientGitHubAuthority(
   environment: Readonly<Record<string, string | undefined>>,
 ): void {
@@ -113,7 +114,7 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
   return createHostedGitHubPublicationRuntimeResolver({
     dependencies: input.resolverDependencies,
     enabled: true,
-    openDatabase: async () => await openDatabase(config.databaseUrl),
+    openDatabase: () => openDatabase(config.databaseUrl),
     prEffectsEnabled: (input.environment.APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED ?? "1") === "1",
     providerFactory: ({ authority, installation }) =>
       createAdapter(
@@ -129,7 +130,7 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
 let defaultResolver: HostedGitHubPublicationRuntimeResolver | undefined;
 
 /** Lazily parses deployment configuration so local discovery stays disabled. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function githubPublicationRuntimeForSession(
   sessionAuth: unknown,
   selection?: { selectedInstallationId: string },

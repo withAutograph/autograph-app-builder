@@ -12,7 +12,8 @@ const authorizationFields = [
   "code_challenge_method",
 ] as const;
 
-const get = async (request: Request, context: { params: Promise<{ provider: string }> }) => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function GET(request: Request, context: { params: Promise<{ provider: string }> }) {
   try {
     const emulation = readProviderEmulation(process.env);
     if (!emulation || emulation.mode !== "preview") {
@@ -27,7 +28,7 @@ const get = async (request: Request, context: { params: Promise<{ provider: stri
       throw new Error("Invalid approval referer.");
     }
     const { searchParams } = new URL(request.url);
-    return await completeAuthorization(
+    return completeAuthorization(
       { params: Promise.resolve({ provider }) },
       Object.fromEntries(
         authorizationFields.map((name) => [
@@ -44,23 +45,22 @@ const get = async (request: Request, context: { params: Promise<{ provider: stri
       status: 400,
     });
   }
-};
+}
 
-export { get as GET };
-
-const post = async (request: Request, context: { params: Promise<{ provider: string }> }) => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function POST(request: Request, context: { params: Promise<{ provider: string }> }) {
   try {
     const emulation = readProviderEmulation(process.env);
     if (!emulation || request.headers.get("origin") !== emulation.canonicalOrigin) {
       throw new Error("Invalid approval origin.");
     }
     const form = await request.formData();
-    return await completeAuthorization(
+    return completeAuthorization(
       context,
       Object.fromEntries(
         authorizationFields.map((name) => [
           name,
-          form.get(name) instanceof File ? undefined : (form.get(name) ?? undefined),
+          typeof form.get(name) === "string" ? String(form.get(name)) : undefined,
         ]),
       ),
     );
@@ -70,6 +70,4 @@ const post = async (request: Request, context: { params: Promise<{ provider: str
       status: 400,
     });
   }
-};
-
-export { post as POST };
+}

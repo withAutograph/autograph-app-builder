@@ -8,48 +8,14 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { themePlugin } from "@/lib/auth/theme-plugin";
 
-// Up/Down on a TabsTrigger escapes back to the previous/next sibling
-// menu item so users can keep navigating the menu with the arrow keys.
-const handleTabsKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
-    return;
-  }
-
-  if (!(event.target instanceof HTMLElement)) {
-    return;
-  }
-
-  const { target } = event;
-  if (target.getAttribute("role") !== "tab") {
-    return;
-  }
-
-  const wrapper = target.closest<HTMLElement>('[role="menuitem"]');
-  const content = wrapper?.closest<HTMLElement>('[data-slot="dropdown-menu-content"]');
-  if (wrapper === null || content === null || content === undefined) {
-    return;
-  }
-
-  const items = [
-    ...content.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])'),
-  ];
-  const currentIndex = items.indexOf(wrapper);
-  const nextIndex = event.key === "ArrowDown" ? currentIndex + 1 : currentIndex - 1;
-  const next = items[nextIndex];
-  if (next === undefined) {
-    return;
-  }
-
-  event.preventDefault();
-  next.focus();
-};
-
 /**
  * Theme toggle dropdown item used inside `UserButton`. Callers are responsible
  * for ensuring theming is configured before rendering this component.
  */
 // Keep keyboard handling local to the theme toggle.
-export const ThemeToggleItem = () => {
+// oxlint-disable-next-line unicorn/consistent-function-scoping
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function ThemeToggleItem() {
   const { useTheme, localization } = useAuthPlugin(themePlugin);
   const { theme, setTheme, themes = [] } = useTheme();
   const tabsListRef = useRef<HTMLDivElement>(null);
@@ -62,6 +28,40 @@ export const ThemeToggleItem = () => {
   const focusActiveTab = () => {
     const activeTab = tabsListRef.current?.querySelector<HTMLElement>('[role="tab"][data-active]');
     activeTab?.focus({ preventScroll: true });
+  };
+
+  // Up/Down on a TabsTrigger escapes back to the previous/next sibling
+  // menu item so users can keep navigating the menu with the arrow keys.
+  // Keep keyboard handling local to the toggle component.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
+  const handleTabsKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return;
+    }
+
+    const target = event.target as HTMLElement;
+    if (target.getAttribute("role") !== "tab") {
+      return;
+    }
+
+    const wrapper = target.closest<HTMLElement>('[role="menuitem"]');
+    const content = wrapper?.closest<HTMLElement>('[data-slot="dropdown-menu-content"]');
+    if (!wrapper || !content) {
+      return;
+    }
+
+    const items = [
+      ...content.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])'),
+    ];
+    const currentIndex = items.indexOf(wrapper);
+    const nextIndex = event.key === "ArrowDown" ? currentIndex + 1 : currentIndex - 1;
+    const next = items[nextIndex];
+    if (!next) {
+      return;
+    }
+
+    event.preventDefault();
+    next.focus();
   };
 
   return (
@@ -86,7 +86,7 @@ export const ThemeToggleItem = () => {
         onKeyDown={handleTabsKeyDown}
       >
         <TabsList ref={tabsListRef} className="h-6!">
-          {themes.length > 0 && themes.includes("system") && (
+          {themes.includes("system") && (
             <TabsTrigger value="system" className="size-5 p-0" aria-label={localization.system}>
               <Monitor className="size-3" />
             </TabsTrigger>
@@ -105,4 +105,4 @@ export const ThemeToggleItem = () => {
       </Tabs>
     </DropdownMenuItem>
   );
-};
+}

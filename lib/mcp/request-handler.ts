@@ -1,5 +1,5 @@
 import { createMcpHandler } from "mcp-handler";
-import { z } from "zod";
+import type { z } from "zod";
 
 import { authorizeHostedPrincipal, HostedAuthorizationError } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -59,13 +59,6 @@ const autographToolScopes = [
   "autograph:respond",
   "autograph:cancel",
 ] as const;
-const toolMetaSchema = z.record(z.string(), z.json());
-const rpcMessageSchema = z.looseObject({ method: z.string(), params: z.json().optional() });
-const rpcMessagesSchema = z.union([rpcMessageSchema, z.array(rpcMessageSchema)]);
-const toolCallSchema = z.looseObject({
-  method: z.literal("tools/call"),
-  params: z.object({ name: z.string() }),
-});
 
 export interface HostedWorkspaceMembership {
   isMember: (input: { principal: HostedPrincipal; workspaceId: string }) => Promise<boolean>;
@@ -76,42 +69,53 @@ type HostedHandoffAuthority = Pick<
   "issuer" | "audience" | "workspaceId" | "ownerUserId"
 >;
 
-type HandoffResolution =
-  | { status: "redeemed"; sessionId: string; deterministicClientRequestId: string }
-  | {
-      status: "unredeemed";
-      prompt: string;
-      deterministicClientRequestId: string;
-      record: {
-        requestDigest: string;
-        intent: { repository: { requestedName: string; resolvedFullName?: string } };
-      };
-    };
-type RepositoryAccessResult =
-  | { status: "ready" }
-  | { status: "provider-unavailable" }
-  | { status: "authorization-required"; action: "connect" | "update" }
-  | { status: "scope-selection-required"; detail?: string };
-type ApprovalResponse = Parameters<
-  NonNullable<EveSessionService["recoverAppliedApprovalResponse"]>
->[0]["responses"][number];
-
 export interface HostedBuilderHandoffRuntime {
-  resolve: (input: {
-    authority: HostedHandoffAuthority;
-    handoffId: string;
-  }) => Promise<HandoffResolution>;
+  resolve: (input: { authority: HostedHandoffAuthority; handoffId: string }) => Promise<
+    | {
+        status: "redeemed";
+        sessionId: string;
+        deterministicClientRequestId: string;
+      }
+    | {
+        status: "unredeemed";
+        prompt: string;
+        deterministicClientRequestId: string;
+        record: {
+          requestDigest: string;
+          intent: {
+            repository: {
+              requestedName: string;
+              resolvedFullName?: string;
+            };
+          };
+        };
+      }
+  >;
   bindSession: (input: {
     authority: HostedHandoffAuthority;
     handoffId: string;
     requestDigest: string;
     sessionId: string;
-  }) => Promise<void>;
+  }) => Promise<unknown>;
   recheckRepositoryAccess: (input: {
     principal: HostedPrincipal;
     repository: string;
     sourceHandoffId?: string;
-  }) => Promise<RepositoryAccessResult>;
+  }) => Promise<
+    | {
+        status: "ready";
+      }
+    | {
+        status: "authorization-required";
+        action: "connect" | "update";
+      }
+    | {
+        status: "scope-selection-required";
+      }
+    | {
+        status: "provider-unavailable";
+      }
+  >;
 }
 
 export interface HostedMcpRuntime {
@@ -150,6 +154,7 @@ const readBuilderProgress = async (
   return await service.list({ cursor: input.cursor, limit: input.limit });
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function withHostedBuilderHandoffs(input: {
   service: EveSessionService;
   principal: HostedPrincipal;
@@ -227,8 +232,8 @@ export function createAutographMcpHandler(
   service: EveSessionService,
   options: { requestUrl?: string; advertiseOauth?: boolean; appAccessOrigin?: string } = {},
 ) {
-  const toolAuthMeta = (_operation: string, meta: z.infer<typeof toolMetaSchema> = {}) => {
-    if (options.advertiseOauth === true) {
+  const toolAuthMeta = (_operation: string, meta: Record<string, unknown> = {}) => {
+    if (options.advertiseOauth) {
       return {
         _meta: {
           ...meta,
@@ -405,10 +410,10 @@ export function createAutographMcpHandler(
           ) {
             try {
               const recovered = await service.recoverAppliedApprovalResponse({
-                responses: input.responses.map(({ requestId, response }) => ({
-                  requestId,
-                  response: { kind: response.kind },
-                })) satisfies ApprovalResponse[],
+                responses: input.responses as {
+                  requestId: string;
+                  response: { kind: "approve" | "deny" };
+                }[],
                 sessionId: input.sessionId,
               });
               if (recovered !== undefined) {
@@ -456,12 +461,9 @@ export function createAutographMcpHandler(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-type AdapterMode = "local" | "hosted" | "unconfigured" | "invalid";
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function adapterMode(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
-): AdapterMode {
+): "local" | "hosted" | "unconfigured" | "invalid" {
   const local = environment.APP_BUILDER_LOCAL_ADAPTER;
   const hosted = environment.EVE_HOSTED_ADAPTER;
   if (![undefined, "0", "1"].includes(local)) {
@@ -495,44 +497,52 @@ const publicDiscoveryMethods = new Set([
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
   try {
-    const parsed = rpcMessagesSchema.safeParse(await request.clone().json());
-    if (!parsed.success) return false;
-    const messages = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
-    if (messages.length === 0) return false;
-    return messages.every(({ method }) => publicDiscoveryMethods.has(method));
+    const body: unknown = await request.clone().json();
+    const messages = Array.isArray(body) ? body : [body];
+    return (
+      messages.length > 0 &&
+      messages.every(
+        (message) =>
+          typeof message === "object" &&
+          message !== null &&
+          "method" in message &&
+          typeof message.method === "string" &&
+          publicDiscoveryMethods.has(message.method),
+      )
+    );
   } catch {
     return false;
   }
 }
 
-const rejectingService = (error: Error): EveSessionService => {
-  const reject = async (): Promise<never> =>
-    await new Promise((_, rejectPromise) => {
-      rejectPromise(error);
-    });
-  return {
-    cancel: reject,
-    get: reject,
-    list: reject,
-    respond: reject,
-    send: reject,
-    start: reject,
-  } satisfies EveSessionService;
-};
-
-const discoveryOnlyService = rejectingService(
-  new Error("Authentication is required before calling a tool."),
-);
+const discoveryOnlyService = new Proxy({} as EveSessionService, {
+  get() {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    return async () => {
+      throw new Error("Authentication is required before calling a tool.");
+    };
+  },
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function authenticationRequiredService(challenge: string) {
-  return rejectingService(new McpToolAuthenticationRequiredError(challenge));
+  return new Proxy({} as EveSessionService, {
+    get() {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+      return async () => {
+        throw new McpToolAuthenticationRequiredError(challenge);
+      };
+    },
+  });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function isToolCallRequest(request: Request): Promise<boolean> {
   try {
-    return toolCallSchema.safeParse(await request.clone().json()).success;
+    const body: unknown = await request.clone().json();
+    return (
+      typeof body === "object" && body !== null && "method" in body && body.method === "tools/call"
+    );
   } catch {
     return false;
   }
@@ -549,8 +559,19 @@ const hostedToolNames = new Set([
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function requiredScopesForRequest(request: Request): Promise<string[]> {
   try {
-    const parsed = toolCallSchema.safeParse(await request.clone().json());
-    if (parsed.success && hostedToolNames.has(parsed.data.params.name)) {
+    const body: unknown = await request.clone().json();
+    if (
+      typeof body === "object" &&
+      body !== null &&
+      "method" in body &&
+      body.method === "tools/call" &&
+      "params" in body &&
+      typeof body.params === "object" &&
+      body.params !== null &&
+      "name" in body.params &&
+      typeof body.params.name === "string" &&
+      hostedToolNames.has(body.params.name)
+    ) {
       return [...autographToolScopes];
     }
   } catch {
@@ -617,16 +638,13 @@ async function hostedServiceForRequest(
     return notFoundResponse();
   }
 
-  const hostedServiceOptions: Parameters<typeof createHostedEveSessionService>[0] = {
-    now: runtime.now,
+  const service = createHostedEveSessionService({
     principal,
     store: runtime.store,
     transport: runtime.transport,
-  };
-  if (runtime.beforeRead !== undefined) {
-    hostedServiceOptions.beforeRead = runtime.beforeRead;
-  }
-  const service = createHostedEveSessionService(hostedServiceOptions);
+    ...(runtime.beforeRead === undefined ? {} : { beforeRead: runtime.beforeRead }),
+    now: runtime.now,
+  });
   return runtime.handoffs === undefined
     ? service
     : withHostedBuilderHandoffs({
@@ -682,7 +700,7 @@ export function createMcpRequestHandler(
     }
     if (mode === "local") {
       try {
-        return await createAutographMcpHandler(createEveSessionService(environment), {
+        return createAutographMcpHandler(createEveSessionService(environment), {
           requestUrl: prototypePreviewRequestUrl({
             environment,
             requestUrl: request.url,
@@ -692,9 +710,8 @@ export function createMcpRequestHandler(
         return unavailableResponse();
       }
     }
-    const options = { requestUrl: request.url } satisfies Parameters<
-      typeof createAutographMcpHandler
-    >[1];
-    return await createAutographMcpHandler(createEveSessionService(environment), options)(request);
+    return await createAutographMcpHandler(createEveSessionService(environment), {
+      requestUrl: request.url,
+    })(request);
   };
 }

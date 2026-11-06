@@ -15,23 +15,18 @@ export const latestInstalledApplicationSource = (events: readonly MessageStreamE
         }
       }
     }
-    if (event.type !== "action.result") {
+    if (
+      event.type !== "action.result" ||
+      event.data.status !== "completed" ||
+      event.data.result.kind !== "tool-result" ||
+      event.data.result.toolName !== "export-application-source"
+    ) {
       continue;
     }
-    if (event.data.status !== "completed") {
+    if (!requested.has(event.data.result.callId)) {
       continue;
     }
-    if (event.data.result.kind !== "tool-result") {
-      continue;
-    }
-    const resultEvent = event.data.result;
-    if (resultEvent.toolName !== "export-application-source") {
-      continue;
-    }
-    if (!requested.has(resultEvent.callId)) {
-      continue;
-    }
-    const result = applicationSourceExportReferenceSchema.safeParse(resultEvent.output);
+    const result = applicationSourceExportReferenceSchema.safeParse(event.data.result.output);
     if (result.success) {
       latest = result.data;
     }

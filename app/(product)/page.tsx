@@ -31,6 +31,7 @@ import { AuthenticatedBuilder } from "../ui/authenticated-builder";
 import { BuilderLoadingShell } from "../ui/builder-loading-shell";
 import { Header } from "../ui/builder-shell";
 import styles from "../ui/app-builder.module.css";
+import type { BuilderDraft } from "../ui/builder-types";
 import { WorkspaceOnboarding } from "../ui/workspace-onboarding";
 
 interface PageProps {
@@ -86,43 +87,29 @@ async function currentUser() {
   };
 }
 
-const providerConnectionNotices = (query: Awaited<PageProps["searchParams"]>) => {
-  const notices: ProviderConnectionNotice[] = [];
-  for (const provider of ["vercel", "github"] as const) {
-    const status = Array.isArray(query[provider]) ? query[provider][0] : query[provider];
-    if (status !== "connected" && status !== "failed") {
-      continue;
-    }
-    const notice: ProviderConnectionNotice = { provider, status };
-    if (status === "failed") {
-      const reasonQuery =
-        query[provider === "vercel" ? "vercelReason" : "githubReason"] ?? query.reason;
-      const reason = Array.isArray(reasonQuery) ? reasonQuery[0] : reasonQuery;
-      notice.reason = parseProviderConnectionFailureReason(reason);
-    }
-    notices.push(notice);
-  }
-  return notices;
-};
-
-const loadDurableDraft = async (resumeKey: string | null) =>
-  resumeKey !== null && resumeKey !== ""
-    ? await readAuthenticatedBuilderDraft({
-        draftId: resumeKey,
-        environment: process.env,
-        headers: await headers(),
-      })
-    : await readAuthenticatedActiveBuilderDraft({
-        environment: process.env,
-        headers: await headers(),
-      });
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function HomeContent({ searchParams }: PageProps) {
   await connection();
   const [query, user] = await Promise.all([searchParams, currentUser()]);
-  const mode = Array.isArray(query.mode) ? query.mode[0] : query.mode;
-  const notices = providerConnectionNotices(query);
+  const mode = typeof query.mode === "string" ? query.mode : undefined;
+  const notices: ProviderConnectionNotice[] = [];
+  for (const provider of ["vercel", "github"] as const) {
+    const status = query[provider];
+    if (status !== "connected" && status !== "failed") {
+      continue;
+    }
+    notices.push({
+      provider,
+      status,
+      ...(status === "failed"
+        ? {
+            reason: parseProviderConnectionFailureReason(
+              query[provider === "vercel" ? "vercelReason" : "githubReason"] ?? query.reason,
+            ),
+          }
+        : {}),
+    });
+  }
   if (
     user.status === "workspace-setup-retry" ||
     user.status === "workspace-ambiguous" ||
@@ -143,7 +130,7 @@ async function HomeContent({ searchParams }: PageProps) {
     builderResourceProvisioningFlag(),
   ]);
 
-  if (resumeKey === null || resumeKey === "") {
+  if (!resumeKey) {
     const pendingHandoff = await findAuthenticatedPendingBuilderHandoff({
       environment: process.env,
       headers: await headers(),
@@ -152,19 +139,26 @@ async function HomeContent({ searchParams }: PageProps) {
       redirect(`/handoff/${encodeURIComponent(pendingHandoff.handoffId)}`);
     }
   }
-  const [durableDraft, integrations] = await Promise.all([
-    loadDurableDraft(resumeKey),
-    loadBuilderIntegrationState(
-      {
-        authenticated: true as const,
+  const durableDraft = resumeKey
+    ? await readAuthenticatedBuilderDraft({
+        draftId: resumeKey,
         environment: process.env,
-        organizationId: user.user.organizationId,
-        userId: user.user.id,
-        workspaceId: user.user.workspaceId,
-      },
-      loadNextGatewayModels,
-    ),
-  ]);
+        headers: await headers(),
+      })
+    : await readAuthenticatedActiveBuilderDraft({
+        environment: process.env,
+        headers: await headers(),
+      });
+  const integrations = await loadBuilderIntegrationState(
+    {
+      authenticated: true as const,
+      environment: process.env,
+      organizationId: user.user.organizationId,
+      userId: user.user.id,
+      workspaceId: user.user.workspaceId,
+    },
+    loadNextGatewayModels,
+  );
 
   return (
     <div className={styles.appShell}>

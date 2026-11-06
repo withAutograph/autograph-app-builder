@@ -101,24 +101,24 @@ const uri = `postgresql://bootstrap_owner:fixture-private-password@${scope.hostn
 beforeAll(async () => {
   scratch = await mkdtemp(path.join(tmpdir(), "owned-neon-mcp-"));
   const certificate = spawnSync(
-    "/usr/bin/openssl",
-    [
-      "req",
-      "-x509",
-      "-newkey",
-      "rsa:2048",
-      "-nodes",
-      "-keyout",
-      path.join(scratch, "key.pem"),
-      "-out",
-      path.join(scratch, "cert.pem"),
-      "-days",
-      "1",
-      "-subj",
-      "/CN=127.0.0.1",
-    ],
-    { stdio: "ignore" },
-  );
+      "/usr/bin/openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-keyout",
+        path.join(scratch, "key.pem"),
+        "-out",
+        path.join(scratch, "cert.pem"),
+        "-days",
+        "1",
+        "-subj",
+        "/CN=127.0.0.1",
+      ],
+      { stdio: "ignore" },
+    );
   if (certificate.status !== 0) {
     throw new Error("Owned TLS fixture failed");
   }

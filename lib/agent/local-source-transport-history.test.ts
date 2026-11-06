@@ -98,8 +98,8 @@ test("actual source-preparation service retains old validation workflow while Na
       },
       {
         environment,
-        readAuthority: () => ({ kind: "local", ownerUid: 1, stateRoot }),
-        snapshot: () => ({
+        readAuthority: async () => ({ kind: "local", ownerUid: 1, stateRoot }),
+        snapshot: async () => ({
           events,
           session: { sessionId: "saved-session", streamIndex: events.length },
         }),
@@ -263,8 +263,8 @@ test("actual source-preparation service retains old validation workflow while Na
         { expected: compatibility, sessionId: "saved-session" },
         {
           environment,
-          readAuthority: () => ({ kind: "local", ownerUid: 1, stateRoot }),
-          snapshot: () => ({
+          readAuthority: async () => ({ kind: "local", ownerUid: 1, stateRoot }),
+          snapshot: async () => ({
             events: noOpHistory,
             session: { sessionId: "saved-session", streamIndex: noOpHistory.length },
           }),
@@ -488,8 +488,8 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
         { expected, sessionId: "saved-session" },
         {
           environment,
-          readAuthority: () => ({ kind: "local", ownerUid: 1, stateRoot }),
-          snapshot: () => ({
+          readAuthority: async () => ({ kind: "local", ownerUid: 1, stateRoot }),
+          snapshot: async () => ({
             events: [],
             session: { sessionId: "saved-session", streamIndex: 2 },
           }),
@@ -515,8 +515,8 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
         { expected, ownerRunId: "foreign-child", sessionId: "saved-session" },
         {
           environment,
-          readAuthority: () => ({ kind: "local", ownerUid: 1, stateRoot }),
-          snapshot: () => {
+          readAuthority: async () => ({ kind: "local", ownerUid: 1, stateRoot }),
+          snapshot: async () => {
             throw new Error("Snapshot must not be read under a foreign owner");
           },
         },
@@ -528,11 +528,11 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
         { expected, sessionId: "saved-session" },
         {
           environment,
-          readAuthority: () => {
+          readAuthority: async () => {
             reads += 1;
             return { kind: "local", ownerUid: reads, stateRoot };
           },
-          snapshot: () => ({
+          snapshot: async () => ({
             events: [],
             session: { sessionId: "saved-session", streamIndex: 0 },
           }),
@@ -572,7 +572,7 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
   const overlay = await prepareDevelopmentSandboxWorkspace(f.source, f.sandbox, "overlay");
   const snapshot = vi
     .spyOn(ClientSession.prototype, "snapshot")
-    .mockImplementation(function read(this: ClientSession) {
+    .mockImplementation(async function read(this: ClientSession) {
       const events: MessageStreamEvent[] =
         this.state.sessionId === "saved-session"
           ? [
@@ -621,7 +621,7 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
     );
     const dependencies = {
       environment,
-      readAuthority: () => ({
+      readAuthority: async () => ({
         kind: "local" as const,
         ownerUid: process.getuid?.() ?? 0,
         stateRoot,

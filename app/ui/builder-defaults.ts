@@ -68,16 +68,9 @@ const randomNameNouns = [
   "Workshop",
 ] as const;
 
-function randomIndex(length: number) {
-  const values = new Uint32Array(1);
-  crypto.getRandomValues(values);
-  return Math.floor(((values[0] ?? 0) / 2 ** 32) * length);
-}
-
-const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-
-export const repositoryNameFromAppName = (appName: string) =>
-  appName
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function repositoryNameFromAppName(appName: string) {
+  return appName
     .normalize("NFKD")
     .replaceAll(/[\u0300-\u036F]/gu, "")
     .toLowerCase()
@@ -86,13 +79,15 @@ export const repositoryNameFromAppName = (appName: string) =>
     .replaceAll(/^-+|-+$/gu, "")
     .slice(0, 100)
     .replaceAll(/-+$/gu, "");
+}
 
-export const appNameFromBrief = (brief: string) => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function appNameFromBrief(brief: string) {
   const firstContentLine = brief
     .split("\n")
     .map((line) => line.replace(/^\s*#+\s*/u, "").trim())
     .find(Boolean);
-  if (firstContentLine === undefined || firstContentLine === "") {
+  if (!firstContentLine) {
     return "";
   }
 
@@ -113,16 +108,16 @@ export const appNameFromBrief = (brief: string) => {
     .slice(0, 120)
     .replace(/[\uD800-\uDBFF]$/u, "")
     .trimEnd();
-};
+}
 
-export const randomAppName = (seed?: string) => {
-  if (seed === undefined || seed === "") {
-    const adjective = randomNameAdjectives[randomIndex(randomNameAdjectives.length)];
-    const noun = randomNameNouns[randomIndex(randomNameNouns.length)];
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function randomAppName(seed?: string) {
+  if (!seed) {
+    const adjective = randomNameAdjectives[Math.floor(Math.random() * randomNameAdjectives.length)];
+    const noun = randomNameNouns[Math.floor(Math.random() * randomNameNouns.length)];
     return `${adjective} ${noun}`;
   }
-  const graphemes = graphemeSegmenter.segment(seed);
-  const hash = Array.from(graphemes, ({ segment }) => segment).reduce(
+  const hash = [...seed].reduce(
     // oxlint-disable-next-line eslint/no-bitwise -- Keep the hash within uint32 bounds.
     (value, character) => (value * 31 + (character.codePointAt(0) ?? 0)) >>> 0,
     0,
@@ -131,4 +126,4 @@ export const randomAppName = (seed?: string) => {
   const noun =
     randomNameNouns[Math.floor(hash / randomNameAdjectives.length) % randomNameNouns.length];
   return `${adjective} ${noun}`;
-};
+}

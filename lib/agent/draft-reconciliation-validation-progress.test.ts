@@ -13,7 +13,7 @@ import type { retireUnusedDraftWorktrees } from "../repository/retire-unused-dra
 
 import validateReconciliation from "../../agent/tools/validate_github_draft_pr_reconciliation";
 import getValidationLog, { validationLogInputSchema } from "../../agent/tools/get_validation_log";
-import formatCandidate from "../../agent/tools/format-github-draft-pr-candidate";
+import formatCandidate from "../../agent/tools/format_github_draft_pr_candidate";
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 
 import { repositoryDeliveryBuildCommand } from "../repository/supported-template";
@@ -125,40 +125,28 @@ const candidateInstallCalls = () =>
     .map(([input]: unknown[]) => input as Parameters<SandboxSession["run"]>[0])
     .filter((input) => input.command === installCommand);
 
-const validationLogKeyFor = (key: ValidationLogKey) =>
-  JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
-
-const encode = (text: string) =>
-  new ReadableStream<Uint8Array>({
-    start(controller) {
-      const bytes = new TextEncoder().encode(text);
-      const split = bytes.indexOf(0xc3) + 1;
-      controller.enqueue(bytes.slice(0, split));
-      controller.enqueue(bytes.slice(split));
-      controller.close();
-    },
-  });
-
 const candidateLogStore = () => {
   const manifests = new Map<string, ValidationLogReference>();
   const chunks = new Map<string, { content: string; digest: string }>();
+  const keyFor = (key: ValidationLogKey) =>
+    JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
   const store: ValidationLogStore = {
     async getChunk(key, index) {
-      return await Promise.resolve(chunks.get(`${validationLogKeyFor(key)}:${index}`));
+      return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`));
     },
     async getReference(key) {
-      return await Promise.resolve(manifests.get(validationLogKeyFor(key)));
+      return await Promise.resolve(manifests.get(keyFor(key)));
     },
     async publish(key, reference) {
-      await Promise.resolve(manifests.set(validationLogKeyFor(key), reference));
+      await Promise.resolve(manifests.set(keyFor(key), reference));
     },
     async putChunk(key, index, content, chunkDigest) {
       await Promise.resolve(
-        chunks.set(`${validationLogKeyFor(key)}:${index}`, { content, digest: chunkDigest }),
+        chunks.set(`${keyFor(key)}:${index}`, { content, digest: chunkDigest }),
       );
     },
     async removeStaged(key) {
-      await Promise.resolve(manifests.delete(validationLogKeyFor(key)));
+      await Promise.resolve(manifests.delete(keyFor(key)));
     },
   };
   return store;
@@ -490,8 +478,8 @@ describe("draft reconciliation command progress", () => {
       stderr: input.command === installCommand ? "lockfile mismatch" : "",
       stdout: "",
     }));
-    const call = async () =>
-      await validateReconciliation.execute(
+    const call = () =>
+      validateReconciliation.execute(
         {
           additionalCheckTasks: [],
           expectedCommand: installCommand,
@@ -972,9 +960,7 @@ describe("draft reconciliation command progress", () => {
     const saved = await store.getChunk(key, 0);
     expect(saved?.content).toContain("kernel_bind_actor_membership rejected runtime preparation");
     expect(saved?.content).not.toMatch(/local-secret|db-secret/u);
-    const candidateWithoutValidationRun = { ...mocks.candidate };
-    delete candidateWithoutValidationRun.validationRun;
-    mocks.candidate = candidateWithoutValidationRun;
+    mocks.candidate = { ...mocks.candidate, validationRun: undefined };
     expect(mocks.attempts.at(-1)).toBe(attempt);
     expect(mocks.candidate.validation).toBeUndefined();
   });
@@ -1213,6 +1199,16 @@ describe("draft reconciliation command progress", () => {
     // Larger than both the provider response and durable chunk size, with a split UTF-8 character.
     const stdout = `catalog inspection started\n${"workspace package detail\n".repeat(4000)}catalog inspection finished\n`;
     const stderr = "catalog mismatch: missing café workspace entry\nBearer catalog-secret\n";
+    const encode = (text: string) =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          const bytes = new TextEncoder().encode(text);
+          const split = bytes.indexOf(0xc3) + 1;
+          controller.enqueue(bytes.slice(0, split));
+          controller.enqueue(bytes.slice(split));
+          controller.close();
+        },
+      });
     mocks.spawn.mockResolvedValueOnce({
       kill: vi.fn(),
       stderr: encode(stderr),
@@ -1237,9 +1233,7 @@ describe("draft reconciliation command progress", () => {
       }),
     );
     // Repair may reset current validation; historical diagnostics must remain discoverable.
-    const candidateWithoutValidationRun = { ...mocks.candidate };
-    delete candidateWithoutValidationRun.validationRun;
-    mocks.candidate = candidateWithoutValidationRun;
+    mocks.candidate = { ...mocks.candidate, validationRun: undefined };
     mocks.workflow = { phase: "empty" };
     const discovery = (await getValidationLog.execute(
       { operation: "validation-attempts" },
@@ -1407,7 +1401,7 @@ describe("draft reconciliation command progress", () => {
       mocks.readText.mockResolvedValue(JSON.stringify({}));
       mocks.candidate.validationRun = {
         commands: [{ command: installCommand, exitCode: 0 }],
-        // An absent compilation preserves the optional field's intended fixture state.
+        compilation: undefined,
         nextIndex: 1,
         resolvedTree: tree,
         schemaTaskCompleted: true,

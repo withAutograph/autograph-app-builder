@@ -6,43 +6,48 @@ const githubLoginSchema = z
   .max(100)
   .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$/u);
 
-export const githubRepositoryAccessSchema = z.strictObject({
-  action: z.enum(["connect", "update"]),
-  provider: z.literal("github"),
-  repository: z
-    .strictObject({
-      fullName: z
-        .string()
-        .min(3)
-        .max(201)
-        .regex(/^[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+$/u),
-      name: z
-        .string()
-        .min(1)
-        .max(100)
-        .regex(/^[A-Za-z0-9_.-]+$/u),
-      owner: githubLoginSchema,
-    })
-    .superRefine((repository, context) => {
-      if (repository.fullName !== `${repository.owner}/${repository.name}`) {
-        context.addIssue({
-          code: "custom",
-          message: "Repository fullName must match owner and name.",
-          path: ["fullName"],
-        });
-      }
-    })
-    .optional(),
-  scopes: z
-    .array(
-      z.strictObject({
-        accountLogin: githubLoginSchema,
-        accountType: z.enum(["Organization", "User"]),
-        installationId: z.string().regex(/^[1-9][0-9]*$/u),
-      }),
-    )
-    .max(100),
-});
+export const githubRepositoryAccessSchema = z
+  .object({
+    action: z.enum(["connect", "update"]),
+    provider: z.literal("github"),
+    repository: z
+      .object({
+        fullName: z
+          .string()
+          .min(3)
+          .max(201)
+          .regex(/^[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+$/u),
+        name: z
+          .string()
+          .min(1)
+          .max(100)
+          .regex(/^[A-Za-z0-9_.-]+$/u),
+        owner: githubLoginSchema,
+      })
+      .strict()
+      .superRefine((repository, context) => {
+        if (repository.fullName !== `${repository.owner}/${repository.name}`) {
+          context.addIssue({
+            code: "custom",
+            message: "Repository fullName must match owner and name.",
+            path: ["fullName"],
+          });
+        }
+      })
+      .optional(),
+    scopes: z
+      .array(
+        z
+          .object({
+            accountLogin: githubLoginSchema,
+            accountType: z.enum(["Organization", "User"]),
+            installationId: z.string().regex(/^[1-9][0-9]*$/u),
+          })
+          .strict(),
+      )
+      .max(100),
+  })
+  .strict();
 
 export type GitHubRepositoryAccess = z.infer<typeof githubRepositoryAccessSchema>;
 
@@ -63,8 +68,8 @@ export interface GitHubStoreInViewModel {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function githubConnectionPrompt(repository = "") {
-  return `Connect GitHub so Autograph can access ${repository.length > 0 ? repository : "the repository for this app"}. GitHub will ask you to approve access if needed.`;
+export function githubConnectionPrompt(repository?: string) {
+  return `Connect GitHub so Autograph can access ${repository || "the repository for this app"}. GitHub will ask you to approve access if needed.`;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -76,8 +81,7 @@ export function githubStoreInViewModel(input: {
   const scopes = [...(input.scopes ?? [])];
   const actionLabel =
     input.action === "connect" ? ("Connect GitHub" as const) : ("Update GitHub access" as const);
-  const trimmedRepository = input.desiredRepository?.trim();
-  const desiredRepository = trimmedRepository === "" ? undefined : trimmedRepository;
+  const desiredRepository = input.desiredRepository?.trim() || undefined;
   let scopeSummary = "No GitHub account connected yet";
   if (scopes.length === 1) {
     scopeSummary = `Connected to ${scopes[0]?.label}`;
@@ -86,7 +90,7 @@ export function githubStoreInViewModel(input: {
   }
 
   let description = "Update which repositories Autograph can access.";
-  if (desiredRepository !== undefined) {
+  if (desiredRepository) {
     description =
       input.action === "connect"
         ? `Connect GitHub so Autograph can access ${desiredRepository}.`
@@ -113,16 +117,13 @@ export function githubStoreInViewModel(input: {
 export function githubRepositoryAccessViewModel(
   access: GitHubRepositoryAccess,
 ): GitHubStoreInViewModel {
-  const input: Parameters<typeof githubStoreInViewModel>[0] = {
+  return githubStoreInViewModel({
     action: access.action,
+    ...(access.repository === undefined ? {} : { desiredRepository: access.repository.fullName }),
     scopes: access.scopes.map((scope) => ({
       detail: scope.accountType,
       id: scope.installationId,
       label: scope.accountLogin,
     })),
-  };
-  if (access.repository !== undefined) {
-    input.desiredRepository = access.repository.fullName;
-  }
-  return githubStoreInViewModel(input);
+  });
 }

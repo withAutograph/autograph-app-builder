@@ -146,7 +146,7 @@ export const sendDeliveryObservationDiagnostic = (input: {
   const turns = input.proof?.turns ?? [];
   const { deliveryId } = input.delivery;
   const matches = turns.filter((turn) => turn.deliveryIds.includes(deliveryId));
-  const observation: SendDeliveryObservationDiagnostic = {
+  return {
     ackObserved: true,
     boundaryStampMatchCount: turns.filter(
       (turn) => turn.boundaryDeliveryIds?.includes(deliveryId) === true,
@@ -167,11 +167,8 @@ export const sendDeliveryObservationDiagnostic = (input: {
     startedStampMatchCount: turns.filter(
       (turn) => turn.startedDeliveryIds?.includes(deliveryId) === true,
     ).length,
+    ...(input.nativeRead === undefined ? {} : { nativeRead: input.nativeRead }),
   };
-  if (input.nativeRead !== undefined) {
-    observation.nativeRead = input.nativeRead;
-  }
-  return observation;
 };
 
 export interface HostedSubmissionDiagnostic {
@@ -235,20 +232,6 @@ const verificationDiagnosticFor = (
   return step.success ? { verificationStep: step.data } : {};
 };
 
-const deliverHostedSubmissionDiagnostic = (
-  diagnostic: HostedSubmissionDiagnostic,
-  sink: HostedSubmissionDiagnosticSink | undefined,
-): void => {
-  if (sink === undefined) {
-    console.error("[builder:hosted-submission]", diagnostic);
-    return;
-  }
-  const delivery = sink(diagnostic);
-  if (delivery !== undefined) {
-    void discardDiagnosticRejection(delivery);
-  }
-};
-
 /** This is server observability, never an operation receipt or a recovery authority. */
 export const reportHostedSubmissionDiagnostic = (input: {
   phase: HostedSubmissionPhase;
@@ -272,7 +255,6 @@ export const reportHostedSubmissionDiagnostic = (input: {
       sqlState === undefined
         ? (input.failureCategory ?? "unclassified_failure")
         : sqlStateCategories[sqlState];
-    const verificationDiagnostic = verificationDiagnosticFor(input.error);
     const diagnostic: HostedSubmissionDiagnostic = {
       category: rejected ? "rejected_before_dispatch" : uncertainCategory,
       event: rejected
@@ -280,10 +262,8 @@ export const reportHostedSubmissionDiagnostic = (input: {
         : "builder.hosted_submission_uncertain",
       operationKind: input.operationKind,
       phase: input.phase,
+      ...verificationDiagnosticFor(input.error),
     };
-    if (verificationDiagnostic.verificationStep !== undefined) {
-      diagnostic.verificationStep = verificationDiagnostic.verificationStep;
-    }
     if (input.sendDeliveryObservation !== undefined) {
       const observed = sendDeliveryObservationSchema.safeParse(input.sendDeliveryObservation);
       if (observed.success) {
@@ -308,7 +288,14 @@ export const reportHostedSubmissionDiagnostic = (input: {
     if (input.savedState !== undefined) {
       diagnostic.savedState = input.savedState;
     }
-    deliverHostedSubmissionDiagnostic(diagnostic, input.sink);
+    if (input.sink === undefined) {
+      console.error("[builder:hosted-submission]", diagnostic);
+    } else {
+      const delivery = input.sink(diagnostic);
+      if (delivery !== undefined) {
+        void discardDiagnosticRejection(delivery);
+      }
+    }
   } catch {
     // A log sink or arbitrary error object must never change durable operation behavior.
   }

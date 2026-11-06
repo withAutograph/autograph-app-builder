@@ -1,5 +1,4 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { z } from "zod";
 
 import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/deployment";
 import { builderProvisionProjectionSchema } from "@/lib/provisioning/contracts";
@@ -10,19 +9,8 @@ const pollIntervalMs = 250;
 const maxStreamMs = 30_000;
 const heartbeatIntervalMs = 10_000;
 
-type ProvisionStreamEventData =
-  | BuilderProvisionProjection
-  | { error: "provisioning_stream_failed" | "provisioning_unavailable" };
-
-const provisionStreamEventDataSchema = z.union([
-  builderProvisionProjectionSchema,
-  z.object({
-    error: z.enum(["provisioning_stream_failed", "provisioning_unavailable"]),
-  }),
-]);
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function event(data: ProvisionStreamEventData, id: string, name = "snapshot") {
+function event(data: unknown, id: string, name = "snapshot") {
   return encoder.encode(`id: ${id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
@@ -37,10 +25,10 @@ function heartbeat() {
  * revisions and therefore survives reconnects through the normal GET route.
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function getProvisionStream(request: Request) {
+export async function GET(request: Request) {
   const source = new URL(request.url);
   const requestId = source.searchParams.get("requestId");
-  if (requestId === null || requestId.length === 0) {
+  if (!requestId) {
     return Response.json({ error: "request_invalid" }, { status: 400 });
   }
 
@@ -48,7 +36,7 @@ async function getProvisionStream(request: Request) {
   const headers = new Headers(request.headers);
   headers.set("accept", "application/json");
   const read = async () =>
-    await handler(
+    handler(
       new Request(
         `${source.origin}/api/builder/provision?projection=1&requestId=${encodeURIComponent(requestId)}`,
         { headers, method: "GET" },
@@ -86,16 +74,12 @@ async function getProvisionStream(request: Request) {
             return;
           }
           if (current.revision > lastRevision) {
-            controller.enqueue(
-              event(provisionStreamEventDataSchema.parse(current), String(current.revision)),
-            );
+            controller.enqueue(event(current, String(current.revision)));
             lastRevision = current.revision;
             lastWrite = Date.now();
           }
           if (current.provisioning.status === "settled" || Date.now() - started >= maxStreamMs) {
-            controller.enqueue(
-              event(provisionStreamEventDataSchema.parse(current), String(current.revision), "end"),
-            );
+            controller.enqueue(event(current, String(current.revision), "end"));
             controller.close();
             return;
           }
@@ -111,13 +95,7 @@ async function getProvisionStream(request: Request) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const response = await read();
           if (!response.ok) {
-            controller.enqueue(
-              event(
-                provisionStreamEventDataSchema.parse({ error: "provisioning_unavailable" }),
-                "error",
-                "error",
-              ),
-            );
+            controller.enqueue(event({ error: "provisioning_unavailable" }, "error", "error"));
             controller.close();
             return;
           }
@@ -126,13 +104,7 @@ async function getProvisionStream(request: Request) {
         }
       } catch {
         if (!cancelled) {
-          controller.enqueue(
-            event(
-              provisionStreamEventDataSchema.parse({ error: "provisioning_stream_failed" }),
-              "error",
-              "error",
-            ),
-          );
+          controller.enqueue(event({ error: "provisioning_stream_failed" }, "error", "error"));
           controller.close();
         }
       }
@@ -148,5 +120,3 @@ async function getProvisionStream(request: Request) {
     },
   });
 }
-
-export { getProvisionStream as GET };

@@ -33,27 +33,25 @@ export default defineTool({
           undefined);
     const observation = await runtime.inspectPublishedPullRequest(proposalDigest, reconciledHead);
     const checks = observation.draft ? "deferred" : observation.checks;
-    const result = {
+    return {
       ...observation,
       checks,
-    };
-    if (
-      runtime.runPublishedPullRequestEffect !== undefined &&
+      ...(runtime.runPublishedPullRequestEffect !== undefined &&
       observation.state === "open" &&
       observation.reviewedRevision
-    ) {
-      const approval = {
-        ...observation.reviewedTarget,
-        ...(installation === undefined ? {} : { installationId: installation }),
-        proposalDigest,
-        ...(reconciledHead === undefined || reconciliation === undefined
-          ? {}
-          : { reconciliationDigest: reconciliation.digest }),
-        ...(observation.readyAt === undefined ? {} : { readyAt: observation.readyAt }),
-      };
-      return { ...result, approval };
-    }
-    return result;
+        ? {
+            approval: {
+              ...observation.reviewedTarget,
+              ...(installation === undefined ? {} : { installationId: installation }),
+              proposalDigest,
+              ...(reconciledHead === undefined || reconciliation === undefined
+                ? {}
+                : { reconciliationDigest: reconciliation.digest }),
+              ...(observation.readyAt === undefined ? {} : { readyAt: observation.readyAt }),
+            },
+          }
+        : {}),
+    };
   },
   inputSchema: z.strictObject({}),
 });

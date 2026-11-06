@@ -11,12 +11,12 @@ function Slider({
   max = 100,
   ...props
 }: SliderPrimitive.Root.Props) {
-  let valueCount = 2;
+  let _values = [min, max];
   if (Array.isArray(defaultValue)) {
-    valueCount = defaultValue.length;
+    _values = defaultValue;
   }
   if (Array.isArray(value)) {
-    valueCount = value.length;
+    _values = value;
   }
 
   return (
@@ -40,7 +40,7 @@ function Slider({
             className="bg-primary select-none data-horizontal:h-full data-vertical:w-full"
           />
         </SliderPrimitive.Track>
-        {Array.from({ length: valueCount }, (_, index) => (
+        {Array.from({ length: _values.length }, (_, index) => (
           <SliderPrimitive.Thumb
             data-slot="slider-thumb"
             key={index}

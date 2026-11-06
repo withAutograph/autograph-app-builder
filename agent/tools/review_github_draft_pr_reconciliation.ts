@@ -89,8 +89,14 @@ export default defineTool({
         validation: candidate.validation,
       };
     }
-    const reviewInput = {
+    const review = createReconciliationReviewReceipt({
       appId: candidate.appId,
+      ...(candidate.publicationScope === undefined
+        ? {}
+        : { publicationScope: candidate.publicationScope }),
+      ...(candidate.dependencyCatalog === undefined
+        ? {}
+        : { dependencyCatalog: candidate.dependencyCatalog }),
       baseChanges: observed.baseChanges,
       baseSha: candidate.baseSha,
       baseTree: candidate.baseTree,
@@ -99,14 +105,7 @@ export default defineTool({
       headTree: candidate.headTree,
       resolvedTree: observed.resolvedTree,
       version: 1,
-    };
-    if (candidate.publicationScope !== undefined) {
-      reviewInput.publicationScope = candidate.publicationScope;
-    }
-    if (candidate.dependencyCatalog !== undefined) {
-      reviewInput.dependencyCatalog = candidate.dependencyCatalog;
-    }
-    const review = createReconciliationReviewReceipt(reviewInput);
+    });
     updateExactDraftReconciliation({
       expected: candidate,
       operation: "recording both reviewed merge diffs",

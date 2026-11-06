@@ -1,9 +1,15 @@
 import { z } from "zod";
 
-const resumeKeySchema = z.uuid();
+const resumeKeySchema = z.string().uuid();
 export const providerConnectionReturnToSchema = z.union([
   z.literal("/"),
-  z.templateLiteral(["/handoff/", z.uuid()]),
+  z
+    .string()
+    .refine(
+      (value) =>
+        value.startsWith("/handoff/") && z.string().uuid().safeParse(value.slice(9)).success,
+    )
+    .transform((value) => value as `/handoff/${string}`),
 ]);
 
 export interface ProviderConnectionReturn {
@@ -11,56 +17,36 @@ export interface ProviderConnectionReturn {
   resumeKey?: string;
 }
 
-type StringOrStrings = string | string[];
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-const first = (value: StringOrStrings | undefined) =>
-  z
-    .union([z.string(), z.array(z.string())])
-    .optional()
-    .parse(value);
-
-const firstValue = (value: StringOrStrings | undefined) => {
-  const parsed = first(value);
-  return Array.isArray(parsed) ? parsed[0] : parsed;
-};
+function first(value: string | string[] | undefined) {
+  return typeof value === "string" ? value : undefined;
+}
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseProviderConnectionReturn(input: {
-  returnTo?: StringOrStrings;
-  resumeKey?: StringOrStrings;
+  returnTo?: string | string[];
+  resumeKey?: string | string[];
 }): ProviderConnectionReturn {
-  const returnTo = firstValue(input.returnTo);
-  const resumeKey = firstValue(input.resumeKey);
-  const result: ProviderConnectionReturn = {
+  const returnTo = first(input.returnTo);
+  const resumeKey = first(input.resumeKey);
+  return {
     returnTo: providerConnectionReturnToSchema.parse(returnTo ?? "/"),
+    ...(resumeKey === undefined ? {} : { resumeKey: resumeKeySchema.parse(resumeKey) }),
   };
-  if (resumeKey !== undefined) {
-    result.resumeKey = resumeKeySchema.parse(resumeKey);
-  }
-  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function providerConnectionReturnFromFormData(formData: FormData): ProviderConnectionReturn {
-  const formDataSchema = z.object({
-    resumeKey: z.string().optional(),
-    returnTo: z.string().optional(),
-  });
-  const { resumeKey, returnTo } = formDataSchema.parse({
-    resumeKey: formData.get("resumeKey") ?? undefined,
-    returnTo: formData.get("returnTo") ?? undefined,
-  });
   return parseProviderConnectionReturn({
-    resumeKey,
-    returnTo,
+    resumeKey: formData.get("resumeKey")?.toString(),
+    returnTo: formData.get("returnTo")?.toString(),
   });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function safeProviderConnectionReturn(input: {
-  returnTo?: StringOrStrings;
-  resumeKey?: StringOrStrings;
+  returnTo?: string | string[];
+  resumeKey?: string | string[];
 }): ProviderConnectionReturn {
   try {
     return parseProviderConnectionReturn(input);
@@ -82,17 +68,17 @@ export function providerConnectionRedirect(input: {
     input.origin,
   );
   url.searchParams.set(input.provider, input.status);
-  if (input.status === "failed" && input.reason !== undefined && input.reason !== "") {
+  if (input.status === "failed" && input.reason) {
     url.searchParams.set(`${input.provider}Reason`, input.reason);
   }
-  if (input.returnState?.resumeKey !== undefined && input.returnState.resumeKey !== "") {
+  if (input.returnState?.resumeKey) {
     url.searchParams.set("resume", input.returnState.resumeKey);
   }
   return url.toString();
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parseProviderResumeKey(value: StringOrStrings | undefined) {
-  const parsed = resumeKeySchema.safeParse(firstValue(value));
+export function parseProviderResumeKey(value: string | string[] | undefined) {
+  const parsed = resumeKeySchema.safeParse(first(value));
   return parsed.success ? parsed.data : undefined;
 }

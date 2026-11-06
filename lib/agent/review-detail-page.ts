@@ -84,25 +84,24 @@ export const readOwnedReviewDetailPage = (input: {
     makePayload: (piece, nextOffsetBytes): ReviewDetailPage => {
       const detailCursor =
         nextOffsetBytes < totalBytes ? { digest, offsetBytes: nextOffsetBytes } : undefined;
-      let nextCall: ReviewDetailNextCall | undefined;
-      if (detailCursor !== undefined) {
-        nextCall = {
-          detailCursor,
-          detailSection: section,
-          expectedReviewDigest: input.details.reviewReceipt.digest,
-          view: "acceptance",
-        };
-        if (sourceAssessment !== undefined) {
-          nextCall.sourceAssessmentBindingDigest = sourceAssessment.bindingDigest;
-        }
-      }
       return {
         complete: nextOffsetBytes === totalBytes,
         content: piece,
         detailCursor,
         digest,
         mediaType: "application/json" as const,
-        nextCall,
+        nextCall:
+          detailCursor === undefined
+            ? undefined
+            : {
+                view: "acceptance" as const,
+                detailSection: section,
+                expectedReviewDigest: input.details.reviewReceipt.digest,
+                ...(sourceAssessment === undefined
+                  ? {}
+                  : { sourceAssessmentBindingDigest: sourceAssessment.bindingDigest }),
+                detailCursor,
+              },
         offsetBytes,
         reviewReference: {
           digest: input.details.reviewReceipt.digest,
