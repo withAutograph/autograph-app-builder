@@ -37,7 +37,6 @@ export default defineTool({
               ...(installation === undefined ? {} : { installationId: installation }),
               proposalDigest: state.githubDraftProposal.proposal.digest,
               ...(observation.readyAt === undefined ? {} : { readyAt: observation.readyAt }),
-              sessionId: ctx.session.id,
             },
           }
         : {}),

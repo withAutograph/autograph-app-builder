@@ -26,11 +26,10 @@ const reviewedTarget = {
 const approval: GitHubPrDeliveryApproval = {
   ...reviewedTarget,
   proposalDigest: "b".repeat(64),
-  sessionId: "session-fixture",
 };
 const readyAt = "2026-11-05T15:30:00Z";
 const mergeCommitSha = "c".repeat(40);
-const session = { id: approval.sessionId, auth: {} };
+const session = { id: "session-fixture", auth: {} };
 const callId = "approved-delivery-call";
 const abortSignal = new AbortController().signal;
 const observe = (changes: Partial<GitHubPrDeliveryObservation> = {}) => ({
@@ -77,6 +76,19 @@ it("requires approval for the session's current reviewed publication", async () 
     type: "denied",
   });
   expect(mocks.inspect).not.toHaveBeenCalled();
+  expect(mocks.run).not.toHaveBeenCalled();
+});
+
+it("rechecks the approved proposal in the authenticated workflow without a model-carried session ID", async () => {
+  mocks.inspect.mockResolvedValue(observe());
+  const callback = { session: { ...session, id: "workflow-session" }, callId, abortSignal };
+  // SAFETY: These are the only callback fields the step reads.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Partial workflow fixture.
+  await expect(continueGitHubPrDelivery(approval, callback as never, readyAt)).resolves.toEqual({
+    status: "waiting-for-checks",
+    readyAt,
+  });
+  expect(mocks.inspect).toHaveBeenCalledExactlyOnceWith(approval.proposalDigest);
   expect(mocks.run).not.toHaveBeenCalled();
 });
 

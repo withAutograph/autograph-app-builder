@@ -514,7 +514,9 @@ When hosted GitHub publication is enabled, an eligible reviewed publication
 can return an input for `finish-github-pr-delivery`. Operators can explicitly
 disable Ready and merge with `APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED=0`. This is a separate native
 approval to mark the PR ready and merge the reviewed revision when required
-checks pass. It is scoped to the current session and repository. The GitHub
+checks pass. Eve binds the approval to the current session's tool call. Builder
+checks that session's reviewed proposal before requesting approval and rechecks
+the authorized repository and revision in the delivery step. The GitHub
 App installation needs Actions read, Pull requests write for Ready, and
 Contents write for merge. The provider requests a repository-scoped token
 attenuated for each operation. GitHub applies its own review and merge policy.
