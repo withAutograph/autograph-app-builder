@@ -11,9 +11,9 @@ import {
   symlinkSync,
   readlinkSync,
 } from "node:fs";
-import { once } from "node:events";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { once } from "node:events";
 import { describe, expect, it } from "vitest";
 import { captureLocalPlanningSource, reconcileLocalPlanningSource } from "./local-planning-source";
 import { localSourceBaselineManifestSchema } from "./local-source-baseline-contract";
@@ -233,6 +233,7 @@ describe("local planning base adoption", () => {
   });
   it("rejects an actually moving source before returning mismatched generation metadata", async () => {
     const f = fixture();
+    f.write(f.source, "large.txt", "x".repeat(32 * 1024 * 1024));
     const writer = spawn(
       process.execPath,
       [
