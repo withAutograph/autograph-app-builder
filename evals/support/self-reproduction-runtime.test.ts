@@ -7,39 +7,36 @@ import {
 } from "./self-reproduction-runtime";
 
 const backend = (results: { exitCode: number; stdout?: string; stderr?: string }[]) => {
-  const shutdown = vi.fn(() => Promise.resolve());
-  const run = vi.fn(() => {
+  const shutdown = vi.fn(async () => {});
+  const run = vi.fn(async () => {
     const result = results.shift();
     if (!result) {
       throw new Error("Runtime backend fixture was exhausted.");
     }
-    return Promise.resolve({ stderr: "", stdout: "", ...result });
+    return { stderr: "", stdout: "", ...result };
   });
-  const writeTextFile = vi.fn(() => Promise.resolve());
-  const writeBinaryFile = vi.fn(() => Promise.resolve());
-  const spawn = vi.fn(() =>
-    Promise.resolve({
-      kill: () => Promise.resolve(),
-      stderr: new ReadableStream(),
-      stdout: new ReadableStream(),
-      wait: () => Promise.resolve({ exitCode: 0 }),
-    }),
-  );
+  const writeTextFile = vi.fn(async () => {});
+  const writeBinaryFile = vi.fn(async () => {});
+  const spawn = vi.fn(async () => ({
+    kill: async () => await Promise.resolve(),
+    stderr: new ReadableStream(),
+    stdout: new ReadableStream(),
+    wait: async () => await Promise.resolve({ exitCode: 0 }),
+  }));
   return {
     backend: {
-      open: () =>
-        Promise.resolve({
+      open: async () => ({
+        id: "sandbox-fixture",
+        session: {
           id: "sandbox-fixture",
-          session: {
-            id: "sandbox-fixture",
-            readTextFile: () => Promise.resolve(JSON.stringify({ basePath: "" })),
-            run,
-            spawn,
-            writeBinaryFile,
-            writeTextFile,
-          },
-          shutdown,
-        }),
+          readTextFile: async () => await Promise.resolve(JSON.stringify({ basePath: "" })),
+          run,
+          spawn,
+          writeBinaryFile,
+          writeTextFile,
+        },
+        shutdown,
+      }),
     } as never,
     run,
     shutdown,
@@ -138,10 +135,10 @@ describe("self-reproduction candidate runtime", () => {
         ]),
       },
     ]);
-    const onReady = vi.fn(({ baseURL }: { baseURL: string }) => {
+    const onReady = vi.fn(async ({ baseURL }: { baseURL: string }) => {
       expect(baseURL).toBe("http://127.0.0.1:3000");
       expect(fixture.shutdown).not.toHaveBeenCalled();
-      return Promise.resolve();
+      return;
     });
     const receipt = await evaluateCandidateRuntime({
       backend: fixture.backend,
@@ -190,7 +187,9 @@ describe("self-reproduction candidate runtime", () => {
   it("classifies provider creation failure as unavailable infrastructure", async () => {
     const receipt = await evaluateCandidateRuntime({
       backend: {
-        open: () => Promise.reject(new Error("Vercel OIDC credential unavailable")),
+        open: async () => {
+          throw new Error("Vercel OIDC credential unavailable");
+        },
       },
       candidateAppId: "candidate",
       files: [],

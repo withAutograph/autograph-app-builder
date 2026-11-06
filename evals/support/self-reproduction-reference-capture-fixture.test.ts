@@ -5,25 +5,23 @@ import { prepareReferenceCaptureFixture } from "./self-reproduction-reference-ca
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
 const fixture = vi.hoisted(() => ({
-  authenticate: vi.fn(() => Promise.resolve()),
-  end: vi.fn(() => Promise.resolve()),
+  authenticate: vi.fn(async () => {}),
+  end: vi.fn(async () => {}),
   query: vi.fn(),
 }));
 vi.mock("../../e2e/support/harness", () => ({
   appOrigin: "https://localhost:3001",
-  currentSession: () => Promise.resolve({ user: { id: "synthetic-owner" } }),
+  currentSession: async () => ({ user: { id: "synthetic-owner" } }),
   databaseUrl: "postgresql://synthetic",
   finishOAuth: fixture.authenticate,
-  waitForBuilderReady: () => Promise.resolve(),
+  waitForBuilderReady: async () => {},
 }));
 vi.mock("postgres", () => ({ default: () => Object.assign(fixture.query, { end: fixture.end }) }));
 const page = {
   getByLabel: (name: string) => ({
     fill: vi.fn(),
-    inputValue: () =>
-      Promise.resolve(
-        name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,
-      ),
+    inputValue: async () =>
+      name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,
   }),
   getByRole: () => ({ filter: () => ({ waitFor: vi.fn() }) }),
   viewportSize: () => ({ height: 900, width: 1440 }),
@@ -31,8 +29,8 @@ const page = {
 
 it("requires an owner-scoped durable readback and records no session credentials", async () => {
   fixture.query.mockResolvedValue([{ ...selfReproductionDraft, revision: 7 }]);
-  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(() =>
-    Promise.resolve(),
+  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(
+    async () => {},
   );
   await prepareReferenceCaptureFixture(page, {
     fixtureRoot: "/tmp/isolated-reference",
@@ -52,8 +50,8 @@ it("requires an owner-scoped durable readback and records no session credentials
 
 it("records a blocker and rejects when emulated authentication fails", async () => {
   fixture.authenticate.mockRejectedValueOnce(new Error("sensitive diagnostic"));
-  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(() =>
-    Promise.resolve(),
+  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(
+    async () => {},
   );
   await expect(
     prepareReferenceCaptureFixture(page, {
@@ -72,8 +70,8 @@ it("captures three restored contexts without waiting for a new write acknowledge
   const status = vi.fn(() => {
     throw new Error("Unchanged draft has no new acknowledgement");
   });
-  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(() =>
-    Promise.resolve(),
+  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(
+    async () => {},
   );
   for (const width of [1440, 1920, 1024]) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- Match the sequential desktop capture lifecycle.
@@ -82,10 +80,8 @@ it("captures three restored contexts without waiting for a new write acknowledge
         ...page,
         getByLabel: (name: string) => ({
           fill,
-          inputValue: () =>
-            Promise.resolve(
-              name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,
-            ),
+          inputValue: async () =>
+            name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,
         }),
         getByRole: status,
         viewportSize: () => ({ height: 900, width }),

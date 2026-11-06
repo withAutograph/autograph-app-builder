@@ -41,31 +41,28 @@ export const createDefaultFrameworkAdapter = (input: {
   return {
     exerciseBrowser:
       input.browserFixture ??
-      (() =>
-        Promise.resolve({
-          artifacts: [],
-          assertions: [],
-          disposition: "not-run",
-          reason: "No evaluator-owned behavioral fixture is bound for this framework requirement.",
-        })),
+      (async () => ({
+        artifacts: [],
+        assertions: [],
+        disposition: "not-run",
+        reason: "No evaluator-owned behavioral fixture is bound for this framework requirement.",
+      })),
     instantNavigationRecipe:
       input.navigationFixture ??
-      (() =>
-        Promise.resolve({
-          disposition: "not-run",
-          ready: false,
-          reason:
-            "No evaluator-owned instant-navigation route and resolved-content fixture is bound.",
-        })),
+      (async () => ({
+        disposition: "not-run",
+        ready: false,
+        reason:
+          "No evaluator-owned instant-navigation route and resolved-content fixture is bound.",
+      })),
     reviewSource:
       input.sourceReview ??
-      (() =>
-        Promise.resolve({
-          artifacts: [],
-          disposition: "not-run",
-          ready: false,
-          reason: `No evaluator-owned source review is bound. Structural hints (not assertion evidence): ${JSON.stringify(hints)}`,
-        })),
+      (async () => ({
+        artifacts: [],
+        disposition: "not-run",
+        ready: false,
+        reason: `No evaluator-owned source review is bound. Structural hints (not assertion evidence): ${JSON.stringify(hints)}`,
+      })),
   };
 };
 

@@ -6,7 +6,7 @@ import {
   parityEvidenceFromReceipts,
 } from "./self-reproduction-parity-evidence";
 
-const artifactExists = () => Promise.resolve(true);
+const artifactExists = async () => true;
 const base = {
   candidate: { output: "available" as const, reason: "ready", sourceRevision: "candidate" },
   reference: { output: "available" as const, reason: "ready", sourceRevision: "ref" },

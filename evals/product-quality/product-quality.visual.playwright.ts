@@ -26,7 +26,7 @@ async function loadPrototype(page: Page) {
         axe: { run: () => Promise<{ violations: unknown[] }> };
       }
     ).axe;
-    return runner.run();
+    return await runner.run();
   });
   expect(accessibility.violations).toEqual([]);
   await expect(page.getByRole("heading", { name: "Vendor Review" })).toBeVisible();
@@ -37,8 +37,10 @@ test.beforeAll(async () => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(vendorOnboardingPrototype);
   });
-  const { promise, resolve } = Promise.withResolvers<undefined>();
-  prototypeServer.listen(0, "127.0.0.1", () => resolve(undefined as undefined));
+  const { promise, resolve } = Promise.withResolvers<void>();
+  prototypeServer.listen(0, "127.0.0.1", () => {
+    resolve();
+  });
   await promise;
   const address = prototypeServer.address() as AddressInfo;
   prototypeUrl = `http://127.0.0.1:${address.port}/prototype/vendor-onboarding`;

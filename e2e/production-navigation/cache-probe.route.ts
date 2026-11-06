@@ -21,7 +21,7 @@ const installCatalogFixture = () => {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise<Response> fetch contract
   globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
-    if (url !== catalogUrl) return realFetch(input, init);
+    if (url !== catalogUrl) return await realFetch(input, init);
     upstreamCalls += 1;
     if (unavailable) return new Response(null, { status: 503 });
     return Response.json({

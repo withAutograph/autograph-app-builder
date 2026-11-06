@@ -34,7 +34,7 @@ async function productionAppSpecInstructions(): Promise<string> {
     "agent/skills/design-app/references/app-spec.md",
   ];
   const contents = await Promise.all(
-    paths.map((path) => readFile(nodePath.resolve(repositoryRoot, path), "utf-8")),
+    paths.map(async (path) => await readFile(nodePath.resolve(repositoryRoot, path), "utf-8")),
   );
   return contents.join("\n\n");
 }

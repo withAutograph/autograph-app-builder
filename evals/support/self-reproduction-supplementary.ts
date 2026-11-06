@@ -79,7 +79,9 @@ export const writeSupplementaryAssessment = async (input: {
     throw new Error("Supplementary output must be outside the App Builder source tree.");
   }
   const roots = await Promise.all(
-    [input.runDirectory, input.sourceReviewDirectory].map((rootPath) => realpath(rootPath)),
+    [input.runDirectory, input.sourceReviewDirectory].map(
+      async (rootPath) => await realpath(rootPath),
+    ),
   );
   const [parityRoot, reviewRoot] = roots;
   if (!parityRoot || !reviewRoot) {
@@ -172,17 +174,21 @@ export const writeSupplementaryAssessment = async (input: {
     prefix: string,
   ): Promise<Observation> => ({
     ...value,
-    artifacts: await Promise.all(value.artifacts.map((path) => copy(root, path, prefix))),
+    artifacts: await Promise.all(
+      value.artifacts.map(async (path) => await copy(root, path, prefix)),
+    ),
     assertions: await Promise.all(
       value.assertions.map(async (assertion) => ({
         ...assertion,
-        artifacts: await Promise.all(assertion.artifacts.map((path) => copy(root, path, prefix))),
+        artifacts: await Promise.all(
+          assertion.artifacts.map(async (path) => await copy(root, path, prefix)),
+        ),
       })),
     ),
   });
   for (const side of sides) {
     evidence[side].observations = await Promise.all(
-      evidence[side].observations.map((item) => rebase(item, parityRoot, "original")),
+      evidence[side].observations.map(async (item) => await rebase(item, parityRoot, "original")),
     );
     for (const raw of review.observations?.[side] ?? []) {
       const item = raw as Observation;
@@ -238,7 +244,7 @@ export const writeSupplementaryAssessment = async (input: {
       }
     }
   }
-  const assessment = await assessParity(evidence, (path) => Promise.resolve(copied.has(path)));
+  const assessment = await assessParity(evidence, async (path) => copied.has(path));
   // Source failures still need their retained source evidence to count as assessed.
   for (const row of assessment.rows) {
     if (row.artifacts.some((path) => !copied.has(path))) {

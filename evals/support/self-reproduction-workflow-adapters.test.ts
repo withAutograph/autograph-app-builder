@@ -41,40 +41,39 @@ const adapter = (input?: {
       reason: "Browser transition observed.",
     };
   },
-  prepare: (_page, id) => {
+  prepare: async (_page, id) => {
     if (id === input?.missing) {
-      return Promise.resolve({
+      return {
         disposition: "missing-functionality" as const,
         ready: false as const,
         reason: "Control absent.",
-      });
+      };
     }
     if (id === input?.unavailable) {
-      return Promise.resolve({
+      return {
         disposition: "infrastructure-unavailable" as const,
         ready: false as const,
         reason: "Fixture database unavailable.",
-      });
+      };
     }
-    return Promise.resolve({ ready: true as const });
+    return { ready: true as const };
   },
-  verify: (id) =>
-    Promise.resolve({
-      assertions: assertionIds(id)
-        .filter((_, index) => index % 2 === 1)
-        .map((assertion) => ({
-          detail: "Durable readback matched.",
-          id: assertion,
-          passed: true,
-        })),
-      reason: "Server readback completed.",
-    }),
+  verify: async (id) => ({
+    assertions: assertionIds(id)
+      .filter((_, index) => index % 2 === 1)
+      .map((assertion) => ({
+        detail: "Durable readback matched.",
+        id: assertion,
+        passed: true,
+      })),
+    reason: "Server readback completed.",
+  }),
 });
 
 const browser = () => {
-  const close = vi.fn(() => Promise.resolve());
-  const newPage = vi.fn(() => Promise.resolve({}));
-  const newContext = vi.fn(() => Promise.resolve({ close, newPage }));
+  const close = vi.fn(async () => {});
+  const newPage = vi.fn(async () => ({}));
+  const newContext = vi.fn(async () => ({ close, newPage }));
   return { close, newContext, newPage, value: { newContext } as unknown as Browser };
 };
 
@@ -99,7 +98,7 @@ describe("trusted browser workflow adapters", () => {
         runId: "trusted",
         runtimeReceipts: run.receipts,
       });
-      const assessed = await assessParity(evidence, () => Promise.resolve(true));
+      const assessed = await assessParity(evidence, async () => true);
       expect(
         assessed.rows
           .filter(
@@ -144,7 +143,7 @@ describe("trusted browser workflow adapters", () => {
         runId: "status",
         runtimeReceipts: run.receipts,
       });
-      const { rows } = await assessParity(evidence, () => Promise.resolve(true));
+      const { rows } = await assessParity(evidence, async () => true);
       const candidate = (id: string) =>
         rows.find((row) => row.side === "candidate" && row.requirementId === id);
       expect(candidate("provider-return-success")).toMatchObject({
@@ -171,7 +170,9 @@ describe("trusted browser workflow adapters", () => {
     const outputRoot = await mkdtemp(path.join(tmpdir(), "trusted-workflows-error-"));
     const fixtureBrowser = browser();
     const broken = adapter();
-    broken.verify = () => Promise.reject(new Error("secret database error"));
+    broken.verify = async () => {
+      throw new Error("secret database error");
+    };
     try {
       const run = await runTrustedBrowserWorkflows({
         adapters: { candidate: broken },

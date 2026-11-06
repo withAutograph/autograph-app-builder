@@ -42,11 +42,11 @@ export const snapshotReferenceSource = async (
     const chunks: Buffer[] = [];
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
     child.on("error", filesDeferred.reject);
-    child.on("close", (code) =>
+    child.on("close", (code) => {
       code === 0
         ? filesDeferred.resolve(Buffer.concat(chunks).toString().split("\0").filter(Boolean))
-        : filesDeferred.reject(new Error("Cannot enumerate reference source.")),
-    );
+        : filesDeferred.reject(new Error("Cannot enumerate reference source."));
+    });
   }
   const files = await filesDeferred.promise;
   await mkdir(fixtureRoot, { recursive: true });
@@ -74,28 +74,34 @@ const availablePort = async (requestedPort = 0): Promise<number> => {
   const listenDeferred = Promise.withResolvers<null>();
   {
     server.once("error", listenDeferred.reject);
-    server.listen(requestedPort, "127.0.0.1", () => listenDeferred.resolve(null));
+    server.listen(requestedPort, "127.0.0.1", () => {
+      listenDeferred.resolve(null);
+    });
   }
   await listenDeferred.promise;
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : 0;
   const closeDeferred = Promise.withResolvers<null>();
-  server.close(() => closeDeferred.resolve(null));
+  server.close(() => {
+    closeDeferred.resolve(null);
+  });
   await closeDeferred.promise;
   return port;
 };
 
-const probe = (url: string): Promise<boolean> => {
+const probe = async (url: string): Promise<boolean> => {
   const deferred = Promise.withResolvers<boolean>();
   {
     const request = get(url, { rejectUnauthorized: false, timeout: 2000 }, (response) => {
       response.resume();
       deferred.resolve(response.statusCode !== undefined && response.statusCode < 500);
     });
-    request.on("error", () => deferred.resolve(false));
+    request.on("error", () => {
+      deferred.resolve(false);
+    });
     request.on("timeout", () => request.destroy());
   }
-  return deferred.promise;
+  return await deferred.promise;
 };
 
 export const startSelfReproductionReferenceRuntime = async (input: {
@@ -155,11 +161,11 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     try {
       const childDeferred = Promise.withResolvers<null>();
       child.on("error", childDeferred.reject);
-      child.on("close", (code) =>
+      child.on("close", (code) => {
         code === 0
           ? childDeferred.resolve(null)
-          : childDeferred.reject(new Error(`${name} failed; see ${log}`)),
-      );
+          : childDeferred.reject(new Error(`${name} failed; see ${log}`));
+      });
       await childDeferred.promise;
     } finally {
       output.end();

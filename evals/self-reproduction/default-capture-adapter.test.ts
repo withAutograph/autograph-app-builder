@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createCaptureAdapters } from "./default-capture-adapter";
 
 const absentLocator = {
-  count: () => Promise.resolve(0),
+  count: async () => 0,
 };
 
 describe("default self-reproduction capture adapter", () => {
@@ -24,7 +24,7 @@ describe("default self-reproduction capture adapter", () => {
     const page = {
       getByRole: vi.fn(() => absentLocator),
       getByText: vi.fn(() => absentLocator),
-      goto: vi.fn(() => Promise.resolve()),
+      goto: vi.fn(async () => {}),
       locator: vi.fn(() => absentLocator),
     } as unknown as Page;
     await expect(candidate.prepare(page, "panel-resize")).resolves.toMatchObject({
@@ -41,7 +41,7 @@ describe("default self-reproduction capture adapter", () => {
     const page = {
       getByRole: vi.fn(() => absentLocator),
       getByText: vi.fn(() => absentLocator),
-      goto: vi.fn(() => Promise.resolve()),
+      goto: vi.fn(async () => {}),
       locator: vi.fn(() => absentLocator),
     } as unknown as Page;
     await expect(reference.prepare(page, "loading")).resolves.toMatchObject({
@@ -60,7 +60,9 @@ describe("default self-reproduction capture adapter", () => {
       referenceURL: "http://127.0.0.1:3000",
     });
     const page = {
-      goto: vi.fn(() => Promise.reject(new Error("connection refused"))),
+      goto: vi.fn(async () => {
+        throw new Error("connection refused");
+      }),
     } as unknown as Page;
     await expect(candidate.prepare(page, "empty")).resolves.toMatchObject({
       disposition: "infrastructure-unavailable",
