@@ -416,16 +416,41 @@ export function IdentityInvitation({
   invitation,
   canOpenLinks,
   onOpenLink,
+  accessUrl,
+  now = Date.now(),
 }: {
   invitation: PublicIdentityInvitation;
   canOpenLinks: boolean;
   onOpenLink: (url: string) => Promise<void>;
+  accessUrl?: string;
+  now?: number;
 }) {
-  if (Date.parse(invitation.expiresAt) <= Date.now()) {
-    return null;
+  if (Date.parse(invitation.expiresAt) <= now) {
+    return (
+      <section aria-label="Connect your app account">
+        <p role="status">Your sign-in link has expired. Your app and setup progress are saved.</p>
+        {accessUrl ? (
+          <a
+            href={accessUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={
+              canOpenLinks
+                ? (event) => {
+                    event.preventDefault();
+                    void onOpenLink(accessUrl);
+                  }
+                : undefined
+            }
+          >
+            Get a new sign-in link in Builder
+          </a>
+        ) : null}
+      </section>
+    );
   }
   return (
-    <section aria-label="Connect your account">
+    <section aria-label="Connect your app account">
       <p>
         <a
           href={invitation.url}
@@ -440,10 +465,10 @@ export function IdentityInvitation({
               : undefined
           }
         >
-          Sign in to connect your account
+          Sign in or create your app account
         </a>
       </p>
-      <p>The approved preparation resumes automatically.</p>
+      <p>Connect once. Builder sets up your access and continues automatically.</p>
     </section>
   );
 }
@@ -473,6 +498,48 @@ const useIdentityInvitationTime = (invitations: PublicIdentityInvitation[]) => {
 
 const invitationOrOutcome = (invitations: ReactNode[], outcome: ReactNode) =>
   invitations.length > 0 ? <main className="mcpApp shell">{invitations}</main> : outcome;
+
+const sessionAccessControls = (input: {
+  invitations: PublicIdentityInvitation[];
+  now: number;
+  accessUrl?: string;
+  canOpenLinks: boolean;
+  onOpenLink: (url: string) => Promise<void>;
+}) => {
+  const controls = input.invitations.map((invitation) => (
+    <IdentityInvitation
+      key={invitation.callId}
+      invitation={invitation}
+      canOpenLinks={input.canOpenLinks}
+      onOpenLink={input.onOpenLink}
+      accessUrl={input.accessUrl}
+      now={input.now}
+    />
+  ));
+  const { accessUrl } = input;
+  if (accessUrl !== undefined) {
+    controls.push(
+      <p key="app-access">
+        <a
+          href={accessUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={
+            input.canOpenLinks
+              ? (event) => {
+                  event.preventDefault();
+                  void input.onOpenLink(accessUrl);
+                }
+              : undefined
+          }
+        >
+          Manage app access and people
+        </a>
+      </p>,
+    );
+  }
+  return controls;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function SessionAppView({
@@ -573,18 +640,13 @@ export function SessionAppView({
       submitted={state === "submitted"}
     />
   );
-  const invitations = identityInvitations.flatMap((invitation) =>
-    Date.parse(invitation.expiresAt) > invitationNow
-      ? [
-          <IdentityInvitation
-            key={invitation.callId}
-            invitation={invitation}
-            canOpenLinks={canOpenLinks}
-            onOpenLink={onOpenLink}
-          />,
-        ]
-      : [],
-  );
+  const invitations = sessionAccessControls({
+    invitations: identityInvitations,
+    now: invitationNow,
+    accessUrl: result.appAccessUrl,
+    canOpenLinks,
+    onOpenLink,
+  });
   if (
     result.status === "failed" ||
     decisionOutcome?.status === "failed" ||

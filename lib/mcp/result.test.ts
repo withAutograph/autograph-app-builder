@@ -20,6 +20,29 @@ import {
 } from "./result";
 
 describe("safe MCP tool errors", () => {
+  it("presents app access and an ordinary sign-in invitation while setup is working", () => {
+    const accessUrl = "https://builder.example.com/builds/session-one/access";
+    const result = toolResult(
+      {
+        sessionId: "session-one",
+        appAccessUrl: accessUrl,
+        status: "working" as const,
+        cursor: 1,
+        events: [
+          {
+            type: "auth_identity_invitation" as const,
+            index: 1,
+            callId: "call",
+            url: "https://apps.example.com/sign-in",
+            expiresAt: "2099-01-01T00:00:00Z",
+          },
+        ],
+      },
+      "Setting up your app",
+    );
+    expect(result.content[0].text).toContain(accessUrl);
+    expect(result._meta?.ui.resourceUri).toBe("ui://autograph-app-builder/session.html");
+  });
   it.each([
     [new AdapterNotConfiguredError(), "adapter_not_configured"],
     [new HostedSessionNotFoundError(), "not_found"],

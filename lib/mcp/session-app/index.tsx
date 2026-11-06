@@ -5,7 +5,10 @@ import { createRoot } from "react-dom/client";
 import packageManifest from "../../../package.json";
 import { eveSessionResultSchema, retainPublicSessionCursor } from "../contracts";
 import type { EveSessionResult } from "../contracts";
-import { createBoundedAuthorizationRefresh } from "./automatic-refresh";
+import {
+  createBoundedAuthorizationRefresh,
+  sessionAuthorizationRefreshKey,
+} from "./automatic-refresh";
 import { SessionAppView } from "./view";
 import { reduceIdentityInvitations } from "./identity-invitation";
 import type { IdentityInvitationState } from "./identity-invitation";
@@ -47,12 +50,10 @@ function SessionAppContainer() {
   );
   const capabilities = app.getHostCapabilities();
   const automaticRefresh = useRef(createBoundedAuthorizationRefresh());
-  const authorizationRequestKey =
-    result?.inputRequests
-      ?.filter((request) => request.kind === "authorization")
-      .map((request) => request.requestId)
-      .toSorted()
-      .join(":") ?? "";
+  const authorizationRequestKey = sessionAuthorizationRefreshKey(
+    result,
+    identityInvitationState?.invitations ?? [],
+  );
 
   const refresh = useCallback(async () => {
     if (!result || !capabilities?.serverTools) {

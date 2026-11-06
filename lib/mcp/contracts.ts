@@ -229,6 +229,7 @@ export type PublicWorkingPreview = z.infer<typeof publicWorkingPreviewSchema>;
 
 export const eveSessionResultSchema = z
   .object({
+    appAccessUrl: z.url().startsWith("https://").optional(),
     cursor: z.number().int().nonnegative(),
     error: z.object({ code: z.string(), message: z.string() }).strict().optional(),
     events: z.array(publicEveEventSchema),

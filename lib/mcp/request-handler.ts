@@ -37,6 +37,7 @@ import {
   toolResult,
 } from "./result";
 import { MCP_APP_RESOURCE_MIME_TYPE, sessionUiHtml } from "./session-ui";
+import { appAccessPath } from "../app-access/contracts";
 
 const sessionResourceMeta = {
   ui: {
@@ -229,7 +230,7 @@ export function withHostedBuilderHandoffs(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createAutographMcpHandler(
   service: EveSessionService,
-  options: { requestUrl?: string; advertiseOauth?: boolean } = {},
+  options: { requestUrl?: string; advertiseOauth?: boolean; appAccessOrigin?: string } = {},
 ) {
   const toolAuthMeta = (_operation: string, meta: Record<string, unknown> = {}) => {
     if (options.advertiseOauth) {
@@ -252,10 +253,21 @@ export function createAutographMcpHandler(
 
     return {};
   };
-  const present = (result: EveSessionListResult | EveSessionResult) =>
-    "kind" in result || options.requestUrl === undefined
-      ? result
-      : attachPrototypePreviewUrl(result, options.requestUrl);
+  const present = (result: EveSessionListResult | EveSessionResult) => {
+    if ("kind" in result) {
+      return result;
+    }
+    const presented =
+      options.requestUrl === undefined
+        ? result
+        : attachPrototypePreviewUrl(result, options.requestUrl);
+    return options.appAccessOrigin === undefined || !result.sessionId
+      ? presented
+      : {
+          ...presented,
+          appAccessUrl: new URL(appAccessPath(result.sessionId), options.appAccessOrigin).href,
+        };
+  };
   return createMcpHandler((server) => {
     server.registerResource(
       "autograph-session",
@@ -683,6 +695,7 @@ export function createMcpRequestHandler(
       return createAutographMcpHandler(selected, {
         advertiseOauth: true,
         requestUrl: request.url,
+        appAccessOrigin: new URL(input.hostedRuntime.auth.resourceUrl).origin,
       })(request);
     }
     if (mode === "local") {

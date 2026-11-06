@@ -112,13 +112,20 @@ export function toolResult<const Result extends EveSessionListResult | EveSessio
   result: Result,
   text: string,
 ) {
-  const needsInteractiveSessionUi =
+  const hasInputRequests =
     !("kind" in result) &&
     result.status === "input_required" &&
     (result.inputRequests?.length ?? 0) > 0;
+  const needsInteractiveSessionUi =
+    !("kind" in result) &&
+    (hasInputRequests || result.events.some((event) => event.type === "auth_identity_invitation"));
+  const accessText =
+    !("kind" in result) && result.appAccessUrl !== undefined
+      ? `${text}\n\nManage app access and people: ${result.appAccessUrl}`
+      : text;
 
   return {
-    content: [{ text, type: "text" as const }],
+    content: [{ text: accessText, type: "text" as const }],
     structuredContent: result,
     ...(needsInteractiveSessionUi ? { _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } } } : {}),
   };

@@ -1254,7 +1254,7 @@ const hostedIdentityInvitation = (value: unknown): string | undefined => {
   if (url.username !== "" || url.password !== "" || /[\r\n<>]/u.test(url.href)) {
     return undefined;
   }
-  return `Sign in to connect your account: <${url.href}>. The approved preparation resumes automatically.`;
+  return `Sign in or create your app account: <${url.href}>. Builder sets up your access and continues automatically.`;
 };
 
 /** Converts only the installed Eve 0.68 events that belong in the public MCP projection. */

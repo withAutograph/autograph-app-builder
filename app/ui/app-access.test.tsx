@@ -1,0 +1,283 @@
+// @vitest-environment jsdom
+import { act } from "react";
+import type { ReactNode } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import { appAccessCommandSchema } from "@/lib/app-access/contracts";
+import type { AppAccessSnapshot } from "@/lib/app-access/contracts";
+import { AppAccessPage, AppAccessView } from "./app-access";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+const snapshot: AppAccessSnapshot = {
+  sessionId: "saved-app-session",
+  appId: "request-log",
+  appName: "Request log",
+  organizationName: "Team",
+  appUrl: "https://apps.example.com/request-log",
+  canManage: true,
+  roles: [
+    { id: "reader", label: "Reader" },
+    { id: "editor", label: "Editor" },
+  ],
+  members: [{ id: "creator", email: "creator@example.com", name: "Creator", roles: ["editor"] }],
+  invitations: [
+    {
+      id: "invite-one",
+      email: "guest@example.com",
+      roles: ["reader"],
+      status: "pending",
+      expiresAt: "2099-01-01T00:00:00Z",
+    },
+  ],
+  creator: { status: "ready" },
+};
+const roots: ReturnType<typeof createRoot>[] = [];
+const render = async (node: ReactNode) => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () => {
+    root.render(node);
+    await Promise.resolve();
+  });
+  return container;
+};
+const click = async (container: HTMLElement, label: string) => {
+  const button = [...container.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent === label,
+  );
+  if (!button) {
+    throw new Error(`Missing button: ${label}`);
+  }
+  await act(async () => {
+    button.click();
+    await Promise.resolve();
+  });
+};
+afterEach(async () => {
+  await act(async () => {
+    for (const root of roots.splice(0)) {
+      root.unmount();
+    }
+    await Promise.resolve();
+  });
+  document.body.replaceChildren();
+  vi.unstubAllGlobals();
+});
+
+describe("Builder app access", () => {
+  it("offers one ordinary app sign-in and account recovery without a completion checkbox", async () => {
+    const onAction = vi.fn();
+    const container = await render(
+      <AppAccessView
+        data={{
+          ...snapshot,
+          creator: {
+            status: "sign_in_required",
+            signInUrl: "https://apps.example.com/connect",
+            recoveryUrl: "https://apps.example.com/auth/forgot-password",
+            expiresAt: "2099-01-01T00:00:00Z",
+          },
+          canManage: false,
+        }}
+        disabled={false}
+        onAction={onAction}
+      />,
+    );
+    expect(
+      container.querySelector('a[href="https://apps.example.com/connect"]')?.textContent,
+    ).toContain("Sign in or create account");
+    expect(
+      container.querySelector('a[href="https://apps.example.com/auth/forgot-password"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("renews an expired sign-in through Builder without opening the stale link", async () => {
+    const onAction = vi.fn();
+    const container = await render(
+      <AppAccessView
+        data={{
+          ...snapshot,
+          creator: {
+            status: "sign_in_required",
+            signInUrl: "https://apps.example.com/stale",
+            expiresAt: "2000-01-01T00:00:00Z",
+          },
+        }}
+        disabled={false}
+        onAction={onAction}
+      />,
+    );
+    expect(container.querySelector('a[href="https://apps.example.com/stale"]')).toBeNull();
+    await click(container, "Get a new sign-in link");
+    expect(onAction).toHaveBeenCalledWith({ action: "renew-sign-in" });
+  });
+
+  it("manages invitation and member actions by their app-scoped identifiers", async () => {
+    const onAction = vi.fn();
+    const container = await render(
+      <AppAccessView data={snapshot} disabled={false} onAction={onAction} />,
+    );
+    await click(container, "Resend invitation");
+    await click(container, "Cancel invitation");
+    await click(container, "Remove app access");
+    expect(onAction.mock.calls).toEqual([
+      [{ action: "resend", invitationId: "invite-one" }],
+      [{ action: "cancel", invitationId: "invite-one" }],
+      [{ action: "remove", memberId: "creator" }],
+    ]);
+  });
+
+  it("shows uncertain email delivery without automatically resending", async () => {
+    const onAction = vi.fn();
+    const data = {
+      ...snapshot,
+      invitations: snapshot.invitations.map((invitation) => ({
+        ...invitation,
+        deliveryStatus: "unknown" as const,
+      })),
+    };
+    const container = await render(
+      <AppAccessView data={data} disabled={false} onAction={onAction} />,
+    );
+    expect(container.textContent).toContain("Delivery unconfirmed");
+    expect(onAction).not.toHaveBeenCalled();
+    await click(container, "Resend invitation");
+    expect(onAction).toHaveBeenCalledWith({ action: "resend", invitationId: "invite-one" });
+  });
+
+  it("submits the entered email and selected app role without browser-supplied organization authority", async () => {
+    const onAction = vi.fn();
+    const container = await render(
+      <AppAccessView data={snapshot} disabled={false} onAction={onAction} />,
+    );
+    const email = container.querySelector<HTMLInputElement>('input[type="email"]');
+    const role = container.querySelector<HTMLInputElement>('form input[type="checkbox"]');
+    const form = container.querySelector("form");
+    if (email === null || role === null || form === null) {
+      throw new Error("Expected invitation form");
+    }
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        email,
+        "new-person@example.com",
+      );
+      email.dispatchEvent(new Event("input", { bubbles: true }));
+      role.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    expect(onAction).toHaveBeenCalledWith({
+      action: "invite",
+      email: "new-person@example.com",
+      roles: ["reader"],
+    });
+  });
+
+  it("recovers the original pending command after reopening the saved app", async () => {
+    const pendingCommand = {
+      action: "resend" as const,
+      invitationId: "invite-one",
+      clientRequestId: "8bd98bc3-969d-486e-9cc3-60a23424250c",
+    };
+    const requests: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        await Promise.resolve();
+        if (init?.method === "POST") {
+          requests.push(JSON.parse(z.string().parse(init.body)));
+          return Response.json(snapshot);
+        }
+        return Response.json({ ...snapshot, pendingCommand });
+      }),
+    );
+    const container = await render(<AppAccessPage sessionId={snapshot.sessionId} />);
+    expect(container.textContent).toContain("Checking the previous request");
+    await click(container, "Retry the same update");
+    expect(requests).toEqual([pendingCommand]);
+  });
+
+  it("keeps the exact operation on a lost invitation reply and disables competing mutations", async () => {
+    const requests: object[] = [];
+    let attempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        await Promise.resolve();
+        if (init?.method === "POST") {
+          requests.push(appAccessCommandSchema.parse(JSON.parse(z.string().parse(init.body))));
+          attempts += 1;
+          if (attempts === 1) {
+            throw new TypeError("Connection interrupted");
+          }
+        }
+        return Response.json(snapshot);
+      }),
+    );
+    const container = await render(<AppAccessPage sessionId={snapshot.sessionId} />);
+    await click(container, "Resend invitation");
+    const cancel = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Cancel invitation",
+    );
+    expect(cancel?.disabled).toBe(true);
+    await click(container, "Retry the same update");
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toEqual(requests[0]);
+    expect(requests[0]).toMatchObject({ action: "resend", invitationId: "invite-one" });
+    expect(container.textContent).toContain("App access updated.");
+    expect(cancel?.disabled).toBe(false);
+  });
+
+  it("continues listing people across pages without dropping the first page", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        await Promise.resolve();
+        calls.push(url);
+        return Response.json(
+          url.includes("cursor=")
+            ? {
+                ...snapshot,
+                members: [
+                  { id: "guest", name: "Guest", email: "guest@example.com", roles: ["reader"] },
+                ],
+              }
+            : { ...snapshot, nextCursor: "page-two" },
+        );
+      }),
+    );
+    const container = await render(<AppAccessPage sessionId={snapshot.sessionId} />);
+    await click(container, "Show more people");
+    expect(calls[1]).toContain("cursor=page-two");
+    expect(container.textContent).toContain("Creator");
+    expect(container.textContent).toContain("Guest");
+    expect(container.textContent).not.toContain("Show more people");
+  });
+
+  it("does not prompt a linked creator to sign in again or require business roles for role-less apps", async () => {
+    const container = await render(
+      <AppAccessView
+        data={{
+          ...snapshot,
+          roles: [],
+          members: [{ id: "creator", name: "Creator", email: "creator@example.com", roles: [] }],
+        }}
+        disabled={false}
+        onAction={vi.fn()}
+      />,
+    );
+    expect(container.textContent).toContain("Your access is ready.");
+    expect(container.querySelector(`a[href="${snapshot.appUrl}"]`)).not.toBeNull();
+    expect(container.textContent).not.toContain("Sign in or create account");
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+  });
+});
