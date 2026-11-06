@@ -49,14 +49,6 @@ import {
   createRepositoryObservation,
 } from "../repository/github-publication";
 
-vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
-  prepareValidationLocalData: () => Promise.resolve(),
-}));
-
-vi.mock("./validation-log-store-for-session", () => ({
-  validationLogStoreForSession: () => Promise.resolve(undefined),
-}));
-
 const staticDescription: AppDescription = {
   app: { id: "example", routes: [], workspacePath: "apps/example" },
   backend: { kind: "static" },
