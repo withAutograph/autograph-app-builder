@@ -367,7 +367,7 @@ export const updateExistingDraft = async (input: {
     review: input.review,
     source: input.contentSource,
   });
-  const inspectApplied =  async (observed: ExistingDraftObservation) =>
+  const inspectApplied = async (observed: ExistingDraftObservation) =>
     (!isPublishedDraftRepairReview(input.review) ||
       observed.headTree === input.review.resolvedTree) &&
     input.adapter.inspectAppliedUpdate(proposal, content, observed);
