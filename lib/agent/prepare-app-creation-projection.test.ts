@@ -16,7 +16,11 @@ import {
   readPrivateApplyAuthority,
   retainPrivateApplyDenials,
 } from "./private-apply-authority";
-import { inspectExistingAppRepair, existingAppRepairHistory } from "./existing-app-repair-planning";
+import {
+  inspectExistingAppRepair,
+  existingAppRepairHistory,
+  priorResumedBuildDraftProposal,
+} from "./existing-app-repair-planning";
 import { privateComputeProjection } from "./private-compute-planning";
 import type { preparePrivateComputePlanning } from "./private-compute-planning";
 import { appBuilderWorkflowState } from "./workflow-state";
@@ -243,7 +247,10 @@ const hostedRecoveryContext = {
   ),
 };
 
-const prepareRecoveryFixture = async (phase: "applied" | "validation_failed" | "reviewed") => {
+const prepareRecoveryFixture = async (
+  phase: "applied" | "validation_failed" | "reviewed",
+  publishedGitHubDraftProposalDigest?: string,
+) => {
   const applied = appliedRepairFixture();
   if (applied.phase !== "applied") {
     throw new Error("fixture");
@@ -253,7 +260,14 @@ const prepareRecoveryFixture = async (phase: "applied" | "validation_failed" | "
     ...applied,
     phase,
     ...(phase === "validation_failed" ? { validationFailure: { reason: "command-failed" } } : {}),
-    ...(phase === "reviewed" ? { validationReceipt: {}, reviewReceipt: {} } : {}),
+    ...(phase === "reviewed"
+      ? {
+          validationReceipt: {},
+          reviewReceipt: {},
+          githubDraftProposal: { proposal: { digest: "sealed-draft" } },
+        }
+      : {}),
+    publishedGitHubDraftProposalDigest,
   } as AppBuilderWorkflowState;
   appBuilderWorkflowState.update(() => base);
   approveRepairFixture(base);
@@ -267,6 +281,39 @@ const prepareRecoveryFixture = async (phase: "applied" | "validation_failed" | "
 };
 
 describe("resume the approved build through the planning tool", () => {
+  it.each([undefined, "verified-publication"])(
+    "preserves only the explicit publication marker while retaining the sealed draft for inspection",
+    async (publishedMarker) => {
+      await run(async () => {
+        await prepareRecoveryFixture("reviewed", publishedMarker);
+        await prepareAppCreationTool.execute({ resumeApprovedBuild: true }, hostedRecoveryContext);
+        const resumed = appBuilderWorkflowState.get();
+        if (resumed.phase !== "applied") {
+          throw new Error("fixture");
+        }
+        expect(resumed.publishedGitHubDraftProposalDigest).toBe(publishedMarker);
+        expect(resumed).not.toHaveProperty("githubDraftProposal");
+        // SAFETY: The historical lookup consumes only the same accepted workflow and source binding.
+        const validated = { ...resumed, phase: "validated" } as Extract<
+          AppBuilderWorkflowState,
+          { phase: "validated" }
+        >;
+        expect(priorResumedBuildDraftProposal(validated, context.session.id)?.digest).toBe(
+          "sealed-draft",
+        );
+        expect(priorResumedBuildDraftProposal(validated, "foreign-session")).toBeUndefined();
+        expect(
+          priorResumedBuildDraftProposal(
+            {
+              ...validated,
+              workspace: { ...validated.workspace, workspaceId: "foreign-workspace" },
+            },
+            context.session.id,
+          ),
+        ).toBeUndefined();
+      });
+    },
+  );
   it.each(["applied", "validation_failed", "reviewed"] as const)(
     "reopens a hosted %s checkout and retains the suspended proposal",
     async (phase) => {

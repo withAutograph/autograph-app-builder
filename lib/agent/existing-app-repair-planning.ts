@@ -126,9 +126,7 @@ export const resumeApprovedAppBuild = async (
   if (base.githubSource?.digest !== current.githubSource?.digest) {
     throw new Error("The selected repository changed after the approved build.");
   }
-  const publishedGitHubDraftProposalDigest =
-    base.publishedGitHubDraftProposalDigest ??
-    (base.phase === "reviewed" ? base.githubDraftProposal?.proposal.digest : undefined);
+  const { publishedGitHubDraftProposalDigest } = base;
   const checkoutDependencyAttempts = new Map(
     [...(base.checkoutDependencyAttempts ?? []), ...(current.checkoutDependencyAttempts ?? [])].map(
       (attempt) => [attempt.attemptDigest, attempt],
@@ -167,6 +165,29 @@ export const resumeApprovedAppBuild = async (
     ),
   );
   return { appId: base.appSpec.appId, status: "resumed_approved_build" as const };
+};
+
+/** Historical context for delivery to inspect in the tenant journal. Sealing is not publication. */
+export const priorResumedBuildDraftProposal = (
+  state: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>,
+  sessionId: string,
+) => {
+  const entry = existingAppRepairHistory.get().findLast((record) => {
+    const { approvedBase: base } = record;
+    return [
+      record.sessionId === sessionId,
+      record.suspendedWorkflow !== undefined,
+      base.phase === "reviewed" && base.githubDraftProposal !== undefined,
+      base.appSpec.appId === state.appSpec.appId,
+      base.appSpec.digest === state.appSpec.digest,
+      base.workspace.workspaceId === state.workspace.workspaceId,
+      base.workspace.workspacePath === state.workspace.workspacePath,
+      base.sourceReceipt.digest === state.sourceReceipt.digest,
+      base.githubSource?.digest === state.githubSource?.digest,
+    ].every(Boolean);
+  });
+  const base = entry?.approvedBase;
+  return base?.phase === "reviewed" ? base.githubDraftProposal?.proposal : undefined;
 };
 const validateRepairChanges = (changes: readonly ExistingAppChange[], current: Proposed) => {
   const paths = new Set<string>();

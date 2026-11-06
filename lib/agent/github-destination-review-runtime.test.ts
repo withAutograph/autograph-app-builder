@@ -17,6 +17,7 @@ import {
   GITHUB_PUBLICATION_VERSION,
 } from "../repository/github-publication";
 import type {
+  DraftPullRequestSuccessReceipt,
   GitHubOperation,
   GitHubPublicationAdapter,
   ImmutableGitHubSourceReceipt,
@@ -266,6 +267,52 @@ describe("initial draft destination runtime", () => {
     expect(f.inspectRepository).not.toHaveBeenCalled();
     expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
     expect(receipt.status).toBe("pending");
+  });
+  it("opens an ordinary review for a sealed-only draft and identifies the same PR after publication", async () => {
+    const f = fixture();
+    const proposal = await f.runtime.sealDraftPullRequestProposal({
+      destinationReview: destination,
+      githubSource: source,
+      review,
+      source: sourceEvidence,
+      title: "Update reviewed schema",
+    });
+    const request = { existingProposal: proposal, githubSource: source, paths: [path] };
+    await expect(f.runtime.inspectDraftDestination?.(request)).resolves.toMatchObject({
+      repository,
+    });
+
+    const published: Omit<DraftPullRequestSuccessReceipt, "digest"> = {
+      approvedByCallId: "prior-publication",
+      baseBranch: repository.defaultBranch,
+      baseSha: proposal.baseSha,
+      branchName: proposal.branchName,
+      branchSha: "5".repeat(40),
+      branchTree: "6".repeat(40),
+      changedContentDigest: review.changedContentDigest,
+      changeSetDigest: review.changeSetDigest,
+      draft: true,
+      idempotencyKey: proposal.idempotencyKey,
+      installationIdentityDigest: proposal.installationIdentityDigest,
+      kind: "draft-pull-request",
+      normalizedChangedPaths: [path],
+      proposalDigest: proposal.digest,
+      providerReadBackDigest: "7".repeat(64),
+      pullRequestId: "1234",
+      pullRequestNumber: 42,
+      recoveredFromPending: false,
+      releaseGateUnchanged: true,
+      repositoryId: repository.repositoryId,
+      status: "succeeded",
+      version: GITHUB_PUBLICATION_VERSION,
+    };
+    f.readReceipt.mockResolvedValue({
+      ...published,
+      digest: createHash("sha256").update(JSON.stringify(published)).digest("hex"),
+    });
+    f.inspectRepository.mockClear();
+    await expect(f.runtime.inspectDraftDestination?.(request)).rejects.toThrow("pull request #42");
+    expect(f.inspectRepository).not.toHaveBeenCalled();
   });
   it("reads destination metadata with source-only authority", async () => {
     const f = fixture();

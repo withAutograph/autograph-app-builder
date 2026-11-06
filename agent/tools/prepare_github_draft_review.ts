@@ -14,6 +14,7 @@ import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-s
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
 import { resolvePublicationTargetForTool } from "@/lib/agent/github-publication-destination";
+import { priorResumedBuildDraftProposal } from "@/lib/agent/existing-app-repair-planning";
 
 export default defineTool({
   description:
@@ -79,7 +80,8 @@ export default defineTool({
     }
     const destination = await runtime.inspectDraftDestination({
       existingProposal:
-        state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined,
+        (state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined) ??
+        priorResumedBuildDraftProposal(state, ctx.session.id),
       ...target,
       paths: candidatePaths,
     });

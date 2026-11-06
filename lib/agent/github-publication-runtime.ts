@@ -783,7 +783,7 @@ export function composeGitHubPublicationRuntime(input: {
           }
           if (prior.status === "succeeded") {
             throw new Error(
-              "Use the existing draft update workflow for the published pull request.",
+              `Use the existing draft update workflow for published pull request #${prior.pullRequestNumber}. Prepare reconciliation for that same draft PR.`,
             );
           }
           if (
