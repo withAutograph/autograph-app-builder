@@ -4,8 +4,8 @@
  * accepted design has already crossed the planning boundary.
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function planAcceptedAppSpec<TPhase extends string>(input: {
-  readonly phase: TPhase;
+export async function planAcceptedAppSpec(input: {
+  readonly phase: string;
   readonly planComplete: boolean;
   readonly plan: () => Promise<void>;
 }) {
