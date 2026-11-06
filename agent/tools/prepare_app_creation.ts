@@ -12,6 +12,19 @@ import { appBuilderWorkflowState, assertUpstreamMutationAllowed } from "@/lib/ag
 export default defineTool({
   description:
     "Prepare or resume the implementation plan for the already accepted AppSpec. In local development this reconciles current shared source with the same saved app, preserving app changes and historical receipts. After a settled build, explicit nonempty existingAppChanges prepares a fresh same-app repair proposal while retaining the accepted AppSpec; no-files calls reuse the current plan. If an unapplied same-app repair proposal displaced a build that still owns the private approval, pass only resumeApprovedBuild: true to return to that approved checkout for preview or repair. Existing-app product edits use existingAppChanges; a verified local source-only refresh needs no artificial app edits. This tool does not apply, publish, deploy, provision resources or connect providers.",
+  async execute(input, ctx) {
+    assertUpstreamMutationAllowed(appBuilderWorkflowState.get(), "implementation planning");
+    try {
+      const result =
+        input.resumeApprovedBuild === true
+          ? await resumeApprovedAppBuild(ctx)
+          : await prepareAppCreation(input, ctx);
+      await emitCurrentBuildWorkflowProjection(ctx);
+      return result;
+    } catch (error) {
+      return await localSourcePrerequisiteResponse(error, ctx);
+    }
+  },
   inputSchema: z
     .object({
       existingAppChanges: existingAppChangesSchema.optional(),
@@ -27,17 +40,4 @@ export default defineTool({
         ),
       { message: "Pass only resumeApprovedBuild when resuming an approved build." },
     ),
-  async execute(input, ctx) {
-    assertUpstreamMutationAllowed(appBuilderWorkflowState.get(), "implementation planning");
-    try {
-      const result =
-        input.resumeApprovedBuild === true
-          ? await resumeApprovedAppBuild(ctx)
-          : await prepareAppCreation(input, ctx);
-      await emitCurrentBuildWorkflowProjection(ctx);
-      return result;
-    } catch (error) {
-      return await localSourcePrerequisiteResponse(error, ctx);
-    }
-  },
 });

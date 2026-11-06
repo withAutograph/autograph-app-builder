@@ -57,8 +57,8 @@ export default defineTool({
         draftPrerequisiteMessage(
           draftSealPrerequisiteDiagnostic({
             candidate,
-            state,
             expectedReviewDigest: input.expectedReviewDigest,
+            state,
             ...(githubSource === undefined ? {} : { resolvedSourceDigest: githubSource.digest }),
           }),
           "The selected app or resolved merge changed. Validate the candidate and review both current diffs before sealing.",
@@ -95,9 +95,6 @@ export default defineTool({
     const request = {
       githubSource,
       pullRequestNumber: candidate.pullRequestNumber,
-      review: candidate.review,
-      selectedCheckoutHeadSha: candidate.headSha,
-      selectedCheckoutHeadTree: candidate.headTree,
       recovery: draftInspectionRecoveryForSession({
         ctx,
         appId: state.appSpec.appId,
@@ -106,6 +103,9 @@ export default defineTool({
         pullRequestNumber: candidate.pullRequestNumber,
         priorPublishedProposalDigest,
       }),
+      review: candidate.review,
+      selectedCheckoutHeadSha: candidate.headSha,
+      selectedCheckoutHeadTree: candidate.headTree,
     };
     const proposal =
       priorPublishedProposalDigest === undefined
@@ -122,18 +122,18 @@ export default defineTool({
     // This metadata becomes durable at the ensuing always()-approval checkpoint, before any Git write.
     // It records no approval grant; reconcile still validates its actual approved call and exact receipt.
     retainDraftReconciliationCompletion({
-      preparation: "sealed-before-approval",
-      proposal,
-      review: candidate.review,
+      appId: state.appSpec.appId,
       appReview: {
         appSpecDigest: state.reviewReceipt.appSpecDigest,
         changeSetDigest: state.reviewReceipt.changeSetDigest,
         digest: state.reviewReceipt.digest,
       },
-      appId: state.appSpec.appId,
-      githubSourceDigest: candidate.githubSourceDigest,
-      root: candidate.root,
       compilation,
+      githubSourceDigest: candidate.githubSourceDigest,
+      preparation: "sealed-before-approval",
+      proposal,
+      review: candidate.review,
+      root: candidate.root,
       ...(candidate.publishedOrigin === undefined
         ? {}
         : { publishedOrigin: candidate.publishedOrigin }),

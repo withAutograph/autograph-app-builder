@@ -3,7 +3,7 @@
 import { isTwoFactorRedirect } from "@better-auth-ui/core/plugins/two-factor";
 import { useAuth, useSession, useSignInEmail } from "@better-auth-ui/react";
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { SubmitEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,9 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
   const [password, setPassword] = useState("");
   const signIn = useSignInEmail(auth.authClient, {
     meta: { errorPresentation: "inline" },
-    onError: () => setPassword(""),
+    onError: () => {
+      setPassword("");
+    },
     onSuccess: async (data) => {
       if (isTwoFactorRedirect(data)) {
         continueSignIn(data);
@@ -33,7 +35,7 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
     },
   });
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const email = session.data?.user.email;
     if (!email) {
@@ -60,7 +62,9 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
                 autoComplete="current-password"
                 disabled={signIn.isPending}
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                }}
                 type="password"
                 required
               />
@@ -75,11 +79,11 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
           </form>
         ) : (
           <Button
-            onClick={() =>
+            onClick={() => {
               auth.navigate({
                 to: `${auth.basePaths.auth}/${auth.viewPaths.auth.signIn}`,
-              })
-            }
+              });
+            }}
           >
             {auth.localization.settings.freshSessionSignIn}
           </Button>

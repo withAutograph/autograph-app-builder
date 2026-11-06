@@ -14,7 +14,7 @@ import {
 async function RedirectAccountVisitor() {
   const requestHeaders = await headers();
   const { origin } = new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000/api/auth");
-  const state = await resolveWorkspaceOnboardingState(() =>
+  const state = await resolveWorkspaceOnboardingState(async () =>
     ensurePreviewOAuthDeploymentSessionOrganization({
       environment: process.env,
       headers: requestHeaders,

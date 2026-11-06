@@ -70,7 +70,9 @@ export function ProviderButton({
           requestSignUp: view === "signUp",
         },
         {
-          onSuccess: () => navigate({ to: callbackURL.pathname + callbackURL.search }),
+          onSuccess: () => {
+            navigate({ to: callbackURL.pathname + callbackURL.search });
+          },
         },
       );
       return;

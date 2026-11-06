@@ -33,8 +33,8 @@ export default defineTool({
       );
     }
     const resolved = await resolvePublicationTargetForTool({
-      ctx,
       appId: state.appSpec.appId,
+      ctx,
       destination:
         input.destination === undefined
           ? undefined
@@ -51,13 +51,13 @@ export default defineTool({
     }
     if (resolved.kind === "missing") {
       return {
-        status: "publication-destination-required" as const,
         nextAction: {
-          tool: "prepare_github_draft_review",
           requiredInput: "destination.repository",
+          tool: "prepare_github_draft_review",
         },
         reason:
           "Supply the intended existing publication repository as destination. Preserve the current starter source and app; do not call resolve_github_source or create a replacement repository.",
+        status: "publication-destination-required" as const,
       };
     }
     const { target } = resolved;

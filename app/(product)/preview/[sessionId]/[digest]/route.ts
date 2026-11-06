@@ -13,5 +13,5 @@ export async function GET(
     params: Promise<{ sessionId: string; digest: string }>;
   },
 ) {
-  return requestHandler(request, await context.params);
+  return await requestHandler(request, await context.params);
 }

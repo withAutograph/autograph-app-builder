@@ -28,7 +28,9 @@ const branchWorkflow = () => {
   return workflow;
 };
 
-export const exactBranchWorktreePublicationProposal = (input: { expectedReviewDigest: string }) => {
+export const exactBranchWorktreePublicationProposal = async (input: {
+  expectedReviewDigest: string;
+}) => {
   const workflow = branchWorkflow();
   if (workflow.reviewReceipt.digest !== input.expectedReviewDigest) {
     throw new Error("The reviewed change-set receipt changed before publication.");

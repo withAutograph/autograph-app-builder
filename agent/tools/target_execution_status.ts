@@ -23,7 +23,7 @@ export default defineTool({
         "Derive a canonical AppSpec-bound proposal before checking target command readiness.",
       );
     }
-    return inspectTargetExecutionReadiness({
+    return await inspectTargetExecutionReadiness({
       expectedProposalDigest,
       sandbox: await ctx.getSandbox(),
       state: current,

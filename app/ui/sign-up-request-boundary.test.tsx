@@ -4,8 +4,8 @@ import { expect, it, vi } from "vitest";
 
 const dependencies = vi.hoisted(() => ({
   connection: vi.fn(),
-  headers: vi.fn(() => Promise.resolve(new Headers())),
-  session: vi.fn(() => Promise.resolve(null)),
+  headers: vi.fn(async () => Promise.resolve(new Headers())),
+  session: vi.fn(async () => Promise.resolve(null)),
 }));
 vi.mock("next/server", () => ({ connection: dependencies.connection }));
 vi.mock("next/headers", () => ({ headers: dependencies.headers }));
@@ -19,7 +19,7 @@ vi.mock("@/lib/auth/preview-oauth-deployment", () => ({
 
 it("waits for a real request before starting shared auth initialization", async () => {
   const connection = Promise.withResolvers<null>();
-  dependencies.connection.mockImplementation(() => connection.promise);
+  dependencies.connection.mockImplementation(async () => connection.promise);
   const page = SignUpPage({ searchParams: Promise.resolve({}) });
   const boundary = page.props.children[1] as ReactElement<{ children: ReactElement }>;
   const child = boundary.props.children;

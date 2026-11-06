@@ -86,19 +86,19 @@ async function release(
 
 export default defineHook({
   events: {
-    "session.completed"(_event, ctx) {
+    async "session.completed"(_event, ctx) {
       return release(ctx, "session-completed");
     },
-    "session.failed"(_event, ctx) {
+    async "session.failed"(_event, ctx) {
       return release(ctx, "session-failed");
     },
-    "turn.cancelled"(_event, ctx) {
+    async "turn.cancelled"(_event, ctx) {
       return release(ctx, "turn-cancelled");
     },
-    "turn.completed"(_event, ctx) {
+    async "turn.completed"(_event, ctx) {
       return release(ctx, "turn-completed");
     },
-    "turn.failed"(_event, ctx) {
+    async "turn.failed"(_event, ctx) {
       return release(ctx, "turn-failed");
     },
     async "turn.started"(_event, ctx) {
@@ -127,7 +127,7 @@ export default defineHook({
         restoreSelectedGitHubSandboxSource({
           accessReceipt: repositoryAccessReceiptState.get(),
           githubSource,
-          runtime: () => repositoryAccessRuntimeForSession(ctx.session.auth),
+          runtime: async () => repositoryAccessRuntimeForSession(ctx.session.auth),
           sessionId: ctx.session.id,
         });
       }

@@ -332,7 +332,7 @@ export default defineTool({
         ? {}
         : { currentGitHubSource: initialSource.githubSource }),
       repository: input.repository,
-      sandbox: () => ctx.getSandbox(),
+      sandbox: async () => ctx.getSandbox(),
       selectedInstallationId: input.selectedInstallationId,
       sessionId: ctx.session.id,
     });

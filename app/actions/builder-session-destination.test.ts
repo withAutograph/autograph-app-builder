@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBuilderSessionDestinationAction } from "../../lib/provisioning/builder-session-destination-action";
 
-const fixture = { open: vi.fn(), select: vi.fn(), enabled: vi.fn(), refresh: vi.fn() };
+const fixture = { enabled: vi.fn(), open: vi.fn(), refresh: vi.fn(), select: vi.fn() };
 let incoming = new Headers();
 const action = createBuilderSessionDestinationAction({
   origin: "https://builder.example",
@@ -10,17 +10,17 @@ const action = createBuilderSessionDestinationAction({
 const selectBuilderSessionDestination = async (input: Parameters<typeof action>[0]) =>
   await action(input, incoming);
 const input = {
-  sessionId: "saved-session",
   expected: { adapterGeneration: 1, adapterSessionId: "saved-adapter", cancellationRevision: 0 },
   request: {
-    version: 1 as const,
-    operation: "vercel" as const,
     appName: "saved-app",
     deploymentAccess: "public-app" as const,
-    requestId: "be05a1b9-92d0-4a16-832b-3309a5594244",
+    operation: "vercel" as const,
     providers: { vercelInstallationId: "installation" },
     repository: { name: "saved-app", private: true },
+    requestId: "be05a1b9-92d0-4a16-832b-3309a5594244",
+    version: 1 as const,
   },
+  sessionId: "saved-session",
 };
 beforeEach(() => {
   vi.clearAllMocks();

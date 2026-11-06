@@ -35,7 +35,7 @@ export async function GET(request: Request) {
   const handler = getBuilderProvisioningDeploymentHandler(process.env);
   const headers = new Headers(request.headers);
   headers.set("accept", "application/json");
-  const read = () =>
+  const read = async () =>
     handler(
       new Request(
         `${source.origin}/api/builder/provision?projection=1&requestId=${encodeURIComponent(requestId)}`,

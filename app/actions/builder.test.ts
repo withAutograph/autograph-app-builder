@@ -151,19 +151,19 @@ afterEach(() => {
 describe("continueBuilderHandoff", () => {
   it("verifies uploaded ownership before provisioning and preserves app ID independently of display name", async () => {
     const reference = {
-      kind: "application-source-candidate-v1",
-      uploadId: "123e4567-e89b-42d3-a456-426614174099",
       appId: "supplier-spend",
+      kind: "application-source-candidate-v1",
       manifestDigest: "a".repeat(64),
+      uploadId: "123e4567-e89b-42d3-a456-426614174099",
     };
     drafts.read.mockResolvedValueOnce({
       draftId,
-      revision: 4,
       record: {
         draft: {
           form: { ...storedForm, appName: "Different display name", sourceCandidate: reference },
         },
       },
+      revision: 4,
     });
     const current = await getAuthenticatedBuilderDraftContext({
       environment: process.env,
@@ -183,15 +183,15 @@ describe("continueBuilderHandoff", () => {
   });
   it("denies an incomplete or foreign source before any provider reservation", async () => {
     const reference = {
-      kind: "application-source-candidate-v1",
-      uploadId: "123e4567-e89b-42d3-a456-426614174099",
       appId: "supplier-spend",
+      kind: "application-source-candidate-v1",
       manifestDigest: "a".repeat(64),
+      uploadId: "123e4567-e89b-42d3-a456-426614174099",
     };
     drafts.read.mockResolvedValueOnce({
       draftId,
-      revision: 4,
       record: { draft: { form: { ...storedForm, sourceCandidate: reference } } },
+      revision: 4,
     });
     vi.mocked(readAuthenticatedSourceUploadContext).mockResolvedValue(globalThis.undefined);
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
@@ -235,14 +235,14 @@ describe("continueBuilderHandoff", () => {
   });
 
   it("rejects missing tenant authority before reading a draft", async () => {
-    vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValueOnce(undefined as undefined);
+    vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValueOnce(undefined);
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(drafts.read).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
   });
 
   it("rejects an inaccessible draft before provider work", async () => {
-    drafts.read.mockResolvedValueOnce(undefined as undefined);
+    drafts.read.mockResolvedValueOnce(undefined);
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(calls).toEqual([]);
   });
@@ -292,9 +292,9 @@ describe("saved provisioning access policy", () => {
         intent: {
           appName: storedForm.appName,
           providers: { vercelInstallationId: storedForm.vercelInstallationId },
-          provisioningRequestId: input.requestId,
           provisioning: deploymentAccess === undefined ? {} : { deploymentAccess },
-          repository: { requestedName: storedForm.repository, private: true },
+          provisioningRequestId: input.requestId,
+          repository: { private: true, requestedName: storedForm.repository },
         },
       } as never);
       expect(

@@ -48,11 +48,12 @@ interface PageProps {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function currentUser() {
-  const state = await resolveWorkspaceOnboardingState(async () =>
-    ensurePreviewOAuthDeploymentSessionOrganization({
-      environment: process.env,
-      headers: await headers(),
-    }),
+  const state = await resolveWorkspaceOnboardingState(
+    async () =>
+      await ensurePreviewOAuthDeploymentSessionOrganization({
+        environment: process.env,
+        headers: await headers(),
+      }),
   );
   if (state.status === "anonymous") {
     console.warn(
@@ -170,7 +171,7 @@ async function HomeContent({ searchParams }: PageProps) {
         integrations={integrations}
         providerNotices={notices}
         providerResumeKey={resumeKey}
-        initialDurableDraft={durableDraft?.record.draft as BuilderDraft | undefined}
+        initialDurableDraft={durableDraft?.record.draft}
         durableDraftId={durableDraft?.draftId}
         durableDraftRevision={durableDraft?.revision}
         durableDraftUpdatedAt={durableDraft?.updatedAt}

@@ -52,7 +52,7 @@ export default defineTool({
     ) {
       receipt = await acquireCanonicalArrustedTemplate({
         callId: ctx.callId,
-        sandbox: () => ctx.getSandbox(),
+        sandbox: async () => ctx.getSandbox(),
         sessionId: ctx.session.id,
       });
     }

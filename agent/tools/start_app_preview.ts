@@ -98,9 +98,9 @@ const resolveNativePreview = async (
     }
     const bindings = await resolveProtectedRuntimeBindings({
       appId: protectedAppId,
+      callbackExecution: hostedOperatorCallbackExecution(ctx.session),
       sessionAuth: ctx.session.auth,
       sessionId: ctx.session.id,
-      callbackExecution: hostedOperatorCallbackExecution(ctx.session),
       signal: ctx.abortSignal,
     });
     if (bindings) {
@@ -143,9 +143,9 @@ export default defineTool({
         ? await priorValidatedPrivateArtifact({
             appId: input.appId,
             sandbox,
-            state: current,
             sessionId: ctx.session.id,
             signal: ctx.abortSignal,
+            state: current,
           })
         : undefined;
     const artifact =
@@ -166,11 +166,11 @@ export default defineTool({
       prior === undefined
         ? await resolvePreparedRuntimeExecution({
             appId: selected.appId,
+            callbackExecution: hostedOperatorCallbackExecution(ctx.session),
             root: selected.root,
             sandboxId: getBuilderSandboxId(sandbox),
             sessionAuth: ctx.session.auth,
             sessionId: ctx.session.id,
-            callbackExecution: hostedOperatorCallbackExecution(ctx.session),
             signal: ctx.abortSignal,
             state: current,
           })
@@ -304,6 +304,7 @@ export default defineTool({
     const preview = await startWorkingPreview({
       ...input,
       appId: selected.appId,
+      assertCurrent: prior?.assertCurrent,
       command: launch.command,
       cwd,
       environmentPath,
@@ -317,7 +318,6 @@ export default defineTool({
         });
       },
       prepareAuthenticatedOrigin,
-      assertCurrent: prior?.assertCurrent,
       previous,
       provider,
       requestDigest,
@@ -336,11 +336,11 @@ export default defineTool({
     };
   },
   inputSchema: z.object({
-    artifact: z.literal("prior-validated").optional(),
     appId: z
       .string()
       .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
       .optional(),
+    artifact: z.literal("prior-validated").optional(),
     command: z.object({
       args: z.array(z.string().max(8192)).max(256),
       executable: z.string().min(1).max(1024),

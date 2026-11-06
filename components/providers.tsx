@@ -85,7 +85,9 @@ export function AuthRouteProvider({
     <AuthProvider
       authClient={authClient}
       Link={Link}
-      navigate={({ to, replace }) => (replace ? router.replace(to) : router.push(to))}
+      navigate={({ to, replace }) => {
+        replace ? router.replace(to) : router.push(to);
+      }}
       plugins={authPlugins(passkeysEnabled, useTheme)}
       emailAndPassword={{ enabled: false }}
       redirectTo={DEFAULT_AUTH_REDIRECT_TO}

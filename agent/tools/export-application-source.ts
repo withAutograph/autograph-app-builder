@@ -10,7 +10,6 @@ import { applicationSourceExportReferenceSchema } from "@/lib/handoff/applicatio
 export default defineTool({
   description:
     "Save the current accepted app's actual applied workspace as a portable source download when the user asks to save or transfer their local app. This captures app-owned code, binary assets and schema history, with credential/runtime/cache omissions reported in the manifest. It does not publish, deploy, start another session, or transfer identities, data, approvals or journal authority. Wait for pending apply/validation work to finish. Local development only; use the normal authenticated hosted flow for release.",
-  inputSchema: z.object({ displayName: z.string().min(1) }),
   async execute({ displayName }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -22,7 +21,7 @@ export default defineTool({
       throw new Error("Finish the accepted app's pending work before saving its source");
     }
     const store = createLocalApplicationSourceStore(process.env);
-    const assertCurrent = () => {
+    const assertCurrent = async () => {
       ctx.abortSignal?.throwIfAborted();
       if (!isDeepStrictEqual(current, appBuilderWorkflowState.get())) {
         throw new Error("The accepted app changed while saving source");
@@ -52,4 +51,5 @@ export default defineTool({
       omissionCount: captured.artifact.manifest.omissions.length,
     });
   },
+  inputSchema: z.object({ displayName: z.string().min(1) }),
 });

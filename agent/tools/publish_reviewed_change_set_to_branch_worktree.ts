@@ -84,11 +84,11 @@ export default defineTool({
       },
       proposal,
       publishedByCallId: ctx.callId,
-      readOverlayFile: (path) =>
+      readOverlayFile: async (path) =>
         ctx
           .getSandbox()
           .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
-      readOverlayFileStream: (path) =>
+      readOverlayFileStream: async (path) =>
         ctx.getSandbox().then((sandbox) => sandbox.readFile({ path: `${relativeRoot}/${path}` })),
       review: workflow.reviewReceipt,
       sourceReceipt: workflow.sourceReceipt,

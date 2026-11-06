@@ -44,8 +44,8 @@ export default defineTool({
     }
   },
   inputSchema: z.union([
-    z.strictObject({ operation: z.literal("continuity"), intentId: z.uuid() }),
-    z.strictObject({ operation: z.literal("export"), exportId: z.uuid() }),
+    z.strictObject({ intentId: z.uuid(), operation: z.literal("continuity") }),
+    z.strictObject({ exportId: z.uuid(), operation: z.literal("export") }),
     z.strictObject({
       appId: z.string().min(1),
       branch: z.string().min(1),

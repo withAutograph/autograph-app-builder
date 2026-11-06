@@ -22,11 +22,10 @@ import { deriveBuilderAppId } from "@/lib/provisioning/names";
 
 const resolvedHandoffContinuationInputSchema = z
   .object({
-    creationRequestId: z.string().uuid(),
+    creationRequestId: z.uuid(),
     form: z
       .object({
         appName: z.string().trim().min(1).max(120),
-        sourceCandidate: sourceCandidateReferenceSchema.optional(),
         brief: z.string().trim().min(1).max(32_000),
         buildDestination: z.enum(["web", "codex", "cursor"]),
         connections: z.array(z.string().trim().min(1).max(100)).max(50),
@@ -42,11 +41,12 @@ const resolvedHandoffContinuationInputSchema = z
           .min(1)
           .max(100)
           .regex(/^[A-Za-z0-9._-]+$/u),
+        sourceCandidate: sourceCandidateReferenceSchema.optional(),
         vercelInstallationId: z.string().min(1).max(256).optional(),
       })
       .strict(),
     provisioningEnabled: z.boolean(),
-    requestId: z.string().uuid(),
+    requestId: z.uuid(),
     retryProvider: z.enum(["github", "vercel"]).optional(),
     version: z.literal(1),
   })
@@ -56,7 +56,7 @@ const handoffContinuationInputSchema = resolvedHandoffContinuationInputSchema
   .omit({ form: true })
   .extend({
     draftCheckpoint: z
-      .object({ draftId: z.string().uuid(), revision: z.number().int().positive() })
+      .object({ draftId: z.uuid(), revision: z.number().int().positive() })
       .strict(),
   });
 
@@ -73,7 +73,7 @@ export type BuilderHandoffContinuationState =
 
 const handoffProvisioningContinuationInputSchema = z
   .object({
-    handoffId: z.string().uuid(),
+    handoffId: z.uuid(),
     retryProvider: z.enum(["github", "vercel"]).optional(),
   })
   .strict();
@@ -129,7 +129,7 @@ export async function provisionBuilderProvider(input: {
       method: "POST",
     }),
   );
-  return readJson(response, "provisioning_unavailable");
+  return await readJson(response, "provisioning_unavailable");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -152,7 +152,7 @@ export async function reserveBuilderProvider(input: {
       method: "POST",
     }),
   );
-  return readJson(response, "provisioning_unavailable");
+  return await readJson(response, "provisioning_unavailable");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -164,7 +164,7 @@ export async function readBuilderProviderProvisioning(requestId: string) {
       headers: await sameOriginHeaders(),
     }),
   );
-  return readJson<BuilderProvisionResponse>(response, "provisioning_unavailable");
+  return await readJson<BuilderProvisionResponse>(response, "provisioning_unavailable");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -188,7 +188,7 @@ export async function createBuilderHandoff(input: {
       method: "POST",
     }),
   );
-  return readJson<{
+  return await readJson<{
     version: 1;
     handoffId: string;
     expiresAt: string;
@@ -268,7 +268,7 @@ async function createContinuationHandoff(
   input: ResolvedHandoffContinuationInput,
   provisioning: BuilderProvisionResponse,
 ) {
-  return createBuilderHandoff({
+  return await createBuilderHandoff({
     creationRequestId: input.creationRequestId,
     destination: input.form.buildDestination === "cursor" ? "cursor" : "codex",
     version: 1,

@@ -97,7 +97,9 @@ export function BuilderDestination() {
       bare
       comingSoonEnabled={comingSoonEnabled}
       selected={form.buildDestination}
-      onChange={(buildDestination) => setForm((current) => ({ ...current, buildDestination }))}
+      onChange={(buildDestination) => {
+        setForm((current) => ({ ...current, buildDestination }));
+      }}
     />
   );
 }
@@ -124,7 +126,9 @@ export function BuilderModel() {
           setModel("");
         }
       }}
-      onRetry={() => router.refresh()}
+      onRetry={() => {
+        router.refresh();
+      }}
     />
   ) : null;
 }
@@ -168,7 +172,7 @@ export function BuilderStorage() {
       onPrivacyChange={(privateRepository) => {
         setForm((current) => ({ ...current, privateRepository }));
       }}
-      onConnect={() => beginProviderConnection("github")}
+      onConnect={async () => beginProviderConnection("github")}
     />
   );
 }
@@ -200,7 +204,7 @@ export function BuilderDeployment() {
       onTeamChange={(value) => {
         setTeam(value);
       }}
-      onConnect={() => beginProviderConnection("vercel")}
+      onConnect={async () => beginProviderConnection("vercel")}
     />
   );
 }
@@ -230,13 +234,15 @@ export function BuilderConnections() {
       onAdd={addConnection}
       onRemove={removeConnection}
       onSearchChange={setSearch}
-      onShowMore={() => setShowMoreConnections(true)}
-      onCustomize={(name) =>
+      onShowMore={() => {
+        setShowMoreConnections(true);
+      }}
+      onCustomize={(name) => {
         setConnectionFlow({
           name,
           stage: connectedConnections.includes(name) ? "configure" : "connect",
-        })
-      }
+        });
+      }}
     />
   );
 }

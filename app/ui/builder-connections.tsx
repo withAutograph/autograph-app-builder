@@ -97,12 +97,19 @@ export function ConnectionsSection({
           name="connection-search"
           autoComplete="off"
           value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
+          onChange={(event) => {
+            onSearchChange(event.target.value);
+          }}
           onKeyDown={(event) => event.key === "Escape" && onSearchChange("")}
           placeholder="Search connections…"
         />
         {search ? (
-          <button type="button" onClick={() => onSearchChange("")}>
+          <button
+            type="button"
+            onClick={() => {
+              onSearchChange("");
+            }}
+          >
             Esc
           </button>
         ) : null}
@@ -121,7 +128,9 @@ export function ConnectionsSection({
                 key={name}
                 aria-label={comingSoon ? `${name} coming soon` : `Add ${name}`}
                 disabled={comingSoon}
-                onClick={() => onAdd(name)}
+                onClick={() => {
+                  onAdd(name);
+                }}
               >
                 <ConnectionIcon kind={connectionKind.get(name)} name={name} />
                 {name}
@@ -146,10 +155,21 @@ export function ConnectionsSection({
                 <strong>{name}</strong>
                 <p>{connectionDescription(name)}</p>
               </div>
-              <button type="button" onClick={() => onCustomize(name)}>
+              <button
+                type="button"
+                onClick={() => {
+                  onCustomize(name);
+                }}
+              >
                 {connected.includes(name) ? "Customize" : "Connect"}
               </button>
-              <button type="button" aria-label={`Remove ${name}`} onClick={() => onRemove(name)}>
+              <button
+                type="button"
+                aria-label={`Remove ${name}`}
+                onClick={() => {
+                  onRemove(name);
+                }}
+              >
                 <X size={17} />
               </button>
             </article>
@@ -235,7 +255,9 @@ export function ConnectionDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="connection-drawer-title"
-        onMouseDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => {
+          event.stopPropagation();
+        }}
       >
         <header>
           <h2 id="connection-drawer-title">Add Connection</h2>
@@ -265,7 +287,12 @@ export function ConnectionDrawer({
               </div>
               <h4>Connect your {flow.name} account</h4>
               <p>Authorize Autograph to access {flow.name} on your behalf.</p>
-              <button type="button" onClick={() => setShowSuccess(true)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSuccess(true);
+                }}
+              >
                 Connect {flow.name} <ExternalLink size={14} aria-hidden="true" />
               </button>
             </div>
@@ -285,7 +312,9 @@ export function ConnectionDrawer({
                 </span>
                 <input
                   value={connectionName}
-                  onChange={(event) => setConnectionName(event.target.value)}
+                  onChange={(event) => {
+                    setConnectionName(event.target.value);
+                  }}
                 />
               </label>
               <div className={styles.scopeRow}>
@@ -301,7 +330,9 @@ export function ConnectionDrawer({
                 <button
                   type="button"
                   disabled={!connectionName.trim()}
-                  onClick={() => onStageChange("customize")}
+                  onClick={() => {
+                    onStageChange("customize");
+                  }}
                 >
                   Continue
                 </button>
@@ -323,14 +354,18 @@ export function ConnectionDrawer({
                 Display Name
                 <input
                   value={connectionName}
-                  onChange={(event) => setConnectionName(event.target.value)}
+                  onChange={(event) => {
+                    setConnectionName(event.target.value);
+                  }}
                 />
               </label>
               <label>
                 Description
                 <textarea
                   value={description}
-                  onChange={(event) => setDescription(event.target.value)}
+                  onChange={(event) => {
+                    setDescription(event.target.value);
+                  }}
                 />
               </label>
               <label className={styles.defaultConnection}>

@@ -42,7 +42,9 @@ export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePassk
   const previewId = `delete-passkey-preview-${passkey.id}`;
 
   const { mutate: deletePasskey, isPending: isDeleting } = useDeletePasskey(authClient, {
-    onSuccess: () => onOpenChange(false),
+    onSuccess: () => {
+      onOpenChange(false);
+    },
   });
 
   return (
@@ -75,7 +77,9 @@ export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePassk
             type="button"
             variant="destructive"
             disabled={isDeleting}
-            onClick={() => deletePasskey({ id: passkey.id })}
+            onClick={() => {
+              deletePasskey({ id: passkey.id });
+            }}
           >
             {isDeleting && <Spinner />}
 

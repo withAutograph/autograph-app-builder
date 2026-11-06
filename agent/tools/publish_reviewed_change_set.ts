@@ -230,7 +230,7 @@ export default defineTool({
     const result = await publishReviewedChangeSet({
       proposal,
       publishedByCallId: ctx.callId,
-      readOverlayFile: (path) =>
+      readOverlayFile: async (path) =>
         hasTestCapability("simulated-publication") &&
         workflow.appSpec.appId === "publication-precondition-failure"
           ? Promise.resolve(null)

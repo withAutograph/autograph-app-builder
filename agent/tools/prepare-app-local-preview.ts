@@ -120,13 +120,13 @@ export const prepareAppLocalPreview = async (input: {
         .parse(input.expectedPreviousAuthOrigin);
     }
     const result = await runSandboxCommandWithExcerpt({
-      sandbox: input.sandbox,
       options: {
         command,
         env,
         workingDirectory: input.root,
         ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
       },
+      sandbox: input.sandbox,
       sanitize: safeOutput,
     });
     const stdout = safeOutput(result.stdout);
@@ -192,20 +192,20 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     const selected = await runnableSelectedApp({
       appId: input.appId,
-      state,
       resolveRoot: async ({ appId, root }) =>
         await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
+      state,
     });
-    const root = selected.root;
+    const { root } = selected;
     return await prepareAppLocalPreview({
       appId: selected.appId,
       execution: {
         appId: selected.appId,
+        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         root,
         sandboxId: getBuilderSandboxId(sandbox),
         sessionAuth: ctx.session.auth,
         sessionId: ctx.session.id,
-        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         signal: ctx.abortSignal,
         state,
       },

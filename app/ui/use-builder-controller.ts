@@ -21,7 +21,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { FormEvent, SetStateAction } from "react";
+import type { SetStateAction, SubmitEvent } from "react";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import { builderDraftFormSchema } from "@/lib/builder-drafts/contracts";
@@ -276,7 +276,7 @@ export function useBuilderController({
         };
       }
     },
-    undefined as undefined,
+    undefined,
   );
   const serverSaveWaiters = useRef(
     new Map<
@@ -312,7 +312,7 @@ export function useBuilderController({
     [],
   );
   const requestServerSave = useCallback(
-    (input: SaveActiveBuilderDraftInput) => {
+    async (input: SaveActiveBuilderDraftInput) => {
       const acknowledgement = Promise.withResolvers<{
         draftId: string;
         revision: number;
@@ -323,7 +323,9 @@ export function useBuilderController({
       // This transition launches the action; the returned promise only waits
       // for the matching state acknowledgement so the autosave outbox can
       // clear exactly the mutation the server completed.
-      startTransition(() => dispatchServerSave(input));
+      startTransition(() => {
+        dispatchServerSave(input);
+      });
       return acknowledgement.promise;
     },
     [dispatchServerSave],
@@ -659,7 +661,9 @@ export function useBuilderController({
     const frame = window.requestAnimationFrame(() => {
       document.querySelector<HTMLElement>(`#${id}`)?.focus();
     });
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
   }, [initialDraft, interactive, resumedGitHubConnection, resumedVercelConnection]);
   useEffect(() => {
     let disposed = false;
@@ -858,8 +862,12 @@ export function useBuilderController({
     if (!draftSyncNotice) {
       return;
     }
-    const timer = window.setTimeout(() => setDraftSyncNotice(""), 4000);
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(() => {
+      setDraftSyncNotice("");
+    }, 4000);
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [draftSyncNotice]);
   useEffect(() => {
     const snapshot = draftSnapshot();
@@ -899,7 +907,7 @@ export function useBuilderController({
     router.push(`/${provider}/installations?returnTo=%2F&resume=${activeDraftId.current}`);
   };
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-  async function submit(event: FormEvent) {
+  async function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (checkpointing.current || submissionPending || !canSubmit) {
       return;
@@ -973,8 +981,6 @@ export function useBuilderController({
     repositoryNameFromAppName,
     router,
     search,
-    setSourceUploadPending,
-    sourceUploadPending,
     setConnectionFlow,
     setDeploymentProvider,
     setDraftSaveError,
@@ -983,10 +989,12 @@ export function useBuilderController({
     setModel,
     setSearch,
     setShowMoreConnections,
+    setSourceUploadPending,
     setStorageProvider,
     setTeam,
     setZdrOnly,
     showMoreConnections,
+    sourceUploadPending,
     storageProvider,
     submissionPending,
     submit,
