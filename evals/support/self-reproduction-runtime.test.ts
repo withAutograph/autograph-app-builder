@@ -138,7 +138,6 @@ describe("self-reproduction candidate runtime", () => {
     const onReady = vi.fn(async ({ baseURL }: { baseURL: string }) => {
       expect(baseURL).toBe("http://127.0.0.1:3000");
       expect(fixture.shutdown).not.toHaveBeenCalled();
-      return;
     });
     const receipt = await evaluateCandidateRuntime({
       backend: fixture.backend,

@@ -99,7 +99,6 @@ it("runs the standalone probe only after scratch tooling setup", async () => {
       run,
       writeTextFile: async ({ path }: { path: string }) => {
         writes.push(path);
-        return;
       },
     },
   });
