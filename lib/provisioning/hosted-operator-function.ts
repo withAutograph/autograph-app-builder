@@ -1,5 +1,8 @@
 import { createRepositoryProductionNativeHandler } from "./repository-production-native";
-import { repositoryProductionPath } from "./repository-production-dispatcher";
+import {
+  repositoryProductionCompletionPath,
+  repositoryProductionPath,
+} from "./repository-production-dispatcher";
 import { createHostedOperatorNativeHandler } from "./hosted-operator-native";
 import { createNativeTargetRequestDependencies } from "./native-target-configuration-resolver";
 import {
@@ -14,10 +17,14 @@ const production = createRepositoryProductionNativeHandler();
 const possession = createCustodyPossessionHandler();
 export default {
   async fetch(request: Request) {
-    if (
-      new URL(request.url).pathname === repositoryProductionPath ||
-      new URL(request.url).pathname.startsWith(`${repositoryProductionPath}/`)
-    ) {
+    const pathname = new URL(request.url).pathname;
+    if ([repositoryProductionPath, repositoryProductionCompletionPath].includes(pathname)) {
+      if (request.method !== "POST") {
+        return Response.json(
+          { code: "not_found" },
+          { status: 404, headers: { "cache-control": "no-store" } },
+        );
+      }
       try {
         return await production(request);
       } catch {
@@ -27,7 +34,7 @@ export default {
         );
       }
     }
-    if (new URL(request.url).pathname === custodyPossessionPath) {
+    if (pathname === custodyPossessionPath) {
       return await possession(request);
     }
     return await runtime(request);
