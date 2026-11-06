@@ -30,11 +30,12 @@ describe("high-fidelity design guidance", () => {
     if (manifest === undefined) {
       throw new Error("Expected the reference to include a JSON manifest.");
     }
+    const parsedManifest: unknown = JSON.parse(manifest);
     const input = uiPreviewInputSchema.parse({
       appId: "request-review",
       catalogGaps: [],
       files: [{ content, path: "src/routes/index.tsx" }],
-      manifest: JSON.parse(manifest),
+      manifest: parsedManifest,
       routes: ["/"],
     });
     expect(() => {
