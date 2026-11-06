@@ -32,7 +32,7 @@ import type { BuilderDestinationEpoch } from "../../../../lib/provisioning/build
 const repositoryRoot = path.resolve(import.meta.dirname, "../../../..");
 const postgresBin = process.argv.at(2);
 assert.ok(
-  postgresBin && path.isAbsolute(postgresBin),
+  postgresBin !== undefined && postgresBin.length > 0 && path.isAbsolute(postgresBin),
   "Supply an absolute installed PostgreSQL bin directory",
 );
 const scratch = await mkdtemp(path.join(tmpdir(), "builder-destination-pg-"));

@@ -19,7 +19,7 @@ import { builderProvisionJournalRecordSchema } from "../../../../lib/provisionin
 const repositoryRoot = path.resolve(import.meta.dirname, "../../../..");
 const postgresBin = process.argv.at(2);
 assert.ok(
-  postgresBin && path.isAbsolute(postgresBin),
+  postgresBin !== undefined && postgresBin.length > 0 && path.isAbsolute(postgresBin),
   "Supply an absolute installed PostgreSQL bin directory",
 );
 const port = await new Promise<number>((resolve, reject) => {
