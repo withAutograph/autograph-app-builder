@@ -184,46 +184,69 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("restores a missing package and registration into the same owned draft candidate", async () => {
-    const state = structuredClone(fixture.reviewed);
-    const appRoot = `apps/${state.appSpec.appId}`;
-    retainedSource.original.mockResolvedValue([
-      { path: "microfrontends.json", mode: "100644", sha256: "starter" },
-    ]);
-    retainedSource.observed.mockResolvedValue({
-      observed: {
-        treeDigest: "current",
-        files: [
-          { path: `${appRoot}/package.json`, mode: "644", digest: "manifest" },
-          { path: `${appRoot}/app/page.tsx`, mode: "644", digest: "page" },
-          { path: "microfrontends.json", mode: "644", digest: "registered" },
-          { path: "apps/another/app/page.tsx", mode: "644", digest: "other" },
-        ],
-      },
-    });
-    await preparePublishedDraftReconciliation({
-      state,
-      ctx,
-      pullRequestNumber: 42,
-      restoreInitialAppSource: true,
-    });
-    expect(mocks.prepare.mock.calls[0]?.[0]).toMatchObject({
-      forceFreshCandidate: true,
-      ownedPublication: { proposal: mocks.owned.proposal, publication: mocks.owned.publication },
-      unpublished: {
+  it.each([false, true])(
+    "restores a missing package and registration (starter repository: %s)",
+    async (sameRepository) => {
+      const state = structuredClone(fixture.reviewed);
+      const appRoot = `apps/${state.appSpec.appId}`;
+      retainedSource.original.mockReset();
+      if (sameRepository) {
+        mocks.owned.proposal = {
+          ...mocks.owned.proposal,
+          owner: "withAutograph",
+          name: "arrusted-development",
+        };
+        retainedSource.original.mockRejectedValue(new Error("Prepared manifest missing"));
+      } else {
+        retainedSource.original.mockResolvedValue([
+          { path: "microfrontends.json", mode: "100644", sha256: "starter" },
+        ]);
+      }
+      retainedSource.observed.mockResolvedValue({
+        observed: {
+          treeDigest: "current",
+          files: [
+            { path: `${appRoot}/package.json`, mode: "644", digest: "manifest" },
+            { path: `${appRoot}/app/page.tsx`, mode: "644", digest: "page" },
+            { path: "microfrontends.json", mode: "644", digest: "registered" },
+            { path: "apps/another/app/page.tsx", mode: "644", digest: "other" },
+          ],
+        },
+      });
+      await preparePublishedDraftReconciliation({
+        state,
+        ctx,
+        pullRequestNumber: 42,
         restoreInitialAppSource: true,
-        changes: [
-          { kind: "added", path: `${appRoot}/app/page.tsx` },
-          { kind: "added", path: `${appRoot}/package.json` },
-          {
-            kind: "modified",
-            path: "microfrontends.json",
-            before: { mode: "644", digest: "starter" },
-          },
-        ],
-      },
-    });
-  });
+      });
+      expect(mocks.prepare.mock.calls[0]?.[0]).toMatchObject({
+        forceFreshCandidate: true,
+        ownedPublication: { proposal: mocks.owned.proposal, publication: mocks.owned.publication },
+        unpublished: {
+          restoreInitialAppSource: true,
+          ...(sameRepository
+            ? {
+                initialSourceRevision: {
+                  sha: state.sourceReceipt.sourceSha,
+                  tree: state.sourceReceipt.sourceTree,
+                },
+              }
+            : {}),
+          changes: [
+            { kind: "added", path: `${appRoot}/app/page.tsx` },
+            { kind: "added", path: `${appRoot}/package.json` },
+            sameRepository
+              ? { kind: "added", path: "microfrontends.json" }
+              : {
+                  kind: "modified",
+                  path: "microfrontends.json",
+                  before: { mode: "644", digest: "starter" },
+                },
+          ],
+        },
+      });
+    },
+  );
 
   it("keeps the validated workflow and exact candidate/private edits when normal preparation reuses it", async () => {
     const before = structuredClone(mocks.candidate);
