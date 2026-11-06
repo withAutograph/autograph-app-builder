@@ -19,6 +19,8 @@ const ref: GitHubPrDeliveryRef = {
 const harness = (
   input: {
     draft?: boolean;
+    readyDenied?: boolean;
+    previousReady?: boolean;
     headSha?: string;
     runCreatedAt?: string;
     checkConclusion?: string;
@@ -31,6 +33,36 @@ const harness = (
   let draft = input.draft ?? false;
   let merged = false;
   const effects: unknown[] = [];
+  const graphql = (body: string) => {
+    if (draft && body.includes("mutation ReadyForReview")) {
+      effects.push({ path: "/graphql", body });
+      if (input.readyDenied === true) {
+        return {
+          data: { markPullRequestReadyForReview: null },
+          errors: [{ type: "FORBIDDEN" }],
+        };
+      }
+      draft = false;
+      return {
+        data: { markPullRequestReadyForReview: { pullRequest: { id: "node", isDraft: false } } },
+      };
+    }
+    return {
+      data: {
+        node: {
+          headRefOid: input.headSha ?? head,
+          baseRefName: "main",
+          isDraft: draft,
+          timelineItems: {
+            nodes: !draft || input.previousReady === true ? [{ createdAt: readyAt }] : [],
+          },
+          baseChanges: {
+            nodes: input.baseChangedAt === undefined ? [] : [{ createdAt: input.baseChangedAt }],
+          },
+        },
+      },
+    };
+  };
   // oxlint-disable-next-line eslint/require-await -- In-memory provider double implements the asynchronous transport.
   const provider = createGitHubPrDeliveryProvider(async () => async ({ path, method, body }) => {
     if (method === "PUT") {
@@ -39,26 +71,7 @@ const harness = (
       return { merged, sha: merge };
     }
     if (path === "/graphql") {
-      if (draft) {
-        effects.push({ path, body });
-        draft = false;
-        return {
-          data: { markPullRequestReadyForReview: { pullRequest: { id: "node", isDraft: false } } },
-        };
-      }
-      return {
-        data: {
-          node: {
-            headRefOid: input.headSha ?? head,
-            baseRefName: "main",
-            isDraft: draft,
-            timelineItems: { nodes: [{ createdAt: readyAt }] },
-            baseChanges: {
-              nodes: input.baseChangedAt === undefined ? [] : [{ createdAt: input.baseChangedAt }],
-            },
-          },
-        },
-      };
+      return graphql(JSON.stringify(body));
     }
     if (path === "/repos/owner/app/pulls/7") {
       input.onInspect?.();
@@ -196,4 +209,21 @@ describe("GitHub pull request delivery", () => {
     await expect(provider.markReady(ref)).resolves.toMatchObject({ state: "open", draft: false });
     expect(effects).toHaveLength(1);
   });
+});
+
+it("distinguishes a GraphQL permission rejection from an unconfirmed Ready write", async () => {
+  const { provider } = harness({ draft: true, readyDenied: true });
+  await expect(provider.markReady(ref)).rejects.toMatchObject({ code: "provider-rejected" });
+});
+
+it("recovers a first Ready without reopening an earlier Ready cycle", async () => {
+  const recoveryRef = { ...ref, readyAuthorization: "recover-first-ready" as const };
+  const fresh = harness({ draft: true });
+  await expect(fresh.provider.markReady(recoveryRef)).resolves.toMatchObject({ draft: false });
+
+  const prior = harness({ draft: true, previousReady: true });
+  await expect(prior.provider.markReady(recoveryRef)).rejects.toMatchObject({
+    code: "provider-rejected",
+  });
+  expect(prior.effects).toHaveLength(0);
 });
