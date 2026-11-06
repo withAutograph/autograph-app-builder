@@ -58,6 +58,7 @@ export interface RepositoryProductionSetupPorts {
   reconcileCreatorRoles?: (
     context: RepositoryProductionEffectContext,
   ) => Promise<"applied" | "skipped">;
+  reconcileAppAccessUpgrade?: (context: RepositoryProductionEffectContext) => Promise<void>;
   readCreatorIdentity: (row: RepositoryProductionRow) => Promise<RepositoryProductionIdentity>;
   reconcile: (
     context: RepositoryProductionEffectContext,
@@ -70,6 +71,7 @@ export interface RepositoryProductionSetupResult {
   signInUrl?: string;
 }
 const unfinished = (record: RepositoryProductionRecord) =>
+  record.appAccessUpgrade?.state === "pending" ||
   record.creatorRoleUpdate?.state === "pending" ||
   Object.values(record.effects).some((effect) => effect.state === "pending");
 const selectedEffects = (record: RepositoryProductionRecord): RepositoryProductionEffect[] =>
@@ -120,6 +122,9 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         }
         next.effects["allocate-storage"] = row.record.effects["allocate-storage"];
         next.effects["creator-access"] = row.record.effects["creator-access"];
+        if (row.record.intent.storage.kind === "none" && intent.storage.kind === "postgres") {
+          next.appAccessUpgrade = { commandId: randomUUID(), state: "pending" };
+        }
         if (
           next.effects["creator-access"].state === "applied" &&
           !isDeepStrictEqual(
@@ -169,6 +174,14 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
             });
           },
         });
+        if (effect === "creator-access" && row.record.appAccessUpgrade?.state === "pending") {
+          if (!ports.reconcileAppAccessUpgrade) {
+            throw new Error("repository_production_access_upgrade_unavailable");
+          }
+          const upgrade = row.record.appAccessUpgrade;
+          await ports.reconcileAppAccessUpgrade(context());
+          await save({ ...row.record, appAccessUpgrade: { ...upgrade, state: "applied" } });
+        }
         // Once initially granted, access management owns revocation and role changes.
         // Neither an ordinary revision nor setup retry may restore an intentionally removed grant.
         if (effect === "creator-access" && row.record.effects[effect].state === "applied") {

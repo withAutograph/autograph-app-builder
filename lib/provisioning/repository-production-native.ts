@@ -36,6 +36,7 @@ import {
   assertNoConflictingCreatorRoleUpdate,
 } from "./repository-production-role-update";
 import { createRepositoryProductionCreator } from "./repository-production-creator";
+import { createRepositoryProductionAccessUpgrader } from "./repository-production-access-upgrade";
 import {
   createRepositoryProductionHandler,
   observeRepositoryProductionCompletion,
@@ -472,6 +473,18 @@ export const createRepositoryProductionNativeHandler =
             assertAuthorized,
             ...workers(scope),
             prepareCreatorIdentity: (context) => creator.prepare(context),
+            reconcileAppAccessUpgrade: createRepositoryProductionAccessUpgrader({
+              readMembers: async (context) =>
+                z
+                  .array(z.object({ id: z.string(), roles: z.array(z.string()) }))
+                  .parse(await authRequest(context, { action: "list-members" }, true)),
+              execute: async (context, command) => {
+                await managementFor(() => context.assertCurrent(), command, true).execute(
+                  (await current(scope)).owner,
+                  command,
+                );
+              },
+            }),
             reconcileCreatorRoles: createRepositoryProductionRoleUpdater({
               readMembers: async (context) =>
                 z
@@ -802,6 +815,7 @@ export const createRepositoryProductionNativeHandler =
             (await store.reserve(initialRepositoryProductionRecord(found.scope, found.intent)));
           if (
             (row.record.creatorRoleUpdate?.state === "pending" ||
+              row.record.appAccessUpgrade?.state === "pending" ||
               Object.values(row.record.effects).some((effect) => effect.state === "pending")) &&
             !isDeepStrictEqual(row.record.intent, found.intent)
           ) {
@@ -832,7 +846,8 @@ export const createRepositoryProductionNativeHandler =
             const row = await store.read(found.scope);
             if (
               command.action === "retry-setup" &&
-              row?.record.creatorRoleUpdate?.state === "pending"
+              (row?.record.creatorRoleUpdate?.state === "pending" ||
+                row?.record.appAccessUpgrade?.state === "pending")
             ) {
               await setup(found.scope).prepare(found.scope, row.record.intent);
               return await management.read(owner);

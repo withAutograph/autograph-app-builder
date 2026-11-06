@@ -17,7 +17,10 @@ export const assertNoConflictingCreatorRoleUpdate = (input: {
   commandId?: string;
   pendingCommandIds: readonly string[];
 }) => {
-  if (input.row?.record.creatorRoleUpdate?.state !== "pending") {
+  if (
+    input.row?.record.creatorRoleUpdate?.state !== "pending" &&
+    input.row?.record.appAccessUpgrade?.state !== "pending"
+  ) {
     return;
   }
   if (input.commandId !== undefined && input.pendingCommandIds.includes(input.commandId)) {

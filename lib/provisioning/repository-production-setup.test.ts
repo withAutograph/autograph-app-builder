@@ -13,6 +13,9 @@ import type {
   RepositoryProductionScope,
 } from "./repository-production-contract";
 import { repositoryProductionOperationRef } from "./repository-production-contract";
+import { createRepositoryProductionAccessUpgrader } from "./repository-production-access-upgrade";
+import { assertNoConflictingCreatorRoleUpdate } from "./repository-production-role-update";
+import type { AppAccessCommand } from "../app-access/contracts";
 
 const scope: RepositoryProductionScope = {
   authority: {
@@ -124,6 +127,7 @@ const fixture = () => {
   };
   return {
     service: createRepositoryProductionSetup(ports),
+    ports,
     calls,
     actual,
     read: () => row,
@@ -142,6 +146,119 @@ const fixture = () => {
   };
 };
 describe("Builder-owned Production setup", () => {
+  it.each([true, false])(
+    "adds storage for existing compatible members without restoring a removed creator (creator active: %s)",
+    async (creatorActive) => {
+      const f = fixture();
+      const frontend = { ...intent, storage: { kind: "none" as const } };
+      await f.service.prepare(scope, frontend);
+      const members = [
+        { id: "invitee", roles: ["requester"] },
+        { id: "incompatible", roles: ["retired-role"] },
+      ];
+      if (creatorActive) {
+        members.push({ id: "creator", roles: ["requester"] });
+      } else {
+        f.actual.delete("creator-access");
+      }
+      const kernel = new Map<string, string[]>();
+      f.ports.reconcileAppAccessUpgrade = createRepositoryProductionAccessUpgrader({
+        readMembers: async () => members,
+        execute: async (context, command) => {
+          expect(context.row.record.effects["install-schema"].state).toBe("applied");
+          if (command.action !== "change-role") {
+            throw new Error("Unexpected upgrade operation");
+          }
+          kernel.set(command.memberId, command.roles);
+        },
+      });
+      expect((await f.service.prepare(scope, intent)).state).toBe("ready");
+      expect(kernel.get("invitee")).toEqual(["requester"]);
+      expect(kernel.get("creator")).toEqual(creatorActive ? ["requester"] : undefined);
+      expect(kernel.has("incompatible")).toBe(false);
+      expect(f.read()?.record.appAccessUpgrade?.state).toBe("applied");
+      expect(f.calls.filter((call) => call === "creator-access")).toHaveLength(1);
+      expect(f.calls.filter((call) => call === "allocate-storage")).toHaveLength(1);
+    },
+  );
+
+  it("resumes an interrupted storage access upgrade from its saved member and People request identities", async () => {
+    const f = fixture();
+    await f.service.prepare(scope, { ...intent, creatorRoles: [], storage: { kind: "none" } });
+    const members: { id: string; roles: string[] }[] = [
+      { id: "creator", roles: [] },
+      { id: "invitee", roles: [] },
+    ];
+    const completed = new Set<string>();
+    const grants: string[] = [];
+    const commands: AppAccessCommand[] = [];
+    let interrupted = false;
+    f.ports.reconcileAppAccessUpgrade = createRepositoryProductionAccessUpgrader({
+      readMembers: async () => members,
+      execute: async (_context, command) => {
+        if (command.action !== "change-role") {
+          throw new Error("Unexpected upgrade operation");
+        }
+        commands.push(command);
+        if (!completed.has(command.clientRequestId)) {
+          grants.push(command.memberId);
+          completed.add(command.clientRequestId);
+        }
+        if (!interrupted) {
+          interrupted = true;
+          throw new Error("lost grant reply");
+        }
+      },
+    });
+    const revised = { ...intent, creatorRoles: [] };
+    await expect(f.service.prepare(scope, revised)).rejects.toThrow("lost grant reply");
+    expect((await f.service.status(scope, revised)).state).toBe("reconciling");
+    const current = f.read();
+    expect(current?.record.appAccessUpgrade?.state).toBe("pending");
+    expect(() => {
+      assertNoConflictingCreatorRoleUpdate({
+        row: current,
+        commandId: "fresh-removal",
+        pendingCommandIds: [],
+      });
+    }).toThrow();
+    expect((await f.service.prepare(scope, { ...revised, sourceSha: "c".repeat(40) })).state).toBe(
+      "reconciling",
+    );
+    members.push({ id: "later-member", roles: [] });
+    const restarted = createRepositoryProductionSetup(f.ports);
+    expect((await restarted.prepare(scope, revised)).state).toBe("ready");
+    expect(grants).toEqual(["creator", "invitee"]);
+    expect(commands[1]).toEqual(commands[0]);
+    expect(
+      commands.every((command) => command.action === "change-role" && command.roles.length === 0),
+    ).toBe(true);
+    expect(f.read()?.record.appAccessUpgrade?.state).toBe("applied");
+    expect(f.calls.filter((call) => call === "creator-access")).toHaveLength(1);
+  });
+
+  it("leaves a separately reviewed creator role change to the existing role updater", async () => {
+    const f = fixture();
+    await f.service.prepare(scope, { ...intent, storage: { kind: "none" } });
+    const upgraded: string[] = [];
+    f.ports.reconcileAppAccessUpgrade = createRepositoryProductionAccessUpgrader({
+      readMembers: async () => [
+        { id: "creator", roles: ["requester"] },
+        { id: "invitee", roles: ["requester"] },
+      ],
+      execute: async (_context, command) => {
+        if (command.action === "change-role") {
+          upgraded.push(command.memberId);
+        }
+      },
+    });
+    expect(
+      (await f.service.prepare(scope, { ...intent, creatorRoles: ["requester", "approver"] }))
+        .state,
+    ).toBe("ready");
+    expect(upgraded).toEqual(["invitee"]);
+    expect(f.calls).toContain("roles:approver,requester");
+  });
   it("prepares persistent apps, waits only for identity, then grants access without database questions", async () => {
     const f = fixture();
     f.setIdentity(false);

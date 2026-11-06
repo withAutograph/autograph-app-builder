@@ -85,6 +85,15 @@ through the normal access-management journal under the same app lock. Removed
 creators stay removed. Interrupted role updates retain their active preimage
 and command identity; conflicting new People commands wait for reconciliation.
 
+When a frontend-only app adds PostgreSQL storage, setup snapshots its active
+members under that same app lock after installing the schema. Existing People
+operations copy each compatible assignment into the new database with the
+same roles, including role-less admission when the app still has no business
+roles. Removed users are absent from the snapshot; incompatible roles are never
+mapped to broader roles. A separately reviewed creator role change uses the
+existing creator-role continuation. Saved per-member request identities survive
+interruption so a retry neither enrolls a new actor nor repeats a completed grant.
+
 The runtime binding cannot adopt or overwrite an unrelated existing variable.
 An earlier delivery path's existing database must be reconciled to its original
 ownership before enabling this path for that app. A response lost after binding

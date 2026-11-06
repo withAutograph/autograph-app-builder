@@ -66,6 +66,12 @@ export const repositoryProductionRecordSchema = z.strictObject({
   resource: repositoryProductionResourceSchema.optional(),
   privateState: z.json().optional(),
   creatorActorId: id.optional(),
+  appAccessUpgrade: z
+    .strictObject({
+      commandId: z.uuid(),
+      state: z.enum(["pending", "applied"]),
+    })
+    .optional(),
   creatorRoleUpdate: z
     .strictObject({
       commandId: z.uuid(),
