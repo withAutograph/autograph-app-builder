@@ -292,7 +292,7 @@ export async function settleFiniteMotion(page: Page) {
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
     });
-    await Promise.all(finite.map((motion) => motion.finished.catch(() => null)));
+    await Promise.all(finite.map(async (motion) => await motion.finished.catch(() => null)));
   });
 }
 
@@ -300,7 +300,7 @@ export async function settleFiniteMotion(page: Page) {
 export async function measurePage(page: Page) {
   await settleFiniteMotion(page);
   await page.addScriptTag({ content: axe.source });
-  return page.evaluate(async () => {
+  return await page.evaluate(async () => {
     // Keep DOM measurement helpers together with browser traversal.
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const rect = (el: Element) => {
@@ -553,7 +553,7 @@ export async function measureStyles(
           if (target.origin === new URL(page.url()).origin) {
             text = await page.evaluate(async (href) => {
               const response = await fetch(href);
-              return response.ok ? response.text() : undefined;
+              return response.ok ? await response.text() : undefined;
             }, target.href);
           }
         } catch {
@@ -1139,7 +1139,7 @@ export async function capturePreview(input: {
         await input.preparePage(page);
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve intentional sequential control flow.
-      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(async () => await document.fonts.ready);
       await runSequentially(
         Array.from({ length: input.scenarios.length + 1 }, (_, index) => index),
         async (index) => {

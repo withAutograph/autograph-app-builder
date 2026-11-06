@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const eve = path.resolve(
   process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(require.resolve("eve/package.json")),
 );
-const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
+const load = async (name) => await import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const {
   createTerminalRecoveryCandidateCollector,
   createOwnedLineagePreflightCollector,
@@ -36,12 +36,12 @@ const ownerRunId = "wrun_physical_original";
 const logicalSessionId = "wrun_logical_original";
 const eventId = (slot) => `evnt_${String(slot).padStart(26, "0")}`;
 const batchEvent = { sequence: 1, stepIndex: 1, turnId: "turn-original" };
-const emission = { sessionStarted: true, sequence: 1, stepIndex: 2, turnId: "turn-original" };
+const emission = { sequence: 1, sessionStarted: true, stepIndex: 2, turnId: "turn-original" };
 const actualRuntimeResult = {
-  kind: "tool-result",
   callId: "original-deferred",
-  toolName: "deferred",
+  kind: "tool-result",
   output: { value: "actual-native-outcome" },
+  toolName: "deferred",
 };
 
 const attachHandoffWorld = async ({ options, sourcePair, world, events, steps }) => {
@@ -59,28 +59,28 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
     };
     const delivery = { kind: "deliver", payloads: [{ message: "retained approved intent" }] };
     const startInput = {
+      activationToken: token,
       anchorRunId,
+      checkpoint,
+      delivery,
       logicalSessionId,
       targetDeploymentId: "child-deployment",
-      activationToken: token,
-      checkpoint,
-      delivery,
     };
     const childEntry = {
-      kind: "handoff",
-      sessionId: logicalSessionId,
-      streamRunId: anchorRunId,
       activationToken: token,
-      ownerDeploymentId: "child-deployment",
       checkpoint,
       delivery,
+      kind: "handoff",
+      ownerDeploymentId: "child-deployment",
+      sessionId: logicalSessionId,
+      streamRunId: anchorRunId,
     };
     const makeStep = async (runId, id, name, value) => ({
+      input: await serialization.dehydrateStepArguments({ args: [value], closureVars: [] }, runId),
       runId,
+      status: "completed",
       stepId: id,
       stepName: `step//eve//${name}`,
-      status: "completed",
-      input: await serialization.dehydrateStepArguments({ args: [value], closureVars: [] }, runId),
     });
     const startStep = await makeStep(
       anchorRunId,
@@ -98,14 +98,14 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       ownerRunId,
       "signal-handoff",
       "signalSessionOwnerActivationStep",
-      { token, activation: { kind: "active" } },
+      { activation: { kind: "active" }, token },
     );
     const typedEvent = (runId, slot, eventType, correlationId, eventData = {}) => ({
-      runId,
-      eventId: eventId(slot),
-      eventType,
       correlationId,
       eventData,
+      eventId: eventId(slot),
+      eventType,
+      runId,
     });
     const parentEvents = [
       typedEvent(anchorRunId, 1, "hook_created", "handoff-hook", { token }),
@@ -134,11 +134,11 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
         stepName: validation.stepName,
       }),
       typedEvent(ownerRunId, 2, "hook_created", "claimed-inbox", {
-        token: inbox,
         metadata: await serialization.dehydrateStepReturnValue(
           { sessionId: logicalSessionId },
           ownerRunId,
         ),
+        token: inbox,
       }),
       typedEvent(ownerRunId, 3, "step_completed", activation.stepId, {
         stepName: activation.stepName,
@@ -152,21 +152,21 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       [
         anchorRunId,
         {
+          deploymentId: "anchor-deployment",
+          input: await serialization.dehydrateWorkflowArguments([{ kind: "initial" }], anchorRunId),
           runId: anchorRunId,
           status: options.anchorStatus ?? "completed",
-          deploymentId: "anchor-deployment",
           workflowName: "session-owner",
-          input: await serialization.dehydrateWorkflowArguments([{ kind: "initial" }], anchorRunId),
         },
       ],
       [
         ownerRunId,
         {
+          deploymentId: "child-deployment",
+          input: await serialization.dehydrateWorkflowArguments([childEntry], ownerRunId),
           runId: ownerRunId,
           status: options.runStatus ?? "cancelled",
-          deploymentId: "child-deployment",
           workflowName: "session-owner",
-          input: await serialization.dehydrateWorkflowArguments([childEntry], ownerRunId),
         },
       ],
     ]);
@@ -179,16 +179,16 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
         },
       });
     }
-    world.runs.get = (id) => {
+    world.runs.get = async (id) => {
       readOperations.push(["runs.get", id]);
-      return Promise.resolve(runs.get(id));
+      return runs.get(id);
     };
-    world.runs.list = () => {
+    world.runs.list = async () => {
       readOperations.push(["runs.list"]);
-      return Promise.resolve({
+      return {
         data: options.omitListedOwner === true ? [runs.get(anchorRunId)] : [...runs.values()],
         hasMore: false,
-      });
+      };
     };
     if (options.omitListedOwner === true) {
       world.hooks = {
@@ -199,7 +199,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       };
     }
     let parentScans = 0;
-    world.events.list = ({ runId, resolveData }) => {
+    world.events.list = async ({ runId, resolveData }) => {
       readOperations.push(["events.list", runId, resolveData]);
       if (runId === anchorRunId) {
         parentScans += 1;
@@ -207,7 +207,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       const data = runId === anchorRunId ? parentEvents : childEvents;
       const drifted = options.parentScanDrift === true && runId === anchorRunId && parentScans > 1;
       const observed = drifted ? [...data, { ...data.at(-1), eventId: eventId(99) }] : data;
-      return Promise.resolve({
+      return {
         data: observed.map((event) => {
           if (resolveData !== "none") {
             return event;
@@ -222,20 +222,20 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
           return { ...event, eventData };
         }),
         hasMore: false,
-      });
+      };
     };
-    world.events.get = (runId, id) => {
+    world.events.get = async (runId, id) => {
       readOperations.push(["events.get", runId]);
-      return Promise.resolve(
-        (runId === anchorRunId ? parentEvents : childEvents).find((event) => event.eventId === id),
+      return (runId === anchorRunId ? parentEvents : childEvents).find(
+        (event) => event.eventId === id,
       );
     };
-    world.steps.get = (runId, id) => {
+    world.steps.get = async (runId, id) => {
       readOperations.push(["steps.get", runId]);
-      return Promise.resolve(
+      return (
         [startStep, validation, activation].find(
           (step) => step.runId === runId && step.stepId === id,
-        ) ?? steps.get(id),
+        ) ?? steps.get(id)
       );
     };
   }
@@ -248,7 +248,7 @@ const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
   }
   const snapshotKey = await serialization.deriveRunPayloadKeys(new Uint8Array(32).fill(9));
   const chunks = [];
-  const values = [...nativeEvents, { type: "text.delta", data: { text: "retained private tail" } }];
+  const values = [...nativeEvents, { data: { text: "retained private tail" }, type: "text.delta" }];
   const readable = new ReadableStream({
     start(controller) {
       for (const nativeEvent of values) {
@@ -260,28 +260,26 @@ const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
     serialization.getSerializeStream(serialization.getWorkflowReducers(globalThis), snapshotKey),
   );
   for await (const data of readable) {
-    chunks.push({ index: chunks.length, data });
+    chunks.push({ data, index: chunks.length });
   }
   world.streams = {
-    getInfo: () => Promise.resolve({ tailIndex: chunks.length - 1, done: false }),
+    get: async (_id, _name, startIndex) => {
+      assert.equal(startIndex, 0);
+      let index = 0;
+      return new ReadableStream({
+        pull(controller) {
+          if (index < chunks.length) {
+            controller.enqueue(chunks[index].data);
+            index += 1;
+          }
+          // Leave the source open; the finite reader must stop at its captured tail.
+        },
+      });
+    },
     getChunks: () => {
       throw new Error("Serial native snapshot pagination is forbidden.");
     },
-    get: (_id, _name, startIndex) => {
-      assert.equal(startIndex, 0);
-      let index = 0;
-      return Promise.resolve(
-        new ReadableStream({
-          pull(controller) {
-            if (index < chunks.length) {
-              controller.enqueue(chunks[index].data);
-              index += 1;
-            }
-            // Leave the source open; the finite reader must stop at its captured tail.
-          },
-        }),
-      );
-    },
+    getInfo: async () => ({ done: false, tailIndex: chunks.length - 1 }),
   };
   return snapshotKey;
 };
@@ -299,8 +297,8 @@ const appendHistoricalInbox = async (events, event, output, suffix) => {
   events.push(
     ...encoded.map((payload, index) =>
       event(13 + index, "hook_received", "command-hook", {
-        token: `eve:session:${logicalSessionId}:inbox`,
         payload,
+        token: `eve:session:${logicalSessionId}:inbox`,
       }),
     ),
     event(13 + suffix.length, "run_cancelled"),
@@ -315,21 +313,51 @@ const expectedCollectionKind = (options) =>
 const fixture = async (options = {}) => {
   const key = await fixtureKey(options.encrypted);
   const originalGrant = {
-    sessionId: logicalSessionId,
-    workspaceId: "original-private-workspace",
     appSpecDigest: "original-spec",
     proposalDigest: "original-proposal",
+    sessionId: logicalSessionId,
+    workspaceId: "original-private-workspace",
   };
   let source = {
-    sessionId: logicalSessionId,
-    continuationToken: "original-continuation",
-    rootSessionId: logicalSessionId,
     agent: {
+      modelReference: { id: "synthetic", provider: "test" },
       system: "original prompt",
       tools: [],
-      modelReference: { id: "synthetic", provider: "test" },
     },
-    compaction: { threshold: 1e6, recentWindowSize: 10 },
+    compaction: { recentWindowSize: 10, threshold: 1e6 },
+    continuationToken: "original-continuation",
+    history: [
+      { content: "Original product brief", kind: "user", role: "user" },
+      {
+        content: [
+          {
+            approvalId: "original-request",
+            approved: options.denied !== true,
+            type: "tool-approval-response",
+          },
+          ...(options.denied === true
+            ? [
+                {
+                  output: { reason: "original denial", type: "execution-denied" },
+                  toolCallId: "original-native",
+                  toolName: "native",
+                  type: "tool-result",
+                },
+              ]
+            : []),
+        ],
+        role: "tool",
+      },
+    ],
+    rootSessionId: logicalSessionId,
+    sandboxState: {
+      session: {
+        providerName: "vercel",
+        state: { name: "original-sandbox", workspaceDrive: { id: "original-drive" } },
+        stateProtocolVersion: 1,
+      },
+    },
+    sessionId: logicalSessionId,
     state: {
       "eve.harness.emission": emission,
       "eve.runtime.hitl.approvedTools": options.denied === true ? [] : ["native"],
@@ -337,69 +365,39 @@ const fixture = async (options = {}) => {
         grant: options.denied === true ? null : originalGrant,
         pending: [{ callId: "original-native", scope: originalGrant }],
       },
-      "fixture.program": { phase: "source-planned", arbitraryNestedState: { keep: true } },
+      "fixture.program": { arbitraryNestedState: { keep: true }, phase: "source-planned" },
     },
-    sandboxState: {
-      session: {
-        providerName: "vercel",
-        stateProtocolVersion: 1,
-        state: { name: "original-sandbox", workspaceDrive: { id: "original-drive" } },
-      },
-    },
-    history: [
-      { role: "user", kind: "user", content: "Original product brief" },
-      {
-        role: "tool",
-        content: [
-          {
-            type: "tool-approval-response",
-            approvalId: "original-request",
-            approved: options.denied !== true,
-          },
-          ...(options.denied === true
-            ? [
-                {
-                  type: "tool-result",
-                  toolCallId: "original-native",
-                  toolName: "native",
-                  output: { type: "execution-denied", reason: "original denial" },
-                },
-              ]
-            : []),
-        ],
-      },
-    ],
   };
   source = setPendingCoordinationBatch({
-    session: source,
     event: batchEvent,
-    runtimeActions: [],
-    tasks: [
-      {
-        kind: "workflow-task",
-        callId: "original-deferred",
-        toolName: "deferred",
-        input: {},
-        workflowId: "workflow:deferred",
-      },
-    ],
     responseMessages: [
       {
-        role: "assistant",
         content: [
           {
-            type: "tool-call",
+            input: { value: "exact-original-input" },
             toolCallId: "original-native",
             toolName: "native",
-            input: { value: "exact-original-input" },
+            type: "tool-call",
           },
-          { type: "tool-call", toolCallId: "original-deferred", toolName: "deferred", input: {} },
+          { input: {}, toolCallId: "original-deferred", toolName: "deferred", type: "tool-call" },
           {
-            type: "tool-approval-request",
             approvalId: "original-request",
             toolCallId: "original-native",
+            type: "tool-approval-request",
           },
         ],
+        role: "assistant",
+      },
+    ],
+    runtimeActions: [],
+    session: source,
+    tasks: [
+      {
+        callId: "original-deferred",
+        input: {},
+        kind: "workflow-task",
+        toolName: "deferred",
+        workflowId: "workflow:deferred",
       },
     ],
   });
@@ -413,13 +411,13 @@ const fixture = async (options = {}) => {
     ...old.session,
     state: {
       ...old.session.state,
-      "fixture.program": { phase: "latest-committed", arbitraryNestedState: { keep: true } },
+      "fixture.program": { arbitraryNestedState: { keep: true }, phase: "latest-committed" },
     },
   };
   const sourcePair = {
     serializedContext: {
-      "eve.sessionId": logicalSessionId,
       "eve.auth": { principalId: "original-owner" },
+      "eve.sessionId": logicalSessionId,
       "fixture.privateContext": { original: true },
     },
     sessionState: createDurableSessionState({ session: source }),
@@ -436,8 +434,8 @@ const fixture = async (options = {}) => {
     ...(options.delivery === true
       ? {
           delivery: {
-            kind: "deliver",
             auth: { principalId: "original-owner" },
+            kind: "deliver",
             payloads: [{ message: "already admitted" }],
           },
         }
@@ -450,22 +448,22 @@ const fixture = async (options = {}) => {
     [
       "prior",
       {
-        runId: ownerRunId,
-        stepId: "prior",
-        stepName: "step//eve//turnStep",
-        status: "completed",
         input: await args(sourcePair),
         output: await output({ action: "park", ...sourcePair }),
+        runId: ownerRunId,
+        status: "completed",
+        stepId: "prior",
+        stepName: "step//eve//turnStep",
       },
     ],
     [
       "terminal",
       {
+        input: await args({ ...sourcePair, input: incoming }),
         runId: ownerRunId,
+        status: options.failedTurn === true ? "failed" : "completed",
         stepId: "terminal",
         stepName: "step//eve//turnStep",
-        status: options.failedTurn === true ? "failed" : "completed",
-        input: await args({ ...sourcePair, input: incoming }),
         ...(options.failedTurn === true
           ? { error: { name: "failure" } }
           : { output: await output({ action: "done", ...latestPair }) }),
@@ -474,37 +472,37 @@ const fixture = async (options = {}) => {
     [
       "finalizer",
       {
+        input: await args(latestPair),
         runId: ownerRunId,
+        status: "completed",
         stepId: "finalizer",
         stepName: "step//eve//terminateChildSessionsStep",
-        status: "completed",
-        input: await args(latestPair),
       },
     ],
   ]);
   if (options.historicalFailure === true) {
     steps.set("historical", {
+      error: { name: "older failure" },
+      input: await args(sourcePair),
       runId: ownerRunId,
+      status: "failed",
       stepId: "historical",
       stepName: "step//eve//turnStep",
-      status: "failed",
-      input: await args(sourcePair),
-      error: { name: "older failure" },
     });
   }
   if (options.unreadableLater === true) {
     steps.set("unreadable", {
+      output: new Uint8Array([99, 1, 2, 3]),
       runId: ownerRunId,
+      status: "completed",
       stepId: "unreadable",
       stepName: "step//eve//turnStep",
-      status: "completed",
-      output: new Uint8Array([99, 1, 2, 3]),
     });
   }
   const event = (slot, eventType, stepId, eventData = {}) => ({
-    runId: ownerRunId,
     eventId: eventId(slot),
     eventType,
+    runId: ownerRunId,
     ...(stepId === undefined ? {} : { correlationId: stepId }),
     eventData: {
       ...(steps.has(stepId) ? { stepName: steps.get(stepId).stepName } : {}),
@@ -534,57 +532,57 @@ const fixture = async (options = {}) => {
   ];
   await appendHistoricalInbox(events, event, output, options.inboxSuffix);
   const nativeEvents = [
-    { type: "action.result", data: { ...batchEvent, result: actualRuntimeResult } },
+    { data: { ...batchEvent, result: actualRuntimeResult }, type: "action.result" },
     ...(options.uncommittedWrite === true
       ? [
           {
-            type: "action.result",
             data: {
               ...emission,
               result: {
-                kind: "tool-result",
                 callId: "original-native",
-                toolName: "native",
+                kind: "tool-result",
                 output: "may-have-written",
+                toolName: "native",
               },
             },
+            type: "action.result",
           },
         ]
       : []),
     ...(options.uncommittedDispatch === true
       ? [
           {
-            type: "actions.requested",
             data: {
               ...emission,
               actions: [
                 {
                   callId: "new-uncommitted-write",
+                  input: {},
                   kind: "tool-call",
                   toolName: "native",
-                  input: {},
                 },
               ],
             },
+            type: "actions.requested",
           },
         ]
       : []),
     ...(options.cancelled === true
-      ? [{ type: "turn.cancelled", data: { sequence: 1, turnId: "turn-original" } }]
+      ? [{ data: { sequence: 1, turnId: "turn-original" }, type: "turn.cancelled" }]
       : []),
   ];
   const world = {
+    events: {
+      get: async (_runId, id) => events.find((value) => value.eventId === id),
+      list: async () => await Promise.resolve({ data: events, hasMore: false }),
+    },
     runs: {
       get: async () =>
         await Promise.resolve({
+          input: "original-entry-retained",
           runId: ownerRunId,
           status: options.runStatus ?? (options.failedTurn === true ? "failed" : "completed"),
-          input: "original-entry-retained",
         }),
-    },
-    events: {
-      list: async () => await Promise.resolve({ data: events, hasMore: false }),
-      get: (_runId, id) => Promise.resolve(events.find((value) => value.eventId === id)),
     },
     steps: {
       get: async (runId, id) => {
@@ -594,21 +592,16 @@ const fixture = async (options = {}) => {
     },
   };
   const { boundOwnerRunId, readOperations } = await attachHandoffWorld({
+    events,
     options,
     sourcePair,
-    world,
-    events,
     steps,
+    world,
   });
   const snapshotKey = await attachNativeSnapshot(world, nativeEvents, options.snapshot);
   let authorized = false;
   const collect = collectorFor(options)({
     getWorld: async () => await Promise.resolve(world),
-    resolveRunEncryptionKey: async () => {
-      await Promise.resolve();
-      return key;
-    },
-    hydrateWorkflowArguments: (...values) => serialization.hydrateWorkflowArguments(...values),
     hydrateHookPayload: async (value, _runId, payloadKey) =>
       serialization.deserializePreparedReplayPayload(
         await serialization.prepareReplayPayload(value, payloadKey),
@@ -616,38 +609,43 @@ const fixture = async (options = {}) => {
       ),
     hydrateStepArguments: (...values) => serialization.hydrateStepArguments(...values),
     hydrateStepReturnValue: (...values) => serialization.hydrateStepReturnValue(...values),
-    readDurableSession,
-    requireEventSlot: (id) => Number(id.slice(5)),
+    hydrateWorkflowArguments: (...values) => serialization.hydrateWorkflowArguments(...values),
     now: () => 0,
+    readDurableSession,
     async *readNativeEvents(runId) {
       yield* options.snapshot === true
         ? readTerminalNativeEventsSnapshot(world, runId, snapshotKey)
         : nativeEvents;
     },
+    requireEventSlot: (id) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      await Promise.resolve();
+      return key;
+    },
   });
   const collected = await collect({
     allowParked: options.allowParked === true,
-    binding: { ownerRunId: boundOwnerRunId, logicalSessionId },
     authorizeOwner: async (currentBinding) => {
-      assert.deepEqual(currentBinding, { ownerRunId: boundOwnerRunId, logicalSessionId });
+      assert.deepEqual(currentBinding, { logicalSessionId, ownerRunId: boundOwnerRunId });
       assert.ok(Object.isFrozen(currentBinding));
       authorized = true;
       await Promise.resolve();
     },
+    binding: { logicalSessionId, ownerRunId: boundOwnerRunId },
   });
   assert.equal(collected.kind, expectedCollectionKind(options));
   assert.equal(authorized, true);
   return {
     collected,
+    events,
+    incoming,
+    latest,
+    latestPair,
+    nativeEvents,
+    originalGrant,
     readOperations,
     source,
-    latest,
     sourcePair,
-    latestPair,
-    originalGrant,
-    incoming,
-    events,
-    nativeEvents,
   };
 };
 
@@ -658,27 +656,27 @@ const resumeSynthetic = async (ready, denied) => {
   const session = {
     ...durable,
     agent: {
+      modelReference: { id: "synthetic", provider: "test" },
       system: durable.agent.system,
       tools: [],
-      modelReference: { id: "synthetic", provider: "test" },
     },
-    compaction: { threshold: 1e6, recentWindowSize: 10 },
+    compaction: { recentWindowSize: 10, threshold: 1e6 },
   };
   const tools = new Map([
     [
       "native",
       {
-        name: "native",
-        inputSchema: z.object({ value: z.string() }),
         approval: () => "user-approval",
         execute: (input) => {
           executions += 1;
           assert.equal(input.value, "exact-original-input");
           return "actual-resumed-result";
         },
+        inputSchema: z.object({ value: z.string() }),
+        name: "native",
       },
     ],
-    ["deferred", { name: "deferred", inputSchema: z.object({}), workflowId: "workflow:deferred" }],
+    ["deferred", { inputSchema: z.object({}), name: "deferred", workflowId: "workflow:deferred" }],
   ]);
   const model = new MockLanguageModelV4({
     doGenerate: async ({ prompt }) => {
@@ -695,8 +693,8 @@ const resumeSynthetic = async (ready, denied) => {
         );
       }
       return await Promise.resolve({
-        content: [{ type: "text", text: "same app continued" }],
-        finishReason: { unified: "stop", raw: "stop" },
+        content: [{ text: "same app continued", type: "text" }],
+        finishReason: { raw: "stop", unified: "stop" },
         usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
         warnings: [],
       });
@@ -705,13 +703,13 @@ const resumeSynthetic = async (ready, denied) => {
   const ctx = new ContextContainer();
   const auth = { authenticator: "test", principalId: "original-owner", principalType: "user" };
   ctx.set(SessionKey, {
-    sessionId: logicalSessionId,
     auth: { current: auth, initiator: auth },
+    sessionId: logicalSessionId,
     turn: { id: "turn-original" },
   });
   assert.equal(executions, 0);
   const result = await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: async () => await Promise.resolve(model) })(
+    createToolLoopHarness({ resolveModel: async () => await Promise.resolve(model), tools })(
       session,
       {
         runtimeActionResults: ready.replayInput.runtimeResults.results,
@@ -836,9 +834,9 @@ test("provider-cancelled physical handoff reconciles latest native typed state w
 for (const options of [
   { handoff: true, runStatus: "running" },
   { handoff: true, runStatus: "pending" },
-  { handoff: true, runStatus: "cancelled", anchorStatus: "running" },
-  { handoff: true, runStatus: "cancelled", parentFrontierUnknown: true },
-  { handoff: true, runStatus: "cancelled", parentScanDrift: true },
+  { anchorStatus: "running", handoff: true, runStatus: "cancelled" },
+  { handoff: true, parentFrontierUnknown: true, runStatus: "cancelled" },
+  { handoff: true, parentScanDrift: true, runStatus: "cancelled" },
 ]) {
   test(`cancelled owner discovery preserves unavailable or uncertain handoff boundary ${JSON.stringify(options)}`, async () => {
     const f = await fixture({ ...options, expectedUnavailable: true });
@@ -867,18 +865,18 @@ for (const { options, reason } of [
 const acceptedSuffix = () => [
   { kind: "cancel", turnId: "turn-original" },
   {
-    kind: "send",
-    requestId: "original-native-request",
     auth: { principalId: "original-owner" },
-    payload: { message: "original accepted intent" },
     delivery: { originalEvidence: true },
+    kind: "send",
+    payload: { message: "original accepted intent" },
+    requestId: "original-native-request",
   },
   { kind: "cancel", turnId: "turn-original" },
 ];
 
 test("exact encrypted post-checkpoint cancel/send/cancel is retained for ordinary owner admission", async () => {
   const suffix = acceptedSuffix();
-  const f = await fixture({ runStatus: "cancelled", inboxSuffix: suffix, encrypted: true });
+  const f = await fixture({ encrypted: true, inboxSuffix: suffix, runStatus: "cancelled" });
   const payload = readTerminalRecoveryCandidate(f.collected.candidate);
   assert.deepEqual(
     payload.carriedInbox.map((entry) => entry.payload),
@@ -899,7 +897,7 @@ test("exact encrypted post-checkpoint cancel/send/cancel is retained for ordinar
 });
 for (const kind of ["reset", "session-timeout", "unknown"]) {
   test(`unsupported historical inbox ${kind} remains uncertain`, async () => {
-    const f = await fixture({ runStatus: "cancelled", inboxSuffix: [{ kind }] });
+    const f = await fixture({ inboxSuffix: [{ kind }], runStatus: "cancelled" });
     const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
     assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
   });
@@ -913,7 +911,7 @@ for (const mutation of [
   "missing-envelope",
 ]) {
   test(`historical inbox cannot waive uncertainty with ${mutation}`, async () => {
-    const f = await fixture({ runStatus: "cancelled", inboxSuffix: acceptedSuffix() });
+    const f = await fixture({ inboxSuffix: acceptedSuffix(), runStatus: "cancelled" });
     const payload = readTerminalRecoveryCandidate(f.collected.candidate);
     const first = payload.carriedInbox[0];
     if (mutation === "foreign-run") {
@@ -940,27 +938,27 @@ for (const mutation of [
 }
 test("retained inbox commands never waive unknown native effects", async () => {
   const f = await fixture({
-    runStatus: "cancelled",
     inboxSuffix: acceptedSuffix(),
+    runStatus: "cancelled",
     uncommittedWrite: true,
   });
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
   assert.deepEqual(result, {
+    callId: "original-native",
     kind: "uncertain",
     reason: "uncommitted-action-result",
-    callId: "original-native",
   });
 });
 
 test("a later authored step leaves historical command admission uncertain", async () => {
-  const f = await fixture({ runStatus: "cancelled", inboxSuffix: acceptedSuffix() });
+  const f = await fixture({ inboxSuffix: acceptedSuffix(), runStatus: "cancelled" });
   const payload = readTerminalRecoveryCandidate(f.collected.candidate);
   payload.events.push({
-    runId: ownerRunId,
-    eventId: eventId(17),
-    eventType: "step_started",
     correlationId: "later-authored-step",
     eventData: { stepName: "turnStep" },
+    eventId: eventId(17),
+    eventType: "step_started",
+    runId: ownerRunId,
   });
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
   assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
@@ -974,17 +972,17 @@ for (const item of [
   },
   {
     options: { runStatus: "waiting" },
+    parentStatus: "completed",
     stage: "handoff_successor",
     status: "waiting",
-    parentStatus: "completed",
   },
   { options: { finalStatusTransition: true }, stage: "final_owner", status: "suspended" },
 ]) {
   test(`actual native handoff resolver identifies ${item.stage} refusal`, async () => {
     const f = await fixture({
-      handoff: true,
       allowParked: true,
       expectedUnavailable: true,
+      handoff: true,
       ...item.options,
     });
     assert.equal(f.collected.reason, "source-not-terminal");
@@ -999,10 +997,10 @@ for (const item of [
 
 test("running anchored-result parent is observable only through an opaque lineage preflight", async () => {
   const options = {
-    handoff: true,
-    anchorStatus: "running",
-    runStatus: "running",
     allowParked: true,
+    anchorStatus: "running",
+    handoff: true,
+    runStatus: "running",
   };
   const terminal = await fixture({ ...options, expectedUnavailable: true });
   assert.equal(terminal.collected.boundary.stage, "handoff_parent");

@@ -163,15 +163,15 @@ async function runEveCycle(input: {
     input.resumeCycle === undefined
       ? await createDevelopmentCycle({ repositoryRoot, supervisorRoot: input.supervisorRoot })
       : await resumeDevelopmentCycle({
-          repositoryRoot,
-          runsRoot: input.runsRoot,
           cycleRoot: input.resumeCycle,
           evePort: input.evePort,
+          repositoryRoot,
+          runsRoot: input.runsRoot,
         });
   try {
     const dependencyBinding = await assertDevelopmentApplicationDependencies({
-      repositoryRoot,
       applicationRoot: cycle.application.root,
+      repositoryRoot,
     });
     console.log("[builder:development:dependencies]", JSON.stringify(dependencyBinding));
     const snapshot = await createDevelopmentSnapshot({
@@ -202,8 +202,8 @@ async function runEveCycle(input: {
     }
     const runtimeFingerprint = await fingerprintDevelopmentRuntime(repositoryRoot);
     const packageFingerprint = await developmentPackageFingerprint({
-      origin: input.web?.origin,
       hostedSession: input.hostedSession,
+      origin: input.web?.origin,
       port: input.nextPort,
       repositoryRoot,
     });
@@ -212,8 +212,8 @@ async function runEveCycle(input: {
       input.packageState.result !== undefined;
     if (!packageReused) {
       input.packageState.result = await createDevelopmentPackage({
-        origin: input.web?.origin,
         hostedSession: input.hostedSession,
+        origin: input.web?.origin,
         outputRoot: input.codexRoot,
         port: input.nextPort,
         repositoryRoot,
@@ -235,31 +235,31 @@ async function runEveCycle(input: {
       sourceTree: snapshot.tree,
     });
     const wrapperEnvironment = await prepareDevelopmentEveWrapperEnvironment({
-      cycleFile: input.cycleFile,
-      closed,
       applicationRoot: cycle.application.root,
-      runsRoot: input.runsRoot,
-      supervisorRoot: nodePath.dirname(cycle.root),
-      runtimeHome: cycle.runtimeHome,
-      workflowData: cycle.workflowData,
-      repositoryRoot,
-      nodeExecutable: requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
-      vercelExecutable: requiredEnvironment("APP_BUILDER_DEV_VERCEL_BIN"),
+      closed,
+      cycleFile: input.cycleFile,
       environment: process.env,
+      nodeExecutable: requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
+      repositoryRoot,
+      runsRoot: input.runsRoot,
+      runtimeHome: cycle.runtimeHome,
       signal: input.signal,
+      supervisorRoot: nodePath.dirname(cycle.root),
+      vercelExecutable: requiredEnvironment("APP_BUILDER_DEV_VERCEL_BIN"),
+      workflowData: cycle.workflowData,
     });
     input.signal.throwIfAborted();
     const stopOidcLease = maintainLocalDevelopmentOidcLease({
-      repositoryRoot,
       applicationRoot: cycle.application.root,
-      runtimeHome: cycle.runtimeHome,
-      vercelExecutable: requiredEnvironment("APP_BUILDER_DEV_VERCEL_BIN"),
       miseExecutable: requiredEnvironment("APP_BUILDER_DEV_MISE_BIN"),
       onUnavailable: () => {
         console.warn(
           "Builder model credential renewal is unavailable; saved work is preserved. Check the existing Vercel login.",
         );
       },
+      repositoryRoot,
+      runtimeHome: cycle.runtimeHome,
+      vercelExecutable: requiredEnvironment("APP_BUILDER_DEV_VERCEL_BIN"),
     });
     const eve = spawn(
       requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
@@ -294,13 +294,13 @@ async function runEveCycle(input: {
       try {
         await observeDevelopmentRuntimeChanges({
           expectedFingerprint: runtimeFingerprint,
-          repositoryRoot,
-          signal: watchers.signal,
           onChanged: () => {
             console.info(
               "Builder runtime source changed; existing Eve sessions retain their pinned worker. Use a separate local instance to exercise the changed runtime.",
             );
           },
+          repositoryRoot,
+          signal: watchers.signal,
         });
       } catch {
         console.warn(
@@ -400,10 +400,10 @@ try {
     args.hostedSessionResource === undefined
       ? undefined
       : {
-          resourceUrl: args.hostedSessionResource,
           codexBin: args.hostedSessionCodexBin ?? requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
-          nodeBin: requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
           cwd: await privateRoot(nodePath.join(stateRoot, "native-session-client")),
+          nodeBin: requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
+          resourceUrl: args.hostedSessionResource,
         };
   const nextHome = await privateRoot(nodePath.join(stateRoot, "next-home"));
   const destinationRoot = await privateRoot(

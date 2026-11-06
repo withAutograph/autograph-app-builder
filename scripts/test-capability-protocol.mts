@@ -38,7 +38,8 @@ export async function relayBoundedFrames(options: {
         return;
       }
       if (frames !== options.expectedFrames || buffered.byteLength !== 0) {
-        return fail(new Error("Protocol relay ended before its exact frames."));
+        fail(new Error("Protocol relay ended before its exact frames."));
+        return;
       }
       options.target.end();
     };
@@ -63,10 +64,12 @@ export async function relayBoundedFrames(options: {
         buffered = buffered.subarray(newline + 1);
         frames += 1;
         if (frame.byteLength > maximumFrameBytes) {
-          return fail(new Error("Protocol frame exceeded its byte limit."));
+          fail(new Error("Protocol frame exceeded its byte limit."));
+          return;
         }
         if (frames > options.expectedFrames) {
-          return fail(new Error("Protocol relay received trailing frames."));
+          fail(new Error("Protocol relay received trailing frames."));
+          return;
         }
         if (!options.target.write(frame)) {
           waitingForDrain = true;
@@ -74,7 +77,8 @@ export async function relayBoundedFrames(options: {
           return;
         }
         if (frames === options.expectedFrames && buffered.byteLength > 0) {
-          return fail(new Error("Protocol relay received trailing bytes."));
+          fail(new Error("Protocol relay received trailing bytes."));
+          return;
         }
       }
     };
@@ -93,8 +97,12 @@ export async function relayBoundedFrames(options: {
       }
       settled = true;
     });
-    options.source.once("error", (error) => fail(error));
-    options.target.once("error", (error) => fail(error));
+    options.source.once("error", (error) => {
+      fail(error);
+    });
+    options.target.once("error", (error) => {
+      fail(error);
+    });
     await finished(options.target);
   }
 }

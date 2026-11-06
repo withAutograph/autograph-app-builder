@@ -18,52 +18,52 @@ const { bootTerminalRecoveryOwnerWithPorts } = await import(
   `${sdk}execution/session/terminal-recovery-boot.js`
 );
 const descriptor = {
-  version: 1,
-  operationId: "op-recovery",
-  sourcePublicSessionId: "ses-parent",
-  sourceOwnerRunId: "wrun-source",
-  sourceAdapterGeneration: 1,
   logicalSessionId: "logical-original",
+  operationId: "op-recovery",
   originalAuthoritySessionId: "ses-authority",
   parentCancellationRevision: 2,
+  sourceAdapterGeneration: 1,
   sourceHandoffId: "handoff-original",
+  sourceOwnerRunId: "wrun-source",
+  sourcePublicSessionId: "ses-parent",
+  version: 1,
 };
 const auth = {
   authenticator: "test",
-  principalType: "user",
-  principalId: "owner",
   issuer: "issuer",
+  principalId: "owner",
+  principalType: "user",
 };
 const provenance = {
+  checkpointVersion: 1,
   kind: "completed-terminal-turn-input",
-  sourceStepId: "step-original",
   sourceEventId: "event-original",
   sourceSlot: 7,
-  checkpointVersion: 1,
+  sourceStepId: "step-original",
 };
 const checkpoint = () => ({
-  version: 9,
-  sessionTimeoutMs: false,
   capabilities: { requestInput: true },
   serializedContext: {
-    "eve.sessionId": descriptor.logicalSessionId,
-    "eve.auth": { current: auth },
     "authored.grant": {
       appId: "same-app",
       sessionId: descriptor.logicalSessionId,
       workspaceId: "same-drive",
     },
+    "eve.auth": { current: auth },
+    "eve.sessionId": descriptor.logicalSessionId,
   },
   sessionState: createDurableSessionState({
     session: {
-      sessionId: descriptor.logicalSessionId,
-      continuationToken: "original-token",
-      state: { deniedCall: true },
-      history: [{ role: "assistant", content: "original" }],
       agent: { system: "retained system", tools: new Map() },
       compaction: {},
+      continuationToken: "original-token",
+      history: [{ content: "original", role: "assistant" }],
+      sessionId: descriptor.logicalSessionId,
+      state: { deniedCall: true },
     },
   }),
+  sessionTimeoutMs: false,
+  version: 9,
 });
 const bootFixture = () => {
   const { promise: activation, resolve: resolveActivation } = Promise.withResolvers();
@@ -74,23 +74,34 @@ const bootFixture = () => {
     async claimSessionHooks(tokens) {
       calls.push(["claim", tokens]);
     },
+    async dispose() {
+      calls.push(["dispose-inbox"]);
+    },
+    drain() {
+      return queue.splice(0);
+    },
     onInterrupt(callback) {
       interrupt = callback;
       return () => {
         interrupt = undefined;
       };
     },
-    drain() {
-      return queue.splice(0);
-    },
     restore(items) {
       queue.unshift(...items);
     },
-    async dispose() {
-      calls.push(["dispose-inbox"]);
-    },
   };
   const ports = {
+    createHook(options) {
+      calls.push(["hook", options]);
+      return Object.assign(activation, {
+        dispose() {
+          calls.push(["dispose-hook"]);
+        },
+        async getConflict() {
+          return null;
+        },
+      });
+    },
     createSessionInbox(id) {
       assert.equal(id, descriptor.logicalSessionId);
       return inbox;
@@ -105,41 +116,30 @@ const bootFixture = () => {
     async validateCheckpoint(input) {
       calls.push(["validate", input]);
     },
-    createHook(options) {
-      calls.push(["hook", options]);
-      return Object.assign(activation, {
-        async getConflict() {
-          return null;
-        },
-        dispose() {
-          calls.push(["dispose-hook"]);
-        },
-      });
-    },
   };
   return {
-    ports,
-    calls,
-    inbox,
-    queue,
     activate: () =>
       resolveActivation({
         kind: "activate-terminal-recovery",
         operationId: descriptor.operationId,
         ownerRunId: "wrun-child",
       }),
+    calls,
     cancel: () => interrupt({ kind: "cancel" }),
+    inbox,
+    ports,
+    queue,
   };
 };
 const inputFor = (cp = checkpoint()) => ({
-  kind: "terminal-recovery",
+  activationToken: "activation-private",
   checkpoint: cp,
   descriptor,
-  provenance,
-  activationToken: "activation-private",
+  kind: "terminal-recovery",
   ownerDeploymentId: "deployment-current",
+  provenance,
   replayInput: {
-    runtimeResults: { results: [{ toolCallId: "actual-call", output: "actual-output" }] },
+    runtimeResults: { results: [{ output: "actual-output", toolCallId: "actual-call" }] },
   },
 });
 
@@ -197,11 +197,11 @@ it("native boot rejects changed logical identity before any claim", async () => 
 it("a competing recovery owner cannot execute or replace logical hook ownership", async () => {
   const fixture = bootFixture();
   fixture.ports.createHook = () => ({
-    async getConflict() {
-      return { runId: "winner" };
-    },
     dispose() {
       fixture.calls.push(["dispose-hook"]);
+    },
+    async getConflict() {
+      return { runId: "winner" };
     },
   });
   assert.equal(await bootTerminalRecoveryOwnerWithPorts(inputFor(), fixture.ports), undefined);
@@ -219,17 +219,17 @@ const recoveryFixture = () => {
   const cp = checkpoint();
   const candidate = Object.freeze({ kind: "private-native-recovery-candidate", version: 1 });
   const payload = {
-    run: { runId: descriptor.sourceOwnerRunId },
     candidates: [
       {
         kind: provenance.kind,
         origin: {
           eventId: provenance.sourceEventId,
-          stepId: provenance.sourceStepId,
           slot: provenance.sourceSlot,
+          stepId: provenance.sourceStepId,
         },
       },
     ],
+    run: { runId: descriptor.sourceOwnerRunId },
   };
   const ports = {
     async authorize() {
@@ -244,10 +244,6 @@ const recoveryFixture = () => {
         throw new Error("cancelled");
       }
     },
-    async readReceipt() {
-      calls.push("receipt-read");
-      return receipt;
-    },
     async commitReceipt(input) {
       calls.push("receipt-commit");
       if (!allowed) {
@@ -256,43 +252,16 @@ const recoveryFixture = () => {
       receipt = input.recoveryBinding;
       return receipt;
     },
+    async readReceipt() {
+      calls.push("receipt-read");
+      return receipt;
+    },
   };
   const deps = {
     async collect(input) {
       calls.push("collect");
       await input.authorizeOwner(input.binding);
-      return { kind: "candidate", candidate };
-    },
-    async reconcile() {
-      calls.push("reconcile");
-      return {
-        kind: "ready",
-        checkpointCore: { serializedContext: cp.serializedContext, sessionState: cp.sessionState },
-        replayInput: inputFor().replayInput,
-        provenance: { selectedOrigin: payload.candidates[0].origin },
-      };
-    },
-    readCandidate(handle) {
-      assert.equal(handle, candidate);
-      return payload;
-    },
-    async readEntry() {
-      calls.push("policy");
-      return { kind: "handoff", checkpoint: cp };
-    },
-    async start(input) {
-      calls.push("start");
-      assert.equal(input.checkpoint.serializedContext, cp.serializedContext);
-      hook = {
-        runId: "wrun-child",
-        metadata: Promise.resolve({
-          recoveryBinding: {
-            ...descriptor,
-            ownerRunId: "wrun-child",
-            provenance: input.provenance,
-          },
-        }),
-      };
+      return { candidate, kind: "candidate" };
     },
     async getHook() {
       if (hook === undefined) {
@@ -300,25 +269,56 @@ const recoveryFixture = () => {
       }
       return hook;
     },
+    isHookNotFound(error) {
+      return error.message === "missing";
+    },
+    now: Date.now,
+    readCandidate(handle) {
+      assert.equal(handle, candidate);
+      return payload;
+    },
+    async readEntry() {
+      calls.push("policy");
+      return { checkpoint: cp, kind: "handoff" };
+    },
+    async reconcile() {
+      calls.push("reconcile");
+      return {
+        checkpointCore: { serializedContext: cp.serializedContext, sessionState: cp.sessionState },
+        kind: "ready",
+        provenance: { selectedOrigin: payload.candidates[0].origin },
+        replayInput: inputFor().replayInput,
+      };
+    },
     async resumeHook(_token, input) {
       calls.push("activate");
       assert.ok(receipt !== null && receipt !== undefined);
       assert.equal(input.ownerRunId, receipt.ownerRunId);
       hook = undefined;
     },
-    isHookNotFound(error) {
-      return error.message === "missing";
+    async start(input) {
+      calls.push("start");
+      assert.equal(input.checkpoint.serializedContext, cp.serializedContext);
+      hook = {
+        metadata: Promise.resolve({
+          recoveryBinding: {
+            ...descriptor,
+            ownerRunId: "wrun-child",
+            provenance: input.provenance,
+          },
+        }),
+        runId: "wrun-child",
+      };
     },
-    now: Date.now,
     async wait() {
       throw new Error("unexpected wait");
     },
   };
   return {
     calls,
-    ports,
     deps,
     getReceipt: () => receipt,
+    ports,
     revoke: () => {
       allowed = false;
     },
@@ -387,16 +387,16 @@ it("uncertain effects never start a physical owner or synthesize results", async
 it("only accepted trusted forwarding may request recovery and raw checkpoint/message fields are rejected", async () => {
   const payload = { operationId: descriptor.operationId, recovery: descriptor };
   const forbidden = await native.handleTerminalRecoveryRequest({
-    payload,
     auth,
     forwarded: false,
+    payload,
     ports: recoveryFixture().ports,
   });
   assert.equal(forbidden.status, 403);
   const invalid = await native.handleTerminalRecoveryRequest({
-    payload: { ...payload, message: "substitute" },
     auth,
     forwarded: true,
+    payload: { ...payload, message: "substitute" },
     ports: recoveryFixture().ports,
   });
   assert.equal(invalid.status, 400);
@@ -413,9 +413,9 @@ it("source policy honors original initial default and rejects missing recovered 
     native.terminalRecoveryPolicy({ kind: "initial", serializedContext: {} }).sessionTimeoutMs,
     2_592_000_000,
   );
-  assert.equal(native.terminalRecoveryPolicy({ kind: "handoff", checkpoint: {} }), undefined);
+  assert.equal(native.terminalRecoveryPolicy({ checkpoint: {}, kind: "handoff" }), undefined);
   assert.equal(
-    native.terminalRecoveryPolicy({ kind: "terminal-recovery", checkpoint: checkpoint() })
+    native.terminalRecoveryPolicy({ checkpoint: checkpoint(), kind: "terminal-recovery" })
       .sessionTimeoutMs,
     false,
   );
@@ -428,27 +428,27 @@ it("recovered first turn admits a queued cancellation before any turn step", asy
   let settled = 0;
   let cleanups = 0;
   const inbox = {
-    onInterrupt() {
-      return () => {
-        cleanups += 1;
-      };
+    drain() {
+      return [{ kind: "cancel" }];
     },
     onDelivery() {
       return () => {
         cleanups += 1;
       };
     },
-    drain() {
-      return [{ kind: "cancel" }];
+    onInterrupt() {
+      return () => {
+        cleanups += 1;
+      };
     },
   };
   const execution = new SessionExecution({
-    sessionId: descriptor.logicalSessionId,
-    inbox,
-    queue: new SessionInputQueue(),
     cursor: {
       sessionState: { emissionState: { sequence: 1, stepIndex: 1, turnId: "turn-original" } },
     },
+    inbox,
+    queue: new SessionInputQueue(),
+    sessionId: descriptor.logicalSessionId,
   });
   execution.runTurnSteps = async () => {
     steps += 1;
@@ -456,9 +456,9 @@ it("recovered first turn admits a queued cancellation before any turn step", asy
   };
   execution.finishCancelledTurn = async () => {
     settled += 1;
-    return { kind: "park", cancelled: true };
+    return { cancelled: true, kind: "park" };
   };
-  assert.deepEqual(await execution.runTurn(undefined, true), { kind: "park", cancelled: true });
+  assert.deepEqual(await execution.runTurn(undefined, true), { cancelled: true, kind: "park" });
   assert.equal(steps, 0);
   assert.equal(settled, 1);
   assert.equal(cleanups, 2);
@@ -608,30 +608,30 @@ it("two-phase preparation parks the actual native boot until canonical child act
 
 const historicalInbox = () => [
   {
-    runId: descriptor.sourceOwnerRunId,
+    correlationId: "original-command-hook",
     eventId: `evnt_${String(8).padStart(26, "0")}`,
-    correlationId: "original-command-hook",
+    payload: { kind: "cancel", turnId: "turn-original" },
+    runId: descriptor.sourceOwnerRunId,
     slot: 8,
-    payload: { kind: "cancel", turnId: "turn-original" },
   },
   {
-    runId: descriptor.sourceOwnerRunId,
+    correlationId: "original-command-hook",
     eventId: `evnt_${String(9).padStart(26, "0")}`,
-    correlationId: "original-command-hook",
-    slot: 9,
     payload: {
-      kind: "send",
-      requestId: "original-request",
       auth: { principalId: "original-owner" },
+      kind: "send",
       payload: { message: "preserved accepted message" },
+      requestId: "original-request",
     },
+    runId: descriptor.sourceOwnerRunId,
+    slot: 9,
   },
   {
-    runId: descriptor.sourceOwnerRunId,
-    eventId: `evnt_${String(10).padStart(26, "0")}`,
     correlationId: "original-command-hook",
-    slot: 10,
+    eventId: `evnt_${String(10).padStart(26, "0")}`,
     payload: { kind: "cancel", turnId: "turn-original" },
+    runId: descriptor.sourceOwnerRunId,
+    slot: 10,
   },
 ];
 const historicalInput = () => {
@@ -667,10 +667,10 @@ it("receipt-bound historical FIFO reaches real ActiveTurn cancellation and retai
   };
   const queue = new SessionInputQueue();
   const execution = new SessionExecution({
-    sessionId: descriptor.logicalSessionId,
+    cursor: { sessionState: boot.session.sessionState },
     inbox: f.inbox,
     queue,
-    cursor: { sessionState: boot.session.sessionState },
+    sessionId: descriptor.logicalSessionId,
   });
   execution.runTurnSteps = async () => {
     turnSteps += 1;
@@ -678,11 +678,11 @@ it("receipt-bound historical FIFO reaches real ActiveTurn cancellation and retai
   };
   execution.finishCancelledTurn = async () => {
     cancellationBoundaries += 1;
-    return { kind: "park", cancelled: true };
+    return { cancelled: true, kind: "park" };
   };
   assert.deepEqual(await execution.runTurn(boot.session.initialTurnInput, true), {
-    kind: "park",
     cancelled: true,
+    kind: "park",
   });
   assert.equal(turnSteps, 0);
   assert.equal(cancellationBoundaries, 1);
@@ -762,34 +762,39 @@ it("an idle recovery owner enters the actual inbox wait without admitting a mode
     claimSessionHooks: async () => {
       claims += 1;
     },
-    onInterrupt: () => vi.fn(),
+    dispose: vi.fn(async () => {}),
     drain: () => [],
-    restore: vi.fn(),
     hasPending: () => false,
     next: () => {
       enterWait();
       return parkedWait;
     },
-    dispose: vi.fn(() => Promise.resolve()),
+    onInterrupt: () => vi.fn(),
+    restore: vi.fn(),
   };
   const ports = {
+    createHook: () =>
+      Object.assign(activation, {
+        dispose: vi.fn(),
+        getConflict: async () => {
+          await Promise.resolve();
+        },
+      }),
     createSessionInbox: () => inbox,
     getWorkflowMetadata: () => ({ workflowRunId: "idle-successor" }),
-    validateCheckpoint: vi.fn(() => Promise.resolve()),
     getWritable: () => {
       writableReads += 1;
       return new WritableStream();
     },
-    createHook: () =>
-      Object.assign(activation, { getConflict: () => Promise.resolve(), dispose: vi.fn() }),
+    validateCheckpoint: vi.fn(async () => {}),
   };
   const input = {
-    kind: "terminal-recovery",
-    descriptor,
-    checkpoint: checkpoint(),
-    provenance: { ...provenance, resumePhase: "await-input" },
     activationToken: "idle-activation",
+    checkpoint: checkpoint(),
+    descriptor,
+    kind: "terminal-recovery",
     ownerDeploymentId: "deployment",
+    provenance: { ...provenance, resumePhase: "await-input" },
   };
   const pending = bootTerminalRecoveryOwnerWithPorts(input, ports);
   await Promise.resolve();

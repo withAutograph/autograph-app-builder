@@ -111,24 +111,25 @@ await writeFile(
 const clientRoot = path.join(output, "clients");
 await mkdir(clientRoot);
 await Promise.all(
-  (["vscode", "cursor", "codex"] as const).map((client) =>
-    writeFile(
-      path.join(clientRoot, `${client}.client-harness.json`),
-      `${JSON.stringify(
-        {
-          client,
-          format: "agent-plugins-client-harness-v2",
-          mcp: "../app-builder/mcp.json",
-          oauth: {
-            protectedResourceMetadata: `${endpoint}/.well-known/oauth-protected-resource`,
+  (["vscode", "cursor", "codex"] as const).map(
+    async (client) =>
+      await writeFile(
+        path.join(clientRoot, `${client}.client-harness.json`),
+        `${JSON.stringify(
+          {
+            client,
+            format: "agent-plugins-client-harness-v2",
+            mcp: "../app-builder/mcp.json",
+            oauth: {
+              protectedResourceMetadata: `${endpoint}/.well-known/oauth-protected-resource`,
+            },
+            pluginRoot: "../app-builder",
+            transport: { type: "streamable-http", url: `${endpoint}/mcp` },
           },
-          pluginRoot: "../app-builder",
-          transport: { type: "streamable-http", url: `${endpoint}/mcp` },
-        },
-        null,
-        2,
-      )}\n`,
-    ),
+          null,
+          2,
+        )}\n`,
+      ),
   ),
 );
 
@@ -140,7 +141,7 @@ async function collectFiles(root: string, directory: string): Promise<Map<string
       const filePath = path.join(directory, entry);
       const fileStatus = await stat(filePath);
       if (fileStatus.isDirectory()) {
-        return collectFiles(root, filePath);
+        return await collectFiles(root, filePath);
       }
       return new Map([[path.relative(root, filePath), await readFile(filePath)]]);
     }),

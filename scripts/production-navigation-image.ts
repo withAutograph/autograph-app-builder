@@ -49,20 +49,20 @@ const missingPinnedImage = (result: ImageCommandResult, image: string): boolean 
 const inspectFailureReason = (stderr: string) => {
   const reasons = [
     {
-      reason: "daemon_unavailable",
       pattern:
         /cannot connect to the docker daemon|is the docker daemon running|connection refused|error during connect/iu,
+      reason: "daemon_unavailable",
     },
     {
-      reason: "authorization_failed",
       pattern: /unauthorized|authentication required|permission denied|forbidden/iu,
+      reason: "authorization_failed",
     },
     {
-      reason: "transport_failed",
       pattern:
         /x509|certificate|tls handshake|network is unreachable|i\/o timeout|context deadline exceeded|no such host/iu,
+      reason: "transport_failed",
     },
-    { reason: "missing_reference_mismatch", pattern: /no such image:/iu },
+    { pattern: /no such image:/iu, reason: "missing_reference_mismatch" },
   ];
   return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
 };
@@ -70,34 +70,34 @@ const inspectFailureReason = (stderr: string) => {
 const pullFailureReason = (stderr: string) => {
   const reasons: { pattern: RegExp; reason: string }[] = [
     {
-      reason: "authorization_failed",
       pattern:
         /unauthorized|authentication required|no basic auth credentials|permission denied|forbidden|pull access denied|failed to authorize/iu,
+      reason: "authorization_failed",
     },
     {
-      reason: "manifest_unavailable",
       pattern: /manifest unknown|name unknown|repository does not exist/iu,
+      reason: "manifest_unavailable",
     },
-    { reason: "registry_client_error", pattern: /\b4\d\d\b/u },
-    { reason: "registry_server_error", pattern: /\b5\d\d\b/u },
+    { pattern: /\b4\d\d\b/u, reason: "registry_client_error" },
+    { pattern: /\b5\d\d\b/u, reason: "registry_server_error" },
     {
-      reason: "daemon_unavailable",
       pattern:
         /cannot connect to .*docker daemon|is the docker daemon running|connection refused|error during connect/iu,
+      reason: "daemon_unavailable",
     },
     {
-      reason: "transport_failed",
       pattern:
         /x509|certificate|tls|network is unreachable|timeout|no such host|connection reset|unexpected eof/iu,
+      reason: "transport_failed",
     },
-    { reason: "storage_exhausted", pattern: /no space left on device/iu },
-    { reason: "platform_mismatch", pattern: /no matching manifest for/iu },
+    { pattern: /no space left on device/iu, reason: "storage_exhausted" },
+    { pattern: /no matching manifest for/iu, reason: "platform_mismatch" },
     {
-      reason: "docker_configuration_invalid",
       pattern:
         /error parsing config file|credential helper.*not found|credentials store.*not found/iu,
+      reason: "docker_configuration_invalid",
     },
-    { reason: "invalid_reference", pattern: /invalid reference format|invalid image reference/iu },
+    { pattern: /invalid reference format|invalid image reference/iu, reason: "invalid_reference" },
   ];
   return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
 };

@@ -361,7 +361,7 @@ describe("hosted portable fresh-client proof", () => {
   });
 
   it("proves exact approvals, metadata, identities, publication, and five tools", async () => {
-    const result = await runHostedProof(proofInput(hostedFixture() as typeof fetch));
+    const result = await runHostedProof(proofInput(hostedFixture()));
     expect(result.discoveredTools).toEqual(TOOL_NAMES);
     expect(result).toMatchObject({
       cancellationProved: true,
@@ -386,12 +386,12 @@ describe("hosted portable fresh-client proof", () => {
 
   it("rejects retries that differ from the discarded start result", async () => {
     await expect(
-      runHostedProof(proofInput(hostedFixture({ discardedStartRetryDrift: true }) as typeof fetch)),
+      runHostedProof(proofInput(hostedFixture({ discardedStartRetryDrift: true }))),
     ).rejects.toThrow("Lost-response retry did not match the discarded hosted session result");
   });
 
   it("rejects a bearer or adapter session disclosure in public responses", async () => {
-    const leaking = hostedFixture() as typeof fetch;
+    const leaking = hostedFixture();
     const fetcher: typeof fetch = async (url, init) => {
       const response = await leaking(url, init);
       const body = JSON.parse(String(init?.body ?? "{}")) as {
@@ -419,11 +419,11 @@ describe("hosted portable fresh-client proof", () => {
 
   it("rejects approval digest drift and missing approval authority", async () => {
     await expect(
-      runHostedProof(proofInput(hostedFixture({ approvalDigestDrift: true }) as typeof fetch)),
+      runHostedProof(proofInput(hostedFixture({ approvalDigestDrift: true }))),
     ).rejects.toThrow("exact digest-bound receipt");
     await expect(
       runHostedProof({
-        ...proofInput(hostedFixture() as typeof fetch),
+        ...proofInput(hostedFixture()),
         permitApprovals: false,
       }),
     ).rejects.toThrow("explicit --permit-approvals gate");
@@ -431,10 +431,10 @@ describe("hosted portable fresh-client proof", () => {
 
   it("rejects nonterminal iteration and invalid draft evidence", async () => {
     await expect(
-      runHostedProof(proofInput(hostedFixture({ iterationStatus: "waiting" }) as typeof fetch)),
+      runHostedProof(proofInput(hostedFixture({ iterationStatus: "waiting" }))),
     ).rejects.toThrow("successful completed state");
     await expect(
-      runHostedProof(proofInput(hostedFixture({ draftDigestDrift: true }) as typeof fetch)),
+      runHostedProof(proofInput(hostedFixture({ draftDigestDrift: true }))),
     ).rejects.toThrow("approved target and change set");
     expect(() => verifiedDraftPrEvidence("https://github.com/x/y/pull/1", scenario)).toThrow(
       "Exactly one structural draft-PR receipt",
@@ -447,7 +447,7 @@ describe("hosted portable fresh-client proof", () => {
         proofInput(
           hostedFixture({
             metadataResource: "https://wrong.autograph.dev/mcp",
-          }) as typeof fetch,
+          }),
         ),
       ),
     ).rejects.toThrow("metadata binding drifted");
@@ -479,7 +479,7 @@ describe("hosted portable fresh-client proof", () => {
 
   it("requires mutual server-backed workspace denial", async () => {
     await expect(
-      runHostedProof(proofInput(hostedFixture({ mutualDenial: false }) as typeof fetch)),
+      runHostedProof(proofInput(hostedFixture({ mutualDenial: false }))),
     ).rejects.toThrow("not mutually isolated");
   });
 
@@ -498,7 +498,7 @@ describe("hosted portable fresh-client proof", () => {
           proofInput(
             hostedFixture({
               denialFailure: { direction, kind },
-            }) as typeof fetch,
+            }),
           ),
         ),
       ).rejects.toThrow(expectedFailure);

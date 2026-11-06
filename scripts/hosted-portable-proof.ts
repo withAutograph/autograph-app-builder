@@ -456,8 +456,8 @@ export class HostedMcpProofClient {
     return result;
   }
 
-  rawInitialize(authenticate = true) {
-    return this.post(
+  async rawInitialize(authenticate = true) {
+    return await this.post(
       "initialize",
       {
         capabilities: {},
