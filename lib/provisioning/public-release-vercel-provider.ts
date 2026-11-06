@@ -578,7 +578,9 @@ export const createPublicReleaseVercelBindingSnapshot =
     fetch?: typeof fetch;
   }) =>
   async (scope: PublicReleaseVercelBindingSnapshotScope) => {
-    const check = async () => await assertSnapshotCurrent(scope.signal, deps.assertCurrent);
+    const check = async () => {
+      await assertSnapshotCurrent(scope.signal, deps.assertCurrent);
+    };
     const read = async (route: string) => {
       await check();
       const credential = await deps.readCredential();
@@ -689,7 +691,9 @@ export const createPublicReleaseVercelActiveDeploymentSnapshot =
       productionBranch: string;
     },
   ): Promise<{ priorActiveDeploymentId: string | null }> => {
-    const check = async () => await assertSnapshotCurrent(scope.signal, deps.assertCurrent);
+    const check = async () => {
+      await assertSnapshotCurrent(scope.signal, deps.assertCurrent);
+    };
     await check();
     const credential = await deps.readCredential();
     await check();

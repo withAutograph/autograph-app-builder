@@ -173,16 +173,15 @@ describe.skipIf(tools === undefined)(
       const target = { ...scope, appId: "concurrent-app" };
       const choices = ["https://one.example", "https://two.example"];
       const results = await Promise.allSettled(
-        choices.map(
-          async (publicOrigin) =>
-            await store.select({
-              assertCurrent: current,
-              authority,
-              expectedPublicOrigin: null,
-              publicOrigin,
-              scope: target,
-            }),
-        ),
+        choices.map(async (publicOrigin) => {
+          await store.select({
+            assertCurrent: current,
+            authority,
+            expectedPublicOrigin: null,
+            publicOrigin,
+            scope: target,
+          });
+        }),
       );
       expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
       const winner = await store.read({ authority, scope: target });
@@ -332,9 +331,7 @@ describe.skipIf(tools === undefined)(
         store.select({
           assertCurrent: async () => {
             checks += 1;
-            return checks === 2
-              ? await Promise.reject(new Error("revoked"))
-              : await Promise.resolve();
+            checks === 2 ? await Promise.reject(new Error("revoked")) : await Promise.resolve();
           },
           authority,
           expectedPublicOrigin: null,

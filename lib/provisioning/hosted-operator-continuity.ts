@@ -275,7 +275,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       if (record.approval !== undefined) {
         return { approved: true };
       }
-      await approvalStage("setup", async () => await deps.assertSetup(context, record.plan));
+      await approvalStage("setup", async () => {
+        await deps.assertSetup(context, record.plan);
+      });
       const receipt = await approvalStage(
         "native_history",
         async () =>

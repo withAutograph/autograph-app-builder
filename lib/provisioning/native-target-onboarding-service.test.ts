@@ -194,7 +194,7 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
     store,
     verifyWorkload: async () => {
       events.push("workload");
-      return workloadAuthorized
+      workloadAuthorized
         ? await Promise.resolve()
         : await Promise.reject(new Error("unauthorized"));
     },

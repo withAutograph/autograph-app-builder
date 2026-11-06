@@ -183,7 +183,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
           const liveExpiry =
             row.record.leaseExpiresAt !== undefined &&
             Date.parse(row.record.leaseExpiresAt) > clock();
-          return physicalFence && row.record.leaseId === leaseId && liveExpiry
+          physicalFence && row.record.leaseId === leaseId && liveExpiry
             ? await Promise.resolve()
             : await Promise.reject(new HostedOperatorError("operation_in_progress"));
         });
@@ -333,7 +333,9 @@ describe("canonical execution observation", () => {
     const expiresAt = f.record.leaseExpiresAt;
     const providerReads = f.assertAuthorized.mock.calls.length;
     await Promise.all(
-      Array.from({ length: 100 }, async () => await effect.assertCurrentObservation()),
+      Array.from({ length: 100 }, async () => {
+        await effect.assertCurrentObservation();
+      }),
     );
     expect(f.revision).toBe(revision);
     expect(f.record.leaseExpiresAt).toBe(expiresAt);

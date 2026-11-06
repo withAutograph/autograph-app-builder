@@ -451,15 +451,17 @@ const fixture = () => {
     checkpoints,
     deployments,
     faults,
-    publish: async () =>
-      await publisher.publish(context, record, capabilities, assertCurrent, save),
+    publish: async () => {
+      await publisher.publish(context, record, capabilities, assertCurrent, save);
+    },
     get record() {
       return record;
     },
-    revoke: async () =>
+    revoke: async () => {
       await publisher.revoke(context, record, assertCurrent, async (environmentRows) => {
         await save({ environmentRows });
-      }),
+      });
+    },
     rows,
     setRecord(change: (r: ContinuityRecord) => void) {
       change(record);

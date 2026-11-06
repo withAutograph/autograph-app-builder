@@ -502,7 +502,9 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     }
   };
   const read = async (context: HostedOperatorContext, guard?: () => Promise<void>) => {
-    await guarded(async () => await ports.assertAuthorized(context), guard);
+    await guarded(async () => {
+      await ports.assertAuthorized(context);
+    }, guard);
     const row = await guarded(async () => await ports.store.read(context), guard);
     if (row === undefined) {
       throw new Error("normal_actor_journal_unavailable");
@@ -512,10 +514,9 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       return { preparation: undefined, row, state: undefined };
     }
     validateProvenance(context, preparation);
-    await guarded(
-      async () => await ports.assertAccountApproval(context, provenance(preparation)),
-      guard,
-    );
+    await guarded(async () => {
+      await ports.assertAccountApproval(context, provenance(preparation));
+    }, guard);
     if (preparation.predecessor !== undefined) {
       const prior = readParticipantSuccessorPredecessor(
         row.record,
@@ -525,7 +526,9 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       if (prior === undefined) {
         throw new Error("normal_actor_journal_authority_mismatch");
       }
-      await guarded(async () => await assertPredecessorApprovals(context, prior), guard);
+      await guarded(async () => {
+        await assertPredecessorApprovals(context, prior);
+      }, guard);
     }
     if (preparation.capturePredecessor !== undefined) {
       const prior = readUnapprovedCapturePredecessor(
@@ -536,7 +539,9 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       if (prior === undefined) {
         throw new Error("normal_actor_journal_authority_mismatch");
       }
-      await guarded(async () => await assertCapturePredecessorApprovals(context, prior), guard);
+      await guarded(async () => {
+        await assertCapturePredecessorApprovals(context, prior);
+      }, guard);
     }
     const state = decryptNormalActorState({
       ...stateScope(context, preparation),
@@ -544,7 +549,9 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       sealed: preparation.sealedState,
     });
     assertCarriedActors(context, row, preparation, state, ports.keyring, ports.now());
-    await guarded(async () => await ports.assertAuthorized(context), guard);
+    await guarded(async () => {
+      await ports.assertAuthorized(context);
+    }, guard);
     const latest = await guarded(async () => await ports.store.read(context), guard);
     if (!sameJournalAfterLeaseRenewal(row, latest, ports.now()) || latest === undefined) {
       throw new Error("normal_actor_journal_changed");
@@ -559,15 +566,20 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
   ) => {
     for (;;) {
       const { row } = await read(context, guard);
-      await guarded(async () => await ports.assertMutationAuthority(context, row, mode), guard);
+      await guarded(async () => {
+        await ports.assertMutationAuthority(context, row, mode);
+      }, guard);
       const preparation = normalActorAccountPreparationSchema.parse(change(row));
       validateProvenance(context, preparation);
-      await guarded(
-        async () => await ports.assertAccountApproval(context, provenance(preparation)),
-        guard,
-      );
-      await guarded(async () => await ports.assertAuthorized(context), guard);
-      await guarded(async () => await ports.assertMutationAuthority(context, row, mode), guard);
+      await guarded(async () => {
+        await ports.assertAccountApproval(context, provenance(preparation));
+      }, guard);
+      await guarded(async () => {
+        await ports.assertAuthorized(context);
+      }, guard);
+      await guarded(async () => {
+        await ports.assertMutationAuthority(context, row, mode);
+      }, guard);
       const latest = await guarded(async () => await ports.store.read(context), guard);
       if (!sameJournalAfterLeaseRenewal(row, latest, ports.now()) || latest === undefined) {
         continue;

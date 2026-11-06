@@ -572,7 +572,9 @@ export const createPublicReleaseDeployment = (input: {
         throw fail();
       }
       const snapshots = await createPublicReleaseVercelBindingSnapshot({
-        assertCurrent: async () => await check(current, plan, consent),
+        assertCurrent: async () => {
+          await check(current, plan, consent);
+        },
         assertProjectKeys: (keys) => {
           assertOwnedAppProductionEnvironment(plan, keys);
         },
@@ -634,17 +636,23 @@ export const createPublicReleaseDeployment = (input: {
       },
     });
     const github = createPublicReleaseGitHubProvider({
-      assertCurrent: async (current, plan) => await verifyProductionRuntime(current, plan, true),
+      assertCurrent: async (current, plan) => {
+        await verifyProductionRuntime(current, plan, true);
+      },
       fetch: input.fetch,
       readCredential: createPublicReleaseGitHubCredentialReader({
-        assertCurrent: async (current, plan) => await verifyProductionRuntime(current, plan, true),
+        assertCurrent: async (current, plan) => {
+          await verifyProductionRuntime(current, plan, true);
+        },
         environment,
         fetch: input.fetch,
         installations,
       }),
     });
     const observeAuth = createPublicReleaseAuthObservation({
-      assertCurrent: async (current, plan) => await check(current, plan, false),
+      assertCurrent: async (current, plan) => {
+        await check(current, plan, false);
+      },
       fetch: input.fetch,
       readPrivateValues: readValues,
     });
@@ -673,7 +681,9 @@ export const createPublicReleaseDeployment = (input: {
           if (
             integrations === undefined ||
             !(await observeAppIntegrationPublicRelease({
-              assertCurrent: async () => await check(current, plan, false),
+              assertCurrent: async () => {
+                await check(current, plan, false);
+              },
               attachment: integrations.attachment,
               fetch: input.fetch,
               publicOrigin: plan.publicOrigin,
@@ -707,7 +717,9 @@ export const createPublicReleaseDeployment = (input: {
         });
         const observed = await readiness({
           ...runtimeContext,
-          assertCurrent: async () => await check(current, plan, false),
+          assertCurrent: async () => {
+            await check(current, plan, false);
+          },
         });
         return { releaseId: observed.releaseId };
       },
@@ -776,7 +788,9 @@ export const createPublicReleaseDeployment = (input: {
           );
         }
         const activation = await createPublicReleaseVercelActiveDeploymentSnapshot({
-          assertCurrent: async () => await base(current),
+          assertCurrent: async () => {
+            await base(current);
+          },
           fetch: input.fetch,
           readCredential: async () =>
             await readActiveVercelInstallationToken({
@@ -944,7 +958,9 @@ export const createPublicReleaseDeployment = (input: {
                 ],
         });
         const snapshots = await createPublicReleaseVercelBindingSnapshot({
-          assertCurrent: async () => await base(current),
+          assertCurrent: async () => {
+            await base(current);
+          },
           assertProjectKeys: (keys) => {
             assertOwnedAppProductionEnvironment(candidate, keys);
           },
@@ -979,7 +995,9 @@ export const createPublicReleaseDeployment = (input: {
         },
         assertNoConflictingRelease: async (current, plan) => {
           const history = await readPublicReleasePlanHistory({
-            assertCurrentOwner: async () => await base(current, plan),
+            assertCurrentOwner: async () => {
+              await base(current, plan);
+            },
             candidate: plan,
             database: input.database,
           });

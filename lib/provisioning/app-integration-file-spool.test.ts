@@ -181,7 +181,7 @@ const fixture = (
             ["protected_installer_lifecycle_ready", 2],
           ] as const) {
             yield {
-              data: `${JSON.stringify({ kind, version: 1, run_id: runId, frame_id: frameId })}\n`,
+              data: `${JSON.stringify({ frame_id: frameId, kind, run_id: runId, version: 1 })}\n`,
               stream: "stdout",
             };
           }

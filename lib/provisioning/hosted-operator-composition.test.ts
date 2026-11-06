@@ -538,11 +538,11 @@ describe("final verifier entry diagnostics", () => {
     async (stage) => {
       const f = publicationFixture();
       const error = new TypeError("private-preflight-error");
-      const assertAuthorized = vi.fn(async () =>
+      const assertAuthorized = vi.fn(async () => {
         stage === "final_owner_authorization"
           ? await Promise.reject(error)
-          : await Promise.resolve(),
-      );
+          : await Promise.resolve();
+      });
       const read = vi.fn(async () => {
         throw error;
       });
@@ -5162,7 +5162,9 @@ it("forwards all additive native delivery contracts through the actual request-s
           appIntegrationCapabilityRequest: delegated,
           centralIntegrationDeploymentReceiptRequest: delegated,
           centralIntegrationHostRequest: delegated,
-          close: async () => await Promise.resolve(),
+          close: async () => {
+            await Promise.resolve();
+          },
           publicReleaseRequest: delegated,
         };
       },

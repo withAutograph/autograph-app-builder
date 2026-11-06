@@ -272,7 +272,9 @@ export const readHostedOperatorProviderInventory = async (input: {
         target: "inventory",
       },
       input.diagnosticSink,
-      async () => await input.assertCurrentOwner(),
+      async () => {
+        await input.assertCurrentOwner();
+      },
     );
     const credential = await readWithDiagnostic(
       target.sessionId,
@@ -348,7 +350,9 @@ export const readHostedOperatorProviderInventory = async (input: {
           target: readTarget,
         },
         input.diagnosticSink,
-        async () => await input.assertCurrentOwner(),
+        async () => {
+          await input.assertCurrentOwner();
+        },
       );
       const url = new URL(path, "https://api.vercel.com");
       if (target.scopeType === "team") {

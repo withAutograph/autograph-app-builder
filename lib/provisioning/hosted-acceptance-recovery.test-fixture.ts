@@ -461,8 +461,8 @@ export const installManagedAcceptanceSuite = (
               keys: [
                 {
                   ...generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }),
-                  kid: "fixture",
                   alg: "EdDSA",
+                  kid: "fixture",
                   use: "sig",
                 },
               ],

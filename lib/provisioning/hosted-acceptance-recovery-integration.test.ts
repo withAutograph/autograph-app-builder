@@ -20,7 +20,9 @@ import {
 const temporaryRoots: string[] = [];
 afterEach(async () => {
   await Promise.all(
-    temporaryRoots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true })),
+    temporaryRoots.splice(0).map(async (root) => {
+      await rm(root, { force: true, recursive: true });
+    }),
   );
 });
 
