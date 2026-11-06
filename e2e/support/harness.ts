@@ -4,10 +4,10 @@ import type { BrowserContext, Page } from "playwright/test";
 
 import { VirtualAuthenticator } from "../auth/virtual-authenticator";
 
-const databasePort = process.env.APP_BUILDER_DATABASE_PORT || "54329";
-const appPort = process.env.APP_BUILDER_LOCAL_PORT || "3001";
+const databasePort = process.env.APP_BUILDER_DATABASE_PORT ?? "54329";
+const appPort = process.env.APP_BUILDER_LOCAL_PORT ?? "3001";
 const appProtocol = "https";
-const emulateBasePort = Number(process.env.EMULATE_BASE_PORT || "4000");
+const emulateBasePort = Number(process.env.EMULATE_BASE_PORT ?? "4000");
 export const appOrigin = `${appProtocol}://localhost:${appPort}`;
 export const vercelEmulatorOrigin = `http://localhost:${emulateBasePort}`;
 export const githubEmulatorOrigin = `http://localhost:${emulateBasePort + 1}`;
