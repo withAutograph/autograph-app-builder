@@ -95,6 +95,11 @@ const approvedRepairHistory = (proposalDigest: string, sessionId: string): Repai
   const matches = existingAppRepairHistory
     .get()
     .filter((entry) => entry.proposalDigest === proposalDigest);
+  if (matches.length === 0) {
+    throw new Error(
+      "This proposal has no retained approved predecessor. Inspect the current change set and follow its normal approval state. If it requires Build approval, request approval for this proposal. If it already has approval, report the missing recovery history and preserve the saved work.",
+    );
+  }
   const entry = matches[0];
   if (matches.length !== 1 || entry?.sessionId !== sessionId || !settled(entry.approvedBase)) {
     throw new Error(
