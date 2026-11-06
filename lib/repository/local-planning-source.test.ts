@@ -233,28 +233,50 @@ describe("local planning base adoption", () => {
   });
   it("rejects an actually moving source before returning mismatched generation metadata", async () => {
     const f = fixture();
-    f.write(f.source, "large.txt", "x".repeat(32 * 1024 * 1024));
-    const writer = spawn(
-      process.execPath,
-      [
-        "-e",
-        `const fs=require('node:fs');let n=0;const write=()=>fs.writeFileSync(process.argv[1],String(n++));write();process.stdout.write('ready');setInterval(write,1);`,
-        path.join(f.source, "shared.txt"),
-      ],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
+    const sourceFile = path.join(f.source, "shared.txt");
+    const watcher = `
+      const fs = require("node:fs");
+      const os = require("node:os");
+      const path = require("node:path");
+      const prefix = "app-builder-local-planning-";
+      const sourceRoot = process.argv[1];
+      const sourceFile = process.argv[2];
+      const existing = new Set(fs.readdirSync(os.tmpdir()).filter((name) => name.startsWith(prefix)));
+      process.send("ready");
+      const interval = setInterval(() => {
+        for (const name of fs.readdirSync(os.tmpdir())) {
+          if (!name.startsWith(prefix) || existing.has(name)) continue;
+          const alternates = path.join(os.tmpdir(), name, "source.git", "objects", "info", "alternates");
+          if (fs.existsSync(alternates) && fs.readFileSync(alternates, "utf8").includes(path.join(sourceRoot, ".git", "objects"))) {
+            fs.writeFileSync(sourceFile, "changed during capture\\n");
+            process.send("changed");
+            clearInterval(interval);
+            return;
+          }
+        }
+      }, 1);
+    `;
+    const writer = spawn(process.execPath, ["-e", watcher, f.source, sourceFile], {
+      stdio: ["ignore", "ignore", "pipe", "ipc"],
+    });
     try {
-      await once(writer.stdout, "data");
-      await expect(captureLocalPlanningSource(f.source, f.originalSha)).rejects.toThrow(
-        "local source changed",
-      );
+      const readyMessage = z.array(z.unknown()).parse(await once(writer, "message"));
+      const ready = z.string().parse(readyMessage[0]);
+      expect(ready).toBe("ready");
+      const capture = captureLocalPlanningSource(f.source, f.originalSha);
+      const changedMessage = z.array(z.unknown()).parse(await once(writer, "message"));
+      const changed = z.string().parse(changedMessage[0]);
+      expect(changed).toBe("changed");
+      await expect(capture).rejects.toThrow("local source changed");
       expect(f.git(f.candidate, "rev-parse", "HEAD")).toBe(f.originalSha);
       expect(readFileSync(path.join(f.candidate, "apps/example/app/page.tsx"), "utf-8")).toBe(
         "saved product\n",
       );
     } finally {
-      writer.kill();
-      await once(writer, "exit");
+      if (writer.exitCode === null && writer.signalCode === null) {
+        writer.kill();
+        await once(writer, "exit");
+      }
       f.dispose();
     }
   });
