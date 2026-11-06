@@ -12,6 +12,7 @@ import {
   canRebindUndispatchedContinuityRuntime,
   continuityPlanDigest,
   continuityStatus,
+  continuityCheckpoints,
   hostedContinuityPlanSchema,
   parseContinuityPlanForOwner,
   parseContinuityRequestForPlan,
@@ -354,6 +355,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
         plan,
       );
       return { plan, request, status: continuityStatus(record) };
+    },
+    async checkpoints(context: HostedOperatorContext, intentId: string) {
+      return continuityCheckpoints(await read(context, z.uuid().parse(intentId), true));
     },
     async status(context: HostedOperatorContext, intentId: string) {
       return continuityStatus(await read(context, z.uuid().parse(intentId)));

@@ -6,6 +6,10 @@ import type { HostedOperatorContext } from "./hosted-operator-service";
 import {
   hostedContinuityPlanSchema,
   continuityRecordSchema,
+  continuityStatus,
+  continuityStatusSchema,
+  continuityCheckpoints,
+  continuityCheckpointSchema,
 } from "./hosted-operator-continuity-contract";
 import type {
   ContinuityRecord,
@@ -321,6 +325,61 @@ const retainPreDispatchAttempt = async (f: ReturnType<typeof setup>) => {
   await expect(f.operations.execute(context, planned.request, "continuity-call")).rejects.toThrow();
   return { planned, retained: f.read() };
 };
+
+it("projects retained checkpoints for the owner without resuming an uncertain attempt", async () => {
+  const f = setup();
+  const { planned, retained } = await retainPreDispatchAttempt(f);
+  const eventsBefore = [...f.events];
+  const writesBefore = f.records.length;
+  const result = await f.operations.readPlan(context, planned.plan.intentId);
+  expect(result.status).not.toHaveProperty("checkpoints");
+  expect(continuityCheckpointSchema.parse(continuityCheckpoints(retained)).checkpoints).toEqual({
+    pendingStage: "runtime",
+    runtimeLocator: "recorded",
+    runtimeDispatch: "unrecorded",
+    runtimeCommand: "unrecorded",
+    publicationAttempt: "unrecorded",
+    publicationCandidate: "unrecorded",
+    environmentWrite: "unrecorded",
+    suiteDispatch: "unrecorded",
+    suiteCommand: "unrecorded",
+    outcome: "unrecorded",
+  });
+  expect(f.read()).toEqual(retained);
+  expect(f.events).toEqual(eventsBefore);
+  expect(f.records).toHaveLength(writesBefore);
+  f.revokeOwner();
+  await expect(f.operations.readPlan(context, planned.plan.intentId)).rejects.toMatchObject({
+    code: "authorization_required",
+  });
+});
+
+it("projects recorded dispatch markers without revealing private command or capability values", async () => {
+  const f = setup();
+  const { retained } = await retainPreDispatchAttempt(f);
+  if (retained.locator === undefined) {
+    throw new Error("Missing locator");
+  }
+  retained.locator.dispatchAttempted = true;
+  retained.locator.commandId = "private-runtime-command";
+  retained.deliveryAttempted = true;
+  retained.suiteDispatched = true;
+  retained.suiteCommandId = "private-suite-command";
+  expect(continuityStatusSchema.parse(continuityStatus(retained))).not.toHaveProperty(
+    "checkpoints",
+  );
+  const status = continuityCheckpointSchema.parse(continuityCheckpoints(retained));
+  expect(status.checkpoints).toMatchObject({
+    runtimeDispatch: "recorded",
+    runtimeCommand: "recorded",
+    publicationAttempt: "recorded",
+    suiteDispatch: "recorded",
+    suiteCommand: "recorded",
+    outcome: "unrecorded",
+  });
+  expect(JSON.stringify(status)).not.toContain("private-runtime-command");
+  expect(JSON.stringify(status)).not.toContain("private-suite-command");
+});
 
 const sessionRebindPatch = (record: ContinuityRecord) => {
   if (record.locator === undefined || record.current === undefined) {

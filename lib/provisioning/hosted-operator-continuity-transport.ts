@@ -1,6 +1,8 @@
 import { reportContinuityPlanningFailure } from "./hosted-operator-consent-diagnostic";
 import type { ContinuityPlanningStage } from "./hosted-operator-consent-diagnostic";
 import { z } from "zod";
+import { verifiedActorReadbackSchema } from "./hosted-operator-verified-actor-contract";
+import type { z as Zod } from "zod";
 import { appTenantBindingReadbackSchema } from "./hosted-operator-tenant-binding-contract";
 import type { AppTenantBindingReadback } from "./hosted-operator-tenant-binding-contract";
 import {
@@ -24,6 +26,16 @@ import type {
 } from "./hosted-operator-service";
 
 export const continuityTransportRequestSchema = z.discriminatedUnion("action", [
+  z.strictObject({
+    action: z.literal("continuity-verified-actors"),
+    intentId: z.uuid(),
+    ownerContext: operatorOwnerContextSchema,
+  }),
+  z.strictObject({
+    action: z.literal("continuity-checkpoints"),
+    intentId: z.uuid(),
+    ownerContext: operatorOwnerContextSchema,
+  }),
   z.strictObject({
     action: z.literal("continuity-binding-read"),
     intentId: z.uuid(),
@@ -95,6 +107,10 @@ export const createContinuityDispatcher =
   (dependencies: {
     store: Pick<ContinuityJournalStore, "read">;
     operations: ReturnType<typeof createHostedContinuityOperations>;
+    readVerifiedActors?: (
+      context: HostedOperatorContext,
+      intentId: string,
+    ) => Promise<Zod.infer<typeof verifiedActorReadbackSchema>>;
     readTenantBindings?: (
       context: HostedOperatorContext,
       intentId: string,
@@ -126,15 +142,11 @@ export const createContinuityDispatcher =
         selected = parsed.selection;
       } else {
         const intentId =
-          parsed.action === "continuity-status" ||
-          parsed.action === "continuity-read" ||
-          parsed.action === "continuity-binding-read"
-            ? parsed.intentId
-            : z.uuid().parse(parsed.planRef.split("/").at(-1));
+          "intentId" in parsed ? parsed.intentId : z.uuid().parse(parsed.planRef.split("/").at(-1));
         const readSaved = () =>
           dependencies.store.read({ authority: parsed.ownerContext.authority, intentId });
         const saved =
-          parsed.action === "continuity-read" || parsed.action === "continuity-binding-read"
+          "intentId" in parsed && parsed.action !== "continuity-status"
             ? await readCanonicalContinuity(readSaved, request.signal)
             : await readSaved();
         if (saved === undefined) {
@@ -152,6 +164,8 @@ export const createContinuityDispatcher =
         "continuity-status",
         "continuity-read",
         "continuity-binding-read",
+        "continuity-checkpoints",
+        "continuity-verified-actors",
         "continuity-approval",
       ].includes(parsed.action);
       const context =
@@ -175,6 +189,19 @@ export const createContinuityDispatcher =
               ? undefined
               : { predecessorIntentId: parsed.predecessorIntentId },
           );
+          break;
+        }
+        case "continuity-verified-actors": {
+          if (dependencies.readVerifiedActors === undefined) {
+            throw new HostedOperatorError("protected_operator_required");
+          }
+          result = verifiedActorReadbackSchema.parse(
+            await dependencies.readVerifiedActors(context, parsed.intentId),
+          );
+          break;
+        }
+        case "continuity-checkpoints": {
+          result = await operations.checkpoints(context, parsed.intentId);
           break;
         }
         case "continuity-binding-read": {

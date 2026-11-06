@@ -458,6 +458,10 @@ const setup = () => {
   const dispatcher = createContinuityDispatcher({
     store: dependencies.store,
     operations,
+    readVerifiedActors: async (ctx, intentId) => {
+      await operations.readPlan(ctx, intentId);
+      return { requestCorrelation: "not_established" as const, actors: [] };
+    },
     readTenantBindings: async (ctx, intentId) => {
       const saved = await operations.readPlan(ctx, intentId);
       return {
@@ -683,6 +687,34 @@ it.each(["initial", "owner-checked"] as const)(
     expect(f.stats.suiteDispatches).toBe(0);
   },
 );
+
+it("reads saved checkpoints and verified actor facts only for the owner without dispatch", async () => {
+  const f = setup();
+  const planned = await f.client.planContinuity(
+    preparedPlan.selection,
+    logicalRuntime,
+    "diagnostic-read",
+  );
+  const before = f.record;
+  const checkpoints = await f.client.readContinuityCheckpoints(planned.plan.intentId);
+  expect(checkpoints.intentId).toBe(planned.plan.intentId);
+  expect(checkpoints.checkpoints.suiteDispatch).toBe("unrecorded");
+  expect(await f.client.readContinuityVerifiedActors(planned.plan.intentId)).toEqual({
+    requestCorrelation: "not_established",
+    actors: [],
+  });
+  expect(f.record).toEqual(before);
+  f.setOwner(false);
+  await expect(f.client.readContinuityCheckpoints(planned.plan.intentId)).rejects.toMatchObject({
+    code: "authorization_required",
+  });
+  await expect(f.client.readContinuityVerifiedActors(planned.plan.intentId)).rejects.toMatchObject({
+    code: "authorization_required",
+  });
+  expect(f.stats.starts).toBe(0);
+  expect(f.stats.publishes).toBe(0);
+  expect(f.stats.suiteDispatches).toBe(0);
+});
 
 it("reads approved binding status through the owner-verified transport without dispatch", async () => {
   const f = setup();

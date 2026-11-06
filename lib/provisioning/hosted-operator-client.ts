@@ -7,6 +7,7 @@ import {
 import {
   hostedContinuityRequestSchema,
   continuityStatusSchema,
+  continuityCheckpointSchema,
   parseContinuityRequestForPlan,
   parseContinuityPlanForOwner,
 } from "./hosted-operator-continuity-contract";
@@ -23,6 +24,7 @@ import {
   tenantExportStatusSchema,
 } from "./hosted-operator-export-contract";
 import type { HostedTenantExportRequest } from "./hosted-operator-export-contract";
+import { verifiedActorReadbackSchema } from "./hosted-operator-verified-actor-contract";
 import { appTenantBindingReadbackSchema } from "./hosted-operator-tenant-binding-contract";
 import { Agent } from "undici";
 import {
@@ -509,6 +511,27 @@ export const createHostedOperatorClient = (input: {
         result.plan.target.sessionId === ownerContext.sessionId,
       ].every(Boolean);
       if (!matchesSavedIntent) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      return result;
+    },
+    async readContinuityVerifiedActors(intentId: string, signal?: AbortSignal) {
+      return await sendContinuity(
+        { action: "continuity-verified-actors", intentId, ownerContext: exportOwner() },
+        verifiedActorReadbackSchema,
+        signal,
+      );
+    },
+    async readContinuityCheckpoints(intentId: string, signal?: AbortSignal) {
+      const result = await sendContinuity(
+        { action: "continuity-checkpoints", intentId, ownerContext: exportOwner() },
+        continuityCheckpointSchema,
+        signal,
+      );
+      if (
+        result.intentId !== intentId ||
+        result.planRef !== `_protected-operator/continuity-plans/${intentId}`
+      ) {
         throw new HostedOperatorError("resource_mismatch");
       }
       return result;
