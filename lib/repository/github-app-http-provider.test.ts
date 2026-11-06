@@ -870,6 +870,125 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     );
   });
 
+  it.each([100, 200])(
+    "scopes delivery to its repository identity (provider ID %i)",
+    async (repositoryId) => {
+      const tokenRequests: unknown[] = [];
+      const head = "a".repeat(40);
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      const request: typeof fetch = async (input, init) => {
+        const url = new URL(String(input));
+        if (url.pathname === "/app/installations/456/access_tokens") {
+          const body = JSON.parse(String(init?.body)) as { permissions: unknown };
+          tokenRequests.push(body);
+          return json(
+            {
+              permissions: body.permissions,
+              token: "ghs_delivery_scoped_installation_token",
+            },
+            201,
+          );
+        }
+        if (url.pathname === "/repositories/100") {
+          return json(historicalRepository(repositoryId));
+        }
+        if (url.pathname === "/repos/withAutograph/example-app/pulls/7") {
+          return json({
+            number: 7,
+            node_id: "PR_node",
+            state: "open",
+            draft: false,
+            merged: false,
+            merge_commit_sha: null,
+            head: { sha: head, ref: "builder", repo: { id: 100 } },
+            base: { ref: "main", repo: { id: 100 } },
+          });
+        }
+        if (url.pathname === "/graphql") {
+          expect(init?.method).toBe("POST");
+          expect(new Headers(init?.headers).get("authorization")).toBe(
+            "token ghs_delivery_scoped_installation_token",
+          );
+          expect(JSON.parse(String(init?.body))).toMatchObject({
+            variables: { id: "PR_node" },
+          });
+          return json({
+            data: {
+              node: {
+                headRefOid: head,
+                baseRefName: "main",
+                isDraft: false,
+                timelineItems: { nodes: [] },
+                baseChanges: { nodes: [] },
+              },
+            },
+          });
+        }
+        throw new Error("unexpected request");
+      };
+      const result = createProvider(request).prDelivery.inspect({
+        repositoryId: "100",
+        owner: "withAutograph",
+        name: "example-app",
+        pullRequestNumber: 7,
+        headSha: head,
+        baseBranch: "main",
+      });
+      await (repositoryId === 100
+        ? expect(result).resolves.toMatchObject({ state: "open", checks: "pending" })
+        : expect(result).rejects.toThrow("repository-identity-changed"));
+      expect(tokenRequests).toEqual([
+        {
+          permissions: {
+            actions: "read",
+            contents: "read",
+            metadata: "read",
+            pull_requests: "read",
+          },
+          repository_ids: [100],
+        },
+      ]);
+    },
+  );
+
+  it.each([403, 502])("classifies a Ready write response with HTTP %i", async (status) => {
+    const mock = providerFetch();
+    const head = "a".repeat(40);
+    const request: typeof fetch = async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/repositories/100") {
+        return json(historicalRepository(100));
+      }
+      if (url.pathname === "/repos/withAutograph/example-app/pulls/7") {
+        return json({
+          number: 7,
+          node_id: "PR_node",
+          state: "open",
+          draft: true,
+          merged: false,
+          merge_commit_sha: null,
+          head: { sha: head, ref: "builder", repo: { id: 100 } },
+          base: { ref: "main", repo: { id: 100 } },
+        });
+      }
+      if (url.pathname === "/graphql") {
+        return json({ message: "provider response" }, status);
+      }
+      return await mock.implementation(input, init);
+    };
+    const result = createProvider(request).prDelivery.markReady({
+      repositoryId: "100",
+      owner: "withAutograph",
+      name: "example-app",
+      pullRequestNumber: 7,
+      headSha: head,
+      baseBranch: "main",
+    });
+    await expect(result).rejects.toThrow(
+      status === 403 ? "github-delivery-provider-rejected" : "github-request-failed",
+    );
+  });
+
   it("names an existing draft update failure without exposing provider details", async () => {
     const provider = {
       ...createProvider(providerFetch().implementation),

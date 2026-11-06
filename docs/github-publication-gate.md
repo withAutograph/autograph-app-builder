@@ -499,3 +499,28 @@ The typed tools accept no command, executable, working directory, environment,
 credential, endpoint, arbitrary refspec, or provider response. Generic shell,
 local Git publication, release activation, deployment, tenant activation, and
 Production are not fallback authority for this boundary.
+
+## Reviewed pull request delivery
+
+`read_github_pr_delivery` reads the current PR from the session's owned draft
+publication receipt. An open draft defers validation. On a ready Arrusted PR,
+the required evidence is a successful canonical `Check` job for the published
+head and current ready cycle. Builder reads the repository's result without
+repeating affected-code selection. A moved revision is visible but cannot use
+the original review for merge.
+
+With `APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED=1`, an eligible reviewed publication
+can return an input for `finish-github-pr-delivery`. This is a separate native
+approval to mark the PR ready and merge the reviewed revision when required
+checks pass. It is scoped to the current session and repository. The GitHub
+App installation needs Actions read, Pull requests write for Ready, and
+Contents write for merge. The provider requests a repository-scoped token
+attenuated for each operation. GitHub applies its own review and merge policy.
+
+Apply the additive PR effect journal migration before enabling the mutation
+tool. The journal claims each approved effect before sending a write. After
+an uncertain response, the same operation can observe provider evidence and
+settle its receipt. Pending effects are never replayed blindly. GitHub's merge
+request guards the expected head atomically. Base and ready-cycle changes are
+checked around the request. A merge result and protected hosted app evidence
+remain separate facts.

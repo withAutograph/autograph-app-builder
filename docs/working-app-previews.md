@@ -1,6 +1,6 @@
 # Working app previews
 
-The shared `start_app_preview` tool opens the applied implementation in the current user's Vercel Sandbox. It accepts the repository's discovered development command as an executable and argument array, a listening port, an optional repository-relative working directory, and an optional nested landing path. Build approval and an applied implementation are required. The tool does not publish the app or provision its external resources.
+The shared `start_app_preview` tool opens the applied implementation in the current user's Vercel Sandbox. It accepts the repository's discovered development command as an executable and argument array, a listening port, an optional repository-relative working directory, and an optional nested landing path. The user’s Build decision and an applied implementation authorize startup. Lint, repository validation, and independent review are separate from starting the app. Builder uses the working preview while it checks and repairs the implementation. The tool does not publish the app or provision its external resources.
 
 The backend supplies the provider Sandbox identity; the model cannot choose another Sandbox or supply a preview URL. The official Sandbox SDK uses the project's existing OIDC credentials. Runtime scripts and access configuration live outside the applied repository under `/workspace/.autograph-working-preview`.
 
@@ -11,6 +11,23 @@ A ready receipt requires a successful same-origin HTTP navigation to an HTML pag
 Preview access follows the provider Sandbox's own expiry; there is no separate ten-minute preview deadline. The supervisor terminates the app process group when the Sandbox expires. Normal agent completion retains only the same live provider process; cancellation and failure stop it. Repeating `start_app_preview` for the same applied build and launch settings returns the existing live preview instead of restarting its server. A changed applied build or launch configuration starts a replacement and revokes the earlier link. Existing provider timeouts and lease reconciliation clean up the Sandbox. Startup cancellation propagates through provider operations and polling, so cancelled polling cannot resume stopped compute. A new start operation can reopen a stopped Sandbox and start a fresh preview through the normal agent workflow.
 
 Public session results distinguish `workingPreview` from fixture `uiPreview`. New startup requests, failed startup, cancellation, and expired access invalidate the current public preview. Explicit invalidation survives checkpoint recovery. Stored receipts remain historical evidence, not permanent availability promises.
+
+For an in-scope source repair, pass the changed files to
+`validate_app_creation` with `repairOnly: true`. Builder checks the original
+Build grant against the current proposal and workspace, applies the files,
+and returns before running repository checks. Start the preview again to
+exercise the updated app. This path does not produce a validation receipt or
+publication authority.
+
+An unapplied repair proposal can become the current plan while the previously
+approved implementation remains saved. When preview startup reports
+`planned` and the user wants the saved app, Builder can use
+`prepare_app_creation({ resumeApprovedBuild: true })` to select the applied
+workspace under its original Build approval. The selection changes no source
+files and retains the draft in repair history. After `resumed_approved_build`,
+Builder starts the preview or applies an in-scope `repairOnly` fix before
+starting it. Continuing with the pending changes uses the ordinary planning
+and Build controls for that scope.
 
 ## Startup ownership and diagnostics
 

@@ -16,11 +16,14 @@ import getValidationLog, { validationLogInputSchema } from "../../agent/tools/ge
 import formatCandidate from "../../agent/tools/format_github_draft_pr_candidate";
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 
+import { repositoryDeliveryBuildCommand } from "../repository/supported-template";
+
 const digest = "a".repeat(64);
 const tree = "b".repeat(40);
 const installCommand = "mise exec --no-deps -- bun install --frozen-lockfile";
 const schemaCommand = "mise run --no-deps app:compile spend-review";
-const checkCommand = "mise run --no-deps --skip-deps --skip-tools app:check spend-review";
+const checkCommand = repositoryDeliveryBuildCommand("spend-review", true);
+const uncompiledBuild = repositoryDeliveryBuildCommand("spend-review");
 const testCommand = "mise run --no-deps --skip-deps --skip-tools app:test spend-review 1/1";
 const captureCommand = "Capture selected checked app release";
 const mocks = vi.hoisted(() => ({
@@ -780,7 +783,17 @@ describe("draft reconciliation command progress", () => {
     {
       kind: "check",
       original: "mise run --skip-tools app:check spend-review",
-      current: "mise run --no-deps --skip-tools app:check spend-review",
+      current: uncompiledBuild,
+    },
+    {
+      kind: "check",
+      original: "mise run --no-deps --skip-tools app:check spend-review",
+      current: uncompiledBuild,
+    },
+    {
+      kind: "check",
+      original: "mise run --no-deps --skip-deps --skip-tools app:check spend-review",
+      current: uncompiledBuild,
     },
     {
       kind: "check",
@@ -1693,13 +1706,13 @@ describe("draft reconciliation command progress", () => {
       },
     };
     await expect(incremental(checkCommand)).resolves.toMatchObject({
-      command: "mise run --no-deps --skip-tools app:check spend-review",
+      command: uncompiledBuild,
       nextCommand: captureCommand,
       status: "in_progress",
     });
     expect(mocks.check).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: "mise run --no-deps --skip-tools app:check spend-review",
+        command: uncompiledBuild,
       }),
     );
     expect(mocks.compile).not.toHaveBeenCalled();

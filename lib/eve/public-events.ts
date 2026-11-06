@@ -71,7 +71,7 @@ const visibleOperations = new Map([
   ["compile-app-schema-release", "Preparing the app's data model"],
   ["install-app-integrations", "Installing the app's requested integrations"],
   ["prepare-app-local-preview", "Preparing the app's local preview dependencies"],
-  ["prepare-app-hosted-runtime", "Setting up the app's Preview resources"],
+  ["prepare-app-hosted-runtime", "Setting up your app’s data"],
   ["cleanup-app-hosted-runtime", "Removing the app's Preview resources"],
   ["export-app-hosted-data", "Exporting approved app data privately"],
   ["run-app-continuity-tests", "Checking that the app stays connected after restart"],
@@ -1182,6 +1182,7 @@ const inputRequest = (request: {
     "export-app-hosted-data": "Export this customer’s app data privately?",
     "run-app-continuity-tests": "Run this app continuity suite?",
     "publish-github-draft-pr": "Publish the reviewed changes?",
+    "finish-github-pr-delivery": "Merge the reviewed changes when checks pass?",
     publish_github_draft_pr: "Publish the reviewed changes?",
     update_github_draft_pr: "Update the draft pull request?",
     reconcile_github_draft_pr: "Update the draft pull request?",
@@ -1353,6 +1354,8 @@ export const projectInstalledEveEvent = (
       );
       const returnedStatus = recordStringField(event.data.result.output, "status");
       const commandFailed =
+        (event.data.result.toolName === "prepare-app-hosted-runtime" &&
+          returnedStatus === "blocked") ||
         (event.data.result.toolName === "validate_github_draft_pr_reconciliation" &&
           (returnedStatus === "needs_repair" || returnedStatus === "needs_resolution")) ||
         (event.data.result.toolName === "install-app-integrations" && returnedStatus === "failed");

@@ -45,41 +45,61 @@ const receipt = {
 };
 
 describe("direct app creation", () => {
-  it("stages approved CUE before the direct command and implementation afterwards", async () => {
-    const calls: string[] = [];
-    const sandbox = {
-      run: vi.fn(async ({ command }: { command: string }) => {
-        calls.push(command);
-        return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
-      }),
-      setNetworkPolicy: vi.fn(async () => {}),
-      writeTextFile: vi.fn(async ({ path }: { path: string }) => {
-        calls.push(path);
-      }),
-    };
-    await withImplementationFiles(sandboxApplyCommandExecutor(), [
-      { content: "package inventory", path: ".config/app-specs/inventory.cue" },
-      { content: "export default null", path: "apps/inventory/app/page.tsx" },
-    ])({
-      appId: "inventory",
-      applyRoot: "/workspace/repository",
-      proposal,
-      // SAFETY: The exercised executor uses only run, setNetworkPolicy, and writeTextFile supplied by this double.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-      sandbox: sandbox as unknown as Parameters<
-        ReturnType<typeof sandboxApplyCommandExecutor>
-      >[0]["sandbox"],
-    });
-    expect(calls.slice(0, 2)).toEqual([
-      "repository/.config/app-specs/inventory.cue",
-      workspaceBinInstallCommand("/workspace/repository", false),
-    ]);
-    expect(calls[2]).toContain("mise install --locked cue");
-    expect(calls.slice(3)).toEqual([
-      "mise run create:app inventory",
-      "repository/apps/inventory/app/page.tsx",
-    ]);
-  });
+  it.each([0, 17])(
+    "reconciles dependencies after the approved workspace writes (exit %s)",
+    async (exitCode) => {
+      const calls: string[] = [];
+      const installCommand = workspaceBinInstallCommand("/workspace/repository", false);
+      const manifestPath = "repository/apps/inventory/package.json";
+      const sandbox = {
+        run: vi.fn(async ({ command }: { command: string }) => {
+          calls.push(command);
+          if (command === installCommand && calls.includes(manifestPath) && exitCode !== 0) {
+            return { exitCode, stderr: "workspace install failed", stdout: "" };
+          }
+          return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
+        }),
+        setNetworkPolicy: vi.fn(async () => {}),
+        writeTextFile: vi.fn(async ({ path }: { path: string }) => {
+          calls.push(path);
+        }),
+      };
+      const result = await withImplementationFiles(
+        sandboxApplyCommandExecutor(),
+        [
+          { content: "package inventory", path: ".config/app-specs/inventory.cue" },
+          { content: "export default null", path: "apps/inventory/app/page.tsx" },
+          { content: '{"name":"@autograph/inventory"}', path: "apps/inventory/package.json" },
+        ],
+        { reconcileNewWorkspace: true },
+      )({
+        appId: "inventory",
+        applyRoot: "/workspace/repository",
+        proposal,
+        // SAFETY: The exercised executor uses only run, setNetworkPolicy, and writeTextFile supplied by this double.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        sandbox: sandbox as unknown as Parameters<
+          ReturnType<typeof sandboxApplyCommandExecutor>
+        >[0]["sandbox"],
+      });
+      expect(calls.slice(0, 2)).toEqual([
+        "repository/.config/app-specs/inventory.cue",
+        installCommand,
+      ]);
+      expect(calls[2]).toContain("mise install --locked cue");
+      expect(calls.slice(3)).toEqual([
+        "mise run create:app inventory",
+        "repository/apps/inventory/app/page.tsx",
+        manifestPath,
+        installCommand,
+      ]);
+      expect(result).toMatchObject(
+        exitCode === 0
+          ? { exitCode, stdout: JSON.stringify(receipt) }
+          : { exitCode, failedCommand: "bun install", stderr: "workspace install failed" },
+      );
+    },
+  );
 
   it.each(["recovered", "failed", "stale", "invalid"] as const)(
     "preserves %s command evidence",

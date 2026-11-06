@@ -503,6 +503,53 @@ const prepareResponse = (options: SessionOptions, session: EveSessionResult): bo
   return true;
 };
 
+const retainUncertainResponse = ({ state, save }: SessionOptions, message: string) => {
+  state.outcome = "response_submission_unresolved";
+  state.error = message;
+  save();
+};
+
+const submitResponse = async (options: SessionOptions, accept: AcceptSession) => {
+  const { state, transport } = options;
+  const pending = state.pendingResponse;
+  if (!pending || !state.session) {
+    throw new Error("Missing pending response session");
+  }
+  const sessionId = state.session.sessionId;
+  const result = eveSessionResultSchema.parse(
+    await transport.call("autograph_respond", { ...pending, sessionId }),
+  );
+  if (result.error !== undefined) {
+    retainUncertainResponse(options, result.error.message);
+    return false;
+  }
+  if (result.sessionId !== sessionId) {
+    throw new Error("Builder did not return the session for this response batch.");
+  }
+  state.answered.push(...pending.responses.map((item) => item.requestId));
+  delete state.pendingResponse;
+  accept(result);
+  return true;
+};
+
+const observePendingResponse = async (options: SessionOptions, accept: AcceptSession) => {
+  const { state, transport } = options;
+  if (!state.session) {
+    throw new Error("Missing public session for pending response");
+  }
+  const { cursor, sessionId } = state.session;
+  const result = eveSessionResultSchema.parse(
+    await transport.call("autograph_get", { cursor, sessionId }),
+  );
+  if (result.sessionId === sessionId && result.error === undefined) {
+    accept(result);
+  }
+  retainUncertainResponse(
+    options,
+    "The saved response batch has no confirmed submission receipt. Continue observing the same session.",
+  );
+};
+
 export const runPublicSession = async (options: SessionOptions) => {
   const { state, transport, save } = options;
   if (state.session?.sessionId === "") {
@@ -531,35 +578,21 @@ export const runPublicSession = async (options: SessionOptions) => {
     save();
     options.onObservation?.(state);
   };
-  const respond = async () => {
-    const pending = state.pendingResponse;
-    if (!pending || !state.session) {
-      throw new Error("Missing pending response session");
-    }
-    accept(
-      await transport.call("autograph_respond", {
-        ...pending,
-        sessionId: state.session.sessionId,
-      }),
-    );
-    state.answered.push(...pending.responses.map((item) => item.requestId));
-    delete state.pendingResponse;
-    save();
-  };
+  if (state.pendingResponse) {
+    await observePendingResponse(options, accept);
+    return;
+  }
   if (!state.session) {
     if (!(await observeOriginalStart(options, accept))) {
       return;
     }
-  } else if (!state.pendingResponse && !state.pendingMessage) {
+  } else if (!state.pendingMessage) {
     accept(
       await transport.call("autograph_get", {
         cursor: state.session.cursor,
         sessionId: state.session.sessionId,
       }),
     );
-  }
-  if (state.pendingResponse) {
-    await respond();
   }
   await sendPendingMessage(options, accept);
   while (Date.now() < deadline) {
@@ -581,7 +614,9 @@ export const runPublicSession = async (options: SessionOptions) => {
       if (!prepareResponse(options, session)) {
         return;
       }
-      await respond();
+      if (!(await submitResponse(options, accept))) {
+        return;
+      }
     } else {
       await (options.sleep ?? delay)(options.pollMs);
       accept(

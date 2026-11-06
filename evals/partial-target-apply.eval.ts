@@ -16,7 +16,9 @@ export default defineEval({
     await session.send("Run target identity and planning.");
     t.succeeded();
 
-    const turn1 = await session.send("Apply the current creation proposal.");
+    await session.send("Apply the current creation proposal.");
+    session.requireInputRequest({ toolName: "apply_app_creation" });
+    const turn1 = await session.respondAll("approve");
     t.succeeded();
     t.check(turn1.message, includes("couldn't finish preparing the app safely"));
     t.check(turn1.message, includes("current plan remains available"));

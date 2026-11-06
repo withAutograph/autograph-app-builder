@@ -1,3 +1,4 @@
+import { parseRepositoryReference } from "@/lib/integrations/repository-access";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -13,6 +14,7 @@ import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-s
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
 import { resolvePublicationTargetForTool } from "@/lib/agent/github-publication-destination";
+import { priorResumedBuildDraftProposal } from "@/lib/agent/existing-app-repair-planning";
 
 export default defineTool({
   description:
@@ -33,7 +35,13 @@ export default defineTool({
     const resolved = await resolvePublicationTargetForTool({
       ctx,
       appId: state.appSpec.appId,
-      destination: input.destination,
+      destination:
+        input.destination === undefined
+          ? undefined
+          : {
+              ...input.destination,
+              repository: parseRepositoryReference(input.destination.repository).fullName,
+            },
       destinationReview: state.githubDestinationReview,
       githubSource: state.githubSource,
       sourceKind: state.sourceReceipt.sourceKind,
@@ -72,7 +80,8 @@ export default defineTool({
     }
     const destination = await runtime.inspectDraftDestination({
       existingProposal:
-        state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined,
+        (state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined) ??
+        priorResumedBuildDraftProposal(state, ctx.session.id),
       ...target,
       paths: candidatePaths,
     });
@@ -111,7 +120,7 @@ export default defineTool({
   inputSchema: z.strictObject({
     destination: z
       .strictObject({
-        repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
+        repository: z.string().min(3).max(221),
         selectedInstallationId: z
           .string()
           .regex(/^[1-9][0-9]*$/u)

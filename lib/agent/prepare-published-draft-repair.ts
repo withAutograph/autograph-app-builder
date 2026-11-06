@@ -32,6 +32,7 @@ import {
   preparePublishedDraftRepairCandidate,
 } from "../repository/sandbox-draft-reconciliation";
 import type { DraftReconciliationInput } from "../repository/sandbox-draft-reconciliation";
+import { priorResumedBuildDraftProposal } from "./existing-app-repair-planning";
 
 type Reviewed = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
 const assertCurrentOrigin = (
@@ -112,7 +113,9 @@ const acquireOwnedPublishedDraft = async (
   const { state, ctx } = input;
   assertCurrentOrigin(state, previous);
   const proposalDigest =
-    state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
+    state.publishedGitHubDraftProposalDigest ??
+    state.githubDraftProposal?.proposal.digest ??
+    priorResumedBuildDraftProposal(state, ctx.session.id)?.digest;
   const savedAccess = repositoryAccessReceiptState.get();
   if (proposalDigest === undefined || savedAccess === undefined) {
     throw new Error(

@@ -1,6 +1,6 @@
 /* oxlint-disable anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- The fixture models exactly the trusted workflow fields consumed by this classifier; actual approval uses installed Eve state, not a stub grant. */
 /* oxlint-disable sonarjs/no-internal-api-use -- Actual Eve approval state is exercised only in this fixture, never imported by product code. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ContextContainer,
   contextStorage,
@@ -11,7 +11,26 @@ import {
   recordApprovedPrivateApply,
 } from "./private-apply-authority";
 import { decideApprovedBuildContinuation } from "./approved-build-continuation";
+import { appBuilderWorkflowState } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
+import type { HookContext } from "eve/hooks";
+import hook from "../../agent/hooks/continue-approved-build";
+import {
+  authenticatedBuildDelivery,
+  currentApprovedBuildProgress,
+  recordApprovedBuildDecision,
+} from "./approved-build-continuation-runtime";
+
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Lifecycle events are delivered directly and only remote projection persistence is stubbed.
+vi.mock("eve/hooks", () => ({ defineHook: <T>(value: T) => value }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep real workflow and progress state while isolating the hosted database adapter.
+vi.mock("./approved-build-continuation-runtime", async (importOriginal) => ({
+  ...(await importOriginal<{
+    authenticatedBuildDelivery: typeof authenticatedBuildDelivery;
+    currentApprovedBuildProgress: typeof currentApprovedBuildProgress;
+  }>()),
+  recordApprovedBuildDecision: vi.fn(),
+}));
 
 const scope = {
   appId: "spend-review",
@@ -62,6 +81,91 @@ const decide = (
     turnId: "actual-stopped-turn-14",
     turnSequence: 13,
   });
+
+const approveBuild = () => {
+  requestPrivateApplyApproval(scope, "approve");
+  recordApprovedPrivateApply(scope, "approve");
+};
+
+describe("approved apply and review continuation", () => {
+  it("continues an approved plan before apply and a validated app before review", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      // SAFETY: Only the phase, frozen proposal and scope are read before apply.
+      const planned = { ...failed, phase: "planned" } as AppBuilderWorkflowState;
+      // SAFETY: Only the phase, applied tree and scope are read before review.
+      const validated = { ...failed, phase: "validated" } as unknown as AppBuilderWorkflowState;
+      expect(decide(planned).decision).toBe("blocked");
+      approveBuild();
+      expect(decide(planned).decision).toBe("runnable");
+      expect(decide(validated).decision).toBe("runnable");
+      expect(decide(validated, { pendingInput: true }).decision).toBe("waiting-input");
+      // SAFETY: Settled private review needs only the retained approved scope.
+      const reviewed = { ...failed, phase: "reviewed" } as unknown as AppBuilderWorkflowState;
+      expect(decide(reviewed).decision).toBe("settled");
+    });
+  });
+
+  it("repairs a completed apply command failure and preserves uncertain and stale operations", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      approveBuild();
+      const applyFailure = {
+        reason: "command-failed" as const,
+        command: { name: "create-app", exitCode: 1 },
+        commandFailureKind: "dependency" as const,
+      };
+      // SAFETY: The classifier reads only the retained scope and command outcome.
+      const rejected = { ...failed, phase: "apply_failed", applyFailure } as unknown as Extract<
+        AppBuilderWorkflowState,
+        { phase: "apply_failed" }
+      >;
+      expect(decide(rejected).decision).toBe("runnable");
+      expect(
+        decide({
+          ...rejected,
+          applyFailure: { ...rejected.applyFailure, commandFailureKind: "stale-proposal" },
+        }).decision,
+      ).toBe("blocked");
+      expect(
+        decide({
+          ...rejected,
+          applyFailure: {
+            ...rejected.applyFailure,
+            command: { ...rejected.applyFailure.command, exitCode: -1 },
+          },
+        }).decision,
+      ).toBe("blocked");
+    });
+  });
+
+  it("stops an authenticated continuation that merely creates another identical failed attempt", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      approveBuild();
+      appBuilderWorkflowState.update(() => failed);
+      const turn = { id: "repair-turn", sequence: 14 };
+      authenticatedBuildDelivery.update(() => ({
+        progress: currentApprovedBuildProgress(),
+        turnId: turn.id,
+      }));
+      appBuilderWorkflowState.update(() => ({
+        ...failed,
+        validationFailure: { ...failed.validationFailure, attemptDigest: "f".repeat(64) },
+      }));
+      // SAFETY: The finish hook reads only the native session and turn identities.
+      const ctx = { session: { id: scope.sessionId, turn } } as HookContext;
+      const complete = hook.events?.["turn.completed"];
+      if (!complete) {
+        throw new Error("Expected the approved build completion hook.");
+      }
+      // SAFETY: The completed event body is unused by this handler.
+      await complete({} as never, ctx);
+      expect(recordApprovedBuildDecision).toHaveBeenLastCalledWith(
+        ctx,
+        expect.objectContaining({ decision: "blocked", reason: "build_no_progress" }),
+      );
+    });
+  });
+});
+
 describe("approved stopped build continuation", () => {
   it("continues app command repairs without requiring changed-file diagnostic membership", () => {
     contextStorage.run(new ContextContainer(), () => {

@@ -1,3 +1,7 @@
+import {
+  describeGitHubPrDeliveryApproval,
+  githubPrDeliveryApprovalSchema,
+} from "./github-pr-delivery-approval";
 import { centralHostApprovalDescription } from "./central-integration-host-approval-description";
 import {
   continuityApprovalToolInputSchema,
@@ -470,7 +474,17 @@ const operatorApprovalDescription = (
     return undefined;
   }
   if (plan.action === "prepare") {
-    return "This approval may incur provider costs.";
+    const { accessSummary, unresolvedAccessSummary } = operatorAccessDescriptions(plan);
+    return [
+      `Prepare a protected Preview for ${plan.selection.appId}.`,
+      ...operatorEffectSummaries(plan),
+      accessSummary,
+      unresolvedAccessSummary,
+      signupApprovalDescription(plan),
+      `${plan.cost.description} This approval may incur provider costs.`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   }
   const effectSummaries = operatorEffectSummaries(plan);
   const signupApproval = signupApprovalDescription(plan);
@@ -575,7 +589,7 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
   ].join("\n\n");
 };
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function publicApprovalDescription(input: unknown, toolName?: string): string | undefined {
+function otherPublicApprovalDescription(input: unknown, toolName?: string): string | undefined {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return undefined;
   }
@@ -656,6 +670,17 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
   }
   return undefined;
 }
+
+export const publicApprovalDescription = (
+  input: unknown,
+  toolName?: string,
+): string | undefined => {
+  if (toolName === "finish-github-pr-delivery") {
+    const parsed = githubPrDeliveryApprovalSchema.safeParse(input);
+    return parsed.success ? describeGitHubPrDeliveryApproval(parsed.data) : undefined;
+  }
+  return otherPublicApprovalDescription(input, toolName);
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function approvalRequestDecision(input: {

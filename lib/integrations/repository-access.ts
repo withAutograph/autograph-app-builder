@@ -50,7 +50,10 @@ export type RepositoryReference = z.output<typeof repositoryReferenceSchema>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseRepositoryReference(value: string): RepositoryReference {
-  const segments = value.trim().split("/");
+  const reference = value.trim();
+  const githubUrl =
+    /^https:\/\/github\.com\/(?<repository>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/?$/iu.exec(reference);
+  const segments = (githubUrl?.groups?.repository ?? reference).split("/");
   if (segments.length !== 2) {
     throw new Error("repository-reference-invalid");
   }

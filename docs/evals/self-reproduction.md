@@ -128,6 +128,11 @@ mise run eval:self-reproduction -- \
   --responses-file /absolute/external/evidence/product-responses.json
 ```
 
+If the response transport fails or Builder reports an uncertain submission,
+the driver retains the exact batch and request ID. Resume reads the same
+session. A redisplayed card, absent card, or later session status leaves the
+submission unresolved without an authoritative receipt.
+
 If the Builder asks an ordinary chat question without an `inputRequests` card,
 put only the user reply in a text file and resume with `--message-file` instead.
 Do not include evaluator feedback, internal stage prompts, reference material,

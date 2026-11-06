@@ -121,21 +121,96 @@ const expectedCommands = {
   validation: SUPPORTED_REPOSITORY_CONTRACT.validationCommands,
 } as const;
 
+// The runner resolves the selected app's native build and verifies its output. The
+// older app:check task always runs lint before build, even with the delivery flag.
+const deliveryBuildProgram = `
+const appId = process.argv[1];
+const stateDirectory = process.env.APP_RUNTIME_STATE_DIR;
+delete process.env.APP_RUNTIME_STATE_DIR;
+if (stateDirectory) {
+  const file = Bun.file(stateDirectory + "/environment.json");
+  if (await file.exists()) {
+    const runtime = await file.json().catch(() => {
+      throw new Error("Could not read the prepared local app environment.");
+    });
+    const names = [
+      appId.toUpperCase().replaceAll("-", "_") + "_DATABASE_URL",
+      "DATABASE_URL",
+      "DATABASE_URL_UNPOOLED",
+      "PLATFORM_AUTH_DATABASE_URL",
+      "PLATFORM_AUTH_TRUSTED_ORIGINS",
+      "BETTER_AUTH_APP_NAME",
+      "BETTER_AUTH_URL",
+      "BETTER_AUTH_SECRET",
+    ];
+    for (const name of names) {
+      if (typeof runtime?.[name] === "string") process.env[name] = runtime[name];
+    }
+  }
+}
+const root = process.cwd();
+const validation = await import("./.config/mise/scripts/repository/app-validation.ts");
+if (typeof validation.runApplicationTasks === "function") {
+  await validation.runApplicationTasks(root, appId, ["build"]);
+} else {
+  // Older Arrusted kept its build runner private and exported its selection helpers.
+  const { spawnSync } = await import("node:child_process");
+  const path = await import("node:path");
+  const app = validation.discoverApplications(root).find((candidate) => candidate.id === appId);
+  if (!app) throw new Error("Unknown convention-discovered application: " + appId);
+  const run = (command, args, env = process.env) => {
+    const result = spawnSync(command, args, { cwd: root, env, stdio: "inherit" });
+    if (result.error) throw result.error;
+    if (result.status !== 0) process.exit(result.status ?? 1);
+  };
+  run("bun", [".config/mise/scripts/repository/generate-microfrontends.ts"]);
+  const environment = validation.applicationTaskEnvironment?.(root) ?? {
+    ...process.env,
+    TURBO_TELEMETRY_DISABLED: "1",
+    VC_MICROFRONTENDS_CONFIG: path.join(root, ".scratch", "microfrontends", "microfrontends.json"),
+  };
+  const turbo = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "turbo.exe" : "turbo");
+  const taskArguments = validation.applicationTaskArguments ?? validation.lifecycleTaskArguments;
+  run(turbo, taskArguments(root, app, "build"), environment);
+  if (app.framework === "next") {
+    const { assertNativeNextBuild } = await import("./packages/platform-microfrontends/src/hosting/vercel/next-build-output");
+    const appRoot = path.join(root, app.directory);
+    if (assertNativeNextBuild.length < 3) {
+      await assertNativeNextBuild(appRoot, appId);
+    } else {
+      const { readMicrofrontendsConfig } = await import("@autograph/microfrontends/config");
+      const { platformCatalogApplication } = await import("./packages/platform-microfrontends/src/policy/application-identity");
+      const selected = platformCatalogApplication(readMicrofrontendsConfig({ cwd: root, environment }), appId);
+      await assertNativeNextBuild(appRoot, appId, selected.assetPrefix === null ? "" : "/" + selected.assetPrefix);
+    }
+  }
+}
+`.trim();
+
+const repositoryDeliveryBuild = (appId: string) =>
+  `BUN_OPTIONS="\${BUN_OPTIONS:+$BUN_OPTIONS }--conditions=source" mise exec --no-deps -- bun -e '${deliveryBuildProgram}' ${appId}` as const;
+
+export const repositoryDeliveryBuildCommand = (appId: string, alreadyCompiled?: true) => {
+  if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId)) {
+    throw new Error("The validation application id is invalid.");
+  }
+  return alreadyCompiled === true
+    ? repositoryDeliveryBuild(appId)
+    : (`mise run --no-deps --skip-tools app:compile ${appId} && ${repositoryDeliveryBuild(appId)}` as const);
+};
+
 export const supportedValidationCommands = function supportedValidationCommands(
   appId: string,
   testShards: readonly string[] = SUPPORTED_VALIDATION_TEST_SHARDS,
   options?: { alreadyCompiled?: true },
 ) {
-  if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId)) {
-    throw new Error("The validation application id is invalid.");
-  }
   if (testShards.some((shard) => !/^[1-9][0-9]*\/[1-9][0-9]*$/u.test(shard))) {
     throw new Error("The validation test shard set is invalid.");
   }
   const compileDependency = options?.alreadyCompiled === true ? "--skip-deps " : "";
   return [
     {
-      command: `mise run --no-deps ${compileDependency}--skip-tools app:check ${appId}` as const,
+      command: repositoryDeliveryBuildCommand(appId, options?.alreadyCompiled),
       name: "check-build" as const,
     },
     ...testShards.map((shard) => ({

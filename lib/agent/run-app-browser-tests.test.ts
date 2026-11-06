@@ -184,17 +184,21 @@ describe("private app browser tests", () => {
       expect.objectContaining({ task: "test-e2e", browserSelection: selection }),
     );
   });
-  it("does not silently run the full local task for a requested focused selection", async () => {
-    const run = vi.fn();
+  it("passes a literal focused selection to the private browser task", async () => {
+    const run = vi.fn(() => Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }));
     const result = await runAppBrowserTests({
       appId: "spend-review",
       root: "/workspace/repository",
       sandbox: { run },
-      selection: { testName: "@acceptance" },
+      selection: { testName: "@acceptance", workers: 1 },
     });
-    expect(result).toMatchObject({ status: "failed", exitCode: null });
-    expect(result.problem).toContain("structured argument transport");
-    expect(run).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: "passed", exitCode: 0 });
+    expect(run).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        command:
+          "mise run --no-deps app:runtime run spend-review test-e2e '--grep' '@acceptance' '--workers=1'",
+      }),
+    );
   });
   it.each([false, true])(
     "reuses prepared local state with explicit signal %s and preserves it across dependency recovery",

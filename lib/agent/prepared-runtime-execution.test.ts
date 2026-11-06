@@ -378,7 +378,7 @@ describe("approved hosted runtime consumers", () => {
       }),
     );
     await expect(
-      runtime.runTask({ task: "repository-check", browserSelection: { testName: "x" } }),
+      runtime.runTask({ task: "repository-test", browserSelection: { testName: "x" } }),
     ).rejects.toThrow();
     await expect(
       runtime.runTask({
@@ -389,9 +389,7 @@ describe("approved hosted runtime consumers", () => {
     ).rejects.toThrow("cannot be resumed with a new test selection");
   });
   it.each([
-    ["repository-check", undefined, undefined],
     ["repository-test", "1/1", undefined],
-    ["repository-check", undefined, true],
     ["repository-test", "1/1", true],
     ["test-e2e", undefined, true],
   ] as const)(
@@ -507,10 +505,10 @@ describe("approved hosted runtime consumers", () => {
       expect(JSON.parse(String(restoredEnvironment?.content))).toEqual(environment);
       expect(mocks.readBinding).not.toHaveBeenCalled();
       expect(mocks.observeInstallation).not.toHaveBeenCalled();
-      await runtime?.runTask({ task: "repository-check" });
+      await runtime?.runTask({ task: "repository-test" });
       expect(fixture.provider.runCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          args: ["mise", "run", "app:runtime", "run", context.appId, "repository-check"],
+          args: ["mise", "run", "app:runtime", "run", context.appId, "repository-test"],
           env: { APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}` },
         }),
       );
@@ -578,7 +576,7 @@ describe("approved hosted runtime consumers", () => {
             },
           }),
         );
-        await runtime.runTask({ task: "repository-check" });
+        await runtime.runTask({ task: "repository-test" });
         expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
           expect.objectContaining({
             env: { APP_RUNTIME_STATE_DIR: "/private-state" },

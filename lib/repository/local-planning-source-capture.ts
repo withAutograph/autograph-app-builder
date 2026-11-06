@@ -68,8 +68,9 @@ const assertStableCaptureGeneration = async (
   root: string,
   generation: Awaited<ReturnType<typeof inspectDevelopmentSourceGeneration>>,
   links: readonly [string, string][],
+  inspectSource: typeof inspectDevelopmentSourceGeneration,
 ) => {
-  const current = await inspectDevelopmentSourceGeneration(root);
+  const current = await inspectSource(root);
   const currentLinks: [string, string][] = [];
   for (const name of current.names) {
     const absolute = path.join(root, name);
@@ -106,13 +107,17 @@ const selectedLocalSourcePath = (root: string, name: string) => {
 export const captureLocalPlanningSource = async (
   sourcePath: string,
   originalSourceSha: string,
-  dependencies: { readAuthority?: typeof readLocalOperatorArtifactAuthority } = {},
+  dependencies: {
+    readAuthority?: typeof readLocalOperatorArtifactAuthority;
+    inspectSource?: typeof inspectDevelopmentSourceGeneration;
+  } = {},
 ) => {
   objectId.parse(originalSourceSha);
   const authority = await (dependencies.readAuthority ?? readLocalOperatorArtifactAuthority)();
   const retainedRunsRoot =
     authority === undefined ? undefined : path.join(authority.stateRoot, "runs");
-  const generation = await inspectDevelopmentSourceGeneration(sourcePath);
+  const inspectSource = dependencies.inspectSource ?? inspectDevelopmentSourceGeneration;
+  const generation = await inspectSource(sourcePath);
   const root = generation.sourcePath;
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "app-builder-local-planning-")));
   const gitDir = path.join(directory, "source.git");
@@ -180,7 +185,7 @@ export const captureLocalPlanningSource = async (
     }
     git(["update-index", "-z", "--index-info"], Buffer.from(`${records.join("\0")}\0`));
     const snapshotTree = objectId.parse(git(["write-tree"]));
-    await assertStableCaptureGeneration(root, generation, links);
+    await assertStableCaptureGeneration(root, generation, links, inspectSource);
     // This is a private planning tree, not host Git history. Parent only the
     // actual retained base so an incremental bundle never requires unrelated
     // merged host ancestors that the file-archive candidate does not possess.
@@ -253,18 +258,21 @@ export const captureLocalPlanningSource = async (
       let offset = 0;
       const digests = new Map<string, string>();
       for (const expected of blobs) {
-        const end = bytes.indexOf(10, offset);
-        if (end === -1) {
+        // Buffer.indexOf narrows its offset to a signed 32-bit integer.
+        // Search from the start of a view to preserve offsets past 2 GiB.
+        const record = bytes.subarray(offset);
+        const headerLength = record.indexOf(10);
+        if (headerLength === -1) {
           throw new Error("The retained original source object stream is incomplete.");
         }
         const header = /^(?<oid>[a-f0-9]{40}) blob (?<size>[0-9]+)$/u.exec(
-          bytes.subarray(offset, end).toString("utf-8"),
+          record.subarray(0, headerLength).toString("utf-8"),
         )?.groups;
         if (header === undefined || header.oid !== expected) {
           throw new Error("The retained original source object identity is invalid.");
         }
         const length = Number(header.size);
-        offset = end + 1;
+        offset += headerLength + 1;
         if (
           !Number.isSafeInteger(length) ||
           offset + length >= bytes.length ||

@@ -12,7 +12,7 @@ const phaseGuidance: Partial<Record<AppBuilderWorkflowState["phase"], string>> =
   identity_resolved:
     "The target app was identified but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and exact existingAppChanges before starting the build.",
   planned:
-    "The accepted AppSpec and canonical implementation proposal are ready. Continue with apply_app_creation for the planned implementation. A selected compute resize requires its own approval. Reuse the accepted UI reference; omission of the full UI object from planning metadata is not a reason to regenerate the prototype. Genuine product revisions still follow the design acceptance flow.",
+    "The accepted AppSpec and canonical implementation proposal are ready. If an unapplied same-app repair is open and the user wants to continue the already applied build, use prepare_app_creation with resumeApprovedBuild: true. Otherwise continue with apply_app_creation for the planned implementation. Present the Build decision for the initial scope, including selected compute if applicable. Reuse the decision for repairs to the same approved scope. Reuse the accepted UI reference; omission of the full UI object from planning metadata is not a reason to regenerate the prototype. Genuine product revisions still follow the design acceptance flow.",
   reviewed:
     "The change set was reviewed after repository validation. Review does not establish product behavior or a reachable app preview.",
   ui_accepted:
@@ -22,7 +22,7 @@ const phaseGuidance: Partial<Record<AppBuilderWorkflowState["phase"], string>> =
   validated:
     "Repository commands passed. Product behavior and a working app preview are not established by that result. Exercise the accepted product outcomes against the implemented app before describing those outcomes as working.",
   validation_failed:
-    "Repository validation failed. Repair the reported diagnostics with corrected implementationFiles and retry validate_app_creation in the same approved checkout. App-owned data adapters, actions, obsolete demo/reset paths and their discovered tests remain implementation work within the accepted AppSpec. Continue their repair through the supported tools; a failed app-owned integration or test is not an external blocker. If a required runtime capability is actually unavailable, report that specific missing capability and the evidence.",
+    "Repository validation failed. Start a requested private preview if the applied app can run. Lint remains advisory for preview startup. For in-scope preview repairs, use validate_app_creation with repairOnly and the changed implementationFiles, then start the preview. For reviewed delivery, repair the reported diagnostics with corrected implementationFiles and retry validate_app_creation in the same approved checkout. App-owned data adapters, actions, obsolete demo/reset paths and their discovered tests remain implementation work within the accepted AppSpec. Continue their repair through the supported tools; a failed app-owned integration or test is not an external blocker. If a required runtime capability is actually unavailable, report that specific missing capability and the evidence.",
   validation_pending:
     "Repository validation is unfinished. Continue validate_app_creation and use its actual result before describing the implementation as checked.",
 };

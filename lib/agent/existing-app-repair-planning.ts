@@ -13,7 +13,12 @@ import {
   assertNoPendingPrivateApplyApproval,
   readPrivateApplyAuthority,
 } from "./private-apply-authority";
-import { assertExactWorkflowState, appBuilderWorkflowState, sha256 } from "./workflow-state";
+import {
+  assertExactWorkflowState,
+  appBuilderWorkflowState,
+  sha256,
+  updateExactWorkflow,
+} from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { ExistingAppChange } from "./existing-app-changes";
 
@@ -28,6 +33,7 @@ interface RepairHistoryEntry {
   sessionId: string;
   previousWorkflow: AppBuilderWorkflowState;
   approvedBase: Settled;
+  suspendedWorkflow?: Extract<AppBuilderWorkflowState, { phase: "planned" }>;
 }
 /** Separate linear history; workflow snapshots never recursively include this key. */
 export const existingAppRepairHistory = defineState<readonly RepairHistoryEntry[]>(
@@ -72,6 +78,116 @@ const assertRepairBinding = (current: Proposed, base: Settled, sandbox: SandboxS
   ) {
     throw new Error("The settled private repair source binding changed.");
   }
+};
+
+const assertRepairApproval = (base: Settled, sessionId: string) => {
+  assertNoPendingPrivateApplyApproval();
+  assertApprovedPrivateApplySession({
+    appId: base.appSpec.appId,
+    appSpecDigest: base.appSpec.digest,
+    proposalDigest: base.proposal.digest,
+    workspaceId: base.workspace.workspaceId,
+    sessionId,
+  });
+};
+
+const approvedRepairHistory = (proposalDigest: string, sessionId: string): RepairHistoryEntry => {
+  const matches = existingAppRepairHistory
+    .get()
+    .filter((entry) => entry.proposalDigest === proposalDigest);
+  const entry = matches[0];
+  if (matches.length !== 1 || entry?.sessionId !== sessionId || !settled(entry.approvedBase)) {
+    throw new Error(
+      "The approved build history is unavailable for this session and repair proposal.",
+    );
+  }
+  return entry;
+};
+
+/** Resume the original execution scope while retaining the unapplied proposal in history. */
+export const resumeApprovedAppBuild = async (
+  ctx: Pick<ToolContext, "abortSignal" | "getSandbox" | "session">,
+) => {
+  ctx.abortSignal?.throwIfAborted();
+  const current = appBuilderWorkflowState.get();
+  if (current.phase !== "planned") {
+    throw new Error("Resuming an approved build requires an unapplied same-app repair proposal.");
+  }
+  const entry = approvedRepairHistory(current.proposal.digest, ctx.session.id);
+  const { approvedBase: base } = entry;
+  assertRepairApproval(base, ctx.session.id);
+  const sandbox = await ctx.getSandbox();
+  ctx.abortSignal?.throwIfAborted();
+  if (!isDeepStrictEqual(approvedRepairHistory(current.proposal.digest, ctx.session.id), entry)) {
+    throw new Error("The approved build history changed while opening the checkout.");
+  }
+  assertRepairApproval(base, ctx.session.id);
+  assertRepairBinding(current, base, sandbox);
+  if (base.githubSource?.digest !== current.githubSource?.digest) {
+    throw new Error("The selected repository changed after the approved build.");
+  }
+  const { publishedGitHubDraftProposalDigest } = base;
+  const checkoutDependencyAttempts = new Map(
+    [...(base.checkoutDependencyAttempts ?? []), ...(current.checkoutDependencyAttempts ?? [])].map(
+      (attempt) => [attempt.attemptDigest, attempt],
+    ),
+  );
+
+  updateExactWorkflow({
+    expected: current,
+    operation: "resume the approved build",
+    transition: () => ({
+      appSpec: base.appSpec,
+      applyReceipt: base.applyReceipt,
+      artifacts: current.artifacts,
+      ...(checkoutDependencyAttempts.size === 0
+        ? {}
+        : { checkoutDependencyAttempts: [...checkoutDependencyAttempts.values()] }),
+      dependencyReceipt: base.dependencyReceipt,
+      ...(base.githubSource === undefined ? {} : { githubSource: base.githubSource }),
+      identityReceipt: base.identityReceipt,
+      phase: "applied",
+      preparedByCallId: base.preparedByCallId,
+      proposal: base.proposal,
+      ...(publishedGitHubDraftProposalDigest === undefined
+        ? {}
+        : { publishedGitHubDraftProposalDigest }),
+      sourceReceipt: base.sourceReceipt,
+      version: base.version,
+      workspace: base.workspace,
+    }),
+  });
+  existingAppRepairHistory.update((history) =>
+    history.map((record) =>
+      record.proposalDigest === current.proposal.digest && record.sessionId === ctx.session.id
+        ? { ...record, suspendedWorkflow: current }
+        : record,
+    ),
+  );
+  return { appId: base.appSpec.appId, status: "resumed_approved_build" as const };
+};
+
+/** Historical context for delivery to inspect in the tenant journal. Sealing is not publication. */
+export const priorResumedBuildDraftProposal = (
+  state: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>,
+  sessionId: string,
+) => {
+  const entry = existingAppRepairHistory.get().findLast((record) => {
+    const { approvedBase: base } = record;
+    return [
+      record.sessionId === sessionId,
+      record.suspendedWorkflow !== undefined,
+      base.phase === "reviewed" && base.githubDraftProposal !== undefined,
+      base.appSpec.appId === state.appSpec.appId,
+      base.appSpec.digest === state.appSpec.digest,
+      base.workspace.workspaceId === state.workspace.workspaceId,
+      base.workspace.workspacePath === state.workspace.workspacePath,
+      base.sourceReceipt.digest === state.sourceReceipt.digest,
+      base.githubSource?.digest === state.githubSource?.digest,
+    ].every(Boolean);
+  });
+  const base = entry?.approvedBase;
+  return base?.phase === "reviewed" ? base.githubDraftProposal?.proposal : undefined;
 };
 const validateRepairChanges = (changes: readonly ExistingAppChange[], current: Proposed) => {
   const paths = new Set<string>();
@@ -208,24 +324,11 @@ export const inspectExistingAppRepair = async (input: {
     );
   }
   assertRepairBinding(current, base, sandbox);
-  assertApprovedPrivateApplySession({
-    appId: base.appSpec.appId,
-    appSpecDigest: base.appSpec.digest,
-    proposalDigest: base.proposal.digest,
-    workspaceId: base.workspace.workspaceId,
-    sessionId: ctx.session.id,
-  });
+  assertRepairApproval(base, ctx.session.id);
   const assertCurrent = () => {
     ctx.abortSignal?.throwIfAborted();
     assertExactWorkflowState(appBuilderWorkflowState.get(), current, "prepare the same-app repair");
-    assertNoPendingPrivateApplyApproval();
-    assertApprovedPrivateApplySession({
-      appId: base.appSpec.appId,
-      appSpecDigest: base.appSpec.digest,
-      proposalDigest: base.proposal.digest,
-      workspaceId: base.workspace.workspaceId,
-      sessionId: ctx.session.id,
-    });
+    assertRepairApproval(base, ctx.session.id);
     if (getBuilderSandboxId(sandbox) !== base.workspace.workspaceId) {
       throw new Error("The private repair workspace changed.");
     }

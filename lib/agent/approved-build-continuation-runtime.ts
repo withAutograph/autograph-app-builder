@@ -9,11 +9,28 @@ import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { readLocalOperatorArtifactAuthority } from "../provisioning/local-operator-artifact-store";
 import {
   approvedBuildDecisionSchema,
+  approvedBuildProgress,
   readInternalBuildMarker,
 } from "./approved-build-continuation";
 import type { ApprovedBuildDecision } from "./approved-build-continuation";
 import type { HostedEveStore } from "../eve/hosted-store";
 import type { HostedPrincipal } from "../eve/hosted-auth";
+import { appBuilderWorkflowState } from "./workflow-state";
+
+export const authenticatedBuildDelivery = defineState<{ turnId: string; progress: string } | null>(
+  "autograph-app-builder.authenticated-build-delivery.v1",
+  () => null,
+);
+export const approvedBuildReviewProgress = defineState<{
+  buildProgress: string;
+  stage: "prepared" | "assessed";
+} | null>("autograph-app-builder.approved-build-review-progress.v1", () => null);
+
+export const currentApprovedBuildProgress = (): string => {
+  const build = approvedBuildProgress(appBuilderWorkflowState.get());
+  const review = approvedBuildReviewProgress.get();
+  return review?.buildProgress === build ? `${build}:${review.stage}` : build;
+};
 
 /** Structural evaluations retain their actual private Eve projection without claiming a public hosted session. */
 export const diagnosticBuildDecisionState = defineState<ApprovedBuildDecision | null>(
@@ -141,15 +158,11 @@ const verifyInternalBuildMessage = async (
 export const emitCurrentBuildWorkflowProjection = async (
   ctx: Pick<HookContext, "session">,
 ): Promise<void> => {
-  const [
-    { appBuilderWorkflowState },
-    { assertApprovedPrivateApplySession },
-    { decideApprovedBuildContinuation },
-  ] = await Promise.all([
-    import("./workflow-state"),
-    import("./private-apply-authority"),
-    import("./approved-build-continuation"),
-  ]);
+  const [{ assertApprovedPrivateApplySession }, { decideApprovedBuildContinuation }] =
+    await Promise.all([
+      import("./private-apply-authority"),
+      import("./approved-build-continuation"),
+    ]);
   const decision = decideApprovedBuildContinuation({
     adapterSessionId: ctx.session.id,
     repositoryAccess: repositoryAccessReceiptState.get(),
@@ -183,7 +196,14 @@ export const authenticatedInternalBuildMessage = async (
   input: { message: string; messageSequence: number; turnId: string },
 ): Promise<boolean> => {
   try {
-    return await verifyInternalBuildMessage(ctx, input);
+    const claimed = await verifyInternalBuildMessage(ctx, input);
+    if (claimed) {
+      authenticatedBuildDelivery.update(() => ({
+        progress: currentApprovedBuildProgress(),
+        turnId: input.turnId,
+      }));
+    }
+    return claimed;
   } catch {
     return false;
   }

@@ -265,9 +265,26 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    integration reference for app-owned UI conflicts and source-only removal.
    After apply and any requested integration installation
    succeed, start a requested private preview directly with `start_app_preview`.
-   Lint is advisory for private previews and must not precede or block startup.
-   For reviewed delivery, continue with `validate_app_creation`. It runs the repository's normal
-   commands against the current applied app. When it
+   Lint is advisory. Run it separately when explicitly requested.
+   If the applied app is still a scaffold or its preview needs a repair, use
+   `validate_app_creation` with `repairOnly: true` and the corrected
+   `implementationFiles`. This writes under the original Build approval and
+   returns before running repository checks. Then open the updated app with
+   `start_app_preview`. Keep the existing proposal for these repairs.
+   An unapplied same-app repair proposal can leave the workflow in `planned`
+   while the previously approved implementation is still saved. When the user
+   wants that implementation and preview or repair diagnostics identify this
+   case, call `prepare_app_creation({ resumeApprovedBuild: true })` to return
+   to its applied workspace. After `resumed_approved_build`, start the preview.
+   For a concrete source fix within the original Build scope, resume that
+   workspace first, then pass the corrected files to `validate_app_creation`
+   with `repairOnly: true`. Builder retains the unapplied draft in repair
+   history. When the user wants those changes, follow the ordinary planning
+   and Build controls for the changed scope.
+   For reviewed delivery, continue with `validate_app_creation`. It runs the
+   selected repository's native build and declared tests against the current
+   applied app. If a saved attempt failed in the old lint checker, keep that
+   diagnostic and use the current delivery validation in the same scope. When it
    reports a repairable failure, provide corrected `implementationFiles` to
    `validate_app_creation` and retry in the same approved checkout. Use the
    returned diagnostics and status; do not invent extra validation capabilities
@@ -309,6 +326,10 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
    do not replace a requested backend outcome with a simulated transition.
+   Use the user's GitHub repository URL or owner/name as the delivery destination.
+   Carry it into `prepare_github_draft_review` for a fresh-template app. Show the
+   resolved repository during review. If access is missing, use the GitHub
+   connection flow for that repository.
    Before initial draft publication, run `prepare_github_draft_review` to bind the
    actual destination snapshot. Inspect its before/after content as needed with
    `change_set_status`, `view: "next-page"`, and the selected `contentSide`.
@@ -317,6 +338,15 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    coverage is not an acceptance or publication prerequisite. Then call
    `accept_change_set`, seal the proposal, and request ordinary publication approval.
    Preserve the actual destination, source-content and approval protections.
+   After initial publication, use `read_github_pr_delivery` when reporting the
+   current pull request, required checks, or merge. Explain draft deferral as
+   checks starting when the pull request is ready for review. Keep the observed
+   GitHub result separate from authenticated hosted verification.
+   If the user requests a merge and that tool returns an approval input, pass
+   it unchanged to `finish-github-pr-delivery`. Present the exact Ready and
+   merge effects through the native approval. A changed revision requires
+   review and approval of the new candidate. An unresolved effect needs
+   readback of the same pull request before any further action.
    When revising an existing draft pull request, first use
    `prepare_github_draft_pr_reconciliation` to inspect its live base and head
    commits and prepare the private merge candidate. This step determines actual
@@ -330,9 +360,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    This restores its exact bytes and mode, including binary and executable files,
    while preserving other repairs. Do not retype historical bytes or supply an
    alternate revision. Restore invalidates saved validation and review; validate
-   the complete candidate and review both diffs again. Run the selected app's schema,
-   repository checks, browser tests, and applicable guard on the reconciled
-   candidate with `validate_github_draft_pr_reconciliation`.
+   the complete candidate and review both diffs again. Run the selected app's
+   schema preparation, native build, and declared tests on the reconciled
+   candidate with `validate_github_draft_pr_reconciliation`. Request browser
+   tests and additional checks for the specific changes they cover. Keep
+   explicitly requested lint separate and advisory.
    If an existing app dependency needs shared Bun catalog alignment, use
    `normalize_github_draft_pr_dependency_catalog` with its package name. It operates
    on this candidate, preserves the existing concrete version, normalizes its
@@ -384,7 +416,19 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    hosted delivery of changed source, publish technically validated and reviewed
    source through the
    existing publication approval flow without waiting for successful private UI
-   startup. Report actual startup failures and claim a working local or hosted
+   startup.
+   Once the publication records its source, continue hosted setup in this
+   session. Use the accepted behavior and backend kind to decide whether the
+   app needs storage. For persistent apps, call `plan-app-hosted-runtime` and
+   continue its exact approved plan through `prepare-app-hosted-runtime`. The
+   protected operator selects storage and installs the checked schema. For a
+   static app, use its native Preview delivery path and skip app database setup.
+   Ask about intended users when access policy needs a product decision. Keep
+   database identifiers, credentials and resource selection inside the operator
+   workflow. If platform setup is unavailable, preserve the session and report
+   the missing capability for the platform operator. Use the saved operation
+   reference to resume an interrupted preparation. Show setup and access
+   verification as separate steps before reporting the app ready. Report actual startup failures and claim a working local or hosted
    Preview only after exercising that actual app.
    For private local preview or candidate checks, if the repository defines
    `app:local` for the selected app and needs local data, use
@@ -509,7 +553,10 @@ acceptance project or Auth project to satisfy this journey.
   it does not grant customer Production provider access. Never weaken operator
   protection, insert base/admin credentials, manually deploy, promote or alias,
   or select a deployment by a source SHA or Git history.
-- Read the release result and open its ordinary public app URL. Exercise real
+- If the release reports pending, use `observe-app-public-release` with the
+  same frozen plan to continue reading the native deployment. Preserve the
+  operation and its approval while the provider is still working. When ready,
+  open the app's ordinary public URL. Exercise real
   Better Auth login/logout and a persistent app action before calling the app
   usable. For integrations, additionally exercise the approved provider
   lifecycle and independent data/isolation readbacks. Keep all these results

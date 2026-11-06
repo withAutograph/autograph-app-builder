@@ -1,3 +1,4 @@
+import type { GitHubPrDeliveryProvider } from "./github-pr-delivery";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
@@ -364,6 +365,7 @@ export interface GitHubTargetSourceResolutionAdapter {
 }
 
 export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter {
+  prDelivery?: GitHubPrDeliveryProvider;
   inspectDestinationFiles?: (input: {
     repository: GitHubRepositoryObservation;
     paths: readonly string[];
@@ -1957,6 +1959,38 @@ function draftSuccess(input: {
     status: "succeeded" as const,
     version: GITHUB_PUBLICATION_VERSION,
   });
+}
+
+/** Settle a retained pending publication only from its exact existing branch and draft PR. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function reconcilePendingDraftPullRequest(input: {
+  adapter: Pick<GitHubPublicationAdapter, "inspectDraftPublication">;
+  pending: GitHubMutationPendingReceipt;
+  proposal: DraftPullRequestProposal;
+  store: GitHubPublicationReceiptStore;
+}): Promise<DraftPullRequestSuccessReceipt> {
+  assertExactDraftPullRequestProposal(input.proposal);
+  assertCanonicalGitHubMutationReceipt(input.pending);
+  if (
+    input.pending.kind !== "draft-pull-request" ||
+    input.pending.proposalDigest !== input.proposal.digest ||
+    input.pending.idempotencyKey !== input.proposal.idempotencyKey
+  ) {
+    throw new Error("The GitHub journal belongs to a different proposal.");
+  }
+  let success: DraftPullRequestSuccessReceipt;
+  try {
+    success = draftSuccess({
+      pending: input.pending,
+      proposal: input.proposal,
+      readBack: await input.adapter.inspectDraftPublication(input.proposal),
+      recovered: true,
+    });
+  } catch {
+    throw new GitHubOutcomeUnknownError();
+  }
+  await storeTerminal(input.store, input.pending, success);
+  return success;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

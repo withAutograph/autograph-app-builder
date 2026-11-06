@@ -591,6 +591,17 @@ These are recovery options, not completed capabilities or provider effects.
 Until an option is implemented and observed, private Sandbox validation can
 continue while native application-process installer isolation remains blocked.
 
+## Automatic setup in Builder
+
+For hosted delivery, the user selects a GitHub repository by URL or owner/name.
+Builder reviews and publishes to the resolved repository before preparing the
+published source for Preview. For an app with persistent behavior, Builder
+plans hosted setup through the protected operator and presents its approval
+with the intended access and material costs. The operator resolves the
+workspace's managed Preview resources. Frontend-only apps use their native
+Preview path and skip app storage. Database selection and credentials belong
+to the platform operator and are never requested from the app creator.
+
 ## Approved sequence and recovery
 
 1. Resolve the owner-selected project and installation, check live membership,

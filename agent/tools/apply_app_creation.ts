@@ -62,7 +62,6 @@ export default defineTool({
         workspaceId: current.workspace.workspaceId,
       },
       ctx.callId,
-      { requiresUserApproval: current.proposal.target.privateCompute !== undefined },
     );
   },
   description:
@@ -107,7 +106,7 @@ export default defineTool({
     if (!hasPendingPrivateApplyApproval(scope, ctx.callId)) {
       return {
         guidance:
-          "This tool call has no matching approval policy decision for the current proposal and private target. Retry apply_app_creation so its policy can bind the current private target and request compute approval when needed.",
+          "This tool call has no matching approval policy decision for the current proposal and private target. Retry apply_app_creation to present the Build decision or reuse the existing approval for this scope.",
         status: "build_approval_required" as const,
         workflowPhase: current.phase,
       };
@@ -188,6 +187,7 @@ export default defineTool({
       executor: withImplementationFiles(
         fixture ? fixtureApplyCommandExecutor() : sandboxApplyCommandExecutor(),
         implementationFiles,
+        { reconcileNewWorkspace: !fixture },
       ),
       proposal: current.proposal.target,
       sandbox,

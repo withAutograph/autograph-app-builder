@@ -6,6 +6,7 @@ import {
   applicationFileChangeSchema,
   applyApplicationFileChanges,
 } from "../repository/application-file-change";
+import { workspaceBinInstallCommand } from "../repository/workspace-bin-install";
 
 export { applyApplicationFileChanges as applyImplementationFiles } from "../repository/application-file-change";
 
@@ -92,6 +93,7 @@ export function implementationArchitectureDiagnostics(
 export function withImplementationFiles(
   executor: ApplyCommandExecutor,
   files: readonly ImplementationFile[],
+  options?: { reconcileNewWorkspace: boolean },
 ): ApplyCommandExecutor {
   return async (input) => {
     assertExistingAppImplementationFiles(files, input.proposal);
@@ -111,6 +113,16 @@ export function withImplementationFiles(
       relativeApplyRoot,
       files.filter((file) => file.path !== cuePath),
     );
+    if (options?.reconcileNewWorkspace === true && !("operation" in input.proposal)) {
+      // The generator and approved file writes can both change the workspace graph.
+      const install = await input.sandbox.run({
+        command: workspaceBinInstallCommand(input.applyRoot, false),
+        workingDirectory: input.applyRoot,
+      });
+      if (install.exitCode !== 0) {
+        return { ...install, failedCommand: "bun install" };
+      }
+    }
     return result;
   };
 }

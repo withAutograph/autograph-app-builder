@@ -32,6 +32,15 @@ continues through the normal build; missing full UI content in its
 status does not call for a new prototype. Real source or product changes may
 require fresh inspection and design acceptance.
 
+When the user wants the already built app and preview startup reports
+`planned` because an unapplied repair proposal is current, call
+`prepare_app_creation({ resumeApprovedBuild: true })`. Once it returns
+`resumed_approved_build`, use `start_app_preview`. If a concrete in-scope repair
+is needed, first pass the corrected files to `validate_app_creation` with
+`repairOnly: true`. Reopening the saved build uses its original approval and
+retains the draft in repair history. When the user wants the pending changes,
+continue through the ordinary planning and Build controls for that scope.
+
 Repository source lookup and checkout recovery belong to Builder. Never ask
 the user to find a branch or PR containing a commit, provide Git SHAs, or repair
 the checkout. A historical app baseline selects app-owned source while the
@@ -320,9 +329,12 @@ follow-up. Missing handoff metadata does not invalidate private app validation.
 Builder source and Preview evidence do not prove protected access or hosted
 Production readiness. Do not restore a retired demo authentication bypass to
 make a walkthrough pass.
-For a private preview, start the applied app directly with `start_app_preview`.
-Do not run lint or repository validation as a prerequisite to startup. Report
-lint separately as advisory for the private preview.
+For a private preview, start the applied app directly with `start_app_preview`
+before repository validation.
+For reviewed delivery, validate the selected repository's native app build and
+declared app tests. Run explicitly requested lint separately and report its
+result as advisory. Preview startup and ordinary delivery proceed independently
+of lint.
 Use `start_app_preview` for requested local delivery or to exercise
 uncovered behavior, with the repository's actual development command and the
 implemented app's route. For requested hosted delivery of changed source,
@@ -331,7 +343,10 @@ and reviewed source may proceed through the existing publication approval flow
 without successful private UI startup. Report an actual startup failure; claim
 a working local or hosted Preview only after exercising that actual app.
 The tool returns a private, expiring browser URL only after the running app
-answers an HTTP readiness check.
+answers an HTTP readiness check. Open the returned URL and follow redirects to
+the actual app screen. A missing route or error screen is a runtime diagnostic.
+Repair it within the approved scope and reopen the preview before reporting
+that the app works.
 For a private local preview or candidate checks, if the selected app has a
 repository-owned `app:local` task and requires local data, call
 `prepare-app-local-preview` in the same private sandbox before checking product
@@ -485,6 +500,21 @@ For an explicitly requested manual continuity exercise, use `plan-app-hosted-run
 
 When a user asks to save or transfer the local app, wait until its accepted app apply/validation work is idle, then call `export-application-source` with its display name. Return the actual source download reference and report omissions. This saves the current owning Sandbox files, including binary assets and app-owned schema history; do not substitute the original host checkout, an old authored bundle, a compiled preview, or reconstructed journal. Source exports carry no database, identity, destination, approval or native-session authority. An authenticated hosted start imports this as untrusted app source through its ordinary workflow and fresh effect approvals.
 
-When validation reports `tooling-prerequisite` with `native-tool-panic`, the checker itself failed before completing. Preserve the current app and its failed receipt, explain the blocked check, and wait for an ordinary user continuation or the required tooling/compute approval. Do not repeatedly edit app source or rerun the same fatal checker as if it were a lint/type diagnostic. Exit 134 by itself does not establish an out-of-memory cause. Ordinary app lint, type and assertion failures remain part of the approved repair loop.
+If a saved validation receipt records a lint checker panic, retain that
+diagnostic and continue ordinary delivery with the native app build and
+declared tests. Repair current build or test failures using their own output.
+When the user wants to investigate the checker, report the actual tooling
+failure separately. Exit 134 alone gives no cause for the failure.
 
-After a positive native checker panic, `prepare_app_creation` with `privateCompute: "private-checks-16gib-v1"` is the supported read-only same-app profile proposal when its source/task and provider-capacity prerequisites pass. It freezes the actual Sandbox/Drive and 8 vCPU/16 GiB ephemeral billing description into a fresh proposal; require approval of the compute resize before `apply_app_creation` with the same profile. Do not reuse prior approval, silently resize, replace the app or infer that this necessarily fixes the panic. If the supported profile cannot be qualified, expose that prerequisite and wait.
+For an explicitly selected checker investigation, a qualifying native checker
+panic may support `prepare_app_creation` with
+`privateCompute: "private-checks-16gib-v1"`. This read-only same-app proposal
+resolves the existing Sandbox, check task, and provider capacity and presents
+the 8 vCPU/16 GiB profile and ephemeral billing for fresh approval before
+`apply_app_creation`. Ordinary delivery uses the existing build scope.
+
+If an approval response or external action may have been submitted, preserve its
+original request and operation identifiers. Read back the existing session and
+operation to reconcile the outcome. While the outcome is unknown, keep the
+operation pending and continue independent work within the approved scope.
+Never resend the batch, substitute a new request ID, or infer settlement.
