@@ -567,6 +567,9 @@ const reconcileMessageProgress = (state: PublicState, result: EveSessionResult) 
   }
 };
 
+const hasSettledWaitingSession = (state: PublicState) =>
+  state.session?.status === "waiting" && state.awaitingMessageProgressAfterCursor === undefined;
+
 export const runPublicSession = async (options: SessionOptions) => {
   const { state, transport, save } = options;
   if (state.session?.sessionId === "") {
@@ -623,7 +626,7 @@ export const runPublicSession = async (options: SessionOptions) => {
       save();
       return;
     }
-    if (session.status === "waiting" && state.awaitingMessageProgressAfterCursor === undefined) {
+    if (hasSettledWaitingSession(state)) {
       state.outcome = "waiting";
       save();
       return;
