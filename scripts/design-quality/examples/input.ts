@@ -1,24 +1,25 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 
 import type { UiPreviewInput } from "../../../lib/agent/ui-preview";
 import { validateUiPreview } from "../../../lib/agent/ui-preview";
 
 export type DesignQualityExampleId = "spend-import-review" | "compensation-planning";
 
-interface ExampleConfig {
-  appId: string;
-  route: string;
-  entry: string;
-  source: string;
-  stateSource: string;
-  stateTarget: string;
-}
+const compositionSource = "@autograph/compositions";
 
-// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
-async function text(root: string, relativePath: string) {
-  return await readFile(path.resolve(root, relativePath), "utf-8");
-}
+const exampleConfigSchema = z.object({
+  appId: z.string(),
+  entry: z.string(),
+  route: z.string(),
+  source: z.string(),
+  stateSource: z.string(),
+  stateTarget: z.string(),
+});
+
+const text = async (root: string, relativePath: string) =>
+  await readFile(path.resolve(root, relativePath), "utf-8");
 
 const exampleManifests: Record<
   DesignQualityExampleId,
@@ -77,7 +78,7 @@ const exampleManifests: Record<
     productionComponents: ["Button", "Card", "PageHeader", "StatusPill", "Typography"].map(
       (name) => ({ name, source: "@autograph/components" as const }),
     ),
-    productionCompositions: [{ name: "SchemaFormComposition", source: "@autograph/compositions" }],
+    productionCompositions: [{ name: "SchemaFormComposition", source: compositionSource }],
   },
   "spend-import-review": {
     assumptions: [
@@ -125,27 +126,30 @@ const exampleManifests: Record<
       "Typography",
     ].map((name) => ({ name, source: "@autograph/components" as const })),
     productionCompositions: [
-      { name: "DataTableComposition", source: "@autograph/compositions" },
-      { name: "RecordDetailPanel", source: "@autograph/compositions" },
+      { name: "DataTableComposition", source: compositionSource },
+      { name: "RecordDetailPanel", source: compositionSource },
     ],
   },
 };
 
 /** Assemble a checked-in case into the exact input accepted by renderUiPreview. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadDesignQualityExample(
   id: DesignQualityExampleId,
   repositoryRoot = process.cwd(),
 ): Promise<UiPreviewInput> {
   const caseRoot = `docs/design-quality-cases/${id}`;
-  const config = JSON.parse(
-    await text(repositoryRoot, `${caseRoot}/example.json`),
-  ) as ExampleConfig;
+  const config = exampleConfigSchema.parse(
+    JSON.parse(await text(repositoryRoot, `${caseRoot}/example.json`)),
+  );
   const [source, stateSource, fixtureSource] = await Promise.all([
     text(repositoryRoot, config.source),
     text(repositoryRoot, config.stateSource),
     text(repositoryRoot, `${caseRoot}/fixtures.json`),
   ]);
+  const stateModule = config.stateTarget.split("/").at(-1)?.replace(/\.ts$/u, "");
+  const fixtureType = id === "spend-import-review" ? "SpendFixture" : "CompensationFixture";
+  const fixtureModule = `./${stateModule}`;
+  const fixtureImport = JSON.stringify(fixtureModule);
   const input: UiPreviewInput = {
     appId: config.appId,
     catalogGaps: [],
@@ -153,7 +157,7 @@ export async function loadDesignQualityExample(
       { content: source, path: config.entry },
       { content: stateSource, path: config.stateTarget },
       {
-        content: `import type { ${id === "spend-import-review" ? "SpendFixture" : "CompensationFixture"} as Fixture } from ${JSON.stringify(`./${config.stateTarget.split("/").at(-1)?.replace(/\.ts$/u, "")}`)};\nconst fixture: Fixture = ${fixtureSource.trim()};\nexport default fixture;\n`,
+        content: `import type { ${fixtureType} as Fixture } from ${fixtureImport};\nconst fixture: Fixture = ${fixtureSource.trim()};\nexport default fixture;\n`,
         path: "src/fixture.ts",
       },
     ],

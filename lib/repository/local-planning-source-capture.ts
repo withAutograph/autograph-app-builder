@@ -22,6 +22,7 @@ import { z } from "zod";
 
 const objectId = z.string().regex(/^[a-f0-9]{40}$/u);
 const gitExecutable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
+const hashObjectStdinArgs = ["hash-object", "-w", "--no-filters", "--stdin"] as const;
 const fixedGitArgs = [
   "-c",
   "core.hooksPath=/dev/null",
@@ -151,12 +152,9 @@ export const captureLocalPlanningSource = async (
       if (info.isSymbolicLink()) {
         const target = readlinkSync(absolute);
         links.push([name, target]);
-        const oid = objectId.parse(
-          git(["hash-object", "-w", "--no-filters", "--stdin"], Buffer.from(target)),
-        );
+        const oid = objectId.parse(git(hashObjectStdinArgs, Buffer.from(target)));
         records.push(`120000 ${oid}\t${name}`);
       } else if (info.isFile()) {
-        // oxlint-disable-next-line eslint/no-bitwise -- Preserve the actual executable mode.
         regular.push({ absolute, mode: (info.mode & 0o111) === 0 ? "100644" : "100755", name });
       } else {
         throw new Error(
@@ -239,7 +237,6 @@ export const captureLocalPlanningSource = async (
       if (!linksCapturedAtPreparation && entries.some((entry) => entry.mode === "120000")) {
         // Legacy regular-file digests do not prove an original dirty symlink.
         // A first-preparation artifact records its separate exact captured tree.
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- Legacy symlink baseline is unproven.
         return undefined;
       }
       const blobs = [
@@ -315,7 +312,6 @@ export const captureLocalPlanningSource = async (
           };
         });
       if (hash(JSON.stringify(files)) !== expectedWorkspaceDigest) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- A nonmatching candidate is explicitly absent.
         return undefined;
       }
       const objects = [
@@ -341,7 +337,6 @@ export const captureLocalPlanningSource = async (
         streamPack: () => processStdoutByteStream("/bin/cat", [`${prefix}-${packId}.pack`]),
       };
     };
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing retained paths explicitly yield no matching base.
     const captureOmittedRetainedPaths = (
       snapshot: string,
       baseSha: string,
@@ -356,31 +351,27 @@ export const captureLocalPlanningSource = async (
       const committedPaths = new Set(git(["ls-tree", "-rz", "--name-only", baseSha]).split("\0"));
       const omitted = originalPaths.filter((name) => !committedPaths.has(name));
       if (omitted.length === 0) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- No matching original retained inventory.
         return undefined;
       }
       git(["read-tree", baseSha]);
       let complete = true;
       for (const name of omitted) {
         const absolute = selectedLocalSourcePath(snapshot, name);
-        if (!existsSync(absolute)) {
+        const info = existsSync(absolute) ? lstatSync(absolute) : undefined;
+        if (
+          info === undefined ||
+          !info.isFile() ||
+          info.isSymbolicLink() ||
+          info.uid !== process.getuid?.()
+        ) {
           complete = false;
           break;
         }
-        const info = lstatSync(absolute);
-        if (!info.isFile() || info.isSymbolicLink() || info.uid !== process.getuid?.()) {
-          complete = false;
-          break;
-        }
-        const oid = objectId.parse(
-          git(["hash-object", "-w", "--no-filters", "--stdin"], readFileSync(absolute)),
-        );
-        // oxlint-disable-next-line eslint/no-bitwise -- Preserve the actual retained executable mode.
+        const oid = objectId.parse(git(hashObjectStdinArgs, readFileSync(absolute)));
         const mode = info.mode & 0o100 ? "100755" : "100644";
         git(["update-index", "--add", "--cacheinfo", mode, oid, name]);
       }
       if (!complete) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- No matching original retained inventory.
         return undefined;
       }
       const retainedTree = objectId.parse(git(["write-tree"]));
@@ -397,7 +388,6 @@ export const captureLocalPlanningSource = async (
       expectedWorkspaceDigest: string,
     ): ReturnType<typeof packOriginalBase> => {
       if (authority === undefined) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- No local artifact authority is available.
         return undefined;
       }
       {
@@ -419,7 +409,6 @@ export const captureLocalPlanningSource = async (
           ]) {
             const info = lstatSync(name);
             const validType = name === manifestPath ? info.isFile() : info.isDirectory();
-            // oxlint-disable-next-line eslint/no-bitwise -- Read only owner-private artifact metadata.
             const privateOwner = info.uid === authority.ownerUid && (info.mode & 0o077) === 0;
             if (
               !validType ||
@@ -470,7 +459,6 @@ export const captureLocalPlanningSource = async (
           return retained;
         }
       }
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- Artifact is explicitly absent.
       return undefined;
     };
     const originalBase = (expectedWorkspaceDigest: string) => {
@@ -485,50 +473,49 @@ export const captureLocalPlanningSource = async (
       // Only the closed launcher's owner-only retained run roots are candidates.
       // Read committed snapshot objects, never mutable snapshot or app bytes.
       if (retainedRunsRoot !== undefined) {
+        let retainedBase;
         for (const entry of readdirSync(retainedRunsRoot, { withFileTypes: true })) {
-          if (!entry.isDirectory() || !/^run-[a-zA-Z0-9]+$/u.test(entry.name)) {
-            continue;
-          }
+          const validRun = entry.isDirectory() && /^run-[a-zA-Z0-9]+$/u.test(entry.name);
           const run = path.join(retainedRunsRoot, entry.name);
           const snapshot = path.join(run, "source");
-          if (!existsSync(snapshot)) {
-            continue;
+          const owned =
+            validRun &&
+            existsSync(snapshot) &&
+            [run, snapshot, path.join(snapshot, ".git")].every((name) => {
+              const info = lstatSync(name);
+              const ownedUid = info.uid === process.getuid?.();
+              const privateMode = (info.mode & 0o077) === 0;
+              const isDirectory = info.isDirectory() && !info.isSymbolicLink();
+              return isDirectory && ownedUid && privateMode && realpathSync(name) === name;
+            });
+          if (owned) {
+            const baseSha = objectId.parse(runGit(["-C", snapshot, "rev-parse", "HEAD"]));
+            // Fetch objects into this operation's private Git store only. No
+            // retained snapshot refs/index or candidate bytes are changed.
+            git([
+              "fetch",
+              "--quiet",
+              "--no-tags",
+              "--no-write-fetch-head",
+              "--no-recurse-submodules",
+              snapshot,
+              baseSha,
+            ]);
+            retainedBase = packOriginalBase(baseSha, expectedWorkspaceDigest);
+            if (retainedBase === undefined) {
+              retainedBase = captureOmittedRetainedPaths(
+                snapshot,
+                baseSha,
+                expectedWorkspaceDigest,
+              );
+            }
+            if (retainedBase !== undefined) {
+              break;
+            }
           }
-          const owned = [run, snapshot, path.join(snapshot, ".git")].every((name) => {
-            const info = lstatSync(name);
-            const ownedUid = info.uid === process.getuid?.();
-            // oxlint-disable-next-line eslint/no-bitwise -- Enforce private retained source ownership.
-            const privateMode = (info.mode & 0o077) === 0;
-            const isDirectory = info.isDirectory() && !info.isSymbolicLink();
-            return isDirectory && ownedUid && privateMode && realpathSync(name) === name;
-          });
-          if (!owned) {
-            continue;
-          }
-          const baseSha = objectId.parse(runGit(["-C", snapshot, "rev-parse", "HEAD"]));
-          // Fetch objects into this operation's private Git store only. No
-          // retained snapshot refs/index or candidate bytes are changed.
-          git([
-            "fetch",
-            "--quiet",
-            "--no-tags",
-            "--no-write-fetch-head",
-            "--no-recurse-submodules",
-            snapshot,
-            baseSha,
-          ]);
-          const retained = packOriginalBase(baseSha, expectedWorkspaceDigest);
-          if (retained !== undefined) {
-            return retained;
-          }
-          const completeBase = captureOmittedRetainedPaths(
-            snapshot,
-            baseSha,
-            expectedWorkspaceDigest,
-          );
-          if (completeBase !== undefined) {
-            return completeBase;
-          }
+        }
+        if (retainedBase !== undefined) {
+          return retainedBase;
         }
       }
       throw new LocalPlanningSourcePrerequisiteError(originalSourceSha, expectedWorkspaceDigest);

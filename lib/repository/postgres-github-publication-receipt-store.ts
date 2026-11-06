@@ -2,8 +2,8 @@ import { and, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-import type * as databaseSchema from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import type { schema as databaseSchema } from "../db/schema";
 import { hostedGitHubPublicationJournals } from "../db/schema";
 import {
   assertCanonicalGitHubMutationReceipt,
@@ -14,21 +14,109 @@ import type { GitHubMutationReceipt, GitHubPublicationReceiptStore } from "./git
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
+interface JournalRowInput {
+  createdAt: Date;
+  idempotencyKey: string;
+  kind: string;
+  proposalDigest: string;
+  receiptDigest: string;
+  record: unknown;
+  status: string;
+  updatedAt: Date;
+}
 const freshRepositoryKind = "fresh-repository" as const;
 const draftPullRequestKind = "draft-pull-request" as const;
 
-const journalRowSchema = z
-  .object({
-    createdAt: z.date(),
-    idempotencyKey: z.string().regex(/^[0-9a-f]{64}$/u),
+const journalRowSchema = z.strictObject({
+  createdAt: z.date(),
+  idempotencyKey: z.string().regex(/^[0-9a-f]{64}$/u),
+  kind: z.enum([freshRepositoryKind, draftPullRequestKind]),
+  proposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+  receiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+  record: z.unknown(),
+  status: z.enum(["pending", "failed", "succeeded"]),
+  updatedAt: z.date(),
+});
+
+const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
+const githubMutationReceiptSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    approvedByCallId: z.string().min(1),
+    digest: digestSchema,
+    idempotencyKey: digestSchema,
     kind: z.enum([freshRepositoryKind, draftPullRequestKind]),
-    proposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    receiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    record: z.unknown(),
-    status: z.enum(["pending", "failed", "succeeded"]),
-    updatedAt: z.date(),
-  })
-  .strict();
+    proposalDigest: digestSchema,
+    status: z.literal("pending"),
+    version: z.number(),
+  }),
+  z.strictObject({
+    approvedByCallId: z.string().min(1),
+    digest: digestSchema,
+    failureCode: z.enum(["provider-rejected", "postcondition-failed"]),
+    idempotencyKey: digestSchema,
+    kind: z.enum([freshRepositoryKind, draftPullRequestKind]),
+    proposalDigest: digestSchema,
+    providerCode: z.string(),
+    recoveryRequired: z.literal(true),
+    status: z.literal("failed"),
+    version: z.number(),
+  }),
+  z.strictObject({
+    approvedByCallId: z.string().min(1),
+    digest: digestSchema,
+    freshHistory: z.literal(true),
+    idempotencyKey: digestSchema,
+    initialCommitSha: z.string(),
+    initialCommitTree: z.string(),
+    installationIdentityDigest: digestSchema,
+    kind: z.literal(freshRepositoryKind),
+    parentCount: z.literal(0),
+    proposalDigest: digestSchema,
+    providerReadBackDigest: digestSchema,
+    recoveredFromPending: z.boolean(),
+    releaseGateAbsent: z.literal(true),
+    repository: z.object({
+      defaultBranch: z.string(),
+      digest: digestSchema,
+      headSha: z.string(),
+      headTree: z.string(),
+      installationIdentityDigest: digestSchema,
+      name: z.string(),
+      owner: z.string(),
+      releaseGate: z.object({ configured: z.boolean(), name: z.string() }),
+      repositoryId: z.string(),
+      version: z.number(),
+      visibility: z.string(),
+    }),
+    status: z.literal("succeeded"),
+    version: z.number(),
+  }),
+  z.strictObject({
+    approvedByCallId: z.string().min(1),
+    baseBranch: z.string(),
+    baseSha: z.string(),
+    branchName: z.string(),
+    branchSha: z.string(),
+    branchTree: z.string(),
+    changeSetDigest: digestSchema,
+    changedContentDigest: digestSchema,
+    digest: digestSchema,
+    draft: z.literal(true),
+    idempotencyKey: digestSchema,
+    installationIdentityDigest: digestSchema,
+    kind: z.literal(draftPullRequestKind),
+    normalizedChangedPaths: z.array(z.string()),
+    proposalDigest: digestSchema,
+    providerReadBackDigest: digestSchema,
+    pullRequestId: z.string(),
+    pullRequestNumber: z.number().int().positive(),
+    recoveredFromPending: z.boolean(),
+    releaseGateUnchanged: z.literal(true),
+    repositoryId: z.string(),
+    status: z.literal("succeeded"),
+    version: z.number(),
+  }),
+]);
 
 const journalRowSelection = {
   createdAt: hostedGitHubPublicationJournals.createdAt,
@@ -155,28 +243,26 @@ const restoreReceiptOrder = (record: GitHubMutationReceipt): GitHubMutationRecei
   const orderedFields = Object.entries(record)
     .map(([key, value]) => [key, key === "repository" ? repository : value] as const)
     .toSorted(([left], [right]) => order.indexOf(left) - order.indexOf(right));
-  return Object.fromEntries(orderedFields) as GitHubMutationReceipt;
+  return githubMutationReceiptSchema.parse(Object.fromEntries(orderedFields));
 };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parseGitHubPublicationJournalRow(input: unknown): GitHubMutationReceipt {
+export function parseGitHubPublicationJournalRow(input: JournalRowInput): GitHubMutationReceipt {
   const row = journalRowSchema.parse(input);
-  const receipt = restoreReceiptOrder(row.record as GitHubMutationReceipt);
+  const receiptRecord = githubMutationReceiptSchema.parse(row.record);
+  const receipt = restoreReceiptOrder(receiptRecord);
   assertCanonicalGitHubMutationReceipt(receipt);
-  if (
-    row.proposalDigest !== receipt.proposalDigest ||
-    row.receiptDigest !== receipt.digest ||
-    row.idempotencyKey !== receipt.idempotencyKey ||
-    row.kind !== receipt.kind ||
-    row.status !== receipt.status ||
-    row.createdAt.getTime() > row.updatedAt.getTime()
-  ) {
+  const receiptBindingsMatch =
+    row.proposalDigest === receipt.proposalDigest &&
+    row.receiptDigest === receipt.digest &&
+    row.idempotencyKey === receipt.idempotencyKey;
+  const receiptClassificationMatches = row.kind === receipt.kind && row.status === receipt.status;
+  const timestampsAreOrdered = row.createdAt.getTime() <= row.updatedAt.getTime();
+  if (!receiptBindingsMatch || !receiptClassificationMatches || !timestampsAreOrdered) {
     throw new Error("GitHub publication journal row is not canonically bound.");
   }
   return receipt;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function journalValues(receipt: GitHubMutationReceipt, now: Date) {
   assertCanonicalGitHubMutationReceipt(receipt);
   return {
@@ -194,7 +280,6 @@ function journalValues(receipt: GitHubMutationReceipt, now: Date) {
 /** PostgreSQL CAS journal for provider mutation intent and terminal receipts.
  * Failed or pending rows are never expired by the hosted tenant-retention
  * operation because deleting them could authorize a duplicate side effect. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresGitHubPublicationReceiptStore(
   database: Database,
   authorityInput: HostedGitHubTenantAuthority,

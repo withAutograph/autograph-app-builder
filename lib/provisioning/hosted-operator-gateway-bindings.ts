@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/no-await-in-loop, sonarjs/expression-complexity, sonarjs/no-nested-functions, react-doctor/async-await-in-loop -- Provider writes and their durable readbacks are deliberately sequential. */
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { createHostedOperatorRealmLinkConfig } from "./hosted-operator-realm-link-config";
@@ -43,6 +42,8 @@ const providerRow = z.object({
   type: z.string(),
 });
 type ProviderRow = z.infer<typeof providerRow>;
+const protectedOperatorComment = "App Builder protected operator";
+const gatewayBindingsEffect = ["gateway-bindings"][0] ?? "";
 // Public Vercel project Trusted Sources schema; retain unrelated provider-owned fields on round-trip.
 const trustedEnvironmentSet = z.looseObject({
   preset: z.literal("all-custom").optional(),
@@ -191,7 +192,7 @@ const preservesTrustedSources = (
 const providerValue = z.object({ value: z.string() });
 const valueDigest = (value: string) => createHash("sha256").update(value).digest("hex");
 const unavailable = () => new HostedOperatorError("operator_unavailable");
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve only the closed reconciliation code; every other caught provider failure keeps its existing public mapping.
+const gatewayDeliveryEffect = "gateway-delivery";
 const rethrowBindingFailure = (error: unknown): never => {
   if (error instanceof HostedOperatorError && error.code === "reconciliation_required") {
     throw error;
@@ -239,9 +240,8 @@ export const readOperatorGatewayProviderFailure = async (
         }
         chunks.push(next.value);
       }
-      return projectOperatorGatewayProviderFailure(
-        JSON.parse(Buffer.concat(chunks).toString("utf-8")),
-      );
+      const payload: unknown = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+      return projectOperatorGatewayProviderFailure(payload);
     } finally {
       signal.removeEventListener("abort", cancel);
       cancel();
@@ -378,9 +378,9 @@ const validGatewayInput = (input: GatewayManagedEnvironmentContext, readonlyCano
   if (!boundary || !config) {
     return false;
   }
-  return [
+  const checks: boolean[] = [
     plan.action === "prepare",
-    ["gateway-bindings", "gateway-delivery"].includes(input.effect.kind) ||
+    [gatewayBindingsEffect, gatewayDeliveryEffect].includes(input.effect.kind) ||
       (readonlyCanonical &&
         input.effect.kind === "resources" &&
         input.effect.resourceId === plan.authDatabase.resourceId),
@@ -408,7 +408,8 @@ const validGatewayInput = (input: GatewayManagedEnvironmentContext, readonlyCano
     boundary.operator.environment === "preview",
     boundary.operator.projectId !== gateway.projectId,
     target.branch === plan.selection.branch,
-  ].every(Boolean);
+  ];
+  return checks.every(Boolean);
 };
 
 const assertRuntimeUrl = (value: string, input: GatewayManagedEnvironmentContext) => {
@@ -489,48 +490,70 @@ export const createHostedOperatorGatewayBindings = (deps: {
       /* Diagnostics never change the existing binding or reconciliation outcome. */
     }
     let stage: OperatorGatewayBindingsDiagnostic["stage"] = "context";
-    let method: OperatorGatewayBindingsDiagnostic["method"];
-    let requestTarget: OperatorGatewayBindingsDiagnostic["requestTarget"];
+    let method: OperatorGatewayBindingsDiagnostic["method"] | null = null;
+    let requestTarget: OperatorGatewayBindingsDiagnostic["requestTarget"] | null = null;
     let protection:
       | Pick<
           OperatorGatewayBindingsDiagnostic,
           "trustedSourcesVisibility" | "missingApprovedPairCount"
         >
       | undefined;
-    let statusCategory: OperatorGatewayBindingsDiagnostic["statusCategory"];
-    let httpStatus: OperatorGatewayBindingsDiagnostic["httpStatus"];
-    let providerFailure: ReturnType<typeof projectOperatorGatewayProviderFailure> | undefined;
+    let statusCategory: OperatorGatewayBindingsDiagnostic["statusCategory"] | null = null;
+    let httpStatus: OperatorGatewayBindingsDiagnostic["httpStatus"] | null = null;
+    let providerFailure: ReturnType<typeof projectOperatorGatewayProviderFailure> | null = null;
     return {
       at(next: OperatorGatewayBindingsDiagnostic["stage"], preserveRequest = false) {
         stage = next;
         if (!preserveRequest) {
-          method = undefined;
-          requestTarget = undefined;
-          statusCategory = undefined;
-          httpStatus = undefined;
-          providerFailure = undefined;
+          method = null;
+          requestTarget = null;
+          statusCategory = null;
+          httpStatus = null;
+          providerFailure = null;
         }
       },
       finish(result: OperatorGatewayBindingsDiagnostic["result"]) {
-        report?.({
+        const gatewayBindings: Partial<OperatorGatewayBindingsDiagnostic> &
+          Pick<OperatorGatewayBindingsDiagnostic, "mode" | "result" | "stage"> = {
+          mode,
+          result,
+          stage,
+        };
+        if (method !== null) {
+          gatewayBindings.method = method;
+        }
+        if ((result === "failed" || result === "unknown") && requestTarget !== null) {
+          gatewayBindings.requestTarget = requestTarget;
+        }
+        if ((result === "failed" || result === "unknown") && protection !== undefined) {
+          gatewayBindings.trustedSourcesVisibility = protection.trustedSourcesVisibility;
+          gatewayBindings.missingApprovedPairCount = protection.missingApprovedPairCount;
+        }
+        if (statusCategory !== null) {
+          gatewayBindings.statusCategory = statusCategory;
+        }
+        if (httpStatus !== null) {
+          gatewayBindings.httpStatus = httpStatus;
+        }
+        if (providerFailure !== null) {
+          if (providerFailure.providerCode !== undefined) {
+            gatewayBindings.providerCode = providerFailure.providerCode;
+          }
+          if (providerFailure.providerTerms !== undefined) {
+            gatewayBindings.providerTerms = providerFailure.providerTerms;
+          }
+          if (providerFailure.validationFields !== undefined) {
+            gatewayBindings.validationFields = providerFailure.validationFields;
+          }
+        }
+        const diagnosticData: Parameters<NonNullable<typeof report>>[0] = {
           boundary: "operator",
-          gatewayBindings: {
-            mode,
-            result,
-            stage,
-            ...(method === undefined ? {} : { method }),
-            ...((result === "failed" || result === "unknown") && requestTarget !== undefined
-              ? { requestTarget }
-              : {}),
-            ...(result === "failed" || result === "unknown" ? protection : {}),
-            ...(statusCategory === undefined ? {} : { statusCategory }),
-            ...(httpStatus === undefined ? {} : { httpStatus }),
-            ...providerFailure,
-          },
+          gatewayBindings,
           outcome: result === "failed" || result === "unknown" ? "setup_unavailable" : "verified",
           phase: "inline",
           stage: "operator_request",
-        });
+        };
+        report?.(diagnosticData);
       },
       noResponse() {
         statusCategory = "no_response";
@@ -617,13 +640,13 @@ export const createHostedOperatorGatewayBindings = (deps: {
         input.plan,
         input.operationRef,
         input.effect.id,
-        "gateway-bindings",
+        gatewayBindingsEffect,
       )
     ) {
       throw unavailable();
     }
     const { branch, projectId } = gateway;
-    const comment = `App Builder protected operator ${input.operationRef}`;
+    const comment = `${protectedOperatorComment} ${input.operationRef}`;
     const approvedCanonical = structuredClone(input.plan.authAdoption?.gatewayEnvironment);
     // Written values are accepted only for writes acknowledged by this invocation, until checkpointed.
     const acknowledgedValues = new Map<string, string>();
@@ -754,7 +777,6 @@ export const createHostedOperatorGatewayBindings = (deps: {
     );
     const observeTrustedSources = async () => {
       if (approvedTrustedSources === undefined) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- Absent approved settings preserve the legacy path without a provider security observation.
         return undefined;
       }
       observation.protection();
@@ -945,7 +967,6 @@ export const createHostedOperatorGatewayBindings = (deps: {
         canonical?.valueSha256 === valueDigest(observed) &&
         isDeepStrictEqual(
           JSON.parse(observed),
-          // oxlint-disable-next-line unicorn/prefer-structured-clone, react-doctor/no-json-parse-stringify-clone -- Project the exact provider JSON wire representation, omitting absent optional fields.
           JSON.parse(
             JSON.stringify({
               ...realmLinkConfig,
@@ -1119,7 +1140,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
             row.projectId !== projectId ||
             row.branch !== branch ||
             !managedKeySchema.safeParse(row.key).success ||
-            row.comment !== `App Builder protected operator ${row.operationRef}` ||
+            row.comment !== `${protectedOperatorComment} ${row.operationRef}` ||
             (row.pendingOperationRef !== undefined &&
               row.pendingOperationRef !== input.operationRef),
         )
@@ -1249,9 +1270,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       return reference;
     };
     const inspectOwnership = async (canonicalOnly = false, selectedKey?: keyof GatewayValues) => {
-      // oxlint-disable-next-line react-doctor/async-parallel -- Establish source ownership before guarded provider metadata; reuse one resolved physical selector afterward.
       const known = await knownRows();
-      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Source ownership must be established before provider readback.
       const listed = await list();
       const newScope = await newRowGitBranch();
       observation.at("ownership_readback");
@@ -1382,21 +1401,31 @@ export const createHostedOperatorGatewayBindings = (deps: {
       if (renewal !== undefined && existing === undefined) {
         throw unavailable();
       }
-      const gitBranch = existing === undefined ? await newRowGitBranch() : undefined;
+      const gitBranch = existing === undefined ? await newRowGitBranch() : null;
+      const body = {
+        comment,
+        key,
+        target: ["preview"],
+        type: "encrypted",
+        value,
+      } satisfies {
+        comment: string;
+        gitBranch?: string;
+        key: keyof GatewayValues;
+        target: string[];
+        type: "encrypted";
+        value: string;
+      };
+      if (gitBranch !== null) {
+        body.gitBranch = gitBranch;
+      }
       return await (existing
         ? request(
             `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(existing.id)}`,
             "PATCH",
             { type: "encrypted", value },
           )
-        : request(`/v10/projects/${encodeURIComponent(projectId)}/env`, "POST", {
-            comment,
-            ...(gitBranch === null ? {} : { gitBranch }),
-            key,
-            target: ["preview"],
-            type: "encrypted",
-            value,
-          }));
+        : request(`/v10/projects/${encodeURIComponent(projectId)}/env`, "POST", body));
     };
     const prepareWrite = async (
       existing: ProviderRow | undefined,
@@ -1619,7 +1648,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     async verifyForDelivery(input: GatewayManagedEnvironmentContext) {
       const observation = diagnostic(input, "verify");
       try {
-        if (input.effect.kind !== "gateway-delivery") {
+        if (input.effect.kind !== gatewayDeliveryEffect) {
           throw unavailable();
         }
         const delivery = input.plan.gatewayDelivery;

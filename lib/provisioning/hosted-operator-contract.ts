@@ -16,14 +16,19 @@ import {
   externallyManagedTrustedSourcesSchema,
   matchesExternalTrustedSources,
 } from "./hosted-operator-host-protection";
-import { readyDeliveryReplacementIntentSchema } from "./hosted-operator-ready-delivery-replacement-intent";
 
 const GATEWAY_BINDINGS_EFFECT = "gateway-bindings";
+const SINGLE_PROJECT_SERVICES = "single-project-services";
+const GATEWAY_DELIVERY_EFFECT = "gateway-delivery";
+const OPERATOR_ROW_COMMENT = "App Builder protected operator ";
+const PUBLIC_GATEWAY_ORIGIN_ERROR = "Public Gateway origin must be exact HTTPS origin";
+const SINGLE_PROJECT_RESOURCES = "single-project-resources-v1";
+const HTTPS_PROTOCOL = "https:";
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
 const isPublicHttpsOrigin = (url: URL): boolean => {
-  if (url.protocol !== "https:") {
+  if (url.protocol !== HTTPS_PROTOCOL) {
     return false;
   }
   if (url.username !== "" || url.password !== "") {
@@ -42,7 +47,7 @@ const httpsPublicOrigin = z
   .superRefine((value, ctx) => {
     const url = new URL(value);
     if (!isPublicHttpsOrigin(url)) {
-      ctx.addIssue({ code: "custom", message: "Public Gateway origin must be exact HTTPS origin" });
+      ctx.addIssue({ code: "custom", message: PUBLIC_GATEWAY_ORIGIN_ERROR });
     }
   })
   .transform((value) => new URL(value).origin);
@@ -114,7 +119,7 @@ const deploymentBoundarySchema = z.strictObject({
   app: previewDeploymentSchema,
   authority: hostedTenantAuthoritySchema,
   /** Omitted plans retain their original three-project Preview semantics. */
-  composition: z.literal("single-project-services").optional(),
+  composition: z.literal(SINGLE_PROJECT_SERVICES).optional(),
   gateway: previewDeploymentSchema,
   operator: z.strictObject({
     deploymentId: id,
@@ -300,10 +305,11 @@ export type ManagedOperatorEnvironmentRow = z.infer<typeof managedOperatorEnviro
 export const managedOperatorEnvironmentRowsSchema = z.array(managedOperatorEnvironmentRowSchema);
 
 const REMOVE_APP_BINDINGS = "remove-bindings";
+const previewSource = z.literal("preview");
 const appPreviewTrustedSource = z.strictObject({
-  from: z.literal("preview"),
+  from: previewSource,
   projectId: id,
-  to: z.literal("preview"),
+  to: previewSource,
 });
 const hostedOperatorPlanDataSchema = z.strictObject({
   access: z.array(
@@ -314,20 +320,16 @@ const hostedOperatorPlanDataSchema = z.strictObject({
     }),
   ),
   action: z.enum(["prepare", "cleanup"]),
-  releaseIntent: z.literal("prepared-preview").optional(),
-  runtimePreparation: z.literal("single-project-resources-v1").optional(),
-  existingResources: ownedAppResourceSourceSchema.optional(),
-
   appDatabase: databaseResource,
   /** Schema installation scope is independent of actor and role grants. */
-  appInstallation: z.strictObject({ customerIds: z.array(id).min(1) }).optional(),
   appEnvironmentCleanup: managedOperatorEnvironmentRowsSchema.optional(),
+  appInstallation: z.strictObject({ customerIds: z.array(id).min(1) }).optional(),
   appTrustedSources: z
     .strictObject({
       gatewayPreview: z.strictObject({
-        from: z.literal("preview"),
+        from: previewSource,
         projectId: id,
-        to: z.literal("preview"),
+        to: previewSource,
       }),
     })
     .optional(),
@@ -374,7 +376,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
           "resources",
           "install",
           GATEWAY_BINDINGS_EFFECT,
-          "gateway-delivery",
+          GATEWAY_DELIVERY_EFFECT,
           "access",
           "auth-membership",
           "auth-signup-policy",
@@ -389,6 +391,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
       }),
     )
     .min(1),
+  existingResources: ownedAppResourceSourceSchema.optional(),
   gatewayBindings: z
     .strictObject({
       authBrowserOrigin: httpsPublicOrigin,
@@ -454,13 +457,12 @@ const hostedOperatorPlanDataSchema = z.strictObject({
       repoId: id,
     })
     .optional(),
+  hostProtection: externallyManagedTrustedSourcesSchema.optional(),
   installer: z.strictObject({
     reference: id,
     sha256: digest,
     sourceCapture: operatorWorkerSourceCaptureSchema.optional(),
   }),
-  hostProtection: externallyManagedTrustedSourcesSchema.optional(),
-  appDeliveryReplacement: readyDeliveryReplacementIntentSchema.optional(),
   neon: z.strictObject({
     branchId: id,
     connectionRef: id,
@@ -468,10 +470,10 @@ const hostedOperatorPlanDataSchema = z.strictObject({
     projectId: id,
     source: z.literal("synthetic-only"),
   }),
-  normalActorProgram: normalActorProgramSchema.optional(),
-  normalActorPreparation: normalActorPreparationSchema.optional(),
-  normalActorPredecessor: normalActorPredecessorSchema.optional(),
   normalActorCapturePredecessor: normalActorCapturePredecessorSchema.optional(),
+  normalActorPredecessor: normalActorPredecessorSchema.optional(),
+  normalActorPreparation: normalActorPreparationSchema.optional(),
+  normalActorProgram: normalActorProgramSchema.optional(),
   // Optional only when parsing persisted protected-operator-v1 records created before
   // native Gateway origins were part of the verified plan.
   publicGateway: z
@@ -482,8 +484,10 @@ const hostedOperatorPlanDataSchema = z.strictObject({
     })
     .optional(),
   release: z.strictObject({ artifactRef: id, id, sha256: digest }),
+  releaseIntent: z.literal("prepared-preview").optional(),
   resourcesInstaller: z.strictObject({ reference: id, sha256: digest }).optional(),
   retention: z.strictObject({ expiresAt: z.iso.datetime({ offset: true }), policy: id }),
+  runtimePreparation: z.literal(SINGLE_PROJECT_RESOURCES).optional(),
   selection: operatorSelectionSchema,
   stage: z.enum([AUTH_BOOTSTRAP_STAGE, AUTH_PARTICIPANTS_STAGE, "app"]).optional(),
   version: z.literal(1),
@@ -557,19 +561,17 @@ const validatePlanStage = (
     });
   }
 };
-const validateNormalActorPlan = (
+const validateActorPredecessors = (
   plan: z.infer<typeof hostedOperatorPlanDataSchema>,
   ctx: z.RefinementCtx,
 ) => {
-  const program = plan.normalActorProgram;
   const participantStage = plan.stage === AUTH_PARTICIPANTS_STAGE;
-  if (
-    plan.normalActorCapturePredecessor !== undefined &&
-    (plan.action !== "prepare" ||
-      !participantStage ||
-      plan.normalActorPredecessor !== undefined ||
-      program === undefined)
-  ) {
+  const invalidCapture =
+    plan.action !== "prepare" ||
+    !participantStage ||
+    plan.normalActorPredecessor !== undefined ||
+    plan.normalActorProgram === undefined;
+  if (plan.normalActorCapturePredecessor !== undefined && invalidCapture) {
     ctx.addIssue({
       code: "custom",
       message:
@@ -586,6 +588,14 @@ const validateNormalActorPlan = (
         "A participant predecessor authorizes only a separately approved account preparation successor.",
     });
   }
+};
+const validateNormalActorPlan = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  const program = plan.normalActorProgram;
+  const participantStage = plan.stage === AUTH_PARTICIPANTS_STAGE;
+  validateActorPredecessors(plan, ctx);
   if (program === undefined) {
     if (participantStage || plan.normalActorPreparation !== undefined) {
       ctx.addIssue({
@@ -718,7 +728,7 @@ const validateResourcePreparation = (
     const { target } = plan.existingResources.source;
     if (
       ![
-        plan.runtimePreparation === "single-project-resources-v1",
+        plan.runtimePreparation === SINGLE_PROJECT_RESOURCES,
         plan.authAdoption === undefined,
         target.appId === plan.selection.appId,
         target.projectId === plan.selection.projectId,
@@ -738,7 +748,7 @@ const validateResourcePreparation = (
     const { target } = plan.existingResources.source;
     if (
       ![
-        plan.runtimePreparation === "single-project-resources-v1",
+        plan.runtimePreparation === SINGLE_PROJECT_RESOURCES,
         plan.authAdoption === undefined,
         target.appId === plan.selection.appId,
         target.projectId === plan.selection.projectId,
@@ -753,26 +763,99 @@ const validateResourcePreparation = (
       });
     }
   }
-
-  if (
-    plan.runtimePreparation !== undefined &&
-    (plan.deploymentBoundary?.composition !== "single-project-services" ||
-      plan.action !== "prepare" ||
-      plan.releaseIntent !== undefined ||
-      plan.delivery !== undefined ||
-      plan.gatewayDelivery !== undefined ||
-      plan.gatewayBindings !== undefined ||
-      plan.appTrustedSources !== undefined ||
-      plan.effects.some((effect) =>
-        ["bindings", "delivery", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
-      ))
-  ) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Resource preparation cannot authorize deployment or environment binding effects.",
-      path: ["runtimePreparation"],
-    });
+};
+const hasInvalidRuntimePreparation = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) => {
+  if (plan.runtimePreparation === undefined) {
+    return false;
   }
+  const hasExplicitDelivery = plan.delivery !== undefined || plan.gatewayDelivery !== undefined;
+  const hasGatewayConfiguration =
+    plan.gatewayBindings !== undefined || plan.appTrustedSources !== undefined;
+  const hasBindingEffects = plan.effects.some((effect) =>
+    ["bindings", "delivery", GATEWAY_BINDINGS_EFFECT, GATEWAY_DELIVERY_EFFECT].includes(
+      effect.kind,
+    ),
+  );
+  const hasDeploymentEffects = hasExplicitDelivery || hasGatewayConfiguration || hasBindingEffects;
+  return (
+    plan.deploymentBoundary?.composition !== SINGLE_PROJECT_SERVICES ||
+    plan.action !== "prepare" ||
+    plan.releaseIntent !== undefined ||
+    hasDeploymentEffects
+  );
+};
+const hasInvalidHostProtection = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) => {
+  const protection = plan.hostProtection;
+  if (!protection) {
+    return false;
+  }
+  const boundary = plan.deploymentBoundary;
+  const gateway = plan.publicGateway;
+  const sourceMismatch = boundary === undefined || gateway === undefined;
+  if (sourceMismatch) {
+    return true;
+  }
+  const externalSourcesMismatch = !matchesExternalTrustedSources(
+    protection,
+    boundary.teamId,
+    plan.selection.projectId,
+    gateway.projectId,
+  );
+  const hasManagedSources =
+    plan.appTrustedSources !== undefined || plan.gatewayBindings?.trustedSources !== undefined;
+  return externalSourcesMismatch || hasManagedSources;
+};
+const hasInvalidBootstrap = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) => {
+  const { bootstrap } = plan;
+  if (!bootstrap) {
+    return false;
+  }
+  const databases = [plan.authDatabase, plan.appDatabase];
+  const roles = databases.flatMap((database) => [database.migratorRole, database.runtimeRole]);
+  const resources = plan.effects.filter((effect) => effect.kind === "resources");
+  const orderedResources =
+    resources.length === 2 &&
+    resources[0]?.resourceId === plan.authDatabase.resourceId &&
+    resources[1]?.resourceId === plan.appDatabase.resourceId;
+  const invalidRoles = new Set(roles).size !== roles.length || roles.includes(bootstrap.role);
+  const invalidResources =
+    plan.appDatabase.resourceId === plan.authDatabase.resourceId ||
+    databases.some((database) =>
+      ["postgres", "neondb", bootstrap.maintenanceDatabase].includes(database.database),
+    );
+  const invalidPhase =
+    plan.action === "prepare" && plan.stage !== AUTH_PARTICIPANTS_STAGE && !orderedResources;
+  const invalidEffectBinding = plan.effects.some(
+    (effect) => !["resources", "retire"].includes(effect.kind) && effect.resourceId !== undefined,
+  );
+  return invalidRoles || invalidResources || invalidPhase || invalidEffectBinding;
+};
+const hasInvalidDeploymentBoundary = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) => {
+  const boundary = plan.deploymentBoundary;
+  if (!boundary) {
+    return false;
+  }
+  const jwks = new URL(boundary.verification.jwksUrl);
+  const projectLayoutInvalid =
+    boundary.composition === SINGLE_PROJECT_SERVICES
+      ? boundary.app.projectId !== boundary.gateway.projectId ||
+        boundary.app.projectId === boundary.operator.projectId
+      : new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
+          .size !== 3;
+  const appBindingInvalid =
+    boundary.app.projectId !== plan.selection.projectId ||
+    boundary.app.branch !== boundaryAppBranch(plan);
+  const gatewayBindingInvalid =
+    boundary.gateway.branch !== plan.publicGateway?.branch ||
+    plan.publicGateway === undefined ||
+    boundary.gateway.projectId !== plan.publicGateway?.projectId ||
+    boundary.verification.publicOrigin !== plan.publicGateway?.origin;
+  const jwksLocationInvalid =
+    jwks.origin !== boundary.verification.gatewayOrigin || jwks.pathname !== "/_platform/jwks.json";
+  const jwksCredentialsInvalid = jwks.username !== "" || jwks.password !== "";
+  const jwksSuffixInvalid = jwks.search !== "" || jwks.hash !== "";
+  const jwksInvalid = jwksLocationInvalid || jwksCredentialsInvalid || jwksSuffixInvalid;
+  return projectLayoutInvalid || appBindingInvalid || gatewayBindingInvalid || jwksInvalid;
 };
 const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) => {
   if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
@@ -850,7 +933,7 @@ const validateAppEnvironmentCleanup = (
         (row) =>
           row.projectId !== plan.selection.projectId ||
           !keys.has(row.key) ||
-          row.comment !== `App Builder protected operator ${row.operationRef}`,
+          row.comment !== `${OPERATOR_ROW_COMMENT}${row.operationRef}`,
       )
     ) {
       ctx.addIssue({
@@ -928,7 +1011,6 @@ const validateGatewayAppTrustedSource = (
     });
   }
 };
-// oxlint-disable-next-line sonarjs/cognitive-complexity -- Preserve the existing aggregate plan authority refinements alongside the optional installer receipt.
 export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine((plan, ctx) => {
   if (plan.appInstallation !== undefined) {
     const customers = new Set(plan.appInstallation.customerIds);
@@ -940,19 +1022,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
       });
     }
   }
-  if (
-    plan.hostProtection !== undefined &&
-    (plan.deploymentBoundary === undefined ||
-      plan.publicGateway === undefined ||
-      !matchesExternalTrustedSources(
-        plan.hostProtection,
-        plan.deploymentBoundary.teamId,
-        plan.selection.projectId,
-        plan.publicGateway.projectId,
-      ) ||
-      plan.appTrustedSources !== undefined ||
-      plan.gatewayBindings?.trustedSources !== undefined)
-  ) {
+  if (hasInvalidHostProtection(plan)) {
     ctx.addIssue({
       code: "custom",
       message:
@@ -981,36 +1051,12 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
       message: "Resource bootstrap requires its pinned installer.",
     });
   }
-  if (plan.bootstrap) {
-    const { bootstrap } = plan;
-    const databases = [plan.authDatabase, plan.appDatabase];
-    const roles = databases.flatMap((database) => [database.migratorRole, database.runtimeRole]);
-    const resources = plan.effects.filter((effect) => effect.kind === "resources");
-    const orderedResources = [
-      resources.length === 2,
-      resources[0]?.resourceId === plan.authDatabase.resourceId,
-      resources[1]?.resourceId === plan.appDatabase.resourceId,
-    ].every(Boolean);
-    const invalid = [
-      new Set(roles).size !== roles.length,
-      plan.appDatabase.resourceId === plan.authDatabase.resourceId,
-      roles.includes(bootstrap.role),
-      databases.some((database) =>
-        ["postgres", "neondb", bootstrap.maintenanceDatabase].includes(database.database),
-      ),
-      plan.action === "prepare" && plan.stage !== AUTH_PARTICIPANTS_STAGE && !orderedResources,
-      plan.effects.some(
-        (effect) =>
-          !["resources", "retire"].includes(effect.kind) && effect.resourceId !== undefined,
-      ),
-    ].some(Boolean);
-    if (invalid) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Bootstrap effects must bind distinct Auth and app resources and roles.",
-      });
-    }
-  } else if (plan.effects.some((effect) => effect.resourceId !== undefined)) {
+  if (plan.bootstrap && hasInvalidBootstrap(plan)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Bootstrap effects must bind distinct Auth and app resources and roles.",
+    });
+  } else if (!plan.bootstrap && plan.effects.some((effect) => effect.resourceId !== undefined)) {
     ctx.addIssue({
       code: "custom",
       message: "Resource effect bindings require the bootstrap plan.",
@@ -1026,36 +1072,13 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
       message: "Resources and effects must have distinct identities.",
     });
   }
-  if (plan.deploymentBoundary !== undefined) {
-    const boundary = plan.deploymentBoundary;
-    const jwks = new URL(boundary.verification.jwksUrl);
-    const invalidBoundary = [
-      boundary.composition === "single-project-services"
-        ? boundary.app.projectId !== boundary.gateway.projectId ||
-          boundary.app.projectId === boundary.operator.projectId
-        : new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
-            .size !== 3,
-      boundary.app.projectId !== plan.selection.projectId,
-      boundary.app.branch !== boundaryAppBranch(plan),
-      boundary.gateway.branch !== plan.publicGateway?.branch,
-      plan.publicGateway === undefined,
-      boundary.gateway.projectId !== plan.publicGateway?.projectId,
-      boundary.verification.publicOrigin !== plan.publicGateway?.origin,
-      jwks.origin !== boundary.verification.gatewayOrigin,
-      jwks.pathname !== "/_platform/jwks.json",
-      jwks.username !== "",
-      jwks.password !== "",
-      jwks.search !== "",
-      jwks.hash !== "",
-    ].some(Boolean);
-    if (invalidBoundary) {
-      ctx.addIssue({
-        code: "custom",
-        message:
-          "App, Gateway and operator require distinct bound deployment identities and exact public verification configuration.",
-        path: ["deploymentBoundary"],
-      });
-    }
+  if (hasInvalidDeploymentBoundary(plan)) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "App, Gateway and operator require distinct bound deployment identities and exact public verification configuration.",
+      path: ["deploymentBoundary"],
+    });
   }
   validatePlanStage(plan, ctx);
   validateNormalActorPlan(plan, ctx);
@@ -1063,19 +1086,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   // Each phase has an observed receipt, including a no-op verification for already-existing resources.
   // Authority is opened only after install/grant verification, and closed before retirement.
   validateResourcePreparation(plan, ctx);
-  if (
-    plan.runtimePreparation !== undefined &&
-    (plan.deploymentBoundary?.composition !== "single-project-services" ||
-      plan.action !== "prepare" ||
-      plan.releaseIntent !== undefined ||
-      plan.delivery !== undefined ||
-      plan.gatewayDelivery !== undefined ||
-      plan.gatewayBindings !== undefined ||
-      plan.appTrustedSources !== undefined ||
-      plan.effects.some((effect) =>
-        ["bindings", "delivery", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
-      ))
-  ) {
+  if (hasInvalidRuntimePreparation(plan)) {
     ctx.addIssue({
       code: "custom",
       message: "Resource preparation cannot authorize deployment or environment binding effects.",
@@ -1106,12 +1117,12 @@ export const nativeDeliveryGitRef = (
   if (plan.gatewayDelivery?.gitRef !== undefined) {
     return plan.gatewayDelivery.gitRef;
   }
-  return plan.stage === "app" &&
+  const usesMatchingAppDelivery =
+    plan.stage === "app" &&
     delivery.gitSha !== undefined &&
     plan.delivery?.repoId === delivery.repoId &&
-    plan.delivery.gitSha === delivery.gitSha
-    ? plan.delivery.branch
-    : delivery.branch;
+    plan.delivery.gitSha === delivery.gitSha;
+  return usesMatchingAppDelivery ? (plan.delivery?.branch ?? delivery.branch) : delivery.branch;
 };
 
 /** Legacy plans install only their grant tenants; explicit plans retain owned installation tenants. */
@@ -1402,23 +1413,26 @@ const retainedConsumedGatewayDeliveryOrigin = (
   operator: z.infer<typeof hostedOperatorRecordDataSchema>,
 ): string | undefined => {
   const link = operator.identityLink;
+  const hasConsumedProof =
+    link?.consumedAt !== undefined && link.proofRef !== undefined && link.proofSha256 !== undefined;
   if (
-    link?.consumedAt === undefined ||
-    link.proofRef === undefined ||
-    link.proofSha256 === undefined ||
+    !hasConsumedProof ||
     operator.plan.gatewayDelivery === undefined ||
     operator.plan.publicGateway === undefined
   ) {
     return undefined;
   }
-  return operator.gatewayDeliveryCandidates?.find(
-    (candidate) =>
+  return operator.gatewayDeliveryCandidates?.find((candidate) => {
+    const sameGatewayTarget =
+      candidate.projectId === operator.plan.publicGateway?.projectId &&
+      candidate.branch === operator.plan.publicGateway?.branch;
+    return (
       candidate.readyState === "READY" &&
       candidate.origin === link.endpointOrigin &&
-      candidate.projectId === operator.plan.publicGateway?.projectId &&
-      candidate.branch === operator.plan.publicGateway?.branch &&
-      candidate.repoId === operator.plan.gatewayDelivery?.repoId,
-  )?.origin;
+      sameGatewayTarget &&
+      candidate.repoId === operator.plan.gatewayDelivery?.repoId
+    );
+  })?.origin;
 };
 /** Exact identity scope shared by validation and successor metadata composition. */
 export const matchesHostedOperatorIdentityLinkScope = (
@@ -1428,7 +1442,7 @@ export const matchesHostedOperatorIdentityLinkScope = (
   if (link !== undefined && operator.plan.runtimePreparation !== undefined) {
     return [
       link.publicRelease !== undefined,
-      operator.plan.deploymentBoundary?.composition === "single-project-services",
+      operator.plan.deploymentBoundary?.composition === SINGLE_PROJECT_SERVICES,
       operator.plan.publicGateway?.projectId === operator.plan.selection.projectId,
       link.authResourceId === operator.plan.authDatabase.resourceId,
       link.ownerSessionId === operator.plan.selection.sessionId,
@@ -1451,7 +1465,6 @@ export const matchesHostedOperatorIdentityLinkScope = (
     ].every(Boolean)
   );
 };
-// oxlint-disable-next-line eslint/complexity, sonarjs/expression-complexity -- Frozen identity link and actual delivered candidate identities require every exact binding.
 const validateOperatorMetadata = (
   operator: z.infer<typeof hostedOperatorRecordDataSchema>,
   context: z.RefinementCtx,
@@ -1541,7 +1554,7 @@ const validateRetainedAppDeliveries = (
           row.projectId !== retained.projectId ||
           row.branch !== retained.branch ||
           !ownedKeys.has(row.key) ||
-          row.comment !== `App Builder protected operator ${row.operationRef}`,
+          row.comment !== `${OPERATOR_ROW_COMMENT}${row.operationRef}`,
       ),
     ].some(Boolean);
     if (invalid) {
@@ -1554,6 +1567,21 @@ const validateRetainedAppDeliveries = (
     }
   }
 };
+const operatorOwnedEnvironmentRowsAreInvalid = (
+  rows: ManagedOperatorEnvironmentRow[],
+  projectId: string | undefined,
+  branch: string | undefined,
+  allowedKeys: Set<string>,
+) =>
+  new Set(rows.map((row) => row.key)).size !== rows.length ||
+  new Set(rows.map((row) => row.id)).size !== rows.length ||
+  rows.some(
+    (row) =>
+      row.projectId !== projectId ||
+      row.branch !== branch ||
+      !allowedKeys.has(row.key) ||
+      row.comment !== `${OPERATOR_ROW_COMMENT}${row.operationRef}`,
+  );
 export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRefine(
   (operator, context) => {
     validateOperatorMetadata(operator, context);
@@ -1567,14 +1595,11 @@ export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRe
       "PLATFORM_APP_BOUNDARY",
     ]);
     if (
-      new Set(environmentRows.map((row) => row.key)).size !== environmentRows.length ||
-      new Set(environmentRows.map((row) => row.id)).size !== environmentRows.length ||
-      environmentRows.some(
-        (row) =>
-          row.projectId !== operator.plan.selection.projectId ||
-          row.branch !== plannedAppBranch(operator.plan) ||
-          !ownedKeys.has(row.key) ||
-          row.comment !== `App Builder protected operator ${row.operationRef}`,
+      operatorOwnedEnvironmentRowsAreInvalid(
+        environmentRows,
+        operator.plan.selection.projectId,
+        plannedAppBranch(operator.plan),
+        ownedKeys,
       )
     ) {
       context.addIssue({
@@ -1593,14 +1618,11 @@ export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRe
       "PLATFORM_GATEWAY_PROJECT_BINDINGS",
     ]);
     if (
-      new Set(gatewayRows.map((row) => row.key)).size !== gatewayRows.length ||
-      new Set(gatewayRows.map((row) => row.id)).size !== gatewayRows.length ||
-      gatewayRows.some(
-        (row) =>
-          row.projectId !== operator.plan.publicGateway?.projectId ||
-          row.branch !== operator.plan.publicGateway?.branch ||
-          !gatewayKeys.has(row.key) ||
-          row.comment !== `App Builder protected operator ${row.operationRef}`,
+      operatorOwnedEnvironmentRowsAreInvalid(
+        gatewayRows,
+        operator.plan.publicGateway?.projectId,
+        operator.plan.publicGateway?.branch,
+        gatewayKeys,
       )
     ) {
       context.addIssue({

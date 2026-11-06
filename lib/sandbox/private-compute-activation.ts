@@ -71,7 +71,7 @@ export const activatePrivateComputeProfile = async <T extends PrivateComputeNati
   let previous = await ports.readActivation();
   const write = async (phase: PrivateComputeActivation["phase"]) => {
     await ports.assertCurrent();
-    await ports.writeActivation({
+    const record: PrivateComputeActivation = {
       appId: input.appId,
       phase,
       profileId: profile.id,
@@ -79,8 +79,11 @@ export const activatePrivateComputeProfile = async <T extends PrivateComputeNati
       sandboxId: profile.target.sandboxId,
       sessionId: input.sessionId,
       workspaceDrive: profile.target.workspaceDrive,
-      ...(phase === "ready" ? { completedByCallId: input.callId } : {}),
-    });
+    };
+    if (phase === "ready") {
+      record.completedByCallId = input.callId;
+    }
+    await ports.writeActivation(record);
     previous = await ports.readActivation();
   };
   if (configured(native, profile) && running(native, profile)) {
@@ -227,7 +230,6 @@ export const applyPrivateComputeWhenSelected = async (
   if (input.profile !== undefined) {
     return await applyApprovedPrivateComputeProfile({ ...input, profile: input.profile });
   }
-  // oxlint-disable-next-line unicorn/no-useless-undefined -- An unselected profile explicitly performs no operation and returns no provider state.
   return undefined;
 };
 export const assertPrivateComputeInput = (

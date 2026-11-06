@@ -123,7 +123,6 @@ const sameDraft = (proposal: ExistingDraftUpdateProposal, observed: ExistingDraf
     },
   );
 
-// oxlint-disable-next-line eslint/complexity -- seal checks installation, exact PR identity, checkout head, and verified adoption before creating an update proposal
 export const sealExistingDraftUpdate = async (input: {
   adapter: ExistingDraftUpdateAdapter;
   installation: GitHubInstallationIdentity;
@@ -350,7 +349,6 @@ export const inspectAppliedExistingDraftUpdate = async (input: {
   };
 };
 
-// oxlint-disable-next-line eslint/complexity -- verifies sealed review, current PR, and uncertain-result recovery in one operation
 export const updateExistingDraft = async (input: {
   adapter: ExistingDraftUpdateAdapter;
   proposal: ExistingDraftUpdateProposal;
@@ -367,10 +365,10 @@ export const updateExistingDraft = async (input: {
     review: input.review,
     source: input.contentSource,
   });
-  const inspectApplied =  async (observed: ExistingDraftObservation) =>
-    (!isPublishedDraftRepairReview(input.review) ||
+  const inspectApplied = async (observed: ExistingDraftObservation) =>
+    await ((!isPublishedDraftRepairReview(input.review) ||
       observed.headTree === input.review.resolvedTree) &&
-    input.adapter.inspectAppliedUpdate(proposal, content, observed);
+      input.adapter.inspectAppliedUpdate(proposal, content, observed));
   if (
     current.headSha !== proposal.expectedHeadSha ||
     current.headTree !== proposal.expectedHeadTree

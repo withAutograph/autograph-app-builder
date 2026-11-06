@@ -1,4 +1,3 @@
-/* oxlint-disable sonarjs/no-nested-functions -- The nested object faithfully represents the read-only Drizzle selection chain, with no mutation port. */
 import { describe, expect, it, vi } from "vitest";
 import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import {
@@ -31,14 +30,13 @@ const bootstrap = () => {
 const read = async (records: ReturnType<typeof bootstrap>[]) => {
   const select = () => ({
     from: () => ({
-      where: () => ({ limit: async () => records.map((record) => ({ record })) }),
+      where: () => ({ limit: () => records.map((record) => ({ record })) }),
     }),
   });
   // SAFETY: The test database implements only the exact read-only Drizzle chain used by this reader; no writes or effects are available.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Bounded read-chain fixture exercises actual journal schemas and stage classification.
   const database = { select } as unknown as ReturnType<typeof openHostedPostgresDatabase>;
   return await readPublicReleasePreparedRuntime({
-    assertCurrentOwner: vi.fn(async () => {}),
+    assertCurrentOwner: vi.fn(() => {}),
     database,
     owner: operatorOwnerContextSchema.parse(context.ownerContext),
     target: context.target,

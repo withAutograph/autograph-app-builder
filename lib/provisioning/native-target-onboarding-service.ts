@@ -40,6 +40,12 @@ import type { NativeTargetVercelAuthorizationObservation } from "./native-target
 
 type Invocation = NativeTargetTransportRequest;
 type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext };
+interface NativeTargetPlanOptions {
+  phase: "planned";
+  appSpec?: { appId: string; digest: string };
+}
+const NATIVE_TARGET_PLAN_ACTION = "native-target-plan";
+const NATIVE_PLAN_OWNER_STAGE = "native_plan_owner";
 
 export interface NativeTargetOnboardingServiceDependencies {
   store: NativeTargetOnboardingStore;
@@ -178,7 +184,7 @@ export const createNativeTargetOnboardingService =
   (deps: NativeTargetOnboardingServiceDependencies) =>
   async (request: Request, input: Invocation): Promise<Response> => {
     const workloadHeaders = new Headers(request.headers);
-    const isPlan = input.action === "native-target-plan";
+    const isPlan = input.action === NATIVE_TARGET_PLAN_ACTION;
     await observeNativePlan(isPlan, "native_plan_workload", async () => {
       await deps.verifyWorkload(new Request(request.url, { headers: workloadHeaders }));
     });
@@ -188,7 +194,7 @@ export const createNativeTargetOnboardingService =
     };
     const owner = await observeNativePlan(
       isPlan,
-      "native_plan_owner",
+      NATIVE_PLAN_OWNER_STAGE,
       async () => await deps.authorize(request, input),
     );
     const ownerMatches = [
@@ -207,7 +213,7 @@ export const createNativeTargetOnboardingService =
       }
       const current = await observeNativePlan(
         isPlan,
-        "native_plan_owner",
+        NATIVE_PLAN_OWNER_STAGE,
         async () => await deps.authorize(request, input),
       );
       if (!isDeepStrictEqual(current, owner)) {
@@ -232,19 +238,15 @@ export const createNativeTargetOnboardingService =
         }
       },
       authorize,
-      readApproval: async (_current, record) =>
-        readApprovalResult(
-          await deps.readApproval(
-            await authorize(input, record.appId),
-            record,
-            input.callId,
-            workload,
-          ),
-        ),
+      readApproval: async (_current, record) => {
+        const current = await authorize(input, record.appId);
+        const approval = await deps.readApproval(current, record, input.callId, workload);
+        return readApprovalResult(approval);
+      },
       store: deps.store,
     });
     const runtime = createNativeTargetOnboardingRuntime({
-      authorizeApprovalResponse: async () => {
+      authorizeApprovalResponse: () => {
         throw denied();
       },
       createProject: async (_ctx, dispatch) => {
@@ -293,7 +295,7 @@ export const createNativeTargetOnboardingService =
           projectId: observation.projectId,
         }),
       readCapturedRelease: async (_ctx, appId, retainedPlan) => {
-        if (input.action !== "native-target-plan") {
+        if (input.action !== NATIVE_TARGET_PLAN_ACTION) {
           throw mismatch();
         }
         if (retainedPlan !== undefined) {
@@ -355,24 +357,18 @@ export const createNativeTargetOnboardingService =
     };
     let output: NativeTargetTransportResponse;
     switch (input.action) {
-      case "native-target-plan": {
+      case NATIVE_TARGET_PLAN_ACTION: {
         try {
-          output = await observeNativePlan(
-            isPlan,
-            "native_plan_dispatch",
-            async () =>
-              await runtime.plan(input.input, context, {
-                phase: "planned",
-                ...(input.selectedApp === undefined
-                  ? {}
-                  : {
-                      appSpec: {
-                        appId: input.selectedApp.appId,
-                        digest: input.selectedApp.appSpecDigest,
-                      },
-                    }),
-              }),
-          );
+          output = await observeNativePlan(isPlan, "native_plan_dispatch", async () => {
+            const planOptions: NativeTargetPlanOptions = { phase: "planned" };
+            if (input.selectedApp !== undefined) {
+              planOptions.appSpec = {
+                appId: input.selectedApp.appId,
+                digest: input.selectedApp.appSpecDigest,
+              };
+            }
+            return await runtime.plan(input.input, context, planOptions);
+          });
           output = await inspectRetainedProviderAuthorization({
             authorize: async () => await authorize(input, input.input.appId),
             inspect: deps.inspectProviderAuthorization,

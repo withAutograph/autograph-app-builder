@@ -230,7 +230,7 @@ it("refuses an altered original sealed checkpoint before returning new ciphertex
   source.record.privateState = prepareHostedOperatorResourceCredentials({
     ...source,
     database: "authDatabase",
-    record: { ...source.record, privateState: undefined },
+    record: { ...source.record, privateState: null },
   }).privateState;
   expect(() => rewrapOwnedAppResourceCredentials({ source, target })).toThrow("resource_mismatch");
 });

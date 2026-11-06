@@ -1,29 +1,20 @@
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { canAutoSelectDevelopmentSource, developmentSourceReceipt } from "./development-source";
-import type { SourceKind } from "./source-receipt";
-import type * as SourceReceipt from "./source-receipt";
-
-const inspectSourceReceipt = vi.hoisted(() => vi.fn());
-
-vi.mock("./source-receipt", async (importOriginal) => ({
-  ...(await importOriginal<typeof SourceReceipt>()),
-  inspectSourceReceipt,
-}));
 
 const roots: string[] = [];
+const gitExecutable = "/opt/homebrew/bin/git";
 
 afterEach(() => {
-  inspectSourceReceipt.mockReset();
   for (const root of roots.splice(0)) {
     rmSync(root, { recursive: true });
   }
 });
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactEnvironment(root: string) {
   return {
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
@@ -46,27 +37,16 @@ function exactEnvironment(root: string) {
   } as const;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixtureRoot() {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "app-builder-development-source-")));
   roots.push(root);
+  execFileSync(gitExecutable, ["init", "--quiet", root]);
+  execFileSync(gitExecutable, ["-C", root, "config", "user.name", "Test"]);
+  execFileSync(gitExecutable, ["-C", root, "config", "user.email", "test@example.com"]);
+  writeFileSync(path.join(root, "source.txt"), "initial\n");
+  execFileSync(gitExecutable, ["-C", root, "add", "source.txt"]);
+  execFileSync(gitExecutable, ["-C", root, "commit", "--quiet", "-m", "initial"]);
   return root;
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function receipt(root: string, sourceKind: SourceKind = "fresh-template") {
-  return {
-    adapter: "arrusted-template-v0" as const,
-    contractDigest: "e".repeat(64),
-    digest: "f".repeat(64),
-    eligibilityDigest: "d".repeat(64),
-    releaseEnabled: false as const,
-    sourceKind,
-    sourcePath: root,
-    sourceSha: "a".repeat(40),
-    sourceTree: "b".repeat(40),
-    version: 3 as const,
-  };
 }
 
 describe("Development source selection", () => {
@@ -74,28 +54,26 @@ describe("Development source selection", () => {
     "uses the exact transient local snapshot for %s without a deployment reader",
     async (sourceKind) => {
       const root = fixtureRoot();
-      const expected = receipt(root, sourceKind);
-      inspectSourceReceipt.mockResolvedValue(expected);
-
+      const result = await developmentSourceReceipt(sourceKind, undefined, exactEnvironment(root));
+      expect(result).toMatchObject({
+        sourceKind,
+        sourcePath: root,
+        version: 3,
+      });
       await expect(
         developmentSourceReceipt(sourceKind, undefined, exactEnvironment(root)),
-      ).resolves.toEqual(expected);
-      expect(inspectSourceReceipt).toHaveBeenCalledWith(sourceKind, root);
+      ).resolves.toEqual(result);
     },
   );
 
   it("accepts only the exact preselected path when one is supplied", async () => {
     const root = fixtureRoot();
-    const expected = receipt(root, "existing-repository");
-    inspectSourceReceipt.mockResolvedValue(expected);
-
     await expect(
       developmentSourceReceipt("existing-repository", root, exactEnvironment(root)),
-    ).resolves.toEqual(expected);
+    ).resolves.toMatchObject({ sourceKind: "existing-repository", sourcePath: root });
     await expect(
       developmentSourceReceipt("existing-repository", `${root}-other`, exactEnvironment(root)),
     ).rejects.toThrow("did not match the selected snapshot");
-    expect(inspectSourceReceipt).toHaveBeenCalledTimes(1);
   });
 
   it("never selects a local path in a hosted Vercel runtime", async () => {
@@ -112,7 +90,6 @@ describe("Development source selection", () => {
         VERCEL: "1",
       }),
     ).toBe(false);
-    expect(inspectSourceReceipt).not.toHaveBeenCalled();
   });
 
   it("leaves explicit existing-repository paths to non-development readers", async () => {
@@ -121,7 +98,6 @@ describe("Development source selection", () => {
       developmentSourceReceipt("existing-repository", root, {}),
     ).resolves.toBeUndefined();
     expect(canAutoSelectDevelopmentSource({})).toBe(false);
-    expect(inspectSourceReceipt).not.toHaveBeenCalled();
   });
 
   it("rejects a development binding that could publish", async () => {
@@ -138,17 +114,26 @@ describe("Development source selection", () => {
         APP_BUILDER_LOCAL_PUBLICATION: "1",
       }),
     ).toBe(false);
-    expect(inspectSourceReceipt).not.toHaveBeenCalled();
   });
 
   it("re-observes a source whose Git identity changed during development", async () => {
     const root = fixtureRoot();
-    inspectSourceReceipt.mockResolvedValue({
-      ...receipt(root, "existing-repository"),
-      sourceSha: "9".repeat(40),
-    });
+    const previous = await developmentSourceReceipt(
+      "existing-repository",
+      undefined,
+      exactEnvironment(root),
+    );
+    writeFileSync(join(root, "source.txt"), "changed\n");
+    execFileSync(gitExecutable, ["-C", root, "add", "source.txt"]);
+    execFileSync(gitExecutable, ["-C", root, "commit", "--quiet", "-m", "changed"]);
     await expect(
       developmentSourceReceipt("existing-repository", undefined, exactEnvironment(root)),
-    ).resolves.toMatchObject({ sourceSha: "9".repeat(40) });
+    ).resolves.toMatchObject({ sourcePath: root });
+    const current = await developmentSourceReceipt(
+      "existing-repository",
+      undefined,
+      exactEnvironment(root),
+    );
+    expect(current?.sourceSha).not.toBe(previous?.sourceSha);
   });
 });

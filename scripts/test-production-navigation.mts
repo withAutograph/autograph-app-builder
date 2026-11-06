@@ -14,15 +14,21 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
-const execute = promisify(execFile);
+const execute = async (
+  command: string,
+  args: string[],
+  options: { cwd?: string; signal?: AbortSignal; timeout?: number } = {},
+): Promise<{ stdout: string; stderr: string }> => await promisify(execFile)(command, args, options);
 const source = path.resolve(import.meta.dirname, "..");
 const docker = process.argv.at(3) ?? "";
 const dockerHost = process.argv.at(5) ?? "";
+const validDockerPath = docker.startsWith("/");
+const validDockerHost = dockerHost.startsWith("unix:///");
 if (
   process.argv[2] !== "--docker" ||
-  !docker?.startsWith("/") ||
+  !validDockerPath ||
   process.argv[4] !== "--docker-host" ||
-  !dockerHost?.startsWith("unix:///")
+  !validDockerHost
 ) {
   throw new Error("Use mise run test:production-navigation.");
 }
@@ -36,7 +42,7 @@ const environment: NodeJS.ProcessEnv = {
   NEXT_TELEMETRY_DISABLED: "1",
   NODE_ENV: "production",
   PATH: process.env.PATH,
-  TMPDIR: process.env.TMPDIR,
+  TMPDIR: tmpdir(),
 };
 const scratch = await mkdtemp(path.join(tmpdir(), "autograph-navigation-"));
 console.log(`Production navigation workspace: ${scratch}`);
@@ -69,7 +75,9 @@ const stopChild = async (child: ChildProcess) => {
   }
   const closed = once(child, "close");
   child.kill("SIGTERM");
-  const force = setTimeout(() => child.kill("SIGKILL"), 5000);
+  const force = setTimeout(() => {
+    child.kill("SIGKILL");
+  }, 5000);
   try {
     await closed;
   } finally {
@@ -89,7 +97,9 @@ const run = async (command: string, args: string[], input?: string) => {
     child.stdin?.end(input);
   }
   try {
-    const [code, signal] = await once(child, "close");
+    await once(child, "close");
+    const code = child.exitCode;
+    const signal = child.signalCode;
     if (code !== 0) {
       throw new Error(`${command} exited with ${code ?? signal}`);
     }
@@ -103,35 +113,52 @@ const freePort = async () => {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
-  if (!address || typeof address === "string") {
+  const port = address && "port" in address ? address.port : null;
+  if (port === null) {
     throw new Error("Missing loopback port.");
+  }
+  if (!Number.isInteger(port)) {
+    throw new TypeError("Missing loopback port.");
   }
   server.close();
   await once(server, "close");
-  return address.port;
+  return port;
 };
 
 const appPort = await freePort();
 const tls = createHttpsServer();
-const interrupt = async () => {
+const interrupt = async (): Promise<void> => {
   cancelled = true;
   imagePreparationAbort.abort();
   await Promise.allSettled([...children].map(stopChild));
 };
 // Both mise and its launcher may forward a signal; repeated delivery must not
 // restore the default immediate exit while cleanup is still in progress.
-process.on("SIGINT", interrupt);
-process.on("SIGTERM", interrupt);
+process.on("SIGINT", () => {
+  void (async () => {
+    try {
+      await interrupt();
+    } catch {
+      // Cleanup continues in the main finally block.
+    }
+  })();
+});
+process.on("SIGTERM", () => {
+  void (async () => {
+    try {
+      await interrupt();
+    } catch {
+      // Cleanup continues in the main finally block.
+    }
+  })();
+});
 
 try {
   await mkdir(snapshot);
   const listed = await execute(
     "git",
     ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-    {
-      cwd: source,
-      maxBuffer: 16 * 1024 * 1024,
-    },
+    { cwd: source },
   );
   const files = [...new Set(listed.stdout.split("\0").filter(Boolean))].filter(
     (file) =>
@@ -142,13 +169,16 @@ try {
   const copies = await Promise.allSettled(
     files.map(async (file) => {
       // Git also lists submodule directory entries; they are not app sources.
-      const info = await lstat(path.join(source, file)).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") {
-          return null;
+      let info;
+      try {
+        info = await lstat(path.join(source, file));
+      } catch (error) {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+          return;
         }
         throw error;
-      });
-      if (!info || info.isDirectory()) {
+      }
+      if (info.isDirectory()) {
         return;
       }
       await mkdir(path.dirname(path.join(snapshot, file)), { recursive: true });
@@ -156,7 +186,7 @@ try {
     }),
   );
   const failedCopy = copies.find((copy) => copy.status === "rejected");
-  if (failedCopy?.status === "rejected") {
+  if (failedCopy !== undefined && failedCopy.status === "rejected") {
     throw failedCopy.reason;
   }
   assertRunning();
@@ -171,13 +201,17 @@ try {
   await Promise.all(
     packageDirectories.map(async (directory) => {
       const dependencyView = path.join(source, directory, "node_modules");
-      const installed = await lstat(dependencyView).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") {
-          return null;
+      let installed = true;
+      try {
+        await lstat(dependencyView);
+      } catch (error) {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+          installed = false;
+        } else {
+          throw error;
         }
-        throw error;
-      });
-      if (installed === null) {
+      }
+      if (!installed) {
         return;
       }
       await symlink(dependencyView, path.join(snapshot, directory, "node_modules"), "dir");
@@ -224,16 +258,19 @@ try {
         port: appPort,
       },
       (response) => {
-        outgoing.writeHead(response.statusCode ?? 502, response.headers);
+        const statusCode = Number(response.statusCode);
+        outgoing.writeHead(Number.isInteger(statusCode) ? statusCode : 502, response.headers);
         response.pipe(outgoing);
       },
     );
     upstream.on("error", () => {
       outgoing.writeHead(502);
-      outgoing.end();
+      void outgoing.end();
     });
     incoming.pipe(upstream);
-    outgoing.on("close", () => upstream.destroy());
+    outgoing.on("close", () => {
+      upstream.destroy();
+    });
   });
   tls.on("upgrade", (incoming, socket, head) => {
     upgradedSockets.add(socket);
@@ -242,14 +279,21 @@ try {
         `${incoming.method} ${incoming.url} HTTP/${incoming.httpVersion}\r\n${Object.entries(
           incoming.headers,
         )
-          .map(([name, value]) => `${name}: ${value}`)
+          .map(
+            ([name, value]) =>
+              `${name}: ${Array.isArray(value) ? value.join(", ") : (value ?? "")}`,
+          )
           .join("\r\n")}\r\n\r\n`,
       );
       upstream.write(head);
       socket.pipe(upstream).pipe(socket);
     });
-    upstream.on("error", () => socket.destroy());
-    socket.on("error", () => upstream.destroy());
+    upstream.on("error", () => {
+      socket.destroy();
+    });
+    socket.on("error", () => {
+      upstream.destroy();
+    });
     socket.on("close", () => {
       upgradedSockets.delete(socket);
       upstream.destroy();
@@ -259,16 +303,16 @@ try {
   tls.listen(0, "127.0.0.1");
   await once(tls, "listening");
   const address = tls.address();
-  if (!address || typeof address === "string") {
+  if (address === null || !Number.isInteger(address.port)) {
     throw new Error("Missing TLS port.");
   }
-  const origin = `https://localhost:${address.port}`;
+  const { port: tlsPort } = address;
+  const origin = `https://localhost:${tlsPort}`;
   const postgresImage = await ensureProductionNavigationImage({
     async runCommand(args, { signal, timeoutMs }) {
       assertRunning();
       try {
         const result = await execute(docker, ["--host", dockerHost, ...args], {
-          killSignal: "SIGKILL",
           signal,
           timeout: timeoutMs,
         });
@@ -276,12 +320,15 @@ try {
       } catch (error) {
         signal.throwIfAborted();
         if (error instanceof Error && "code" in error && "stderr" in error) {
-          const killed = "killed" in error && error.killed === true;
-          if (typeof error.code === "number" && typeof error.stderr === "string" && !killed) {
-            return { exitCode: error.code, stderr: error.stderr };
+          // SAFETY: execFile rejects with an Error carrying these documented subprocess fields.
+          const details = error as Error & { code?: unknown; killed?: unknown; stderr?: unknown };
+          const killed = details.killed === true;
+          const exitCode = Number(details.code);
+          const stderr = String(details.stderr);
+          if (Number.isInteger(exitCode) && !killed) {
+            return { exitCode, stderr };
           }
         }
-        // oxlint-disable-next-line eslint/preserve-caught-error -- Arbitrary subprocess diagnostics must not escape this boundary.
         throw new Error("Production navigation image command could not complete.");
       }
     },
@@ -306,7 +353,6 @@ try {
   while (true) {
     assertRunning();
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- database initialization must precede migrations
       await runDocker([
         "exec",
         container,
@@ -323,7 +369,6 @@ try {
       if (Date.now() >= deadline) {
         throw error;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- bounded readiness polling
       await delay(500);
     }
   }
@@ -384,7 +429,6 @@ try {
       throw new Error("Production server exited before readiness.");
     }
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- wait for the production server before browser assertions
       const response = await fetch(`http://127.0.0.1:${appPort}/github/installations`, {
         signal: AbortSignal.timeout(2000),
       });
@@ -397,7 +441,6 @@ try {
     if (Date.now() >= readyDeadline) {
       throw new Error("Production server readiness timed out.");
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- bounded readiness polling
     await delay(250);
   }
   await run(process.execPath, [

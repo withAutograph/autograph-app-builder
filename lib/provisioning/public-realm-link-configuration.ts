@@ -115,13 +115,14 @@ export const readPublicRealmLinkConfiguration = async (input: {
     )
     .limit(2);
   await input.assertCurrentOwner();
-  if (rows.length !== 1 || rows[0] === undefined) {
+  const [row] = rows;
+  if (rows.length !== 1 || row === undefined) {
     throw unavailable();
   }
-  const record = savedSchema.parse(rows[0].record);
+  const record = savedSchema.parse(row.record);
   if (
     !isDeepStrictEqual(record.enrollment.authority, input.authority) ||
-    rows[0].requestDigest !== record.scopeDigest
+    row.requestDigest !== record.scopeDigest
   ) {
     throw unavailable();
   }
@@ -216,9 +217,8 @@ export const resolvePublicRealmEnrollment = async (input: {
       .where(and(ownerPredicate(authority), eq(builderProvisioningJournals.requestId, requestId)))
       .limit(1);
     await input.assertCurrentOwner();
-    const row = rows[0];
+    const [row] = rows;
     if (row === undefined) {
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing enrollment metadata is an explicit optional result, not an activated realm.
       return undefined;
     }
     const record = savedSchema.parse(row.record);

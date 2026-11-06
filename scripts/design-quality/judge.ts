@@ -37,15 +37,17 @@ export const judgmentSchema = z.object({
   }),
   strengths: z.array(z.string()),
 });
+export type JudgmentInput = z.input<typeof judgmentSchema>;
+export type Judgment = z.output<typeof judgmentSchema>;
+export type ValidatedJudgment = Judgment & { subjectiveScore: number };
+const projectSchema = z.object({ orgId: z.string(), projectId: z.string() });
 export interface ImageEvidence {
   name: string;
   path: string;
   width: number;
   height: number;
 }
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function validateJudgment(value: unknown, images: ImageEvidence[]) {
-  const judgment = judgmentSchema.parse(value);
+export function validateJudgment(judgment: Judgment, images: ImageEvidence[]): ValidatedJudgment {
   for (const finding of judgment.findings) {
     const image = images.find((i) => i.name === finding.image);
     const r = finding.region;
@@ -69,10 +71,9 @@ Anchors: 0 unusable, 1 major problems, 2 usable with notable issues, 3 strong, 4
 Every finding MUST identify an exact provided image name and a rectangle in that image's original pixel coordinates, severity, explanation and concrete improvement. Don't invent findings or pretend unseen states were tested. Report uncertainties. Keep Arrusted token adherence separate; do not invent a token adherence percentage.
 Return the requested structured object only.`;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function judgeDesign(
   input: { brief: string; evidence: unknown; images: ImageEvidence[] },
-  hooks?: { getToken: () => Promise<string>; generate: () => Promise<unknown> },
+  hooks?: { getToken: () => Promise<string>; generate: () => Promise<JudgmentInput> },
 ) {
   const base = {
     assessedImages: input.images.map((i) => i.name),
@@ -85,10 +86,9 @@ export async function judgeDesign(
       token = await hooks.getToken();
     } else {
       // Official SDK refreshes project OIDC; no static-key fallback is selected.
-      const project = JSON.parse(await readFile(".vercel/project.json", "utf-8")) as {
-        projectId: string;
-        orgId: string;
-      };
+      const project = projectSchema.parse(
+        JSON.parse(await readFile(".vercel/project.json", "utf-8")),
+      );
       token = await getVercelOidcToken({
         project: project.projectId,
         team: project.orgId,
@@ -105,7 +105,7 @@ export async function judgeDesign(
     };
   }
   try {
-    let output: unknown;
+    let output: JudgmentInput;
     let usage: unknown;
     if (hooks) {
       output = await hooks.generate();
@@ -125,6 +125,7 @@ export async function judgeDesign(
         ]),
       );
       const result = await generateText({
+        instructions: rubric,
         maxRetries: 0,
         messages: [
           {
@@ -149,14 +150,13 @@ export async function judgeDesign(
         model: gateway(builderValidationModelId),
         output: Output.object({ schema: judgmentSchema }),
         providerOptions: { gateway: { only: ["openai"] } },
-        instructions: rubric,
       });
       ({ output, usage } = result);
     }
     return {
       ...base,
       status: "complete" as const,
-      ...validateJudgment(output, input.images),
+      ...validateJudgment(judgmentSchema.parse(output), input.images),
       usage,
     };
   } catch {

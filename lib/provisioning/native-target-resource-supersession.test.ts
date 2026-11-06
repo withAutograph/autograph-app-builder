@@ -104,7 +104,7 @@ const fixture = () => {
   let current = structuredClone(owner);
   let receipt: NativeTargetOnboardingApproval | null = null;
   const assertPlanOrigin = vi.fn(
-    async (_owner: NativeTargetCurrentOwner, candidate: NativeTargetOnboardingPlan) => {
+    (_owner: NativeTargetCurrentOwner, candidate: NativeTargetOnboardingPlan) => {
       if (candidate.origin.release.artifactRef !== "artifact-original") {
         throw new Error("captured-release-mismatch");
       }
@@ -112,7 +112,7 @@ const fixture = () => {
   );
   const registry = createNativeTargetOnboardingRegistry({
     assertPlanOrigin,
-    authorize: async (_inv: string, appId: string) => {
+    authorize: (_inv: string, appId: string) => {
       if (
         appId !== "requests-app" ||
         current.authority.ownerUserId !== owner.authority.ownerUserId
@@ -122,7 +122,7 @@ const fixture = () => {
       return structuredClone(current);
     },
     now: () => new Date(time),
-    readApproval: async () => receipt,
+    readApproval: () => receipt,
     store,
   });
   const read = async () => await store.read({ appId: "requests-app", authority });

@@ -19,40 +19,34 @@ import { deploymentArrustedTemplateReader } from "../repository/arrusted-templat
 import type { ArrustedTemplateReader } from "../repository/arrusted-template-reader";
 import { safeSourcePath } from "../repository/source-path";
 
-const digest = z.string().regex(/^[0-9a-f]{64}$/u);
-const objectId = z.string().regex(/^[0-9a-f]{40}$/u);
+const digest = z.hex().length(64);
+const objectId = z.hex().length(40);
+const INVALID_ARCHIVE = "starter-archive-invalid";
+const HTTPS_URL = z.url({ protocol: /^https$/u });
 
-export const starterSourceManifestSchema = z
-  .object({
-    archive: z
-      .object({
-        bytes: z.number().int().positive(),
+export const starterSourceManifestSchema = z.strictObject({
+  archive: z.strictObject({
+    bytes: z.int().positive(),
+    sha256: digest,
+    url: HTTPS_URL,
+  }),
+  files: z
+    .array(
+      z.strictObject({
+        bytes: z.int().nonnegative(),
+        mode: z.enum(["100644", "100755"]),
+        path: z.string().min(1),
         sha256: digest,
-        url: z.string().url().startsWith("https://"),
-      })
-      .strict(),
-    files: z
-      .array(
-        z
-          .object({
-            bytes: z.number().int().nonnegative(),
-            mode: z.enum(["100644", "100755"]),
-            path: z.string().min(1),
-            sha256: digest,
-          })
-          .strict(),
-      )
-      .min(1),
-    source: z
-      .object({
-        repository: z.literal("https://github.com/withAutograph/arrusted-development"),
-        sha: objectId,
-        tree: objectId,
-      })
-      .strict(),
-    version: z.literal(1),
-  })
-  .strict();
+      }),
+    )
+    .min(1),
+  source: z.strictObject({
+    repository: z.literal("https://github.com/withAutograph/arrusted-development"),
+    sha: objectId,
+    tree: objectId,
+  }),
+  version: z.literal(1),
+});
 
 export type StarterSourceManifest = z.infer<typeof starterSourceManifestSchema>;
 export interface StarterSourceFile {
@@ -88,12 +82,26 @@ export interface StarterSource {
 
 const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
 
-// oxlint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function restrictedGit(
   args: string[],
   askpass?: { credentialFile: string; askpassFile: string },
 ) {
-  // oxlint-disable-next-line promise/avoid-new -- Spawn completion is reported through child process events.
+  const env: NodeJS.ProcessEnv = {
+    GIT_ASKPASS: askpass?.askpassFile ?? "/usr/bin/false",
+    GIT_ATTR_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+    GIT_LFS_SKIP_SMUDGE: "1",
+    GIT_NO_LAZY_FETCH: "1",
+    GIT_TERMINAL_PROMPT: "0",
+    HOME: "/dev/null",
+    NODE_ENV: process.env.NODE_ENV ?? "production",
+    PATH: "/usr/bin:/bin",
+    SSH_ASKPASS: "/usr/bin/false",
+    XDG_CONFIG_HOME: "/dev/null",
+  };
+  if (askpass !== undefined) env.APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE = askpass.credentialFile;
   return await new Promise<{ stdout: string }>((resolve, reject) => {
     const child = spawn(
       git,
@@ -111,31 +119,14 @@ async function restrictedGit(
         ...args,
       ],
       {
-        env: {
-          ...(askpass === undefined
-            ? {}
-            : {
-                APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE: askpass.credentialFile,
-              }),
-          GIT_ASKPASS: askpass?.askpassFile ?? "/usr/bin/false",
-          GIT_ATTR_NOSYSTEM: "1",
-          GIT_CONFIG_GLOBAL: "/dev/null",
-          GIT_CONFIG_NOSYSTEM: "1",
-          GIT_CONFIG_SYSTEM: "/dev/null",
-          GIT_LFS_SKIP_SMUDGE: "1",
-          GIT_NO_LAZY_FETCH: "1",
-          GIT_TERMINAL_PROMPT: "0",
-          HOME: "/dev/null",
-          NODE_ENV: process.env.NODE_ENV ?? "production",
-          PATH: "/usr/bin:/bin",
-          SSH_ASKPASS: "/usr/bin/false",
-          XDG_CONFIG_HOME: "/dev/null",
-        },
+        env,
         stdio: ["ignore", "pipe", "ignore"],
       },
     );
     const output: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => output.push(chunk));
+    child.stdout.on("data", (chunk: Buffer) => {
+      output.push(chunk);
+    });
     child.once("error", reject);
     child.once("close", (code) => {
       if (code !== 0) {
@@ -148,11 +139,10 @@ async function restrictedGit(
 }
 
 const starterConfigSchema = z
-  .object({
+  .strictObject({
     manifestSha256: digest,
-    manifestUrl: z.string().url().startsWith("https://"),
+    manifestUrl: HTTPS_URL,
   })
-  .strict()
   .superRefine((value, context) => {
     if (!new URL(value.manifestUrl).pathname.includes(value.manifestSha256)) {
       context.addIssue({
@@ -165,13 +155,10 @@ const starterConfigSchema = z
 
 export type StarterSourceConfig = z.infer<typeof starterConfigSchema>;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sha256(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/* eslint-disable eslint/no-await-in-loop, unicorn/no-negated-condition, eslint/no-negated-condition, sonarjs/too-many-break-or-continue-in-loop, promise/prefer-await-to-callbacks -- These loops and callbacks are required for bounded-memory stream parsing. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function responseBytes(response: Response) {
   if (!response.body) return new Uint8Array(await response.arrayBuffer());
   const chunks: Uint8Array[] = [];
@@ -188,13 +175,11 @@ async function responseBytes(response: Response) {
   return Buffer.concat(chunks);
 }
 
-// oxlint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function tarFiles(tar: AsyncIterable<Uint8Array>) {
   const files = new Map<string, { mode: "100644" | "100755"; bytes: Uint8Array }>();
   const iterator = tar[Symbol.asyncIterator]();
   let pending = new Uint8Array(0);
   let ended = false;
-  // oxlint-disable-next-line sonarjs/cognitive-complexity -- Reads consume chunks until one tar field is complete.
   const readExact = async (size: number, allowEnd = false): Promise<Uint8Array | null> => {
     const chunks: Uint8Array[] = [];
     let length = 0;
@@ -209,7 +194,7 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
         const next = await iterator.next();
         ended = next.done === true;
         if (!ended) {
-          if (!(next.value instanceof Uint8Array)) throw new Error("starter-archive-invalid");
+          if (!(next.value instanceof Uint8Array)) throw new Error(INVALID_ARCHIVE);
           const chunk = Buffer.from(next.value);
           if (chunk.byteLength > 0) {
             chunks.push(chunk);
@@ -220,7 +205,7 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
     }
     if (length < size) {
       if (length === 0 && allowEnd) return null;
-      throw new Error("starter-archive-invalid");
+      throw new Error(INVALID_ARCHIVE);
     }
     const bytes = Buffer.concat(chunks, length);
     if (length > size) {
@@ -252,38 +237,29 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
       8,
     );
     const [type] = header.slice(156);
-    if (
-      !safeSourcePath(path) ||
-      !Number.isSafeInteger(size) ||
-      size < 0 ||
-      ![0, 48].includes(type) ||
-      files.has(path)
-    ) {
-      throw new Error("starter-archive-invalid");
+    if (!safeSourcePath(path) || files.has(path) || ![0, 48].includes(type) || size < 0) {
+      throw new Error(INVALID_ARCHIVE);
     }
-    if (!Number.isSafeInteger(size)) throw new Error("starter-archive-invalid");
+    if (!Number.isSafeInteger(size)) throw new Error(INVALID_ARCHIVE);
     const bytes = await readExact(size);
-    if (!bytes) throw new Error("starter-archive-invalid");
-    files.set(path, {
-      bytes,
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-      mode: rawMode & 0o111 ? "100755" : "100644",
-    });
+    if (!bytes) throw new Error(INVALID_ARCHIVE);
+    let mode: StarterSourceFile["mode"] = "100644";
+    if (rawMode & 0o111) mode = "100755";
+    files.set(path, { bytes, mode });
     const padding = (512 - (size % 512)) % 512;
-    if (padding > 0 && !(await readExact(padding))) throw new Error("starter-archive-invalid");
+    if (padding > 0 && !(await readExact(padding))) throw new Error(INVALID_ARCHIVE);
   }
   for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) {
     // Drain the compressed archive so its integrity digest is checked in full.
     void chunk;
   }
   if (!files.size) {
-    throw new Error("starter-archive-invalid");
+    throw new Error(INVALID_ARCHIVE);
   }
   return files;
 }
 
 /* eslint-enable eslint/no-await-in-loop, unicorn/no-negated-condition, eslint/no-negated-condition, sonarjs/too-many-break-or-continue-in-loop, promise/prefer-await-to-callbacks */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadStarterSource(input: {
   config: StarterSourceConfig;
   fetch?: typeof fetch;
@@ -330,10 +306,9 @@ export async function loadStarterSource(input: {
   if (!archiveResponse.ok) {
     throw new Error("starter-archive-unavailable");
   }
-  if (!archiveResponse.body) throw new Error("starter-archive-invalid");
+  if (!archiveResponse.body) throw new Error(INVALID_ARCHIVE);
   let archiveBytes = 0;
   const archiveHash = createHash("sha256");
-  /* oxlint-disable promise/prefer-await-to-callbacks -- Transform callbacks keep hashing inside the backpressured byte stream. */
   const archiveIntegrity = new Transform({
     transform(chunk: Uint8Array, _encoding, callback) {
       archiveBytes += chunk.byteLength;
@@ -390,7 +365,6 @@ export async function loadStarterSource(input: {
  * transport as fresh App Builder sessions.  The legacy archive loader above
  * remains readable solely for sessions that already recorded a V3 receipt.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function cloneStarterSource(input?: {
   reader?: ArrustedTemplateReader;
   /** Injectable command transport; the canonical origin and source checks still apply. */
@@ -484,7 +458,6 @@ export async function cloneStarterSource(input?: {
         }
         return {
           bytes: await readFile(filePath),
-          // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
           mode: stat.mode & 0o111 ? "100755" : "100644",
           path,
         };

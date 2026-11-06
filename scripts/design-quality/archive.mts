@@ -3,13 +3,185 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { renderReport } from "./report";
 import { captureFilename } from "./archive-path";
-import { readArchivedReport } from "./archive-entry";
 import { formatWithOxfmt } from "../format-with-oxfmt.mts";
+import { z } from "zod";
+import type { Adherence } from "./evidence";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+type Report = Omit<Parameters<typeof renderReport>[0], "captures" | "judge" | "adherence"> & {
+  judge: Parameters<typeof renderReport>[0]["judge"] & {
+    subjectiveScore?: number;
+    model?: string;
+    rubricVersion?: number;
+    ratings?: Record<string, { score: number; reason: string }>;
+    strengths?: string[];
+    findings?: { severity: string; image: string; explanation: string; improvement: string }[];
+    limitations?: string[];
+  };
+  adherence?: Adherence;
+  archive?: { archivedAt: string; evaluatedAt: string; name: string; note: string };
+  captures: (Omit<
+    Parameters<typeof renderReport>[0]["captures"][number],
+    "styles" | "interaction"
+  > & {
+    path?: string;
+    styles?: JsonValue & {
+      categories?: Record<string, StyleSummary>;
+      observations?: { category: string; provenance: string; classification: string }[];
+    };
+    interaction: JsonValue & { status: string };
+  })[];
+};
+type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue | undefined };
+interface StyleSummary {
+  counts: Record<string, number>;
+  assessed: number;
+  total: number;
+  coveragePercent: number | null;
+}
+interface ArchiveIndexEntry {
+  createdAt: string;
+  archive: { name: string };
+  judge: { subjectiveScore?: number };
+}
+
+const archivedIndexEntrySchema = z.object({
+  archive: z.object({ name: z.string() }),
+  createdAt: z.string(),
+  judge: z.object({ subjectiveScore: z.number().optional() }),
+});
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.null(),
+    z.boolean(),
+    z.number(),
+    z.string(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema.optional()),
+  ]),
+);
+const reportParser: z.ZodType<Report> = z.looseObject({
+  adherence: z
+    .object({
+      coveragePercent: z.number().nullable(),
+      dimensions: z.record(
+        z.string(),
+        z.object({
+          assessed: z.number(),
+          browserCount: z.number(),
+          conforming: z.number(),
+          coveragePercent: z.number().nullable(),
+          nonconforming: z.number(),
+          percent: z.number().nullable(),
+          staticCount: z.number(),
+          total: z.number(),
+          unassessed: z.number(),
+        }),
+      ),
+      limitations: z.array(z.string()),
+      method: z.string(),
+      observations: z.array(
+        z.looseObject({
+          category: z.string(),
+          classification: z.string(),
+          provenance: z.string(),
+        }),
+      ),
+      score: z.number().nullable(),
+      status: z.string(),
+      version: z.number(),
+    })
+    .optional(),
+  archive: z
+    .object({
+      archivedAt: z.string(),
+      evaluatedAt: z.string(),
+      name: z.string(),
+      note: z.string(),
+    })
+    .optional(),
+  captures: z.array(
+    z.object({
+      interaction: jsonValueSchema.and(z.object({ status: z.string() })),
+      measurements: jsonValueSchema,
+      name: z.string(),
+      path: z.string().optional(),
+      state: z.string(),
+      styles: jsonValueSchema.optional(),
+    }),
+  ),
+  case: z
+    .object({
+      evidence: z.array(z.object({ path: z.string(), repo: z.string(), status: z.string() })),
+      id: z.string(),
+      notes: z.string(),
+      outcomes: z.array(z.string()),
+      reviewQuestions: z.array(z.string()),
+      title: z.string(),
+    })
+    .optional(),
+  createdAt: z.string(),
+  evaluationNotes: z.array(z.string()).optional(),
+  judge: z.object({
+    findings: z
+      .array(
+        z.object({
+          explanation: z.string(),
+          image: z.string(),
+          improvement: z.string(),
+          severity: z.string(),
+        }),
+      )
+      .optional(),
+    limitations: z.array(z.string()).optional(),
+    model: z.string().optional(),
+    ratings: z.record(z.string(), z.object({ reason: z.string(), score: z.number() })).optional(),
+    reason: z.string().optional(),
+    rubricVersion: z.number().optional(),
+    status: z.string().optional(),
+    strengths: z.array(z.string()).optional(),
+    subjectiveScore: z.number().optional(),
+  }),
+  reference: jsonValueSchema.optional(),
+  source: z
+    .object({
+      implementationDiagnostics: z
+        .array(
+          z.object({
+            code: z.string(),
+            column: z.number(),
+            line: z.number(),
+            message: z.string(),
+            path: z.string(),
+          }),
+        )
+        .optional(),
+    })
+    .catchall(jsonValueSchema.optional()),
+  sourceFiles: z.array(z.object({ content: z.string(), path: z.string() })).optional(),
+});
+const reportFilename = "report.json";
+
 async function writeFile(filePath: string, content: string) {
   await writeRawFile(filePath, await formatWithOxfmt(filePath, content));
 }
+const readArchiveIndexEntry = async (filePath: string): Promise<ArchiveIndexEntry | null> => {
+  try {
+    const contents = await readFile(filePath, "utf-8");
+    const value: unknown = JSON.parse(contents);
+    return archivedIndexEntrySchema.parse(value);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+};
 
 const { values } = parseArgs({
   options: {
@@ -18,48 +190,55 @@ const { values } = parseArgs({
     "report-dir": { type: "string" },
   },
 });
-if (values.help) {
+if (values.help === true) {
   console.log("mise run eval:design-archive -- --report-dir PATH --name stock-exceptions");
   process.exit(0);
 }
-if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(values.name)) {
+const { name, "report-dir": reportDirectory } = values;
+const hasValidReportDirectory = reportDirectory !== undefined && reportDirectory !== "";
+const hasValidName = name !== undefined && name !== "";
+if (!hasValidReportDirectory || !hasValidName || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(name)) {
   throw new Error("Supply --report-dir and a lowercase kebab-case --name");
 }
-const input = path.resolve(values["report-dir"]);
-const report = JSON.parse(await readFile(path.join(input, "report.json"), "utf-8"));
+const input = path.resolve(reportDirectory);
+const reportContents = await readFile(path.join(input, reportFilename), "utf-8");
+const reportJson: unknown = JSON.parse(reportContents);
+const report = reportParser.parse(reportJson);
 const timestamp = new Date(report.createdAt).toISOString();
+const { subjectiveScore } = report.judge;
+const subjectiveScoreLabel =
+  subjectiveScore === undefined ? "Not available" : `${subjectiveScore}/100`;
 const date = timestamp.slice(0, 10);
 const time = timestamp.slice(11, 23).replaceAll(/[:.]/gu, "");
 const archiveRoot = path.resolve("docs/reports/design-quality");
-const relative = `${date}/${values.name}-${time}Z`;
+const relative = `${date}/${name}-${time}Z`;
 const destination = path.join(archiveRoot, relative);
 await mkdir(path.join(archiveRoot, date), { recursive: true });
 // A report is a historical observation: never silently replace an existing run.
 await mkdir(destination);
 for (const capture of report.captures) {
   const filename = captureFilename(capture.name);
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   await copyFile(path.join(input, filename), path.join(destination, filename));
   capture.path = filename;
 }
 report.archive = {
   archivedAt: new Date().toISOString(),
   evaluatedAt: timestamp,
-  name: values.name,
+  name,
   note: "Saved generated preview; advisory model judgment, not human-calibrated ground truth. Local machine paths omitted.",
 };
-await writeFile(path.join(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+await writeFile(path.join(destination, reportFilename), `${JSON.stringify(report, null, 2)}\n`);
 await writeFile(path.join(destination, "index.html"), renderReport(report));
-const md = (v: unknown) =>
-  String(v).replaceAll(/[<>|]/gu, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c] ?? c);
+const md = (value: string | number | null) =>
+  String(value).replaceAll(/[<>|]/gu, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c] ?? c);
 const lines = [
-  `# ${values.name} — ${timestamp}`,
+  `# ${name} — ${timestamp}`,
   "",
   "[All reports](../../README.md) · [Interactive HTML report](index.html) · [Full measurements and scoring](report.json)",
   "",
   "GitHub renders this summary and the screenshots. Download or clone this folder to open the HTML report locally; GitHub does not serve it as a website.",
   "",
-  `**Subjective design score:** ${report.judge.subjectiveScore === undefined ? "Not available" : `${report.judge.subjectiveScore}/100`}. Model: ${report.judge.model ?? "not run"}. Rubric: ${report.judge.rubricVersion ?? "not run"}.`,
+  `**Subjective design score:** ${subjectiveScoreLabel}. Model: ${report.judge.model ?? "not run"}. Rubric: ${report.judge.rubricVersion ?? "not run"}.`,
   "",
   "This report evaluates the captured preview; evaluation itself does not regenerate the app or prove a built backend. Scores are advisory and not human-calibrated.",
   "",
@@ -77,15 +256,9 @@ if (report.adherence) {
     "",
     "| Dimension | Conforming | Nonconforming | Unassessed | Adherence |",
     "| --- | --- | --- | --- | --- |",
-    ...Object.entries(a.dimensions).map(([name, value]) => {
-      const d = value as {
-        conforming: number;
-        nonconforming: number;
-        unassessed: number;
-        assessed: number;
-        percent: number | null;
-      };
-      return `| ${name} | ${d.conforming} | ${d.nonconforming} | ${d.unassessed} | ${d.percent === null ? "n/a" : `${Math.round(d.percent)}%`} (${d.conforming}/${d.assessed}) |`;
+    ...Object.entries(a.dimensions).map(([dimensionName, value]) => {
+      const percent = value.percent === null ? "n/a" : `${Math.round(value.percent)}%`;
+      return `| ${dimensionName} | ${value.conforming} | ${value.nonconforming} | ${value.unassessed} | ${percent} (${value.conforming}/${value.assessed}) |`;
     }),
     "",
     "Scores from different evaluator versions or captured states are not directly comparable.",
@@ -93,8 +266,7 @@ if (report.adherence) {
   );
 }
 for (const [axis, rating] of Object.entries(report.judge.ratings ?? {})) {
-  const r = rating as { score: number; reason: string };
-  lines.push(`| ${md(axis)} | ${r.score}/4 | ${md(r.reason)} |`);
+  lines.push(`| ${md(axis)} | ${rating.score}/4 | ${md(rating.reason)} |`);
 }
 lines.push("", "## Strengths", "");
 for (const strength of report.judge.strengths ?? []) {
@@ -117,14 +289,9 @@ lines.push(
 );
 for (const capture of report.captures) {
   for (const [category, summary] of Object.entries(capture.styles?.categories ?? {})) {
-    const s = summary as {
-      counts: Record<string, number>;
-      assessed: number;
-      total: number;
-      coveragePercent: number | null;
-    };
+    const s = summary;
     lines.push(
-      `| ${md(capture.name)} | ${md(category)} | ${capture.styles.observations?.filter((o: { category: string; provenance: string; classification: string }) => o.category === category && o.provenance === "generated" && o.classification === "semantic-token-reference").length ?? s.counts["token-reference"] ?? 0}/${s.assessed} | ${s.coveragePercent ?? "n/a"}% (${s.assessed}/${s.total}) |`,
+      `| ${md(capture.name)} | ${md(category)} | ${capture.styles.observations?.filter((o) => o.category === category && o.provenance === "generated" && o.classification === "semantic-token-reference").length ?? s.counts["token-reference"] ?? 0}/${s.assessed} | ${s.coveragePercent ?? "n/a"}% (${s.assessed}/${s.total}) |`,
     );
   }
 }
@@ -151,30 +318,27 @@ const rows: {
   path: string;
   name: string;
   date: string;
-  score: unknown;
+  score: string | number;
 }[] = [];
 for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
-  if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/u.test(day.name)) {
-    continue;
-  }
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  for (const run of await readdir(path.join(archiveRoot, day.name), {
-    withFileTypes: true,
-  })) {
-    if (!run.isDirectory()) {
-      continue;
+  if (day.isDirectory() && /^\d{4}-\d{2}-\d{2}$/u.test(day.name)) {
+    for (const run of await readdir(path.join(archiveRoot, day.name), {
+      withFileTypes: true,
+    })) {
+      if (run.isDirectory()) {
+        const saved = await readArchiveIndexEntry(
+          path.join(archiveRoot, day.name, run.name, reportFilename),
+        );
+        if (saved !== null) {
+          rows.push({
+            date: saved.createdAt,
+            name: saved.archive.name,
+            path: `${day.name}/${run.name}`,
+            score: saved.judge.subjectiveScore ?? "not scored",
+          });
+        }
+      }
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const saved = await readArchivedReport(path.join(archiveRoot, day.name, run.name));
-    if (saved === null) {
-      continue;
-    }
-    rows.push({
-      date: saved.createdAt,
-      name: saved.archive.name,
-      path: `${day.name}/${run.name}`,
-      score: saved.judge.subjectiveScore ?? "not scored",
-    });
   }
 }
 rows.sort((a, b) => b.date.localeCompare(a.date));

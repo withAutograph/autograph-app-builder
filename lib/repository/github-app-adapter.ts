@@ -17,6 +17,9 @@ import type {
   GitHubPublicationAdapter,
   GitHubSourceResolutionAdapter,
   GitHubTargetSourceResolutionAdapter,
+  GitHubMutationAcknowledgement,
+  DraftPublicationReadBack,
+  FreshRepositoryReadBack,
   GitHubDraftPullRequestContent,
   GitHubFreshRepositoryContent,
   GitHubRepositoryObservation,
@@ -50,140 +53,118 @@ const mutationRejectionCode = z.enum([
   "reviewed-path-changed",
 ]);
 
-const permissionSnapshotSchema = z
-  .object({
-    administration: z.enum(["none", "write"]),
-    contents: z.enum(["read", "write"]),
-    metadata: z.literal("read"),
-    pullRequests: z.enum(["none", "write"]),
-    variables: z.literal("read"),
-    workflows: z.enum(["none", "write"]),
-  })
-  .strict();
+const permissionSnapshotSchema = z.strictObject({
+  administration: z.enum(["none", "write"]),
+  contents: z.enum(["read", "write"]),
+  metadata: z.literal("read"),
+  pullRequests: z.enum(["none", "write"]),
+  variables: z.literal("read"),
+  workflows: z.enum(["none", "write"]),
+});
 
-const installationSnapshotSchema = z
-  .object({
-    accountId: decimal,
-    accountLogin: z.string().min(1).max(100),
-    accountType: z.enum(["Organization", "User"]),
-    grantedPermissions: permissionSnapshotSchema,
-    installationId: decimal,
-    repositorySelection: z.enum(["all", "selected"]),
-    selectedRepositoryIds: z.array(decimal),
-  })
-  .strict();
+const installationSnapshotSchema = z.strictObject({
+  accountId: decimal,
+  accountLogin: z.string().min(1).max(100),
+  accountType: z.enum(["Organization", "User"]),
+  grantedPermissions: permissionSnapshotSchema,
+  installationId: decimal,
+  repositorySelection: z.enum(["all", "selected"]),
+  selectedRepositoryIds: z.array(decimal),
+});
 
-const repositorySnapshotSchema = z
-  .object({
-    defaultBranch: z.string().min(1).max(200),
-    headSha: objectId,
-    headTree: objectId,
-    name: z.string().min(1).max(100),
-    owner: z.string().min(1).max(100),
-    repositoryId: decimal,
-    repositoryVariableNames: z.array(z.string().min(1).max(255)),
-    visibility: z.literal("private"),
-  })
-  .strict();
+const repositorySnapshotSchema = z.strictObject({
+  defaultBranch: z.string().min(1).max(200),
+  headSha: objectId,
+  headTree: objectId,
+  name: z.string().min(1).max(100),
+  owner: z.string().min(1).max(100),
+  repositoryId: decimal,
+  repositoryVariableNames: z.array(z.string().min(1).max(255)),
+  visibility: z.literal("private"),
+});
 
-const freshReadBackSchema = z
-  .object({
-    idempotencyKey: digest,
-    initialCommit: z
-      .object({
-        parents: z.array(objectId),
-        sha: objectId,
-        tree: objectId,
-      })
-      .strict(),
-    repository: repositorySnapshotSchema,
-  })
-  .strict();
+const freshReadBackSchema = z.strictObject({
+  idempotencyKey: digest,
+  initialCommit: z.strictObject({
+    parents: z.array(objectId),
+    sha: objectId,
+    tree: objectId,
+  }),
+  repository: repositorySnapshotSchema,
+});
 
 const branchSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("absent") }).strict(),
-  z
-    .object({
-      branchName: z.string().min(1).max(200),
-      branchSha: objectId,
-      branchTree: objectId,
-      changedContentDigest: digest,
-      idempotencyKey: digest,
-      normalizedChangedPaths: z.array(z.string()),
-      status: z.literal("present"),
-    })
-    .strict(),
+  z.strictObject({ status: z.literal("absent") }),
+  z.strictObject({
+    branchName: z.string().min(1).max(200),
+    branchSha: objectId,
+    branchTree: objectId,
+    changedContentDigest: digest,
+    idempotencyKey: digest,
+    normalizedChangedPaths: z.array(z.string()),
+    status: z.literal("present"),
+  }),
 ]);
 
 const pullRequestSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("absent") }).strict(),
-  z
-    .object({
-      baseBranch: z.string().min(1).max(200),
-      baseRepositoryId: decimal,
-      baseSha: objectId,
-      changeSetDigest: digest,
-      draft: z.boolean(),
-      headBranch: z.string().min(1).max(200),
-      headRepositoryId: decimal,
-      headSha: objectId,
-      idempotencyKey: digest,
-      pullRequestId: decimal,
-      pullRequestNumber: z.number().int().positive().safe(),
-      status: z.literal("present"),
-    })
-    .strict(),
-]);
-
-const draftReadBackSchema = z
-  .object({
-    branch: branchSchema,
-    changedPathsSinceBase: z.array(z.string()),
-    idempotencyKey: digest,
-    pullRequest: pullRequestSchema,
-    repository: repositorySnapshotSchema,
-  })
-  .strict();
-
-const existingDraftSchema = z
-  .object({
-    baseBranch: z.string().min(1),
+  z.strictObject({ status: z.literal("absent") }),
+  z.strictObject({
+    baseBranch: z.string().min(1).max(200),
     baseRepositoryId: decimal,
+    baseSha: objectId,
+    changeSetDigest: digest,
     draft: z.boolean(),
-    headBranch: z.string().min(1),
+    headBranch: z.string().min(1).max(200),
     headRepositoryId: decimal,
     headSha: objectId,
-    headTree: objectId,
-    name: z.string().min(1),
-    number: z.number().int().positive(),
-    owner: z.string().min(1),
+    idempotencyKey: digest,
     pullRequestId: decimal,
-    repositoryId: decimal,
-    state: z.enum(["open", "closed"]),
-    verifiedBuilderOrigin: z
-      .object({ appId: decimal, authorId: decimal, marker: digest })
-      .strict()
-      .optional(),
-  })
-  .strict();
+    pullRequestNumber: z.number().int().positive(),
+    status: z.literal("present"),
+  }),
+]);
+
+const draftReadBackSchema = z.strictObject({
+  branch: branchSchema,
+  changedPathsSinceBase: z.array(z.string()),
+  idempotencyKey: digest,
+  pullRequest: pullRequestSchema,
+  repository: repositorySnapshotSchema,
+});
+
+const existingDraftSchema = z.strictObject({
+  baseBranch: z.string().min(1),
+  baseRepositoryId: decimal,
+  draft: z.boolean(),
+  headBranch: z.string().min(1),
+  headRepositoryId: decimal,
+  headSha: objectId,
+  headTree: objectId,
+  name: z.string().min(1),
+  number: z.number().int().positive(),
+  owner: z.string().min(1),
+  pullRequestId: decimal,
+  repositoryId: decimal,
+  state: z.enum(["open", "closed"]),
+  verifiedBuilderOrigin: z
+    .strictObject({ appId: decimal, authorId: decimal, marker: digest })
+    .optional(),
+});
 
 const acknowledgementSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    requestId: z.string().regex(/^[-A-Za-z0-9_]{1,128}$/u),
+    status: z.literal("accepted"),
+  }),
   z
-    .object({
-      requestId: z.string().regex(/^[-A-Za-z0-9_]{1,128}$/u),
-      status: z.literal("accepted"),
-    })
-    .strict(),
-  z
-    .object({
-      bytes: z.number().int().nonnegative().safe().optional(),
+    .strictObject({
+      bytes: z.number().int().nonnegative().optional(),
       code: mutationRejectionCode,
       operation: z.literal("create-blob").optional(),
       path: z.string().refine(safeSourcePath).optional(),
       providerStatus: z.number().int().min(400).max(599).optional(),
       status: z.literal("rejected"),
     })
-    .strict()
     .refine((value) => {
       if (value.code === "reviewed-path-changed") {
         return (
@@ -215,7 +196,7 @@ export interface GitHubTargetAccessProvider {
     operation: "resolve-existing-source" | "publish-draft-pull-request";
     repositoryId: string;
     requestedPermissions: RequestedPermissions;
-  }) => Promise<unknown>;
+  }) => Promise<z.input<typeof targetAccessObservationSchema>>;
 }
 
 /** Additive v3 path; existing v2 publication adapters retain their current contract. */
@@ -229,7 +210,6 @@ export const createGitHubTargetAccessAdapter = (
   ): Promise<GitHubTargetAccessProof> {
     const requestedPermissions = githubPermissionsFor(operation);
     const observed = targetAccessObservationSchema.parse(
-      // eslint-disable-next-line eslint/no-use-before-define -- Function declaration is hoisted; the adapter uses the shared sanitization boundary.
       await sanitizedProviderCall(
         async () =>
           await provider.inspectTargetAccess({ operation, repositoryId, requestedPermissions }),
@@ -259,72 +239,86 @@ export interface GitHubAppInstallationProvider {
   inspectDestinationFiles?: (input: {
     repository: GitHubRepositoryObservation;
     paths: readonly string[];
-  }) => Promise<unknown>;
+  }) => Promise<readonly { digest: string; mode: "644" | "755"; path: string }[]>;
   readDestinationFile?: (input: {
     repository: GitHubRepositoryObservation;
     path: string;
-  }) => Promise<unknown>;
+  }) => Promise<{ bytes: Uint8Array; digest: string; mode: "644" | "755" } | null>;
   inspectHistoricalAppSource?: (input: {
     repositoryId: string;
     owner: string;
     name: string;
     source: HistoricalAppSourceSelector;
-  }) => Promise<unknown>;
-  inspectExistingDraft: (input: ExistingDraftInspectionRequest) => Promise<unknown>;
+  }) => Promise<z.input<typeof historicalAppSourceObservationSchema>>;
+  inspectExistingDraft: (
+    input: ExistingDraftInspectionRequest,
+  ) => Promise<z.input<typeof existingDraftSchema>>;
   updateExistingDraft: (
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
-  ) => Promise<unknown>;
+  ) => Promise<GitHubMutationAcknowledgement>;
   inspectAppliedDraftUpdate: (
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
     observed: ExistingDraftObservation,
-  ) => Promise<unknown>;
+  ) => Promise<boolean>;
   inspectAppliedDraftRepair?: (
     proposal: ExistingDraftUpdateProposal,
     resolvedTree: string,
     observed: ExistingDraftObservation,
-  ) => Promise<unknown>;
+  ) => Promise<boolean>;
   reconcileExistingDraft: (
     proposal: ExistingDraftReconciliationProposal,
     content: ReconciliationContent,
     recovery?: OwnedDraftInspectionRecovery,
-  ) => Promise<unknown>;
+  ) => Promise<GitHubMutationAcknowledgement>;
   inspectAppliedDraftReconciliation: (
     proposal: ExistingDraftReconciliationProposal,
     observed: ExistingDraftObservation,
     recovery?: OwnedDraftInspectionRecovery,
-  ) => Promise<unknown>;
+  ) => Promise<boolean>;
   inspectInstallation: (input: {
     operation: GitHubOperation;
     requestedPermissions: RequestedPermissions;
-  }) => Promise<unknown>;
-  inspectRepository: (input: { repositoryId: string; ref: string }) => Promise<unknown>;
-  inspectDestination: (input: { owner: string; name: string }) => Promise<unknown>;
-  inspectFreshRepositoryOutcome: (proposal: FreshRepositoryProposal) => Promise<unknown>;
+  }) => Promise<z.input<typeof installationSnapshotSchema>>;
+  inspectRepository: (input: {
+    repositoryId: string;
+    ref: string;
+  }) => Promise<z.input<typeof repositorySnapshotSchema>>;
+  inspectDestination: (input: {
+    owner: string;
+    name: string;
+  }) => Promise<"absent" | z.input<typeof repositorySnapshotSchema>>;
+  inspectFreshRepositoryOutcome: (
+    proposal: FreshRepositoryProposal,
+  ) => Promise<z.input<typeof freshReadBackSchema> | undefined>;
   createPrivateFreshHistoryRepository: (
     proposal: FreshRepositoryProposal,
     content: GitHubFreshRepositoryContent,
-  ) => Promise<unknown>;
-  inspectDraftPublication: (proposal: DraftPullRequestProposal) => Promise<unknown>;
+  ) => Promise<GitHubMutationAcknowledgement>;
+  inspectDraftPublication: (
+    proposal: DraftPullRequestProposal,
+  ) => Promise<z.input<typeof draftReadBackSchema>>;
   publishDraftPullRequest: (
     proposal: DraftPullRequestProposal,
     content: GitHubDraftPullRequestContent,
-  ) => Promise<unknown>;
+  ) => Promise<GitHubMutationAcknowledgement>;
 }
 
-const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+type HashInput = Parameters<typeof JSON.stringify>[0];
+type ProviderError = Error & { cause?: unknown };
+
+const hash = (value: HashInput) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const inspectSelectedRepositoryRevisionAction = "inspect the selected repository revision";
 
-const providerStatus = z.object({ status: z.number().int().min(400).max(599) }).passthrough();
+const providerStatus = z.looseObject({ status: z.number().int().min(400).max(599) });
 
-// eslint-disable-next-line eslint/func-style -- Keep provider errors free of URLs, headers, and tokens.
-function safeProviderStatus(error: unknown): number | undefined {
+function safeProviderStatus(error: ProviderError): number | undefined {
   const direct = providerStatus.safeParse(error);
   if (direct.success) {
     return direct.data.status;
   }
-  const cause = error instanceof Error ? error.cause : undefined;
+  const { cause } = error;
   const nested = providerStatus.safeParse(cause);
   return nested.success ? nested.data.status : undefined;
 }
@@ -351,24 +345,18 @@ const safeProviderRecovery = (status: number | undefined): string => {
   return "Check GitHub availability and repository access. Inspect the current state before retrying a write.";
 };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function sanitizedProviderCall(
-  operation: () => Promise<unknown>,
-  action: string,
-): Promise<unknown> {
+async function sanitizedProviderCall<T>(operation: () => Promise<T>, action: string): Promise<T> {
   try {
     return await operation();
   } catch (error) {
     const status = safeProviderStatus(error);
     const statusSuffix = status === undefined ? "" : ` (HTTP ${status})`;
     const recovery = safeProviderRecovery(status);
-    // oxlint-disable-next-line eslint/preserve-caught-error -- Raw provider errors may contain authorization headers or request URLs.
     throw new Error(`GitHub could not ${action}${statusSuffix}. ${recovery}`);
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function parseProviderResponse<T>(schema: z.ZodType<T>, input: unknown): T {
+function parseProviderResponse<T>(schema: z.ZodType<T>, input: T): T {
   const result = schema.safeParse(input);
   if (!result.success) {
     throw new Error("GitHub provider response was invalid.");
@@ -376,9 +364,8 @@ function parseProviderResponse<T>(schema: z.ZodType<T>, input: unknown): T {
   return result.data;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function repositoryObservation(
-  snapshotInput: unknown,
+  snapshotInput: z.input<typeof repositorySnapshotSchema>,
   installationIdentityDigest: string,
 ): GitHubRepositoryObservation {
   const snapshot = parseProviderResponse(repositorySnapshotSchema, snapshotInput);
@@ -427,11 +414,9 @@ export const createGitHubTargetSourceResolutionAdapter = (
  * Validates an operation-scoped GitHub App provider without reading a token or
  * accepting caller-supplied permissions, endpoints, or provider payloads.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubAppPublicationAdapter(
   provider: GitHubAppInstallationProvider,
 ): GitHubPublicationAdapter {
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function inspectInstallation(operation: GitHubOperation) {
     const expected = githubPermissionsFor(operation);
     const snapshot = parseProviderResponse(
@@ -459,10 +444,9 @@ export function createGitHubAppPublicationAdapter(
     });
   }
 
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function observationFor(
     operation: GitHubOperation,
-    snapshotOperation: () => Promise<unknown>,
+    snapshotOperation: () => Promise<z.input<typeof repositorySnapshotSchema>>,
     action: string,
   ) {
     const identity = await inspectInstallation(operation);
@@ -493,16 +477,6 @@ export function createGitHubAppPublicationAdapter(
           ),
         );
     },
-    async inspectAppliedDraftUpdate(proposal, content, observed) {
-      return z
-        .boolean()
-        .parse(
-          await sanitizedProviderCall(
-            async () => await provider.inspectAppliedDraftUpdate(proposal, content, observed),
-            "verify whether the draft PR update was applied",
-          ),
-        );
-    },
     async inspectAppliedDraftRepair(proposal, resolvedTree, observed) {
       const inspect = provider.inspectAppliedDraftRepair;
       if (inspect === undefined) {
@@ -519,6 +493,16 @@ export function createGitHubAppPublicationAdapter(
           ),
         );
     },
+    async inspectAppliedDraftUpdate(proposal, content, observed) {
+      return z
+        .boolean()
+        .parse(
+          await sanitizedProviderCall(
+            async () => await provider.inspectAppliedDraftUpdate(proposal, content, observed),
+            "verify whether the draft PR update was applied",
+          ),
+        );
+    },
     async inspectDestination(input) {
       const raw = await sanitizedProviderCall(
         async () => await provider.inspectDestination(input),
@@ -530,7 +514,7 @@ export function createGitHubAppPublicationAdapter(
       const identity = await inspectInstallation("create-fresh-repository");
       return repositoryObservation(raw, identity.digest);
     },
-    async inspectDraftPublication(proposal) {
+    async inspectDraftPublication(proposal): Promise<DraftPublicationReadBack> {
       const snapshot = parseProviderResponse(
         draftReadBackSchema,
         await sanitizedProviderCall(
@@ -561,13 +545,13 @@ export function createGitHubAppPublicationAdapter(
         ),
       );
     },
-    async inspectFreshRepositoryOutcome(proposal) {
+    async inspectFreshRepositoryOutcome(proposal): Promise<FreshRepositoryReadBack | undefined> {
       const raw = await sanitizedProviderCall(
         async () => await provider.inspectFreshRepositoryOutcome(proposal),
         "inspect the repository creation result",
       );
       if (raw === undefined) {
-        return;
+        return undefined;
       }
       const snapshot = parseProviderResponse(freshReadBackSchema, raw);
       if (snapshot.initialCommit.parents.length !== 0) {
@@ -587,7 +571,6 @@ export function createGitHubAppPublicationAdapter(
       return { ...unsigned, digest: hash(unsigned) };
     },
     inspectInstallation,
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async inspectRepository(input) {
       const { operation, repositoryId, ref } = input;
       return await observationFor(
@@ -685,11 +668,9 @@ export type GitHubAppSourceResolutionProvider = Pick<
 >;
 
 /** The read-only subset used to bind one exact existing-repository source. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubAppSourceResolutionAdapter(
   provider: GitHubAppSourceResolutionProvider,
 ): GitHubSourceResolutionAdapter {
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function inspectInstallation(operation: GitHubOperation) {
     const requestedPermissions = githubPermissionsFor(operation);
     const snapshot = parseProviderResponse(

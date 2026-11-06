@@ -1,6 +1,5 @@
 import type { PrivateOperatorApprovalObservationPort } from "../eve/private-operator-approval-observation";
 import { HostedSessionReadTimeoutError } from "../eve/hosted-session-read-timeout-error";
-/* oxlint-disable sonarjs/no-nested-functions -- One resource lease retains a single approved attempt through its private checkpoints. */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
@@ -120,6 +119,36 @@ export interface HostedContinuityDependencies {
   now?: () => Date;
 }
 const unavailable = () => new HostedOperatorError("reconciliation_required");
+const approvalStage = async <T>(
+  recoveryStage: NonNullable<HostedOperatorError["recoveryStage"]>,
+  run: () => Promise<T>,
+): Promise<T> => {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
+    let code: HostedOperatorError["code"] = "operator_unavailable";
+    let progress: boolean | undefined;
+    let stage = recoveryStage;
+    if (error instanceof HostedOperatorError) {
+      const { code: errorCode, recoveryProgressAdvanced, recoveryStage: errorStage } = error;
+      code = errorCode;
+      stage = errorStage ?? stage;
+      progress = recoveryProgressAdvanced;
+    } else if (error instanceof HostedSessionReadTimeoutError) {
+      progress = error.progressPersisted;
+    } else if (recoveryStage === "native_history") {
+      code = "reconciliation_required";
+    }
+    throw new HostedOperatorError(code, {
+      cause: error,
+      recoveryProgressAdvanced: progress,
+      recoveryStage: stage,
+    });
+  }
+};
 const intentIdFor = (context: HostedOperatorContext, key: string) => {
   const hash = createHash("sha256")
     .update(
@@ -139,35 +168,6 @@ const intentIdFor = (context: HostedOperatorContext, key: string) => {
 };
 export const createHostedContinuityOperations = (deps: HostedContinuityDependencies) => {
   const now = deps.now ?? (() => new Date());
-  const approvalStage = async <T>(
-    recoveryStage: NonNullable<HostedOperatorError["recoveryStage"]>,
-    run: () => Promise<T>,
-  ): Promise<T> => {
-    try {
-      return await run();
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        throw error;
-      }
-      let code: HostedOperatorError["code"] = "operator_unavailable";
-      let progress: boolean | undefined;
-      let stage = recoveryStage;
-      if (error instanceof HostedOperatorError) {
-        code = error.code;
-        stage = error.recoveryStage ?? stage;
-        progress = error.recoveryProgressAdvanced;
-      } else if (error instanceof HostedSessionReadTimeoutError) {
-        progress = error.progressPersisted;
-      } else if (recoveryStage === "native_history") {
-        code = "reconciliation_required";
-      }
-      throw new HostedOperatorError(code, {
-        cause: error,
-        recoveryProgressAdvanced: progress,
-        recoveryStage: stage,
-      });
-    }
-  };
   const read = async (context: HostedOperatorContext, intentId: string) => {
     await deps.assertOwner(context);
     const record = await deps.store.read({ authority: context.authority, intentId });
@@ -183,7 +183,8 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
   ) => {
     const changed = change(structuredClone(record));
     changed.revision = record.revision + 1;
-    const saved = await deps.store.compareAndSet({
+    const { compareAndSet } = deps.store;
+    const saved = await compareAndSet({
       expectedRevision: record.revision,
       now: now(),
       record: continuityRecordSchema.parse(changed),
@@ -195,15 +196,20 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
   };
   const approvalObservation = (
     record: ContinuityRecord,
-  ): PrivateOperatorApprovalObservationPort => ({
-    ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
-    save: async (state) => {
-      await approvalStage(
-        "journal",
-        async () => await update(record, (value) => ({ ...value, approvalObservation: state })),
-      );
-    },
-  });
+  ): PrivateOperatorApprovalObservationPort => {
+    const observation: PrivateOperatorApprovalObservationPort = {
+      save: async (state) => {
+        await approvalStage(
+          "journal",
+          async () => await update(record, (value) => ({ ...value, approvalObservation: state })),
+        );
+      },
+    };
+    if (record.approvalObservation !== undefined) {
+      observation.state = record.approvalObservation;
+    }
+    return observation;
+  };
   const assertRecoverablePredecessor = (record: ContinuityRecord, successorId: string) => {
     if (
       ![
@@ -469,10 +475,10 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
               return { ...value, ...patch };
             });
           };
-          let renewalTask: Promise<void> | undefined;
+          let renewalTask: Promise<void> | null = null;
           let stopping = false;
           const renewal = setInterval(() => {
-            if (stopping || renewalTask !== undefined) {
+            if (stopping || renewalTask !== null) {
               return;
             }
             renewalTask = (async () => {
@@ -496,7 +502,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
                 }
               }
             })().finally(() => {
-              renewalTask = undefined;
+              renewalTask = null;
             });
           }, 15_000);
           const stopRenewal = async () => {
@@ -535,20 +541,21 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
             }
             await assertFence();
             const cancelled = signal?.aborted === true;
-            current = await update(current, (value) => ({
-              ...value,
-              state: "reconciliation-required",
-              ...(cancelled ? { cancelled: true, pendingStage: "revocation" as const } : {}),
-              ...(publicationFailed
-                ? {
-                    failure: {
-                      reason: "runtime-closed-before-publication-completed" as const,
-                      stage: "publication" as const,
-                    },
-                    pendingStage: "revocation" as const,
-                  }
-                : {}),
-            }));
+            current = await update(current, (value) => {
+              const next = { ...value, state: "reconciliation-required" as const };
+              if (cancelled) {
+                next.cancelled = true;
+                next.pendingStage = "revocation";
+              }
+              if (publicationFailed) {
+                next.failure = {
+                  reason: "runtime-closed-before-publication-completed",
+                  stage: "publication",
+                };
+                next.pendingStage = "revocation";
+              }
+              return next;
+            });
             if ((cancelled || current.failure !== undefined) && closed) {
               try {
                 await deps.projection.revoke(
@@ -721,12 +728,15 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
         assertRecoverablePredecessor(predecessor, intentId);
       }
       const selected = await deps.resolvePlan(context, runtime);
-      const plan = hostedContinuityPlanSchema.parse({
+      const planInput = {
         ...selected,
         intentId,
-        ...(predecessor === undefined ? {} : { predecessorIntentId: predecessor.requestId }),
         planRef: `_protected-operator/continuity-plans/${intentId}`,
-      });
+      };
+      if (predecessor !== undefined) {
+        planInput.predecessorIntentId = predecessor.requestId;
+      }
+      const plan = hostedContinuityPlanSchema.parse(planInput);
       await deps.assertSetup(context, plan);
       const record = await deps.store.reserve({
         now: now(),

@@ -1,9 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
-import { hostedOperatorSourceConfigurationSchema } from "./hosted-operator-source-configuration";
+import { describe, expect, it } from "vitest";
+import { hostedOperatorSourceConfigurationSchema } from "./hosted-operator-source-configuration-schema";
 import { matchesExternalTrustedSources } from "./hosted-operator-host-protection";
-
-// Parser tests never open the private provider/control-plane factory.
-vi.mock("./hosted-operator-deployment", () => ({ createHostedOperatorControlPlane: vi.fn() }));
 
 const application = () => ({
   accessRoles: ["member"],
@@ -49,7 +46,11 @@ describe("deployment-owned app publication configuration", () => {
   } as const;
   it("accepts external administrator evidence only for the actual team and both project pairs", () => {
     const parsed = applications.parse({ actual: { ...application(), hostProtection } }).actual
-      .hostProtection!;
+      .hostProtection;
+    expect(parsed).toBeDefined();
+    if (parsed === undefined) {
+      throw new Error("Expected external host protection evidence.");
+    }
     expect(matchesExternalTrustedSources(parsed, "team", "prj_actual_app", "gateway")).toBe(true);
     expect(matchesExternalTrustedSources(parsed, "foreign-team", "prj_actual_app", "gateway")).toBe(
       false,

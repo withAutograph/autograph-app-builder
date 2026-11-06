@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from "node:util";
 import { verifyOperatorWorkerSourceCapture } from "./operator-worker-source-capture";
 import type { OperatorWorkerSourceCapture } from "./operator-worker-source-capture";
 import { centralHostCanonicalBytes } from "./central-integration-host-contract";
-/* oxlint-disable eslint/sort-keys, eslint/no-await-in-loop, eslint/complexity, sonarjs/cognitive-complexity, sonarjs/expression-complexity -- Rust context serialization order and per-frame authority/checkpoint relay order are protocol contracts. */
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 
@@ -81,6 +80,20 @@ const VENDOR_COMMAND = "protected-materialize";
 const GENERATED_COMMAND = "protected-generated-app-install";
 const GENERATED_INSPECT_COMMAND = "protected-generated-app-install-readback";
 const AUTH_COMMAND = "auth-protected-schema";
+const INTEGRATION_CONTROL_SCHEMA_COMMAND = "integration-control-schema";
+const INTEGRATION_CONTROL_SCHEMA_READBACK_COMMAND = "integration-control-schema-readback";
+const INTEGRATION_FENCE_APP_AUTHORITY_COMMAND = "integration-fence-app-authority";
+const INTEGRATION_FENCE_APP_AUTHORITY_READBACK_COMMAND = "integration-fence-app-authority-readback";
+const INTEGRATION_SERVICE_MEMBERSHIPS_COMMAND = "integration-service-memberships";
+const INTEGRATION_SERVICE_MEMBERSHIPS_READBACK_COMMAND = "integration-service-memberships-readback";
+const INTEGRATION_REGISTER_CENTRAL_APP_COMMAND = "integration-register-central-app";
+const INTEGRATION_REGISTER_CENTRAL_APP_READBACK_COMMAND =
+  "integration-register-central-app-readback";
+const CENTRAL_INTEGRATION_SCHEMA_COMMAND = "central-integration-schema";
+const CENTRAL_INTEGRATION_SCHEMA_READBACK_COMMAND = "central-integration-schema-readback";
+const CENTRAL_INTEGRATION_SOURCE_CAPTURE_COMMAND = "central-integration-source-capture";
+const APP_INTEGRATION_SCOPE = "app-integration-bootstrap-v1";
+const CENTRAL_INTEGRATION_SCOPE = "central-integration-bootstrap-v1";
 export const GENERATED_RELEASE_MEMBERS = [
   "app-artifact.json",
   "cue-to-sql-source-map.json",
@@ -146,8 +159,8 @@ const workerScopeSchema = z.enum([
   MEMBERSHIP_SCOPE,
   RESOURCES_SCOPE,
   ACCESS_SCOPE,
-  "app-integration-bootstrap-v1",
-  "central-integration-bootstrap-v1",
+  APP_INTEGRATION_SCOPE,
+  CENTRAL_INTEGRATION_SCOPE,
 ]);
 const workerSubcommandSchema = z.enum([
   HC_COMMAND,
@@ -164,17 +177,17 @@ const workerSubcommandSchema = z.enum([
   ACCESS_COMMAND,
   ACCESS_INSPECT_COMMAND,
   GENERATED_INSPECT_COMMAND,
-  "integration-control-schema",
-  "integration-control-schema-readback",
-  "integration-fence-app-authority",
-  "integration-fence-app-authority-readback",
-  "integration-service-memberships",
-  "integration-service-memberships-readback",
-  "integration-register-central-app",
-  "integration-register-central-app-readback",
-  "central-integration-schema",
-  "central-integration-schema-readback",
-  "central-integration-source-capture",
+  INTEGRATION_CONTROL_SCHEMA_COMMAND,
+  INTEGRATION_CONTROL_SCHEMA_READBACK_COMMAND,
+  INTEGRATION_FENCE_APP_AUTHORITY_COMMAND,
+  INTEGRATION_FENCE_APP_AUTHORITY_READBACK_COMMAND,
+  INTEGRATION_SERVICE_MEMBERSHIPS_COMMAND,
+  INTEGRATION_SERVICE_MEMBERSHIPS_READBACK_COMMAND,
+  INTEGRATION_REGISTER_CENTRAL_APP_COMMAND,
+  INTEGRATION_REGISTER_CENTRAL_APP_READBACK_COMMAND,
+  CENTRAL_INTEGRATION_SCHEMA_COMMAND,
+  CENTRAL_INTEGRATION_SCHEMA_READBACK_COMMAND,
+  CENTRAL_INTEGRATION_SOURCE_CAPTURE_COMMAND,
 ]);
 
 export interface ProtectedInstallerWorkerDescriptor {
@@ -815,23 +828,23 @@ const requestMatchesWorkerScope = (
         : ["resources:roles", "resources:database", "resources:acl"].includes(effectId))
     );
   }
-  if (worker.operationScope === "central-integration-bootstrap-v1") {
+  if (worker.operationScope === CENTRAL_INTEGRATION_SCOPE) {
     return (
       "kind" in context &&
       context.kind === "central_integration_schema" &&
       context.app_id === "integrations" &&
       context.tenant_targets.length === 0 &&
       tenantId === null &&
-      worker.subcommand === "central-integration-schema" &&
+      worker.subcommand === CENTRAL_INTEGRATION_SCHEMA_COMMAND &&
       effectId === "install-central-schema"
     );
   }
-  if (worker.operationScope === "app-integration-bootstrap-v1") {
+  if (worker.operationScope === APP_INTEGRATION_SCOPE) {
     const effects = {
-      "integration-control-schema": "install-control-schema",
+      [INTEGRATION_CONTROL_SCHEMA_COMMAND]: "install-control-schema",
       "integration-service-memberships": "bind-service-memberships",
       "integration-register-central-app": "register-central-app",
-      "integration-fence-app-authority": "fence-app-integration-authority",
+      [INTEGRATION_FENCE_APP_AUTHORITY_COMMAND]: "fence-app-integration-authority",
     } as const;
     return (
       tenantId === null &&
@@ -1280,7 +1293,6 @@ const runSandboxWorker = async (
     throw resourceMismatch();
   }
 
-  // oxlint-disable-next-line eslint/no-use-before-define -- Both fixed entry points share the transport declared below.
   return await runPinnedFileSpoolTransport(
     configuration,
     createSandbox,
@@ -1567,7 +1579,7 @@ const runPinnedFileSpoolTransport = async (
         throw unknownSeen ? reconciliationRequired() : resourceMismatch();
       }
       await assertCurrent();
-      if (worker.subcommand === "integration-fence-app-authority") {
+      if (worker.subcommand === INTEGRATION_FENCE_APP_AUTHORITY_COMMAND) {
         if (
           setup.authorizeAppIntegrationRemoval === undefined ||
           request.effect_id !== "fence-app-integration-authority" ||
@@ -1736,8 +1748,8 @@ const runPinnedFileSpoolTransport = async (
         "app-integration-connections.json",
         "app-integration-authority.json",
         ...([
-          "integration-fence-app-authority",
-          "integration-fence-app-authority-readback",
+          INTEGRATION_FENCE_APP_AUTHORITY_COMMAND,
+          INTEGRATION_FENCE_APP_AUTHORITY_READBACK_COMMAND,
         ].includes(worker.subcommand)
           ? [
               "app-integration-removal-approved-plan.json",
@@ -1745,7 +1757,7 @@ const runPinnedFileSpoolTransport = async (
               "app-integration-removal-connections.json",
             ]
           : []),
-        ...(worker.operationScope === "central-integration-bootstrap-v1"
+        ...(worker.operationScope === CENTRAL_INTEGRATION_SCOPE
           ? ["central-integration-approved-plan.json", "central-integration-connections.json"]
           : []),
       ]);
@@ -1980,18 +1992,15 @@ const runPinnedFileSpoolTransport = async (
       (access ||
         installReadback ||
         membership ||
-        worker.operationScope === "app-integration-bootstrap-v1" ||
-        worker.operationScope === "central-integration-bootstrap-v1")
+        worker.operationScope === APP_INTEGRATION_SCOPE ||
+        worker.operationScope === CENTRAL_INTEGRATION_SCOPE)
     ) {
       await assertCurrent();
       const raw = await readSpoolJson(sandbox, path.posix.join(spool, "readback.json"), signal);
-      /* oxlint-disable eslint/no-nested-ternary, sonarjs/no-nested-conditional -- Preserve the existing three wire-protocol readback selections. */
       const schema =
-        worker.subcommand === "integration-fence-app-authority-readback"
+        worker.subcommand === INTEGRATION_FENCE_APP_AUTHORITY_READBACK_COMMAND
           ? removalReadbackSchema
-          : ["app-integration-bootstrap-v1", "central-integration-bootstrap-v1"].includes(
-                worker.operationScope,
-              )
+          : [APP_INTEGRATION_SCOPE, CENTRAL_INTEGRATION_SCOPE].includes(worker.operationScope)
             ? accessReadbackSchema.extend({ receipt: z.unknown() })
             : accessReadbackSchema;
       /* oxlint-enable eslint/no-nested-ternary, sonarjs/no-nested-conditional */
@@ -2112,8 +2121,8 @@ export const runAppIntegrationFileSpool = async (
     .parse(input.worker);
   if (
     !(
-      (worker.operationScope === "app-integration-bootstrap-v1" &&
-        worker.id === "app-integration-bootstrap-v1" &&
+      (worker.operationScope === APP_INTEGRATION_SCOPE &&
+        worker.id === APP_INTEGRATION_SCOPE &&
         !("kind" in input.context)) ||
       (worker.operationScope === RESOURCES_SCOPE &&
         "kind" in input.context &&
@@ -2122,13 +2131,13 @@ export const runAppIntegrationFileSpool = async (
         input.context.resource.scope === "integration_control_database" &&
         [RESOURCES_COMMAND, RESOURCES_INSPECT_COMMAND].includes(worker.subcommand) &&
         input.resourceCredentialBytes !== undefined) ||
-      (worker.operationScope === "central-integration-bootstrap-v1" &&
-        worker.id === "central-integration-bootstrap-v1" &&
+      (worker.operationScope === CENTRAL_INTEGRATION_SCOPE &&
+        worker.id === CENTRAL_INTEGRATION_SCOPE &&
         "kind" in input.context &&
         input.context.app_id === "integrations" &&
         input.context.tenant_targets.length === 0 &&
         ((input.context.kind === "central_integration_schema" &&
-          ["central-integration-schema", "central-integration-schema-readback"].includes(
+          [CENTRAL_INTEGRATION_SCHEMA_COMMAND, "central-integration-schema-readback"].includes(
             worker.subcommand,
           )) ||
           (input.context.kind === "central_source_capture" &&
@@ -2150,7 +2159,7 @@ export const runAppIntegrationFileSpool = async (
   ) {
     throw resourceMismatch();
   }
-  const removal = worker.subcommand === "integration-fence-app-authority";
+  const removal = worker.subcommand === INTEGRATION_FENCE_APP_AUTHORITY_COMMAND;
   if (
     (removal && (!input.authorizeAppIntegrationRemoval || input.readOnly)) ||
     (!removal && input.authorizeAppIntegrationRemoval !== undefined)
@@ -2249,7 +2258,7 @@ export const runCentralIntegrationFileSpool = async (
   dependencies: Parameters<typeof runAppIntegrationFileSpool>[2] = {},
 ) => {
   if (
-    input.worker.operationScope !== "central-integration-bootstrap-v1" ||
+    input.worker.operationScope !== CENTRAL_INTEGRATION_SCOPE ||
     !["central_integration_schema", "central_source_capture"].includes(input.context.kind)
   ) {
     throw resourceMismatch();

@@ -10,14 +10,37 @@ import { assertRepositoryReleasePolicyAtGitSnapshot } from "./supported-template
 
 export const LOCAL_PUBLICATION_VERSION = 2 as const;
 export const LOCAL_PUBLICATION_ALLOWED_MODES = ["644", "755"] as const;
+type Digestible =
+  | LocalPublicationProposal
+  | LocalPublicationJournal
+  | DestinationSnapshot
+  | ReviewedChangeSetReceipt
+  | { dirty: readonly DirtyPathSnapshot[]; index: DestinationSnapshot["index"] }
+  | {
+      changeSetDigest: string;
+      approvedPaths: readonly string[];
+      changes: readonly OverlayChange[];
+      contractDigest: string;
+      digest: string;
+      preconditionStatusDigest: string;
+      proposalDigest: string;
+      repositoryContractDigest: string;
+      reviewDigest: string;
+      sourceReceiptDigest: string;
+      validationDigest: string;
+      version: number;
+    }
+  | { path: string; postimage: PublicationPathEvidence["after"] }[];
+const failedReceiptMessage = "The failed local-publication receipt is not canonical.";
 const topologyPath = "microfrontends.json";
+const publicationDigestKey = "digest";
 
 export const executionOrder = (paths: readonly string[]): readonly string[] => [
   ...paths.filter((path) => path !== topologyPath),
   ...paths.filter((path) => path === topologyPath),
 ];
 
-export const stableDigest = (value: unknown): string =>
+export const stableDigest = (value: Digestible): string =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 export const contentDigest = (value: Uint8Array): string =>
@@ -53,7 +76,7 @@ export interface DirtyPathSnapshot {
   worktreeStatus: string;
   indexMode?: string;
   indexObjectId?: string;
-  kind: "absent" | "regular" | "directory" | "symlink" | "special";
+  kind: "absent" | "present";
   mode?: string;
   size?: number;
   contentDigest?: string;
@@ -173,7 +196,8 @@ export const unrelatedProjectionDigest = (
 };
 
 const validMode = (mode: string): boolean =>
-  (LOCAL_PUBLICATION_ALLOWED_MODES as readonly string[]).includes(mode);
+  // SAFETY: Comparing strings does not require widening the readonly tuple; membership is exact.
+  LOCAL_PUBLICATION_ALLOWED_MODES.some((allowedMode) => allowedMode === mode);
 
 const canonicalChanges = (review: ReviewedChangeSetReceipt): readonly OverlayChange[] => {
   const paths = new Set<string>();
@@ -187,11 +211,12 @@ const canonicalChanges = (review: ReviewedChangeSetReceipt): readonly OverlayCha
         throw new Error("The reviewed change set contains an unsupported file mode or digest.");
       }
     }
-    if (
-      (change.kind === "added" && (change.before !== undefined || change.after === undefined)) ||
-      (change.kind === "modified" && (change.before === undefined || change.after === undefined)) ||
-      (change.kind === "deleted" && (change.before === undefined || change.after !== undefined))
-    ) {
+    const beforeExists = change.before !== undefined;
+    const afterExists = change.after !== undefined;
+    const malformedAdded = change.kind === "added" && (beforeExists || !afterExists);
+    const malformedModified = change.kind === "modified" && (!beforeExists || !afterExists);
+    const malformedDeleted = change.kind === "deleted" && (!beforeExists || afterExists);
+    if (malformedAdded || malformedModified || malformedDeleted) {
       throw new Error("The reviewed change set contains a malformed change.");
     }
   }
@@ -272,15 +297,16 @@ export const createLocalPublicationProposal = (input: {
     sourceSha: source.sourceSha,
     sourceTree: source.sourceTree,
   });
-  if (
-    destination.canonicalPath !== source.sourcePath ||
-    destination.headSha !== source.sourceSha ||
-    destination.headTree !== source.sourceTree ||
-    destination.contractDigest !== source.contractDigest ||
-    review.sourceSha !== source.sourceSha ||
-    review.sourceTree !== source.sourceTree ||
-    review.repositoryContractDigest !== source.contractDigest
-  ) {
+  const destinationMatchesSource =
+    destination.canonicalPath === source.sourcePath &&
+    destination.headSha === source.sourceSha &&
+    destination.headTree === source.sourceTree &&
+    destination.contractDigest === source.contractDigest;
+  const reviewMatchesSource =
+    review.sourceSha === source.sourceSha &&
+    review.sourceTree === source.sourceTree &&
+    review.repositoryContractDigest === source.contractDigest;
+  if (!destinationMatchesSource || !reviewMatchesSource) {
     throw new Error("The destination is not the exact original reviewed source checkout.");
   }
   const overlap = destination.dirty.find((entry) =>
@@ -372,18 +398,24 @@ export const proposalFromJournal = (
   version: receipt.version,
 });
 
-export const receiptDigest = <T extends { digest?: string }>(receipt: T): string => {
-  const unsigned = Object.fromEntries(Object.entries(receipt).filter(([key]) => key !== "digest"));
+export const receiptDigest = (receipt: { digest?: string }): string => {
+  const unsigned = Object.fromEntries(
+    Object.entries(receipt).filter(([key]) => key !== publicationDigestKey),
+  );
   return stableDigest(unsigned);
 };
 
 const exactPathEvidence = (journal: LocalPublicationJournal): readonly PublicationPathEvidence[] =>
-  journal.changes.map((change) => ({
-    operation: change.kind,
-    path: change.path,
-    ...(change.before === undefined ? {} : { before: change.before }),
-    ...(change.after === undefined ? {} : { after: change.after }),
-  }));
+  journal.changes.map((change) => {
+    const evidence: PublicationPathEvidence = { operation: change.kind, path: change.path };
+    if (change.before !== undefined) {
+      evidence.before = change.before;
+    }
+    if (change.after !== undefined) {
+      evidence.after = change.after;
+    }
+    return evidence;
+  });
 
 const samePaths = (left: readonly string[], right: readonly string[]) =>
   JSON.stringify(left) === JSON.stringify(right);
@@ -397,6 +429,35 @@ const isOrderedUniqueSubset = (
     positions.every((position) => position >= 0) &&
     new Set(paths).size === paths.length &&
     positions.every((position, index) => index === 0 || position > (positions[index - 1] ?? -1))
+  );
+};
+
+const hasCanonicalFailurePartition = (journal: LocalPublicationFailureReceipt): boolean => {
+  const applied = new Set(journal.appliedPaths);
+  const accounted = [...journal.rolledBackPaths, ...journal.conflictedPaths];
+  const canonicalPartition =
+    new Set(accounted).size === accounted.length &&
+    samePaths(
+      accounted.filter((path) => applied.has(path)).toSorted(compareOverlayPaths),
+      [...journal.appliedPaths].toSorted(compareOverlayPaths),
+    );
+  const uncertain = new Set(journal.uncertainPaths);
+  const rolledBack = new Set(journal.rolledBackPaths);
+  const conflicted = new Set(journal.conflictedPaths);
+  const expectedRecovery = journal.conflictedPaths.length > 0 || journal.uncertainPaths.length > 0;
+  const evidenceIsDisjoint =
+    !journal.rolledBackPaths.some((path) => !applied.has(path)) &&
+    !journal.conflictedPaths.some((path) => !applied.has(path)) &&
+    !journal.uncertainPaths.some((path) => applied.has(path)) &&
+    ![...uncertain].some((path) => rolledBack.has(path) || conflicted.has(path));
+  const failureMatchesRecovery =
+    (expectedRecovery && journal.reason === "rollback-conflict") ||
+    (!expectedRecovery && journal.reason === "mutation-failed");
+  return (
+    evidenceIsDisjoint &&
+    canonicalPartition &&
+    journal.recoveryRequired === expectedRecovery &&
+    failureMatchesRecovery
   );
 };
 
@@ -426,20 +487,21 @@ export const assertCanonicalLocalPublicationJournal = (journal: LocalPublication
   }
 
   if (journal.status === "succeeded") {
+    const successfulPathsMatch =
+      samePaths(journal.intentPaths, journal.executionPaths) &&
+      samePaths(journal.appliedPaths, journal.executionPaths);
+    const hasNoFailureEvidence =
+      journal.rolledBackPaths.length === 0 &&
+      journal.conflictedPaths.length === 0 &&
+      journal.uncertainPaths.length === 0 &&
+      !journal.recoveryRequired;
+    const expectedPostconditionDigest = stableDigest(
+      journal.pathEvidence.map(({ path, after: postimage }) => ({ path, postimage })),
+    );
     if (
-      !samePaths(journal.intentPaths, journal.executionPaths) ||
-      !samePaths(journal.appliedPaths, journal.executionPaths) ||
-      journal.rolledBackPaths.length !== 0 ||
-      journal.conflictedPaths.length !== 0 ||
-      journal.uncertainPaths.length !== 0 ||
-      journal.recoveryRequired ||
-      journal.postconditionDigest !==
-        stableDigest(
-          journal.pathEvidence.map(({ path, after: postimage }) => ({
-            path,
-            postimage,
-          })),
-        )
+      !successfulPathsMatch ||
+      !hasNoFailureEvidence ||
+      journal.postconditionDigest !== expectedPostconditionDigest
     ) {
       throw new Error("The successful local-publication receipt is not canonical.");
     }
@@ -451,53 +513,33 @@ export const assertCanonicalLocalPublicationJournal = (journal: LocalPublication
     !isOrderedUniqueSubset(journal.conflictedPaths, journal.executionPaths) ||
     !isOrderedUniqueSubset(journal.uncertainPaths, journal.executionPaths)
   ) {
-    throw new Error("The failed local-publication receipt is not canonical.");
+    throw new Error(failedReceiptMessage);
   }
   if (
     journal.reason !== "precondition-failed" &&
     journal.reason !== "mutation-failed" &&
     journal.reason !== "rollback-conflict"
   ) {
-    throw new Error("The failed local-publication receipt is not canonical.");
+    throw new Error(failedReceiptMessage);
   }
-  const applied = new Set(journal.appliedPaths);
-  const accounted = [...journal.rolledBackPaths, ...journal.conflictedPaths];
-  const canonicalPartition =
-    new Set(accounted).size === accounted.length &&
-    samePaths(
-      accounted.filter((path) => applied.has(path)).toSorted(compareOverlayPaths),
-      [...journal.appliedPaths].toSorted(compareOverlayPaths),
-    );
   if (journal.reason === "precondition-failed") {
-    if (
-      journal.intentPaths.length !== 0 ||
-      journal.appliedPaths.length !== 0 ||
-      journal.rolledBackPaths.length !== 0 ||
-      journal.conflictedPaths.length !== 0 ||
-      journal.uncertainPaths.length !== 0 ||
-      journal.recoveryRequired
-    ) {
-      throw new Error("The failed local-publication receipt is not canonical.");
+    const hasNoMutationEvidence = [
+      journal.intentPaths,
+      journal.appliedPaths,
+      journal.rolledBackPaths,
+      journal.conflictedPaths,
+      journal.uncertainPaths,
+    ].every((paths) => paths.length === 0);
+    if (!hasNoMutationEvidence || journal.recoveryRequired) {
+      throw new Error(failedReceiptMessage);
     }
     return;
   }
   if (!samePaths(journal.intentPaths, journal.executionPaths)) {
-    throw new Error("The failed local-publication receipt is not canonical.");
+    throw new Error(failedReceiptMessage);
   }
-  const uncertain = new Set(journal.uncertainPaths);
-  const expectedRecovery = journal.conflictedPaths.length > 0 || journal.uncertainPaths.length > 0;
-  if (
-    journal.rolledBackPaths.some((path) => !applied.has(path)) ||
-    journal.conflictedPaths.some((path) => !applied.has(path)) ||
-    journal.uncertainPaths.some((path) => applied.has(path)) ||
-    [...uncertain].some(
-      (path) => journal.rolledBackPaths.includes(path) || journal.conflictedPaths.includes(path),
-    ) ||
-    !canonicalPartition ||
-    journal.recoveryRequired !== expectedRecovery ||
-    journal.reason !== (expectedRecovery ? "rollback-conflict" : "mutation-failed")
-  ) {
-    throw new Error("The failed local-publication receipt is not canonical.");
+  if (!hasCanonicalFailurePartition(journal)) {
+    throw new Error(failedReceiptMessage);
   }
 };
 
@@ -511,15 +553,24 @@ export const assertExactDurablePublicationSuccess: (
     throw new Error("The published local workflow does not have its durable success journal.");
   }
   assertCanonicalLocalPublicationJournal(durable);
+  const durableIdentityMatches =
+    durable.digest === workflowReceipt.digest &&
+    durable.proposalDigest === workflowReceipt.proposalDigest &&
+    durable.publishedByCallId === workflowReceipt.publishedByCallId &&
+    durable.sourceReceiptDigest === workflowReceipt.sourceReceiptDigest;
+  const durableReviewMatches = durable.reviewDigest === workflowReceipt.reviewDigest;
+  const durableDestinationMatches =
+    durable.destinationPath === workflowReceipt.destinationPath &&
+    durable.postconditionDigest === workflowReceipt.postconditionDigest;
+  const durableProposalMatches = exactProposalMatch(
+    proposalFromJournal(durable),
+    proposalFromJournal(workflowReceipt),
+  );
   if (
-    durable.digest !== workflowReceipt.digest ||
-    durable.proposalDigest !== workflowReceipt.proposalDigest ||
-    durable.publishedByCallId !== workflowReceipt.publishedByCallId ||
-    durable.sourceReceiptDigest !== workflowReceipt.sourceReceiptDigest ||
-    durable.reviewDigest !== workflowReceipt.reviewDigest ||
-    durable.destinationPath !== workflowReceipt.destinationPath ||
-    durable.postconditionDigest !== workflowReceipt.postconditionDigest ||
-    !exactProposalMatch(proposalFromJournal(durable), proposalFromJournal(workflowReceipt))
+    !durableIdentityMatches ||
+    !durableReviewMatches ||
+    !durableDestinationMatches ||
+    !durableProposalMatches
   ) {
     throw new Error(
       "The published local workflow does not exactly match its durable success journal.",

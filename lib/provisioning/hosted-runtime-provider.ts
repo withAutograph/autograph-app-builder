@@ -317,17 +317,22 @@ export const createHostedRuntimeVercelProvider = (input: {
         await request(
           `/v10/projects/${projectPath}/env`,
           { upsert: String(upsert) },
-          selectedKeys.map((key) => ({
-            comment:
+          selectedKeys.map((key) => {
+            const variable: RuntimeVariableInput = {
+              key,
+              target: ["preview"],
+              type: "encrypted",
+              value: values[key],
+            };
+            variable.comment =
               options === undefined
                 ? `App Builder isolated runtime for ${input.target.appId}`
-                : runtimeComment(options.runtimeId),
-            ...(environmentGitBranch === null ? {} : { gitBranch: environmentGitBranch }),
-            key,
-            target: ["preview"],
-            type: "encrypted",
-            value: values[key],
-          })),
+                : runtimeComment(options.runtimeId);
+            if (environmentGitBranch !== null) {
+              variable.gitBranch = environmentGitBranch;
+            }
+            return variable;
+          }),
         );
       };
       if (options === undefined) {
@@ -407,7 +412,6 @@ export const createHostedRuntimeVercelProvider = (input: {
         configurationId,
         fail: (code) => new HostedRuntimeProviderError(code),
         projectId: input.target.projectId,
-        // oxlint-disable-next-line eslint/require-await -- forward the existing authenticated API client.
         request: async (path) => await request(path),
         scopeId: input.target.scopeId,
       });

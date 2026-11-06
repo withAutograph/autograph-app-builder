@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await -- The in-memory operator ports perform no I/O. */
 import { describe, expect, it, vi } from "vitest";
 import { operatorPublicResultSchema } from "./hosted-operator-contract";
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
@@ -13,113 +12,112 @@ import {
   requiredFixture,
 } from "./hosted-operator-unapproved-app-successor.test-support";
 
-describe("unapproved app successor service integration", () => {
-  const serviceFixture = () => {
-    const { record, added } = captureFixture();
-    const candidate = inspectUnapprovedAppSuccessor(
-      record,
-      context.target,
-      added,
-      Date.parse(observedAt),
-    );
-    if (!candidate) {
-      throw new Error("missing candidate");
-    }
-    const next = createUnapprovedParticipantPlan(candidate, added);
-    let row = { record: structuredClone(record), revision: 1 };
-    let deniedCall: string | undefined;
-    let raceOnNextCas = false;
-    const readApproval = vi.fn(
-      async (input: { action: "prepare" | "cleanup"; callId: string; planDigest: string }) => {
-        if (input.callId === deniedCall) {
-          return null;
-        }
-        let id: string | undefined;
-        if (input.callId === candidate.account.accountApprovedByCallId) {
-          id = candidate.account.accountApprovalId;
-        } else if (input.callId === candidate.bootstrap.auth.approvedByCallId) {
-          id = candidate.bootstrap.auth.approvalId;
-        }
-        return id === undefined
-          ? null
-          : {
-              action: input.action,
-              approvalId: id,
-              approved: true,
-              callId: input.callId,
-              planDigest: input.planDigest,
-            };
-      },
-    );
-    const executeEffect = vi.fn();
-    const deps: ProtectedHostedOperatorDependencies = {
-      assertAuthorized: vi.fn(async () => {}),
-      authorize: async () => context,
-      bindings: vi.fn(),
-      executeEffect,
-      now: () => Date.parse(observedAt),
-      plan: vi.fn(async () => next),
-      readApproval,
-      reconcile: vi.fn(async () => ({ status: "unknown" as const })),
-      store: {
-        compareAndSet: async (input: { expectedRevision: number; record: typeof record }) => {
-          if (raceOnNextCas) {
-            raceOnNextCas = false;
-            requiredFixture(row.record.operator).pendingEffectId = "auth-schema";
-            row.revision += 1;
-          }
-          if (input.expectedRevision !== row.revision) {
-            // CAS failure explicitly returns no row.
-            // oxlint-disable-next-line unicorn/no-useless-undefined
-            return undefined;
-          }
-          row = {
-            record: hostedRuntimeJournalRecordSchema.parse(input.record),
-            revision: row.revision + 1,
+const serviceFixture = () => {
+  const { record, added } = captureFixture();
+  const candidate = inspectUnapprovedAppSuccessor(
+    record,
+    context.target,
+    added,
+    Date.parse(observedAt),
+  );
+  if (!candidate) {
+    throw new Error("missing candidate");
+  }
+  const next = createUnapprovedParticipantPlan(candidate, added);
+  let row = { record: structuredClone(record), revision: 1 };
+  let deniedCall: string | undefined;
+  let raceOnNextCas = false;
+  const readApproval = vi.fn(
+    async (input: { action: "prepare" | "cleanup"; callId: string; planDigest: string }) => {
+      if (input.callId === deniedCall) {
+        return null;
+      }
+      let id: string | undefined;
+      if (input.callId === candidate.account.accountApprovedByCallId) {
+        id = candidate.account.accountApprovalId;
+      } else if (input.callId === candidate.bootstrap.auth.approvedByCallId) {
+        id = candidate.bootstrap.auth.approvalId;
+      }
+      return id === undefined
+        ? null
+        : {
+            action: input.action,
+            approvalId: id,
+            approved: true,
+            callId: input.callId,
+            planDigest: input.planDigest,
           };
-          return structuredClone(row);
-        },
-        read: async () => structuredClone(row),
-        reserve: async () => structuredClone(row),
-        reserveFenceGeneration: vi.fn(),
+    },
+  );
+  const executeEffect = vi.fn();
+  const deps: ProtectedHostedOperatorDependencies = {
+    assertAuthorized: vi.fn(async () => {}),
+    authorize: async () => context,
+    bindings: vi.fn(),
+    executeEffect,
+    now: () => Date.parse(observedAt),
+    plan: vi.fn(async () => next),
+    readApproval,
+    reconcile: vi.fn(async () => ({ status: "unknown" as const })),
+    store: {
+      compareAndSet: async (input: { expectedRevision: number; record: typeof record }) => {
+        if (raceOnNextCas) {
+          raceOnNextCas = false;
+          requiredFixture(row.record.operator).pendingEffectId = "auth-schema";
+          row.revision += 1;
+        }
+        if (input.expectedRevision !== row.revision) {
+          // CAS failure explicitly returns no row.
+          return undefined;
+        }
+        row = {
+          record: hostedRuntimeJournalRecordSchema.parse(input.record),
+          revision: row.revision + 1,
+        };
+        return structuredClone(row);
       },
-      verify: vi.fn(),
-      withResourceLease: vi.fn(),
-    };
-    const handler = createProtectedHostedOperatorHandler(deps);
-    const request = async () => {
-      const response = await handler(
-        new Request("https://operator.example/v1/runtime", {
-          body: JSON.stringify({
-            action: "plan",
-            normalActorProgram: added,
-            operation: "prepare",
-            selection: requiredFixture(record.operator).plan.selection,
-          }),
-          headers: { "content-type": "application/json" },
-          method: "POST",
-        }),
-      );
-      return operatorPublicResultSchema.parse(await response.json());
-    };
-    return {
-      before: record,
-      deny(callId: string) {
-        deniedCall = callId;
-      },
-      executeEffect,
-      next,
-      race() {
-        raceOnNextCas = true;
-      },
-      readApproval,
-      request,
-      get row() {
-        return row;
-      },
-    };
+      read: async () => structuredClone(row),
+      reserve: async () => structuredClone(row),
+      reserveFenceGeneration: vi.fn(),
+    },
+    verify: vi.fn(),
+    withResourceLease: vi.fn(),
   };
+  const handler = createProtectedHostedOperatorHandler(deps);
+  const request = async () => {
+    const response = await handler(
+      new Request("https://operator.example/v1/runtime", {
+        body: JSON.stringify({
+          action: "plan",
+          normalActorProgram: added,
+          operation: "prepare",
+          selection: requiredFixture(record.operator).plan.selection,
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      }),
+    );
+    return operatorPublicResultSchema.parse(await response.json());
+  };
+  return {
+    before: record,
+    deny(callId: string) {
+      deniedCall = callId;
+    },
+    executeEffect,
+    next,
+    race() {
+      raceOnNextCas = true;
+    },
+    readApproval,
+    request,
+    get row() {
+      return row;
+    },
+  };
+};
 
+describe("unapproved app successor service integration", () => {
   it("archives the unapproved proposal and inherited receipts, checks original approvals, and proposes only new participants", async () => {
     const f = serviceFixture();
     const result = await f.request();

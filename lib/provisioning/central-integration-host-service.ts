@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions -- Approved effects and consent rechecks are strictly ordered under one physical lease. */
 import { builderAppIdSchema } from "./names";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -32,6 +31,8 @@ import type {
 import type { PublicReleaseInvocation } from "./public-release-handler";
 
 type Plan = CentralHostSetupPlan | CentralHostCallerPlan;
+const CENTRAL_HOST_SETUP_KIND = "central-integration-host-setup-v1";
+const PENDING_STATUS = "pending" as const;
 export const centralHostSelectionSchema = z.strictObject({
   operationRef: z.uuid(),
   planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -172,13 +173,13 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
       return {
         operationRef: row.operationRef,
         planDigest: row.record.planDigest,
-        status: "pending" as const,
+        status: PENDING_STATUS,
       };
     }
     if ((row.record.approvalReceipts?.length ?? 0) === 0) {
       throw fail();
     }
-    if (row.record.plan.kind === "central-integration-host-setup-v1") {
+    if (row.record.plan.kind === CENTRAL_HOST_SETUP_KIND) {
       const native = row.record.nativeDeployment;
       if (native?.status === "conflict") {
         throw new Error("central_host_native_deployment_conflict");
@@ -195,7 +196,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
       return {
         operationRef: row.operationRef,
         planDigest: row.record.planDigest,
-        status: ready ? ("ready" as const) : ("pending" as const),
+        status: ready ? ("ready" as const) : PENDING_STATUS,
       };
     }
     const observation = await ports.observeCaller(invocation, row);
@@ -204,7 +205,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
       return {
         operationRef: row.operationRef,
         planDigest: row.record.planDigest,
-        status: "pending" as const,
+        status: PENDING_STATUS,
       };
     }
     const receipt = centralHostReadyReceiptSchema.parse(observation);
@@ -245,7 +246,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
       const plan = await ports.resolvePlan(invocation, request);
       await authorize(invocation, plan);
       if (
-        (request.kind === "setup") !== (plan.kind === "central-integration-host-setup-v1") ||
+        (request.kind === "setup") !== (plan.kind === CENTRAL_HOST_SETUP_KIND) ||
         request.appId !== plan.selection.initiatingAppId
       ) {
         throw fail();
@@ -354,7 +355,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
           const bindingState = async (key: string) => {
             await assertCurrent();
             if (
-              row.record.plan.kind !== "central-integration-host-setup-v1" ||
+              row.record.plan.kind !== CENTRAL_HOST_SETUP_KIND ||
               !row.record.plan.environment.some((entry) => entry.key === key) ||
               effect !== "bind-central-preview-runtime"
             ) {
@@ -385,7 +386,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
               },
               read: async () => {
                 await assertCurrent();
-                return row.record.plan.kind === "central-integration-host-setup-v1"
+                return row.record.plan.kind === CENTRAL_HOST_SETUP_KIND
                   ? Object.fromEntries(
                       row.record.plan.environment.map((entry) => [
                         entry.key,

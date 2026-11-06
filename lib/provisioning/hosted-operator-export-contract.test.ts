@@ -22,7 +22,7 @@ const fixtureInput: unknown = JSON.parse(
 const fixture = tenantExportWireFixtureSchema.parse(fixtureInput);
 const copy = () => structuredClone(fixture);
 const first = <T>(items: readonly T[]): T => {
-  const value = items[0];
+  const [value] = items;
   if (value === undefined) {
     throw new Error("Controlled wire fixture member is missing");
   }
@@ -152,16 +152,30 @@ test("worker metadata cannot become a general credential, SQL or command transpo
 
 const plan = () =>
   hostedTenantExportPlanSchema.parse({
-    version: 1,
-    kind: "tenant-export-plan",
-    exportId: fixture.worker.exportId,
-    planRef: `_protected-operator/export-plans/${fixture.worker.exportId}`,
     authority: {
       audience: "audience-fixture",
       issuer: "issuer-fixture",
       ownerUserId: "owner-fixture",
       workspaceId: "workspace-fixture",
     },
+    destination: {
+      artifactPrefix: `_protected-operator/artifacts/tenant-export/${fixture.worker.exportId}`,
+      kind: "owner-private-builder-artifact",
+    },
+    exportId: fixture.worker.exportId,
+    format: "ndjson",
+    kind: "tenant-export-plan",
+    originalSetup: {
+      approvalId: "original-setup-approval",
+      approvedByCallId: "original-setup-call",
+      operationRef: "40000000-0000-4000-8000-000000000004",
+      planDigest: "1".repeat(64),
+    },
+    planRef: `_protected-operator/export-plans/${fixture.worker.exportId}`,
+    release: structuredClone(fixture.worker.release),
+    resource: structuredClone(fixture.worker.resource),
+    scope: structuredClone(fixture.worker.scope),
+    selection: "public-app-customer-tables-v1",
     // Provider resource project/branch and repository target project/branch are distinct identities.
     target: {
       appId: fixture.worker.scope.appId,
@@ -169,21 +183,7 @@ const plan = () =>
       projectId: "vercel-app-project",
       sessionId: "saved-session-fixture",
     },
-    originalSetup: {
-      approvalId: "original-setup-approval",
-      approvedByCallId: "original-setup-call",
-      operationRef: "40000000-0000-4000-8000-000000000004",
-      planDigest: "1".repeat(64),
-    },
-    scope: structuredClone(fixture.worker.scope),
-    resource: structuredClone(fixture.worker.resource),
-    release: structuredClone(fixture.worker.release),
-    selection: "public-app-customer-tables-v1",
-    format: "ndjson",
-    destination: {
-      artifactPrefix: `_protected-operator/artifacts/tenant-export/${fixture.worker.exportId}`,
-      kind: "owner-private-builder-artifact",
-    },
+    version: 1,
   });
 const journal = () => {
   const planned = plan();
@@ -328,10 +328,10 @@ test("reading and completion require exact export intent approval, own attempt a
   };
   expect(tenantExportJournalRecordSchema.parse(complete).state).toBe("complete");
   for (const changed of [
-    { ...complete, approval: undefined },
+    { ...complete, approval: null },
     { ...complete, approval: { ...approval, action: "prepare" } },
     { ...complete, approval: { ...approval, idempotencyKey: "another-export-intent" } },
-    { ...complete, completion: undefined },
+    { ...complete, completion: null },
     {
       ...complete,
       completion: { ...complete.completion, snapshotId: "50000000-0000-4000-8000-000000000005" },

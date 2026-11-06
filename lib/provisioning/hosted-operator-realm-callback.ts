@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/no-await-in-loop -- Bounded callback body is read sequentially; the reader cancels immediately at the byte limit. */
 import { publicRealmEnrollmentSchema } from "./public-realm-enrollment";
 
 import { verifyVercelOidcToken } from "@vercel/oidc";
@@ -19,6 +18,7 @@ import type { openHostedOperatorCompositionResources } from "./hosted-operator-s
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { OperatorArtifactStore } from "./hosted-operator-artifact-store";
 import type { NormalActorCaptureSender } from "./hosted-operator-normal-actor-capture";
+import type { PublicRealmEnrollment } from "./public-realm-enrollment";
 import {
   readVerifiedRealmAccess,
   realmIdentityNonceSha256,
@@ -309,15 +309,13 @@ interface PrivateStageFailure {
 }
 const reportPrivateStageFailure = (
   stage: z.infer<typeof privateStageName>,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Caught exceptions are reduced to exact allowlisted codes; never messages, causes, or request values.
   error: unknown,
   jwks?: JwksResponseObservation,
 ) => {
-  const failure: PrivateStageFailure = {
-    errorClass: "unknown",
-    stage,
-    ...(stage === "proof_verification" && jwks !== undefined ? { jwks } : {}),
-  };
+  const failure: PrivateStageFailure = { errorClass: "unknown", stage };
+  if (stage === "proof_verification" && jwks !== undefined) {
+    Object.assign(failure, { jwks });
+  }
   try {
     // Read only an own data descriptor; a hostile code getter is never invoked.
     const code: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
@@ -694,13 +692,19 @@ export const createRealmIdentityCallbackDeploymentHandler =
       ) {
         throw new Error("realm_callback_configuration");
       }
-      let selectedPublicRealm: Awaited<
-        ReturnType<typeof controlPlane.readPendingRealmIdentityLinkForStaging>
-      >["publicRealm"];
-      const selectCanonicalRuntime = async (selector: {
+      interface PendingRealmForStaging {
+        link: PendingRealmIdentityLink;
+        publicRealm?: {
+          enrollment: PublicRealmEnrollment;
+          publicJwk: { crv: string; kid: string; kty: string; x: string };
+          sender: NormalActorCaptureSender;
+        };
+      }
+      let selectedPublicRealm: PendingRealmForStaging["publicRealm"];
+      const selectCanonicalRuntime: (selector: {
         ownerSessionId: string;
         nonceSha256: string;
-      }) => {
+      }) => Promise<PendingRealmForStaging> = async (selector) => {
         if (selectedNonceSha256 !== undefined && selectedNonceSha256 !== selector.nonceSha256) {
           throw new Error("realm_callback_scope");
         }
@@ -723,22 +727,24 @@ export const createRealmIdentityCallbackDeploymentHandler =
               environment,
             );
             try {
+              const {
+                target: { appId, sessionId },
+              } = selected.context;
               const canonical = await resolveOwnedStandardRuntimeConfiguration({
                 configuration,
                 context: {
                   authority: selected.context.authority,
                   ownerContext: operatorOwnerContextSchema.parse(selected.context.ownerContext),
                   target: {
-                    appId: selected.context.target.appId,
-                    sessionId: selected.context.target.sessionId,
+                    appId,
+                    sessionId,
                   },
                 },
                 environment,
                 resources: privateResources,
               });
               resources = await openHostedOperatorConfigurationResources(canonical, environment);
-              configuration = resources.configuration;
-              controlPlane = resources.controlPlane;
+              ({ configuration, controlPlane } = resources);
             } finally {
               await privateResources.close();
             }
@@ -747,7 +753,10 @@ export const createRealmIdentityCallbackDeploymentHandler =
         const pending = await controlPlane.readPendingRealmIdentityLinkForStaging(selector);
         selectedNonceSha256 = selector.nonceSha256;
         selectedEndpointOrigin = pending.link.endpointOrigin;
-        selectedPublicRealm = pending.publicRealm;
+        selectedPublicRealm =
+          pending.publicRelease === undefined
+            ? undefined
+            : await resolvePendingPublicRealm(pending);
         return pending;
       };
       const assertCurrent = async (context: HostedOperatorContext) => {
@@ -764,9 +773,9 @@ export const createRealmIdentityCallbackDeploymentHandler =
         assertCurrentOwner: async (artifactContext) => {
           const context = await controlPlane.resolveRealmIdentityCallbackContext({
             authority: hostedTenantAuthoritySchema.parse(artifactContext.authority),
-            ownerSessionId: artifactContext.target.sessionId,
             // The exact pending nonce is selected by the verified routing ticket or private POST below.
             nonceSha256: selectedNonceSha256 ?? "",
+            ownerSessionId: artifactContext.target.sessionId,
           });
           if (context.target.appId !== artifactContext.target.appId) {
             throw new Error("realm_callback_scope");

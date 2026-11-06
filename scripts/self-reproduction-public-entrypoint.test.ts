@@ -1,12 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 
 const task = path.resolve(import.meta.dirname, "../.config/mise/tasks/eval/self-reproduction");
 const invoke = (args: string[]) => {
-  const directory = mkdtempSync(path.join(os.tmpdir(), "self-reproduction-entrypoint-"));
+  const directory = mkdtempSync(path.join(import.meta.dirname, ".self-reproduction-entrypoint-"));
   const log = path.join(directory, "calls");
   try {
     writeFileSync(log, "");
@@ -44,7 +43,7 @@ printf 'launcher %s\\n' "$*" >> "$ENTRYPOINT_TEST_LOG"
 it.each([
   [],
   ["--live-model"],
-  ["--arrusted-root", "/tmp/template", "--output-dir", "/tmp/evidence"],
+  ["--arrusted-root", "template", "--output-dir", "evidence"],
   ["--candidate-runtime"],
   ["--reference-runtime", "--reference-navigation"],
 ])("rejects generation invocation %j before setup or launcher execution", (...args) => {
@@ -62,11 +61,11 @@ it.each(["--help", "-h"])("shows %s without resolving tools or refreshing identi
 });
 
 it("runs report-only comparison without an OIDC refresh", () => {
-  const result = invoke(["--report-only", "--candidate-root", "/tmp/candidate"]);
+  const result = invoke(["--report-only", "--candidate-root", "candidate"]);
   expect(result.status, result.stderr).toBe(0);
   expect(result.calls).toContain("mise which node");
   expect(result.calls).toContain("scripts/eval-self-reproduction.mts");
-  expect(result.calls).toContain("--report-only --candidate-root /tmp/candidate");
+  expect(result.calls).toContain("--report-only --candidate-root candidate");
   expect(result.calls).not.toContain("local:ensure-oidc");
   expect(result.calls).not.toContain("reconcile");
 });
@@ -79,12 +78,7 @@ it("refreshes project OIDC only for explicitly requested candidate runtime compa
 });
 
 it("launches only the public driver without provisioning infrastructure", () => {
-  const result = invoke([
-    "--endpoint",
-    "http://127.0.0.1:64613/mcp",
-    "--output-dir",
-    "/tmp/evidence",
-  ]);
+  const result = invoke(["--endpoint", "http://127.0.0.1:64613/mcp", "--output-dir", "evidence"]);
   expect(result.status, result.stderr).toBe(0);
   expect(result.calls).toContain("scripts/self-reproduction-public.mts");
   expect(result.calls).not.toContain("scripts/eval-self-reproduction.mts");
@@ -92,14 +86,14 @@ it("launches only the public driver without provisioning infrastructure", () => 
 });
 
 it.each([
-  ["--brief-file", "/tmp/brief.md"],
-  ["--start-file", "/tmp/start.json"],
+  ["--brief-file", "brief.md"],
+  ["--start-file", "start.json"],
 ])("forwards the supplied public input %j without private setup", (...input) => {
   const result = invoke([
     "--endpoint",
     "https://builder.example.test/mcp",
     "--output-dir",
-    "/tmp/evidence",
+    "evidence",
     ...input,
   ]);
   expect(result.status, result.stderr).toBe(0);

@@ -105,6 +105,12 @@ const normalAuthFailureSchema = z.enum([
   "invalid_response",
 ]);
 type Failure = z.infer<typeof normalAuthFailureSchema>;
+interface MemberQuery {
+  organizationId: string;
+  filterField?: string;
+  filterOperator?: string;
+  filterValue?: string;
+}
 
 /** The same closed client vocabulary is used for request handling and safe diagnostics. */
 export const normalAuthClientFailureDiagnosticSchema = z.strictObject({
@@ -149,7 +155,6 @@ export class NormalAuthClientError extends Error {
 
 /** Only own data descriptors and closed values survive; no message, body or inherited/accessor metadata is inspected. */
 export const projectNormalAuthClientFailure = (
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the exception-to-closed-metadata boundary and must accept hostile thrown values.
   error: unknown,
 ): NormalAuthClientFailureDiagnostic | undefined => {
   try {
@@ -174,13 +179,22 @@ export const projectNormalAuthClientFailure = (
     const retryAfterMs = normalAuthClientFailureDiagnosticSchema.shape.retryAfterMs
       .unwrap()
       .safeParse(Object.getOwnPropertyDescriptor(error, "retryAfterMs")?.value);
-    return {
+    const diagnostic: NormalAuthClientFailureDiagnostic = {
       code: code.data,
-      ...(operation.success ? { operation: operation.data } : {}),
-      ...(httpStatus.success ? { httpStatus: httpStatus.data } : {}),
-      ...(authCode.success ? { authCode: authCode.data } : {}),
-      ...(retryAfterMs.success ? { retryAfterMs: retryAfterMs.data } : {}),
     };
+    if (operation.success) {
+      diagnostic.operation = operation.data;
+    }
+    if (httpStatus.success) {
+      diagnostic.httpStatus = httpStatus.data;
+    }
+    if (authCode.success) {
+      diagnostic.authCode = authCode.data;
+    }
+    if (retryAfterMs.success) {
+      diagnostic.retryAfterMs = retryAfterMs.data;
+    }
+    return diagnostic;
   } catch {
     return undefined;
   }
@@ -224,14 +238,12 @@ const readJson = async <T>(response: Response, schema: z.ZodType<T>): Promise<T>
   try {
     for (;;) {
       // A stream reader permits one outstanding read; check the byte bound between chunks.
-      // oxlint-disable-next-line no-await-in-loop
       const chunk = await reader.read();
       if (chunk.done) {
         break;
       }
       size += chunk.value.byteLength;
       if (size > maximumResponseBytes) {
-        // oxlint-disable-next-line no-await-in-loop -- cancel the same reader before discarding its bytes.
         await reader.cancel();
         throw new Error("Response too large");
       }
@@ -279,11 +291,14 @@ const rejectedResponse = async (
   } catch {
     // Error bodies are untrusted and stay private, including malformed or oversized responses.
   }
-  return new NormalAuthClientError("auth_rejected", {
+  const details: ConstructorParameters<typeof NormalAuthClientError>[1] = {
     httpStatus: response.status,
     operation,
-    ...(authCode ? { authCode } : {}),
-  });
+  };
+  if (authCode) {
+    details.authCode = authCode;
+  }
+  return new NormalAuthClientError("auth_rejected", details);
 };
 
 const cookieSameSite = (cookie: Cookie): "Strict" | "None" | "Lax" => {
@@ -399,14 +414,17 @@ export const createHostedOperatorNormalAuthClient = (options: {
       }
       let response: Response;
       try {
-        response = await (options.fetch ?? fetch)(url, {
-          method: input === undefined ? "GET" : "POST",
-          headers,
-          ...(body === undefined ? {} : { body }),
+        const requestInit: RequestInit = {
           cache: "no-store",
+          headers,
+          method: input === undefined ? "GET" : "POST",
           redirect: "error",
           signal,
-        });
+        };
+        if (body !== undefined) {
+          requestInit.body = body;
+        }
+        response = await (options.fetch ?? fetch)(url, requestInit);
         if (
           response.redirected ||
           (response.url && new URL(response.url).origin !== origin.origin)
@@ -463,20 +481,16 @@ export const createHostedOperatorNormalAuthClient = (options: {
       return true;
     };
     for (;;) {
-      // oxlint-disable-next-line no-await-in-loop -- each actual attempt obtains fresh approval and shares the original deadline.
       const response = await attempt();
-      // oxlint-disable-next-line no-await-in-loop -- replay only an explicit 429 with actual provider timing.
       if (await retryRejection(response)) {
         continue;
       }
       if (!response.ok) {
-        // oxlint-disable-next-line no-await-in-loop -- terminal responses are read once and never replayed.
         const failure = await rejectedResponse(response, operation);
         assertDeadline();
         throw failure;
       }
       try {
-        // oxlint-disable-next-line no-await-in-loop -- successful responses are read once.
         const result = await readJson(response, schema);
         assertDeadline();
         return result;
@@ -536,15 +550,16 @@ export const createHostedOperatorNormalAuthClient = (options: {
       if (value.session.userId !== value.user.id) {
         throw new NormalAuthClientError("invalid_response", { operation: "get_session" });
       }
-      return {
+      const session: NormalAuthSession = {
         actorId: value.user.id,
         email: value.user.email,
         expiresAt: value.session.expiresAt,
         sessionId: value.session.id,
-        ...(value.session.activeOrganizationId === undefined
-          ? {}
-          : { activeOrganizationId: value.session.activeOrganizationId }),
       };
+      if (value.session.activeOrganizationId !== undefined) {
+        session.activeOrganizationId = value.session.activeOrganizationId;
+      }
+      return session;
     },
     async inviteMember(input) {
       return await request(
@@ -570,12 +585,21 @@ export const createHostedOperatorNormalAuthClient = (options: {
         input,
         "list_members",
       );
-      return await request("list_members", "organization/list-members", membersSchema, undefined, {
+      const query: MemberQuery = {
         organizationId: parsed.organizationId,
-        ...(parsed.userId === undefined
-          ? {}
-          : { filterField: "userId", filterOperator: "eq", filterValue: parsed.userId }),
-      });
+      };
+      if (parsed.userId !== undefined) {
+        query.filterField = "userId";
+        query.filterOperator = "eq";
+        query.filterValue = parsed.userId;
+      }
+      return await request(
+        "list_members",
+        "organization/list-members",
+        membersSchema,
+        undefined,
+        query,
+      );
     },
     async setActiveOrganization(input) {
       const parsed = parseInput(organizationInput, input, "set_active_organization");

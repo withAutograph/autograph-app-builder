@@ -46,23 +46,20 @@ export interface AppCreationSkillExportManifest {
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function absent(target: string): Promise<boolean> {
   try {
     await lstat(target);
     return false;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return true;
     }
     throw error;
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[]> {
   const files: ExportedSkillFile[] = [];
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function visit(directory: string): Promise<void> {
     const entries = await readdir(directory, { withFileTypes: true });
     await runSequentially(
@@ -102,7 +99,6 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
   return files.toSorted((left, right) => left.path.localeCompare(right.path));
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function exportAppCreationSkills(options: {
   repositoryRoot: string;
   outputRoot: string;

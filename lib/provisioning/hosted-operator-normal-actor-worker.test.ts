@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await -- Test dependency fixtures preserve asynchronous native interfaces without provider calls. */
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -621,7 +620,9 @@ describe("actual selected organization worker adapter", () => {
         change === "actor" &&
         historical.plan.authMembership?.kind === "create-owned-organizations"
       ) {
-        const organization = historical.plan.authMembership.organizations[0];
+        const {
+          organizations: [organization],
+        } = historical.plan.authMembership;
         if (organization === undefined) {
           throw new Error("fixture_missing_organization");
         }

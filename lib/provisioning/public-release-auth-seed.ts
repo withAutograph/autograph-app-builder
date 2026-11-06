@@ -12,6 +12,8 @@ import {
 import type { VercelTokenKeyringConfig } from "../integrations/vercel-installation";
 
 const id = z.string().min(1);
+const seedPurpose = "public-release-auth-seed-v";
+const seedKind = (version: 1 | 2) => `${seedPurpose}${version}`;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const scopeSchema = z.strictObject({
   appId: id,
@@ -30,8 +32,14 @@ const seedSchema = z.strictObject({
   PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY: z.string().min(32),
 });
 export type PublicReleaseAuthSeed = z.infer<typeof seedSchema>;
+interface PublicReleaseAuthSeedAssociatedData {
+  creationSessionId?: string;
+  digest: string;
+  purpose: string;
+  ref: string;
+}
 const recordSchema = z.strictObject({
-  kind: z.enum(["public-release-auth-seed-v1", "public-release-auth-seed-v2"]),
+  kind: z.enum([seedKind(1), seedKind(2)]),
   scope: scopeSchema,
   sealed: z.strictObject({ encryptedToken: id, keyVersion: id, tokenIv: id, tokenTag: id }),
 });
@@ -46,7 +54,7 @@ const appScope = (scope: PublicReleaseAuthSeedScope) => ({
 const identity = (scope: PublicReleaseAuthSeedScope, version: 1 | 2 = 2) => {
   const digest = hash(
     JSON.stringify([
-      `public-release-auth-seed-v${version}`,
+      `${seedPurpose}${version}`,
       version === 1 ? scopeSchema.parse(scope) : appScope(scopeSchema.parse(scope)),
     ]),
   );
@@ -57,12 +65,15 @@ const identity = (scope: PublicReleaseAuthSeedScope, version: 1 | 2 = 2) => {
 };
 const associatedDataFor = (scope: PublicReleaseAuthSeedScope, version: 1 | 2) => {
   const { digest, ref } = identity(scope, version);
-  return JSON.stringify({
+  const associatedData: PublicReleaseAuthSeedAssociatedData = {
     digest,
-    purpose: `public-release-auth-seed-v${version}`,
+    purpose: `${seedPurpose}${version}`,
     ref,
-    ...(version === 1 ? {} : { creationSessionId: scope.sessionId }),
-  });
+  };
+  if (version !== 1) {
+    associatedData.creationSessionId = scope.sessionId;
+  }
+  return JSON.stringify(associatedData);
 };
 export const createFreshPublicAuthSeed = (): PublicReleaseAuthSeed => {
   const key = generateKeyPairSync("ed25519", {
@@ -92,7 +103,7 @@ export const reservePublicReleaseAuthSeed = async (input: {
     eq(builderProvisioningJournals.workspaceId, scope.authority.workspaceId),
     eq(builderProvisioningJournals.ownerUserId, scope.authority.ownerUserId),
     eq(builderProvisioningJournals.requestId, ref),
-    sql`${builderProvisioningJournals.record}->>'kind' = 'public-release-auth-seed-v2'`,
+    sql`${builderProvisioningJournals.record}->>'kind' = ${seedKind(2)}`,
   );
   const read = async () => {
     await input.assertCurrentOwner();
@@ -104,12 +115,11 @@ export const reservePublicReleaseAuthSeed = async (input: {
     await input.assertCurrentOwner();
     const row = rows.at(0);
     if (row === undefined) {
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- An absent private app seed is prepared once and never replaced on retry.
       return undefined;
     }
     const record = recordSchema.parse(row.record);
     if (
-      record.kind !== "public-release-auth-seed-v2" ||
+      record.kind !== seedKind(2) ||
       row.requestDigest !== digest ||
       !isDeepStrictEqual(appScope(record.scope), appScope(scope))
     ) {
@@ -145,7 +155,7 @@ export const reservePublicReleaseAuthSeed = async (input: {
         eq(builderProvisioningJournals.audience, scope.authority.audience),
         eq(builderProvisioningJournals.workspaceId, scope.authority.workspaceId),
         eq(builderProvisioningJournals.ownerUserId, scope.authority.ownerUserId),
-        sql`${builderProvisioningJournals.record}->>'kind' = 'public-release-auth-seed-v1'`,
+        sql`${builderProvisioningJournals.record}->>'kind' = ${seedKind(1)}`,
         sql`${builderProvisioningJournals.record}->'scope'->>'appId' = ${scope.appId}`,
         sql`${builderProvisioningJournals.record}->'scope'->>'projectId' = ${scope.projectId}`,
         sql`${builderProvisioningJournals.record}->'scope'->>'publicOrigin' = ${scope.publicOrigin}`,
@@ -165,7 +175,7 @@ export const reservePublicReleaseAuthSeed = async (input: {
     const record = recordSchema.parse(legacy.record);
     const expected = identity(record.scope, 1);
     if (
-      record.kind !== "public-release-auth-seed-v1" ||
+      record.kind !== seedKind(1) ||
       !isDeepStrictEqual(appScope(record.scope), appScope(scope)) ||
       legacy.requestId !== expected.ref ||
       legacy.requestDigest !== expected.digest
@@ -201,7 +211,7 @@ export const reservePublicReleaseAuthSeed = async (input: {
     .values({
       ...scope.authority,
       createdAt: now,
-      record: recordSchema.parse({ kind: "public-release-auth-seed-v2", scope, sealed }),
+      record: recordSchema.parse({ kind: seedKind(2), scope, sealed }),
       requestDigest: digest,
       requestId: ref,
       revision: 1,

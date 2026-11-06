@@ -15,24 +15,33 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function json(value: unknown, status = 200) {
-  return Response.json(value, { status });
-}
+type ReaderJson =
+  | {
+      expires_at: string;
+      permissions: Record<string, string>;
+      repositories: { id: number }[];
+      repository_selection: string;
+      token: string;
+    }
+  | { repositories: { full_name: string; id: number; private: boolean }[]; total_count: number };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function readerFetch(input?: {
-  permissions?: Record<string, string>;
+type ReaderPermission = "checks" | "contents" | "issues" | "metadata";
+type ReaderPermissions = Partial<Record<ReaderPermission, "read" | "write">>;
+type ReaderFetchRequest = string | URL | Request;
+
+const json = (value: ReaderJson, status = 200): Response => Response.json(value, { status });
+
+const readerFetch = (input?: {
+  permissions?: ReaderPermissions;
   repositorySelection?: "all" | "selected";
   tokenRepositoryIds?: number[];
-  repository?: Record<string, unknown>;
+  repository?: { full_name: string; id: number; private: boolean };
   totalCount?: number;
   status?: number;
-}) {
+}) => {
   const calls: { url: string; init: RequestInit }[] = [];
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  const implementation: typeof fetch = async (request, init = {}) => {
-    const url = String(request);
+  const implementation: typeof fetch = async (request: ReaderFetchRequest, init = {}) => {
+    const url = new URL(request instanceof Request ? request.url : request).href;
     calls.push({ init, url });
     if (url.endsWith("/app/installations/456/access_tokens")) {
       return json(
@@ -66,11 +75,10 @@ function readerFetch(input?: {
     throw new Error(`Unexpected GitHub request: ${url}`);
   };
   return { calls, implementation };
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function reader(fetch: typeof globalThis.fetch) {
-  return createArrustedTemplateReader({
+const reader = (fetch: typeof globalThis.fetch) =>
+  createArrustedTemplateReader({
     config: {
       appId: "123",
       installationId: "456",
@@ -78,7 +86,6 @@ function reader(fetch: typeof globalThis.fetch) {
     },
     fetch,
   });
-}
 
 describe("Arrusted private template reader", () => {
   it("mints an exact read-only, one-repository token from the fixed installation", async () => {
@@ -90,7 +97,11 @@ describe("Arrusted private template reader", () => {
     const tokenCall = mock.calls.find(({ url }) =>
       url.endsWith("/app/installations/456/access_tokens"),
     );
-    expect(JSON.parse(String(tokenCall?.init.body))).toEqual({
+    if (tokenCall === undefined) {
+      throw new Error("Expected the installation token request");
+    }
+    const parsedTokenBody: unknown = await new Response(tokenCall.init.body).json();
+    expect(parsedTokenBody).toEqual({
       permissions: { contents: "read" },
       repository_ids: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
     });

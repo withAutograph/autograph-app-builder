@@ -3,7 +3,6 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderProvisioningJournals } from "../db/schema";
-import type * as databaseSchema from "../db/schema";
 import { builderProvisionRequestDigest } from "./contracts";
 import {
   builderProvisionJournalRecordSchema,
@@ -15,9 +14,10 @@ import type {
   BuilderProvisionJournalStore,
 } from "./journal";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = PostgresJsDatabase<{
+  builderProvisioningJournals: typeof builderProvisioningJournals;
+}>;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function predicate(authority: BuilderProvisionAuthority, requestId: string) {
   return and(
     eq(builderProvisioningJournals.issuer, authority.issuer),
@@ -29,7 +29,6 @@ function predicate(authority: BuilderProvisionAuthority, requestId: string) {
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseRow(
   row: typeof builderProvisioningJournals.$inferSelect,
 ): BuilderProvisionJournalRow {
@@ -45,12 +44,11 @@ function parseRow(
     requestDigest: row.requestDigest,
     requestId: row.requestId,
     revision: row.revision,
-    state: row.state as "pending" | "settled",
+    state: row.state === "settled" ? "settled" : "pending",
     updatedAt: row.updatedAt,
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresBuilderProvisionJournalStore(
   database: Database,
 ): BuilderProvisionJournalStore {
@@ -61,7 +59,8 @@ export function createPostgresBuilderProvisionJournalStore(
       .from(builderProvisioningJournals)
       .where(predicate(authority, input.requestId))
       .limit(1);
-    return rows[0] ? parseRow(rows[0]) : undefined;
+    const [row] = rows;
+    return row === undefined ? undefined : parseRow(row);
   };
   return {
     async compareAndSet(input) {
@@ -82,7 +81,8 @@ export function createPostgresBuilderProvisionJournalStore(
           ),
         )
         .returning();
-      return rows[0] ? parseRow(rows[0]) : undefined;
+      const [row] = rows;
+      return row === undefined ? undefined : parseRow(row);
     },
     async findSettledAppRepository(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
@@ -119,9 +119,9 @@ export function createPostgresBuilderProvisionJournalStore(
               sql`(${builderProvisioningJournals.record} #>> '{operations,github,nextRetryAt}')::timestamptz <= ${input.now}`,
               sql`(${builderProvisioningJournals.record} #>> '{operations,vercel,nextRetryAt}')::timestamptz <= ${input.now}`,
             ),
-            cursor
-              ? sql`(${builderProvisioningJournals.issuer}, ${builderProvisioningJournals.audience}, ${builderProvisioningJournals.workspaceId}, ${builderProvisioningJournals.ownerUserId}, ${builderProvisioningJournals.requestId}) > (${cursor.issuer}, ${cursor.audience}, ${cursor.workspaceId}, ${cursor.ownerUserId}, ${cursor.requestId})`
-              : undefined,
+            cursor === undefined
+              ? undefined
+              : sql`(${builderProvisioningJournals.issuer}, ${builderProvisioningJournals.audience}, ${builderProvisioningJournals.workspaceId}, ${builderProvisioningJournals.ownerUserId}, ${builderProvisioningJournals.requestId}) > (${cursor.issuer}, ${cursor.audience}, ${cursor.workspaceId}, ${cursor.ownerUserId}, ${cursor.requestId})`,
           ),
         )
         .orderBy(
@@ -156,7 +156,7 @@ export function createPostgresBuilderProvisionJournalStore(
       const page: Awaited<ReturnType<NonNullable<BuilderProvisionJournalStore["listDue"]>>> = {
         items,
       };
-      if (last && rows.length === input.limit) {
+      if (last !== undefined && rows.length === input.limit) {
         page.nextCursor = {
           audience: last.audience,
           issuer: last.issuer,
@@ -185,10 +185,12 @@ export function createPostgresBuilderProvisionJournalStore(
         })
         .onConflictDoNothing()
         .returning();
-      const row = rows[0]
-        ? parseRow(rows[0])
-        : await read({ authority, requestId: input.request.requestId });
-      if (!row) {
+      const [insertedRow] = rows;
+      const row =
+        insertedRow === undefined
+          ? await read({ authority, requestId: input.request.requestId })
+          : parseRow(insertedRow);
+      if (row === undefined) {
         throw new Error("provision-journal-not-durable");
       }
       if (row.requestDigest !== requestDigest) {

@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   chmod,
   cp,
@@ -12,7 +13,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
-import { promisify } from "node:util";
 import { runSequentially } from "../lib/async-sequential";
 
 import {
@@ -25,38 +25,49 @@ import { HostedMcpProofClient } from "./hosted-portable-proof";
 import { TOOL_NAMES } from "./portable-release";
 
 const execFileAsync = promisify(execFile);
+const PROMOTION_RECEIPT_NAME = "promotion-receipt.json";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function parseArguments(args: readonly string[]) {
+const UNIQUE_PAIRS_ERROR = "Release publication options must be unique pairs.";
+const TOKEN_FILE_ERROR = "Release OAuth token must be a canonical owner-only file.";
+const DEPLOYMENT_READBACK_ERROR = "Vercel deployment readback was incomplete.";
+const GITHUB_READBACK_ERROR = "Existing GitHub release did not match the promotion.";
+const RELEASE_ASSETS_ERROR = "Existing GitHub release assets did not match proof.";
+const RESOURCE_METADATA_ERROR = "Deployed OAuth resource metadata did not match release.";
+
+const parseArguments = (args: readonly string[]) => {
   const values = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
     const value = args[index + 1];
-    if (
-      name === undefined ||
-      value === undefined ||
-      !name.startsWith("--") ||
-      value.startsWith("--") ||
-      values.has(name)
-    ) {
-      throw new Error("Release publication options must be unique pairs.");
+    if (name === undefined || value === undefined) {
+      throw new Error(UNIQUE_PAIRS_ERROR);
+    }
+    const invalidName = !name.startsWith("--");
+    const invalidValue = value.startsWith("--");
+    const duplicateName = values.has(name);
+    if (invalidName || invalidValue || duplicateName) {
+      throw new Error(UNIQUE_PAIRS_ERROR);
     }
     values.set(name, value);
   }
   const candidateRoot = values.get("--candidate-root");
   const tokenFile = values.get("--token-file");
-  if (values.size !== 2 || candidateRoot === undefined || tokenFile === undefined) {
+  const hasExpectedOptions = values.size === 2;
+  const hasCandidate = candidateRoot !== undefined;
+  const hasToken = tokenFile !== undefined;
+  if (!hasExpectedOptions || !hasCandidate || !hasToken) {
     throw new Error(
       "Usage: mise run release:publish -- --candidate-root /absolute/proven/candidate --token-file /absolute/owner-only/oauth-token",
     );
   }
-  if (!nodePath.isAbsolute(candidateRoot) || !nodePath.isAbsolute(tokenFile)) {
+  const candidateIsAbsolute = nodePath.isAbsolute(candidateRoot);
+  const tokenIsAbsolute = nodePath.isAbsolute(tokenFile);
+  if (!candidateIsAbsolute || !tokenIsAbsolute) {
     throw new Error("Release candidate and token paths must be absolute.");
   }
   return { candidateRoot, tokenFile };
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredExecutable(name: string) {
   const value = process.env[name];
   if (value === undefined || !nodePath.isAbsolute(value)) {
@@ -65,19 +76,20 @@ function requiredExecutable(name: string) {
   return value;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function ownerToken(path: string) {
   const canonical = await realpath(nodePath.resolve(path));
   const info = await lstat(canonical);
-  if (
-    canonical !== path ||
-    !info.isFile() ||
-    info.isSymbolicLink() ||
-    info.uid !== process.getuid?.() ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (info.mode & 0o077) !== 0
-  ) {
-    throw new Error("Release OAuth token must be a canonical owner-only file.");
+  const wrongPath = canonical !== path;
+  const notRegularFile = !info.isFile();
+  const symbolicLink = info.isSymbolicLink();
+  if (wrongPath || notRegularFile || symbolicLink) {
+    throw new Error(TOKEN_FILE_ERROR);
+  }
+  if (info.uid !== process.getuid?.()) {
+    throw new Error(TOKEN_FILE_ERROR);
+  }
+  if ((info.mode & 0o077) !== 0) {
+    throw new Error(TOKEN_FILE_ERROR);
   }
   const tokenContents = await readFile(canonical, "utf-8");
   const token = tokenContents.trim();
@@ -87,36 +99,65 @@ async function ownerToken(path: string) {
   return token;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function deploymentIdentity(value: string) {
-  const parsed = JSON.parse(value) as { id?: unknown; url?: unknown };
-  if (
-    typeof parsed.id !== "string" ||
-    !/^dpl_[A-Za-z0-9]+$/u.test(parsed.id) ||
-    typeof parsed.url !== "string" ||
-    !/^[A-Za-z0-9.-]+[.]vercel[.]app$/u.test(parsed.url)
-  ) {
-    throw new Error("Vercel deployment readback was incomplete.");
-  }
-  return { id: parsed.id, url: parsed.url } as const;
+interface JsonRecord {
+  [key: string]: JsonValue;
 }
+type JsonValue = boolean | JsonRecord | null | number | string | JsonValue[];
+interface DeploymentIdentity {
+  id: string;
+  url: string;
+}
+interface GithubAsset {
+  name: string;
+}
+const isJsonRecord = (value: unknown): value is JsonRecord =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+const parseJsonRecord = (value: string, errorMessage: string): JsonRecord => {
+  const parsed: unknown = JSON.parse(value);
+  if (!isJsonRecord(parsed)) throw new Error(errorMessage);
+  return parsed;
+};
+
+const parseString = (value: JsonValue | undefined, pattern: RegExp, errorMessage: string) => {
+  if (value === null || value === undefined || value.constructor !== String) {
+    throw new Error(errorMessage);
+  }
+  const valueString = value;
+  const [parsed] = valueString.match(pattern) ?? [];
+  if (parsed !== value) throw new Error(errorMessage);
+  return valueString;
+};
+
+const deploymentIdentity = (value: string): DeploymentIdentity => {
+  const parsed = parseJsonRecord(value, DEPLOYMENT_READBACK_ERROR);
+  return {
+    id: parseString(parsed.id, /^dpl_[A-Za-z0-9]+$/u, DEPLOYMENT_READBACK_ERROR),
+    url: parseString(parsed.url, /^[A-Za-z0-9.-]+[.]vercel[.]app$/u, DEPLOYMENT_READBACK_ERROR),
+  };
+};
+
+const parseGithubAssets = (value: JsonValue | undefined): GithubAsset[] => {
+  if (!Array.isArray(value)) throw new Error(GITHUB_READBACK_ERROR);
+  return value.map((asset) => {
+    if (!isJsonRecord(asset)) {
+      throw new Error(GITHUB_READBACK_ERROR);
+    }
+    return { name: parseString(asset.name, /.+/u, GITHUB_READBACK_ERROR) };
+  });
+};
+
 async function sealPublicationTree(root: string, current = root) {
   const entries = await readdir(current, { withFileTypes: true });
   await runSequentially(entries, async (entry) => {
     const path = nodePath.join(current, entry.name);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const info = await lstat(path);
     if (info.isSymbolicLink()) {
       throw new Error("Release publication staging contained a link.");
     }
     if (entry.isDirectory()) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await sealPublicationTree(root, path);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await chmod(path, 0o500);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     } else if (entry.isFile()) {
       await chmod(path, 0o400);
     } else {
@@ -129,10 +170,8 @@ async function sealPublicationTree(root: string, current = root) {
 }
 
 // Keep publication cleanup scoped to the release command.
-// oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 async function removePublicationTree(root: string) {
   // Keep publication cleanup helpers local to this operation.
-  // oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
   async function makeWritable(path: string) {
     const info = await lstat(path);
     if (info.isSymbolicLink()) {
@@ -140,7 +179,6 @@ async function removePublicationTree(root: string) {
     }
     if (info.isDirectory()) {
       await chmod(path, 0o700);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await runSequentially(await readdir(path), async (entry) => {
         await makeWritable(nodePath.join(path, entry));
       });
@@ -148,11 +186,13 @@ async function removePublicationTree(root: string) {
       await chmod(path, 0o600);
     }
   }
-  await makeWritable(root).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "ENOENT") {
+  try {
+    await makeWritable(root);
+  } catch (error: unknown) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") {
       throw error;
     }
-  });
+  }
   await rm(root, { force: true, recursive: true });
 }
 
@@ -166,8 +206,8 @@ const publicationReceiptPath = nodePath.join(candidateRoot, "publication-receipt
 try {
   await lstat(publicationReceiptPath);
   throw new Error("This exact release candidate was already published.");
-} catch (error) {
-  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+} catch (error: unknown) {
+  if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") {
     throw error;
   }
 }
@@ -216,51 +256,52 @@ try {
       );
       metadataRaw = result.stdout;
     } catch (error) {
-      const { stderr } = error as { stderr?: unknown };
+      const stderrValue = error instanceof Error && "stderr" in error ? error.stderr : undefined;
+      const stderr =
+        stderrValue !== null && stderrValue !== undefined && stderrValue.constructor === String
+          ? String(stderrValue)
+          : undefined;
       if (
-        typeof stderr === "string" &&
+        stderr !== undefined &&
+        stderr.length > 0 &&
         /release not found|could not resolve to a release/iu.test(stderr)
       ) {
         return false;
       }
       throw error;
     }
-    const metadata = JSON.parse(metadataRaw) as {
-      tagName?: unknown;
-      isPrerelease?: unknown;
-      targetCommitish?: unknown;
-      assets?: { name?: unknown }[];
-    };
+    const metadata = parseJsonRecord(metadataRaw, GITHUB_READBACK_ERROR);
     const expectedAssetNames = [
       nodePath.basename(receipt.package.archive),
       nodePath.basename(receipt.package.marketplaceArchive),
       nodePath.basename(receipt.package.checksums),
       nodePath.basename(receipt.package.receipt),
-      "promotion-receipt.json",
-    ].toSorted();
+      PROMOTION_RECEIPT_NAME,
+    ].toSorted((left, right) => left.localeCompare(right));
+    const tagMatches = metadata.tagName === `v${receipt.package.version}`;
+    const isPrerelease = metadata.isPrerelease === true;
+    const commitMatches = metadata.targetCommitish === receipt.builder.commit;
+    if (!tagMatches || !isPrerelease || !commitMatches) throw new Error(GITHUB_READBACK_ERROR);
+    const assetNames = parseGithubAssets(metadata.assets).map(({ name }) => name);
     if (
-      metadata.tagName !== `v${receipt.package.version}` ||
-      metadata.isPrerelease !== true ||
-      metadata.targetCommitish !== receipt.builder.commit ||
-      !Array.isArray(metadata.assets) ||
-      JSON.stringify(metadata.assets.map(({ name }) => name).toSorted()) !==
-        JSON.stringify(expectedAssetNames)
+      JSON.stringify(assetNames.toSorted((left, right) => left.localeCompare(right))) !==
+      JSON.stringify(expectedAssetNames)
     ) {
-      throw new Error("Existing GitHub release did not match the promotion.");
+      throw new Error(GITHUB_READBACK_ERROR);
     }
     const downloadRoot = await realpath(
       await mkdtemp(nodePath.join(tmpdir(), "autograph-github-readback-")),
     );
-    const assets = [
+    const proofAssets: readonly (readonly [string, string])[] = [
       [receipt.package.archive, receipt.package.archiveSha256],
       [receipt.package.marketplaceArchive, receipt.package.marketplaceArchiveSha256],
       [receipt.package.checksums, receipt.package.checksumsSha256],
       [receipt.package.receipt, receipt.package.receiptSha256],
       [
-        "promotion-receipt.json",
-        sha256(await readFile(nodePath.join(publicationRoot, "promotion-receipt.json"))),
+        PROMOTION_RECEIPT_NAME,
+        sha256(await readFile(nodePath.join(publicationRoot, PROMOTION_RECEIPT_NAME))),
       ],
-    ] as const;
+    ];
     try {
       await execFileAsync(
         executables.gh,
@@ -275,17 +316,15 @@ try {
         ],
         { cwd: publicationRoot, encoding: "utf-8", env: process.env },
       );
-      for (const [path, expected] of assets) {
+      for (const [path, expected] of proofAssets) {
         const downloaded = nodePath.join(downloadRoot, nodePath.basename(path));
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const info = await lstat(downloaded);
         if (
           !info.isFile() ||
           info.isSymbolicLink() ||
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           sha256(await readFile(downloaded)) !== expected
         ) {
-          throw new Error("Existing GitHub release assets did not match proof.");
+          throw new Error(RELEASE_ASSETS_ERROR);
         }
       }
     } finally {
@@ -317,7 +356,6 @@ try {
   };
   let deploymentUrl: string | undefined;
   for (const command of commands.slice(0, -1)) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const stdout = await execute(command);
     if (command.tool === "vercel") {
       deploymentUrl = stdout
@@ -338,7 +376,10 @@ try {
       maxBuffer: 4 * 1024 * 1024,
     },
   );
-  const remoteDescriptor = JSON.parse(remote.stdout) as { digest?: unknown };
+  const remoteDescriptor = parseJsonRecord(
+    remote.stdout,
+    "Published registry image readback was malformed.",
+  );
   if (remoteDescriptor.digest !== receipt.image.manifestDigest) {
     throw new Error("Published registry image did not retain the proven digest.");
   }
@@ -371,18 +412,22 @@ try {
     throw new Error("Deployed OAuth resource metadata was unavailable.");
   }
   const metadataBytes = Buffer.from(await metadataResponse.arrayBuffer());
-  const metadata = JSON.parse(metadataBytes.toString("utf-8")) as {
-    resource?: unknown;
-    authorization_servers?: unknown;
-  };
+  const metadata = parseJsonRecord(metadataBytes.toString("utf-8"), RESOURCE_METADATA_ERROR);
+  const authorizationServers = metadata.authorization_servers;
   if (
     metadata.resource !== receipt.endpoint ||
-    !Array.isArray(metadata.authorization_servers) ||
-    metadata.authorization_servers.length !== 1 ||
-    typeof metadata.authorization_servers[0] !== "string" ||
-    !metadata.authorization_servers[0].startsWith("https://")
+    !Array.isArray(authorizationServers) ||
+    authorizationServers.length !== 1
   ) {
-    throw new Error("Deployed OAuth resource metadata did not match release.");
+    throw new Error(RESOURCE_METADATA_ERROR);
+  }
+  const [authorizationServer] = authorizationServers;
+  const hasAuthorizationServer = authorizationServer !== null && authorizationServer !== undefined;
+  const isAuthorizationServerString =
+    hasAuthorizationServer && authorizationServer.constructor === String;
+  const authorizationServerUrl = isAuthorizationServerString ? authorizationServer : "";
+  if (!isAuthorizationServerString || !authorizationServerUrl.startsWith("https://")) {
+    throw new Error(RESOURCE_METADATA_ERROR);
   }
   const hostedClient = new HostedMcpProofClient(receipt.endpoint, oauthToken);
   await hostedClient.initialize();

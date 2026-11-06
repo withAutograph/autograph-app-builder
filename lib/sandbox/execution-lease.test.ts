@@ -79,7 +79,6 @@ describe("sandbox execution lease", () => {
   it("keeps stop failures orphaned and reuse-blocking until a successful retry", async () => {
     const store = new InMemorySandboxExecutionLeaseStore();
     await acquire(store, "user_1", "session_1", 1);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const stopSandbox = vi.fn(async () => {
       throw new Error("provider unavailable");
     });
@@ -101,7 +100,6 @@ describe("sandbox execution lease", () => {
       { disposition: "rejected", reason: "recovery-in-progress" },
       { disposition: "rejected", reason: "recovery-in-progress" },
     ]);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const retryStop = vi.fn(async () => {});
     const retried = await reconcileExpiredSandboxLeases({
       nowEpochMs: 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
@@ -129,7 +127,6 @@ describe("sandbox execution lease", () => {
     const store = new InMemorySandboxExecutionLeaseStore();
     await acquire(store, "user_1", "session_1", 1);
     await acquire(store, "user_2", "session_2", 1);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const stopSandbox = vi.fn(async (providerSandboxId: string) => {
       if (providerSandboxId === "sandbox_session_1") {
         throw new Error("provider unavailable");
@@ -165,8 +162,8 @@ describe("sandbox execution lease", () => {
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
     });
     expect(claim).toBeDefined();
-    if (!claim) {
-      throw new Error("expected an expired lease claim");
+    if (claim === undefined) {
+      throw new TypeError("expected an expired lease claim");
     }
     await expect(
       acquire(store, "user_1", "session_1", 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs),
@@ -204,7 +201,6 @@ describe("sandbox execution lease", () => {
     await acquire(store, "user_2", "session_2", 1);
     const settle = vi.spyOn(store, "settleRecovery");
     settle.mockRejectedValueOnce(new Error("settlement unavailable"));
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const stopSandbox = vi.fn(async () => {});
     const result = await reconcileExpiredSandboxLeases({
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,

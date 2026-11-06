@@ -43,13 +43,13 @@ const json = (value: MockPayload, status = 200): Response => Response.json(value
 
 const fixture = () => {
   const order: string[] = [];
-  const authorizeAttempt = vi.fn(async () => {
+  const authorizeAttempt = vi.fn(() => {
     order.push("journal");
   });
-  const acceptProjectId = vi.fn(async (_projectId: string) => {
+  const acceptProjectId = vi.fn((_projectId: string) => {
     order.push("receipt");
   });
-  const request = vi.fn<typeof fetch>(async (_url, options) => {
+  const request = vi.fn<typeof fetch>((_url, options) => {
     order.push(options?.method ?? "GET");
     return options?.method === "POST" ? json({ id: project.id }, 201) : json(project);
   });
@@ -167,7 +167,7 @@ describe("native target Vercel project provider", () => {
       JSON.stringify(
         await createNativeTargetVercelProject({
           ...f.input,
-          authorizeAttempt: async () => {
+          authorizeAttempt: () => {
             throw new Error("already dispatched");
           },
         }),
@@ -179,7 +179,7 @@ describe("native target Vercel project provider", () => {
     "uses the create API contract and independently checks outside-root access (%s)",
     async (outsideRoot) => {
       const f = fixture();
-      f.request.mockImplementation(async (_url, options) => {
+      f.request.mockImplementation((_url, options) => {
         if (options?.method === "POST") {
           const body = z.looseObject({}).parse(JSON.parse(z.string().parse(options.body)));
           // Vercel POST /v11/projects has additionalProperties:false and does not
@@ -304,7 +304,7 @@ describe("native target Vercel project provider", () => {
 
   it("keeps omitted protection readback uncertain", async () => {
     const f = fixture();
-    f.request.mockResolvedValueOnce(Response.json({ ...project, oidcTokenConfig: undefined }));
+    f.request.mockResolvedValueOnce(Response.json({ ...project, oidcTokenConfig: null }));
     expect(await observeNativeTargetVercelProject({ ...f.input, projectId: project.id })).toEqual({
       projectId: project.id,
       reason: "invalid_response",

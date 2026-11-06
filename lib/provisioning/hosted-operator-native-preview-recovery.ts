@@ -7,6 +7,18 @@ import {
   isReadyDeliveryReplacementSuccessor,
   resolveReadyDeliveryReplacementPredecessor,
 } from "./hosted-operator-ready-delivery-replacement";
+import { readyDeliveryReplacementIntentSchema } from "./hosted-operator-ready-delivery-replacement-intent";
+import type { ReadyDeliveryReplacementIntent } from "./hosted-operator-ready-delivery-replacement-intent";
+
+const appDeliveryReplacementOf = (
+  plan: HostedOperatorPlan,
+): ReadyDeliveryReplacementIntent | undefined =>
+  "appDeliveryReplacement" in plan
+    ? (() => {
+        const parsed = readyDeliveryReplacementIntentSchema.safeParse(plan.appDeliveryReplacement);
+        return parsed.success ? parsed.data : undefined;
+      })()
+    : undefined;
 
 export const withExternallyManagedHostProtection = (
   plan: HostedOperatorPlan,
@@ -41,13 +53,11 @@ export const withExternallyManagedHostProtection = (
 /** Recovery owns a pending legacy READY transition or its saved proposal/attempt, never ordinary revisions. */
 export const hasPendingNativePreviewRecovery = (record: HostedRuntimeJournalRecord | undefined) => {
   const current = record?.operator;
-  if (
-    record === undefined ||
-    current === undefined ||
-    !["pending", "failed"].includes(record.status) ||
-    current.plan.stage !== "app" ||
-    current.plan.action !== "prepare"
-  ) {
+  if (record === undefined || current === undefined) {
+    return false;
+  }
+  const statusCanRecover = ["pending", "failed"].includes(record.status);
+  if (!statusCanRecover || current.plan.stage !== "app" || current.plan.action !== "prepare") {
     return false;
   }
   if (current.plan.appDeliveryReplacement !== undefined) {
@@ -68,6 +78,83 @@ export const hasPendingNativePreviewRecovery = (record: HostedRuntimeJournalReco
   );
 };
 
+const readyCandidates = <T extends { readyState: string }>(values: T[] | undefined) =>
+  (values ?? []).filter((value) => value.readyState === "READY");
+
+const selectAppCandidate = <T extends { deploymentId: string }>(
+  candidates: T[],
+  deliveredDeploymentId: string | undefined,
+) => {
+  const delivered = candidates.find((value) => value.deploymentId === deliveredDeploymentId);
+  if (delivered !== undefined) {
+    return delivered;
+  }
+  return candidates.length === 1 ? candidates[0] : undefined;
+};
+
+const selectGatewayCandidate = <T extends { deploymentId: string }>(
+  candidates: T[],
+  requestedDeploymentId: string | undefined,
+  deliveredDeploymentId: string | undefined,
+) => {
+  const target = requestedDeploymentId ?? deliveredDeploymentId;
+  const matching = candidates.find((value) => value.deploymentId === target);
+  if (matching !== undefined) {
+    return matching;
+  }
+  if (requestedDeploymentId === undefined && candidates.length === 1) {
+    return candidates[0] ?? null;
+  }
+  return null;
+};
+
+const describeRecoveryEffect = (effect: HostedOperatorPlan["effects"][number]) => {
+  if (effect.kind === "bindings" || effect.kind === "gateway-bindings") {
+    return {
+      ...effect,
+      description:
+        "Bind and read back only owned Preview environment rows; consume the explicitly configured administrator-managed Trusted Sources policy without setting or claiming fresh policy proof.",
+    };
+  }
+  if (effect.kind === "delivery" || effect.kind === "gateway-delivery") {
+    return {
+      ...effect,
+      description:
+        "Create and verify a fresh native Preview under this new approval, replacing the named READY predecessor. This may create duplicate deployment usage charges.",
+    };
+  }
+  return effect;
+};
+
+const createReplacementProposal = (
+  record: HostedRuntimeJournalRecord,
+  base: Omit<
+    HostedOperatorPlan,
+    "appDeliveryReplacement" | "gatewayBindings" | "hostProtection" | "retention" | "effects"
+  >,
+  previous: HostedOperatorPlan,
+  bindings: NonNullable<HostedOperatorPlan["gatewayBindings"]>,
+  policy: ExternallyManagedTrustedSources,
+  intent: ReadyDeliveryReplacementIntent,
+  now: number,
+): HostedOperatorPlan | undefined => {
+  if (resolveReadyDeliveryReplacementPredecessor(record, intent) === undefined) {
+    return undefined;
+  }
+  const proposed = hostedOperatorPlanSchema.parse({
+    ...base,
+    appDeliveryReplacement: intent,
+    effects: previous.effects.map(describeRecoveryEffect),
+    gatewayBindings: bindings,
+    hostProtection: policy,
+    retention: {
+      ...previous.retention,
+      expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+    },
+  });
+  return isReadyDeliveryReplacementSuccessor(record, proposed, now) ? proposed : undefined;
+};
+
 /** A fresh explicit delivery proposal uses the approved source and ownership. No old receipt becomes new success. */
 export const createNativePreviewRecoveryPlan = (
   record: HostedRuntimeJournalRecord | undefined,
@@ -79,95 +166,67 @@ export const createNativePreviewRecoveryPlan = (
   if (!record || !current || !hasPendingNativePreviewRecovery(record)) {
     return undefined;
   }
+  const currentPlan = current.plan;
+  const currentReplacement = appDeliveryReplacementOf(currentPlan);
   if (
-    current.plan.appDeliveryReplacement &&
+    currentReplacement !== undefined &&
     isDeepStrictEqual(current.plan.hostProtection, policy) &&
     Date.parse(current.plan.retention.expiresAt) > now
   ) {
-    return current.plan;
+    return currentPlan;
   }
   const previous = current.plan;
-  const { appTrustedSources, gatewayBindings, appDeliveryReplacement, ...base } = previous;
+  const { appTrustedSources, gatewayBindings, ...base } = previous;
+  const appDeliveryReplacement = appDeliveryReplacementOf(previous);
   void appTrustedSources;
   void appDeliveryReplacement;
-  if (!gatewayBindings || !previous.delivery || !previous.gatewayDelivery) {
+  if (
+    gatewayBindings === undefined ||
+    previous.delivery === undefined ||
+    previous.gatewayDelivery === undefined
+  ) {
     return undefined;
   }
   const { trustedSources, ...bindings } = gatewayBindings;
   void trustedSources;
-  for (const origin of [
+  const origins = [
     { operator: current },
     ...(current.retainedRenewalOperations ?? []).toReversed(),
-  ]) {
+  ];
+  for (const origin of origins) {
     const { operator } = origin;
-    const candidates = (operator.deliveryCandidates ?? []).filter(
-      (value) => value.readyState === "READY",
+    const app = selectAppCandidate(
+      readyCandidates(operator.deliveryCandidates),
+      operator.deliveredDeploymentId,
     );
-    const app =
-      candidates.find((value) => value.deploymentId === operator.deliveredDeploymentId) ??
-      (candidates.length === 1 ? candidates[0] : undefined);
-    if (!app) {
-      continue;
-    }
-    const gatewayCandidates = (operator.gatewayDeliveryCandidates ?? []).filter(
-      (value) => value.readyState === "READY",
+    const gateway = selectGatewayCandidate(
+      readyCandidates(operator.gatewayDeliveryCandidates),
+      gatewayDeploymentId,
+      operator.deliveredGatewayDeploymentId,
     );
-    const gateway =
-      gatewayCandidates.find(
-        (value) =>
-          value.deploymentId === (gatewayDeploymentId ?? operator.deliveredGatewayDeploymentId),
-      ) ??
-      (gatewayDeploymentId === undefined && gatewayCandidates.length === 1
-        ? gatewayCandidates[0]
-        : undefined);
-    if (gatewayDeploymentId !== undefined && !gateway) {
-      continue;
-    }
-    const intent = {
-      predecessor: {
+    const gatewayRequired = gatewayDeploymentId !== undefined;
+    if (app !== undefined && (!gatewayRequired || (gateway !== undefined && gateway !== null))) {
+      const predecessor: ReadyDeliveryReplacementIntent["predecessor"] = {
         appDeploymentId: app.deploymentId,
         operationRef: operator.operationRef,
         planDigest: operator.planDigest,
-        ...(gateway ? { gatewayDeploymentId: gateway.deploymentId } : {}),
-      },
-      version: 1 as const,
-    };
-    if (!resolveReadyDeliveryReplacementPredecessor(record, intent)) {
-      continue;
-    }
-    const proposed = hostedOperatorPlanSchema.parse({
-      ...base,
-      appDeliveryReplacement: intent,
-      effects: previous.effects.map((effect) =>
-        effect.kind === "bindings" || effect.kind === "gateway-bindings"
-          ? {
-              ...effect,
-              description:
-                "Bind and read back only owned Preview environment rows; consume the explicitly configured administrator-managed Trusted Sources policy without setting or claiming fresh policy proof.",
-            }
-          : effect.kind === "delivery" || effect.kind === "gateway-delivery"
-            ? {
-                ...effect,
-                description:
-                  "Create and verify a fresh native Preview under this new approval, replacing the named READY predecessor. This may create duplicate deployment usage charges.",
-              }
-            : effect,
-      ),
-      gatewayBindings: bindings,
-      hostProtection: policy,
-      retention: {
-        ...previous.retention,
-        expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
-      },
-    });
-    if (
-      isReadyDeliveryReplacementSuccessor(
+      };
+      if (gateway !== undefined && gateway !== null) {
+        predecessor.gatewayDeploymentId = gateway.deploymentId;
+      }
+      const intent: ReadyDeliveryReplacementIntent = { predecessor, version: 1 };
+      const proposed = createReplacementProposal(
         record,
-        { ...proposed, appDeliveryReplacement: intent },
+        base,
+        previous,
+        bindings,
+        policy,
+        intent,
         now,
-      )
-    ) {
-      return proposed;
+      );
+      if (proposed !== undefined) {
+        return proposed;
+      }
     }
   }
   return undefined;
@@ -185,10 +244,10 @@ export const readNativePreviewRecoveryPlan = async (input: {
     return undefined;
   }
   const current = record?.operator;
-  if (!current) {
+  if (current === undefined) {
     return undefined;
   }
-  if (current.plan.appDeliveryReplacement !== undefined) {
+  if (appDeliveryReplacementOf(current.plan) !== undefined) {
     // Expired saved authority belongs to ordinary renewal/proposal planning, never fresh predecessor discovery.
     if (Date.parse(current.plan.retention.expiresAt) <= now) {
       return undefined;
@@ -212,8 +271,9 @@ export const readyReplacementHistory = (
   plan: HostedOperatorPlan,
   now = Date.now(),
 ) => {
-  if (!plan.appDeliveryReplacement) {
-    return;
+  const appDeliveryReplacement = appDeliveryReplacementOf(plan);
+  if (appDeliveryReplacement === undefined) {
+    return null;
   }
   for (const archived of record.operator?.retainedReadyDeliveryOperations?.toReversed() ?? []) {
     const snapshot: HostedRuntimeJournalRecord = {
@@ -221,21 +281,20 @@ export const readyReplacementHistory = (
       approvedByCallId: archived.approvedByCallId,
       operator: archived.operator,
     };
+    delete snapshot.leaseExpiresAt;
+    delete snapshot.leaseId;
     const predecessor = resolveReadyDeliveryReplacementPredecessor(
       snapshot,
-      plan.appDeliveryReplacement,
+      appDeliveryReplacement,
     );
     if (
-      predecessor &&
-      isReadyDeliveryReplacementSuccessor(
-        { ...snapshot, leaseExpiresAt: undefined, leaseId: undefined },
-        { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
-        now,
-      )
+      predecessor !== undefined &&
+      isReadyDeliveryReplacementSuccessor(snapshot, { ...plan, appDeliveryReplacement }, now)
     ) {
       return predecessor;
     }
   }
+  return null;
 };
 
 export const readyReplacementPriorOperators = (
@@ -244,7 +303,7 @@ export const readyReplacementPriorOperators = (
   now = Date.now(),
 ): { approvedByCallId: string; operator: HostedOperatorRecordBase }[] => {
   const predecessor = readyReplacementHistory(record, plan, now);
-  if (predecessor === undefined || predecessor.snapshot.operator === undefined) {
+  if (predecessor === null || predecessor.snapshot.operator === undefined) {
     return [];
   }
   return [

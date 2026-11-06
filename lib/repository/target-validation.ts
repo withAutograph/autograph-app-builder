@@ -165,6 +165,7 @@ const formatterTimingLinePattern =
 const repairLinePattern =
   /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|stale iteration preimage|schema-compiler:|Schema compilation failed|Schema release generation failed|The schema compiler produced invalid JSON|Compiler output excerpt:|ToolNotFound:|linker\s+[`"']?cc|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|The compiler returned no output|No CUE source location was reported|Install a native C compiler|Install the repository's locked mise tools|Read the compiler error and its CUE file location|Retry:)/iu;
 const diagnosticContinuationPattern = /^(?:\s+\S|\s*\^|\s*\||\s*(?:caused by|help|note|retry):)/iu;
+const validationCommandEvent = "app_builder.validation_command";
 
 // Keep enough compiler/build output for an agent to repair its own candidate,
 // while excluding control bytes and common credential forms from durable state.
@@ -184,22 +185,19 @@ export const validationOutputExcerpt = (
       const isRepairLine = repairLinePattern.test(line);
       const isFormatterSummary = formatterFailureSummaryPattern.test(line);
       const filename = formatterTimingLinePattern.exec(line)?.groups?.filename?.trim();
-      const isFormatterFileTiming =
-        hasFormatterFailure &&
+      const hasFilenamePath =
         filename !== undefined &&
         (filename.includes("/") || filename.includes("\\") || /\.[^.\s]+$/u.test(filename));
-      if (!isRepairLine && !isFormatterSummary && !isFormatterFileTiming) {
-        continue;
-      }
-      retained.add(index);
-      if (!isRepairLine || isFormatterSummary || isFormatterFileTiming) {
-        continue;
-      }
-      // CUE and Rust often put the source excerpt or the underlying cause on
-      // following lines that do not repeat the error prefix.
-      for (let next = index + 1; next < Math.min(index + 4, lines.length); next += 1) {
-        if (!diagnosticContinuationPattern.test(lines[next] ?? "")) break;
-        retained.add(next);
+      const isFormatterFileTiming = hasFormatterFailure && hasFilenamePath;
+      const shouldRetain = isRepairLine || isFormatterSummary || isFormatterFileTiming;
+      if (shouldRetain) retained.add(index);
+      if (isRepairLine && !isFormatterSummary && !isFormatterFileTiming) {
+        // CUE and Rust often put the source excerpt or the underlying cause on
+        // following lines that do not repeat the error prefix.
+        for (let next = index + 1; next < Math.min(index + 4, lines.length); next += 1) {
+          if (diagnosticContinuationPattern.test(lines[next] ?? "")) retained.add(next);
+          else break;
+        }
       }
     }
     const cleaned = lines
@@ -209,7 +207,7 @@ export const validationOutputExcerpt = (
     return {
       cleaned,
       omitted: lines.some((line, index) => line.trim().length > 0 && !retained.has(index)),
-    };
+    } satisfies TargetValidationOutputExcerpt & { omitted: boolean };
   };
   const safeStdout = sanitize(sanitizedStdout);
   const safeStderr = sanitize(sanitizedStderr);
@@ -294,10 +292,33 @@ const diagnosticMessage = (code: TargetValidationDiagnostic["code"]): string => 
   return "Compiler error at this location; inspect the reported code and file.";
 };
 
+const appendCompilerLine = (
+  sourceLine: string,
+  append: (
+    code: TargetValidationDiagnostic["code"],
+    path: string,
+    line: string,
+    column: string,
+  ) => boolean,
+) => {
+  let matched = false;
+  for (const pattern of compilerDiagnosticPatterns) {
+    if (matched) continue;
+    const match = pattern.exec(sourceLine);
+    if (match !== null) {
+      const [, path, line, column, code] = match;
+      if (/^TS\d+$/u.test(code)) {
+        append(`TS${Number(code.slice(2))}`, path, line, column);
+      }
+      matched = true;
+    }
+  }
+};
+
 export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[] => {
   const diagnostics: TargetValidationDiagnostic[] = [];
   const seen = new Set<string>();
-  let pendingCompiler: { code: `TS${number}` } | undefined;
+  let pendingCompiler: { code: `TS${number}` } | null = null;
   let pendingVitestMessage = false;
   const append = (
     code: TargetValidationDiagnostic["code"],
@@ -325,45 +346,38 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
     seen.add(key);
     return true;
   };
-  for (const sourceLine of output
+  const sourceLines = output
     .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
-    .split("\n")) {
+    .split("\n");
+  for (const sourceLine of sourceLines) {
     const oxcHeader = oxcCompilerHeaderPattern.exec(sourceLine);
     if (oxcHeader !== null) {
-      pendingCompiler = {
-        code: oxcHeader[1] as `TS${number}`,
-      };
-      continue;
+      const [code] = oxcHeader;
+      if (/^TS\d+$/u.test(code ?? "")) pendingCompiler = { code: `TS${Number(code?.slice(2))}` };
     }
     const location = sourceLocationPattern.exec(sourceLine);
-    if (location !== null && pendingCompiler !== undefined) {
+    if (oxcHeader === null && location !== null && pendingCompiler !== null) {
       append(pendingCompiler.code, location[1], location[2], location[3]);
-      pendingCompiler = undefined;
-      continue;
+      pendingCompiler = null;
     }
     const vitestFailure = vitestFailurePattern.exec(sourceLine);
     if (vitestFailure !== null) {
       pendingVitestMessage = true;
-      continue;
     }
     const vitestLocation = vitestLocationPattern.exec(sourceLine);
-    if (vitestLocation !== null && pendingVitestMessage) {
+    if (vitestFailure === null && vitestLocation !== null && pendingVitestMessage) {
       const recorded = append("VITEST", vitestLocation[1], vitestLocation[2], vitestLocation[3]);
       if (recorded) {
         pendingVitestMessage = false;
       }
-      continue;
     }
-    for (const pattern of compilerDiagnosticPatterns) {
-      const match = pattern.exec(sourceLine);
-      if (match === null) {
-        continue;
-      }
-      if (/^TS\d+$/u.test(match[4])) {
-        append(match[4] as `TS${number}`, match[1], match[2], match[3]);
-      }
-      break;
-    }
+    if (
+      oxcHeader === null &&
+      location === null &&
+      vitestFailure === null &&
+      vitestLocation === null
+    )
+      appendCompilerLine(sourceLine, append);
   }
   return diagnostics;
 };
@@ -477,14 +491,15 @@ export const sandboxValidationCommandExecutor =
       command === repositoryDeliveryBuildCommand(appId, options?.alreadyCompiled);
     const shard = isDeliveryBuild ? undefined : command.split(" ").at(-1);
     if (options?.runtime && !isDeliveryBuild) {
-      return await options.runtime.runTask({
-        task: "repository-test",
-        ...(options.alreadyCompiled === true ? { alreadyCompiled: true } : {}),
+      const runtimeInput = {
         environment,
-        shard,
         onChunk,
+        shard,
         signal: abortSignal,
-      });
+        task: "repository-test",
+      };
+      if (options.alreadyCompiled === true) runtimeInput.alreadyCompiled = true;
+      return await options.runtime.runTask(runtimeInput);
     }
     const environmentPath = localRuntimeEnvironmentPath(validationRoot, appId);
     const env = {
@@ -497,8 +512,8 @@ export const sandboxValidationCommandExecutor =
         ),
       ),
       APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath),
-      ...(options?.alreadyCompiled === true ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
     };
+    if (options?.alreadyCompiled === true) env.APP_RUNTIME_ALREADY_COMPILED = "1";
     const executionCommand = `(
 set -e
 (
@@ -514,12 +529,13 @@ cat "$log"
 rm -f "$log"
 exit "$status"`;
     if (onChunk === undefined) {
-      return await sandbox.run({
+      const runInput = {
         command: detachedCommand,
         env,
         workingDirectory: validationRoot,
-        ...(abortSignal === undefined ? {} : { abortSignal }),
-      });
+      };
+      if (abortSignal !== undefined) runInput.abortSignal = abortSignal;
+      return await sandbox.run(runInput);
     }
     const process = await sandbox.spawn({
       abortSignal,
@@ -532,12 +548,10 @@ exit "$status"`;
       const decoder = new TextDecoder("utf-8");
       try {
         while (true) {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- Durable writes apply output backpressure.
           const next = await reader.read();
           if (next.done) break;
           const content = decoder.decode(next.value, { stream: true });
           if (content) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- Each stream read waits for durable storage.
             await onChunk(channel, content);
           }
         }
@@ -566,7 +580,7 @@ exit "$status"`;
 
 export const fixtureValidationCommandExecutor =
   (): ValidationCommandExecutor =>
-  async ({ appId, command }) => {
+  ({ appId, command }) => {
     const isBuild = command === repositoryDeliveryBuildCommand(appId);
     if (appId === "validation-interruption" && isBuild) {
       const error = new Error("fixture validation interruption");
@@ -586,7 +600,7 @@ const failureReceipt = (
   diagnostics?: readonly TargetValidationDiagnostic[],
   output?: TargetValidationOutputExcerpt,
 ): TargetValidationFailureReceipt => {
-  const unsigned = {
+  const unsigned: Omit<TargetValidationFailureReceipt, "digest"> = {
     version: 3 as const,
     ...attemptBinding(attempt),
     attemptDigest: attempt.digest,
@@ -595,10 +609,10 @@ const failureReceipt = (
     recoveryRequired: true as const,
     status: "failed" as const,
     validatedByCallId: attempt.startedByCallId,
-    ...(commandFailure === undefined ? {} : { commandFailure }),
-    ...(diagnostics === undefined || diagnostics.length === 0 ? {} : { diagnostics }),
-    ...(output === undefined ? {} : { output }),
   };
+  if (commandFailure !== undefined) unsigned.commandFailure = commandFailure;
+  if (diagnostics !== undefined && diagnostics.length > 0) unsigned.diagnostics = diagnostics;
+  if (output !== undefined) unsigned.output = output;
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 };
 
@@ -615,24 +629,20 @@ export const executeProposalBoundValidation = async (input: {
   abortSignal?: AbortSignal;
 }): Promise<TargetValidationResult> => {
   const commands: TargetValidationCommandReceipt[] = [];
-  // oxlint-disable-next-line eslint/complexity -- Existing receipt branches and staged log rollback share one command transition.
-  const execute = async (index: number): Promise<TargetValidationResult> => {
-    const planned = input.attempt.commands[index];
-    if (planned === undefined) {
-      const unsigned = {
-        version: 3 as const,
-        ...attemptBinding(input.attempt),
-        attemptDigest: input.attempt.digest,
-        commands,
-        status: "passed" as const,
-        validatedByCallId: input.attempt.startedByCallId,
-      };
-      return {
-        ok: true,
-        receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },
-      };
-    }
-    let result: ApplyCommandResult;
+  const successReceipt = (): TargetValidationResult => {
+    const unsigned = {
+      version: 3 as const,
+      ...attemptBinding(input.attempt),
+      attemptDigest: input.attempt.digest,
+      commands,
+      status: "passed" as const,
+      validatedByCallId: input.attempt.startedByCallId,
+    };
+    return { ok: true, receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) } };
+  };
+  const executeOne = async (
+    planned: TargetValidationAttemptReceipt["commands"][number],
+  ): Promise<TargetValidationResult | undefined> => {
     const logInput =
       input.logStore === undefined || input.sessionId === undefined
         ? undefined
@@ -649,23 +659,24 @@ export const executeProposalBoundValidation = async (input: {
       logInput === undefined || input.logStore === undefined
         ? undefined
         : new ValidationLogWriter(input.logStore, { ...logInput, channel: "stderr" });
+    const toolingFailure = createValidationToolingFailureObserver(
+      planned.command.includes(" app:check ") ? `//apps/${input.appId}:check` : undefined,
+    );
+    const startedAt = new Date().toISOString();
+    const startedMonotonic = performance.now();
+    let result: ApplyCommandResult;
     let durableOutput:
       | {
           stdout: Awaited<ReturnType<ValidationLogWriter["finish"]>>;
           stderr: Awaited<ReturnType<ValidationLogWriter["finish"]>>;
         }
       | undefined;
-    const toolingFailure = createValidationToolingFailureObserver(
-      planned.command.includes(" app:check ") ? `//apps/${input.appId}:check` : undefined,
-    );
-    const startedAt = new Date().toISOString();
-    const startedMonotonic = performance.now();
     try {
       console.info(
         JSON.stringify({
           callId: input.attempt.startedByCallId,
           command: planned.name,
-          event: "app_builder.validation_command",
+          event: validationCommandEvent,
           phase: "started",
           startedAt,
         }),
@@ -685,8 +696,6 @@ export const executeProposalBoundValidation = async (input: {
       });
       toolingFailure.observe("stdout", result.stdout);
       toolingFailure.observe("stderr", result.stderr);
-      const finishedAt = new Date().toISOString();
-      const elapsedMs = Math.round(performance.now() - startedMonotonic);
       if (stdoutLog !== undefined && stderrLog !== undefined) {
         // Fixture executors return strings; hosted Sandbox executors stream.
         if (result.stdout) await stdoutLog.append(result.stdout);
@@ -699,10 +708,10 @@ export const executeProposalBoundValidation = async (input: {
         JSON.stringify({
           callId: input.attempt.startedByCallId,
           command: planned.name,
-          elapsedMs,
-          event: "app_builder.validation_command",
+          elapsedMs: Math.round(performance.now() - startedMonotonic),
+          event: validationCommandEvent,
           exitCode: result.exitCode,
-          finishedAt,
+          finishedAt: new Date().toISOString(),
           phase: "finished",
           startedAt,
         }),
@@ -715,7 +724,7 @@ export const executeProposalBoundValidation = async (input: {
           command: planned.name,
           elapsedMs: Math.round(performance.now() - startedMonotonic),
           errorName: error instanceof Error ? error.name : "non_error_rejection",
-          event: "app_builder.validation_command",
+          event: validationCommandEvent,
           finishedAt: new Date().toISOString(),
           phase: "provider_error",
           startedAt,
@@ -723,14 +732,12 @@ export const executeProposalBoundValidation = async (input: {
       );
       const timedOut = error instanceof Error && error.name === "TimeoutError";
       const rejection = z.string().safeParse(error);
-      let providerError: Error;
-      if (error instanceof Error) {
-        providerError = error;
-      } else if (rejection.success) {
-        providerError = new Error(rejection.data);
-      } else {
-        providerError = new Error("The provider returned a non-Error rejection.");
-      }
+      const providerError =
+        error instanceof Error
+          ? error
+          : new Error(
+              rejection.success ? rejection.data : "The provider returned a non-Error rejection.",
+            );
       return {
         ok: false,
         receipt: failureReceipt(
@@ -746,48 +753,33 @@ export const executeProposalBoundValidation = async (input: {
         ),
       };
     }
-    const commandReceipt = {
+    const commandReceipt: TargetValidationCommandReceipt = {
       ...planned,
       exitCode: result.exitCode,
       inputTreeDigest: input.apply.postTreeDigest,
       stderrDigest: durableOutput?.stderr.reference.digest ?? sha256(result.stderr),
       stdoutDigest: durableOutput?.stdout.reference.digest ?? sha256(result.stdout),
-      ...(durableOutput === undefined
-        ? {}
-        : {
-            logs: {
-              stderr: durableOutput.stderr.reference,
-              stdout: durableOutput.stdout.reference,
-            },
-          }),
     };
+    if (durableOutput !== undefined) {
+      commandReceipt.logs = {
+        stderr: durableOutput.stderr.reference,
+        stdout: durableOutput.stdout.reference,
+      };
+    }
     commands.push(commandReceipt);
     if (result.exitCode !== 0) {
+      const classification = toolingFailure.classification();
       return {
         ok: false,
         receipt: failureReceipt(
           input.attempt,
           commands,
-          toolingFailure.classification() === undefined ? "command-failed" : "tooling-prerequisite",
+          classification === undefined ? "command-failed" : "tooling-prerequisite",
           {
             exitCode: result.exitCode,
+            failureClass: classification,
+            hint: classification === "missing-app-task" ? missingAppTaskHint : toolingFailureHint,
             name: planned.name,
-            ...(toolingFailure.classification() === undefined
-              ? {}
-              : {
-                  failureClass: toolingFailure.classification(),
-                  hint:
-                    toolingFailure.classification() === "missing-app-task"
-                      ? missingAppTaskHint
-                      : toolingFailureHint,
-                }),
-            ...(/(?:script not found|missing script|task .* not found)/iu.test(
-              `${result.stderr}\n${result.stdout}`,
-            )
-              ? {
-                  hint: "The repository app task is unavailable. Check the supported mise task and app package scripts before retrying.",
-                }
-              : {}),
           },
           compilerDiagnostics(
             `${durableOutput?.stderr.excerpt ?? result.stderr}\n${durableOutput?.stdout.excerpt ?? result.stdout}`,
@@ -802,6 +794,13 @@ export const executeProposalBoundValidation = async (input: {
         ),
       };
     }
+    return undefined;
+  };
+  const execute = async (index: number): Promise<TargetValidationResult> => {
+    const planned = input.attempt.commands[index];
+    if (planned === undefined) return successReceipt();
+    const result = await executeOne(planned);
+    if (result !== undefined) return result;
     return await execute(index + 1);
   };
   return await execute(0);

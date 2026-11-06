@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await -- In-memory ports implement asynchronous durable I/O. */
 import { realmIdentityNonceSha256 } from "./hosted-operator-auth-identity";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -168,8 +167,6 @@ const fixture = () => {
     reconcile,
     seal: () => "private-encrypted-authority",
     store: {
-      read: async () => structuredClone(row),
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS misses intentionally return undefined as the store interface specifies.
       compareAndSet: async (input): Promise<HostedRuntimeJournalRow | undefined> => {
         if (input.expectedRevision !== row.revision) {
           return undefined;
@@ -177,6 +174,7 @@ const fixture = () => {
         row = { record: structuredClone(input.record), revision: row.revision + 1 };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
   };
   return {

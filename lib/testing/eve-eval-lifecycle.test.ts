@@ -1,6 +1,4 @@
-/* eslint-disable unicorn/prefer-event-target -- Node ChildProcess lifecycle tests require EventEmitter semantics. */
 import { spawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import {
   existsSync,
@@ -14,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { PassThrough } from "node:stream";
+import { z } from "zod";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -23,8 +22,14 @@ import {
   waitForEveEvalChild,
 } from "./eve-eval-lifecycle";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function lockFixture() {
+const lockOwnerSchema = z.strictObject({
+  createdAt: z.string(),
+  pid: z.number(),
+});
+type LockOwner = z.infer<typeof lockOwnerSchema>;
+type LockOwnerInput = LockOwner | Readonly<{ pid?: number }>;
+
+const lockFixture = () => {
   const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "eve-eval-locks-")));
   const backend = nodePath.join(
     root,
@@ -34,18 +39,19 @@ function lockFixture() {
     "vercel-authorized",
   );
   mkdirSync(backend, { recursive: true });
-  const addLock = (name: string, owner: unknown) => {
+  const addLock = (name: string, owner: LockOwnerInput) => {
     const lock = nodePath.join(backend, `${name}.lock`);
     mkdirSync(lock);
-    writeFileSync(nodePath.join(lock, "owner.json"), `${JSON.stringify(owner)}\n`, {
+    const parsedOwner = lockOwnerSchema.safeParse(owner);
+    const document = parsedOwner.success ? parsedOwner.data : owner;
+    writeFileSync(nodePath.join(lock, "owner.json"), `${JSON.stringify(document)}\n`, {
       mode: 0o600,
     });
     return lock;
   };
   return { addLock, backend, root };
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function startServer(port: number) {
   const child = spawn(
     process.execPath,
@@ -64,7 +70,8 @@ async function startServer(port: number) {
       stdio: ["ignore", "ignore", "ignore", "ipc"],
     },
   );
-  const [message] = await once(child, "message");
+  const messageEvent: unknown = await once(child, "message");
+  const [message] = z.tuple([z.unknown()]).parse(messageEvent);
   return { child, port: Number(message) };
 }
 
@@ -117,16 +124,12 @@ describe("Eve eval resource lifecycle", () => {
     const lock = nodePath.join(fixture.backend, "linked.lock");
     symlinkSync(outside, lock);
 
-    await expect(
-      reconcileDeadEveEvalPrewarmLocks(fixture.root, {
-        processAlive: () => false,
-      }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        lock: expect.stringContaining("linked.lock"),
-        status: "preserved",
-      }),
-    ]);
+    const results = await reconcileDeadEveEvalPrewarmLocks(fixture.root, {
+      processAlive: () => false,
+    });
+    const [result] = results;
+    expect(result?.lock).toContain("linked.lock");
+    expect(result?.status).toBe("preserved");
     expect(existsSync(nodePath.join(outside, "owner.json"))).toBe(true);
   });
 
@@ -145,7 +148,6 @@ describe("Eve eval resource lifecycle", () => {
     ]) {
       const info = lstatSync(path);
       expect(info.isDirectory()).toBe(true);
-      // oxlint-disable-next-line eslint/no-bitwise -- File permission mask assertion.
       expect(info.mode & 0o077).toBe(0);
     }
   });
@@ -180,12 +182,14 @@ describe("Eve eval resource lifecycle", () => {
       return;
     }
     const signals = new EventEmitter();
-    const child = new EventEmitter() as ChildProcess;
-    Object.defineProperties(child, {
-      exitCode: { value: null, writable: true },
-      pid: { value: 54_589 },
-      signalCode: { value: null, writable: true },
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
     });
+    const childPid = child.pid;
+    if (childPid === undefined) {
+      throw new Error("Expected spawned child to have a PID");
+    }
+    const stopChild = () => child.kill("SIGKILL");
     const directSignals: (NodeJS.Signals | number | undefined)[] = [];
     child.kill = (signal?: NodeJS.Signals | number) => {
       directSignals.push(signal);
@@ -214,6 +218,7 @@ describe("Eve eval resource lifecycle", () => {
       expect(groupSignals).toEqual(["SIGKILL", "SIGKILL"]);
     } finally {
       kill.mockRestore();
+      stopChild();
     }
   });
 
@@ -221,12 +226,10 @@ describe("Eve eval resource lifecycle", () => {
     if (process.platform === "win32") {
       return;
     }
-    const child = new EventEmitter() as ChildProcess;
-    Object.defineProperties(child, {
-      exitCode: { value: null, writable: true },
-      pid: { value: 54_590 },
-      signalCode: { value: null, writable: true },
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
     });
+    const stopChild = () => child.kill("SIGKILL");
     child.kill = vi.fn(() => true);
     const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
 
@@ -239,9 +242,10 @@ describe("Eve eval resource lifecycle", () => {
       child.emit("exit", 0, null);
       await expect(exit).resolves.toBe(0);
       expect(kill).toHaveBeenCalledTimes(1);
-      expect(kill).toHaveBeenCalledWith(-54_590, "SIGKILL");
+      expect(kill).toHaveBeenCalledWith(-childPid, "SIGKILL");
     } finally {
       kill.mockRestore();
+      stopChild();
     }
   });
 });

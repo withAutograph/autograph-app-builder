@@ -25,7 +25,6 @@ export type ReadOwnedBuilderDestination = (
 ) => Promise<OwnedBuilderDestination | undefined>;
 
 /** Shared read-only custody resolution. It creates no resource or delivery and never elects a history row. */
-// oxlint-disable-next-line eslint/complexity -- Normal destination, exact captured source and approved runtime custody are independently checked in order.
 export const readOwnedBuilderRuntime = async (input: {
   database: ReturnType<typeof openHostedPostgresDatabase>;
   readStandardDestination: ReadOwnedBuilderDestination;
@@ -51,7 +50,6 @@ export const readOwnedBuilderRuntime = async (input: {
   });
   await assertCurrentOwner();
   if (
-    // oxlint-disable-next-line sonarjs/expression-complexity -- Every accepted normal provisioning receipt field must agree with independent destination ownership.
     provisioning === undefined ||
     provisioning.state !== "settled" ||
     provisioning.requestDigest !== destination.provisioningDigest ||
@@ -85,7 +83,6 @@ export const readOwnedBuilderRuntime = async (input: {
   const selection = await selections.read(context, marker.appSpecDigest);
   await assertCurrentOwner();
   if (
-    // oxlint-disable-next-line sonarjs/expression-complexity -- The selected artifact must match this exact canonical accepted app/spec/release.
     selection === undefined ||
     selection.appId !== appId ||
     selection.appSpecDigest !== marker.appSpecDigest ||
@@ -133,11 +130,11 @@ export const readOwnedBuilderRuntime = async (input: {
     );
   }
   return {
-    destination,
-    recordedBuilderDestination,
-    ...prepared,
-    selection,
     captured,
     description: captured.description,
+    destination,
+    ...prepared,
+    recordedBuilderDestination,
+    selection,
   };
 };

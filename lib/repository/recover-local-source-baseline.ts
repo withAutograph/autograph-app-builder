@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/no-bitwise, eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Recovery verifies each immutable input and ordered local Git operation before publishing. */
 import { createHash } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
 import { createReadStream, createWriteStream } from "node:fs";
@@ -18,6 +17,8 @@ import {
 import { safeSourcePath } from "./source-path";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const GIT_EXECUTABLE = "/usr/bin/git";
+const GIT_PATH = "/usr/bin:/bin";
 const sourcePath = z
   .string()
   .refine(
@@ -49,7 +50,7 @@ export const localSourceRecoveryRequestSchema = z.strictObject({
 const hash = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 const cleanGit = (root: string, args: string[], input?: string) =>
   execFileSync(
-    "/usr/bin/git",
+    GIT_EXECUTABLE,
     ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-C", root, ...args],
     {
       env: {
@@ -59,7 +60,7 @@ const cleanGit = (root: string, args: string[], input?: string) =>
         GIT_TERMINAL_PROMPT: "0",
         HOME: root,
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: GIT_PATH,
       },
       input,
       maxBuffer: 32 * 1024 * 1024,
@@ -121,18 +122,18 @@ export const recoverLocalSourceBaseline = async (input: {
       .filter(Boolean)
       .map((line) => line.split(/\s/u)[2]),
   ];
-  const producer = spawn("/usr/bin/git", ["-C", originalRoot, "pack-objects", "--stdout"], {
+  const producer = spawn(GIT_EXECUTABLE, ["-C", originalRoot, "pack-objects", "--stdout"], {
     env: {
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
       NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
+      PATH: GIT_PATH,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
   const consumer = spawn(
-    "/usr/bin/git",
+    GIT_EXECUTABLE,
     ["--git-dir", gitRoot, "index-pack", "--stdin", "--strict"],
     {
       env: {
@@ -140,7 +141,7 @@ export const recoverLocalSourceBaseline = async (input: {
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: GIT_PATH,
       },
       stdio: ["pipe", "ignore", "pipe"],
     },
@@ -257,7 +258,7 @@ export const recoverLocalSourceBaseline = async (input: {
   }
   const tree = localBaselineGit(gitRoot, ["write-tree"]).toString().trim();
   const captured = execFileSync(
-    "/usr/bin/git",
+    GIT_EXECUTABLE,
     [
       "--git-dir",
       gitRoot,
@@ -278,7 +279,7 @@ export const recoverLocalSourceBaseline = async (input: {
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: GIT_PATH,
       },
       input: "Explicit source-only baseline recovery capture\n",
     },
@@ -307,13 +308,13 @@ export const recoverLocalSourceBaseline = async (input: {
     version: 1 as const,
     workspaceDigest: request.workspaceDigest,
   };
-  const pack = spawn("/usr/bin/git", ["--git-dir", gitRoot, "pack-objects", "--stdout", "--revs"], {
+  const pack = spawn(GIT_EXECUTABLE, ["--git-dir", gitRoot, "pack-objects", "--stdout", "--revs"], {
     env: {
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
       NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
+      PATH: GIT_PATH,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });

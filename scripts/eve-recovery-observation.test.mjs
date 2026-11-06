@@ -1,4 +1,3 @@
-/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- This fixture imports installed private compiled Eve modules by package path. */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -7,6 +6,14 @@ import { afterAll, test } from "vitest";
 
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
+const FAILED_STATUS = "failed";
+const TERMINAL_OBSERVATION_PREFIX = "terminal-recovery-observation";
+const DENIED_ERROR = "denied";
+const PRIVATE_DEFERRED = "private-deferred";
+const PRIVATE_APPROVAL = "private-approval";
+const PRIVATE_RESULT = "private-result";
+const PHYSICAL_ORIGINAL = "physical-original";
+const PHYSICAL_FAILED_CHILD = "physical-failed-child";
 const load = async (name) => await import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const { observeTerminalSession, handleTerminalRecoveryRequest } = await load(
   "execution/session/terminal-recovery.js",
@@ -24,12 +31,12 @@ const serialization = await load("compiled/@workflow/core/serialization.js");
 const { setLogRecordSubscriber } = await load("internal/logging.js");
 const records = [];
 setLogRecordSubscriber((record) => {
-  const prefix = "terminal-recovery-observation ";
+  const prefix = `${TERMINAL_OBSERVATION_PREFIX} `;
   if (record.message.startsWith(prefix) === true) {
     records.push({
       ...record,
       fields: JSON.parse(record.message.slice(prefix.length)),
-      message: "terminal-recovery-observation",
+      message: TERMINAL_OBSERVATION_PREFIX,
     });
   }
 });
@@ -43,13 +50,13 @@ const setup = () => {
     originalAuthoritySessionId: "public-original",
     parentCancellationRevision: 0,
     sourceAdapterGeneration: 1,
-    sourceOwnerRunId: "physical-original",
+    sourceOwnerRunId: PHYSICAL_ORIGINAL,
     sourcePublicSessionId: "public-original",
     version: 1,
   };
   const receipt = {
     ...descriptor,
-    ownerRunId: "physical-failed-child",
+    ownerRunId: PHYSICAL_FAILED_CHILD,
     provenance: {
       checkpointVersion: 1,
       kind: "completed-terminal-turn-input",
@@ -78,18 +85,18 @@ const setup = () => {
     frontier: [],
     issues: [],
     nativeEvents: [],
-    run: { status: "failed" },
+    run: { status: FAILED_STATUS },
   };
   const ports = {
-    authorize: async () => {
+    authorize: () => {
       state.authorized += 1;
       if (state.denied) {
-        throw new Error("denied");
+        throw new Error(DENIED_ERROR);
       }
     },
     authorizeActivation: effect,
     commitReceipt: effect,
-    readReceipt: async () => state.receipt,
+    readReceipt: () => state.receipt,
   };
   const deps = {
     collect: async ({ binding, authorizeOwner }) => {
@@ -126,23 +133,23 @@ test("receipt observation selects failed physical child and cannot activate, rec
   const before = JSON.stringify(payload);
   assert.deepEqual(await observeTerminalSession(input, deps), {
     kind: "accepted",
-    sessionId: "physical-failed-child",
+    sessionId: PHYSICAL_FAILED_CHILD,
   });
   assert.equal(state.effects, 0);
   assert.equal(state.collects, 2);
   assert.deepEqual(
     state.reports.map((report) => report.ownerRunId),
-    ["physical-original", "physical-failed-child"],
+    [PHYSICAL_ORIGINAL, PHYSICAL_FAILED_CHILD],
   );
   assert.equal(JSON.stringify(payload), before);
 });
 
 test("without receipt observes only canonical original physical owner", async () => {
   const { state, deps, input, payload } = setup();
-  state.receipt = undefined;
+  state.receipt = null;
   payload.binding.ownerRunId = input.descriptor.sourceOwnerRunId;
   const observed = await observeTerminalSession(input, deps);
-  assert.equal(observed.sessionId, "physical-original");
+  assert.equal(observed.sessionId, PHYSICAL_ORIGINAL);
   assert.equal(state.reports[0].receiptPresent, false);
   assert.equal(state.effects, 0);
 });
@@ -158,7 +165,7 @@ test("successful repeat suppresses reads briefly but reauthorizes every request"
   await observeTerminalSession(input, deps);
   assert.equal(state.collects, 4);
   state.denied = true;
-  await assert.rejects(observeTerminalSession(input, deps), /denied/u);
+  await assert.rejects(observeTerminalSession(input, deps), new RegExp(DENIED_ERROR, "u"));
   assert.equal(state.collects, 4);
 });
 
@@ -264,18 +271,18 @@ test("actual native collector and serialization retain mixed orphan history and 
             toolName: "private-tool",
             type: "tool-call",
           },
-          { input: {}, toolCallId: deferredCall, toolName: "private-deferred", type: "tool-call" },
-          { approvalId: "private-approval", toolCallId: nativeCall, type: "tool-approval-request" },
+          { input: {}, toolCallId: deferredCall, toolName: PRIVATE_DEFERRED, type: "tool-call" },
+          { approvalId: PRIVATE_APPROVAL, toolCallId: nativeCall, type: "tool-approval-request" },
         ],
         role: "assistant",
       },
       {
         content: [
-          { approvalId: "private-approval", approved: true, type: "tool-approval-response" },
+          { approvalId: PRIVATE_APPROVAL, approved: true, type: "tool-approval-response" },
           {
-            output: { type: "text", value: "private-result" },
+            output: { type: "text", value: PRIVATE_RESULT },
             toolCallId: deferredCall,
-            toolName: "private-deferred",
+            toolName: PRIVATE_DEFERRED,
             type: "tool-result",
           },
         ],
@@ -317,16 +324,16 @@ test("actual native collector and serialization retain mixed orphan history and 
   const readOwners = [];
   const world = {
     events: {
-      list: async ({ runId }) => ({ data: [{ ...event, runId }], hasMore: false }),
+      list: ({ runId }) => ({ data: [{ ...event, runId }], hasMore: false }),
     },
     runs: {
-      get: async (id) => {
+      get: (id) => {
         assert.ok([owner, sourceOwner].includes(id));
         readOwners.push(id);
-        return { runId: id, status: "failed" };
+        return { runId: id, status: FAILED_STATUS };
       },
     },
-    steps: { get: async (runId) => (runId === sourceOwner ? sourceStep : step) },
+    steps: { get: (runId) => (runId === sourceOwner ? sourceStep : step) },
   };
   const realResult = {
     data: {
@@ -340,7 +347,7 @@ test("actual native collector and serialization retain mixed orphan history and 
     type: "action.result",
   };
   deps.collect = createTerminalRecoveryCandidateCollector({
-    getWorld: async () => world,
+    getWorld: () => world,
     hydrateStepArguments: (value, runId, key) =>
       serialization.hydrateStepArguments(value, runId, key, []),
     hydrateStepReturnValue: (value, runId, key) =>
@@ -357,7 +364,7 @@ test("actual native collector and serialization retain mixed orphan history and 
       }
     },
     requireEventSlot: (id) => Number(id.slice(5)),
-    resolveRunEncryptionKey: async () => {},
+    resolveRunEncryptionKey: () => null,
   });
   deps.readCandidate = readTerminalRecoveryCandidate;
   deps.recordObservation = recordTerminalRecoveryObservation;
@@ -369,9 +376,9 @@ test("actual native collector and serialization retain mixed orphan history and 
   for (const privateValue of [
     nativeCall,
     deferredCall,
-    "private-result",
+    PRIVATE_RESULT,
     "private-tool",
-    "private-approval",
+    PRIVATE_APPROVAL,
     "secret-prompt",
     owner,
     logical,

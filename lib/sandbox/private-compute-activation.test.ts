@@ -26,6 +26,7 @@ const profile = () =>
     vcpus: 8,
     version: 1,
   });
+const pause = async () => await Promise.resolve(true);
 const fixture = () => {
   let status: PrivateComputeNative["status"] = "running";
   let vcpus = 2;
@@ -45,11 +46,12 @@ const fixture = () => {
       return status;
     },
     stop: async () => {
+      await pause();
       effects.push("stop");
       status = "stopped";
-      return globalThis.undefined;
     },
     update: async (input) => {
+      await pause();
       effects.push("update");
       if (uncertainUpdate) {
         throw new Error("Lost provider reply");
@@ -62,15 +64,23 @@ const fixture = () => {
   };
   const ports = {
     assertCurrent: () => {},
-    read: async () => native,
-    readActivation: async () => record,
+    read: async () => {
+      await pause();
+      return native;
+    },
+    readActivation: async () => {
+      await pause();
+      return record;
+    },
     resume: async () => {
+      await pause();
       effects.push("resume");
       status = "running";
       sessionVcpus = vcpus;
       return native;
     },
     writeActivation: async (value: PrivateComputeActivation) => {
+      await pause();
       record = value;
     },
   };
@@ -127,7 +137,6 @@ describe("approved private compute transition", () => {
     const f = fixture();
     for (const status of ["stopping", "snapshotting"] as const) {
       f.observeStatus(status);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Each independent observed native state must deny effects.
       await expect(activatePrivateComputeProfile(f.input, f.ports)).rejects.toThrow(
         "still transitioning",
       );

@@ -36,7 +36,6 @@ export type NativeTargetVercelProjectObservation =
       reason: "invalid_response" | "provider_unavailable" | "unobserved_project";
     };
 
-/* oxlint-disable sonarjs/max-union-size -- Each provider outcome carries a distinct durable write meaning. */
 export type NativeTargetVercelProjectCreation =
   | NativeTargetVercelProjectObservation
   | { status: "uncertain"; reason: "receipt_unavailable" | "unknown_write"; projectId?: string }
@@ -170,19 +169,20 @@ export const createNativeTargetVercelProject = async (
   // Once dispatched, an exception or unreadable response is an unknown write.
   let response: Response;
   try {
+    const projectBody = {
+      framework: settings.framework,
+      name: input.name,
+      oidcTokenConfig: protection.oidcTokenConfig,
+      rootDirectory: settings.rootDirectory,
+      ssoProtection: protection.ssoProtection,
+    };
+    if (settings.buildCommand !== undefined) {
+      Object.assign(projectBody, { buildCommand: settings.buildCommand });
+    }
     response = await (input.fetch ?? fetch)(
       `https://api.vercel.com/v11/projects${queryFor(input.installation)}`,
       {
-        body: JSON.stringify({
-          name: input.name,
-          framework: settings.framework,
-          rootDirectory: settings.rootDirectory,
-          // The create API rejects this update-only field. Independent readback below
-          // still requires its requested value before this project can be registered.
-          ...(settings.buildCommand === undefined ? {} : { buildCommand: settings.buildCommand }),
-          ssoProtection: protection.ssoProtection,
-          oidcTokenConfig: protection.oidcTokenConfig,
-        }),
+        body: JSON.stringify(projectBody),
         headers: {
           Accept: "application/json",
           Authorization: `Bearer ${input.token}`,

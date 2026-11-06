@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/no-await-in-loop -- Journal CAS retries must freshly reread canonical approval and ownership sequentially. */
 import {
   HostedOperatorError,
   sameOperatorPlanExceptExpiry,
@@ -51,12 +50,15 @@ export const recoverOriginalApprovedPlan = async (
     // Each CAS retry rechecks current canonical ownership and actual approval.
     const current = await deps.store.read(context);
     const saved = current?.record.operator;
-    const original = await deps.readApprovedPlan({
+    const approvedPlanInput: Parameters<NonNullable<typeof deps.readApprovedPlan>>[0] = {
       ...context,
       now: now(),
       plan,
-      ...(saved === undefined ? {} : { currentOperation: saved }),
-    });
+    };
+    if (saved !== undefined) {
+      approvedPlanInput.currentOperation = saved;
+    }
+    const original = await deps.readApprovedPlan(approvedPlanInput);
     if (original === null) {
       return null;
     }

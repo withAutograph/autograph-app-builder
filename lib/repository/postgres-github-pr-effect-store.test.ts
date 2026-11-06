@@ -40,7 +40,7 @@ const succeeded = createGitHubPrEffectReceipt({
 });
 
 const databaseFixture = (rows: readonly (readonly (object | string)[])[] = []) => {
-  const request = vi.fn(async (_sql: string, _params: readonly (object | string | number)[]) => ({
+  const request = vi.fn((_sql: string, _params: readonly (object | string | number)[]) => ({
     rows: [...rows],
   }));
   return { database: drizzle(request), request };

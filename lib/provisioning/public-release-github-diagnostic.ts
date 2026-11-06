@@ -20,7 +20,6 @@ const httpCodes = new Map([
   [429, "rate_limited"],
 ]);
 /** Parse only actual HTTP metadata; provider bodies/messages/URLs never cross this boundary. */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Octokit throws across a package boundary; only the independently parsed status and response header are retained.
 export const githubReleaseFailure = (error: unknown): PublicReleaseProviderError | undefined => {
   if (error instanceof PublicReleaseProviderError) {
     return error;
@@ -42,19 +41,29 @@ export const githubReleaseFailure = (error: unknown): PublicReleaseProviderError
   const code =
     httpCodes.get(status.data.status) ??
     (status.data.status >= 500 ? "provider_unavailable" : undefined);
-  return new PublicReleaseProviderError(
-    githubReleaseDiagnosticSchema.parse({
-      provider: "github",
-      statusCode: status.data.status,
-      ...(code === undefined ? {} : { code }),
-      ...(metadata.success ? requestRef(metadata.data.response.headers) : {}),
-    }),
-  );
+  const requestReference = metadata.success
+    ? requestRef(metadata.data.response.headers).requestRef
+    : undefined;
+  const diagnostic = {
+    provider: "github",
+    statusCode: status.data.status,
+  } satisfies {
+    provider: "github";
+    statusCode: number;
+    code?: string;
+    requestRef?: string;
+  };
+  if (code !== undefined) {
+    diagnostic.code = code;
+  }
+  if (requestReference !== undefined) {
+    diagnostic.requestRef = requestReference;
+  }
+  return new PublicReleaseProviderError(githubReleaseDiagnosticSchema.parse(diagnostic));
 };
 
 /** GraphQL rejects mutations with HTTP200; retain only a closed error type. */
 export const githubReleaseGraphqlFailure = (
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This GitHub response boundary reads only the GraphQL errors array and allowlisted type below.
   data: unknown,
   headers: Readonly<Record<string, string | number | undefined>>,
 ): PublicReleaseProviderError | undefined => {
@@ -70,10 +79,21 @@ export const githubReleaseGraphqlFailure = (
       break;
     }
   }
-  return new PublicReleaseProviderError({
+  const ref = requestRef(headers).requestRef;
+  const diagnostic = {
     provider: "github",
     statusCode: 200,
-    ...(code === undefined ? {} : { code }),
-    ...requestRef(headers),
-  });
+  } satisfies {
+    provider: "github";
+    statusCode: number;
+    code?: z.infer<typeof githubReleaseGraphqlTypeSchema>;
+    requestRef?: string;
+  };
+  if (code !== undefined) {
+    diagnostic.code = code;
+  }
+  if (ref !== undefined) {
+    diagnostic.requestRef = ref;
+  }
+  return new PublicReleaseProviderError(diagnostic);
 };

@@ -6,7 +6,6 @@ import { captureEveWorkerEnvelope, installEveWorkerEnvelope } from "./eve-worker
 
 const appRoot = "/owned/app";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function trustedSource(overrides: Record<string, string | undefined> = {}) {
   return {
     EVE_DEV: "1",
@@ -63,11 +62,11 @@ describe("closed Eve worker environment", () => {
   });
 
   it.each([
-    ["non-loopback", { WORKFLOW_LOCAL_BASE_URL: "http://192.0.2.1:43123" }],
-    ["credential", { WORKFLOW_LOCAL_BASE_URL: "http://user@127.0.0.1:43123" }],
-    ["path", { WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123/path" }],
-    ["query", { WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123?x=1" }],
-    ["missing port", { WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1" }],
+    ["non-loopback", { WORKFLOW_LOCAL_BASE_URL: "https://192.0.2.1:43123" }],
+    ["credential", { WORKFLOW_LOCAL_BASE_URL: "https://user@127.0.0.1:43123" }],
+    ["path", { WORKFLOW_LOCAL_BASE_URL: "https://127.0.0.1:43123/path" }],
+    ["query", { WORKFLOW_LOCAL_BASE_URL: "https://127.0.0.1:43123?x=1" }],
+    ["missing port", { WORKFLOW_LOCAL_BASE_URL: "https://127.0.0.1" }],
     ["port mismatch", { PORT: "43124" }],
     ["development marker", { EVE_DEV: "0" }],
     ["evaluation marker", { EVE_EVALUATION: "0" }],
@@ -98,12 +97,12 @@ describe("closed Eve worker environment", () => {
 
   it("accepts an absent optional sandbox run id", () => {
     const envelope = captureEveWorkerEnvelope(
-      trustedSource({ EVE_DEVELOPMENT_SANDBOX_RUN_ID: undefined }),
+      trustedSource({ EVE_DEVELOPMENT_SANDBOX_RUN_ID: null }),
       appRoot,
     );
-    const environment: Record<string, string | undefined> = {
+    const environment = {
       EVE_DEVELOPMENT_SANDBOX_RUN_ID: "hostile",
-    };
+    } satisfies Record<string, string | undefined>;
     installEveWorkerEnvelope(environment, envelope, appRoot);
     expect(environment.EVE_DEVELOPMENT_SANDBOX_RUN_ID).toBeUndefined();
   });
@@ -111,15 +110,15 @@ describe("closed Eve worker environment", () => {
   it("deletes an ambient body timeout when the envelope omits it", () => {
     const envelope = captureEveWorkerEnvelope(
       trustedSource({
-        WORKFLOW_LOCAL_BODY_TIMEOUT_MS: undefined,
-        WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: undefined,
+        WORKFLOW_LOCAL_BODY_TIMEOUT_MS: null,
+        WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: null,
       }),
       appRoot,
     );
-    const environment: Record<string, string | undefined> = {
+    const environment = {
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "hostile",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "hostile",
-    };
+    } satisfies Record<string, string | undefined>;
     installEveWorkerEnvelope(environment, envelope, appRoot);
     expect(environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS).toBeUndefined();
     expect(environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS).toBeUndefined();

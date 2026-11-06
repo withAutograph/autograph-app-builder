@@ -91,7 +91,6 @@ import type {
   NeonAuthorizationInput,
   NeonAuthorizationResult,
 } from "./hosted-operator-neon-authorization";
-/* oxlint-disable eslint/no-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions, eslint/complexity, sonarjs/expression-complexity, sonarjs/cognitive-complexity, unicorn/no-await-expression-member, eslint/prefer-destructuring -- Effects, fences and journal checkpoints are deliberately sequential inside one resource lease. */
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
@@ -163,6 +162,7 @@ import {
   resolveReadyDeliveryReplacementPredecessor,
 } from "./hosted-operator-ready-delivery-replacement";
 import type { ReadyDeliveryReplacementPredecessor } from "./hosted-operator-ready-delivery-replacement";
+import { readyDeliveryReplacementIntentSchema } from "./hosted-operator-ready-delivery-replacement-intent";
 import {
   readyReplacementHistory,
   readyReplacementPriorOperators,
@@ -446,7 +446,6 @@ const correctionDeliveryIntent = (plan: HostedOperatorPlan, effectId: string) =>
   if (effect?.kind === GATEWAY_DELIVERY_EFFECT) {
     return { delivery: plan.gatewayDelivery, kind: effect.kind };
   }
-  // oxlint-disable-next-line unicorn/no-useless-undefined -- Non-delivery effects explicitly have no delivery intent.
   return undefined;
 };
 const retainedDeliveryCorrections = (
@@ -454,7 +453,6 @@ const retainedDeliveryCorrections = (
   next: HostedOperatorRecordBase,
 ) => {
   if (prior.operationRef !== next.operationRef) {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- An unrelated operation explicitly has no retained correction state.
     return undefined;
   }
   return prior.deliveryCorrections?.filter((correction) => {
@@ -810,7 +808,7 @@ const handlePlanOperation = async (
     const readAppProjectSettings = deps.readAppProjectSettings?.bind(deps);
     if (
       readAppProjectSettings !== undefined &&
-      saved?.record.approvedByCallId === "operator:unapproved-plan" &&
+      saved?.record.approvedByCallId === UNAPPROVED_PLAN &&
       saved.record.operator?.retainedProjectSettingsOperations !== undefined
     ) {
       const savedOperationRef = saved.record.operator.operationRef;
@@ -878,17 +876,20 @@ const handlePlanOperation = async (
           return renewal;
         }
       }
-      return await deps.plan({
+      const planInput = {
         ...context,
         action: input.operation,
-        ...(input.releaseIntent === undefined ? {} : { releaseIntent: input.releaseIntent }),
-        ...(input.normalActorProgram === undefined
-          ? {}
-          : { normalActorProgram: input.normalActorProgram }),
-        ...(input.authSignupPolicy === undefined
-          ? {}
-          : { authSignupPolicy: input.authSignupPolicy }),
-      });
+      };
+      if (input.releaseIntent !== undefined) {
+        Object.assign(planInput, { releaseIntent: input.releaseIntent });
+      }
+      if (input.normalActorProgram !== undefined) {
+        Object.assign(planInput, { normalActorProgram: input.normalActorProgram });
+      }
+      if (input.authSignupPolicy !== undefined) {
+        Object.assign(planInput, { authSignupPolicy: input.authSignupPolicy });
+      }
+      return await deps.plan(planInput);
     },
   );
   const cleanupPrior = input.operation === "cleanup" ? await deps.store.read(context) : undefined;
@@ -968,7 +969,6 @@ const handlePlanOperation = async (
     appGatewaySuccessor,
     settingsSuccessor,
     retentionRenewal,
-    readySuccessor,
   } = await observeOperatorPlanStage(context.target.sessionId, "successor_classification", () => ({
     appGatewaySuccessor:
       successorPrior !== undefined &&
@@ -979,14 +979,6 @@ const handlePlanOperation = async (
     participantSuccessor:
       successorPrior !== undefined &&
       isParticipantProgramSuccessor(successorPrior.record, plan, now()),
-    readySuccessor:
-      successorPrior !== undefined &&
-      plan.appDeliveryReplacement !== undefined &&
-      isReadyDeliveryReplacementSuccessor(
-        successorPrior.record,
-        { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
-        now(),
-      ),
     retentionRenewal:
       successorPrior !== undefined &&
       isRetentionRenewalSuccessor(successorPrior.record, plan, now()),
@@ -997,6 +989,17 @@ const handlePlanOperation = async (
       successorPrior !== undefined &&
       isSharedHostProtectionSuccessor(successorPrior.record, plan, now()),
   }));
+  const readyIntentResult = readyDeliveryReplacementIntentSchema.safeParse(
+    plan.appDeliveryReplacement,
+  );
+  const readySuccessor =
+    successorPrior !== undefined &&
+    readyIntentResult.success &&
+    isReadyDeliveryReplacementSuccessor(
+      successorPrior.record,
+      { ...plan, appDeliveryReplacement: readyIntentResult.data },
+      now(),
+    );
   if (renewalPrior !== undefined && successorPrior?.revision !== renewalPrior.revision) {
     throw new HostedOperatorError("operation_in_progress");
   }
@@ -1043,10 +1046,9 @@ const handlePlanOperation = async (
       }
     }
     if (readySuccessor && plan.appDeliveryReplacement !== undefined) {
-      const predecessor = resolveReadyDeliveryReplacementPredecessor(
-        successorPrior.record,
-        plan.appDeliveryReplacement,
-      );
+      const predecessor = readyIntentResult.success
+        ? resolveReadyDeliveryReplacementPredecessor(successorPrior.record, readyIntentResult.data)
+        : undefined;
       if (!predecessor || !deps.verifyReadyDeliveryReplacement) {
         throw new HostedOperatorError("reconciliation_required");
       }
@@ -1328,12 +1330,9 @@ const handlePlanOperation = async (
             record.operator.planDigest === successorPrior?.record.operator?.planDigest &&
             record.operator.approvalId === successorPrior?.record.operator?.approvalId &&
             record.approvedByCallId === successorPrior?.record.approvedByCallId &&
-            plan.appDeliveryReplacement !== undefined &&
-            isReadyDeliveryReplacementSuccessor(
-              record,
-              { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
-              now(),
-            );
+            readyIntentResult.success &&
+            resolveReadyDeliveryReplacementPredecessor(record, readyIntentResult.data) !==
+              undefined;
           if (readySuccessor && !readyDeliverySuccessor) {
             throw new HostedOperatorError("operation_in_progress");
           }
@@ -1646,25 +1645,30 @@ const handlePlanOperation = async (
                 : undefined,
             status: "pending" as const,
             step: "reserved" as const,
-            ...(captureTransition &&
+          };
+          if (
+            captureTransition &&
             captureSuccessor !== undefined &&
             record.retainedAuth !== undefined
-              ? {
-                  unapprovedAppProposalHistory: [
-                    ...(record.unapprovedAppProposalHistory ?? []),
-                    {
-                      approvedByCallId: "operator:unapproved-plan" as const,
-                      operator: record.operator,
-                      preparation: captureSuccessor.account,
-                      retainedAuth: record.retainedAuth,
-                      ...(record.retainedParticipantGateway === undefined
-                        ? {}
-                        : { retainedParticipantGateway: record.retainedParticipantGateway }),
-                    },
-                  ],
-                }
-              : {}),
-          };
+          ) {
+            const proposal = {
+              approvedByCallId: UNAPPROVED_PLAN,
+              operator: record.operator,
+              preparation: captureSuccessor.account,
+              retainedAuth: record.retainedAuth,
+            };
+            if (record.retainedParticipantGateway !== undefined) {
+              Object.assign(proposal, {
+                retainedParticipantGateway: record.retainedParticipantGateway,
+              });
+            }
+            Object.assign(next, {
+              unapprovedAppProposalHistory: [
+                ...(record.unapprovedAppProposalHistory ?? []),
+                proposal,
+              ],
+            });
+          }
           delete next.proof;
           if (
             gatewaySourceSuccessor ||
@@ -1817,15 +1821,22 @@ const handleBindingsOperation = async (input: {
   if (latest?.revision !== current.revision) {
     throw new HostedOperatorError("operation_in_progress");
   }
-  return response({
+  const result = {
     environment,
-    ...(nativePreview === undefined ? {} : { nativePreview }),
-    ...(publicDelivery === undefined ? {} : { publicDelivery }),
-    ...(normalActors === undefined ? {} : { normalActors }),
     operationRef,
     plan,
     proof,
-  });
+  };
+  if (nativePreview !== undefined) {
+    Object.assign(result, { nativePreview });
+  }
+  if (publicDelivery !== undefined) {
+    Object.assign(result, { publicDelivery });
+  }
+  if (normalActors !== undefined) {
+    Object.assign(result, { normalActors });
+  }
+  return response(result);
 };
 
 const normalizeOperatorContext = (authorized: Context): Context => {
@@ -1861,7 +1872,6 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
     "verify",
     "bindings",
   ] as const) {
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Trusted adapter startup validates each required callback; there is no permissive fallback.
     if (typeof deps[name] !== "function") {
       throw new HostedOperatorError("protected_operator_required");
     }
@@ -1872,7 +1882,6 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
   const now = deps.now ?? Date.now;
   return async (request: Request): Promise<Response> => {
     let appId = "unknown";
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The outer rejection boundary delegates arbitrary private errors to the closed diagnostic reporter.
     let reportExecutionFailure: ((error: unknown) => void) | undefined;
     const executionObservationRequested =
       request.headers.get(OPERATOR_EXECUTION_OBSERVATION_HEADER) ===
@@ -2073,7 +2082,6 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       const { plan, planDigest, operationRef } = operator;
       let executionStage: OperatorExecutionStage = "resource_lease";
       const reportedExecutionFailures = new Set<unknown>();
-      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve arbitrary private rejections while projecting only closed failure metadata.
       const reportPrepareFailure = (error: unknown) => {
         if (
           input.action === "execute" &&
@@ -2157,18 +2165,23 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         if (status === "prepared" && signupReady) {
           status = "waiting_for_signup";
         }
-        return {
+        const result: OperatorPublicResult = {
           appId,
           authenticatedBehavior: "unassessed",
           operationRef,
           planDigest,
           status,
-          ...(preparationProgressRequested
-            ? { preparationProgress: readOperatorPreparationProgress(record, now()) }
-            : {}),
-          ...(appUrl === undefined ? {} : { appUrl }),
-          ...(signupUrl === undefined ? {} : { signupUrl }),
         };
+        if (preparationProgressRequested) {
+          result.preparationProgress = readOperatorPreparationProgress(record, now());
+        }
+        if (appUrl !== undefined) {
+          result.appUrl = appUrl;
+        }
+        if (signupUrl !== undefined) {
+          result.signupUrl = signupUrl;
+        }
+        return result;
       };
       if (input.action === "auth-identity-input") {
         if (plan.normalActorProgram !== undefined && plan.stage !== AUTH_PARTICIPANTS_STAGE) {
@@ -2381,26 +2394,26 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               ...record,
               // A new approved attempt verifies under its live lease. Completed
               // resource reads remain idle-only until this attempt settles.
-              ...(plan.action === "prepare" && record.status === "prepared"
-                ? { status: "pending" as const }
-                : {}),
               approvedByCallId: input.callId,
               leaseExpiresAt: new Date(now() + 60_000).toISOString(),
               leaseId,
-              ...(executionObservationRequested
-                ? {
-                    executionObservation: {
-                      approvalId: approval.approvalId,
-                      attemptRef: leaseId,
-                      callId: input.callId,
-                      operationRef,
-                      planDigest,
-                      state: "running" as const,
-                    },
-                  }
-                : {}),
               operator: { ...record.operator, approvalId: approval.approvalId },
             };
+            if (plan.action === "prepare" && record.status === "prepared") {
+              claimedRecord.status = "pending";
+            }
+            if (executionObservationRequested) {
+              Object.assign(claimedRecord, {
+                executionObservation: {
+                  approvalId: approval.approvalId,
+                  attemptRef: leaseId,
+                  callId: input.callId,
+                  operationRef,
+                  planDigest,
+                  state: "running" as const,
+                },
+              });
+            }
             if (!executionObservationRequested) {
               delete claimedRecord.executionObservation;
             }
@@ -2470,9 +2483,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           return await deps.withResourceLease(leased, async (assertFence) => {
             // Renew throughout the acquired resource lease, including credential
             // preparation before a worker exists. Observations never renew it.
-            let renewal: Promise<void> | undefined;
+            let renewal: Promise<void> | null = null;
             const renewalTimer = setInterval(() => {
-              if (renewal !== undefined || executionSignal.aborted) {
+              if (renewal !== null || executionSignal.aborted) {
                 return;
               }
               renewal = (async () => {
@@ -2490,7 +2503,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                       : new HostedOperatorError("operator_unavailable"),
                   );
                 } finally {
-                  renewal = undefined;
+                  renewal = null;
                 }
               })();
             }, 20_000);
@@ -2525,12 +2538,13 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   await executionResponse.clone().json(),
                 );
                 await assertFence();
-                await ownedUpdate((record) =>
-                  settleOperatorExecution(record, leaseId, {
-                    status: result.status,
-                    ...(result.code === undefined ? {} : { code: result.code }),
-                  }),
-                );
+                const settlement: Parameters<typeof settleOperatorExecution>[2] = {
+                  status: result.status,
+                };
+                if (result.code !== undefined) {
+                  settlement.code = result.code;
+                }
+                await ownedUpdate((record) => settleOperatorExecution(record, leaseId, settlement));
               });
               return executionResponse;
             } catch (error) {
@@ -2766,17 +2780,50 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               }
               const effectInput: HostedOperatorEffectContext = {
                 ...context,
-                signal: executionSignal,
-                leaseId,
-                assertCurrent,
                 accountPreparation: record.accountPreparation,
-                checkpointAccountPreparation,
+                assertCurrent,
                 assertCurrentObservation: async () => {
                   await assertCurrentObservation(assertFence);
                 },
                 checkpoint: async (privateState) => {
                   await assertCurrent();
                   record = (await ownedUpdate((value) => ({ ...value, privateState }))).record;
+                },
+                checkpointAccountPreparation,
+                checkpointDelivery: async (rows, selectedId) => {
+                  await assertCurrent();
+                  const candidates = operatorDeploymentCandidatesSchema.parse(rows);
+                  record = (
+                    await ownedUpdate((value) => {
+                      const prior = requireOperator(value);
+                      if (
+                        candidates.some(
+                          (candidate) =>
+                            candidate.operationRef !== operationRef &&
+                            !(prior.deliveryCandidates ?? []).some(
+                              (old) => JSON.stringify(old) === JSON.stringify(candidate),
+                            ),
+                        )
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      const merged = [
+                        ...(prior.deliveryCandidates ?? []).filter(
+                          (old) =>
+                            !candidates.some(
+                              (observedCandidate) =>
+                                observedCandidate.deploymentId === old.deploymentId,
+                            ),
+                        ),
+                        ...candidates,
+                      ];
+                      const next = { ...prior, deliveryCandidates: merged };
+                      if (selectedId !== undefined) {
+                        next.deliveredDeploymentId = selectedId;
+                      }
+                      return { ...value, operator: next };
+                    })
+                  ).record;
                 },
                 checkpointDeliveryCorrection: async (supplied) => {
                   await assertCurrent();
@@ -2836,41 +2883,6 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                       (candidate) => candidate.effectId === effect.id,
                     ),
                   );
-                },
-                checkpointDelivery: async (rows, selectedId) => {
-                  await assertCurrent();
-                  const candidates = operatorDeploymentCandidatesSchema.parse(rows);
-                  record = (
-                    await ownedUpdate((value) => {
-                      const prior = requireOperator(value);
-                      if (
-                        candidates.some(
-                          (candidate) =>
-                            candidate.operationRef !== operationRef &&
-                            !(prior.deliveryCandidates ?? []).some(
-                              (old) => JSON.stringify(old) === JSON.stringify(candidate),
-                            ),
-                        )
-                      ) {
-                        throw new HostedOperatorError("resource_mismatch");
-                      }
-                      const merged = [
-                        ...(prior.deliveryCandidates ?? []).filter(
-                          (old) =>
-                            !candidates.some(
-                              (observedCandidate) =>
-                                observedCandidate.deploymentId === old.deploymentId,
-                            ),
-                        ),
-                        ...candidates,
-                      ];
-                      const next = { ...prior, deliveryCandidates: merged };
-                      if (selectedId !== undefined) {
-                        next.deliveredDeploymentId = selectedId;
-                      }
-                      return { ...value, operator: next };
-                    })
-                  ).record;
                 },
                 checkpointGatewayDelivery: async (rows, selectedId) => {
                   await assertCurrent();
@@ -3025,19 +3037,8 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 fenceGeneration,
                 gatewayDeliveryCandidates: requireOperator(record).gatewayDeliveryCandidates,
                 gatewayDeliveryProvenance,
-                ...(retainedAppDelivery === undefined
-                  ? {}
-                  : {
-                      priorAppDelivery: {
-                        deliveryCandidates: retainedAppDelivery.deliveryCandidates,
-                        operationRef: retainedAppDelivery.operationRef,
-                        plan: retainedAppDelivery.plan,
-                        planDigest: retainedAppDelivery.planDigest,
-                      },
-                    }),
-                ...(renewalDeliveryProvenance.length === 0 ? {} : { renewalDeliveryProvenance }),
-                ...(renewalBindingProvenance === undefined ? {} : { renewalBindingProvenance }),
                 gatewayEnvironmentRows: requireOperator(record).gatewayEnvironment,
+                leaseId,
                 managedEnvironment:
                   plan.appEnvironmentCleanup === undefined
                     ? requireOperator(record).managedEnvironment
@@ -3045,10 +3046,25 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 operationRef,
                 plan,
                 privateState: record.privateState,
+                signal: executionSignal,
                 workerCheckpoints: (requireOperator(record).workerCheckpoints ?? []).filter(
                   (checkpoint) => checkpoint.parentEffectId === effect.id,
                 ),
               };
+              if (retainedAppDelivery !== undefined) {
+                effectInput.priorAppDelivery = {
+                  deliveryCandidates: retainedAppDelivery.deliveryCandidates,
+                  operationRef: retainedAppDelivery.operationRef,
+                  plan: retainedAppDelivery.plan,
+                  planDigest: retainedAppDelivery.planDigest,
+                };
+              }
+              if (renewalDeliveryProvenance.length > 0) {
+                effectInput.renewalDeliveryProvenance = renewalDeliveryProvenance;
+              }
+              if (renewalBindingProvenance !== undefined) {
+                effectInput.renewalBindingProvenance = renewalBindingProvenance;
+              }
               if (
                 plan.appDeliveryReplacement !== undefined &&
                 (effect.kind === "delivery" || effect.kind === GATEWAY_DELIVERY_EFFECT)
@@ -3079,10 +3095,10 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 effectInput.readyReplacement = {
                   appCandidate: predecessor.appCandidate,
                   originatingOperator: predecessor.originatingOperator,
-                  ...(predecessor.gatewayCandidate
-                    ? { gatewayCandidate: predecessor.gatewayCandidate }
-                    : {}),
                 };
+                if (predecessor.gatewayCandidate !== undefined) {
+                  effectInput.readyReplacement.gatewayCandidate = predecessor.gatewayCandidate;
+                }
               }
               // Always inspect before first execution as well as uncertain retry. Provider timeouts cannot create new identities.
               const observed = await observePrepare("effect_reconciliation", async () => {

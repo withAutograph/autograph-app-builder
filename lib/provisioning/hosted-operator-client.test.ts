@@ -40,13 +40,16 @@ describe("operator Auth identity input results", () => {
     "authorization_required",
     undefined,
   ] as const)("preserves a blocked operator result code (%s)", async (code) => {
-    const result = clientFor({
+    const response = {
       appId: selection.appId,
       authenticatedBehavior: "unassessed",
       operationRef,
       status: "blocked",
-      ...(code === undefined ? {} : { code }),
-    }).authIdentityInput(request);
+    } satisfies Record<string, string> & { code?: string };
+    if (code !== undefined) {
+      response.code = code;
+    }
+    const result = clientFor(response).authIdentityInput(request);
     await expect(result).rejects.toBeInstanceOf(HostedOperatorError);
     await expect(result).rejects.toMatchObject({ code: code ?? "operator_unavailable" });
   });
@@ -239,8 +242,10 @@ describe("closed outbound operator action diagnostics", () => {
         action,
         operationRef,
         selection,
-        ...(action === "execute" ? { callId: "private-call", planDigest: "a".repeat(64) } : {}),
       };
+      if (action === "execute") {
+        Object.assign(requestPayload, { callId: "private-call", planDigest: "a".repeat(64) });
+      }
       const transport = vi.fn<typeof fetch>(async (_url, init) => {
         const body = z.string().parse(init?.body);
         expect(JSON.parse(body)).toEqual(requestPayload);
@@ -392,7 +397,6 @@ describe("operator request transport", () => {
       fetch: transport,
       token: async () => await Promise.resolve("bearer"),
     });
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The predicate narrows the transport error with the exported guard.
     await expect(client.request(request)).rejects.toSatisfy((error: unknown) => {
       expect(isHostedOperatorTransportUnknown(error)).toBe(true);
       expect(error).toMatchObject({ cause: failure });
@@ -416,7 +420,6 @@ describe("operator request transport", () => {
       planDigest: "a".repeat(64),
       selection,
     });
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The predicate narrows the transport error with the exported guard.
     await expect(result).rejects.toSatisfy((error: unknown) => {
       expect(isHostedOperatorTransportUnknown(error)).toBe(true);
       expect(error).toMatchObject({ cause: failure });
@@ -441,7 +444,6 @@ describe("operator request transport", () => {
       planDigest: "a".repeat(64),
       selection,
     };
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The predicate narrows the unknown transport failure with the exported guard.
     await expect(client.request(executeRequest)).rejects.toSatisfy((error: unknown) => {
       expect(isHostedOperatorTransportUnknown(error)).toBe(true);
       expect(error).toMatchObject({ cause: bodyReadFailure });

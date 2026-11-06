@@ -37,6 +37,12 @@ const metadataSchema = z.object({
   peerDependencies: z.record(z.string(), z.string()).optional(),
   version: stableVersion,
 });
+const supports = (metadata: z.infer<typeof metadataSchema>, name: string, version: string) =>
+  metadata.peerDependencies?.[name] === undefined ||
+  satisfies(version, metadata.peerDependencies[name]);
+const npmRegistryUrl = "https://registry.npmjs.org/";
+const reactPackage = "react";
+const reactTypesPackage = "@types/react";
 
 /** Resolve once during planning. Apply and resume use only the stored concrete versions. */
 export type FrameworkRegistryFetch = (
@@ -48,9 +54,7 @@ export const resolveLatestFrameworkVersions = async (
   fetchMetadata: FrameworkRegistryFetch = fetch,
 ): Promise<FrameworkVersions> => {
   const read = async (name: string, version = "latest") => {
-    const response = await fetchMetadata(
-      `https://registry.npmjs.org/${encodeURIComponent(name)}/${version}`,
-    );
+    const response = await fetchMetadata(`${npmRegistryUrl}${encodeURIComponent(name)}/${version}`);
     if (response.status === 404) {
       throw new RegistryPackageNotFoundError(`No published ${name}@${version}`);
     }
@@ -61,15 +65,12 @@ export const resolveLatestFrameworkVersions = async (
   };
   const [next, latestReact, latestTypesReact, latestTypesReactDom] = await Promise.all([
     read("next"),
-    read("react"),
-    read("@types/react"),
+    read(reactPackage),
+    read(reactTypesPackage),
     read("@types/react-dom"),
   ]);
-  const supports = (metadata: z.infer<typeof metadataSchema>, name: string, version: string) =>
-    metadata.peerDependencies?.[name] === undefined ||
-    satisfies(version, metadata.peerDependencies[name]);
   const candidates = async (name: string) => {
-    const response = await fetchMetadata(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
+    const response = await fetchMetadata(`${npmRegistryUrl}${encodeURIComponent(name)}`, {
       headers: { accept: "application/vnd.npm.install-v1+json" },
     });
     if (!response.ok) {
@@ -95,51 +96,58 @@ export const resolveLatestFrameworkVersions = async (
 
   if (
     reactDom === null ||
-    !supports(next, "react", react.version) ||
+    !supports(next, reactPackage, react.version) ||
     !supports(next, "react-dom", reactDom.version) ||
-    !supports(reactDom, "react", react.version)
+    !supports(reactDom, reactPackage, react.version)
   ) {
-    const [reacts, doms] = await Promise.all([candidates("react"), candidates("react-dom")]);
-    const pair = reacts.flatMap((candidate) => {
+    const [reacts, doms] = await Promise.all([candidates(reactPackage), candidates("react-dom")]);
+    const [pair] = reacts.flatMap((candidate) => {
       const dom = doms.find((value) => value.version === candidate.version);
-      if (dom === undefined || !supports(next, "react", candidate.version)) {
+      if (dom === undefined || !supports(next, reactPackage, candidate.version)) {
         return [];
       }
-      if (!supports(next, "react-dom", dom.version) || !supports(dom, "react", candidate.version)) {
+      if (
+        !supports(next, "react-dom", dom.version) ||
+        !supports(dom, reactPackage, candidate.version)
+      ) {
         return [];
       }
       return [{ react: candidate, reactDom: dom }];
-    })[0];
+    });
     if (pair === undefined) {
       throw new Error(`Next.js ${next.version} has no compatible stable React/React DOM pair`);
     }
-    ({ react, reactDom } = pair);
+    [react, reactDom] = [pair.react, pair.reactDom];
   }
   let typesReact = latestTypesReact;
   let typesReactDom = latestTypesReactDom;
-  const sameMajor = (version: string) => version.split(".")[0] === react.version.split(".")[0];
+  const [reactMajor] = react.version.split(".");
+  const sameMajor = (version: string) => {
+    const [major] = version.split(".");
+    return major === reactMajor;
+  };
   if (
     !sameMajor(typesReact.version) ||
     !sameMajor(typesReactDom.version) ||
-    !supports(typesReactDom, "@types/react", typesReact.version)
+    !supports(typesReactDom, reactTypesPackage, typesReact.version)
   ) {
     const [reactTypes, domTypes] = await Promise.all([
-      candidates("@types/react"),
+      candidates(reactTypesPackage),
       candidates("@types/react-dom"),
     ]);
-    const pair = domTypes.flatMap((dom) => {
+    const [pair] = domTypes.flatMap((dom) => {
       if (!sameMajor(dom.version)) {
         return [];
       }
       const types = reactTypes.find(
-        (value) => sameMajor(value.version) && supports(dom, "@types/react", value.version),
+        (value) => sameMajor(value.version) && supports(dom, reactTypesPackage, value.version),
       );
       return types === undefined ? [] : [{ typesReact: types, typesReactDom: dom }];
-    })[0];
+    });
     if (pair === undefined) {
       throw new Error(`React ${react.version} has no compatible stable type packages`);
     }
-    ({ typesReact, typesReactDom } = pair);
+    [typesReact, typesReactDom] = [pair.typesReact, pair.typesReactDom];
   }
   return frameworkVersionsSchema.parse({
     next: next.version,
@@ -161,20 +169,17 @@ export const planFrameworkUpgrade = async (
         bytes === null
           ? undefined
           : await sandbox.run({ command: `stat -c %a /workspace/repository/${path}` });
-      return {
-        path,
-        ...(bytes === null
-          ? {}
-          : {
-              before: {
-                digest: createHash("sha256").update(bytes).digest("hex"),
-                mode:
-                  stat?.exitCode === 0 && /^[0-7]{3,4}$/u.test(stat.stdout.trim())
-                    ? stat.stdout.trim()
-                    : "644",
-              },
-            }),
-      };
+      const entry: FrameworkUpgrade["baseline"][number] = { path };
+      if (bytes !== null) {
+        entry.before = {
+          digest: createHash("sha256").update(bytes).digest("hex"),
+          mode:
+            stat?.exitCode === 0 && /^[0-7]{3,4}$/u.test(stat.stdout.trim())
+              ? stat.stdout.trim()
+              : "644",
+        };
+      }
+      return entry;
     }),
   );
   return { baseline, scope: "workspace", versions: frameworkVersionsSchema.parse(versions) };

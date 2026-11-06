@@ -222,7 +222,6 @@ describe("hosted operator owner context", () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       for (const key of ["DATABASE_URL", "BETTER_AUTH_URL", "MCP_RESOURCE_URL"]) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- stubEnv requires this value to remove the variable.
         vi.stubEnv(key, undefined);
       }
       await expect(
@@ -380,11 +379,9 @@ describe("hosted operator owner context", () => {
       sessionId: "public-child",
     });
     const sessions = {
-      // oxlint-disable-next-line eslint/require-await -- The fixture follows the async session-store contract.
       getSession: vi.fn(async (_principal: HostedPrincipal, sessionId: string) =>
         sessionId === source.sessionId ? source : null,
       ),
-      // oxlint-disable-next-line eslint/require-await -- The fixture follows the async session-store contract.
       getSessionByAdapterSessionId: vi.fn(async () => child),
     };
     const resolver = createHostedOperatorOwnerContextResolver({
@@ -795,31 +792,32 @@ describe("approval history for recovered public grant authority", () => {
       stage: "needs_attention",
       status: "failed",
     });
+    const nativeRecoveryBinding = {
+      logicalSessionId: source.adapterSessionId,
+      operationId: "recovery-operation",
+      originalAuthoritySessionId: source.sessionId,
+      ownerRunId: "recovered-adapter",
+      parentCancellationRevision: 0,
+      provenance: {
+        checkpointVersion: 1,
+        kind: "failed-turn-input" as const,
+        sourceEventId: "source-event",
+        sourceSlot: 0,
+        sourceStepId: "source-step",
+      },
+      sourceAdapterGeneration: source.adapterGeneration,
+      sourceOwnerRunId: source.adapterSessionId,
+      sourcePublicSessionId: source.sessionId,
+      version: 1 as const,
+    };
+    if (source.sourceHandoffId !== undefined) {
+      Object.assign(nativeRecoveryBinding, { sourceHandoffId: source.sourceHandoffId });
+    }
     const child = durableHostedSessionRecordSchema.parse({
       ...source,
       adapterGeneration: 1,
       adapterSessionId: "recovered-adapter",
-      nativeRecoveryBinding: {
-        version: 1,
-        operationId: "recovery-operation",
-        sourcePublicSessionId: source.sessionId,
-        sourceOwnerRunId: source.adapterSessionId,
-        sourceAdapterGeneration: source.adapterGeneration,
-        ...(source.sourceHandoffId === undefined
-          ? {}
-          : { sourceHandoffId: source.sourceHandoffId }),
-        logicalSessionId: source.adapterSessionId,
-        originalAuthoritySessionId: source.sessionId,
-        parentCancellationRevision: 0,
-        ownerRunId: "recovered-adapter",
-        provenance: {
-          checkpointVersion: 1,
-          kind: "failed-turn-input",
-          sourceEventId: "source-event",
-          sourceSlot: 0,
-          sourceStepId: "source-step",
-        },
-      },
+      nativeRecoveryBinding,
       originAdapterSessionId: "recovered-adapter",
       parentSessionId: source.sessionId,
       resumability: "live",
@@ -831,16 +829,27 @@ describe("approval history for recovered public grant authority", () => {
       [child.sessionId, child],
     ]);
     const sessions = {
-      getSession: async (_principal: HostedPrincipal, requested: string) =>
-        await Promise.resolve(sessionsById.get(requested) ?? null),
-      getSessionByAdapterSessionId: async () => await Promise.resolve(child),
+      getSession: async (_principal: HostedPrincipal, requested: string) => {
+        await Promise.resolve();
+        return sessionsById.get(requested) ?? null;
+      },
+      getSessionByAdapterSessionId: async () => {
+        await Promise.resolve();
+        return child;
+      },
     };
     const resolver = createHostedOperatorOwnerContextResolver({
       audience: authority.audience,
       handoffs: {
-        read: async () => await Promise.resolve(kind === "handoff" ? handoff : undefined),
+        read: async () => {
+          await Promise.resolve();
+          return kind === "handoff" ? handoff : undefined;
+        },
       },
-      isActiveMember: async () => await Promise.resolve(true),
+      isActiveMember: async () => {
+        await Promise.resolve();
+        return true;
+      },
       issuer: authority.issuer,
       sessions,
     });
@@ -901,23 +910,22 @@ describe("approval history for recovered public grant authority", () => {
           type: "approval.settled",
         },
       ];
-      const fetchImplementation = vi.fn<typeof fetch>(
-        async () =>
-          new Response(`${nativeEvents.map((event) => JSON.stringify(event)).join("\n")}\n`, {
-            headers: {
-              "content-type": "application/x-ndjson",
-              "x-eve-session-id": f.child.adapterSessionId,
-              "x-eve-stream-format": "ndjson",
-              "x-eve-stream-tail-index": "1",
-              "x-eve-stream-version": "25",
-            },
-          }),
+      const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(`${nativeEvents.map((event) => JSON.stringify(event)).join("\n")}\n`, {
+          headers: {
+            "content-type": "application/x-ndjson",
+            "x-eve-session-id": f.child.adapterSessionId,
+            "x-eve-stream-format": "ndjson",
+            "x-eve-stream-tail-index": "1",
+            "x-eve-stream-version": "25",
+          },
+        }),
       );
       const observer = createHostedOperatorApprovalObserver({
         builderOrigin: "https://builder.example",
         fetchImplementation,
         verifyReadAuthority: f.verifyReadAuthority,
-        workloadIdentity: { token: async () => "controlled-workload" },
+        workloadIdentity: { token: vi.fn().mockResolvedValue("controlled-workload") },
       });
       const seen: string[] = [];
       const observed = await observer.privateHistoryForContext({

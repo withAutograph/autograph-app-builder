@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await -- In-memory ports expose the production async contract. */
 import { describe, expect, it, vi } from "vitest";
 import { operatorPlanDigest } from "./hosted-operator-contract";
 import { createNormalActorJournal } from "./hosted-operator-normal-actor-journal";
@@ -90,7 +89,6 @@ describe("expired pre-delivery captured account", () => {
     const store: NormalActorJournalPorts["store"] = {
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS explicitly returns no row.
           return undefined;
         }
         row = {
@@ -136,7 +134,7 @@ describe("expired pre-delivery captured account", () => {
     };
     await expect(operations.ensureNormalActorCapture(input)).rejects.toThrow("ordinary invitation");
     expect(invitation).toHaveBeenCalledWith(
-      expect.objectContaining({ actorKey: "owner", organizationId: undefined }),
+      expect.objectContaining({ actorKey: "owner", organizationId: null }),
     );
     expect(network).not.toHaveBeenCalled();
     const saved = await createNormalActorJournal(journalPorts).read(context);

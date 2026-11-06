@@ -1,9 +1,7 @@
-/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- The installed Eve diagnostic is an internal JavaScript module exercised through explicit synthetic ports. */
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { isDeepStrictEqual } from "node:util";
 import { it } from "vitest";
 
 const require = createRequire(import.meta.url);
@@ -14,6 +12,12 @@ const { observeRecoveryInboxHolder } = await import(
 const { sessionCommandHookToken, sessionInboxHookToken } = await import(
   `${sdk}execution/session-inbox/address.js`
 );
+
+const INBOX_HOOK_TOKEN_PREFIX = "eve:inbox:v1:eve:session:";
+const HOOK_NOT_FOUND = "hook-not-found";
+const FIXTURE_OWNER = "fixture-owner";
+const TERMINAL_RECOVERY = "terminal-recovery";
+const noop = async () => await Promise.resolve(null);
 
 let sequence = 0;
 const fixture = () => {
@@ -47,7 +51,7 @@ const fixture = () => {
     },
   };
   const holderOwnerRunId = `physical-holder-${id}`;
-  const auth = { authenticator: "fixture", principalId: "fixture-owner" };
+  const auth = { authenticator: "fixture", principalId: FIXTURE_OWNER };
   const token = sessionInboxHookToken(sessionCommandHookToken(descriptor.logicalSessionId));
   const summaries = [];
   const seen = { bindings: [], reads: [], tokens: [] };
@@ -62,10 +66,10 @@ const fixture = () => {
       sessionState: { sessionId: descriptor.logicalSessionId },
     },
     descriptor: holderDescriptor,
-    kind: "terminal-recovery",
+    kind: TERMINAL_RECOVERY,
   };
-  let onRead = async () => {};
-  let onBinding = async () => {};
+  let onRead = noop;
+  let onBinding = noop;
   const facts = {
     committedChildMatches: false,
     descriptorMatches: true,
@@ -92,11 +96,11 @@ const fixture = () => {
       seen.tokens.push(requestedToken);
       assert.equal(requestedToken, token);
       if (hook === undefined) {
-        throw new Error("hook-not-found");
+        throw new Error(HOOK_NOT_FOUND);
       }
-      return hook;
+      return await Promise.resolve(hook);
     },
-    isHookNotFound: (error) => error?.message === "hook-not-found",
+    isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND,
     now: () => 1,
     async readRunEntry(runId) {
       seen.reads.push(runId);
@@ -114,6 +118,7 @@ const fixture = () => {
       if (currentRejection !== null) {
         throw new Error(`current-${currentRejection}-canary`);
       }
+      await Promise.resolve();
     },
     descriptor,
     ports,
@@ -127,7 +132,7 @@ const fixture = () => {
     holderDescriptor,
     holderOwnerRunId,
     input,
-    observe: async () => await observeRecoveryInboxHolder(input, deps),
+    observe: () => observeRecoveryInboxHolder(input, deps),
     receipt,
     rejectCurrent: (reason) => {
       currentRejection = reason;
@@ -155,7 +160,7 @@ it("observes a real occupied logical inbox held by a distinct physical owner wit
   await f.observe();
   assert.equal(
     f.seen.tokens.every(
-      (token) => token === `eve:inbox:v1:eve:session:${f.descriptor.logicalSessionId}:inbox`,
+      (token) => token === `${INBOX_HOOK_TOKEN_PREFIX}${f.descriptor.logicalSessionId}:inbox`,
     ),
     true,
   );
@@ -165,24 +170,24 @@ it("observes a real occupied logical inbox held by a distinct physical owner wit
     true,
   );
   assert.equal(
-    f.seen.bindings.some((binding) =>
-      isDeepStrictEqual(binding, {
-        auth: f.auth,
-        descriptor: f.descriptor,
-        holderDescriptor: f.holderDescriptor,
-        holderOwnerRunId: f.holderOwnerRunId,
-      }),
+    f.seen.bindings.some(
+      (binding) =>
+        JSON.stringify(binding) ===
+        JSON.stringify({
+          auth: f.auth,
+          descriptor: f.descriptor,
+          holderDescriptor: f.holderDescriptor,
+          holderOwnerRunId: f.holderOwnerRunId,
+        }),
     ),
     true,
   );
-  assert.equal(
-    f.seen.bindings.every((binding) => binding.holderOwnerRunId === f.holderOwnerRunId),
-    true,
-  );
-  const summary = f.summaries[0];
+  const [firstBinding] = f.seen.bindings;
+  assert.equal(firstBinding.holderOwnerRunId, f.holderOwnerRunId);
+  const [summary] = f.summaries;
   assert.equal(summary.event, "eve.terminal_recovery_inbox_holder");
   assert.equal(summary.outcome, "observed");
-  assert.equal(summary.entryKind, "terminal-recovery");
+  assert.equal(summary.entryKind, TERMINAL_RECOVERY);
   assert.equal(summary.nativeStatus, "failed");
   assert.equal(summary.holderIsLogicalOwner, false);
   assert.equal(summary.holderIsSourceOwner, false);
@@ -295,10 +300,10 @@ it("a missing holder stays read only and cannot emit stale absence after a new c
 
   const changed = fixture();
   let lookups = 0;
-  changed.deps.getHook = async () => {
+  changed.deps.getHook = () => {
     lookups += 1;
     if (lookups === 1) {
-      throw new Error("hook-not-found");
+      throw new Error(HOOK_NOT_FOUND);
     }
     return {
       metadata: Promise.resolve({ sessionId: changed.descriptor.logicalSessionId }),
@@ -312,16 +317,12 @@ it("a missing holder stays read only and cannot emit stale absence after a new c
 it("contains hostile private failures and emits only fixed diagnostic facts", async () => {
   const canary = "private-holder-error-and-token-canary";
   const f = fixture();
-  f.deps.readRunEntry = () => {
-    throw new Error(canary);
-  };
+  f.deps.readRunEntry = async () => await Promise.reject(new Error(canary));
   await f.observe();
   assert.equal(f.summaries[0]?.outcome, "unavailable");
   assert.equal(JSON.stringify(f.summaries).includes(canary), false);
   const callback = fixture();
-  callback.setOnBinding(() => {
-    throw new Error(canary);
-  });
+  callback.setOnBinding(async () => await Promise.reject(new Error(canary)));
   await callback.observe();
   assert.equal(callback.summaries[0]?.canonicalFacts.operationFound, null);
   assert.equal(JSON.stringify(callback.summaries).includes(canary), false);

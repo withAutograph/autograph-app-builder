@@ -1,11 +1,9 @@
-/* oxlint-disable eslint/complexity, sonarjs/expression-complexity, unicorn/no-useless-undefined -- CAS transitions validate every retained authority/effect binding; absent rows intentionally return undefined. */
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderProvisioningJournals } from "../db/schema";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle uses the complete existing schema as its database type.
 import type * as databaseSchema from "../db/schema";
 import { builderAppIdSchema } from "./names";
 import {
@@ -146,25 +144,26 @@ const assertUndispatchedReplan = (
   }
 };
 
+const target = (plan: NativeTargetOnboardingPlan) => ({
+  appId: plan.appId,
+  appSpecDigest: plan.origin.appSpecDigest,
+  branch: plan.branch,
+  conflictPolicy: plan.conflictPolicy,
+  cost: plan.cost,
+  database: plan.appDatabase.database,
+  migratorRole: plan.appDatabase.migratorRole,
+  productRoles: plan.productRoles,
+  project: plan.project,
+  publicSessionId: plan.origin.publicSessionId,
+  release: plan.origin.release,
+  retention: plan.retention,
+  runtimeRole: plan.appDatabase.runtimeRole,
+});
+
 const assertPlannedScopeSupersession = (
   before: Extract<NativeTargetOnboardingRecord, { stage: "planned" }>,
   after: Extract<NativeTargetOnboardingRecord, { stage: "planned" }>,
 ) => {
-  const target = (plan: NativeTargetOnboardingPlan) => ({
-    appId: plan.appId,
-    appSpecDigest: plan.origin.appSpecDigest,
-    branch: plan.branch,
-    conflictPolicy: plan.conflictPolicy,
-    cost: plan.cost,
-    database: plan.appDatabase.database,
-    migratorRole: plan.appDatabase.migratorRole,
-    productRoles: plan.productRoles,
-    project: plan.project,
-    publicSessionId: plan.origin.publicSessionId,
-    release: plan.origin.release,
-    retention: plan.retention,
-    runtimeRole: plan.appDatabase.runtimeRole,
-  });
   const prior = after.priorPlannedScopes?.at(-1);
   if (
     before.previousAttempts.length !== 0 ||
@@ -317,6 +316,7 @@ export const createInMemoryNativeTargetOnboardingStore = (): NativeTargetOnboard
   const rows = new Map<string, NativeTargetOnboardingRow>();
   return {
     async compareAndSet(input) {
+      await Promise.resolve();
       const requestId = identity(input);
       const current = rows.get(requestId);
       if (current === undefined || current.revision !== input.expectedRevision) {
@@ -328,8 +328,12 @@ export const createInMemoryNativeTargetOnboardingStore = (): NativeTargetOnboard
       rows.set(requestId, structuredClone(row));
       return structuredClone(row);
     },
-    read: async (key) => structuredClone(rows.get(identity(key))),
+    async read(key) {
+      await Promise.resolve();
+      return structuredClone(rows.get(identity(key)));
+    },
     async reserve(input) {
+      await Promise.resolve();
       const requestId = identity(input);
       const existing = rows.get(requestId);
       if (existing !== undefined) {

@@ -23,9 +23,11 @@ export const matchesExternalTrustedSources = (
   appProjectId: string,
   gatewayProjectId: string,
 ) =>
-  policy.teamId === teamId &&
-  appProjectId !== gatewayProjectId &&
-  policy.appPreview.sourceProjectId === gatewayProjectId &&
-  policy.appPreview.targetProjectId === appProjectId &&
-  policy.gatewayPreview.sourceProjectId === appProjectId &&
-  policy.gatewayPreview.targetProjectId === gatewayProjectId;
+  [
+    policy.teamId === teamId,
+    appProjectId !== gatewayProjectId,
+    policy.appPreview.sourceProjectId === gatewayProjectId,
+    policy.appPreview.targetProjectId === appProjectId,
+    policy.gatewayPreview.sourceProjectId === appProjectId,
+    policy.gatewayPreview.targetProjectId === gatewayProjectId,
+  ].every(Boolean);

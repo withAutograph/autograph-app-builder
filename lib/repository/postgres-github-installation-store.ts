@@ -3,26 +3,23 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import type * as databaseSchema from "../db/schema";
+import type { schema as databaseSchema } from "../db/schema";
 import { hostedGitHubInstallationBindings, hostedGitHubInstallations } from "../db/schema";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 export type HostedGitHubTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
-export const hostedGitHubInstallationBindingSchema = z
-  .object({
-    accountId: z.string().regex(/^[1-9][0-9]*$/u),
-    accountLogin: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
-    accountType: z.enum(["Organization", "User"]),
-    active: z.boolean(),
-    installationId: z.string().regex(/^[1-9][0-9]*$/u),
-    updatedAt: z.date(),
-  })
-  .strict();
+export const hostedGitHubInstallationBindingSchema = z.strictObject({
+  accountId: z.string().regex(/^[1-9][0-9]*$/u),
+  accountLogin: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
+  accountType: z.enum(["Organization", "User"]),
+  active: z.boolean(),
+  installationId: z.string().regex(/^[1-9][0-9]*$/u),
+  updatedAt: z.date(),
+});
 
 export type HostedGitHubInstallationBinding = z.infer<typeof hostedGitHubInstallationBindingSchema>;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function mergeHostedGitHubInstallationBindings(
   bindings: HostedGitHubInstallationBinding[],
   legacy: HostedGitHubInstallationBinding | undefined,
@@ -33,7 +30,6 @@ export function mergeHostedGitHubInstallationBindings(
     : [...bindings, legacy];
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tenantPredicate(authority: HostedGitHubTenantAuthority) {
   const parsed = hostedTenantAuthoritySchema.parse(authority);
   return and(
@@ -44,7 +40,6 @@ function tenantPredicate(authority: HostedGitHubTenantAuthority) {
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function bindingTenantPredicate(authority: HostedGitHubTenantAuthority) {
   const parsed = hostedTenantAuthoritySchema.parse(authority);
   return and(
@@ -76,12 +71,10 @@ export interface HostedGitHubInstallationStore {
   }) => Promise<HostedGitHubInstallationBinding>;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresHostedGitHubInstallationStore(
   database: Database,
 ): HostedGitHubInstallationStore {
   return {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async bind(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const binding = hostedGitHubInstallationBindingSchema.parse({

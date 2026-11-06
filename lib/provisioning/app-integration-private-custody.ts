@@ -12,6 +12,7 @@ import {
 import type { VercelTokenKeyringConfig } from "../integrations/vercel-installation";
 import { integrationCapabilityResourceSchema } from "./app-integration-capability-contract";
 
+const APP_INTEGRATION_PRIVATE_CUSTODY_KIND = "app-integration-private-custody-v1";
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const integrationPrivateAppScopeSchema = z.strictObject({
   appId: z.string().min(1),
@@ -49,7 +50,7 @@ const sealedSchema = z.strictObject({
   tokenTag: z.string().min(1),
 });
 const recordSchema = z.strictObject({
-  kind: z.literal("app-integration-private-custody-v1"),
+  kind: z.literal(APP_INTEGRATION_PRIVATE_CUSTODY_KIND),
   plaintextSha256: digest,
   scope: scopeSchema,
   sealed: sealedSchema,
@@ -60,7 +61,7 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const unavailable = () => new Error("app_integration_private_custody_unavailable");
 const identity = (scope: IntegrationPrivateScope) => {
   const sha256 = hash(
-    JSON.stringify(["app-integration-private-custody-v1", scopeSchema.parse(scope)]),
+    JSON.stringify([APP_INTEGRATION_PRIVATE_CUSTODY_KIND, scopeSchema.parse(scope)]),
   );
   const reference = `${sha256.slice(0, 8)}-${sha256.slice(8, 12)}-5${sha256.slice(13, 16)}-a${sha256.slice(17, 20)}-${sha256.slice(20, 32)}`;
   return { reference, sha256 };
@@ -94,14 +95,13 @@ export const createAppIntegrationPrivateCustody = (input: {
           eq(builderProvisioningJournals.workspaceId, app.authority.workspaceId),
           eq(builderProvisioningJournals.ownerUserId, app.authority.ownerUserId),
           eq(builderProvisioningJournals.requestId, key.reference),
-          sql`${builderProvisioningJournals.record}->>'kind'='app-integration-private-custody-v1'`,
+          sql`${builderProvisioningJournals.record}->>'kind'=${APP_INTEGRATION_PRIVATE_CUSTODY_KIND}`,
         ),
       )
       .limit(1);
     await input.assertCurrent();
     const row = rows.at(0);
     if (row === undefined) {
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- An absent private checkpoint has never been reserved.
       return undefined;
     }
     try {
@@ -138,13 +138,13 @@ export const createAppIntegrationPrivateCustody = (input: {
       const key = identity(scope);
       const plaintext = JSON.stringify(jsonSchema.parse(prepare()));
       const record = recordSchema.parse({
-        kind: "app-integration-private-custody-v1",
+        kind: APP_INTEGRATION_PRIVATE_CUSTODY_KIND,
         plaintextSha256: hash(plaintext),
         scope,
         sealed: {
           ...encryptVercelToken({
             associatedData: JSON.stringify({
-              purpose: "app-integration-private-custody-v1",
+              purpose: APP_INTEGRATION_PRIVATE_CUSTODY_KIND,
               ...key,
             }),
             key: input.keyring.tokenKey,
@@ -182,20 +182,21 @@ export const appIntegrationPrivateSeedSchema = z.strictObject({
   serviceSecret: z.string().min(32),
   setupProofSecret: z.string().min(32),
 });
-export const createFreshAppIntegrationPrivateSeed = () =>
-  appIntegrationPrivateSeedSchema.parse({
-    catalogAuthoritySecret: randomBytes(32).toString("base64url"),
-    controlRuntimePassword: randomBytes(32).toString("base64url"),
-    ingressSecret: randomBytes(32).toString("base64url"),
-    serviceSecret: randomBytes(32).toString("base64url"),
-    setupProofSecret: randomBytes(32).toString("base64url"),
+export const createFreshAppIntegrationPrivateSeed = () => {
+  const encoding = "base64url";
+  return appIntegrationPrivateSeedSchema.parse({
+    catalogAuthoritySecret: randomBytes(32).toString(encoding),
+    controlRuntimePassword: randomBytes(32).toString(encoding),
+    ingressSecret: randomBytes(32).toString(encoding),
+    serviceSecret: randomBytes(32).toString(encoding),
+    setupProofSecret: randomBytes(32).toString(encoding),
   });
+};
 /** Shared canonical sealed-envelope digest: includes ciphertext and all metadata, never returned raw. */
 export const canonicalIntegrationPrivateJsonBytes = (value: IntegrationPrivateJson): string => {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalIntegrationPrivateJsonBytes).join(",")}]`;
   }
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Canonical serialization branches only on the validated JSON domain.
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .toSorted(([a], [b]) => {

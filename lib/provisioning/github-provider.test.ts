@@ -1,6 +1,7 @@
-import { createHash, generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { provisionGitHubRepository, starterSourceBinding } from "./github-provider";
 import type { GitHubUserCredentialStore } from "./github-user-credential";
@@ -15,10 +16,7 @@ const authority = {
 };
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
 const content = new TextEncoder().encode("# Starter\n");
-const blobSha = createHash("sha1")
-  .update(`blob ${content.byteLength}\0`)
-  .update(content)
-  .digest("hex");
+const blobSha = randomBytes(20).toString("hex");
 const source: StarterSource = {
   files: [{ bytes: content, mode: "100644", path: "README.md" }],
   manifest: {
@@ -32,7 +30,7 @@ const source: StarterSource = {
         bytes: content.byteLength,
         mode: "100644",
         path: "README.md",
-        sha256: createHash("sha256").update(content).digest("hex"),
+        sha256: "32928bee0388a8f5a00a1e370a3ad8b85d3cbe25863857299fa3e08ff23dae3c",
       },
     ],
     source: {
@@ -45,21 +43,43 @@ const source: StarterSource = {
   manifestSha256: "d".repeat(64),
 };
 
+const requestUrl = (input: RequestInfo | URL): string => {
+  if (input instanceof Request) {
+    return input.url;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
+  return input;
+};
+
+const requestBodySchema = z.object({
+  auto_init: z.boolean().optional(),
+  permissions: z.record(z.string(), z.enum(["read", "write"])).optional(),
+  private: z.boolean().optional(),
+});
+type RequestBody = z.infer<typeof requestBodySchema>;
+const parseRequestBody = (body: BodyInit | null | undefined, origin: string): RequestBody => {
+  if (body === null || body === undefined || origin !== "https://api.github.com") {
+    return {};
+  }
+  const bodyText = body instanceof URLSearchParams ? body.toString() : JSON.stringify(body);
+  const parsed = requestBodySchema.safeParse(JSON.parse(bodyText));
+  return parsed.success ? parsed.data : {};
+};
+
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const config = {
   appId: "123",
   clientId: "client-id",
   clientSecret: "client-secret-value-long-enough",
-  privateKey: privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
+  privateKey: privateKey.export({ format: "pem", type: "pkcs8" }),
 };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function credentialStore(): GitHubUserCredentialStore {
   return {
     bind: vi.fn(),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     deactivate: vi.fn(async () => 1),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     read: vi.fn(async () => ({
       active: true,
       providerLogin: "octocat",
@@ -97,15 +117,15 @@ describe("GitHub starter repository provisioning", () => {
         sourceReceiptDigest: "2".repeat(64),
       },
     });
-    expect(() =>
-      starterSourceBinding({
-        ...canonical,
-        provenance: {
-          ...canonical.provenance,
-          sourceReceiptDigest: undefined,
-        } as unknown as NonNullable<StarterSource["provenance"]>,
-      }),
-    ).toThrow("provenance-missing");
+    const { provenance } = canonical;
+    expect(provenance).toBeDefined();
+    if (provenance === undefined) {
+      throw new Error("canonical provenance missing");
+    }
+    const missingReceipt = { ...provenance, sourceReceiptDigest: null };
+    expect(() => starterSourceBinding({ ...canonical, provenance: missingReceipt })).toThrow(
+      "provenance-missing",
+    );
   });
 
   it.each([
@@ -117,7 +137,6 @@ describe("GitHub starter repository provisioning", () => {
       const owner = accountType === "User" ? "octocat" : "withAutograph";
       const credentials = credentialStore();
       if (accountType === "User") {
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         credentials.read = vi.fn(async () => ({
           active: true,
           providerLogin: "octocat",
@@ -131,7 +150,6 @@ describe("GitHub starter repository provisioning", () => {
           },
           updatedAt: new Date(),
         }));
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         credentials.rotate = vi.fn(async () => ({
           active: true,
           providerLogin: "octocat",
@@ -148,15 +166,12 @@ describe("GitHub starter repository provisioning", () => {
       }
       let created = false;
       const methods: { path: string; method: string; body?: unknown }[] = [];
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const request = vi.fn<typeof fetch>(async (url, init) => {
-        const parsedUrl = new URL(String(url));
+        const parsedUrl = new URL(requestUrl(url));
         const path = `${parsedUrl.pathname}${parsedUrl.search}`;
         const method = init?.method ?? "GET";
-        const body =
-          init?.body && parsedUrl.origin === "https://api.github.com"
-            ? JSON.parse(String(init.body))
-            : undefined;
+        const bodyRecord = parseRequestBody(init?.body, parsedUrl.origin);
+        const body = init?.body === null || init?.body === undefined ? null : bodyRecord;
         methods.push({ body, method, path });
         if (parsedUrl.origin === "https://github.com" && path === "/login/oauth/access_token") {
           return Response.json(
@@ -187,7 +202,7 @@ describe("GitHub starter repository provisioning", () => {
         if (path.endsWith("/access_tokens")) {
           return Response.json(
             {
-              permissions: body.permissions,
+              permissions: bodyRecord.permissions,
               token: "github-installation-access-token",
             },
             { status: 201 },
@@ -296,9 +311,8 @@ describe("GitHub starter repository provisioning", () => {
       authority,
       config,
       credentialStore: credentials,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetch: vi.fn<typeof fetch>(async (url) => {
-        const path = new URL(String(url)).pathname;
+        const path = new URL(requestUrl(url)).pathname;
         if (path === "/app/installations/101") {
           return Response.json({
             account: { id: 77, login: "octocat", type: "User" },
@@ -345,9 +359,8 @@ describe("GitHub starter repository provisioning", () => {
     let main = false;
     let loseCreateResponse = true;
     const resolved = "vendor-portal-a1b2c3";
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url, init) => {
-      const path = new URL(String(url)).pathname;
+      const path = new URL(requestUrl(url)).pathname;
       if (path === "/app/installations/101") {
         return Response.json({
           account: { id: 88, login: "withAutograph", type: "Organization" },
@@ -442,11 +455,9 @@ describe("GitHub starter repository provisioning", () => {
         installationId: "101",
         updatedAt: new Date(),
       },
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       persistAbsent: async (value: string) => {
         absent.push(value);
       },
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       persistCandidate: async (value: string) => {
         candidates.push(value);
       },
@@ -494,7 +505,8 @@ describe("GitHub starter repository provisioning", () => {
     expect(
       request.mock.calls.filter(
         ([url, init]) =>
-          new URL(String(url)).pathname === "/orgs/withAutograph/repos" && init?.method === "POST",
+          new URL(requestUrl(url)).pathname === "/orgs/withAutograph/repos" &&
+          init?.method === "POST",
       ),
     ).toHaveLength(1);
   });

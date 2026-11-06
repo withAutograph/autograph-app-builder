@@ -11,7 +11,9 @@ export const applicationSourceRegistrationSchema = z.strictObject({
   projectName: z.string(),
   proposedBytes: z.string(),
 });
-const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+const shellQuote = "'";
+const quote = (value: string) =>
+  `${shellQuote}${value.replaceAll(shellQuote, "'\"'\"'")}${shellQuote}`;
 
 /** Invoke the acquired platform's pure planner; no uploaded app module is imported. */
 export const planApplicationSourceRegistration = async (sandbox: SandboxSession, appId: string) => {
@@ -21,10 +23,12 @@ export const planApplicationSourceRegistration = async (sandbox: SandboxSession,
   const packageName = `@autograph/${appId}`;
   const routes = [`/${appId}`, `/${appId}/:path*`];
   const source = `import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {planMicrofrontendRegistration} from './packages/platform-microfrontends/src/policy/config-registration.ts';const bytes=readFileSync('microfrontends.json','utf8'); console.log(JSON.stringify(planMicrofrontendRegistration(bytes,{projectName:${JSON.stringify(appId)},packageName:${JSON.stringify(packageName)},routes:${JSON.stringify(routes)},expectedDigest:createHash('sha256').update(bytes).digest('hex')})));`;
-  let result = await sandbox.run({
-    command: `bun -e ${quote(source)}`,
-    workingDirectory: "/workspace/repository",
-  });
+  const runPlanner = () =>
+    sandbox.run({
+      command: `bun -e ${quote(source)}`,
+      workingDirectory: "/workspace/repository",
+    });
+  let result = await runPlanner();
   if (
     result.exitCode !== 0 &&
     /cannot find module|module_not_found|node_modules|dependencies? (?:are )?missing/iu.test(
@@ -39,10 +43,7 @@ export const planApplicationSourceRegistration = async (sandbox: SandboxSession,
     if (dependencies.exitCode !== 0) {
       throw new Error("The platform registration planner dependencies are unavailable.");
     }
-    result = await sandbox.run({
-      command: `bun -e ${quote(source)}`,
-      workingDirectory: "/workspace/repository",
-    });
+    result = await runPlanner();
   }
   if (result.exitCode !== 0) {
     throw new Error("The acquired platform could not plan the imported app registration.");

@@ -30,7 +30,7 @@ printf '%s\\n' "$*" >> "$MISE_TEST_LOG"
       [
         path.resolve(import.meta.dirname, "../.config/mise/tasks/test/production-navigation"),
         "--json-report",
-        "/tmp/navigation.json",
+        path.join(directory, "navigation.json"),
       ],
       {
         cwd: directory,
@@ -42,7 +42,7 @@ printf '%s\\n' "$*" >> "$MISE_TEST_LOG"
     const calls = readFileSync(log, "utf-8");
     expect(calls).toContain("which docker");
     expect(calls).toContain("which node");
-    expect(calls).toContain("--json-report /tmp/navigation.json");
+    expect(calls).toContain(`--json-report ${path.join(directory, "navigation.json")}`);
   } finally {
     rmSync(directory, { force: true, recursive: true });
   }

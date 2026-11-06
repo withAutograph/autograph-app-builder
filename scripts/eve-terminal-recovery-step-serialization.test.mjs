@@ -1,5 +1,3 @@
-/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- Exercises the installed compiled Workflow proxy and serializer, whose internal JavaScript exports lack public test typings. */
-/* oxlint-disable unicorn/no-useless-undefined -- An absent encryption key exercises real Workflow serialization of synthetic input without private key material. */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -30,11 +28,13 @@ const { bootTerminalRecoveryOwnerWithPorts } = await import(
 const { createDurableSessionState } = await import(
   new URL("execution/durable-session-store.js", sdk).href
 );
+const logicalSessionId = "logical-fixture";
+const workflowRunId = "wrun-synthetic";
 const checkpoint = {
   capabilities: { requestInput: true },
   serializedContext: {
     "eve.capabilities": { requestInput: true },
-    "eve.sessionId": "logical-fixture",
+    "eve.sessionId": logicalSessionId,
   },
   sessionState: createDurableSessionState({
     session: {
@@ -42,7 +42,7 @@ const checkpoint = {
       compaction: {},
       continuationToken: "fixture-continuation",
       history: [],
-      sessionId: "logical-fixture",
+      sessionId: logicalSessionId,
       state: { approval: "retained-fixture" },
     },
   }),
@@ -50,7 +50,7 @@ const checkpoint = {
   version: 9,
 };
 const descriptor = {
-  logicalSessionId: "logical-fixture",
+  logicalSessionId,
   operationId: "fixture-recovery",
   originalAuthoritySessionId: "fixture-source",
   parentCancellationRevision: 0,
@@ -118,7 +118,7 @@ it("reproduces the member-step receiver failure through the real compiled Workfl
   const input = f.queuedArguments();
   assert.equal(input.thisVal, f.ports);
   await assert.rejects(
-    dehydrateStepArguments(input, "wrun-synthetic", undefined),
+    dehydrateStepArguments(input, workflowRunId, undefined),
     (error) => error.name === "SerializationError" && error.message.includes(".thisVal.createHook"),
   );
   assert.deepEqual(f.calls, []);
@@ -139,8 +139,8 @@ it("serializes the actual terminal boot validation step without its function-bea
   );
   assert.ok(suspended instanceof Promise);
   const input = f.queuedArguments();
-  const encoded = await dehydrateStepArguments(input, "wrun-synthetic", undefined);
-  const decoded = await hydrateStepArguments(encoded, "wrun-synthetic", undefined);
+  const encoded = await dehydrateStepArguments(input, workflowRunId, undefined);
+  const decoded = await hydrateStepArguments(encoded, workflowRunId, undefined);
   assert.equal(input.thisVal, undefined);
   assert.equal(decoded.thisVal, undefined);
   assert.deepEqual(decoded.args, [{ checkpoint }]);

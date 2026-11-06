@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await, typescript/no-unsafe-type-assertion -- Minimal official SDK fake exercises real transport without allocating compute. */
 import { centralHostCanonicalBytes } from "./central-integration-host-contract";
 import { z } from "zod";
 import { createHash } from "node:crypto";
@@ -79,7 +78,7 @@ const fixture = (mutation = false, write = false, capture = false) => {
         return { exitCode: 0, stdout: async () => `${sha}  /worker/integration\n` };
       }
       const spool = options.args[2];
-      frame(`${spool}/requests/1.json`, {
+      const request = {
         app_id: wire.app_id,
         approval_digest: wire.operation.approval_digest,
         context_digest: digest,
@@ -92,8 +91,11 @@ const fixture = (mutation = false, write = false, capture = false) => {
         resource_id: wire.resource.resource_id,
         tenant_id: null,
         version: 1,
-        ...(mutation ? { effect_id: "install-central-schema", sequence: 1 } : {}),
-      });
+      };
+      if (mutation) {
+        Object.assign(request, { effect_id: "install-central-schema", sequence: 1 });
+      }
+      frame(`${spool}/requests/1.json`, request);
       frame(`${spool}/requests/1.ready`, { frame_id: 1, run_id: runId, version: 1 });
       if (write) {
         frame(`${spool}/requests/2.json`, {
@@ -129,12 +131,20 @@ const fixture = (mutation = false, write = false, capture = false) => {
       return {
         kill: vi.fn(async () => {}),
         async *logs() {
-          for (const [kind, frameId] of [
+          const lifecycleFrames = [
             ["protected_installer_lifecycle_ready", 1],
             ["protected_installer_frame_ready", 1],
-            ...(write ? [["protected_installer_frame_ready", 2] as const] : []),
             ["protected_installer_lifecycle_ready", 2],
-          ] as const) {
+          ] as const;
+          const frames = write
+            ? [
+                lifecycleFrames[0],
+                lifecycleFrames[1],
+                ["protected_installer_frame_ready", 2] as const,
+                lifecycleFrames[2],
+              ]
+            : lifecycleFrames;
+          for (const [kind, frameId] of frames) {
             yield {
               data: `${JSON.stringify({ frame_id: frameId, kind, run_id: runId, version: 1 })}\n`,
               stream: "stdout",
@@ -151,23 +161,22 @@ const fixture = (mutation = false, write = false, capture = false) => {
     }),
   };
   const createSandbox: unknown = vi.fn(async () => sandbox);
-  const input = {
+  const baseInput = {
+    assertCurrent: vi.fn(async () => {}),
+    context: wire,
+    readOnly: true,
+    runId,
+    signal: new AbortController().signal,
+    startupFiles: { "central-integration-approved-plan.json": Buffer.from("{}") },
     worker: capture
       ? { ...worker, subcommand: "central-integration-source-capture" as const }
       : worker,
-    context: wire,
-    runId,
-    ...(capture
-      ? {}
-      : {
-          directDatabaseUrl:
-            "postgresql://owner:private@ep-control.neon.tech/integrations?sslmode=verify-full",
-        }),
-    startupFiles: { "central-integration-approved-plan.json": Buffer.from("{}") },
-    readOnly: true,
-    signal: new AbortController().signal,
-    assertCurrent: vi.fn(async () => {}),
   };
+  const input: typeof baseInput & { directDatabaseUrl?: string } = { ...baseInput };
+  if (!capture) {
+    input.directDatabaseUrl =
+      "postgresql://owner:private@ep-control.neon.tech/integrations?sslmode=verify-full";
+  }
   return { createSandbox, files, input, stop };
 };
 const config = {

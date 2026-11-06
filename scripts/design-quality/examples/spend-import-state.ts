@@ -69,23 +69,36 @@ export type SpendAction =
   | { type: "decision-deferred" };
 
 const requiredTargets: SpendTarget[] = ["vendor_name", "amount", "transaction_date"];
+const notMapped = "Not mapped";
+const spendTargets = new Map<string, SpendTarget>([
+  ["vendor_name", "vendor_name"],
+  ["amount", "amount"],
+  ["currency", "currency"],
+  ["transaction_date", "transaction_date"],
+  ["source_record_ref", "source_record_ref"],
+  ["ignore", "ignore"],
+]);
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+const parseSpendTarget = (value: string): SpendTarget | null => spendTargets.get(value) ?? null;
+
 export function initialSpendState(fixture: SpendFixture): SpendState {
+  const mapping: SpendMapping = {};
+  for (const [target, source] of Object.entries(fixture.fieldMapping)) {
+    const parsedTarget = parseSpendTarget(target);
+    if (parsedTarget !== null) {
+      mapping[source] = parsedTarget;
+    }
+  }
   return {
-    mapping: Object.fromEntries(
-      Object.entries(fixture.fieldMapping).map(([target, source]) => [source, target]),
-    ) as SpendMapping,
+    mapping,
     stage: "mapping",
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sourceFor(mapping: SpendMapping, target: SpendTarget) {
   return Object.entries(mapping).find(([, value]) => value === target)?.[0];
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function mappedValue(
   source: Record<string, string | number>,
   mapping: SpendMapping,
@@ -95,11 +108,13 @@ function mappedValue(
   return key === undefined ? undefined : source[key];
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping): SpendPreview {
-  const complete = requiredTargets.every((target) => sourceFor(mapping, target));
+  const complete = requiredTargets.every((target) => {
+    const source = sourceFor(mapping, target);
+    return source !== undefined && source !== "";
+  });
   const representativeBaselineReady = fixture.representativeRows.filter(
-    ({ issue }) => !issue,
+    ({ issue }) => issue === undefined || issue === "",
   ).length;
   const unshownReady = Math.max(0, fixture.preview.creates - representativeBaselineReady);
   const rows = fixture.representativeRows.map((row) => {
@@ -108,19 +123,21 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
     const currency = mappedValue(row.source, mapping, "currency") ?? "USD";
     const date = mappedValue(row.source, mapping, "transaction_date");
     const sourceRef = mappedValue(row.source, mapping, "source_record_ref");
+    const parsedAmount = amount === undefined ? Number.NaN : Number(amount);
+    const amountIsValid = amount !== undefined && amount !== "" && Number.isFinite(parsedAmount);
+    const issueFree = row.issue === undefined || row.issue === "";
     return {
-      amount:
-        typeof amount === "number"
-          ? new Intl.NumberFormat("en-US", {
-              currency: String(currency),
-              style: "currency",
-            }).format(amount)
-          : "Not mapped",
-      date: date === undefined ? "Not mapped" : String(date),
+      amount: amountIsValid
+        ? new Intl.NumberFormat("en-US", {
+            currency: String(currency),
+            style: "currency",
+          }).format(parsedAmount)
+        : notMapped,
+      date: date === undefined ? notMapped : String(date),
       id: row.id,
-      result: complete && !row.issue ? "Ready" : "Needs review",
+      result: complete && issueFree ? "Ready" : "Needs review",
       sourceRef: sourceRef === undefined ? "Not imported" : String(sourceRef),
-      vendor: vendor === undefined ? "Not mapped" : String(vendor),
+      vendor: vendor === undefined ? notMapped : String(vendor),
     } satisfies SpendPreviewRow;
   });
   const ready = complete
@@ -128,18 +145,19 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
     : 0;
   const needsReview = fixture.import.rows - ready;
   const ignored = Object.values(mapping).filter((value) => value === "ignore").length;
+  const ignoredColumns = ignored === 1 ? "column is" : "columns are";
+  const mappingSummary =
+    ignored === 0
+      ? "All source columns are included."
+      : `${ignored} source ${ignoredColumns} excluded.`;
   return {
-    mappingSummary:
-      ignored === 0
-        ? "All source columns are included."
-        : `${ignored} source ${ignored === 1 ? "column is" : "columns are"} excluded.`,
+    mappingSummary,
     needsReview,
     ready,
     rows,
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function reduceSpendState(state: SpendState, action: SpendAction): SpendState {
   if (action.type === "mapping-changed") {
     const mapping = { ...state.mapping };
@@ -152,7 +170,7 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
     return { mapping, stage: "mapping" };
   }
   if (action.type === "preview-requested") {
-    return { ...state, saved: undefined, stage: "preview" };
+    return { ...state, saved: null, stage: "preview" };
   }
   if (action.type === "save-requested") {
     const preview = deriveSpendPreview(action.fixture, state.mapping);
@@ -168,12 +186,16 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
     return { ...state, stage: "review" };
   }
   if (action.type === "match-selected") {
-    return { ...state, decision: undefined, selectedMatchId: action.id };
+    return { ...state, decision: null, selectedMatchId: action.id };
   }
   if (action.type === "decision-deferred") {
     return { ...state, decision: "deferred" };
   }
-  if (action.type === "decision-applied" && state.selectedMatchId) {
+  if (
+    action.type === "decision-applied" &&
+    state.selectedMatchId !== undefined &&
+    state.selectedMatchId !== ""
+  ) {
     return {
       ...state,
       decision: "resolved",
@@ -190,7 +212,6 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
   return state;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function spendActionModel(state: SpendState) {
   let result: string | undefined;
   if (state.decision === "resolved") {
@@ -201,7 +222,10 @@ export function spendActionModel(state: SpendState) {
 
   return {
     applyEnabled:
-      state.stage === "review" && Boolean(state.selectedMatchId) && state.decision === undefined,
+      state.stage === "review" &&
+      state.selectedMatchId !== undefined &&
+      state.selectedMatchId !== "" &&
+      state.decision === undefined,
     result,
     saveEnabled: state.stage === "preview",
   };

@@ -10,7 +10,7 @@ import type { SandboxExecutionPolicy } from "./execution-policy";
 const sha256Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 
 export const sandboxExecutionLeaseSchema = z
-  .object({
+  .strictObject({
     acquiredAtEpochMs: z.number().int().nonnegative(),
     adapterSessionId: hostedIdentifierSchema,
     epoch: z.number().int().positive(),
@@ -34,19 +34,20 @@ export const sandboxExecutionLeaseSchema = z
     state: z.enum(["active", "released", "orphaned"]),
     version: z.literal(1),
   })
-  .strict()
-  .superRefine((lease, context) => {
+  .check((context) => {
+    const lease = context.value;
     if (
       lease.acquiredAtEpochMs > lease.heartbeatAtEpochMs ||
       lease.heartbeatAtEpochMs >= lease.expiresAtEpochMs
     ) {
-      context.addIssue({ code: "custom", message: "Invalid lease interval." });
+      context.issues.push({ code: "custom", input: lease, message: "Invalid lease interval" });
     }
     const released = lease.releasedAtEpochMs !== undefined && lease.releaseReason !== undefined;
     if ((lease.state === "released") !== released) {
-      context.addIssue({
+      context.issues.push({
         code: "custom",
-        message: "Lease release state is not canonical.",
+        input: lease,
+        message: "Lease release state is not canonical",
       });
     }
   });
@@ -109,12 +110,10 @@ export interface SandboxExecutionLeaseStore {
   }) => Promise<SandboxExecutionLease | null>;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxLeaseKey(principal: HostedPrincipal, adapterSessionId: string): string {
   return JSON.stringify([tenantKeyFor(principal), adapterSessionId]);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxLeaseReceiptDigest(lease: SandboxExecutionLease): string {
   return `sha256:${createHash("sha256")
     .update(JSON.stringify(sandboxExecutionLeaseSchema.parse(lease)))
@@ -124,7 +123,6 @@ export function sandboxLeaseReceiptDigest(lease: SandboxExecutionLease): string 
 export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLeaseStore {
   private readonly leases = new Map<string, SandboxExecutionLease>();
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async acquire(
     input: Parameters<SandboxExecutionLeaseStore["acquire"]>[0],
   ): Promise<AcquireSandboxLeaseResult> {
@@ -162,19 +160,18 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     return { disposition: "acquired", lease: structuredClone(lease) };
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async assertCurrent(
     input: Parameters<SandboxExecutionLeaseStore["assertCurrent"]>[0],
   ): Promise<SandboxExecutionLease> {
     const lease = this.leases.get(sandboxLeaseKey(input.principal, input.adapterSessionId));
-    if (
-      lease === undefined ||
-      lease.state !== "active" ||
-      lease.expiresAtEpochMs <= input.nowEpochMs ||
-      lease.epoch !== input.epoch ||
-      lease.providerSandboxId !== input.providerSandboxId ||
-      lease.policyDigest !== input.policyDigest
-    ) {
+    if (lease === undefined) {
+      throw new Error("The sandbox execution lease is stale or unavailable.");
+    }
+    const matchesInput =
+      lease.epoch === input.epoch &&
+      lease.providerSandboxId === input.providerSandboxId &&
+      lease.policyDigest === input.policyDigest;
+    if (lease.state !== "active" || lease.expiresAtEpochMs <= input.nowEpochMs || !matchesInput) {
       throw new Error("The sandbox execution lease is stale or unavailable.");
     }
     return structuredClone(lease);
@@ -198,7 +195,6 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     return structuredClone(lease);
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async release(
     input: Parameters<SandboxExecutionLeaseStore["release"]>[0],
   ): Promise<SandboxExecutionLease> {
@@ -220,7 +216,6 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     return structuredClone(lease);
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async releaseCurrent(
     input: Parameters<SandboxExecutionLeaseStore["releaseCurrent"]>[0],
   ): Promise<SandboxExecutionLease | null> {
@@ -243,12 +238,13 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     });
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async claimExpired(
     input: Parameters<SandboxExecutionLeaseStore["claimExpired"]>[0],
   ): Promise<readonly SandboxExecutionLease[]> {
     const claimed: SandboxExecutionLease[] = [];
-    for (const [key, current] of [...this.leases.entries()].toSorted()) {
+    for (const [key, current] of [...this.leases.entries()].toSorted(([left], [right]) =>
+      left.localeCompare(right),
+    )) {
       if (
         claimed.length >= input.limit ||
         current.state === "released" ||
@@ -267,7 +263,6 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     return claimed;
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async settleRecovery(
     input: Parameters<SandboxExecutionLeaseStore["settleRecovery"]>[0],
   ): Promise<SandboxExecutionLease | null> {
@@ -295,7 +290,6 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function reconcileExpiredSandboxLeases(input: {
   store: SandboxExecutionLeaseStore;
   stopSandbox: (providerSandboxId: string) => Promise<void>;
@@ -314,14 +308,12 @@ export async function reconcileExpiredSandboxLeases(input: {
     const digest = sandboxLeaseReceiptDigest(lease);
     let providerOutcome: "stopped" | "stop-failed" = "stopped";
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.stopSandbox(lease.providerSandboxId);
     } catch {
       providerOutcome = "stop-failed";
       providerFailed.push(digest);
     }
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const settled = await input.store.settleRecovery({
         lease,
         nowEpochMs: input.nowEpochMs,

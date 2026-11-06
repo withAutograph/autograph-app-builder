@@ -1,4 +1,5 @@
 import type { Sandbox } from "@vercel/sandbox";
+import { z } from "zod";
 
 export interface PreviewAttempt {
   attemptId: string;
@@ -73,11 +74,37 @@ type OwnershipOperation =
       patch: Partial<PreviewAttempt>;
     };
 
-export const previewOwnershipOperation = async <T>(
+type OwnershipResult = PreviewAttempt | null | { claimed: boolean; attempt: PreviewAttempt | null };
+
+const previewAttemptSchema = z.looseObject({
+  attemptId: z.string(),
+  commandId: z.string().optional(),
+  expiresAt: z.number(),
+  providerSessionId: z.string(),
+  status: z.enum(["starting", "ready", "cleanup-required"]),
+  supervisorPath: z.string().optional(),
+  supervisorPid: z.number().optional(),
+});
+const ownershipResultSchema = z.union([
+  previewAttemptSchema,
+  z.null(),
+  z.looseObject({ attempt: previewAttemptSchema.nullable(), claimed: z.boolean() }),
+]);
+
+const parseOwnershipPayload = (input: string): OwnershipResult => {
+  const parsedJson: unknown = JSON.parse(input);
+  const parsedResult = ownershipResultSchema.safeParse(parsedJson);
+  if (!parsedResult.success) {
+    throw parsedResult.error;
+  }
+  return parsedResult.data;
+};
+
+export const previewOwnershipOperation = async (
   provider: Sandbox,
   operation: OwnershipOperation,
   signal?: AbortSignal,
-): Promise<T> => {
+): Promise<OwnershipResult> => {
   const command = await provider.runCommand({
     args: [
       "--input-type=module",
@@ -92,5 +119,5 @@ export const previewOwnershipOperation = async <T>(
       "The preview ownership journal could not be updated; retry cleanup before starting another preview.",
     );
   }
-  return JSON.parse(await command.stdout({ signal })) as T;
+  return parseOwnershipPayload(await command.stdout({ signal }));
 };

@@ -15,6 +15,32 @@ import {
 } from "./supported-template";
 import type { PreparedSandboxWorkspace } from "./supported-template";
 
+type TestSandbox = Pick<
+  SandboxSession,
+  | "id"
+  | "run"
+  | "readTextFile"
+  | "readBinaryFile"
+  | "removePath"
+  | "writeFile"
+  | "writeBinaryFile"
+  | "writeTextFile"
+>;
+type InspectionSandbox = Pick<SandboxSession, "id" | "run" | "readTextFile">;
+const gitPath = path.join(path.dirname(process.execPath), "git");
+const sandboxAsSession = (sandbox: TestSandbox): SandboxSession => ({
+  ...sandbox,
+  readFile: async () => {
+    await Promise.resolve();
+    throw new Error("readFile is unused in this test");
+  },
+  resolvePath: (value) => value,
+  spawn: async () => {
+    await Promise.resolve();
+    throw new Error("spawn is unused in this test");
+  },
+});
+
 const roots: string[] = [];
 
 afterEach(() => {
@@ -56,7 +82,7 @@ describe("development Sandbox workspace verification", () => {
           id: "sandbox",
           readTextFile: vi.fn().mockResolvedValue(JSON.stringify(workspace)),
           run,
-        } as never,
+        } satisfies InspectionSandbox,
         "development-live",
       ),
     ).resolves.toEqual({ state: "prepared", workspace });
@@ -73,13 +99,13 @@ describe("development Sandbox workspace verification", () => {
             exitCode: 0,
             stderr: "",
             stdout: JSON.stringify({
-              realRepository: "/tmp/repository",
+              realRepository: "/outside/repository",
               realWorkspace: "/workspace",
               repositoryInput: "/workspace/repository",
               workspaceRoot: "/workspace",
             }),
           }),
-        } as never,
+        } satisfies InspectionSandbox,
         "development-live",
       ),
     ).rejects.toThrow("escaped its sandbox boundary");
@@ -93,7 +119,7 @@ describe("development Sandbox workspace verification", () => {
           id: "sandbox",
           readTextFile: vi.fn().mockResolvedValue(JSON.stringify(workspace)),
           run: vi.fn().mockResolvedValue({ exitCode: 1, stderr: "node failed", stdout: "" }),
-        } as never,
+        } satisfies InspectionSandbox,
         "development-live",
       ),
     ).rejects.toThrow("inspection command failed");
@@ -106,35 +132,37 @@ describe("development Sandbox workspace refresh", () => {
     roots.push(source);
     writeFileSync(path.join(source, "changed.txt"), "before");
     writeFileSync(path.join(source, "deleted.txt"), "delete me");
-    execFileSync("git", ["init", "--quiet"], { cwd: source });
-    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: source });
-    execFileSync("git", ["config", "user.name", "Test"], { cwd: source });
-    execFileSync("git", ["config", "commit.gpgsign", "false"], { cwd: source });
-    execFileSync("git", ["add", "."], { cwd: source });
-    execFileSync("git", ["commit", "--quiet", "-m", "fixture"], { cwd: source });
+    execFileSync(gitPath, ["init", "--quiet"], { cwd: source });
+    execFileSync(gitPath, ["config", "user.email", "test@example.com"], { cwd: source });
+    execFileSync(gitPath, ["config", "user.name", "Test"], { cwd: source });
+    execFileSync(gitPath, ["config", "commit.gpgsign", "false"], { cwd: source });
+    execFileSync(gitPath, ["add", "."], { cwd: source });
+    execFileSync(gitPath, ["commit", "--quiet", "-m", "fixture"], { cwd: source });
 
     const files = new Map<string, string | Buffer>();
-    const removePath = vi.fn(async ({ path: target, recursive = false }) => {
-      if (recursive) {
-        for (const key of files.keys()) {
-          if (key === target || key.startsWith(`${target}/`)) {
-            files.delete(key);
+    const removePath = vi.fn(
+      ({ path: target, recursive = false }: { path: string; recursive?: boolean }) => {
+        if (recursive) {
+          for (const key of files.keys()) {
+            if (key === target || key.startsWith(`${target}/`)) {
+              files.delete(key);
+            }
           }
+        } else {
+          files.delete(target);
         }
-      } else {
-        files.delete(target);
-      }
-    });
+      },
+    );
     const sandbox = {
       id: "sandbox",
-      readBinaryFile: vi.fn(async ({ path: target }: { path: string }) => {
+      readBinaryFile: vi.fn(({ path: target }: { path: string }) => {
         const value = files.get(target);
         if (value === undefined) {
           return null;
         }
         return Buffer.isBuffer(value) ? value : Buffer.from(value);
       }),
-      readTextFile: vi.fn(async ({ path: target }) => {
+      readTextFile: vi.fn(({ path: target }: { path: string }) => {
         const value = files.get(target);
         if (value === undefined) {
           return null;
@@ -142,7 +170,7 @@ describe("development Sandbox workspace refresh", () => {
         return Buffer.isBuffer(value) ? value.toString("utf-8") : value;
       }),
       removePath,
-      run: vi.fn(async ({ command }) => {
+      run: vi.fn(({ command }: { command: string }) => {
         if (command.includes("tar --extract")) {
           for (const name of ["changed.txt", "deleted.txt"]) {
             try {
@@ -154,14 +182,15 @@ describe("development Sandbox workspace refresh", () => {
         }
         return { exitCode: 0, stderr: "", stdout: "" };
       }),
-      writeBinaryFile: vi.fn(async ({ content, path: target }) => {
-        files.set(target, content);
-      }),
+      writeBinaryFile: vi.fn(
+        ({ content, path: target }: { content: string | Buffer; path: string }) => {
+          files.set(target, content);
+        },
+      ),
       writeFile: vi.fn<SandboxSession["writeFile"]>(async ({ content, path: target }) => {
         const reader = content.getReader();
         const chunks: Uint8Array[] = [];
         for (;;) {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- Consume the file stream sequentially.
           const item = await reader.read();
           if (item.done) {
             break;
@@ -170,24 +199,24 @@ describe("development Sandbox workspace refresh", () => {
         }
         files.set(target, Buffer.concat(chunks));
       }),
-      writeTextFile: vi.fn(async ({ content, path: target }) => {
+      writeTextFile: vi.fn(({ content, path: target }: { content: string; path: string }) => {
         files.set(target, content);
       }),
     };
 
-    await prepareDevelopmentSandboxWorkspace(source, sandbox as never, "first");
+    await prepareDevelopmentSandboxWorkspace(source, sandboxAsSession(sandbox), "first");
     files.set("repository/apps/generated/page.tsx", "generated");
     const largeSourceFile = Buffer.alloc(2 * 1024 * 1024, 0x61);
     writeFileSync(path.join(source, "changed.txt"), largeSourceFile);
     rmSync(path.join(source, "deleted.txt"));
 
-    await prepareDevelopmentSandboxWorkspace(source, sandbox as never, "second");
+    await prepareDevelopmentSandboxWorkspace(source, sandboxAsSession(sandbox), "second");
 
     expect(files.get("repository/changed.txt")).toEqual(largeSourceFile);
     expect(files.has("repository/deleted.txt")).toBe(false);
     expect(files.get("repository/apps/generated/page.tsx")).toBe("generated");
     expect(removePath).not.toHaveBeenCalledWith(expect.objectContaining({ path: "repository" }));
-    const readActual = async ({ path: target }: { path: string }) => {
+    const readActual = ({ path: target }: { path: string }) => {
       const value = files.get(target);
       if (value === undefined) {
         return null;
@@ -195,15 +224,15 @@ describe("development Sandbox workspace refresh", () => {
       return Buffer.isBuffer(value) ? value : Buffer.from(value);
     };
     writeFileSync(path.join(source, "changed.txt"), "new source transfer before corrupt readback");
-    sandbox.readBinaryFile.mockImplementation(async (input) => {
+    sandbox.readBinaryFile.mockImplementation((input) => {
       if (input.path === "repository/changed.txt") {
         return Buffer.from("corrupt transferred bytes");
       }
-      return await readActual(input);
+      return readActual(input);
     });
     sandbox.writeTextFile.mockClear();
     await expect(
-      prepareDevelopmentSandboxWorkspace(source, sandbox as never, "corrupt-readback"),
+      prepareDevelopmentSandboxWorkspace(source, sandboxAsSession(sandbox), "corrupt-readback"),
     ).rejects.toThrow("drifted or is missing");
     expect(
       sandbox.writeTextFile.mock.calls.some(([input]) =>
@@ -214,7 +243,7 @@ describe("development Sandbox workspace refresh", () => {
     sandbox.readBinaryFile.mockImplementation(readActual);
     files.set(".app-builder/source-files.json", "not json");
     writeFileSync(path.join(source, "changed.txt"), "after corrupt receipt");
-    await prepareDevelopmentSandboxWorkspace(source, sandbox as never, "third");
+    await prepareDevelopmentSandboxWorkspace(source, sandboxAsSession(sandbox), "third");
 
     expect(files.get("repository/changed.txt")?.toString()).toBe("after corrupt receipt");
     expect(files.get("repository/apps/generated/page.tsx")).toBe("generated");
@@ -233,31 +262,32 @@ const legacyWorkspaceFixture = () => {
   );
   writeFileSync(path.join(source, "scripts/check.cjs"), 'process.stdout.write("checked");');
   writeFileSync(path.join(source, "app.txt"), "original");
-  execFileSync("git", ["init", "--quiet"], { cwd: source });
-  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: source });
-  execFileSync("git", ["config", "user.name", "Test"], { cwd: source });
-  execFileSync("git", ["-c", "commit.gpgsign=false", "add", "."], { cwd: source });
-  execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "fixture"], {
+  execFileSync(gitPath, ["init", "--quiet"], { cwd: source });
+  execFileSync(gitPath, ["config", "user.email", "test@example.com"], { cwd: source });
+  execFileSync(gitPath, ["config", "user.name", "Test"], { cwd: source });
+  execFileSync(gitPath, ["-c", "commit.gpgsign=false", "add", "."], { cwd: source });
+  execFileSync(gitPath, ["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "fixture"], {
     cwd: source,
   });
-  const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf-8" }).trim();
+  const sha = execFileSync(gitPath, ["rev-parse", "HEAD"], {
+    cwd: source,
+    encoding: "utf-8",
+  }).trim();
   const files = new Map<string, Buffer>();
   const sandbox = {
     id: "sandbox",
-    readBinaryFile: vi.fn(async ({ path: target }: { path: string }) => files.get(target) ?? null),
+    readBinaryFile: vi.fn(({ path: target }: { path: string }) => files.get(target) ?? null),
     readTextFile: vi.fn(
-      async ({ path: target }: { path: string }) => files.get(target)?.toString("utf-8") ?? null,
+      ({ path: target }: { path: string }) => files.get(target)?.toString("utf-8") ?? null,
     ),
-    removePath: vi.fn(
-      async ({ path: target, recursive }: { path: string; recursive?: boolean }) => {
-        for (const name of files.keys()) {
-          if (name === target || (recursive === true && name.startsWith(`${target}/`))) {
-            files.delete(name);
-          }
+    removePath: vi.fn(({ path: target, recursive }: { path: string; recursive?: boolean }) => {
+      for (const name of files.keys()) {
+        if (name === target || (recursive === true && name.startsWith(`${target}/`))) {
+          files.delete(name);
         }
-      },
-    ),
-    run: vi.fn(async () => ({
+      }
+    }),
+    run: vi.fn(() => ({
       exitCode: 0,
       stderr: "",
       stdout: JSON.stringify({
@@ -271,7 +301,6 @@ const legacyWorkspaceFixture = () => {
       const reader = content.getReader();
       const chunks: Uint8Array[] = [];
       for (;;) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Consume each source stream sequentially.
         const item = await reader.read();
         if (item.done) {
           break;
@@ -280,7 +309,7 @@ const legacyWorkspaceFixture = () => {
       }
       files.set(target, Buffer.concat(chunks));
     }),
-    writeTextFile: vi.fn(async ({ content, path: target }: { content: string; path: string }) => {
+    writeTextFile: vi.fn(({ content, path: target }: { content: string; path: string }) => {
       files.set(target, Buffer.from(content));
     }),
   };
@@ -296,7 +325,7 @@ describe("legacy writable Sandbox workspace", () => {
       source,
       sha,
       "e".repeat(64),
-      sandbox as never,
+      sandboxAsSession(sandbox),
       "first",
     );
     expect(
@@ -316,34 +345,40 @@ describe("legacy writable Sandbox workspace", () => {
         source,
         sha,
         "f".repeat(64),
-        sandbox as never,
+        sandboxAsSession(sandbox),
         "again",
         false,
         "planning",
       ),
     ).resolves.toEqual(prepared);
-    await expect(inspectPreparedSandboxWorkspace(sandbox as never, "legacy-live")).resolves.toEqual(
-      { state: "prepared", workspace: prepared },
-    );
+    await expect(
+      inspectPreparedSandboxWorkspace(sandboxAsSession(sandbox), "legacy-live"),
+    ).resolves.toEqual({ state: "prepared", workspace: prepared });
     expect(files.get("repository/app.txt")?.toString()).toBe("repaired");
     expect(files.get("repository/new.txt")?.toString()).toBe("new app file");
     expect(files.has("repository/scripts/check.cjs")).toBe(false);
     expect(sandbox.removePath).not.toHaveBeenCalled();
     expect(sandbox.writeFile).not.toHaveBeenCalled();
-    await expect(inspectPreparedSandboxWorkspace(sandbox as never)).rejects.toThrow(
+    await expect(inspectPreparedSandboxWorkspace(sandboxAsSession(sandbox))).rejects.toThrow(
       "drifted or is missing",
     );
   });
 
   it("does not seal a failed initial transfer", async () => {
     const { files, sandbox, sha, source } = legacyWorkspaceFixture();
-    sandbox.readBinaryFile.mockImplementation(async ({ path: target }) =>
+    sandbox.readBinaryFile.mockImplementation(({ path: target }: { path: string }) =>
       target === "repository/app.txt"
         ? Buffer.from("corrupt transfer")
         : (files.get(target) ?? null),
     );
     await expect(
-      prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), sandbox as never, "first"),
+      prepareSupportedSandboxWorkspace(
+        source,
+        sha,
+        "e".repeat(64),
+        sandboxAsSession(sandbox),
+        "first",
+      ),
     ).rejects.toThrow("drifted or is missing");
     expect(
       sandbox.writeTextFile.mock.calls.some(([input]) =>
@@ -354,7 +389,13 @@ describe("legacy writable Sandbox workspace", () => {
 
   it("rejects a different Sandbox or selected source before replacing content", async () => {
     const { files, sandbox, sha, source } = legacyWorkspaceFixture();
-    await prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), sandbox as never, "first");
+    await prepareSupportedSandboxWorkspace(
+      source,
+      sha,
+      "e".repeat(64),
+      sandboxAsSession(sandbox),
+      "first",
+    );
     files.set("repository/app.txt", Buffer.from("keep repair"));
     sandbox.removePath.mockClear();
     await expect(
@@ -362,7 +403,7 @@ describe("legacy writable Sandbox workspace", () => {
         source,
         sha,
         "e".repeat(64),
-        { ...sandbox, id: "other" } as never,
+        sandboxAsSession({ ...sandbox, id: "other" }),
         "again",
       ),
     ).rejects.toThrow("different workspace");
@@ -371,7 +412,7 @@ describe("legacy writable Sandbox workspace", () => {
         source,
         "a".repeat(40),
         "e".repeat(64),
-        sandbox as never,
+        sandboxAsSession(sandbox),
         "again",
       ),
     ).rejects.toThrow("Source SHA changed");
@@ -381,7 +422,13 @@ describe("legacy writable Sandbox workspace", () => {
 
   it("rejects a realpath escape and damaged baseline provenance on live reads", async () => {
     const { files, sandbox, sha, source } = legacyWorkspaceFixture();
-    await prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), sandbox as never, "first");
+    await prepareSupportedSandboxWorkspace(
+      source,
+      sha,
+      "e".repeat(64),
+      sandboxAsSession(sandbox),
+      "first",
+    );
     sandbox.run.mockResolvedValueOnce({
       exitCode: 0,
       stderr: "",
@@ -392,26 +439,26 @@ describe("legacy writable Sandbox workspace", () => {
         workspaceRoot: "/workspace",
       }),
     });
-    await expect(inspectPreparedSandboxWorkspace(sandbox as never, "legacy-live")).rejects.toThrow(
-      "escaped its sandbox boundary",
-    );
+    await expect(
+      inspectPreparedSandboxWorkspace(sandboxAsSession(sandbox), "legacy-live"),
+    ).rejects.toThrow("escaped its sandbox boundary");
     files.set(".app-builder/source-files.json", Buffer.from("[]"));
-    await expect(inspectPreparedSandboxWorkspace(sandbox as never, "legacy-live")).rejects.toThrow(
-      "manifest is invalid",
-    );
+    await expect(
+      inspectPreparedSandboxWorkspace(sandboxAsSession(sandbox), "legacy-live"),
+    ).rejects.toThrow("manifest is invalid");
   });
 
   it("checks release workflow bytes without freezing mutable app content", async () => {
     const fixture = legacyWorkspaceFixture();
     mkdirSync(path.join(fixture.source, ".github/workflows"), { recursive: true });
     writeFileSync(path.join(fixture.source, ".github/workflows/cd.yml"), "jobs: {}\n");
-    execFileSync("git", ["add", "."], { cwd: fixture.source });
+    execFileSync(gitPath, ["add", "."], { cwd: fixture.source });
     execFileSync(
-      "git",
+      gitPath,
       ["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "release policy"],
       { cwd: fixture.source },
     );
-    const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+    const sha = execFileSync(gitPath, ["rev-parse", "HEAD"], {
       cwd: fixture.source,
       encoding: "utf-8",
     }).trim();
@@ -419,12 +466,12 @@ describe("legacy writable Sandbox workspace", () => {
       fixture.source,
       sha,
       "e".repeat(64),
-      fixture.sandbox as never,
+      sandboxAsSession(fixture.sandbox),
       "first",
     );
     fixture.files.set("repository/app.txt", Buffer.from("ordinary edit"));
     const input = {
-      sandbox: fixture.sandbox as never,
+      sandbox: sandboxAsSession(fixture.sandbox),
       sourceSha: prepared.sourceSha,
       sourceTree: prepared.sourceTree,
       workspaceDigest: prepared.workspaceDigest,

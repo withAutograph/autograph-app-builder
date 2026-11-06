@@ -22,25 +22,25 @@ const designCaseSchema = z.object({
 export type DesignCase = z.infer<typeof designCaseSchema>;
 export type ListedDesignCase = Pick<DesignCase, "id" | "title" | "status">;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function designCasesRoot(root = "docs/design-quality-cases") {
   return path.resolve(root);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function caseDirectory(id: string, root?: string) {
   return path.join(designCasesRoot(root), caseId.parse(id));
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function listDesignCases(root?: string): Promise<ListedDesignCase[]> {
   const base = designCasesRoot(root);
-  const entries = await readdir(base, { withFileTypes: true }).catch((error) => {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+  let entries;
+  try {
+    entries = await readdir(base, { withFileTypes: true });
+  } catch (error) {
+    if (z.object({ code: z.literal("ENOENT") }).safeParse(error).success) {
       return [];
     }
     throw error;
-  });
+  }
   const cases = await Promise.all(
     entries
       .filter((entry) => entry.isDirectory() && caseId.safeParse(entry.name).success)
@@ -61,7 +61,6 @@ export async function listDesignCases(root?: string): Promise<ListedDesignCase[]
   return cases.toSorted((left, right) => left.id.localeCompare(right.id));
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readDesignCase(id: string, root?: string) {
   const directory = caseDirectory(id, root);
   const metadata = designCaseSchema.parse(
@@ -78,10 +77,10 @@ export async function readDesignCase(id: string, root?: string) {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function appendReviewQuestions(brief: string, questions: string[]) {
   if (questions.length === 0) {
     return brief;
   }
-  return `${brief.trimEnd()}\n\n---\n\nReview questions for this case:\n${questions.map((question) => `- ${question}`).join("\n")}`;
+  const questionList = questions.map((question) => `- ${question}`).join("\n");
+  return [brief.trimEnd(), "---", "Review questions for this case:", questionList].join("\n\n");
 }

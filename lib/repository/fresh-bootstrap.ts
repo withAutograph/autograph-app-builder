@@ -142,15 +142,18 @@ export type FreshBootstrapSuccessReceipt = TerminalBase & {
   digest: string;
 };
 
+export enum FreshBootstrapFailureReason {
+  PreconditionFailed = "precondition-failed",
+  Collision = "collision",
+  MaterializationPartial = "materialization-partial",
+  PublicationPartial = "publication-partial",
+  CapabilityDisabled = "capability-disabled",
+  RecoveryConflict = "recovery-conflict",
+}
+
 export type FreshBootstrapFailureReceipt = TerminalBase & {
   status: "failed";
-  reason:
-    | "precondition-failed"
-    | "collision"
-    | "materialization-partial"
-    | "publication-partial"
-    | "capability-disabled"
-    | "recovery-conflict";
+  reason: FreshBootstrapFailureReason;
   failureMessage: string;
   layout: FreshBootstrapLayout;
   stageCreated: boolean;
@@ -174,10 +177,15 @@ export type FreshBootstrapLayout =
       swappedOldIdentity?: PathIdentity;
     };
 
-const sha1Object = (kind: "blob" | "tree" | "commit", bytes: Uint8Array) =>
-  createHash("sha1")
-    .update(Buffer.from(`${kind} ${bytes.byteLength}\0`))
-    .update(bytes)
+const GIT_OBJECT_HASH = "sha1";
+
+const makeGitHash = (algorithm: string) => createHash(algorithm);
+
+const sha1Object = (kind: "blob" | "tree" | "commit", objectBytes: Uint8Array) =>
+  // SAFETY: Git requires SHA-1 object IDs; this digest is only for Git format compatibility.
+  makeGitHash(GIT_OBJECT_HASH)
+    .update(Buffer.from(`${kind} ${objectBytes.byteLength}\0`))
+    .update(objectBytes)
     .digest("hex");
 
 interface Tree {
@@ -185,21 +193,53 @@ interface Tree {
   directories: Map<string, Tree>;
 }
 
+const FRESH_BOOTSTRAP_MARKER = ".repository-bootstrap-claim";
+
+const encodeTreeEntry = ({ mode, name, oid }: { mode: string; name: string; oid: string }) =>
+  Buffer.concat([Buffer.from(`${mode} ${name}\0`), Buffer.from(oid, "hex")]);
+
+const hasReservedComponent = (components: readonly string[]): boolean =>
+  components.some((component) => {
+    const normalized = component.toLowerCase();
+    return normalized === ".git" || normalized === FRESH_BOOTSTRAP_MARKER;
+  });
+
+const hasParentPath = (components: readonly string[], paths: ReadonlySet<string>): boolean => {
+  for (let index = 1; index < components.length; index += 1) {
+    if (paths.has(components.slice(0, index).join("/"))) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const hasChildPath = (path: string, paths: ReadonlySet<string>): boolean => {
+  for (const existingPath of paths) {
+    if (existingPath.startsWith(`${path}/`)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const validateTreeFile = (file: FreshBootstrapFile, components: string[], paths: Set<string>) =>
+  isValidTreeBlob(file) &&
+  isUniqueTreePath(file, components, paths) &&
+  !hasParentPath(components, paths) &&
+  !hasChildPath(file.path, paths);
+
+const isValidTreeBlob = (file: FreshBootstrapFile) =>
+  safeSourcePath(file.path) && /^[0-9a-f]{40}$/u.test(file.blob);
+
+const isUniqueTreePath = (file: FreshBootstrapFile, components: string[], paths: Set<string>) =>
+  !paths.has(file.path) && !hasReservedComponent(components);
+
 export const gitTreeId = (files: readonly FreshBootstrapFile[]): string => {
   const root: Tree = { directories: new Map(), files: [] };
   const paths = new Set<string>();
   for (const file of files) {
     const components = file.path.split("/");
-    if (
-      !safeSourcePath(file.path) ||
-      !/^[0-9a-f]{40}$/u.test(file.blob) ||
-      paths.has(file.path) ||
-      components.some((component) =>
-        [".git", ".repository-bootstrap-claim"].includes(component.toLowerCase()),
-      ) ||
-      components.some((_, index) => paths.has(components.slice(0, index + 1).join("/"))) ||
-      [...paths].some((path) => path.startsWith(`${file.path}/`))
-    ) {
+    if (!validateTreeFile(file, components, paths)) {
       throw new Error("The fresh-bootstrap tree contains an unsafe entry.");
     }
     paths.add(file.path);
@@ -234,32 +274,21 @@ export const gitTreeId = (files: readonly FreshBootstrapFile[]): string => {
         sort: `${name}/`,
       })),
     ].toSorted((left, right) => Buffer.from(left.sort).compare(Buffer.from(right.sort)));
-    return sha1Object(
-      "tree",
-      Buffer.concat(
-        entries.map(({ mode, name, oid }) =>
-          Buffer.concat([Buffer.from(`${mode} ${name}\0`), Buffer.from(oid, "hex")]),
-        ),
-      ),
-    );
+    return sha1Object("tree", Buffer.concat(entries.map(encodeTreeEntry)));
   };
   return walk(root);
 };
 
 const commitActor = (identity: FreshBootstrapIdentity): string => {
-  if (
-    !/^(?![.-])[A-Za-z0-9._/-]+$/u.test(identity.initialBranch) ||
-    identity.initialBranch.includes("..") ||
-    identity.initialBranch.includes("@{") ||
-    identity.initialBranch.includes("//") ||
-    identity.initialBranch.endsWith("/") ||
-    identity.authorName.trim() !== identity.authorName ||
-    identity.authorName.length === 0 ||
-    /[\n\r<>]/u.test(identity.authorName) ||
-    !/^[^\s<>@]+@[^\s<>@]+$/u.test(identity.authorEmail) ||
-    /[\0\r]/u.test(identity.commitMessage) ||
-    identity.commitMessage.trim().length === 0
-  ) {
+  const validBranch = isValidInitialBranch(identity.initialBranch);
+  const validAuthor =
+    identity.authorName.trim() === identity.authorName &&
+    identity.authorName.length > 0 &&
+    !/[\n\r<>]/u.test(identity.authorName) &&
+    /^[^\s<>@]+@[^\s<>@]+$/u.test(identity.authorEmail);
+  const validMessage =
+    !/[\0\r]/u.test(identity.commitMessage) && identity.commitMessage.trim().length > 0;
+  if (!validBranch || !validAuthor || !validMessage) {
     throw new Error("The fresh-bootstrap Git identity is invalid.");
   }
   const milliseconds = Date.parse(identity.commitTimestamp);
@@ -268,6 +297,13 @@ const commitActor = (identity: FreshBootstrapIdentity): string => {
     throw new Error("The fresh-bootstrap commit timestamp is invalid.");
   }
   return `${identity.authorName} <${identity.authorEmail}> ${Math.floor(milliseconds / 1000)} ${offset[1]}${offset[2]}${offset[3]}`;
+};
+
+const isValidInitialBranch = (branch: string) => {
+  if (!/^(?![.-])[A-Za-z0-9._/-]+$/u.test(branch)) {
+    return false;
+  }
+  return !["..", "@{", "//"].some((part) => branch.includes(part)) && !branch.endsWith("/");
 };
 
 export const initialCommitId = (input: {
@@ -387,11 +423,40 @@ export const createFreshBootstrapProposal = (input: {
   return { ...unsigned, digest: stableDigest(unsigned) };
 };
 
-const canonicalProposal = (proposal: FreshBootstrapProposal) => {
-  const unsigned = { ...proposal } as Record<string, unknown>;
-  delete unsigned.digest;
-  return unsigned;
-};
+type UnsignedProposal = Omit<FreshBootstrapProposal, "digest">;
+
+const canonicalProposal = (proposal: FreshBootstrapProposal): UnsignedProposal => ({
+  appSpecDigest: proposal.appSpecDigest,
+  appSpecPath: proposal.appSpecPath,
+  applyDigest: proposal.applyDigest,
+  atomicAdapterDigest: proposal.atomicAdapterDigest,
+  capability: proposal.capability,
+  changeSetDigest: proposal.changeSetDigest,
+  claimMarkerName: proposal.claimMarkerName,
+  contractDigest: proposal.contractDigest,
+  destinationLockDigest: proposal.destinationLockDigest,
+  destinationPath: proposal.destinationPath,
+  destinationPrestate: proposal.destinationPrestate,
+  exactTree: proposal.exactTree,
+  exactTreeDigest: proposal.exactTreeDigest,
+  expectedGitTree: proposal.expectedGitTree,
+  expectedInitialCommit: proposal.expectedInitialCommit,
+  githubOutcome: proposal.githubOutcome,
+  intendedOutcome: proposal.intendedOutcome,
+  journalPath: proposal.journalPath,
+  lockPath: proposal.lockPath,
+  materializeAdapterDigest: proposal.materializeAdapterDigest,
+  publicationIdentityDigest: proposal.publicationIdentityDigest,
+  releaseEnabled: proposal.releaseEnabled,
+  repositoryIdentity: proposal.repositoryIdentity,
+  reviewDigest: proposal.reviewDigest,
+  sourceReceiptDigest: proposal.sourceReceiptDigest,
+  sourceSha: proposal.sourceSha,
+  sourceTree: proposal.sourceTree,
+  stagingPath: proposal.stagingPath,
+  validationDigest: proposal.validationDigest,
+  version: proposal.version,
+});
 
 const hasExactKeys = <Value extends object>(
   value: Value,
@@ -403,203 +468,246 @@ const hasExactKeys = <Value extends object>(
 
 const pathIdentityKeys = ["path", "device", "inode", "uid", "mode", "nlink"] as const;
 const executableIdentityKeys = [...pathIdentityKeys, "sha256"] as const;
+const pathIdentityValidators: readonly ((value: PathIdentity) => boolean)[] = [
+  ({ path }) => path.startsWith("/"),
+  ({ device }) => /^\d+$/u.test(device),
+  ({ inode }) => /^\d+$/u.test(inode),
+  ({ uid }) => /^\d+$/u.test(uid),
+  ({ mode }) => /^[0-7]+$/u.test(mode),
+  ({ nlink }) => /^\d+$/u.test(nlink),
+];
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const validPathIdentity = (value: PathIdentity): boolean =>
+  pathIdentityValidators.every((validator) => validator(value));
 
-const isPathIdentity = (value: unknown): value is PathIdentity => {
-  if (!isRecord(value) || !hasExactKeys(value, pathIdentityKeys)) {
-    return false;
+const IDENTITY_DIGEST_LENGTH = 64;
+const JOURNAL_MALFORMED = "The fresh-bootstrap journal is malformed.";
+
+const validExecutableIdentity = (value: ExecutableIdentity): boolean =>
+  validPathIdentity(value) &&
+  new RegExp(`^[0-9a-f]{${IDENTITY_DIGEST_LENGTH}}$`, "u").test(value.sha256);
+
+const proposalPathIdentities = (proposal: FreshBootstrapProposal): PathIdentity[] => {
+  const identities = [
+    proposal.capability.stateRoot,
+    proposal.capability.allowedRoot,
+    proposal.destinationPrestate.parent,
+  ];
+  if (proposal.destinationPrestate.kind === "empty-directory") {
+    identities.push(proposal.destinationPrestate.destination);
   }
-  return (
-    typeof value.path === "string" &&
-    value.path.startsWith("/") &&
-    typeof value.device === "string" &&
-    /^\d+$/u.test(value.device) &&
-    typeof value.inode === "string" &&
-    /^\d+$/u.test(value.inode) &&
-    typeof value.uid === "string" &&
-    /^\d+$/u.test(value.uid) &&
-    typeof value.mode === "string" &&
-    /^[0-7]+$/u.test(value.mode) &&
-    typeof value.nlink === "string" &&
-    /^\d+$/u.test(value.nlink)
-  );
+  return identities;
 };
 
-const isExecutableIdentity = (value: unknown): value is ExecutableIdentity =>
-  isRecord(value) &&
-  hasExactKeys(value, executableIdentityKeys) &&
-  isPathIdentity(Object.fromEntries(pathIdentityKeys.map((key) => [key, value[key]]))) &&
-  typeof value.sha256 === "string" &&
-  /^[0-9a-f]{64}$/u.test(value.sha256);
+const proposalExactKeys = [
+  "version",
+  "capability",
+  "destinationPath",
+  "stagingPath",
+  "journalPath",
+  "lockPath",
+  "destinationLockDigest",
+  "claimMarkerName",
+  "atomicAdapterDigest",
+  "materializeAdapterDigest",
+  "destinationPrestate",
+  "sourceReceiptDigest",
+  "sourceSha",
+  "sourceTree",
+  "contractDigest",
+  "reviewDigest",
+  "changeSetDigest",
+  "appSpecDigest",
+  "appSpecPath",
+  "applyDigest",
+  "validationDigest",
+  "repositoryIdentity",
+  "exactTree",
+  "exactTreeDigest",
+  "expectedGitTree",
+  "expectedInitialCommit",
+  "publicationIdentityDigest",
+  "intendedOutcome",
+  "githubOutcome",
+  "releaseEnabled",
+  "digest",
+] as const;
+
+const proposalCapabilityKeys = [
+  "stateRoot",
+  "allowedRoot",
+  "systemGit",
+  "systemPython",
+  "systemGitIdentity",
+  "systemPythonIdentity",
+  "systemNode",
+  "systemNodeIdentity",
+  "lockStrategy",
+  "lockHelper",
+  "lockHelperIdentity",
+] as const;
+
+const hasCanonicalProposalKeys = (proposal: FreshBootstrapProposal): boolean =>
+  hasExactKeys(proposal, proposalExactKeys) &&
+  hasExactKeys(proposal.capability, proposalCapabilityKeys) &&
+  proposalPathIdentities(proposal).every((identity) => hasExactKeys(identity, pathIdentityKeys));
+
+const validProposalIdentity = (proposal: FreshBootstrapProposal): boolean => {
+  const { capability } = proposal;
+  const identities = proposalPathIdentities(proposal);
+  const executableIdentities = [
+    capability.systemGitIdentity,
+    capability.systemPythonIdentity,
+    capability.systemNodeIdentity,
+    capability.lockHelperIdentity,
+  ];
+  return (
+    identities.every(validPathIdentity) &&
+    executableIdentities.every(validExecutableIdentity) &&
+    ["flock", "lockf"].includes(capability.lockStrategy)
+  );
+};
 
 const dirnameForComparison = (path: string): string => {
   const index = path.lastIndexOf("/");
   return index <= 0 ? "/" : path.slice(0, index);
 };
 
-export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapProposal): void => {
-  if (
-    !isRecord(proposal) ||
-    !isRecord(proposal.capability) ||
-    !isRecord(proposal.destinationPrestate) ||
-    !isRecord(proposal.repositoryIdentity) ||
-    !Array.isArray(proposal.exactTree) ||
-    !isPathIdentity(proposal.capability.stateRoot) ||
-    !isPathIdentity(proposal.capability.allowedRoot) ||
-    !isPathIdentity(proposal.destinationPrestate.parent) ||
-    (proposal.destinationPrestate.kind === "empty-directory" &&
-      !isPathIdentity(proposal.destinationPrestate.destination)) ||
-    (proposal.destinationPrestate.kind !== "empty-directory" &&
-      proposal.destinationPrestate.kind !== "absent") ||
-    !isExecutableIdentity(proposal.capability.systemGitIdentity) ||
-    !isExecutableIdentity(proposal.capability.systemPythonIdentity) ||
-    !isExecutableIdentity(proposal.capability.systemNodeIdentity) ||
-    !isExecutableIdentity(proposal.capability.lockHelperIdentity) ||
-    (proposal.capability.lockStrategy !== "flock" && proposal.capability.lockStrategy !== "lockf")
-  ) {
-    throw new Error("The fresh-bootstrap proposal is not canonical V3.");
+const validProposalShape = (proposal: FreshBootstrapProposal): boolean => {
+  if (!hasCanonicalProposalKeys(proposal)) {
+    return false;
+  }
+  if (!proposalPathIdentities(proposal).every((value) => hasExactKeys(value, pathIdentityKeys))) {
+    return false;
+  }
+  const executableIdentities = [
+    proposal.capability.systemGitIdentity,
+    proposal.capability.systemPythonIdentity,
+    proposal.capability.systemNodeIdentity,
+    proposal.capability.lockHelperIdentity,
+  ];
+  if (!executableIdentities.every((value) => hasExactKeys(value, executableIdentityKeys))) {
+    return false;
+  }
+  const prestateKeys =
+    proposal.destinationPrestate.kind === "absent"
+      ? ["kind", "destinationPath", "parent"]
+      : ["kind", "destination", "parent"];
+  if (!hasExactKeys(proposal.destinationPrestate, prestateKeys)) {
+    return false;
   }
   if (
-    !hasExactKeys(proposal, [
-      "version",
-      "capability",
-      "destinationPath",
-      "stagingPath",
-      "journalPath",
-      "lockPath",
-      "destinationLockDigest",
-      "claimMarkerName",
-      "atomicAdapterDigest",
-      "materializeAdapterDigest",
-      "destinationPrestate",
-      "sourceReceiptDigest",
-      "sourceSha",
-      "sourceTree",
-      "contractDigest",
-      "reviewDigest",
-      "changeSetDigest",
-      "appSpecDigest",
-      "appSpecPath",
-      "applyDigest",
-      "validationDigest",
-      "repositoryIdentity",
-      "exactTree",
-      "exactTreeDigest",
-      "expectedGitTree",
-      "expectedInitialCommit",
-      "publicationIdentityDigest",
-      "intendedOutcome",
-      "githubOutcome",
-      "releaseEnabled",
-      "digest",
-    ]) ||
-    !hasExactKeys(proposal.capability, [
-      "stateRoot",
-      "allowedRoot",
-      "systemGit",
-      "systemPython",
-      "systemGitIdentity",
-      "systemPythonIdentity",
-      "systemNode",
-      "systemNodeIdentity",
-      "lockStrategy",
-      "lockHelper",
-      "lockHelperIdentity",
-    ]) ||
-    ![
-      proposal.capability.stateRoot,
-      proposal.capability.allowedRoot,
-      proposal.destinationPrestate.parent,
-      ...(proposal.destinationPrestate.kind === "empty-directory"
-        ? [proposal.destinationPrestate.destination]
-        : []),
-    ].every((value) => hasExactKeys(value, pathIdentityKeys)) ||
-    ![
-      proposal.capability.systemGitIdentity,
-      proposal.capability.systemPythonIdentity,
-      proposal.capability.systemNodeIdentity,
-      proposal.capability.lockHelperIdentity,
-    ].every((value) => hasExactKeys(value, executableIdentityKeys)) ||
-    !hasExactKeys(
-      proposal.destinationPrestate,
-      proposal.destinationPrestate.kind === "absent"
-        ? ["kind", "destinationPath", "parent"]
-        : ["kind", "destination", "parent"],
-    ) ||
     !hasExactKeys(proposal.repositoryIdentity, [
       "initialBranch",
       "authorName",
       "authorEmail",
       "commitMessage",
       "commitTimestamp",
-    ]) ||
-    !proposal.exactTree.every((file) => hasExactKeys(file, ["path", "mode", "blob"])) ||
+    ])
+  ) {
+    return false;
+  }
+  return proposal.exactTree.every((file) => hasExactKeys(file, ["path", "mode", "blob"]));
+};
+
+const validProposalBindings = (proposal: FreshBootstrapProposal): boolean => {
+  if (
     proposal.version !== FRESH_BOOTSTRAP_VERSION ||
     proposal.githubOutcome !== "unavailable" ||
-    proposal.releaseEnabled ||
+    proposal.releaseEnabled
+  ) {
+    return false;
+  }
+  if (
     !/^[0-9a-f]{64}$/u.test(proposal.atomicAdapterDigest) ||
-    !/^[0-9a-f]{64}$/u.test(proposal.materializeAdapterDigest) ||
-    proposal.destinationLockDigest !==
-      stableDigest({
-        allowedRoot: proposal.capability.allowedRoot,
-        destinationPath: proposal.destinationPath,
-      }) ||
-    proposal.lockPath !==
-      `${proposal.capability.stateRoot.path}/locks/${proposal.destinationLockDigest}.lock` ||
-    dirnameForComparison(proposal.stagingPath) !== dirnameForComparison(proposal.destinationPath) ||
-    proposal.exactTreeDigest !== stableDigest(proposal.exactTree) ||
-    proposal.expectedGitTree !== gitTreeId(proposal.exactTree) ||
-    proposal.expectedInitialCommit !==
-      initialCommitId({
-        identity: proposal.repositoryIdentity,
-        tree: proposal.expectedGitTree,
-      }) ||
-    proposal.digest !== stableDigest(canonicalProposal(proposal))
+    !/^[0-9a-f]{64}$/u.test(proposal.materializeAdapterDigest)
+  ) {
+    return false;
+  }
+  const expectedLockDigest = stableDigest({
+    allowedRoot: proposal.capability.allowedRoot,
+    destinationPath: proposal.destinationPath,
+  });
+  if (proposal.destinationLockDigest !== expectedLockDigest) {
+    return false;
+  }
+  const expectedLockPath = `${proposal.capability.stateRoot.path}/locks/${proposal.destinationLockDigest}.lock`;
+  if (proposal.lockPath !== expectedLockPath) {
+    return false;
+  }
+  if (
+    dirnameForComparison(proposal.stagingPath) !== dirnameForComparison(proposal.destinationPath)
+  ) {
+    return false;
+  }
+  if (proposal.exactTreeDigest !== stableDigest(proposal.exactTree)) {
+    return false;
+  }
+  if (proposal.expectedGitTree !== gitTreeId(proposal.exactTree)) {
+    return false;
+  }
+  const expectedCommit = initialCommitId({
+    identity: proposal.repositoryIdentity,
+    tree: proposal.expectedGitTree,
+  });
+  return (
+    proposal.expectedInitialCommit === expectedCommit &&
+    proposal.digest === stableDigest(canonicalProposal(proposal))
+  );
+};
+
+export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapProposal): void => {
+  if (
+    !validProposalIdentity(proposal) ||
+    !validProposalShape(proposal) ||
+    !validProposalBindings(proposal)
   ) {
     throw new Error("The fresh-bootstrap proposal is not canonical V3.");
   }
 };
 
-export const freshBootstrapJournalDigest = (value: unknown) => stableDigest(value);
+export const freshBootstrapJournalDigest = (
+  value: FreshBootstrapJournal | Omit<FreshBootstrapJournal, "digest">,
+) => stableDigest(value);
 
 export const proposalFromFreshBootstrapJournal = (
   journal: FreshBootstrapJournal,
-): FreshBootstrapProposal => {
-  const candidate = { ...journal } as Record<string, unknown>;
-  const digest = journal.proposalDigest;
-  for (const key of [
-    "proposalDigest",
-    "publishedByCallId",
-    "leaseMarkerDigest",
-    "recoveryOfDigest",
-    "previousLeaseMarkerDigest",
-    "status",
-    "stageCreated",
-    "destinationPublished",
-    "reason",
-    "failureMessage",
-    "layout",
-    "destinationIdentity",
-    "gitDirectoryIdentity",
-    "swappedOldIdentity",
-    "headReference",
-    "headCommit",
-    "headTree",
-    "commitCount",
-    "remoteDigest",
-    "worktreeDigest",
-    "recoveryRequired",
-    "digest",
-  ]) {
-    Reflect.deleteProperty(candidate, key);
-  }
-  return { ...(candidate as Omit<FreshBootstrapProposal, "digest">), digest };
-};
+): FreshBootstrapProposal => ({
+  appSpecDigest: journal.appSpecDigest,
+  appSpecPath: journal.appSpecPath,
+  applyDigest: journal.applyDigest,
+  atomicAdapterDigest: journal.atomicAdapterDigest,
+  capability: journal.capability,
+  changeSetDigest: journal.changeSetDigest,
+  claimMarkerName: journal.claimMarkerName,
+  contractDigest: journal.contractDigest,
+  destinationLockDigest: journal.destinationLockDigest,
+  destinationPath: journal.destinationPath,
+  destinationPrestate: journal.destinationPrestate,
+  digest: journal.proposalDigest,
+  exactTree: journal.exactTree,
+  exactTreeDigest: journal.exactTreeDigest,
+  expectedGitTree: journal.expectedGitTree,
+  expectedInitialCommit: journal.expectedInitialCommit,
+  githubOutcome: journal.githubOutcome,
+  intendedOutcome: journal.intendedOutcome,
+  journalPath: journal.journalPath,
+  lockPath: journal.lockPath,
+  materializeAdapterDigest: journal.materializeAdapterDigest,
+  publicationIdentityDigest: journal.publicationIdentityDigest,
+  releaseEnabled: journal.releaseEnabled,
+  repositoryIdentity: journal.repositoryIdentity,
+  reviewDigest: journal.reviewDigest,
+  sourceReceiptDigest: journal.sourceReceiptDigest,
+  sourceSha: journal.sourceSha,
+  sourceTree: journal.sourceTree,
+  stagingPath: journal.stagingPath,
+  validationDigest: journal.validationDigest,
+  version: journal.version,
+});
 
 const assertExactPathIdentity = (value: PathIdentity, label: string): void => {
-  if (!isPathIdentity(value)) {
+  if (!validPathIdentity(value)) {
     throw new Error(`The fresh-bootstrap ${label} identity is malformed.`);
   }
 };
@@ -635,43 +743,19 @@ const assertExactFreshBootstrapLayout = (layout: FreshBootstrapLayout): void => 
   }
 };
 
-export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJournal): void => {
-  if (
-    !isRecord(journal) ||
-    (journal.status !== "pending" &&
-      journal.status !== "failed" &&
-      journal.status !== "succeeded") ||
-    typeof journal.publishedByCallId !== "string" ||
-    journal.publishedByCallId.length === 0 ||
-    journal.publishedByCallId.length > 512 ||
-    typeof journal.leaseMarkerDigest !== "string" ||
-    (journal.recoveryOfDigest !== undefined && typeof journal.recoveryOfDigest !== "string") ||
-    (journal.previousLeaseMarkerDigest !== undefined &&
-      typeof journal.previousLeaseMarkerDigest !== "string") ||
-    ((journal.status === "pending" || journal.status === "failed") &&
-      (typeof journal.stageCreated !== "boolean" ||
-        typeof journal.destinationPublished !== "boolean")) ||
-    (journal.status === "failed" &&
-      (![
-        "precondition-failed",
-        "collision",
-        "materialization-partial",
-        "publication-partial",
-        "capability-disabled",
-        "recovery-conflict",
-      ].includes(journal.reason) ||
-        typeof journal.failureMessage !== "string" ||
-        journal.failureMessage.length === 0 ||
-        journal.failureMessage.length > 4096)) ||
-    (journal.status === "succeeded" &&
-      (typeof journal.headReference !== "string" ||
-        typeof journal.headCommit !== "string" ||
-        typeof journal.headTree !== "string" ||
-        typeof journal.remoteDigest !== "string" ||
-        typeof journal.worktreeDigest !== "string"))
-  ) {
-    throw new Error("The fresh-bootstrap journal is malformed.");
+const assertJournalEnvelope = (journal: FreshBootstrapJournal): void => {
+  const callIdValid =
+    journal.publishedByCallId.length > 0 && journal.publishedByCallId.length <= 512;
+  const failedMessageValid =
+    journal.status !== "failed" ||
+    (journal.failureMessage.length > 0 && journal.failureMessage.length <= 4096);
+  if (!callIdValid || !failedMessageValid) {
+    throw new Error(JOURNAL_MALFORMED);
   }
+};
+
+export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJournal): void => {
+  assertJournalEnvelope(journal);
   const proposal = proposalFromFreshBootstrapJournal(journal);
   const proposalKeys = Object.keys(canonicalProposal(proposal));
   const lineageKeys = [

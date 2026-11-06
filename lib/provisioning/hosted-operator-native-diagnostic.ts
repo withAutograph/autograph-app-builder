@@ -41,15 +41,21 @@ const nativeFailureSqlState = z.enum([
   "08006",
 ]);
 
+interface HostedOperatorNativeDiagnostic {
+  errorClass: string;
+  event: string;
+  stage: HostedOperatorNativeFailureStage;
+  code?: string;
+  sqlState?: string;
+}
+
 export const reportHostedOperatorNativeFailure = (
   stage: HostedOperatorNativeFailureStage,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Project private failures into fixed diagnostic labels only.
   error: unknown,
 ): void => {
   try {
     // Never invoke exception accessors or log arbitrary names, text or causes.
     const code: unknown =
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Own data descriptors are the diagnostic boundary.
       error !== null && typeof error === "object"
         ? Object.getOwnPropertyDescriptor(error, "code")?.value
         : undefined;
@@ -70,23 +76,23 @@ export const reportHostedOperatorNativeFailure = (
     if (!sqlState.success && error instanceof DrizzleQueryError) {
       const cause: unknown = Object.getOwnPropertyDescriptor(error, "cause")?.value;
       const causeCode: unknown =
-        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Inspect one known query wrapper's own data property without invoking accessors.
         cause !== null && typeof cause === "object"
           ? Object.getOwnPropertyDescriptor(cause, "code")?.value
           : undefined;
       sqlState = nativeFailureSqlState.safeParse(causeCode);
     }
-    console.warn(
-      JSON.stringify({
-        errorClass,
-        event: "builder.hosted_operator_native_failure",
-        stage,
-        ...(error instanceof HostedOperatorError && publicCode.success
-          ? { code: publicCode.data }
-          : {}),
-        ...(sqlState.success ? { sqlState: sqlState.data } : {}),
-      }),
-    );
+    const diagnostic = {
+      errorClass,
+      event: "builder.hosted_operator_native_failure",
+      stage,
+    } satisfies HostedOperatorNativeDiagnostic;
+    if (error instanceof HostedOperatorError && publicCode.success) {
+      diagnostic.code = publicCode.data;
+    }
+    if (sqlState.success) {
+      diagnostic.sqlState = sqlState.data;
+    }
+    console.warn(JSON.stringify(diagnostic));
   } catch {
     // Diagnostic failures must preserve the original response, error and cleanup.
   }

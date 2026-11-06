@@ -219,13 +219,20 @@ describe("private read-only operator provider inventory", () => {
           id: configuration.operator.projectId,
         });
       } else {
-        f.payloads.set("/v13/deployments/operator-current.example.test", {
-          ...f.deployment,
-          ...(mismatch === "project" ? { projectId: "foreign-project" } : {}),
-          ...(mismatch === "owner" ? { ownerId: "foreign-team" } : {}),
-          ...(mismatch === "environment" ? { target: "production" } : {}),
-          ...(mismatch === "readiness" ? { readyState: "BUILDING" } : {}),
-        });
+        const deployment = { ...f.deployment };
+        if (mismatch === "project") {
+          deployment.projectId = "foreign-project";
+        }
+        if (mismatch === "owner") {
+          deployment.ownerId = "foreign-team";
+        }
+        if (mismatch === "environment") {
+          deployment.target = "production";
+        }
+        if (mismatch === "readiness") {
+          deployment.readyState = "BUILDING";
+        }
+        f.payloads.set("/v13/deployments/operator-current.example.test", deployment);
       }
       await expect(
         readHostedOperatorProviderInventory({
@@ -287,13 +294,14 @@ describe("private read-only operator provider inventory", () => {
         ...f.deployment,
         id: configuration.operator.deploymentId,
       });
-      const inventory = await readHostedOperatorProviderInventory({
-        ...f.input,
-        ...(mode === "capture" ? { phase: "bootstrap-planning" as const } : {}),
-        ...(mode === "opt-in-without-planning"
-          ? { resolveOperatorByConfiguredOrigin: true as const }
-          : {}),
-      });
+      const input = { ...f.input };
+      if (mode === "capture") {
+        input.phase = "bootstrap-planning";
+      }
+      if (mode === "opt-in-without-planning") {
+        input.resolveOperatorByConfiguredOrigin = true;
+      }
+      const inventory = await readHostedOperatorProviderInventory(input);
       expect(inventory.operator.deploymentId).toBe(configuration.operator.deploymentId);
       expect(
         f.fetcher.mock.calls.some(
@@ -337,15 +345,20 @@ describe("private read-only operator provider inventory", () => {
     await expect(
       readHostedOperatorProviderInventory({ ...f.input, diagnosticSink: sink }),
     ).rejects.toThrow("operator_unavailable");
+    const expectedFailure = {
+      operation: "project",
+      phase,
+      target: "app",
+    };
+    if (status && phase === "http_response") {
+      Object.assign(expectedFailure, {
+        errorClass: "operator_error",
+        httpStatus: status,
+        publicCode: "operator_unavailable",
+      });
+    }
     expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toContainEqual(
-      expect.objectContaining({
-        operation: "project",
-        phase,
-        target: "app",
-        ...(status && phase === "http_response"
-          ? { errorClass: "operator_error", httpStatus: status, publicCode: "operator_unavailable" }
-          : {}),
-      }),
+      expect.objectContaining(expectedFailure),
     );
     expect(
       sink.mock.calls.filter(([event]) => event.inventoryReadFailure !== undefined),
@@ -386,7 +399,7 @@ describe("private read-only operator provider inventory", () => {
     const aliasSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     alias.input.configuration = {
       ...configuration,
-      gateway: { ...configuration.gateway, deploymentId: undefined },
+      gateway: { ...configuration.gateway, deploymentId: null },
     };
     alias.fetcher.mockImplementation(async (url, options) => {
       const parsed = new URL(url instanceof Request ? url.url : url.toString());

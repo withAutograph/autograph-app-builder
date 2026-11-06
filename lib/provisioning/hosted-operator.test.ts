@@ -9,11 +9,9 @@ import {
   composeHostedOperatorAuthorizationDependencies,
   composeHostedOperatorDependencies,
 } from "./hosted-operator-composition";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Inject only the SQL snapshot transport while retaining the actual readiness producer and all its checks.
 import * as appReadiness from "./hosted-operator-app-readiness";
 import type { AppRuntimeSnapshotReader } from "./hosted-operator-app-readiness";
 import { readHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
-/* oxlint-disable eslint/require-await, eslint/no-await-in-loop, sonarjs/no-hardcoded-passwords, unicorn/no-await-expression-member -- Synthetic service adapters and credentials only; plan replacements run sequentially against one journal. */
 import { once } from "node:events";
 import { text } from "node:stream/consumers";
 import { z } from "zod";
@@ -201,7 +199,6 @@ const fixture = (clock?: () => number) => {
   const store: HostedRuntimeJournalStore = {
     async compareAndSet(input) {
       if (row?.revision !== input.expectedRevision) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS failure is the explicit optional-row return contract.
         return undefined;
       }
       row = {
@@ -230,7 +227,6 @@ const fixture = (clock?: () => number) => {
     },
     async reserveFenceGeneration(input) {
       if (row === undefined) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- The journal CAS reports no allocated row.
         return undefined;
       }
       if (
@@ -239,7 +235,6 @@ const fixture = (clock?: () => number) => {
         row.record.operator?.operationRef !== input.operationRef ||
         row.record.operator.fenceGeneration !== undefined
       ) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS must not allocate a generation.
         return undefined;
       }
       nextFenceGeneration += 1;
@@ -255,7 +250,6 @@ const fixture = (clock?: () => number) => {
     },
   };
   const deps: ProtectedHostedOperatorDependencies = {
-    ...(clock === undefined ? {} : { now: clock }),
     async assertAuthorized() {
       if (!member) {
         throw new HostedOperatorError("authorization_required");
@@ -293,15 +287,16 @@ const fixture = (clock?: () => number) => {
     }),
     plan: vi.fn(async () => plan),
     async readApproval(input) {
-      return approved
-        ? {
-            action: input.action,
-            approvalId: "durable-human-decision",
-            approved: true,
-            callId: input.callId,
-            planDigest: input.planDigest,
-          }
-        : null;
+      if (!approved) {
+        return null;
+      }
+      return {
+        action: input.action,
+        approvalId: "durable-human-decision",
+        approved: true,
+        callId: input.callId,
+        planDigest: input.planDigest,
+      };
     },
     async reconcile(input) {
       if (uncertain) {
@@ -322,6 +317,9 @@ const fixture = (clock?: () => number) => {
       });
     },
   };
+  if (clock !== undefined) {
+    deps.now = clock;
+  }
   const handler = createProtectedHostedOperatorHandler(deps);
   const client = createHostedOperatorClient({
     endpoint: "https://operator.example",
@@ -454,7 +452,7 @@ const adoptedGatewayPlan = () => {
 const completedOwnerBootstrap = async (normalActors = false) => {
   const f = fixture();
   const gatewayPlan = adoptedGatewayPlan();
-  const bootstrapPlan = hostedOperatorPlanSchema.parse({
+  const bootstrapInput: z.input<typeof hostedOperatorPlanSchema> = {
     ...plan,
     access: [],
     authSchema: gatewayPlan.authSchema,
@@ -478,27 +476,26 @@ const completedOwnerBootstrap = async (normalActors = false) => {
     gatewayBindings: gatewayPlan.gatewayBindings,
     resourcesInstaller: gatewayPlan.resourcesInstaller,
     stage: "auth-bootstrap",
-    ...(normalActors
-      ? {
-          normalActorProgram: {
-            actors: [
-              {
-                account: "capture-existing",
-                actorKey: "owner",
-                email: "owner@example.test",
-                name: "Owner",
-              },
-            ],
-            appAccess: [],
-            appId: selection.appId,
-            memberships: [],
-            organizations: [],
-            origin: plan.publicGateway?.origin,
-            version: 1,
-          },
-        }
-      : {}),
-  });
+  };
+  if (normalActors) {
+    bootstrapInput.normalActorProgram = {
+      actors: [
+        {
+          account: "capture-existing",
+          actorKey: "owner",
+          email: "owner@example.test",
+          name: "Owner",
+        },
+      ],
+      appAccess: [],
+      appId: selection.appId,
+      memberships: [],
+      organizations: [],
+      origin: plan.publicGateway?.origin,
+      version: 1,
+    };
+  }
+  const bootstrapPlan = hostedOperatorPlanSchema.parse(bootstrapInput);
   f.deps.plan = async () => bootstrapPlan;
   f.deps.verifyAuthReadiness = async () => ({
     assetSha256: "1".repeat(64),
@@ -932,7 +929,6 @@ describe("protected hosted operator boundary", () => {
         if (f.row !== undefined) {
           f.row = { ...f.row, revision: f.row.revision + 1 };
         }
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS returns no row.
         return undefined;
       }
       return await compareAndSet(input);
@@ -1043,7 +1039,6 @@ describe("protected hosted operator boundary", () => {
     expect(
       retainedOperatorAuthFromJournal({
         ...complete,
-        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Missing optional approval cannot mint ownership.
         operator: { ...complete.operator, approvalId: undefined },
       }),
     ).toBeUndefined();
@@ -1062,7 +1057,6 @@ describe("protected hosted operator boundary", () => {
     expect(
       retainedOperatorAuthFromJournal({
         ...complete,
-        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Missing optional readiness cannot mint ownership.
         operator: { ...complete.operator, authPreparation: undefined },
       }),
     ).toBeUndefined();
@@ -2410,7 +2404,6 @@ describe("protected hosted operator boundary", () => {
     await once(server, "listening");
     try {
       const address = server.address();
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Node returns a path for Unix sockets; this fixture listens on a TCP port.
       if (address === null || typeof address === "string") {
         throw new Error("Local server unavailable");
       }
@@ -3842,7 +3835,6 @@ describe("canonical runtime proof through the production verifier and handler", 
       const composed = composeHostedOperatorDependencies(
         configuration,
         // SAFETY: Only verify is delegated; all its control-plane ports are implemented here, and the real inventory and readiness checks run over synthetic transports.
-        // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- This fixture intentionally implements only the final verifier's control-plane ports.
         controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
       );
       const verify = vi.fn(composed.verify);
@@ -3949,12 +3941,18 @@ describe("closed prepare final verification diagnostics", () => {
           await f.handler(
             new Request("https://operator.example/v1/runtime", {
               body: JSON.stringify({ ...request, ownerContext }),
-              headers: {
-                "content-type": "application/json",
-                authorization: "Bearer fixture-service-identity",
-                "x-vercel-trusted-oidc-idp-token": "fixture-service-identity",
-                [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
-              },
+              headers: (() => {
+                const headers = new Headers({
+                  authorization: "Bearer fixture-service-identity",
+                  "content-type": "application/json",
+                  "x-vercel-trusted-oidc-idp-token": "fixture-service-identity",
+                });
+                headers.set(
+                  OPERATOR_EXECUTION_OBSERVATION_HEADER,
+                  OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+                );
+                return headers;
+              })(),
               method: "POST",
             }),
           )

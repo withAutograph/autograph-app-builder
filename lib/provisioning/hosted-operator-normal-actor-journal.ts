@@ -1,7 +1,6 @@
 import { sameJournalAfterLeaseRenewal } from "./hosted-operator-lease-renewal";
 import { readParticipantSuccessorPredecessor } from "./hosted-operator-participant-successor";
 import { readUnapprovedCapturePredecessor } from "./hosted-operator-unapproved-capture-history";
-/* oxlint-disable eslint/no-await-in-loop, sonarjs/expression-complexity -- CAS and encrypted capture require each exact approval, scope, nonce, proof and session binding. */
 import { createHash, randomUUID, randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
@@ -161,19 +160,24 @@ export interface NormalActorJournalPorts {
   ) => Promise<void>;
   now: () => number;
 }
-const provenance = (preparation: NormalActorAccountPreparation): NormalActorAccountProvenance => ({
-  program: preparation.program,
-  ...(preparation.predecessor === undefined ? {} : { predecessor: preparation.predecessor }),
-  ...(preparation.capturePredecessor === undefined
-    ? {}
-    : { capturePredecessor: preparation.capturePredecessor }),
-  programDigest: preparation.programDigest,
-  accountOperationRef: preparation.accountOperationRef,
-  accountPlan: preparation.accountPlan,
-  accountPlanDigest: preparation.accountPlanDigest,
-  accountApprovalId: preparation.accountApprovalId,
-  accountApprovedByCallId: preparation.accountApprovedByCallId,
-});
+const provenance = (preparation: NormalActorAccountPreparation): NormalActorAccountProvenance => {
+  const result: NormalActorAccountProvenance = {
+    accountApprovalId: preparation.accountApprovalId,
+    accountApprovedByCallId: preparation.accountApprovedByCallId,
+    accountOperationRef: preparation.accountOperationRef,
+    accountPlan: preparation.accountPlan,
+    accountPlanDigest: preparation.accountPlanDigest,
+    program: preparation.program,
+    programDigest: preparation.programDigest,
+  };
+  if (preparation.predecessor !== undefined) {
+    result.predecessor = preparation.predecessor;
+  }
+  if (preparation.capturePredecessor !== undefined) {
+    result.capturePredecessor = preparation.capturePredecessor;
+  }
+  return result;
+};
 const validateProvenance = (
   context: HostedOperatorContext,
   input: NormalActorAccountProvenance,
@@ -193,6 +197,28 @@ const validateProvenance = (
     throw new Error("normal_actor_journal_authority_mismatch");
   }
 };
+const readCapturePredecessor = (
+  row: HostedRuntimeJournalRow,
+  activePreparation: NormalActorAccountPreparation | undefined,
+  reference: string,
+  now: number,
+) => {
+  let preparation = row.record.participantPreparationHistory
+    ?.map((entry) => entry.preparation)
+    .find((entry) => entry.captures.some((capture) => capture.reference === reference));
+  const activePlan = activePreparation?.accountPlan;
+  const captured =
+    activePlan === undefined
+      ? undefined
+      : readUnapprovedCapturePredecessor(row.record, activePlan, now);
+  if (
+    preparation === undefined &&
+    captured?.account.captures.some((capture) => capture.reference === reference) === true
+  ) {
+    preparation = captured.account;
+  }
+  return preparation;
+};
 const stateScope = (context: HostedOperatorContext, preparation: NormalActorAccountProvenance) => ({
   authority: context.authority,
   operationRef: preparation.accountOperationRef,
@@ -203,21 +229,23 @@ const captureAad = (
   context: HostedOperatorContext,
   preparation: NormalActorAccountProvenance,
   capture: z.infer<typeof captureReferenceSchema>,
-) =>
-  JSON.stringify({
-    ...context.authority,
-    ownerSessionId: context.target.sessionId,
-    appId: preparation.program.appId,
-    accountOperationRef: preparation.accountOperationRef,
-    programDigest: preparation.programDigest,
-    origin: preparation.program.origin,
-    nonceSha256: capture.nonceSha256,
-    proofSha256: capture.proofSha256,
-    actorKey: capture.actorKey,
-    ...(capture.organizationId === undefined ? {} : { organizationId: capture.organizationId }),
-    reference: capture.reference,
-    purpose: "normal-auth-capture-v1",
-  });
+) => {
+  const associatedData = [
+    ...Object.entries(context.authority),
+    ["ownerSessionId", context.target.sessionId],
+    ["appId", preparation.program.appId],
+    ["accountOperationRef", preparation.accountOperationRef],
+    ["programDigest", preparation.programDigest],
+    ["origin", preparation.program.origin],
+    ["nonceSha256", capture.nonceSha256],
+    ["proofSha256", capture.proofSha256],
+    ["actorKey", capture.actorKey],
+    ...(capture.organizationId === undefined ? [] : [["organizationId", capture.organizationId]]),
+    ["reference", capture.reference],
+    ["purpose", "normal-auth-capture-v1"],
+  ] as const;
+  return JSON.stringify(Object.fromEntries(associatedData));
+};
 export const normalActorCaptureCookieDigest = (
   cookie: Pick<NormalActorCaptureCookie, "name" | "value">,
 ) => createHash("sha256").update(`${cookie.name}=${cookie.value}`).digest("hex");
@@ -449,14 +477,14 @@ const sameOrganizationProofBinding = (
     existing.transportSource.projectId === input.binding.transportSource.projectId,
     existing.transportSource.environment === input.binding.transportSource.environment,
   ].every(Boolean);
+const guarded = async <T>(action: () => Promise<T>, guard?: () => Promise<void>) => {
+  await guard?.();
+  const result = await action();
+  await guard?.();
+  return result;
+};
 /** Actual owner journal CAS; raw normal sessions are decrypted only in this private capability. */
 export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
-  const guarded = async <T>(action: () => Promise<T>, guard?: () => Promise<void>) => {
-    await guard?.();
-    const result = await action();
-    await guard?.();
-    return result;
-  };
   const assertPredecessorApprovals = async (
     context: HostedOperatorContext,
     prior: NonNullable<HostedRuntimeJournalRow["record"]["participantPreparationHistory"]>[number],
@@ -480,24 +508,31 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     context: HostedOperatorContext,
     prior: NonNullable<ReturnType<typeof readUnapprovedCapturePredecessor>>,
   ) => {
+    const bootstrap = z
+      .strictObject({
+        auth: retainedOperatorAuthSchema,
+        candidate: operatorDeploymentCandidateSchema,
+        gateway: retainedOperatorAuthSchema.optional(),
+      })
+      .parse(prior.bootstrap);
     validateProvenance(context, prior.account);
     await ports.assertAccountApproval(context, provenance(prior.account));
     await ports.assertAccountApproval(context, {
       ...provenance(prior.account),
-      accountApprovalId: prior.bootstrap.auth.approvalId,
-      accountApprovedByCallId: prior.bootstrap.auth.approvedByCallId,
-      accountOperationRef: prior.bootstrap.auth.operationRef,
-      accountPlan: prior.bootstrap.auth.plan,
-      accountPlanDigest: prior.bootstrap.auth.planDigest,
+      accountApprovalId: bootstrap.auth.approvalId,
+      accountApprovedByCallId: bootstrap.auth.approvedByCallId,
+      accountOperationRef: bootstrap.auth.operationRef,
+      accountPlan: bootstrap.auth.plan,
+      accountPlanDigest: bootstrap.auth.planDigest,
     });
-    if (prior.bootstrap.gateway !== undefined) {
+    if (bootstrap.gateway !== undefined) {
       await ports.assertAccountApproval(context, {
         ...provenance(prior.account),
-        accountApprovalId: prior.bootstrap.gateway.approvalId,
-        accountApprovedByCallId: prior.bootstrap.gateway.approvedByCallId,
-        accountOperationRef: prior.bootstrap.gateway.operationRef,
-        accountPlan: prior.bootstrap.gateway.plan,
-        accountPlanDigest: prior.bootstrap.gateway.planDigest,
+        accountApprovalId: bootstrap.gateway.approvalId,
+        accountApprovedByCallId: bootstrap.gateway.approvedByCallId,
+        accountOperationRef: bootstrap.gateway.operationRef,
+        accountPlan: bootstrap.gateway.plan,
+        accountPlanDigest: bootstrap.gateway.planDigest,
       });
     }
   };
@@ -511,7 +546,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     }
     const preparation = row.record.accountPreparation;
     if (preparation === undefined) {
-      return { preparation: undefined, row, state: undefined };
+      return { preparation: null, row, state: null };
     }
     validateProvenance(context, preparation);
     await guarded(async () => {
@@ -606,7 +641,210 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     context: HostedOperatorContext,
     change: (row: HostedRuntimeJournalRow) => NormalActorAccountPreparation,
   ) => await mutate(context, change, undefined, "capture");
-  return {
+  const journal = {
+    async authorizeCapture(
+      context: HostedOperatorContext,
+      input: {
+        actorKey: string;
+        organizationId?: string;
+        nonceSha256: string;
+        proofSha256: string;
+        expiresAt: string;
+      },
+    ) {
+      const preparation = await mutateCapture(context, (row) => {
+        const prior = row.record.accountPreparation;
+        if (
+          prior === undefined ||
+          !prior.program.actors.some(
+            (actor) => actor.actorKey === input.actorKey && actor.account === "capture-existing",
+          ) ||
+          (input.organizationId !== undefined &&
+            !prior.program.memberships.some(
+              (member) =>
+                member.actorKey === input.actorKey &&
+                member.organizationId === input.organizationId,
+            ))
+        ) {
+          throw new Error("normal_actor_capture_unavailable");
+        }
+        const existing = prior.captures.find(
+          (capture) => capture.nonceSha256 === input.nonceSha256,
+        );
+        if (existing !== undefined) {
+          if (
+            existing.actorKey !== input.actorKey ||
+            existing.organizationId !== input.organizationId ||
+            existing.proofSha256 !== input.proofSha256 ||
+            Date.parse(existing.expiresAt) <= ports.now()
+          ) {
+            throw new Error("normal_actor_capture_unavailable");
+          }
+          return prior;
+        }
+        if (Date.parse(input.expiresAt) <= ports.now()) {
+          throw new Error("normal_actor_capture_unavailable");
+        }
+        return { ...prior, captures: [...prior.captures, { ...input, reference: randomUUID() }] };
+      });
+      return captureReference(preparation, input.nonceSha256);
+    },
+    async capture(context: HostedOperatorContext, payloadInput: NormalActorCapturedPayload) {
+      const payload = normalActorCapturedPayloadSchema.parse(payloadInput);
+      const cookieDigest = normalActorCaptureCookieDigest(payload.normalCookie);
+      const preparation = await mutateCapture(context, (row) => {
+        const prior = row.record.accountPreparation;
+        const capture = prior?.captures.find((entry) => entry.nonceSha256 === payload.nonceSha256);
+        if (
+          prior === undefined ||
+          capture === undefined ||
+          capture.actorKey !== payload.actorKey ||
+          capture.organizationId !== payload.organizationId ||
+          capture.proofSha256 !== payload.proofSha256 ||
+          payload.session.reference !== capture.reference ||
+          Date.parse(capture.expiresAt) <= ports.now() ||
+          payload.session.origin !== prior.program.origin ||
+          createHash("sha256").update(payload.proof).digest("hex") !== payload.proofSha256
+        ) {
+          throw new Error("normal_actor_capture_unavailable");
+        }
+        if (capture.sealed !== undefined) {
+          if (capture.normalCookieSha256 !== cookieDigest) {
+            throw new Error("normal_actor_capture_unavailable");
+          }
+          return prior;
+        }
+        const sealed = {
+          ...encryptVercelToken({
+            associatedData: captureAad(context, prior, capture),
+            key: ports.keyring.tokenKey,
+            token: JSON.stringify(payload),
+          }),
+          keyVersion: ports.keyring.tokenKeyVersion,
+        };
+        return {
+          ...prior,
+          captures: prior.captures.map((entry) =>
+            entry.reference === capture.reference
+              ? { ...entry, normalCookieSha256: cookieDigest, sealed }
+              : entry,
+          ),
+        };
+      });
+      return captureReference(preparation, payload.nonceSha256);
+    },
+    async checkpoint(context: HostedOperatorContext, state: NormalActorState) {
+      return await mutate(context, (row) => {
+        const preparation = row.record.accountPreparation;
+        if (preparation === undefined) {
+          throw new Error("normal_actor_journal_unavailable");
+        }
+        const checked = assertNormalActorState(
+          preparation.program,
+          state,
+          preparation.accountOperationRef,
+        );
+        assertCarriedActors(context, row, preparation, checked, ports.keyring, ports.now());
+        const baseAccountsComplete = checked.actors.every(
+          (actor) =>
+            actor.signup === "complete" &&
+            actor.session !== undefined &&
+            actor.storageState !== undefined,
+        );
+        const organizationSessionsComplete = hasOrganizationAccountSessions(preparation, checked);
+        const complete = baseAccountsComplete && organizationSessionsComplete;
+        const next: NormalActorAccountPreparation = {
+          ...preparation,
+          sealedState: encryptNormalActorState({
+            ...stateScope(context, preparation),
+            config: ports.keyring,
+            state: checked,
+          }),
+        };
+        if (complete) {
+          next.accountsCompletedAt =
+            preparation.accountsCompletedAt ?? new Date(ports.now()).toISOString();
+        } else {
+          delete next.accountsCompletedAt;
+        }
+        return next;
+      });
+    },
+    async completeOrganizationProof(
+      context: HostedOperatorContext,
+      input: {
+        organizationId: string;
+        nonceSha256: string;
+        proofRef: string;
+        proofSha256: string;
+        actorId: string;
+        realmSessionId: string;
+        capturedAt: string;
+      },
+    ) {
+      const preparation = await mutate(context, (row) => {
+        const current = row.record.accountPreparation;
+        const retained = current?.organizationProofs?.find(
+          (entry) => entry.organizationId === input.organizationId,
+        );
+        if (current === undefined || retained === undefined) {
+          throw new Error("normal_actor_organization_proof_mismatch");
+        }
+        const state = decryptNormalActorState({
+          ...stateScope(context, current),
+          config: ports.keyring,
+          sealed: current.sealedState,
+        });
+        assertOrganizationProofOwner(current, state, retained);
+        const same = [
+          retained.link.nonceSha256 === input.nonceSha256,
+          retained.owner.actorId === input.actorId,
+          retained.owner.realmSessionId === input.realmSessionId,
+          input.proofRef ===
+            `_protected-operator/artifacts/realm-identity-proof/${context.target.appId}/${input.proofSha256}`,
+        ].every(Boolean);
+        if (!same) {
+          throw new Error("normal_actor_organization_proof_mismatch");
+        }
+        if (retained.link.consumedAt !== undefined) {
+          if (
+            retained.link.proofRef !== input.proofRef ||
+            retained.link.proofSha256 !== input.proofSha256
+          ) {
+            throw new Error("normal_actor_organization_proof_mismatch");
+          }
+          return current;
+        }
+        if (
+          Date.parse(input.capturedAt) > ports.now() ||
+          Date.parse(retained.link.expiresAt) <= Date.parse(input.capturedAt)
+        ) {
+          throw new Error("normal_actor_session_required");
+        }
+        const next = normalActorOrganizationProofSchema.parse({
+          ...retained,
+          link: {
+            ...retained.link,
+            consumedAt: input.capturedAt,
+            proofRef: input.proofRef,
+            proofSha256: input.proofSha256,
+          },
+        });
+        return {
+          ...current,
+          organizationProofs: current.organizationProofs?.map((entry) =>
+            entry.organizationId === input.organizationId ? next : entry,
+          ),
+        };
+      });
+      const retained = preparation.organizationProofs?.find(
+        (entry) => entry.organizationId === input.organizationId,
+      );
+      if (retained === undefined) {
+        throw new Error("normal_actor_organization_proof_mismatch");
+      }
+      return retained;
+    },
     async initializeSuccessor(
       context: HostedOperatorContext,
       input: NormalActorAccountProvenance,
@@ -702,50 +940,227 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
         guard,
       );
     },
-    async retain(context: HostedOperatorContext, input: NormalActorAccountProvenance) {
-      validateProvenance(context, input);
-      await ports.assertAccountApproval(context, input);
-      return await mutate(context, (row) => {
-        if (row.record.accountPreparation !== undefined) {
-          const existing = row.record.accountPreparation;
-          if (
-            ![
-              existing.accountOperationRef === input.accountOperationRef,
-              existing.programDigest === input.programDigest,
-              existing.accountPlanDigest === input.accountPlanDigest,
-              existing.accountApprovalId === input.accountApprovalId,
-              existing.accountApprovedByCallId === input.accountApprovedByCallId,
-            ].every(Boolean)
-          ) {
-            throw new Error("normal_actor_journal_authority_mismatch");
+    async prepareOrganizationProof(
+      context: HostedOperatorContext,
+      input: OrganizationProofOwner & {
+        binding: NormalActorOrganizationProofBinding;
+        bootstrap?: CompletedParticipantBootstrap;
+        assertBootstrapCurrent?: () => Promise<void>;
+      },
+    ) {
+      if ((input.bootstrap === undefined) !== (input.assertBootstrapCurrent === undefined)) {
+        throw new Error("normal_actor_organization_proof_mismatch");
+      }
+      // The runtime journal imports this schema; resolve its selector after module initialization.
+      const bootstrapInspector =
+        input.bootstrap === undefined
+          ? undefined
+          : await guarded(
+              async () => await import("./hosted-operator-participant-bootstrap"),
+              input.assertBootstrapCurrent,
+            );
+      const preparation = await mutate(
+        context,
+        (row) => {
+          const current = row.record.accountPreparation;
+          if (current === undefined) {
+            throw new Error("normal_actor_journal_unavailable");
           }
-          return row.record.accountPreparation;
-        }
-        const { operator } = row.record;
-        if (
-          operator?.operationRef !== input.accountOperationRef ||
-          operator.planDigest !== input.accountPlanDigest ||
-          operator.approvalId !== input.accountApprovalId ||
-          row.record.approvedByCallId !== input.accountApprovedByCallId
-        ) {
-          throw new Error("normal_actor_journal_authority_mismatch");
-        }
-        return {
-          ...input,
-          captures: [],
-          sealedState: encryptNormalActorState({
-            ...stateScope(context, input),
+          const state = decryptNormalActorState({
+            ...stateScope(context, current),
             config: ports.keyring,
-            state: initialNormalActorState(input.program, input.accountOperationRef),
-          }),
-        };
-      });
+            sealed: current.sealedState,
+          });
+          assertOrganizationProofOwner(current, state, input);
+          const captured = readUnapprovedCapturePredecessor(
+            row.record,
+            current.accountPlan,
+            ports.now(),
+          );
+          const selected =
+            row.record.operator === undefined
+              ? undefined
+              : (bootstrapInspector?.inspectPlanningParticipantBootstrap(
+                  row.record.operator.plan,
+                  row.record,
+                ) ?? captured?.bootstrap);
+          assertOrganizationProofBinding(
+            current,
+            input.binding,
+            input.bootstrap,
+            selected,
+            captured,
+          );
+          const existing = current.organizationProofs?.find(
+            (entry) => entry.organizationId === input.organizationId,
+          );
+          const changedEndpoint =
+            existing !== undefined && existing.link.endpointOrigin !== input.binding.endpointOrigin;
+          if (existing !== undefined) {
+            const same = sameOrganizationProofBinding(existing, input);
+            if (!same || (changedEndpoint && input.bootstrap === undefined)) {
+              throw new Error("normal_actor_organization_proof_mismatch");
+            }
+            if (
+              !changedEndpoint &&
+              (existing.link.consumedAt !== undefined ||
+                Date.parse(existing.link.expiresAt) > ports.now())
+            ) {
+              return current;
+            }
+          }
+          const nonce = randomBytes(32).toString("hex");
+          const expiresAt = new Date(
+            Math.min(ports.now() + 240_000, Date.parse(input.owner.expiresAt)),
+          ).toISOString();
+          if (Date.parse(expiresAt) <= ports.now()) {
+            throw new Error("normal_actor_session_required");
+          }
+          const { transportSource, ...linkBinding } = input.binding;
+          const proofInput: z.input<typeof normalActorOrganizationProofSchema> = {
+            link: {
+              ...linkBinding,
+              expiresAt,
+              nonceSha256: createHash("sha256").update(nonce).digest("hex"),
+              organizationId: null,
+              ownerSessionId: context.target.sessionId,
+              sealedNonce: {
+                ...encryptVercelToken({
+                  associatedData: organizationProofAad(context, current, input),
+                  key: ports.keyring.tokenKey,
+                  token: nonce,
+                }),
+                keyVersion: ports.keyring.tokenKeyVersion,
+              },
+            },
+            organizationId: input.organizationId,
+            owner: input.owner,
+            ownerActorKey: input.ownerActorKey,
+            transportSource,
+          };
+          if (input.bootstrap !== undefined) {
+            proofInput.bootstrap = input.bootstrap;
+          }
+          const next = normalActorOrganizationProofSchema.parse(proofInput);
+          const updated: NormalActorAccountPreparation = {
+            ...current,
+            organizationProofs: [
+              ...(current.organizationProofs ?? []).filter(
+                (entry) => entry.organizationId !== input.organizationId,
+              ),
+              next,
+            ],
+          };
+          if (changedEndpoint && existing !== undefined) {
+            updated.supersededOrganizationProofs = [
+              ...(current.supersededOrganizationProofs ?? []),
+              existing,
+            ];
+          }
+          return updated;
+        },
+        input.assertBootstrapCurrent,
+      );
+      const retained = preparation.organizationProofs?.find(
+        (entry) => entry.organizationId === input.organizationId,
+      );
+      if (retained === undefined) {
+        throw new Error("normal_actor_organization_proof_mismatch");
+      }
+      if (retained.link.consumedAt !== undefined) {
+        return { record: retained };
+      }
+      if (retained.link.sealedNonce === undefined) {
+        throw new Error("normal_actor_organization_proof_mismatch");
+      }
+      const nonce = digest.parse(
+        decryptVersionedVercelToken({
+          ...retained.link.sealedNonce,
+          associatedData: organizationProofAad(context, preparation, retained),
+          config: ports.keyring,
+        }),
+      );
+      if (createHash("sha256").update(nonce).digest("hex") !== retained.link.nonceSha256) {
+        throw new Error("normal_actor_organization_proof_mismatch");
+      }
+      return { nonce, record: retained };
     },
     async read(context: HostedOperatorContext) {
       const result = await read(context);
       return result.preparation === undefined || result.state === undefined
         ? undefined
         : { preparation: result.preparation, state: result.state };
+    },
+    async readCapture(
+      context: HostedOperatorContext,
+      reference: string,
+    ): Promise<NormalActorCapturedPayload | undefined> {
+      const result = await read(context);
+      let { preparation } = result;
+      if (preparation?.captures.some((entry) => entry.reference === reference) !== true) {
+        preparation = readCapturePredecessor(
+          result.row,
+          result.preparation,
+          reference,
+          ports.now(),
+        );
+        if (preparation !== undefined) {
+          validateProvenance(context, preparation);
+          await ports.assertAccountApproval(context, provenance(preparation));
+          await ports.assertAuthorized(context);
+        }
+      }
+      const capture = preparation?.captures.find((entry) => entry.reference === reference);
+      if (
+        preparation === undefined ||
+        capture?.sealed === undefined ||
+        Date.parse(capture.expiresAt) <= ports.now()
+      ) {
+        return undefined;
+      }
+      try {
+        const payload = normalActorCapturedPayloadSchema.parse(
+          JSON.parse(
+            decryptVersionedVercelToken({
+              ...capture.sealed,
+              associatedData: captureAad(context, preparation, capture),
+              config: ports.keyring,
+            }),
+          ),
+        );
+        if (
+          payload.actorKey !== capture.actorKey ||
+          payload.organizationId !== capture.organizationId ||
+          payload.nonceSha256 !== capture.nonceSha256 ||
+          payload.proofSha256 !== capture.proofSha256 ||
+          normalActorCaptureCookieDigest(payload.normalCookie) !== capture.normalCookieSha256
+        ) {
+          throw new Error("normal_actor_capture_unavailable");
+        }
+        return payload;
+      } catch {
+        throw new Error("normal_actor_capture_unavailable");
+      }
+    },
+    async readPendingCapture(context: HostedOperatorContext, nonceSha256: string) {
+      const current = await read(context);
+      const pending = current.preparation?.pendingCaptures?.find(
+        (entry) => entry.nonceSha256 === digest.parse(nonceSha256),
+      );
+      const link = current.row.record.operator?.identityLink;
+      if (pending === undefined || link === undefined || current.preparation === undefined) {
+        return undefined;
+      }
+      const matches = [
+        link.consumedAt === undefined,
+        link.nonceSha256 === pending.nonceSha256,
+        link.ownerSessionId === context.target.sessionId,
+        link.browserSession?.operationRef === current.preparation.accountOperationRef,
+        link.browserSession?.participantProgramDigest === current.preparation.programDigest,
+        Date.parse(pending.expiresAt) > ports.now(),
+        Date.parse(link.expiresAt) > ports.now(),
+      ].every(Boolean);
+      return matches ? pending : undefined;
     },
     async registerPendingCapture(context: HostedOperatorContext, input: NormalActorPendingCapture) {
       const pending = normalActorPendingCaptureSchema.parse(input);
@@ -809,437 +1224,46 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       }
       return retained;
     },
-    async readPendingCapture(context: HostedOperatorContext, nonceSha256: string) {
-      const current = await read(context);
-      const pending = current.preparation?.pendingCaptures?.find(
-        (entry) => entry.nonceSha256 === digest.parse(nonceSha256),
-      );
-      const link = current.row.record.operator?.identityLink;
-      if (pending === undefined || link === undefined || current.preparation === undefined) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing pending correlation is an explicit optional capability result.
-        return undefined;
-      }
-      const matches = [
-        link.consumedAt === undefined,
-        link.nonceSha256 === pending.nonceSha256,
-        link.ownerSessionId === context.target.sessionId,
-        link.browserSession?.operationRef === current.preparation.accountOperationRef,
-        link.browserSession?.participantProgramDigest === current.preparation.programDigest,
-        Date.parse(pending.expiresAt) > ports.now(),
-        Date.parse(link.expiresAt) > ports.now(),
-      ].every(Boolean);
-      return matches ? pending : undefined;
-    },
-    async prepareOrganizationProof(
-      context: HostedOperatorContext,
-      input: OrganizationProofOwner & {
-        binding: NormalActorOrganizationProofBinding;
-        bootstrap?: CompletedParticipantBootstrap;
-        assertBootstrapCurrent?: () => Promise<void>;
-      },
-    ) {
-      if ((input.bootstrap === undefined) !== (input.assertBootstrapCurrent === undefined)) {
-        throw new Error("normal_actor_organization_proof_mismatch");
-      }
-      // The runtime journal imports this schema; resolve its selector after module initialization.
-      const bootstrapInspector =
-        input.bootstrap === undefined
-          ? undefined
-          : await guarded(
-              async () => await import("./hosted-operator-participant-bootstrap"),
-              input.assertBootstrapCurrent,
-            );
-      const preparation = await mutate(
-        context,
-        // oxlint-disable-next-line eslint/complexity -- Validate current owner, proof and predecessor authority within the same atomic update.
-        (row) => {
-          const current = row.record.accountPreparation;
-          if (current === undefined) {
-            throw new Error("normal_actor_journal_unavailable");
-          }
-          const state = decryptNormalActorState({
-            ...stateScope(context, current),
-            config: ports.keyring,
-            sealed: current.sealedState,
-          });
-          assertOrganizationProofOwner(current, state, input);
-          const captured = readUnapprovedCapturePredecessor(
-            row.record,
-            current.accountPlan,
-            ports.now(),
-          );
-          const selected =
-            row.record.operator === undefined
-              ? undefined
-              : (bootstrapInspector?.inspectPlanningParticipantBootstrap(
-                  row.record.operator.plan,
-                  row.record,
-                ) ?? captured?.bootstrap);
-          assertOrganizationProofBinding(
-            current,
-            input.binding,
-            input.bootstrap,
-            selected,
-            captured,
-          );
-          const existing = current.organizationProofs?.find(
-            (entry) => entry.organizationId === input.organizationId,
-          );
-          const changedEndpoint =
-            existing !== undefined && existing.link.endpointOrigin !== input.binding.endpointOrigin;
-          if (existing !== undefined) {
-            const same = sameOrganizationProofBinding(existing, input);
-            if (!same || (changedEndpoint && input.bootstrap === undefined)) {
-              throw new Error("normal_actor_organization_proof_mismatch");
-            }
-            if (
-              !changedEndpoint &&
-              (existing.link.consumedAt !== undefined ||
-                Date.parse(existing.link.expiresAt) > ports.now())
-            ) {
-              return current;
-            }
-          }
-          const nonce = randomBytes(32).toString("hex");
-          const expiresAt = new Date(
-            Math.min(ports.now() + 240_000, Date.parse(input.owner.expiresAt)),
-          ).toISOString();
-          if (Date.parse(expiresAt) <= ports.now()) {
-            throw new Error("normal_actor_session_required");
-          }
-          const { transportSource, ...linkBinding } = input.binding;
-          const next = normalActorOrganizationProofSchema.parse({
-            transportSource,
-            ...(input.bootstrap === undefined ? {} : { bootstrap: input.bootstrap }),
-            organizationId: input.organizationId,
-            ownerActorKey: input.ownerActorKey,
-            owner: input.owner,
-            link: {
-              ...linkBinding,
-              expiresAt,
-              nonceSha256: createHash("sha256").update(nonce).digest("hex"),
-              organizationId: null,
-              ownerSessionId: context.target.sessionId,
-              sealedNonce: {
-                ...encryptVercelToken({
-                  associatedData: organizationProofAad(context, current, input),
-                  key: ports.keyring.tokenKey,
-                  token: nonce,
-                }),
-                keyVersion: ports.keyring.tokenKeyVersion,
-              },
-            },
-          });
-          return {
-            ...current,
-            ...(changedEndpoint && existing !== undefined
-              ? {
-                  supersededOrganizationProofs: [
-                    ...(current.supersededOrganizationProofs ?? []),
-                    existing,
-                  ],
-                }
-              : {}),
-            organizationProofs: [
-              ...(current.organizationProofs ?? []).filter(
-                (entry) => entry.organizationId !== input.organizationId,
-              ),
-              next,
-            ],
-          };
-        },
-        input.assertBootstrapCurrent,
-      );
-      const retained = preparation.organizationProofs?.find(
-        (entry) => entry.organizationId === input.organizationId,
-      );
-      if (retained === undefined) {
-        throw new Error("normal_actor_organization_proof_mismatch");
-      }
-      if (retained.link.consumedAt !== undefined) {
-        return { record: retained };
-      }
-      if (retained.link.sealedNonce === undefined) {
-        throw new Error("normal_actor_organization_proof_mismatch");
-      }
-      const nonce = digest.parse(
-        decryptVersionedVercelToken({
-          ...retained.link.sealedNonce,
-          associatedData: organizationProofAad(context, preparation, retained),
-          config: ports.keyring,
-        }),
-      );
-      if (createHash("sha256").update(nonce).digest("hex") !== retained.link.nonceSha256) {
-        throw new Error("normal_actor_organization_proof_mismatch");
-      }
-      return { nonce, record: retained };
-    },
-    async completeOrganizationProof(
-      context: HostedOperatorContext,
-      input: {
-        organizationId: string;
-        nonceSha256: string;
-        proofRef: string;
-        proofSha256: string;
-        actorId: string;
-        realmSessionId: string;
-        capturedAt: string;
-      },
-    ) {
-      const preparation = await mutate(context, (row) => {
-        const current = row.record.accountPreparation;
-        const retained = current?.organizationProofs?.find(
-          (entry) => entry.organizationId === input.organizationId,
-        );
-        if (current === undefined || retained === undefined) {
-          throw new Error("normal_actor_organization_proof_mismatch");
-        }
-        const state = decryptNormalActorState({
-          ...stateScope(context, current),
-          config: ports.keyring,
-          sealed: current.sealedState,
-        });
-        assertOrganizationProofOwner(current, state, retained);
-        const same = [
-          retained.link.nonceSha256 === input.nonceSha256,
-          retained.owner.actorId === input.actorId,
-          retained.owner.realmSessionId === input.realmSessionId,
-          input.proofRef ===
-            `_protected-operator/artifacts/realm-identity-proof/${context.target.appId}/${input.proofSha256}`,
-        ].every(Boolean);
-        if (!same) {
-          throw new Error("normal_actor_organization_proof_mismatch");
-        }
-        if (retained.link.consumedAt !== undefined) {
-          if (
-            retained.link.proofRef !== input.proofRef ||
-            retained.link.proofSha256 !== input.proofSha256
-          ) {
-            throw new Error("normal_actor_organization_proof_mismatch");
-          }
-          return current;
-        }
-        if (
-          Date.parse(input.capturedAt) > ports.now() ||
-          Date.parse(retained.link.expiresAt) <= Date.parse(input.capturedAt)
-        ) {
-          throw new Error("normal_actor_session_required");
-        }
-        const next = normalActorOrganizationProofSchema.parse({
-          ...retained,
-          link: {
-            ...retained.link,
-            consumedAt: input.capturedAt,
-            proofRef: input.proofRef,
-            proofSha256: input.proofSha256,
-          },
-        });
-        return {
-          ...current,
-          organizationProofs: current.organizationProofs?.map((entry) =>
-            entry.organizationId === input.organizationId ? next : entry,
-          ),
-        };
-      });
-      const retained = preparation.organizationProofs?.find(
-        (entry) => entry.organizationId === input.organizationId,
-      );
-      if (retained === undefined) {
-        throw new Error("normal_actor_organization_proof_mismatch");
-      }
-      return retained;
-    },
-    async checkpoint(context: HostedOperatorContext, state: NormalActorState) {
+    async retain(context: HostedOperatorContext, input: NormalActorAccountProvenance) {
+      validateProvenance(context, input);
+      await ports.assertAccountApproval(context, input);
       return await mutate(context, (row) => {
-        const preparation = row.record.accountPreparation;
-        if (preparation === undefined) {
-          throw new Error("normal_actor_journal_unavailable");
-        }
-        const checked = assertNormalActorState(
-          preparation.program,
-          state,
-          preparation.accountOperationRef,
-        );
-        assertCarriedActors(context, row, preparation, checked, ports.keyring, ports.now());
-        const baseAccountsComplete = checked.actors.every(
-          (actor) =>
-            actor.signup === "complete" &&
-            actor.session !== undefined &&
-            actor.storageState !== undefined,
-        );
-        const organizationSessionsComplete = hasOrganizationAccountSessions(preparation, checked);
-        const complete = baseAccountsComplete && organizationSessionsComplete;
-        const next = {
-          ...preparation,
-          sealedState: encryptNormalActorState({
-            ...stateScope(context, preparation),
-            config: ports.keyring,
-            state: checked,
-          }),
-          ...(complete
-            ? {
-                accountsCompletedAt:
-                  preparation.accountsCompletedAt ?? new Date(ports.now()).toISOString(),
-              }
-            : {}),
-        };
-        if (!complete) {
-          delete next.accountsCompletedAt;
-        }
-        return next;
-      });
-    },
-    async authorizeCapture(
-      context: HostedOperatorContext,
-      input: {
-        actorKey: string;
-        organizationId?: string;
-        nonceSha256: string;
-        proofSha256: string;
-        expiresAt: string;
-      },
-    ) {
-      const preparation = await mutateCapture(context, (row) => {
-        const prior = row.record.accountPreparation;
-        if (
-          prior === undefined ||
-          !prior.program.actors.some(
-            (actor) => actor.actorKey === input.actorKey && actor.account === "capture-existing",
-          ) ||
-          (input.organizationId !== undefined &&
-            !prior.program.memberships.some(
-              (member) =>
-                member.actorKey === input.actorKey &&
-                member.organizationId === input.organizationId,
-            ))
-        ) {
-          throw new Error("normal_actor_capture_unavailable");
-        }
-        const existing = prior.captures.find(
-          (capture) => capture.nonceSha256 === input.nonceSha256,
-        );
-        if (existing !== undefined) {
+        if (row.record.accountPreparation !== undefined) {
+          const existing = row.record.accountPreparation;
           if (
-            existing.actorKey !== input.actorKey ||
-            existing.organizationId !== input.organizationId ||
-            existing.proofSha256 !== input.proofSha256 ||
-            Date.parse(existing.expiresAt) <= ports.now()
+            ![
+              existing.accountOperationRef === input.accountOperationRef,
+              existing.programDigest === input.programDigest,
+              existing.accountPlanDigest === input.accountPlanDigest,
+              existing.accountApprovalId === input.accountApprovalId,
+              existing.accountApprovedByCallId === input.accountApprovedByCallId,
+            ].every(Boolean)
           ) {
-            throw new Error("normal_actor_capture_unavailable");
+            throw new Error("normal_actor_journal_authority_mismatch");
           }
-          return prior;
+          return row.record.accountPreparation;
         }
-        if (Date.parse(input.expiresAt) <= ports.now()) {
-          throw new Error("normal_actor_capture_unavailable");
-        }
-        return { ...prior, captures: [...prior.captures, { ...input, reference: randomUUID() }] };
-      });
-      return captureReference(preparation, input.nonceSha256);
-    },
-    async capture(context: HostedOperatorContext, payloadInput: NormalActorCapturedPayload) {
-      const payload = normalActorCapturedPayloadSchema.parse(payloadInput);
-      const cookieDigest = normalActorCaptureCookieDigest(payload.normalCookie);
-      const preparation = await mutateCapture(context, (row) => {
-        const prior = row.record.accountPreparation;
-        const capture = prior?.captures.find((entry) => entry.nonceSha256 === payload.nonceSha256);
+        const { operator } = row.record;
         if (
-          prior === undefined ||
-          capture === undefined ||
-          capture.actorKey !== payload.actorKey ||
-          capture.organizationId !== payload.organizationId ||
-          capture.proofSha256 !== payload.proofSha256 ||
-          payload.session.reference !== capture.reference ||
-          Date.parse(capture.expiresAt) <= ports.now() ||
-          payload.session.origin !== prior.program.origin ||
-          createHash("sha256").update(payload.proof).digest("hex") !== payload.proofSha256
+          operator?.operationRef !== input.accountOperationRef ||
+          operator.planDigest !== input.accountPlanDigest ||
+          operator.approvalId !== input.accountApprovalId ||
+          row.record.approvedByCallId !== input.accountApprovedByCallId
         ) {
-          throw new Error("normal_actor_capture_unavailable");
+          throw new Error("normal_actor_journal_authority_mismatch");
         }
-        if (capture.sealed !== undefined) {
-          if (capture.normalCookieSha256 !== cookieDigest) {
-            throw new Error("normal_actor_capture_unavailable");
-          }
-          return prior;
-        }
-        const sealed = {
-          ...encryptVercelToken({
-            associatedData: captureAad(context, prior, capture),
-            key: ports.keyring.tokenKey,
-            token: JSON.stringify(payload),
-          }),
-          keyVersion: ports.keyring.tokenKeyVersion,
-        };
         return {
-          ...prior,
-          captures: prior.captures.map((entry) =>
-            entry.reference === capture.reference
-              ? { ...entry, normalCookieSha256: cookieDigest, sealed }
-              : entry,
-          ),
+          ...input,
+          captures: [],
+          sealedState: encryptNormalActorState({
+            ...stateScope(context, input),
+            config: ports.keyring,
+            state: initialNormalActorState(input.program, input.accountOperationRef),
+          }),
         };
       });
-      return captureReference(preparation, payload.nonceSha256);
-    },
-    // oxlint-disable-next-line eslint/complexity -- Captured-account history requires the same exact authenticated read and provenance checks.
-    async readCapture(
-      context: HostedOperatorContext,
-      reference: string,
-    ): Promise<NormalActorCapturedPayload | undefined> {
-      const result = await read(context);
-      let { preparation } = result;
-      if (preparation?.captures.some((entry) => entry.reference === reference) !== true) {
-        preparation = result.row.record.participantPreparationHistory
-          ?.map((entry) => entry.preparation)
-          .find((entry) => entry.captures.some((capture) => capture.reference === reference));
-        const activePlan = result.preparation?.accountPlan;
-        const captured =
-          activePlan === undefined
-            ? undefined
-            : readUnapprovedCapturePredecessor(result.row.record, activePlan, ports.now());
-        if (
-          preparation === undefined &&
-          captured?.account.captures.some((capture) => capture.reference === reference) === true
-        ) {
-          preparation = captured.account;
-        }
-        if (preparation !== undefined) {
-          validateProvenance(context, preparation);
-          await ports.assertAccountApproval(context, provenance(preparation));
-          await ports.assertAuthorized(context);
-        }
-      }
-      const capture = preparation?.captures.find((entry) => entry.reference === reference);
-      if (
-        preparation === undefined ||
-        capture?.sealed === undefined ||
-        Date.parse(capture.expiresAt) <= ports.now()
-      ) {
-        return undefined;
-      }
-      try {
-        const payload = normalActorCapturedPayloadSchema.parse(
-          JSON.parse(
-            decryptVersionedVercelToken({
-              ...capture.sealed,
-              associatedData: captureAad(context, preparation, capture),
-              config: ports.keyring,
-            }),
-          ),
-        );
-        if (
-          payload.actorKey !== capture.actorKey ||
-          payload.organizationId !== capture.organizationId ||
-          payload.nonceSha256 !== capture.nonceSha256 ||
-          payload.proofSha256 !== capture.proofSha256 ||
-          normalActorCaptureCookieDigest(payload.normalCookie) !== capture.normalCookieSha256
-        ) {
-          throw new Error("normal_actor_capture_unavailable");
-        }
-        return payload;
-      } catch {
-        throw new Error("normal_actor_capture_unavailable");
-      }
     },
   };
+  return journal;
 };
 export type NormalActorJournal = ReturnType<typeof createNormalActorJournal>;

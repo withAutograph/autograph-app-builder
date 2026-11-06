@@ -1,6 +1,3 @@
-/* oxlint-disable eslint/require-await -- Async mocks preserve the actual World SDK promise contract. */
-/* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- Synthetic regression loads private installed native SDK modules by package path. */
-/* oxlint-disable sonarjs/no-duplicate-string -- Exact native fixture identities are reused across provenance assertions. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -41,6 +38,15 @@ const slotToEventId = (slot) => `evnt_${String(slot).padStart(26, "0")}`;
 const requireEventSlot = (id) => {
   assert.match(id, /^evnt_[0-9]{26}$/u);
   return Number(id.slice(5));
+};
+const bytesFromParts = (parts) => {
+  const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.length;
+  }
+  return bytes;
 };
 
 const ownerRunId = "wrun_00000000000000000000000001";
@@ -188,18 +194,27 @@ const fixture = async function fixture(options = {}) {
       },
     ],
   ]);
-  const event = (slot, eventType, stepId, eventData = {}) => ({
-    eventId: slotToEventId(slot),
-    eventType,
-    runId: ownerRunId,
-    ...(stepId === undefined ? {} : { correlationId: stepId }),
-    eventData: {
-      ...(steps.has(stepId) ? { stepName: steps.get(stepId).stepName } : {}),
-      ...(eventType === "step_completed" ? { result: steps.get(stepId)?.output } : {}),
-      ...eventData,
-    },
-    createdAt: new Date(10_000 - slot),
-  });
+  const event = (slot, eventType, stepId, eventData = {}) => {
+    const nativeEvent = {
+      createdAt: new Date(10_000 - slot),
+      eventId: slotToEventId(slot),
+      eventType,
+      runId: ownerRunId,
+    };
+    if (stepId !== undefined) {
+      nativeEvent.correlationId = stepId;
+    }
+    const data = {};
+    if (steps.has(stepId)) {
+      data.stepName = steps.get(stepId).stepName;
+    }
+    if (eventType === "step_completed") {
+      data.result = steps.get(stepId)?.output;
+    }
+    Object.assign(data, eventData);
+    nativeEvent.eventData = data;
+    return nativeEvent;
+  };
   const events = [
     event(1, "run_created"),
     event(2, "step_started", "step-prior"),
@@ -237,22 +252,23 @@ const fixture = async function fixture(options = {}) {
     runs: {
       get: async (id, params) => {
         calls.push(["run", id, params]);
-        return {
+        const run = {
           deploymentId: "original-deployment",
           input: runInput,
           runId: ownerRunId,
           status: options.status ?? "failed",
-          ...(options.expired === true ? { expiredAt: new Date(0) } : {}),
         };
+        if (options.expired === true) {
+          run.expiredAt = new Date(0);
+        }
+        return run;
       },
     },
     steps: {
       get: async (runId, stepId, params) => {
         calls.push(["step", runId, stepId, params]);
         const step = steps.get(stepId);
-        return params.resolveData === "none"
-          ? { ...step, input: undefined, output: undefined }
-          : step;
+        return params.resolveData === "none" ? { ...step, input: null, output: null } : step;
       },
     },
   };
@@ -502,7 +518,9 @@ test("foreign logical checkpoints fail before the native stream is read", async 
   await assert.rejects(
     f.collect({
       ...f.input,
-      authorizeOwner: async () => {},
+      authorizeOwner: async (authorized) => {
+        assert.equal(authorized.ownerRunId, ownerRunId);
+      },
       binding: { ...binding, logicalSessionId: "foreign" },
     }),
     /logical identity differs/u,
@@ -558,9 +576,7 @@ test("partial native stream remains partial evidence with explicit uncertainty",
 
 test("expired or non-failed runs return unavailable without decoding or stream reads", async () => {
   for (const options of [{ expired: true }, { status: "running" }, { status: "pending" }]) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Each isolated SDK fixture is verified in sequence.
     const f = await fixture(options);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Each isolated SDK fixture is verified in sequence.
     const result = await f.collect(f.input);
     assert.equal(result.kind, "unavailable");
     assert.ok(!f.calls.some(([kind]) => ["key", "events", "step", "stream"].includes(kind)));
@@ -801,15 +817,6 @@ const reconnectingSnapshot = async (mode) => {
     native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
     key,
   );
-  const join = (parts) => {
-    const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-    let offset = 0;
-    for (const part of parts) {
-      bytes.set(part, offset);
-      offset += part.length;
-    }
-    return bytes;
-  };
   let partial = new Uint8Array();
   if (mode === "partial-header") {
     partial = chunks[2].data.subarray(0, 2);
@@ -820,7 +827,7 @@ const reconnectingSnapshot = async (mode) => {
   const first =
     mode === "zero-progress"
       ? chunks[0].data.subarray(0, 2)
-      : join([chunks[0].data, chunks[1].data, partial]);
+      : bytesFromParts([chunks[0].data, chunks[1].data, partial]);
   const starts = [];
   let infos = 0;
   let cancelled = false;
@@ -1129,7 +1136,7 @@ test("646 independent checkpoint histories retain every value while sharing immu
     records.flatMap((value) => value.sessionState.snapshot.session.history),
   );
   assert.equal(uniqueMessages.size, history.length);
-  const shared = records[0].sessionState.snapshot.session.history[0];
+  const [shared] = records[0].sessionState.snapshot.session.history;
   assert.equal(Object.isFrozen(shared), true);
   assert.equal(Object.isFrozen(shared.content[0].output), true);
   assert.throws(() => {
@@ -1223,7 +1230,7 @@ test("unsupported branded, cyclic and non-JSON-safe history values stay unchange
     cyclic,
     new Branded(),
     { content: new Map(), role: "tool" },
-    { content: undefined, role: "tool" },
+    { content: null, role: "tool" },
     { content: new Uint8Array([1]), role: "tool" },
     { content: { kind: "native-recovery-transport-reference", value: "private" }, role: "tool" },
   ];

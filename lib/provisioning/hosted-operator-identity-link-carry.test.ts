@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/require-await -- In-memory async service ports preserve the real handler contract without provider operations. */
 import { describe, expect, it, vi } from "vitest";
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
@@ -174,50 +173,49 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
     proofRef: "original-approved-owner-proof",
     proofSha256: "e".repeat(64),
   };
+  const operator = {
+    approvalId: "original-approval",
+    authPreparation: {
+      assetSha256: "1".repeat(64),
+      catalogFingerprint: "2".repeat(64),
+      database: originalPlan.authDatabase.database,
+      observedAt: "2026-10-19T12:00:00Z",
+      runtimeRole: originalPlan.authDatabase.runtimeRole,
+      targetDigest: originalPlan.authSchema?.targetDigest,
+    },
+    fenceGeneration: 1,
+    identityLink,
+    mode: "protected-operator-v1" as const,
+    operationRef,
+    plan: originalPlan,
+    planDigest,
+    receipts: originalPlan.effects.map((effect) => ({
+      effectId: effect.id,
+      fenceGeneration: 1,
+      observedAt: "2026-10-19T12:00:00Z",
+      resourceVersion: "observed",
+    })),
+  };
+  if (observedEndpoint) {
+    operator.deliveredGatewayDeploymentId = "ready-owner-gateway";
+    operator.gatewayDeliveryCandidates = [
+      {
+        branch: "preview",
+        deploymentId: "ready-owner-gateway",
+        operationRef,
+        origin: identityLink.endpointOrigin,
+        projectId: "prj_gateway",
+        readyState: "READY" as const,
+        repoId: "gateway-repo",
+      },
+    ];
+  }
   let row: HostedRuntimeJournalRow = {
     record: hostedRuntimeJournalRecordSchema.parse({
       approvedByCallId: "original-approved-call",
       environmentBound: true,
       kind: "app-runtime",
-      operator: {
-        approvalId: "original-approval",
-        authPreparation: {
-          assetSha256: "1".repeat(64),
-          catalogFingerprint: "2".repeat(64),
-          database: originalPlan.authDatabase.database,
-          observedAt: "2026-10-19T12:00:00Z",
-          runtimeRole: originalPlan.authDatabase.runtimeRole,
-          targetDigest: originalPlan.authSchema?.targetDigest,
-        },
-        fenceGeneration: 1,
-        identityLink,
-        mode: "protected-operator-v1",
-        operationRef,
-        plan: originalPlan,
-        planDigest,
-        receipts: originalPlan.effects.map((effect) => ({
-          effectId: effect.id,
-          fenceGeneration: 1,
-          observedAt: "2026-10-19T12:00:00Z",
-          resourceVersion: "observed",
-        })),
-        ...(observedEndpoint
-          ? {
-              deliveredGatewayDeploymentId: "ready-owner-gateway",
-              gatewayDeliveryCandidates: [
-                {
-                  branch: "preview",
-                  deploymentId: "ready-owner-gateway",
-                  operationRef,
-                  origin: identityLink.endpointOrigin,
-                  projectId: "prj_gateway",
-                  readyState: "READY",
-                  repoId: "gateway-repo",
-                },
-              ],
-            }
-          : {}),
-      },
+      operator,
       privateState: {
         encryptedToken: "ciphertext",
         keyVersion: "key-v1",
@@ -265,7 +263,6 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
     store: {
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- A lost journal CAS returns no row.
           return undefined;
         }
         row = {
@@ -538,7 +535,9 @@ describe("consumed proof after Gateway selection advances", () => {
   ] as const)("rejects incompatible retained identity evidence: %s", (change) => {
     const { after } = fixture();
     const link = after.identityLink;
-    const previous = after.gatewayDeliveryCandidates[0];
+    const {
+      gatewayDeliveryCandidates: [previous],
+    } = after;
     if (link === undefined || previous === undefined) {
       throw new Error("Missing controlled proof");
     }

@@ -25,19 +25,16 @@ const forwarded = () => ({
 });
 const sessionAuth = () => ({ current: forwarded(), initiator: forwarded() });
 
-// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
-function sandboxFixture(stop = vi.fn(async () => {})) {
+function sandboxFixture(stop = vi.fn(async () => {})): Pick<RuntimeSandboxSession, "id" | "stop"> {
   return {
     id: "provider_session_1",
     stop,
-  } as unknown as RuntimeSandboxSession;
+  };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function install(store: InMemorySandboxExecutionLeaseStore, member = true) {
   setHostedSandboxExecutionLeaseDependenciesForTest({
     enabled: () => true,
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     isMember: async () => member,
     store: () => store,
   });
@@ -156,32 +153,35 @@ describe("hosted sandbox turn lease lifecycle", () => {
         auth: sessionAuth(),
         member: true,
         message: "acquire failed",
-        store: () =>
-          ({
-            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-            acquire: async () => {
-              throw new Error("acquire failed");
-            },
-          }) as never,
+        store: () => ({
+          acquire: async () => {
+            throw new Error("acquire failed");
+          },
+        }),
       },
     ];
     for (const candidate of cases) {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const stop = vi.fn(async () => {});
       setHostedSandboxExecutionLeaseDependenciesForTest({
         enabled: () => true,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         isMember: async () => candidate.member,
         store: candidate.store,
       });
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const rejection = await acquireHostedSandboxExecutionLease({
-        sandbox: sandboxFixture(stop),
-        sessionAuth: candidate.auth,
-        sessionId: "session_1",
-      }).catch((error: unknown) => error);
+      let rejection: unknown;
+      try {
+        await acquireHostedSandboxExecutionLease({
+          sandbox: sandboxFixture(stop),
+          sessionAuth: candidate.auth,
+          sessionId: "session_1",
+        });
+      } catch (error) {
+        rejection = error;
+      }
       expect(rejection).toBeInstanceOf(Error);
-      expect((rejection as Error).message).toContain(candidate.message);
+      if (!(rejection instanceof Error)) {
+        throw new Error("Expected acquisition to reject with an Error.");
+      }
+      expect(rejection.message).toContain(candidate.message);
       expect(stop).toHaveBeenCalledOnce();
       expect(sandboxCleanupEvidence(rejection)).toEqual({
         attempted: true,
@@ -195,21 +195,24 @@ describe("hosted sandbox turn lease lifecycle", () => {
     const original = new Error("database unavailable");
     setHostedSandboxExecutionLeaseDependenciesForTest({
       enabled: () => true,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       isMember: async () => true,
       store: () => {
         throw original;
       },
     });
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const stop = vi.fn(async () => {
       throw new Error("provider unavailable");
     });
-    const rejection = await acquireHostedSandboxExecutionLease({
-      sandbox: sandboxFixture(stop),
-      sessionAuth: sessionAuth(),
-      sessionId: "session_1",
-    }).catch((error: unknown) => error);
+    let rejection: unknown;
+    try {
+      await acquireHostedSandboxExecutionLease({
+        sandbox: sandboxFixture(stop),
+        sessionAuth: sessionAuth(),
+        sessionId: "session_1",
+      });
+    } catch (error) {
+      rejection = error;
+    }
     expect(rejection).toBe(original);
     expect(sandboxCleanupEvidence(rejection)).toEqual({
       attempted: true,

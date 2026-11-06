@@ -4,6 +4,25 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
+
+const generatedMcpSchema = z.object({
+  mcpServers: z.record(
+    z.string(),
+    z.object({ oauth_resource: z.string().optional(), url: z.string() }),
+  ),
+});
+const generatedManifestSchema = z.object({
+  interface: z.object({
+    composerIcon: z.string(),
+    defaultPrompt: z.array(z.string()),
+    displayName: z.string(),
+    logo: z.string(),
+    longDescription: z.string(),
+    shortDescription: z.string(),
+  }),
+  version: z.string(),
+});
 
 const runGenerator = async (cwd: string, endpoint: string) => {
   let stderr = "";
@@ -16,7 +35,11 @@ const runGenerator = async (cwd: string, endpoint: string) => {
   child.stderr.on("data", (chunk: string) => {
     stderr += chunk;
   });
-  const [code] = await once(child, "exit");
+  const exitResult: unknown[] = await once(child, "exit");
+  const codeResult = z
+    .tuple([z.union([z.number(), z.null()]), z.union([z.string(), z.null()])])
+    .parse(exitResult);
+  const [code] = codeResult;
   if (code !== 0) {
     throw new Error(`OpenAI package generator exited ${code}: ${stderr.trim()}`);
   }
@@ -39,26 +62,23 @@ const writeFixture = async (
       version,
     }),
   );
-  await writeFile(
-    path.join(root, "mcp.json"),
-    JSON.stringify({
-      $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
-      mcpServers: {
-        "app-builder": {
-          type: "streamable-http",
-          url: "http://127.0.0.1:3000/mcp",
-        },
-        ...(extraServer
-          ? {
-              alternate: {
-                type: "streamable-http",
-                url: "https://preview.autograph.dev/alternate",
-              },
-            }
-          : {}),
-      },
-    }),
-  );
+  const mcpServers = {
+    "app-builder": {
+      type: "streamable-http",
+      url: "http://127.0.0.1:3000/mcp",
+    },
+  };
+  if (extraServer) {
+    mcpServers.alternate = {
+      type: "streamable-http",
+      url: "https://preview.autograph.dev/alternate",
+    };
+  }
+  const mcpConfig = {
+    $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+    mcpServers,
+  };
+  await writeFile(path.join(root, "mcp.json"), JSON.stringify(mcpConfig));
 };
 
 describe("OpenAI package generator", () => {
@@ -70,11 +90,15 @@ describe("OpenAI package generator", () => {
       const endpoint = "https://preview.autograph.dev/mcp";
       await runGenerator(root, endpoint);
 
-      const portable = JSON.parse(await readFile(path.join(root, "mcp.json"), "utf-8"));
-      const codex = JSON.parse(await readFile(path.join(root, ".mcp.json"), "utf-8"));
-      const manifest = JSON.parse(
-        await readFile(path.join(root, ".codex-plugin/plugin.json"), "utf-8"),
+      const portableContents = await readFile(path.join(root, "mcp.json"), "utf-8");
+      const codexContents = await readFile(path.join(root, ".mcp.json"), "utf-8");
+      const manifestContents = await readFile(
+        path.join(root, ".codex-plugin/plugin.json"),
+        "utf-8",
       );
+      const portable = generatedMcpSchema.parse(JSON.parse(portableContents));
+      const codex = generatedMcpSchema.parse(JSON.parse(codexContents));
+      const manifest = generatedManifestSchema.parse(JSON.parse(manifestContents));
       expect(portable.mcpServers["app-builder"].url).toBe(endpoint);
       expect(Object.keys(portable.mcpServers)).toEqual(["app-builder"]);
       expect(codex.mcpServers["app-builder"].url).toBe(endpoint);

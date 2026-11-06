@@ -1,20 +1,32 @@
-/* oxlint-disable eslint/no-await-in-loop -- readiness retries and model turns must remain sequential. */
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
+import { z } from "zod";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 const required = (name: string) => {
   const value = process.env[name];
-  if (!value) {
+  if (value === undefined || value === null || value.length === 0) {
     throw new Error(`${name} was required for the live self-reproduction run.`);
   }
   return value;
 };
 
 const root = path.resolve(import.meta.dirname, "..");
+const mise = path.resolve(root, "node_modules/.bin/mise");
+const answersSchema = z.object({ responses: z.record(z.string(), z.string()) });
+const eveResultSchema = z.object({
+  result: z.union([
+    z.record(z.string(), z.unknown()),
+    z.array(z.unknown()),
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+  ]),
+});
 const candidateRoot = required("SELF_REPRODUCTION_CANDIDATE_ROOT");
 const arrustedRoot = required("SELF_REPRODUCTION_ARRUSTED_ROOT");
 const briefPath = required("SELF_REPRODUCTION_BRIEF_PATH");
@@ -45,7 +57,7 @@ const availableLoopbackPort = async (configured: string | undefined): Promise<nu
   const closed = once(server, "close");
   server.close();
   await closed;
-  if (address === null || typeof address === "string") {
+  if (address === null || !("port" in address)) {
     throw new Error("A loopback port was unavailable.");
   }
   return address.port;
@@ -56,37 +68,55 @@ const run = async (
   args: string[],
   options: { input?: string; timeoutMs?: number } = {},
 ) => {
-  const child = spawn(command, args, { cwd: root, env: process.env, stdio: "pipe" });
+  const child = spawn(command, args, {
+    cwd: root,
+    env: { ...process.env, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+    stdio: "pipe",
+  });
   let stdout = "";
   let stderr = "";
   let timedOut = false;
-  let spawnError: Error | undefined;
+  let spawnError: unknown;
   let forceStop: ReturnType<typeof setTimeout> | undefined;
   const timer = setTimeout(() => {
     timedOut = true;
-    child.kill("SIGTERM");
-    forceStop = setTimeout(() => child.kill("SIGKILL"), 5000);
+    void child.kill("SIGTERM");
+    forceStop = setTimeout(() => {
+      void child.kill("SIGKILL");
+    }, 5000);
   }, options.timeoutMs ?? 0);
   timer.unref();
-  child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
-  child.stderr.on("data", (chunk: Buffer) => (stderr += String(chunk)));
-  if (options.input) {
+  child.stdout.on("data", (chunk: Buffer) => {
+    stdout += String(chunk);
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr += String(chunk);
+  });
+  if (options.input !== undefined && options.input.length > 0) {
     child.stdin.end(options.input);
   } else {
     child.stdin.end();
   }
-  const closed = once(child, "close");
-  const [code] = await closed.catch((error: Error) => {
+  let code: number | null = null;
+  try {
+    const closed = await once(child, "close");
+    const exit = z.tuple([z.number().nullable(), z.string().nullable()]).parse(closed);
+    [code] = exit;
+  } catch (error: unknown) {
     spawnError = error;
-    return [null];
-  });
+  }
   clearTimeout(timer);
   if (forceStop !== undefined) {
     clearTimeout(forceStop);
   }
+  let capturedStderr = stderr;
+  if (spawnError !== undefined) {
+    const processError = spawnError instanceof Error ? spawnError.message : "Unknown process error";
+    capturedStderr += processError;
+  }
   return {
-    code: spawnError === undefined ? (code as number | null) : null,
-    stderr: spawnError === undefined ? stderr : `${stderr}${spawnError.message}`,
+    code: spawnError === undefined ? code : null,
+    stderr: capturedStderr,
     stdout,
     timedOut,
   };
@@ -124,7 +154,9 @@ const availableDistinctLoopbackPort = async (
   return port === excludedPort ? await availableDistinctLoopbackPort(excludedPort) : port;
 };
 
-const answerFor = (result: unknown, answers: Record<string, string>) => {
+type EveResult = z.infer<typeof eveResultSchema>;
+
+const answerFor = (result: EveResult, answers: Record<string, string>) => {
   const serialized = JSON.stringify(result).toLowerCase();
   if (serialized.includes("approve")) {
     return "approve";
@@ -148,9 +180,9 @@ const resumeInvocation = async (
   if (remainingTurns === 0 || invocation.code !== 3) {
     return invocation;
   }
-  let result: unknown;
+  let result: EveResult;
   try {
-    result = JSON.parse(invocation.stdout);
+    result = eveResultSchema.parse(JSON.parse(invocation.stdout));
   } catch {
     throw new Error("Eve paused without a parseable resumable result.");
   }
@@ -167,15 +199,13 @@ const main = async () => {
   await mkdir(candidateRoot, { mode: 0o700, recursive: true });
   await mkdir(stateRoot, { mode: 0o700, recursive: true });
   const brief = await readFile(briefPath, "utf-8");
-  const answers = (
-    JSON.parse(await readFile(answersPath, "utf-8")) as { responses: Record<string, string> }
-  ).responses;
+  const answers = answersSchema.parse(JSON.parse(await readFile(answersPath, "utf-8"))).responses;
   const controller = new AbortController();
   const nextPort = await availableLoopbackPort(configuredNextPort);
   const evePort = await availableDistinctLoopbackPort(nextPort, configuredEvePort);
   const url = `http://127.0.0.1:${evePort}`;
   const development = spawn(
-    "mise",
+    mise,
     [
       "run",
       "dev",
@@ -197,20 +227,22 @@ const main = async () => {
       env: {
         ...process.env,
         APP_BUILDER_SANDBOX_REQUEST_TIMEOUT_MS: String(providerRequestTimeoutMs),
+        PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
       },
       stdio: "pipe",
     },
   );
   const developmentExited = once(development, "close");
+  const transcriptWriteFailure = "Transcript write failed:";
+  const transcriptChunks: string[] = [];
+  const queueTranscriptWrite = (chunk: Buffer) => {
+    transcriptChunks.push(String(chunk));
+  };
   development.once("close", () => {
     controller.abort();
   });
-  development.stdout.on("data", async (chunk: Buffer) => {
-    await appendFile(transcriptPath, String(chunk));
-  });
-  development.stderr.on("data", async (chunk: Buffer) => {
-    await appendFile(transcriptPath, String(chunk));
-  });
+  development.stdout.on("data", queueTranscriptWrite);
+  development.stderr.on("data", queueTranscriptWrite);
   const stop = () => {
     controller.abort();
     if (development.pid !== undefined) {
@@ -266,6 +298,12 @@ const main = async () => {
     stop();
     if (development.exitCode === null) {
       await developmentExited;
+    }
+    try {
+      await appendFile(transcriptPath, transcriptChunks.join(""));
+    } catch (error) {
+      const writeError = error instanceof Error ? error : new Error("unknown error");
+      process.stderr.write(`${transcriptWriteFailure} ${writeError.message}\n`);
     }
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);

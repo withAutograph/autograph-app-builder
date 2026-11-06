@@ -2,6 +2,9 @@ import { appIntegrationReadObjectsDigest } from "../repository/app-integration-m
 import { appIntegrationCapabilityPlanSchema } from "./app-integration-capability-contract";
 import { authority } from "./public-release-test-fixture";
 
+const vendorObjectName = "Vendor";
+const isolatedReadsDestination = "isolated-reads";
+
 const resource = (name: string) => ({
   database: name,
   environment: "preview" as const,
@@ -66,7 +69,7 @@ export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.pars
     payloadHosts: ["sandbox-data.example"],
     projectId: "development-provider-project",
     readObjectsSha256: appIntegrationReadObjectsDigest({
-      Vendor: { destination: "isolated-reads", objectName: "Vendor" },
+      [vendorObjectName]: { destination: isolatedReadsDestination, objectName: vendorObjectName },
     }),
     recipeId: "quickbooks-read",
     recipeVersion: "1",
@@ -75,9 +78,11 @@ export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.pars
     artifactRef: "captured-release",
     connectionProviderKey: "quickbooks-sandbox",
     provider: "quickbooks",
-    readObjects: { Vendor: { destination: "isolated-reads", objectName: "Vendor" } },
+    readObjects: {
+      [vendorObjectName]: { destination: isolatedReadsDestination, objectName: vendorObjectName },
+    },
     readObjectsSha256: appIntegrationReadObjectsDigest({
-      Vendor: { destination: "isolated-reads", objectName: "Vendor" },
+      [vendorObjectName]: { destination: isolatedReadsDestination, objectName: vendorObjectName },
     }),
     recipeId: "quickbooks-read",
     recipeVersion: "1",

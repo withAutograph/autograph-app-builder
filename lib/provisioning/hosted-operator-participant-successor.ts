@@ -14,6 +14,7 @@ import type { NormalActorProgram } from "./hosted-operator-normal-actor-program"
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 
 type Predecessor = NonNullable<HostedRuntimeJournalRecord["participantPreparationHistory"]>[number];
+const AUTH_PARTICIPANTS_STAGE = "auth-participants";
 
 /** Organization-proof migration is deliberately outside this capture-only successor. */
 export const isAdditiveCaptureParticipantProgram = (
@@ -56,7 +57,7 @@ const completed = (record: HostedRuntimeJournalRecord, now: number): Predecessor
     preparation.accountsCompletedAt !== undefined,
     preparation.programDigest === normalActorProgramDigest(preparation.program),
     preparation.accountPlanDigest === operatorPlanDigest(preparation.accountPlan),
-    preparation.accountPlan.stage === "auth-participants",
+    preparation.accountPlan.stage === AUTH_PARTICIPANTS_STAGE,
     preparation.accountPlan.normalActorProgram !== undefined &&
       normalActorProgramDigest(preparation.accountPlan.normalActorProgram) ===
         preparation.programDigest,
@@ -191,20 +192,8 @@ export const createParticipantSuccessorPlan = (
   void normalActorPreparation;
   const { gatewayBindings } = prior.operator.plan;
   const trustedSources = gatewayBindings?.trustedSources;
-  return hostedOperatorPlanSchema.parse({
+  const successorPlan = {
     ...base,
-    ...(gatewayBindings === undefined
-      ? {}
-      : {
-          gatewayBindings: {
-            ...gatewayBindings,
-            // Existing app/JWKS grants stay provider facts; this account-only plan cannot authorize them.
-            trustedSources:
-              trustedSources !== undefined && "gatewayPreview" in trustedSources
-                ? { gatewayPreview: trustedSources.gatewayPreview }
-                : undefined,
-          },
-        }),
     access: [],
     effects: [
       {
@@ -222,8 +211,19 @@ export const createParticipantSuccessorPlan = (
       preparation: normalActorPreparationSchema.strip().parse(prior.preparation),
     },
     normalActorProgram: program,
-    stage: "auth-participants",
-  });
+    stage: AUTH_PARTICIPANTS_STAGE,
+  };
+  if (gatewayBindings !== undefined) {
+    successorPlan.gatewayBindings = {
+      ...gatewayBindings,
+      // Existing app/JWKS grants stay provider facts; this account-only plan cannot authorize them.
+      trustedSources:
+        trustedSources !== undefined && "gatewayPreview" in trustedSources
+          ? { gatewayPreview: trustedSources.gatewayPreview }
+          : undefined,
+    };
+  }
+  return hostedOperatorPlanSchema.parse(successorPlan);
 };
 
 export const isParticipantProgramSuccessor = (
@@ -239,7 +239,7 @@ export const isParticipantProgramSuccessor = (
     completed(record, now)?.operator.operationRef === prior.operator.operationRef ||
     [
       record.operator?.planDigest === operatorPlanDigest(plan),
-      record.operator?.plan.stage === "auth-participants",
+      record.operator?.plan.stage === AUTH_PARTICIPANTS_STAGE,
       record.leaseId === undefined,
       record.leaseExpiresAt === undefined,
       record.operator?.pendingEffectId === undefined,
