@@ -119,7 +119,9 @@ export const createTenantExportReader =
         target: { appId: record.target.appId, sessionId: record.target.sessionId },
       };
       parseHostedTenantExportPlanForOwner(record.plan, { authority, target: context.target });
-      const assertCurrent = async () => await ports.assertCurrentOwner(context);
+      const assertCurrent = async () => {
+        await ports.assertCurrentOwner(context);
+      };
       await assertCurrent();
       const worker = workerFor(record);
       const inspection = await inspectTenantExportCompletion({

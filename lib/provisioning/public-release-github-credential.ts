@@ -106,7 +106,9 @@ export const createPublicReleaseGitHubCredentialReader = (
 ): PublicReleaseGitHubDependencies["readCredential"] => {
   const read = createOwnerScopedGitHubRepositoryCredentialReader(input);
   return async (invocation, plan) =>
-    await read(invocation, plan.source, async () => await input.assertCurrent(invocation, plan));
+    await read(invocation, plan.source, async () => {
+      await input.assertCurrent(invocation, plan);
+    });
 };
 
 /** Read actual refs while constructing a new release plan; no model-provided repository authority. */

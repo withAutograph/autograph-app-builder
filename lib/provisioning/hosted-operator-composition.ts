@@ -3253,7 +3253,9 @@ export const createRequestScopedHostedOperatorDependencies =
     }
     try {
       return {
-        close: async () => await controlPlane.close(),
+        close: async () => {
+          await controlPlane.close();
+        },
         dependencies: composeHostedOperatorDependencies(configuration, controlPlane),
       };
     } catch (error) {

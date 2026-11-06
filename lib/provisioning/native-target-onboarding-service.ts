@@ -179,11 +179,9 @@ export const createNativeTargetOnboardingService =
   async (request: Request, input: Invocation): Promise<Response> => {
     const workloadHeaders = new Headers(request.headers);
     const isPlan = input.action === "native-target-plan";
-    await observeNativePlan(
-      isPlan,
-      "native_plan_workload",
-      async () => await deps.verifyWorkload(new Request(request.url, { headers: workloadHeaders })),
-    );
+    await observeNativePlan(isPlan, "native_plan_workload", async () => {
+      await deps.verifyWorkload(new Request(request.url, { headers: workloadHeaders }));
+    });
     const workload = {
       authorization: workloadHeaders.get("authorization"),
       signal: request.signal,

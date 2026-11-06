@@ -527,7 +527,11 @@ export const createHostedManagedRuntimeProjection = (deps: {
     }
   };
   return {
-    publish: async (...args) => await safe(async () => await implementation.publish(...args)),
-    revoke: async (...args) => await safe(async () => await implementation.revoke(...args)),
+    publish: async (...args) => {
+      await safe(async () => await implementation.publish(...args));
+    },
+    revoke: async (...args) => {
+      await safe(async () => await implementation.revoke(...args));
+    },
   };
 };

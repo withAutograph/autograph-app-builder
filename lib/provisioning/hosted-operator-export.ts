@@ -415,7 +415,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
           ],
           readCurrentFence: async () => {
             const latest = await read(context, exportId);
-            const claim = latest.journal.claim;
+            const { claim } = latest.journal;
             if (latest.journal.state === "complete") {
               return {
                 fenceGeneration: latest.journal.fenceGeneration,

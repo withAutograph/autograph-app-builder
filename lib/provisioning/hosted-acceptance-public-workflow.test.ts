@@ -81,7 +81,9 @@ afterEach(async () => {
   hooks.state.clear();
   vi.clearAllMocks();
   await Promise.all(
-    roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true })),
+    roots.splice(0).map(async (root) => {
+      await rm(root, { force: true, recursive: true });
+    }),
   );
 });
 

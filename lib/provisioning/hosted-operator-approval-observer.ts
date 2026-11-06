@@ -83,10 +83,10 @@ export const createHostedOperatorApprovalObserver = (input: {
         const { observe } = createSameOriginEveTransport({
           ...options,
           fetchImplementation: createBuilderApprovalStreamFetch({
-            origin: input.builderOrigin,
             adapterSessionId: request.adapterSessionId,
-            signal: capability.signal,
             fetchImplementation: input.fetchImplementation ?? fetch,
+            origin: input.builderOrigin,
+            signal: capability.signal,
           }),
           workloadIdentity: { token: async () => await Promise.resolve(capability.token) },
         });

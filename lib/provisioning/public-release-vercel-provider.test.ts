@@ -567,7 +567,9 @@ it("does not accept the prior active deployment when changed runtime values requ
 it("takes a current owner-bound active deployment snapshot without selecting or mutating a deployment", async () => {
   const f = fixture();
   const read = createPublicReleaseVercelActiveDeploymentSnapshot({
-    assertCurrent: async () => await f.deps.assertCurrent(f.invocation, f.plan, false),
+    assertCurrent: async () => {
+      await f.deps.assertCurrent(f.invocation, f.plan, false);
+    },
     fetch: f.fetcher,
     readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
   });
@@ -586,7 +588,9 @@ it("records absent Production activation explicitly rather than inventing a depl
   const f = fixture();
   f.fetcher.mockResolvedValueOnce(Response.json({ ...f.project, targets: { production: null } }));
   const read = createPublicReleaseVercelActiveDeploymentSnapshot({
-    assertCurrent: async () => await f.deps.assertCurrent(f.invocation, f.plan, false),
+    assertCurrent: async () => {
+      await f.deps.assertCurrent(f.invocation, f.plan, false);
+    },
     fetch: f.fetcher,
     readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
   });

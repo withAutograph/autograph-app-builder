@@ -3862,7 +3862,9 @@ export const createHostedOperatorControlPlane = async (input: {
           observeContinuityPlanningStage(
             context.target.sessionId,
             "sandbox_authorization",
-            async () => await assertSelectedSandbox(context, runtime),
+            async () => {
+              await assertSelectedSandbox(context, runtime);
+            },
           ),
         ]);
         // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Verify canonical VM ownership and completed setup before resuming it for planning.
