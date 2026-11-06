@@ -271,6 +271,16 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    `implementationFiles`. This writes under the original Build approval and
    returns before running repository checks. Then open the updated app with
    `start_app_preview`. Keep the existing proposal for these repairs.
+   An unapplied same-app repair proposal can leave the workflow in `planned`
+   while the previously approved implementation is still saved. When the user
+   wants that implementation and preview or repair diagnostics identify this
+   case, call `prepare_app_creation({ resumeApprovedBuild: true })` to return
+   to its applied workspace. After `resumed_approved_build`, start the preview.
+   For a concrete source fix within the original Build scope, resume that
+   workspace first, then pass the corrected files to `validate_app_creation`
+   with `repairOnly: true`. Builder retains the unapplied draft in repair
+   history. When the user wants those changes, follow the ordinary planning
+   and Build controls for the changed scope.
    For reviewed delivery, continue with `validate_app_creation`. It runs the repository's normal
    commands against the current applied app. When it
    reports a repairable failure, provide corrected `implementationFiles` to

@@ -39,6 +39,7 @@ import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { prepareDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 import type { DraftReconciliationInput } from "@/lib/repository/sandbox-draft-reconciliation";
+import { priorResumedBuildDraftProposal } from "@/lib/agent/existing-app-repair-planning";
 
 const assertReconciliationDraftLineage = (input: {
   headBranch: string;
@@ -132,12 +133,15 @@ type ReconciliationSourceRequest = Parameters<
 const reconciliationLineageRequest = (
   state: ReviewedWorkflow,
   original: DraftReconciliationCandidate | null,
+  sessionId: string,
 ): Pick<
   ReconciliationSourceRequest,
   "previousReconciliation" | "publishedReconciliation" | "priorPublishedProposalDigest"
 > => {
   const priorPublishedProposalDigest =
-    state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
+    state.publishedGitHubDraftProposalDigest ??
+    state.githubDraftProposal?.proposal.digest ??
+    priorResumedBuildDraftProposal(state, sessionId)?.digest;
   const previousReconciliation =
     original?.appId === state.appSpec.appId ? original.proposal : undefined;
   const publishedReconciliation =
@@ -287,7 +291,7 @@ export default defineTool({
       }
       const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
       const original = draftReconciliationState.get();
-      const lineage = reconciliationLineageRequest(state, original);
+      const lineage = reconciliationLineageRequest(state, original, ctx.session.id);
       const source = await runtime.inspectExistingDraftReconciliationSource({
         ...lineage,
         recovery: draftInspectionRecoveryForSession({

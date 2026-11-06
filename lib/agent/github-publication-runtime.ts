@@ -18,6 +18,7 @@ import {
   assertExactDraftPullRequestProposal,
   createApprovedFreshRepository,
   publishApprovedDraftPullRequest,
+  reconcilePendingDraftPullRequest,
   resolveImmutableExistingSource,
   resolveImmutableExistingSourceWithTargetProof,
 } from "../repository/github-publication";
@@ -767,7 +768,7 @@ export function composeGitHubPublicationRuntime(input: {
     },
     async inspectDraftDestination(request) {
       if (request.existingProposal !== undefined) {
-        const prior = await receipts.read(request.existingProposal.digest);
+        let prior = await receipts.read(request.existingProposal.digest);
         if (prior !== undefined) {
           assertCanonicalGitHubMutationReceipt(prior);
           if (
@@ -777,13 +778,16 @@ export function composeGitHubPublicationRuntime(input: {
             throw new Error("The prior publication journal does not match this draft proposal.");
           }
           if (prior.status === "pending") {
-            throw new Error(
-              "Recover the prior draft publication's unknown outcome before preparing another destination review.",
-            );
+            prior = await reconcilePendingDraftPullRequest({
+              adapter,
+              pending: prior,
+              proposal: request.existingProposal,
+              store: receipts,
+            });
           }
           if (prior.status === "succeeded") {
             throw new Error(
-              "Use the existing draft update workflow for the published pull request.",
+              `Use the existing draft update workflow for published pull request #${prior.pullRequestNumber}. Prepare reconciliation for that same draft PR.`,
             );
           }
           if (

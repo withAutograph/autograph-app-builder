@@ -9,16 +9,22 @@ import {
   contextStorage,
 } from "../../node_modules/eve/dist/src/context/container.js";
 import { prepareAppCreation } from "./prepare-app-creation";
+import prepareAppCreationTool from "../../agent/tools/prepare_app_creation";
 import {
   requestPrivateApplyApproval,
   recordApprovedPrivateApply,
   readPrivateApplyAuthority,
   retainPrivateApplyDenials,
 } from "./private-apply-authority";
-import { inspectExistingAppRepair, existingAppRepairHistory } from "./existing-app-repair-planning";
+import {
+  inspectExistingAppRepair,
+  existingAppRepairHistory,
+  priorResumedBuildDraftProposal,
+} from "./existing-app-repair-planning";
 import { privateComputeProjection } from "./private-compute-planning";
 import type { preparePrivateComputePlanning } from "./private-compute-planning";
 import { appBuilderWorkflowState } from "./workflow-state";
+import { runnableSelectedApp } from "./runnable-selected-app";
 import { implementationFilesSchema } from "./apply-implementation-files";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import {
@@ -32,10 +38,14 @@ const ports = vi.hoisted(() => ({
   execute: vi.fn(),
   readBinary: vi.fn(),
   run: vi.fn(),
+  emitProjection: vi.fn(),
 }));
 const repairSandbox = { id: "workspace", readBinaryFile: ports.readBinary, run: ports.run };
 vi.mock("./refresh-planning-source", () => ({
   refreshPlanningSource: () => Promise.resolve(repairSandbox),
+}));
+vi.mock("./approved-build-continuation-runtime", () => ({
+  emitCurrentBuildWorkflowProjection: ports.emitProjection,
 }));
 vi.mock("./target-dependency-preparation", () => ({
   prepareOrReuseDependencies: () =>
@@ -227,6 +237,147 @@ const repairFiles = [
     content: "# Enables discovery of generated app-scoped mise tasks.\n",
   },
 ];
+
+const hostedRecoveryContext = {
+  ...context,
+  callId: "hosted-recovery",
+  // SAFETY: Recovery may inspect this Sandbox's identity only. The command and file spies assert no source I/O.
+  getSandbox: vi.fn(() =>
+    Promise.resolve(repairSandbox as unknown as Awaited<ReturnType<typeof context.getSandbox>>),
+  ),
+};
+
+const prepareRecoveryFixture = async (
+  phase: "applied" | "validation_failed" | "reviewed",
+  publishedGitHubDraftProposalDigest?: string,
+) => {
+  const applied = appliedRepairFixture();
+  if (applied.phase !== "applied") {
+    throw new Error("fixture");
+  }
+  // SAFETY: The fixture models only the historical fields used by recovery and the downstream receipts it must discard.
+  const base = {
+    ...applied,
+    phase,
+    ...(phase === "validation_failed" ? { validationFailure: { reason: "command-failed" } } : {}),
+    ...(phase === "reviewed"
+      ? {
+          validationReceipt: {},
+          reviewReceipt: {},
+          githubDraftProposal: { proposal: { digest: "sealed-draft" } },
+        }
+      : {}),
+    publishedGitHubDraftProposalDigest,
+  } as AppBuilderWorkflowState;
+  appBuilderWorkflowState.update(() => base);
+  approveRepairFixture(base);
+  await prepareAppCreation({ existingAppChanges: repairFiles }, context);
+  const planned = appBuilderWorkflowState.get();
+  if (planned.phase !== "planned") {
+    throw new Error("fixture");
+  }
+  vi.clearAllMocks();
+  return { applied, planned };
+};
+
+describe("resume the approved build through the planning tool", () => {
+  it.each([undefined, "verified-publication"])(
+    "preserves only the explicit publication marker while retaining the sealed draft for inspection",
+    async (publishedMarker) => {
+      await run(async () => {
+        await prepareRecoveryFixture("reviewed", publishedMarker);
+        await prepareAppCreationTool.execute({ resumeApprovedBuild: true }, hostedRecoveryContext);
+        const resumed = appBuilderWorkflowState.get();
+        if (resumed.phase !== "applied") {
+          throw new Error("fixture");
+        }
+        expect(resumed.publishedGitHubDraftProposalDigest).toBe(publishedMarker);
+        expect(resumed).not.toHaveProperty("githubDraftProposal");
+        // SAFETY: The historical lookup consumes only the same accepted workflow and source binding.
+        const validated = { ...resumed, phase: "validated" } as Extract<
+          AppBuilderWorkflowState,
+          { phase: "validated" }
+        >;
+        expect(priorResumedBuildDraftProposal(validated, context.session.id)?.digest).toBe(
+          "sealed-draft",
+        );
+        expect(priorResumedBuildDraftProposal(validated, "foreign-session")).toBeUndefined();
+        expect(
+          priorResumedBuildDraftProposal(
+            {
+              ...validated,
+              workspace: { ...validated.workspace, workspaceId: "foreign-workspace" },
+            },
+            context.session.id,
+          ),
+        ).toBeUndefined();
+      });
+    },
+  );
+  it.each(["applied", "validation_failed", "reviewed"] as const)(
+    "reopens a hosted %s checkout and retains the suspended proposal",
+    async (phase) => {
+      await run(async () => {
+        const { applied, planned } = await prepareRecoveryFixture(phase);
+        const authority = readPrivateApplyAuthority();
+        await expect(
+          prepareAppCreationTool.execute({ resumeApprovedBuild: true }, hostedRecoveryContext),
+        ).resolves.toEqual({
+          appId: "example",
+          status: "resumed_approved_build",
+        });
+        const resumed = appBuilderWorkflowState.get();
+        expect(resumed).toMatchObject({ phase: "applied", proposal: applied.proposal });
+        expect(resumed).not.toHaveProperty("validationReceipt");
+        expect(resumed).not.toHaveProperty("validationFailure");
+        expect(resumed).not.toHaveProperty("reviewReceipt");
+        expect(readPrivateApplyAuthority()).toEqual(authority);
+        expect(existingAppRepairHistory.get()[0]?.suspendedWorkflow).toEqual(planned);
+        await expect(runnableSelectedApp({ state: resumed })).resolves.toMatchObject({
+          appId: "example",
+          root: "/workspace/repository",
+        });
+        expect(ports.emitProjection).toHaveBeenCalledOnce();
+        expect(ports.execute).not.toHaveBeenCalled();
+        expect(ports.run).not.toHaveBeenCalled();
+        expect(ports.readBinary).not.toHaveBeenCalled();
+      });
+    },
+  );
+
+  it.each(["different-app", "pending", "dispatched"] as const)(
+    "keeps the repair proposal in place for a %s recovery attempt",
+    async (boundary) => {
+      await run(async () => {
+        const { planned } = await prepareRecoveryFixture("applied");
+        if (boundary === "different-app") {
+          appBuilderWorkflowState.update(() => ({
+            ...planned,
+            appSpec: { ...planned.appSpec, appId: "different-app" },
+          }));
+        } else {
+          const grant = readPrivateApplyAuthority().grant;
+          if (grant === null) {
+            throw new Error("fixture");
+          }
+          const scope = { ...grant, proposalDigest: planned.proposal.digest };
+          requestPrivateApplyApproval(scope, "new-build");
+          if (boundary === "dispatched") {
+            recordApprovedPrivateApply(scope, "new-build");
+          }
+        }
+        const before = appBuilderWorkflowState.get();
+        await expect(
+          prepareAppCreationTool.execute({ resumeApprovedBuild: true }, hostedRecoveryContext),
+        ).rejects.toThrow();
+        expect(appBuilderWorkflowState.get()).toEqual(before);
+        expect(ports.execute).not.toHaveBeenCalled();
+        expect(ports.run).not.toHaveBeenCalled();
+        expect(ports.emitProjection).not.toHaveBeenCalled();
+      });
+    },
+  );
+});
 
 describe("explicit same-app private repair through the real planning producer", () => {
   it("produces fresh ordinary plans, preserves old receipts and same profile, and reuses only unchanged prepared preimages", async () => {
