@@ -185,8 +185,19 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
     };
     world.runs.list = () => {
       readOperations.push(["runs.list"]);
-      return Promise.resolve({ data: [...runs.values()], hasMore: false });
+      return Promise.resolve({
+        data: options.omitListedOwner === true ? [runs.get(anchorRunId)] : [...runs.values()],
+        hasMore: false,
+      });
     };
+    if (options.omitListedOwner === true) {
+      world.hooks = {
+        getByToken: (requestedToken) => {
+          assert.equal(requestedToken, inbox);
+          return Promise.resolve({ runId: ownerRunId });
+        },
+      };
+    }
     let parentScans = 0;
     world.events.list = ({ runId, resolveData }) => {
       readOperations.push(["events.list", runId, resolveData]);
@@ -997,6 +1008,7 @@ test("running anchored-result parent is observable only through an opaque lineag
   assert.equal(terminal.collected.boundary.stage, "handoff_parent");
   const observed = await fixture({
     ...options,
+    omitListedOwner: true,
     collectFactory: createOwnedLineagePreflightCollector,
     expectedKind: "preflight",
   });
