@@ -522,3 +522,10 @@ settle its receipt. Pending effects are never replayed blindly. GitHub's merge
 request guards the expected head atomically. Base and ready-cycle changes are
 checked around the request. A merge result and protected hosted app evidence
 remain separate facts.
+
+For an existing repository with native Production delivery, the approved merge
+hands off to the repository's native deploy integration. The PR effect journal
+records GitHub writes in Builder's own storage. This flow has no dependency on
+a Preview app, a managed runtime journal, or synthetic app data. Actual runtime
+bindings are owned by the destination's Production setup. GitHub merge evidence
+and the provider's deployment result are reported separately.

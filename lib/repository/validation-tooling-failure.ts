@@ -36,7 +36,7 @@ export const createValidationToolingFailureObserver = (expectedAppCheckTask?: st
   };
 };
 export const toolingFailureHint =
-  "The validation checker panicked before completing. Preserve the app source and inspect its tooling or execution prerequisites before retrying. If the supported larger private-check profile is appropriate, prepare a same-app proposal with prepare_app_creation privateCompute=private-checks-16gib-v1 and present its ordinary fresh Build approval (8 vCPU, 16 GiB and ephemeral billing) before any apply. Preserve the existing Sandbox, Drive and app destination; a prior approval never authorizes that changed proposal. If profile prerequisites are unavailable, report them without resizing. The exit code alone does not establish an out-of-memory cause.";
+  "The validation checker panicked before completing. Keep the approved proposal and private workspace. Continue implementing the requested app with validate_app_creation using repairOnly and the changed implementationFiles, then start its working preview. Repository validation remains unfinished. Diagnose the checker separately if reviewed delivery requires it. A checker panic is not a reason to request another Build approval. The exit code alone does not establish an out-of-memory cause.";
 
 export const missingAppTaskHint =
   "The selected app's reviewed mise check task is unavailable. Preserve its source and inspect the app-owned task path and executable mode before retrying. Restore it through the normal reviewed Builder repair flow; repeated validation cannot repair a missing task, and this does not authorize changing the app destination or provider resources.";

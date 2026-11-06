@@ -20,6 +20,18 @@ const privateFdFor = (value: string) => {
   return openSync(file, "r");
 };
 
+const expectPrivateFileClosed = (fd: number, original: ReturnType<typeof fstatSync>) => {
+  let current;
+  try {
+    current = fstatSync(fd);
+  } catch (error) {
+    expect(error).toMatchObject({ code: "EBADF" });
+    return;
+  }
+  // The OS can reuse a closed descriptor while other test threads are running.
+  expect([current.dev, current.ino]).not.toEqual([original.dev, original.ino]);
+};
+
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { force: true, recursive: true });
@@ -35,14 +47,16 @@ describe("private migration database URL", () => {
 
   it("reads a synthetic direct URL from a private fd and closes the descriptor", () => {
     const fd = privateFdFor(directUrl);
+    const original = fstatSync(fd);
     expect(readPrivateMigrationDatabaseUrl(fd)).toBe(directUrl);
-    expect(() => fstatSync(fd)).toThrow();
+    expectPrivateFileClosed(fd, original);
   });
 
   it("keeps the existing private application reader pooled-only", () => {
     const fd = privateFdFor(directUrl);
+    const original = fstatSync(fd);
     expect(() => readPrivateDatabaseUrl(fd)).toThrow();
-    expect(() => fstatSync(fd)).toThrow();
+    expectPrivateFileClosed(fd, original);
   });
 
   it.each([
@@ -55,8 +69,9 @@ describe("private migration database URL", () => {
 
   it("closes an fd when migration URL policy validation fails", () => {
     const fd = privateFdFor(pooledUrl);
+    const original = fstatSync(fd);
     expect(() => readPrivateMigrationDatabaseUrl(fd)).toThrow();
-    expect(() => fstatSync(fd)).toThrow();
+    expectPrivateFileClosed(fd, original);
   });
 
   it.each([
@@ -65,8 +80,9 @@ describe("private migration database URL", () => {
     ["malformed", `${directUrl}\n`],
   ])("closes the fd and rejects an %s secret frame", (_label, value) => {
     const fd = privateFdFor(value);
+    const original = fstatSync(fd);
     expect(() => readPrivateMigrationDatabaseUrl(fd)).toThrow();
-    expect(() => fstatSync(fd)).toThrow();
+    expectPrivateFileClosed(fd, original);
   });
 
   it("rejects an invalid fd before attempting to read or close it", () => {

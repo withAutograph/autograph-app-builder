@@ -2279,12 +2279,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
     },
   },
   {
-    files: ["**/lib/repository/arrusted-template.ts"],
-    rules: {
-      "typescript/dot-notation": "off",
-    },
-  },
-  {
     files: [
       "**/app/\\(product\\)/local-oauth/\\[provider\\]/approve/route.ts",
       "**/app/ui/app-builder.test.tsx",
@@ -2536,12 +2530,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
     ],
     rules: {
       "typescript/no-unnecessary-boolean-literal-compare": "off",
-    },
-  },
-  {
-    files: ["**/evals/support/self-reproduction-runtime.ts"],
-    rules: {
-      "typescript/no-unnecessary-type-arguments": "off",
     },
   },
   {
@@ -3248,12 +3236,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
     ],
     rules: {
       "typescript/prefer-regexp-exec": "off",
-    },
-  },
-  {
-    files: ["**/lib/agent/product-acceptance.ts"],
-    rules: {
-      "typescript/prefer-string-starts-ends-with": "off",
     },
   },
   {

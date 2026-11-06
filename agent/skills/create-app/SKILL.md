@@ -265,9 +265,26 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    integration reference for app-owned UI conflicts and source-only removal.
    After apply and any requested integration installation
    succeed, start a requested private preview directly with `start_app_preview`.
-   Lint is advisory for private previews and must not precede or block startup.
-   For reviewed delivery, continue with `validate_app_creation`. It runs the repository's normal
-   commands against the current applied app. When it
+   Lint is advisory. Run it separately when explicitly requested.
+   If the applied app is still a scaffold or its preview needs a repair, use
+   `validate_app_creation` with `repairOnly: true` and the corrected
+   `implementationFiles`. This writes under the original Build approval and
+   returns before running repository checks. Then open the updated app with
+   `start_app_preview`. Keep the existing proposal for these repairs.
+   An unapplied same-app repair proposal can leave the workflow in `planned`
+   while the previously approved implementation is still saved. When the user
+   wants that implementation and preview or repair diagnostics identify this
+   case, call `prepare_app_creation({ resumeApprovedBuild: true })` to return
+   to its applied workspace. After `resumed_approved_build`, start the preview.
+   For a concrete source fix within the original Build scope, resume that
+   workspace first, then pass the corrected files to `validate_app_creation`
+   with `repairOnly: true`. Builder retains the unapplied draft in repair
+   history. When the user wants those changes, follow the ordinary planning
+   and Build controls for the changed scope.
+   For reviewed delivery, continue with `validate_app_creation`. It runs the
+   selected repository's native build and declared tests against the current
+   applied app. If a saved attempt failed in the old lint checker, keep that
+   diagnostic and use the current delivery validation in the same scope. When it
    reports a repairable failure, provide corrected `implementationFiles` to
    `validate_app_creation` and retry in the same approved checkout. Use the
    returned diagnostics and status; do not invent extra validation capabilities
@@ -338,9 +355,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    This restores its exact bytes and mode, including binary and executable files,
    while preserving other repairs. Do not retype historical bytes or supply an
    alternate revision. Restore invalidates saved validation and review; validate
-   the complete candidate and review both diffs again. Run the selected app's schema,
-   repository checks and applicable guard on the reconciled
-   candidate with `validate_github_draft_pr_reconciliation`.
+   the complete candidate and review both diffs again. Run the selected app's
+   schema preparation, native build, and declared tests on the reconciled
+   candidate with `validate_github_draft_pr_reconciliation`. Request browser
+   tests and additional checks for the specific changes they cover. Keep
+   explicitly requested lint separate and advisory.
    If an existing app dependency needs shared Bun catalog alignment, use
    `normalize_github_draft_pr_dependency_catalog` with its package name. It operates
    on this candidate, preserves the existing concrete version, normalizes its
@@ -458,7 +477,8 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    when an accepted walkthrough requires actual hosted actors, exercise them
    through the authorized hosted path and report their independent readbacks.
 
-   When validation returns `productionHandoff`, follow
+   When the app needs new Production runtime bindings and validation returns
+   `productionHandoff`, follow
    [Production handoff](../../../docs/production-readiness-handoff.md) for
    reviewed Auth identity, explicit QA access and runtime binding delivery.
    Include its declared app route, roles, and blockers in the result. Keep the
@@ -489,12 +509,21 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    another outcome. Keep internal execution mechanics out of the public
    conversation.
 
-## Normal public app delivery
+## Production delivery
 
-When the requested result is a public app URL with application sign-in, use the
-normal Builder destination and public-release capability. Vercel account sign-in
-is not an app access requirement. Do not start a separate native Preview target,
-acceptance project or Auth project to satisfy this journey.
+For an existing repository with native deployment, including Arrusted, use the
+selected repository's reviewed PR delivery. After the approved merge, report
+the native Production deployment outcome when available. A separate Preview,
+synthetic storage, private browser run, or managed public-release plan is not a
+step in this route. If the app actually needs new runtime bindings, use the
+repository's protected Production setup for those bindings and keep the same
+destination and app identity.
+
+### Builder-created deployment destinations
+
+Use the managed public-release capability for an owned Builder-created
+repository and project. App sign-in uses the application's Auth at its public
+domain. Keep the resource preparation and release in that same project.
 
 - Keep the accepted app and saved session. Use its normal owned provisioned
   destination. If setup reports `builder_destination_required`, direct the user

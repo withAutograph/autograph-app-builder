@@ -71,6 +71,11 @@ repair or retry instruction. If the response cannot carry all diagnostics,
 preserve the complete sanitized output in retrievable storage and provide an
 excerpt with a continuation reference; never discard the only copy. Follow the
 [Builder workload capacity policy](builder-workload-capacity-policy.md).
+For delivery, Builder uses the selected checkout's native build runner and its
+output verification, including on older checkouts. It compiles the schema
+before the build when that validation pass has not already compiled it.
+Application tests run separately and lint remains advisory. The validation
+receipt records the command that ran.
 For hosted app checks, each stdout and stderr channel is sanitized while it is
 streamed to tenant and session scoped immutable chunks. A validation receipt
 contains each channel's log ID, SHA-256 digest, byte length, and chunk count.

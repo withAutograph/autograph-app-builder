@@ -34,7 +34,10 @@ import type {
   DraftReconciliationCandidate,
 } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
-import { supportedValidationCommands } from "@/lib/repository/supported-template";
+import {
+  repositoryDeliveryBuildCommand,
+  supportedValidationCommands,
+} from "@/lib/repository/supported-template";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 import {
   sandboxValidationCommandExecutor,
@@ -421,12 +424,24 @@ const currentValidationStep = (
       return { ...step, command: appBrowserTestCommand(appId) };
     }
     case "check": {
+      const currentBuild = repositoryDeliveryBuildCommand(appId, alreadyCompiled);
+      if (
+        [
+          repositoryDeliveryBuildCommand(appId),
+          repositoryDeliveryBuildCommand(appId, true),
+          `mise run --skip-tools app:check ${appId}`,
+          `mise run --no-deps --skip-tools app:check ${appId}`,
+          `mise run --no-deps --skip-deps --skip-tools app:check ${appId}`,
+        ].includes(step.command)
+      ) {
+        return { ...step, command: currentBuild };
+      }
       const planned = supportedValidationCommands(appId, testShards, { alreadyCompiled }).find(
         (candidate) => {
-          const legacy =
-            candidate.name === "check-build"
-              ? `mise run --skip-tools app:check ${appId}`
-              : `mise run --skip-tools app:test ${appId} ${candidate.command.split(" ").at(-1)}`;
+          if (candidate.name !== "test") {
+            return false;
+          }
+          const legacy = `mise run --skip-tools app:test ${appId} ${candidate.command.split(" ").at(-1)}`;
           const standalone = candidate.command.replace("--skip-deps ", "");
           const precompiled = standalone.replace("--skip-tools", "--skip-deps --skip-tools");
           return [candidate.command, standalone, precompiled, legacy].includes(step.command);
@@ -1068,7 +1083,7 @@ export const validateDraftReconciliation = async (
 
 export default defineTool({
   description:
-    "Restore this candidate's locked dependencies using the existing sandbox cache, compile the selected app once for this coherent candidate validation, then run repository app:check and all declared app:test shards without repeating their compile dependency, optional local/browser and check: tasks, and capture its actual checked release. Each coherent validation pass checks its own locked dependency graph before running checks; preserve earlier source and validation evidence. Failures identify the command and cause. This does not update GitHub.",
+    "Restore this candidate's locked dependencies using the existing sandbox cache, compile the selected app once for this coherent candidate validation, then run the native application build and all declared app:test shards without repeating compilation, run selected local or browser checks, and capture its actual checked release. Keep additionalCheckTasks empty for ordinary delivery and use it only for an explicitly requested check. Each coherent validation pass checks its own locked dependency graph before running checks; preserve earlier source and validation evidence. Failures identify the command and cause. This does not update GitHub.",
   execute: validateDraftReconciliation,
   inputSchema: z.strictObject({
     additionalCheckTasks: z.array(z.string().regex(/^check:[A-Za-z0-9:_-]+$/u)).default([]),

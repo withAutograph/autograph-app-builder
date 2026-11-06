@@ -187,6 +187,7 @@ export default defineTool({
       executor: withImplementationFiles(
         fixture ? fixtureApplyCommandExecutor() : sandboxApplyCommandExecutor(),
         implementationFiles,
+        { reconcileNewWorkspace: !fixture },
       ),
       proposal: current.proposal.target,
       sandbox,

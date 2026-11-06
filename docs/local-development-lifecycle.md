@@ -449,17 +449,14 @@ or reprovisions resources to bypass the mismatch.
 
 ## Native checker prerequisites
 
-A native validation-checker panic is a tooling prerequisite, not an app lint or
-type failure. Builder retains the actual exit status and bounded sanitized log
-references and stops automatic private-build continuation for that observation.
-An exit code such as 134 without a positive panic diagnostic does not establish
-a cause or prove an out-of-memory condition. Preserve the same app/session and
-source; inspect the actual tooling/compute prerequisite and obtain the ordinary
-fresh approval before changing a compute profile. A later ordinary user turn
-may retry validation after that prerequisite is addressed. Existing failed
-receipts are historical facts and are never rewritten to claim a later result.
+A native checker panic records a tooling failure. Builder retains the actual
+exit status and bounded sanitized log references. A historical lint checker
+panic stays in the session history while Builder continues ordinary delivery
+with the selected repository's native app build and declared tests. An exit
+code such as 134 alone gives no cause for the failure. Use the actual diagnostic
+to investigate a checker when the user requests it.
 
-For a qualifying native-checker failure, the read-only
+For an explicitly selected investigation of a qualifying checker failure, the read-only
 `prepare_app_creation({privateCompute: "private-checks-16gib-v1"})` path can offer
 the supported larger profile. It must resolve the current Sandbox/Drive,
 maintained check task and linked-team capacity, then obtain a fresh Build card
@@ -567,15 +564,12 @@ call ID. Compatibility still requires the original completed reconciliation call
 and its identical receipt in the same complete owned history; the later no-op
 does not create or replace that historical proof.
 
-A native `mise ERROR no task //apps/<selected-app>:check found` failure is a
-validation tooling prerequisite, not an ordinary app lint or test failure. Builder
-retains that typed failure and stops automatic validation continuation. Inspect
-the selected app-owned task's source and executable mode before explicitly
-retrying. A source repair must use an available normal Builder edit/replan path
-and its ordinary approvals; if no supported repair path is available, report that
-product gap rather than retrying validation; this grants no new
-provider, destination, or source-change authority. Other apps' tasks and ordinary
-compiler, lint, and assertion failures do not acquire this classification.
+A historical `mise ERROR no task //apps/<selected-app>:check found` receipt
+records that the old checker task could not run. Resume ordinary validation with
+the current native app build and declared tests. For an explicitly selected
+checker investigation, inspect the selected task's source and executable mode
+before retrying that task. Use the normal Builder edit or planning path for a
+source repair.
 
 For an already approved private-check profile, ordinary
 `validate_app_creation` repair may explicitly upsert that same app's reviewed
@@ -585,10 +579,9 @@ policy, including executable mode. No-files validation, deletion, another path,
 custom recipe, or changed app/proposal/workspace cannot trigger this repair. It
 creates no approval and cannot resize compute or change provider resources.
 
-A retained typed tooling prerequisite stops automatic validation continuation.
-An explicit `validate_app_creation` retry runs the current checkout's checks
-and reports the new result, including a current failure if the tool remains
-unavailable. The prior failure does not certify the current checkout.
+A tooling failure in the current native build or test still needs diagnosis.
+An explicit `validate_app_creation` retry runs current validation and records
+its own result while preserving the earlier receipt.
 
 Private browser tasks use the checked `app:describe` catalog entry independently
 of the exact Auth origin. A restored private runtime projects that entry even

@@ -15,9 +15,11 @@ The intended complete-app journey has four business phases:
 2. **Build.** Implement the approved app, including its authenticated backend and
    persistence. Keep the private checkout and accepted session; repair concrete
    failures through supported tools. Start the applied app as soon as it can run
-   and use its working preview for feedback. Lint, repository validation, and
-   independent review are separate from startup. Use focused checks during
-   implementation and one final local acceptance pass when the behavior is ready.
+   and use its working preview for feedback. For reviewed delivery, validate the
+   selected repository's native app build and declared app tests. Run explicitly
+   requested lint separately and report its findings as advisory. Use focused
+   checks during implementation and one final local acceptance pass when the
+   behavior is ready.
 3. **Independent review.** Assess the implementation against the original brief,
    product clarifications and accepted plan. Keep technical checks, independent
    source judgments and executed product behavior distinct. Reuse current
