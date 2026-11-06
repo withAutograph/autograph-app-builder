@@ -240,29 +240,28 @@ activation proof. Disconnecting a provider blocks new access but does not revoke
 credentials already issued. Never remove persistent resources during turn
 cleanup or overwrite another app's shared authentication bindings.
 
-Organize the complete-app journey around the four business phases in
-`docs/full-app-authoring.md`: initial version, build,
-independent review, and requested delivery. These phases are not a promise of
-exactly four model requests. Reuse current assessment and behavioral evidence;
-do not add a second independent review or repeat a covered browser scenario for
-ceremony. Technical validation defers independent source assessment to final
-change acceptance.
+Organize the app journey around the initial version, build, review of the
+source to be published, and requested delivery. Reuse current evidence when the
+app calls for testing or independent assessment.
+
+For a selected existing repository with native Production deployment, including
+Arrusted, publish the reviewed draft, use the separate approved PR Ready and
+merge flow, and report the native deployment result. Hosted Preview, a synthetic
+runtime journal, and external qualification are optional and do not precede this
+handoff. For new runtime bindings the app actually needs, use the destination's
+protected Production setup. The creator supplies the repository and app
+requirements; keep infrastructure details within the operator flow.
 Preserve separate effect approvals and report unavailable deployment/submission
 capabilities as delivery work still required.
 
 For reviewed delivery of applied changes, call `validate_app_creation` in the approved
 private checkout after apply succeeds. Published-version restoration may proceed
 first while that candidate's work remains deferred. Applied files are not
-validated files. Successful repository commands establish technical validation,
-not proof that the accepted product behaviors
-work. Exercise those outcomes against the actual implementation and preserve
-honest distinctions between verified behavior and behavior still unassessed.
-A deferred or unassessed source assessment from validation is expected; do not
-rerun validation merely to obtain independent review. When implementation and
-required behavioral checks are ready, inspect `change_set_status` and call
-`accept_change_set`. This required final independent review assesses current
-source against the original request and accepted plan, or reuses a matching
-completed assessment. If it returns `source_review_pending`, automatically call
+validated files. Successful repository commands establish technical validation.
+Run app-owned behavior checks when the app calls for them and report what they
+cover. Inspect `change_set_status` and call `accept_change_set` after the build
+succeeds. Leave `runSourceReview` unset for ordinary delivery. Set it only when
+an independent source assessment serves the app's needs. If it returns `source_review_pending`, automatically call
 `review-current-product-source` with its exact opaque reference, then call
 `accept_change_set` with the returned `sourceReview`. Each review round is a
 private durable checkpoint. If that workflow is unavailable or interrupted,
@@ -360,8 +359,7 @@ port. A page that responds with HTTP 200 can still contain an application error.
 Give that URL to the user, including its expiry. Reopen it with the same supported
 tool when asked after expiry or a runtime restart. A reachable page is delivery
 evidence, not proof of persistence, authentication, or independent orchestration.
-When the selected app defines an app-owned `test-e2e` task and its accepted
-walkthrough uses forms or other browser-only interactions, use
+When the app calls for browser verification and defines a `test-e2e` task, use
 `run-app-browser-tests` after preparing any required sandbox-local data. Report
 the exact scenarios asserted and the browser task result; do not treat a passing
 task as proof of behavior it does not cover.
