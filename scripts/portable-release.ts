@@ -3,6 +3,9 @@ import { gzipSync } from "node:zlib";
 
 import { isReservedPublicReleaseHostname } from "../lib/plugin/public-release-endpoint.ts";
 
+const invalidEndpointMessage =
+  "Endpoint must be a credential-free, deployed, literal HTTPS origin.";
+
 export const TOOL_NAMES = [
   "autograph_start",
   "autograph_get",
@@ -19,11 +22,10 @@ export const sha256 = (value: Uint8Array | string) =>
 export function hasCanonicalFetchRemote(remoteOutput: string, expectedRepository: string) {
   return remoteOutput.split("\n").some((line) => {
     const fields = line.trim().split(/\s+/u);
-    if (
-      (fields.length !== 3 && fields.length !== 4) ||
-      fields[2] !== "(fetch)" ||
-      (fields.length === 4 && fields[3] !== "[blob:none]")
-    ) {
+    if ((fields.length !== 3 && fields.length !== 4) || fields[2] !== "(fetch)") {
+      return false;
+    }
+    if (fields.length === 4 && fields[3] !== "[blob:none]") {
       return false;
     }
     const [, remoteUrl] = fields;
@@ -33,7 +35,7 @@ export function hasCanonicalFetchRemote(remoteOutput: string, expectedRepository
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function releaseEndpoint(value: string | undefined) {
-  if (!value) {
+  if (value === undefined || value === "") {
     throw new Error("Usage: --endpoint https://agent.example.com");
   }
   const endpoint = new URL(value);
@@ -41,14 +43,20 @@ export function releaseEndpoint(value: string | undefined) {
     endpoint.protocol !== "https:" ||
     endpoint.username ||
     endpoint.password ||
-    endpoint.pathname !== "/" ||
+    endpoint.pathname !== "/"
+  ) {
+    throw new Error(invalidEndpointMessage);
+  }
+  if (
     endpoint.search ||
     endpoint.hash ||
     endpoint.hostname.endsWith(".") ||
-    isReservedPublicReleaseHostname(endpoint.hostname) ||
-    value !== endpoint.origin
+    isReservedPublicReleaseHostname(endpoint.hostname)
   ) {
-    throw new Error("Endpoint must be a credential-free, deployed, literal HTTPS origin.");
+    throw new Error(invalidEndpointMessage);
+  }
+  if (value !== endpoint.origin) {
+    throw new Error(invalidEndpointMessage);
   }
   return endpoint.origin;
 }
@@ -65,7 +73,7 @@ export function registeredAutographToolNames(handlerSource: string) {
   ) {
     throw new Error(`The MCP handler must register exactly ${TOOL_NAMES.join(", ")} in order.`);
   }
-  return names as unknown as typeof TOOL_NAMES;
+  return [...TOOL_NAMES] as const;
 }
 
 const pad = (value: string, length: number) => Buffer.from(value).subarray(0, length);
