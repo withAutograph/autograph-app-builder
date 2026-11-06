@@ -8,7 +8,7 @@ mise run package:test-portable
 mise run format-check
 mise run lint
 mise run typecheck
-mise run test:unit
+mise run test:unit -- --project=unit
 mise run storybook:visual
 mise run storybook:test
 mise run test:postgres-sandbox-leases

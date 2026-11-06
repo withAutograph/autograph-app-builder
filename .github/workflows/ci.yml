@@ -92,7 +92,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: mise run dependencies:install
-      - run: mise run test:unit -- --shard=${{ matrix.shard }}/4
+      - run: mise run test:unit -- --project=unit --shard=${{ matrix.shard }}/4
 
   repository-storybook:
     runs-on: ubuntu-24.04
