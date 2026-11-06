@@ -121,21 +121,61 @@ const expectedCommands = {
   validation: SUPPORTED_REPOSITORY_CONTRACT.validationCommands,
 } as const;
 
+// The runner resolves the selected app's native build and verifies its output. The
+// older app:check task always runs lint before build, even with the delivery flag.
+const deliveryBuildProgram = `
+const appId = process.argv[1];
+const stateDirectory = process.env.APP_RUNTIME_STATE_DIR;
+delete process.env.APP_RUNTIME_STATE_DIR;
+if (stateDirectory) {
+  const file = Bun.file(stateDirectory + "/environment.json");
+  if (await file.exists()) {
+    const runtime = await file.json().catch(() => {
+      throw new Error("Could not read the prepared local app environment.");
+    });
+    const names = [
+      appId.toUpperCase().replaceAll("-", "_") + "_DATABASE_URL",
+      "DATABASE_URL",
+      "DATABASE_URL_UNPOOLED",
+      "PLATFORM_AUTH_DATABASE_URL",
+      "PLATFORM_AUTH_TRUSTED_ORIGINS",
+      "BETTER_AUTH_APP_NAME",
+      "BETTER_AUTH_URL",
+      "BETTER_AUTH_SECRET",
+    ];
+    for (const name of names) {
+      if (typeof runtime?.[name] === "string") process.env[name] = runtime[name];
+    }
+  }
+}
+const { runApplicationTasks } = await import("./.config/mise/scripts/repository/app-validation.ts");
+await runApplicationTasks(process.cwd(), appId, ["build"]);
+`.trim();
+
+const repositoryDeliveryBuild = (appId: string) =>
+  `BUN_OPTIONS="\${BUN_OPTIONS:+$BUN_OPTIONS }--conditions=source" mise exec --no-deps -- bun -e '${deliveryBuildProgram}' ${appId}` as const;
+
+export const repositoryDeliveryBuildCommand = (appId: string, alreadyCompiled?: true) => {
+  if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId)) {
+    throw new Error("The validation application id is invalid.");
+  }
+  return alreadyCompiled === true
+    ? repositoryDeliveryBuild(appId)
+    : (`mise run --no-deps --skip-tools app:compile ${appId} && ${repositoryDeliveryBuild(appId)}` as const);
+};
+
 export const supportedValidationCommands = function supportedValidationCommands(
   appId: string,
   testShards: readonly string[] = SUPPORTED_VALIDATION_TEST_SHARDS,
   options?: { alreadyCompiled?: true },
 ) {
-  if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId)) {
-    throw new Error("The validation application id is invalid.");
-  }
   if (testShards.some((shard) => !/^[1-9][0-9]*\/[1-9][0-9]*$/u.test(shard))) {
     throw new Error("The validation test shard set is invalid.");
   }
   const compileDependency = options?.alreadyCompiled === true ? "--skip-deps " : "";
   return [
     {
-      command: `mise run --no-deps ${compileDependency}--skip-tools app:check ${appId}` as const,
+      command: repositoryDeliveryBuildCommand(appId, options?.alreadyCompiled),
       name: "check-build" as const,
     },
     ...testShards.map((shard) => ({

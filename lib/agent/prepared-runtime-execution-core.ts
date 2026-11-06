@@ -100,7 +100,7 @@ export interface PreparedRuntimeExecution {
   stateDirectory: string;
   prepareAuthenticatedOrigin: (origin: string) => Promise<void>;
   runTask: (input: {
-    task: "test-e2e" | "repository-check" | "repository-test";
+    task: "test-e2e" | "repository-test";
     commandId?: string;
     commandCheckpoint?: (commandId: string) => Promise<void>;
     allowDispatch?: boolean;

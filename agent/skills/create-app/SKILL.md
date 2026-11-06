@@ -265,7 +265,7 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    integration reference for app-owned UI conflicts and source-only removal.
    After apply and any requested integration installation
    succeed, start a requested private preview directly with `start_app_preview`.
-   Lint is advisory for private previews and must not precede or block startup.
+   Lint is advisory. Run it separately when explicitly requested.
    If the applied app is still a scaffold or its preview needs a repair, use
    `validate_app_creation` with `repairOnly: true` and the corrected
    `implementationFiles`. This writes under the original Build approval and
@@ -281,8 +281,10 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    with `repairOnly: true`. Builder retains the unapplied draft in repair
    history. When the user wants those changes, follow the ordinary planning
    and Build controls for the changed scope.
-   For reviewed delivery, continue with `validate_app_creation`. It runs the repository's normal
-   commands against the current applied app. When it
+   For reviewed delivery, continue with `validate_app_creation`. It runs the
+   selected repository's native build and declared tests against the current
+   applied app. If a saved attempt failed in the old lint checker, keep that
+   diagnostic and use the current delivery validation in the same scope. When it
    reports a repairable failure, provide corrected `implementationFiles` to
    `validate_app_creation` and retry in the same approved checkout. Use the
    returned diagnostics and status; do not invent extra validation capabilities
@@ -358,9 +360,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    This restores its exact bytes and mode, including binary and executable files,
    while preserving other repairs. Do not retype historical bytes or supply an
    alternate revision. Restore invalidates saved validation and review; validate
-   the complete candidate and review both diffs again. Run the selected app's schema,
-   repository checks, browser tests, and applicable guard on the reconciled
-   candidate with `validate_github_draft_pr_reconciliation`.
+   the complete candidate and review both diffs again. Run the selected app's
+   schema preparation, native build, and declared tests on the reconciled
+   candidate with `validate_github_draft_pr_reconciliation`. Request browser
+   tests and additional checks for the specific changes they cover. Keep
+   explicitly requested lint separate and advisory.
    If an existing app dependency needs shared Bun catalog alignment, use
    `normalize_github_draft_pr_dependency_catalog` with its package name. It operates
    on this candidate, preserves the existing concrete version, normalizes its

@@ -34,6 +34,7 @@ import {
   deriveNormalizedChangeSet,
 } from "../repository/reviewed-change-set";
 import { validationBinding } from "../repository/target-validation";
+import { repositoryDeliveryBuildCommand } from "../repository/supported-template";
 import type { TargetApplyReceipt } from "../repository/target-apply";
 import { repositoryAccessReceiptState } from "./repository-access-state";
 import { recordApprovedPrivateApply, requestPrivateApplyApproval } from "./private-apply-authority";
@@ -47,7 +48,7 @@ const appPath = "apps/orchard/value.js";
 const original = 'export const value = "original-native";\n';
 const edited = 'export const value = "managed-public-keys";\n';
 const install = "mise exec --no-deps -- bun install --frozen-lockfile";
-const check = "mise run --no-deps --skip-deps --skip-tools app:check orchard";
+const check = repositoryDeliveryBuildCommand("orchard", true);
 const test = "mise run --no-deps --skip-deps --skip-tools app:test orchard 1/1";
 const git = (cwd: string, ...args: string[]) =>
   // oxlint-disable-next-line sonarjs/no-os-command-from-path -- Fixed Git executable operates only in this owned temporary fixture.
@@ -158,8 +159,7 @@ const fixture = () => {
         };
       }
       const technical =
-        input.command.includes(" app:check orchard") ||
-        input.command.includes(" app:test orchard ");
+        input.command.includes(check) || input.command.includes(" app:test orchard ");
       if (technical) {
         commands.push({ root: cwd, command: input.command });
         if (failure === "interrupted") {

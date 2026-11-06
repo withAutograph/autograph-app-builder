@@ -14,6 +14,7 @@ import type { SandboxSession } from "eve/sandbox";
 
 import type { TargetApplyReceipt } from "./target-apply";
 import { localRuntimeEnvironmentPath } from "./runtime-environment";
+import { repositoryDeliveryBuildCommand } from "./supported-template";
 import type { ValidationCommandExecutor } from "./target-validation";
 import type {
   ValidationLogKey,
@@ -166,7 +167,7 @@ describe("target validation", () => {
         apply,
         attempt,
         executor: async ({ command, onChunk }) => {
-          if (command.includes(" app:check ")) {
+          if (command === repositoryDeliveryBuildCommand("example")) {
             vi.advanceTimersByTime(125);
             return { exitCode: 0, stderr: "", stdout: "" };
           }
@@ -298,14 +299,7 @@ describe("target validation", () => {
   });
 
   it.each([
-    ["mise run --no-deps --skip-tools app:check example", "repository-check", undefined, undefined],
     ["mise run --no-deps --skip-tools app:test example 1/1", "repository-test", "1/1", undefined],
-    [
-      "mise run --no-deps --skip-deps --skip-tools app:check example",
-      "repository-check",
-      undefined,
-      true,
-    ],
     [
       "mise run --no-deps --skip-deps --skip-tools app:test example 1/1",
       "repository-test",
@@ -351,10 +345,7 @@ describe("target validation", () => {
       expect(result).toMatchObject({ exitCode: 0, stdout: "checks passed" });
       expect(runTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          environment: {
-            ...environment,
-            ...(task === "repository-check" ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
-          },
+          environment,
           onChunk,
           task,
           ...(shard ? { shard } : {}),
@@ -465,12 +456,22 @@ describe("target validation", () => {
     });
     expect(JSON.stringify(result)).not.toContain("secret-test-value");
   });
-  it("blocks automatic validation retry for the exact native missing selected-app check task", async () => {
+  it("preserves recovery guidance for a retained native missing selected-app check task", async () => {
     const { sandbox } = sandboxFixture();
+    const attempt = createTargetValidationAttempt(apply, "missing-native-app-task");
     const result = await executeProposalBoundValidation({
       appId: "example",
       apply,
-      attempt: createTargetValidationAttempt(apply, "missing-native-app-task"),
+      attempt: {
+        ...attempt,
+        commands: [
+          {
+            name: "check-build",
+            command: "mise run --no-deps --skip-tools app:check example",
+            validationRoot: apply.applyRoot,
+          },
+        ],
+      },
       executor: async ({ onChunk }) => {
         await onChunk?.("stderr", "mise ERROR no task //apps/example:che");
         await onChunk?.("stderr", "ck found\n");
@@ -789,7 +790,7 @@ describe("target validation", () => {
     expect(result.receipt.commandFailure?.hint).toContain("Sandbox command launch failed");
     expect(result.receipt.commandFailure?.hint).toContain("workspace unavailable for apps/example");
     expect(result.receipt.commandFailure?.hint).toContain(
-      "mise run --no-deps --skip-tools app:check example",
+      repositoryDeliveryBuildCommand("example"),
     );
     expect(JSON.stringify(result)).not.toContain("private-value");
   });
@@ -915,9 +916,7 @@ describe("target validation", () => {
   });
 
   it.each([
-    ["mise run --no-deps --skip-tools app:check example", undefined],
     ["mise run --no-deps --skip-tools app:test example 1/1", undefined],
-    ["mise run --no-deps --skip-deps --skip-tools app:check example", true],
     ["mise run --no-deps --skip-deps --skip-tools app:test example 1/1", true],
   ] as const)(
     "runs the repository-owned validation task once: %s",
@@ -947,14 +946,13 @@ set -e
 (
 ${sourceDeclaredToolchainActivationCommand()}
 )
-if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run --no-deps app:runtime run example ${command.includes(" app:check ") ? "repository-check" : "repository-test 1/1"}; else ${command}; fi
+if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run --no-deps app:runtime run example repository-test 1/1; else ${command}; fi
 ) > "$log" 2>&1
 status=$?
 cat "$log"
 rm -f "$log"
 exit "$status"`,
         env: {
-          ...(command.includes(" app:check ") ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
           ...(alreadyCompiled ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
           APP_RUNTIME_STATE_DIR: path.posix.dirname(
             localRuntimeEnvironmentPath("/workspace/repository", "example"),
@@ -966,9 +964,7 @@ exit "$status"`,
   );
 
   it.each([
-    [false, "mise run --no-deps --skip-tools app:check example", "repository-check"],
     [false, "mise run --no-deps --skip-tools app:test example 1/1", "repository-test 1/1"],
-    [true, "mise run --no-deps --skip-tools app:check example", "repository-check"],
     [true, "mise run --no-deps --skip-tools app:test example 1/1", "repository-test 1/1"],
   ] as const)(
     "hands compiler inputs and the prepared state directory to mise with streaming=%s for %s",
@@ -1056,7 +1052,6 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
         expect((streaming ? spawn : run).mock.calls[0]?.[0].env).toEqual({
           APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
           APP_RUNTIME_STATE_DIR: stateDirectory,
-          ...(runtimeTask === "repository-check" ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
         });
         expect(streaming ? run : spawn).not.toHaveBeenCalled();
       } finally {
@@ -1065,6 +1060,122 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
       }
     },
   );
+
+  it.each([
+    { outcome: "build", exitCode: 0 },
+    { outcome: "already compiled", alreadyCompiled: true as const, exitCode: 0 },
+    { outcome: "native output rejected", exitCode: 42 },
+    { outcome: "compile failed", exitCode: 43 },
+  ])("executes the legacy checkout's build-only runner: $outcome", async (scenario) => {
+    const directory = mkdtempSync(path.join(tmpdir(), "builder-native-delivery-"));
+    const environmentPath = localRuntimeEnvironmentPath(directory, "example");
+    const stateDirectory = path.posix.dirname(environmentPath);
+    try {
+      mkdirSync(stateDirectory, { mode: 0o700, recursive: true });
+      writeFileSync(
+        environmentPath,
+        JSON.stringify({
+          BETTER_AUTH_SECRET: "local-only-fixture",
+          UNRELATED_RUNTIME_VALUE: "must-not-enter-build",
+        }),
+        { mode: 0o600 },
+      );
+      mkdirSync(path.join(directory, ".config/mise/scripts/repository"), { recursive: true });
+      writeFileSync(path.join(directory, ".config/mise/config.toml"), "[tools]\n");
+      writeFileSync(path.join(directory, "source-cue"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      writeFileSync(
+        path.join(directory, "bun"),
+        '#!/bin/sh\nPATH="$FIXTURE_SOURCE_PATH" exec bun "$@"\n',
+        { mode: 0o755 },
+      );
+      writeFileSync(
+        path.join(directory, "mise"),
+        `#!/bin/sh
+case "$1" in
+ trust|install) exit 0 ;;
+ which) printf '%s\\n' "$PWD/source-cue"; exit 0 ;;
+esac
+if [ "$*" = "run --no-deps --skip-tools app:compile example" ]; then
+  if [ -n "$BETTER_AUTH_SECRET" ]; then exit 51; fi
+  if [ "$FIXTURE_OUTCOME" = "compile failed" ]; then exit 43; fi
+  touch .compiled
+  printf 'compiled selected schema\\n'
+  exit 0
+fi
+if [ "$1" = exec ] && [ "$2" = --no-deps ] && [ "$3" = -- ]; then
+  shift 3
+  exec "$@"
+fi
+printf 'legacy app:check invoked\\n'
+exit 134
+`,
+        { mode: 0o755 },
+      );
+      writeFileSync(
+        path.join(directory, ".config/mise/scripts/repository/app-validation.ts"),
+        `export async function runApplicationTasks(root, appId, tasks) {
+  if (root !== process.cwd() || appId !== "example" || tasks.join() !== "build") process.exit(134);
+  if (process.env.BETTER_AUTH_SECRET !== "local-only-fixture") process.exit(52);
+  if (process.env.UNRELATED_RUNTIME_VALUE || process.env.APP_RUNTIME_STATE_DIR) process.exit(53);
+  if (!process.env.BUN_OPTIONS?.includes("--conditions=source")) process.exit(55);
+  const compiled = await Bun.file(root + "/.compiled").exists();
+  if (compiled === (process.env.FIXTURE_OUTCOME === "already compiled")) process.exit(54);
+  if (process.env.FIXTURE_OUTCOME === "native output rejected") {
+    console.error("native output verification rejected");
+    process.exit(42);
+  }
+  console.log("verified selected native output");
+}
+`,
+      );
+      const run = vi.fn((input: Parameters<SandboxSession["run"]>[0]) => {
+        const result = spawnSync("/bin/bash", ["-c", input.command], {
+          cwd: directory,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            ...input.env,
+            BETTER_AUTH_SECRET: "",
+            FIXTURE_OUTCOME: scenario.outcome,
+            FIXTURE_SOURCE_PATH: process.env.PATH ?? "",
+            PATH: `${directory}:${process.env.PATH ?? ""}`,
+          },
+          timeout: 5000,
+        });
+        if (result.error !== undefined) {
+          throw result.error;
+        }
+        return Promise.resolve({
+          exitCode: result.status ?? -1,
+          stderr: result.stderr,
+          stdout: result.stdout,
+        });
+      });
+      const command = repositoryDeliveryBuildCommand("example", scenario.alreadyCompiled);
+      const result = await sandboxValidationCommandExecutor({
+        alreadyCompiled: scenario.alreadyCompiled,
+      })({
+        appId: "example",
+        command,
+        sandbox: { run } as unknown as SandboxSession,
+        validationRoot: directory,
+      });
+      expect(run).toHaveBeenCalledOnce();
+      expect(run.mock.calls[0]?.[0].command).toContain(command);
+      expect(result.exitCode).toBe(scenario.exitCode);
+      expect(result.stdout).not.toContain("legacy app:check invoked");
+      expect(result.stdout).not.toContain("local-only-fixture");
+      if (scenario.exitCode === 0) {
+        expect(result.stdout).toContain("verified selected native output");
+      }
+      if (scenario.outcome === "already compiled") {
+        expect(result.stdout).not.toContain("compiled selected schema");
+      }
+    } finally {
+      rmSync(stateDirectory, { force: true, recursive: true });
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
 
   it("does not validate a resumed workspace when declared tool activation fails", async () => {
     const directory = mkdtempSync(path.join(tmpdir(), "builder-toolchain-failure-"));
@@ -1099,7 +1210,7 @@ exit 99
       });
       const result = await sandboxValidationCommandExecutor()({
         appId: "example",
-        command: "mise run --no-deps --skip-tools app:check example",
+        command: repositoryDeliveryBuildCommand("example"),
         sandbox: { run } as unknown as SandboxSession,
         validationRoot: directory,
       });

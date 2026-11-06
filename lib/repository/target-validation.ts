@@ -14,6 +14,7 @@ import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
 import {
+  repositoryDeliveryBuildCommand,
   supportedValidationCommands,
   supportedValidationTestShards,
   SUPPORTED_VALIDATION_TEST_SHARDS,
@@ -33,7 +34,8 @@ export { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 
 export type TargetValidationCommand =
   | `mise run --no-deps ${"" | "--skip-deps "}--skip-tools app:check ${string}`
-  | `mise run --no-deps ${"" | "--skip-deps "}--skip-tools app:test ${string} ${string}`;
+  | `mise run --no-deps ${"" | "--skip-deps "}--skip-tools app:test ${string} ${string}`
+  | ReturnType<typeof repositoryDeliveryBuildCommand>;
 export type TargetValidationCommandName = "check-build" | "test";
 
 export type ValidationCommandExecutor = (input: {
@@ -471,18 +473,15 @@ export const sandboxValidationCommandExecutor =
     // Repository tasks may start local services. Keep those services' output on
     // a file so a child that outlives the task cannot hold the sandbox command
     // pipe open after the validation task exits.
-    const runtimeTask = command.includes(" app:check ") ? "repository-check" : "repository-test";
-    const shard = command.includes(" app:test ") ? ` ${command.split(" ").at(-1)}` : "";
-    const deliveryEnvironment = {
-      ...environment,
-      ...(runtimeTask === "repository-check" ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
-    };
-    if (options?.runtime) {
+    const isDeliveryBuild =
+      command === repositoryDeliveryBuildCommand(appId, options?.alreadyCompiled);
+    const shard = isDeliveryBuild ? undefined : command.split(" ").at(-1);
+    if (options?.runtime && !isDeliveryBuild) {
       return await options.runtime.runTask({
-        task: runtimeTask,
-        ...(options?.alreadyCompiled === true ? { alreadyCompiled: true } : {}),
-        environment: deliveryEnvironment,
-        ...(shard ? { shard: shard.trim() } : {}),
+        task: "repository-test",
+        ...(options.alreadyCompiled === true ? { alreadyCompiled: true } : {}),
+        environment,
+        shard,
         onChunk,
         signal: abortSignal,
       });
@@ -490,9 +489,11 @@ export const sandboxValidationCommandExecutor =
     const environmentPath = localRuntimeEnvironmentPath(validationRoot, appId);
     const env = {
       ...Object.fromEntries(
-        Object.entries(deliveryEnvironment).filter(
+        Object.entries(environment ?? {}).filter(
           (entry): entry is [string, string] =>
-            entry[1] !== undefined && entry[0] !== "APP_RUNTIME_ALREADY_COMPILED",
+            entry[1] !== undefined &&
+            entry[0] !== "APP_RUNTIME_ALREADY_COMPILED" &&
+            entry[0] !== "APP_BUILDER_DELIVERY_BUILD_ONLY",
         ),
       ),
       APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath),
@@ -503,7 +504,7 @@ set -e
 (
 ${sourceDeclaredToolchainActivationCommand()}
 )
-if [ -f '${environmentPath}' ]; then mise run --no-deps app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi
+${isDeliveryBuild ? command : `if [ -f '${environmentPath}' ]; then mise run --no-deps app:runtime run ${appId} repository-test ${shard}; else ${command}; fi`}
 )`;
     const detachedCommand = `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
@@ -513,7 +514,12 @@ cat "$log"
 rm -f "$log"
 exit "$status"`;
     if (onChunk === undefined) {
-      return await sandbox.run({ command: detachedCommand, env, workingDirectory: validationRoot });
+      return await sandbox.run({
+        command: detachedCommand,
+        env,
+        workingDirectory: validationRoot,
+        ...(abortSignal === undefined ? {} : { abortSignal }),
+      });
     }
     const process = await sandbox.spawn({
       abortSignal,
@@ -561,17 +567,14 @@ exit "$status"`;
 export const fixtureValidationCommandExecutor =
   (): ValidationCommandExecutor =>
   ({ appId, command }) => {
-    if (
-      appId === "validation-interruption" &&
-      command.startsWith("mise run --no-deps --skip-tools app:check ")
-    ) {
+    const isBuild = command === repositoryDeliveryBuildCommand(appId);
+    if (appId === "validation-interruption" && isBuild) {
       const error = new Error("fixture validation interruption");
       error.name = "TimeoutError";
       return Promise.reject(error);
     }
     return Promise.resolve(
-      appId === "validation-failure" &&
-        command.startsWith("mise run --no-deps --skip-tools app:check ")
+      appId === "validation-failure" && isBuild
         ? { exitCode: 1, stderr: "fixture validation failure", stdout: "" }
         : { exitCode: 0, stderr: "", stdout: `${command} passed` },
     );
@@ -655,7 +658,7 @@ export const executeProposalBoundValidation = (input: {
         }
       | undefined;
     const toolingFailure = createValidationToolingFailureObserver(
-      planned.name === "check-build" ? `//apps/${input.appId}:check` : undefined,
+      planned.command.includes(" app:check ") ? `//apps/${input.appId}:check` : undefined,
     );
     const startedAt = new Date().toISOString();
     const startedMonotonic = performance.now();
