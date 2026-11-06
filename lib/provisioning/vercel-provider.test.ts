@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import type { GitHubProvisionResult } from "./contracts";
+import type { GitHubProvisionResult } from "./contracts-schema";
 import { provisionVercelProject } from "./vercel-provider";
 
 const github = {
@@ -390,7 +390,7 @@ describe("Vercel project provisioning", () => {
         expect(value.pathname).not.toContain("deployments");
         if (init?.method === "POST") {
           created = true;
-          const body = JSON.parse(String(init.body));
+          const body: unknown = JSON.parse(String(init.body));
           expect(body).not.toHaveProperty("ssoProtection");
           expect(body).not.toHaveProperty("oidcTokenConfig");
           expect(body).toMatchObject({
@@ -515,7 +515,7 @@ describe("Vercel project provisioning", () => {
     const request = vi.fn<typeof fetch>(async (url, init) => {
       const path = new URL(String(url)).pathname;
       if (init?.method === "POST") {
-        const body = JSON.parse(String(init.body));
+        const body = z.looseObject({ name: z.string() }).parse(JSON.parse(String(init.body)));
         expect(body.name).toBe("apps-vendor-portal-a1b2c3");
         expect(body).not.toHaveProperty("gitRepository");
         created = true;
