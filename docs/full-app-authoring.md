@@ -47,6 +47,12 @@ approval decisions throughout these phases.
 
 ### One app destination and public delivery
 
+The default hosted result is the live app at its final URL. After private
+validation and review, complete the approved release preparation and
+native delivery described in [public app release](public-app-release.md).
+The owner uses the live app first and shares it through its access controls.
+A hosted Preview and synthetic acceptance run are optional.
+
 The [A-469 execution decision](plans/2026-11-03-a469-normal-builder-public-delivery.md)
 records the local-first implementation milestones and remaining acceptance gaps.
 

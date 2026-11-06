@@ -76,7 +76,6 @@ export const readPublicReleasePreparedRuntime = async (input: {
             operator.receipts.filter((receipt) => receipt.effectId === effect.id).length !== 1,
         ))) ||
     operator.plan.selection.projectId !== input.target.projectId ||
-    operator.plan.neon.source !== "synthetic-only" ||
     (input.release !== undefined && !isDeepStrictEqual(operator.plan.release, input.release))
   ) {
     throw new PublicReleasePrerequisiteError("prepared_runtime_required");

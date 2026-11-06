@@ -398,19 +398,15 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    source through the
    existing publication approval flow without waiting for successful private UI
    startup.
-   Once the publication records its source, continue hosted setup in this
-   session. Use the accepted behavior and backend kind to decide whether the
-   app needs storage. For persistent apps, call `plan-app-hosted-runtime` and
-   continue its exact approved plan through `prepare-app-hosted-runtime`. The
-   protected operator selects storage and installs the checked schema. For a
-   static app, use its native Preview delivery path and skip app database setup.
-   Ask about intended users when access policy needs a product decision. Keep
-   database identifiers, credentials and resource selection inside the operator
-   workflow. If platform setup is unavailable, preserve the session and report
-   the missing capability for the platform operator. Use the saved operation
-   reference to resume an interrupted preparation. Show setup and access
-   verification as separate steps before reporting the app ready. Report actual startup failures and claim a working local or hosted
-   Preview only after exercising that actual app.
+   For a normal release into an existing repository with native Production
+   delivery, continue through the approved PR merge flow once the repository's
+   required checks pass. Native Git delivery owns deployment. Treat optional
+   app tests and private Preview as iteration tools. Use the app's own tasks
+   for any behavior checks that its requirements call for. Report actual build
+   or deployment failures and the provider's observed delivery result.
+   If the app needs managed storage or Auth, use its supported owner-scoped
+   setup and resume any saved operation. Keep provider details inside Builder.
+   Run the hosted Preview setup only when the user asks for a hosted Preview.
    For private local preview or candidate checks, if the repository defines
    `app:local` for the selected app and needs local data, use
    `prepare-app-local-preview` first in the approved sandbox.
@@ -537,11 +533,9 @@ acceptance project or Auth project to satisfy this journey.
 - If the release reports pending, use `observe-app-public-release` with the
   same frozen plan to continue reading the native deployment. Preserve the
   operation and its approval while the provider is still working. When ready,
-  open the app's ordinary public URL. Exercise real
-  Better Auth login/logout and a persistent app action before calling the app
-  usable. For integrations, additionally exercise the approved provider
-  lifecycle and independent data/isolation readbacks. Keep all these results
-  separate from source tests, deployment readiness and prototype observations.
+  report the app's ordinary public URL and the observed deployment result.
+  App-owned behavior and integration checks can run when the app calls for
+  them. They are separate from the normal release result.
 - Preserve old protected Preview intents and history. Changed targets and
   exposure require new supported plans and ordinary approvals. Unknown effects
   stay visible and are reconciled through the saved operation; never resend an

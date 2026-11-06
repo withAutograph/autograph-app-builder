@@ -1,64 +1,45 @@
 # Generated app lifecycle completion roadmap
 
-The first milestone is a usable protected Preview reached from a saved Builder
-session. Production use is a separately authorized milestone. Full lifecycle
-completion covers the app after first delivery, including changes, recovery,
-access, operations and retirement.
+The default delivery path is a single live app with an internet-reachable
+Production domain. Builder validates the app privately, then prepares the
+approved destination and delivers the reviewed revision through native Git
+delivery. The owner starts with authorized access to the live app. Invitations
+and role changes update access to that same URL, deployment and data.
 
-This roadmap defines acceptance evidence. The
-[Builder lifecycle](../autograph-app-builder-lifecycle.md),
-[GitHub publication gate](../github-publication-gate.md),
-[hosted app runtime](../hosted-app-runtime.md) and
-[Production handoff](../production-readiness-handoff.md) define the existing
-behavior and authority boundaries. The
-[A-469 delivery plan](2026-11-03-a469-normal-builder-public-delivery.md) owns its
-specific public delivery and revision qualification. The
-[November continuation handoff](../app-builder-next-session-handoff-20261105.md)
-records existing signup and recovery work, prior receipts, and the ownership
-of overlapping initiatives.
+Hosted Preview, synthetic acceptance and app behavior checks are optional.
+Run the normal build and native deployment using the approved source and target.
+When an app needs managed storage or Auth, Builder provisions those resources
+through the protected operator and reuses them on revision. Report actual
+provider build or deployment failures. The app owns any additional tests.
+A successful deployment can be reported with its final URL without a separate
+browser walkthrough or persistence exercise.
 
-## M1 · Verified protected Preview
+The [public release contract](../public-app-release.md) describes the current
+synthetic-runtime dependency and the change required to remove it.
 
-| Step                      | Owner and status                                                                                                                                                    | Evidence required                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Resume and validate       | Builder and the target repository own the existing private flow. Qualify it as part of the delivery walkthrough.                                                    | Resume the saved session with its selected tenant, app and candidate intact. Use the repository's actual validation commands. Retain their outcomes and paged logs, independent source review and the user's review of the current candidate.                                                                                                                        |
-| Publish a draft           | Builder owns authorized publication. GitHub owns PR state and checks.                                                                                               | Record the authorized destination and exact candidate as an owned draft PR. Read back the draft and head. Report required checks as deferred for an eligible draft. A deferred or placeholder status supplies no validation evidence.                                                                                                                                |
-| Ready and merge           | GitHub owns Ready for review and required checks. The user authorizes the merge of the reviewed revision. Qualify the full transition.                              | Observe Ready for review and the required checks on the current head. Bind the separate merge approval to the reviewed target and expected head. Reject stale approval after a head change and confirm the merged revision independently.                                                                                                                            |
-| Prepare and prove Preview | The protected operator owns separately approved preparation and access. The native provider owns deployment and activation. Builder reports the resulting evidence. | Read back the deployment and scoped runtime bindings for the intended Preview. Use the app's supported Auth flow and role. For a persistent workflow, perform a real authorized write and independently read it back in a fresh session or process. Verify a denied access case. Record the observed app, tenant, release and outcome without recording credentials. |
+## M1 · Deliver a usable app at its final URL
 
-Exit when a representative persistent app completes every row from the same
-saved session and the intended participant can use the protected Preview. Show
-the live app and the tested behavior. Record missing evidence and the next
-supported action if any row remains incomplete. UI review, local validation,
-GitHub success, deployment readiness and authenticated runtime proof are separate
-observations. For a static app, exercise its declared behavior and record
-persistence as inapplicable.
+1. Resume the saved Builder session and keep the selected repository, app and
+   tenant. Run applicable local validation and review the proposed changes.
+2. Resolve and verify the approved live resources. Provision the dedicated
+   database and restricted role when needed. Install the checked release and
+   grant the intended owner access. Reconcile interrupted operations before
+   retrying. A static app skips app database setup.
+3. Publish the reviewed revision under existing GitHub policy. Where the
+   repository uses a draft PR, observe deferred checks, run the required
+   checks when ready, and merge only the approved revision after they pass.
+4. Read the provider's active deployment and final URL. Report any build or
+   deployment failure. App behavior checks are owned by the app and can run
+   independently of release.
 
-The Arrusted PR contract was exercised on
-[#1748](https://github.com/withAutograph/arrusted-development/pull/1748).
-The draft aggregate was skipped, and the ready event ran the required check
-successfully at the same head. This validates the repository behavior in
-isolation. The public Builder session, approved merge and protected app
-verification remain the milestone exit evidence.
+## M2 · Share and revise the same live app
 
-## M2 · Approved Production use
-
-| Step                | Owner and status                                                                                                                               | Evidence required                                                                                                                                                                                                                                                                        |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Review and prepare  | The protected operator owns Production preparation. Builder can supply its existing operator handoff. Production qualification is a follow-up. | Review the repository descriptor, release, environment, tenant and provider target. Obtain separate authorization for applicable database preparation, access and bindings. Independently confirm installed release, restricted runtime principal and app assignments before activation. |
-| Activate and verify | The native provider owns activation. The operator verifies the approved outcome.                                                               | Observe the intended native deployment and active Gateway route. Verify real authentication, intended role and tenant, and the app's approved user workflow. For persistent apps, include an authorized write and independent readback, plus negative access evidence.                   |
-| Recover             | Operator and provider own recovery. Qualify the recovery path for this release.                                                                | Record the supported response to a failed activation and prove that the prior usable state or an approved recovery target can be restored. Confirm route, runtime and data compatibility with independent readback.                                                                      |
-
-Exit when an authorized participant can use the intended Production release and
-the operator can identify and recover the deployed state. Preview proof remains
-attached to Preview. Apply the separate approval and provider authority described
-in the [Production handoff](../production-readiness-handoff.md).
-
-Builder's public-release tool already covers approved synthetic Production
-runtime bindings and Git delivery. Qualify that path using the saved app session
-after M1. Customer Production uses Arrusted's operator-owned release, access
-and recovery flow. Coordinate the hosted activation and rollback proof with
-[A-481](https://linear.app/withgraph/issue/A-481/add-hosted-lifecycle-operations-separately).
+Grant a second authorized participant access, then verify their role and use
+on the same deployment. Revoke that access and verify the change. Deliver an
+approved revision on the same app identity, preserving its data and access.
+For an interrupted setup or revision, resume against the same owned resources
+and verify the resulting state. Qualify provider rollback or a forward repair
+under the [Production handoff](../production-readiness-handoff.md).
 
 ## M3 · Operate and retire the app
 

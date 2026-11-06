@@ -136,6 +136,24 @@ at the selected destination after the approved effects. A revision delivers
 the requested change to the same app and preserves unaffected content, data,
 and destination.
 
+The default delivery path is a single live app with an internet-reachable
+Production domain. Builder validates the app privately, then prepares the
+approved destination and delivers the reviewed revision through native Git
+delivery. The owner starts with authorized access to the live app. Invitations
+and role changes update access to that same URL, deployment and data.
+
+Hosted Preview and synthetic acceptance runs are optional engineering tools.
+Neither is a prerequisite for initial release. Release preparation verifies
+the actual target and provisions its required database, schema, restricted
+runtime credentials, and owner access through the protected operator.
+Builder derives database details from its managed configuration. After
+provider-owned activation, verify the owner's authenticated workflow on
+the live app. For persistent apps, save an authorized record and read it
+back independently. Record delivery and behavior as separate outcomes.
+
+See [public app release](public-app-release.md) for the target flow and the
+remaining implementation gap.
+
 ## Source documents
 
 This overview summarizes the detailed [design workflow](../agent/skills/design-app/SKILL.md),
