@@ -1,6 +1,7 @@
 # Product source review
 
-The final independent review attempt starts at ordinary `accept_change_set`,
+An optional independent review starts at `accept_change_set` with
+`runSourceReview: true`,
 after implementation and technical validation are ready. It prepares an opaque
 review reference, Builder runs the blocking `review-current-product-source`
 workflow, then ordinary `accept_change_set` finalizes with the returned reference.
@@ -80,8 +81,8 @@ publication approval and assessment detail references remain authoritative.
 A review interruption alone does not require another technical validation.
 Concrete implementation repairs use the normal focused validation path.
 
-The final independent review attempt is required; source opinions remain
-advisory. An unavailable or interrupted assessment is reported truthfully as
+Ordinary acceptance records the reviewed source without running a paid review.
+Source opinions remain advisory. An unavailable or interrupted assessment is reported truthfully as
 unassessed, without gating private preview/publication, fabricating a pass, or
 requiring another technical validation. Concrete findings still use the normal
 repair path, and existing source and outward-effect approvals remain intact. A

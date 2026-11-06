@@ -282,18 +282,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    covers; run additional scenarios only for missing coverage or changed behavior.
    A new tool invocation or business phase alone is not a reason to repeat an
    independent model judgment or an already covered browser test.
-   Successful validation defers independent source assessment until final
-   `accept_change_set`. A deferred or unassessed source assessment is expected;
-   do not repeat validation merely to obtain review. Once the implementation and
-   available behavioral checks are ready, inspect `change_set_status` and call
-   `accept_change_set` to assess current source against the original request and
-   accepted plan. A matching completed application assessment is reused.
-   Interrupted incomplete application-review model work may rerun; do not claim
-   per-step durable recovery. Record the independent assessment truthfully,
-   including findings or unavailable evidence. Source opinions are advisory;
-   do not turn them into an additional publication gate. You may start the private
-   preview to complete missing behavioral checks before final acceptance; keep
-   that incomplete preview explicitly inspectable.
+   After the ordinary build succeeds, inspect `change_set_status` and use
+   `accept_change_set` to record the reviewed source. Leave `runSourceReview`
+   unset for ordinary delivery. An independent assessment is optional and may
+   be requested explicitly when it serves the app's needs. Report any
+   assessment and its findings as advisory evidence.
    Repair cited product contradictions through `validate_app_creation` with
    corrected implementation files, then accept the repaired change set again.
    Read cited findings through `change_set_status` with `view: "acceptance"`,
@@ -346,7 +339,7 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    while preserving other repairs. Do not retype historical bytes or supply an
    alternate revision. Restore invalidates saved validation and review; validate
    the complete candidate and review both diffs again. Run the selected app's schema,
-   repository checks, browser tests, and applicable guard on the reconciled
+   repository checks and applicable guard on the reconciled
    candidate with `validate_github_draft_pr_reconciliation`.
    If an existing app dependency needs shared Bun catalog alignment, use
    `normalize_github_draft_pr_dependency_catalog` with its package name. It operates

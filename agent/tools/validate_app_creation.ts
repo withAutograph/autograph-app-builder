@@ -181,7 +181,7 @@ export const createAppValidationTool = (
 ) =>
   defineTool({
     description:
-      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. Set runBrowserTests only when authenticated browser testing is wanted for this app. Report those results separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
+      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. Set runBrowserTests only when authenticated browser testing is wanted for this app. Report those results separately; a runtime block preserves the technical receipt. Independent paid source assessment can be requested at accept_change_set after implementation and technical checks are ready. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
     // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep the workflow phase, cancellation and original failure receipt branches explicit.
     async execute(input, ctx) {
       const current = appBuilderWorkflowState.get();
@@ -558,12 +558,12 @@ export const createAppValidationTool = (
           clarifications: request.clarifications,
           files: [],
           omissions: [
-            "Current source was not observed or independently assessed during technical validation; final acceptance observes and reviews the current implementation.",
+            "Current source was not observed or independently assessed during technical validation; final acceptance observes the current implementation.",
           ],
           originalRequest: request.original,
           sourceDigest: current.applyReceipt.postTreeDigest,
         },
-        "Independent source assessment is deferred to final change-set acceptance. Complete implementation and technical checks, then call accept_change_set for the final review.",
+        "Independent source assessment can be requested separately during change-set acceptance.",
       );
       validationPhase(ctx.callId, "source_review_deferred", sourceAssessment.status);
       const productionHandoff = await productionReadinessHandoff({

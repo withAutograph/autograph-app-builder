@@ -49,6 +49,14 @@ import {
   createRepositoryObservation,
 } from "../repository/github-publication";
 
+vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
+  prepareValidationLocalData: () => Promise.resolve(),
+}));
+
+vi.mock("./validation-log-store-for-session", () => ({
+  validationLogStoreForSession: () => Promise.resolve(undefined),
+}));
+
 const staticDescription: AppDescription = {
   app: { id: "example", routes: [], workspacePath: "apps/example" },
   backend: { kind: "static" },
@@ -229,7 +237,7 @@ it("repeated intermediate validation executes technical checks and returns defer
           sourceAssessment: z.object({ omissions: z.array(z.string()), reason: z.string() }),
         })
         .parse(result).sourceAssessment;
-      expect(sourceEvidence.reason).toContain("deferred to final change-set acceptance");
+      expect(sourceEvidence.reason).toContain("requested separately");
       expect(sourceEvidence.omissions[0]).toContain("not observed");
       expect(currentProductSourceAssessment(acceptedRequest)).toBeUndefined();
     }
@@ -382,7 +390,7 @@ it("final acceptance permits absent or incomplete destination inspection coverag
     expect(() => {
       assertExactWorkflowState(appBuilderWorkflowState.get(), before, "acceptance");
     }).toThrow("changed concurrently");
-    const first = await tool.execute({}, context("final-first"));
+    const first = await tool.execute({ runSourceReview: true }, context("final-first"));
     expect(appBuilderWorkflowState.get()).toMatchObject({
       phase: "reviewed",
       appBackendKind: "static",
@@ -404,14 +412,14 @@ it("final acceptance permits absent or incomplete destination inspection coverag
         },
       };
     });
-    const same = await tool.execute({}, context("final-same"));
+    const same = await tool.execute({ runSourceReview: true }, context("final-same"));
     expect(same).toMatchObject({ reused: true, sourceAssessment: { reviewCompleted: true } });
     expect(model.doGenerateCalls).toHaveLength(1);
     source = "export const save = false;";
-    await tool.execute({}, context("final-changed-source"));
+    await tool.execute({ runSourceReview: true }, context("final-changed-source"));
     expect(model.doGenerateCalls).toHaveLength(2);
     productRequestState.update((request) => ({ ...request, clarifications: ["Keep old records"] }));
-    await tool.execute({}, context("final-changed-requirements"));
+    await tool.execute({ runSourceReview: true }, context("final-changed-requirements"));
     expect(model.doGenerateCalls).toHaveLength(3);
     expect(observations).toBe(4);
   });
@@ -542,9 +550,18 @@ it("prepared review resumes in the original acceptance context without a second 
         );
       },
     });
-    const pending = await tool.execute({}, context("prepare-review"));
+    const ordinary = await tool.execute({}, context("ordinary-acceptance"));
+    expect(ordinary).toMatchObject({
+      sourceAssessment: { reviewCompleted: false, status: "unassessed" },
+    });
+    expect({ directCalls, preparedCalls, finalizedCalls }).toEqual({
+      directCalls: 0,
+      preparedCalls: 0,
+      finalizedCalls: 0,
+    });
+    const pending = await tool.execute({ runSourceReview: true }, context("prepare-review"));
     expect(pending).toMatchObject({ status: "source_review_pending", sourceReview: reference });
-    expect(appBuilderWorkflowState.get().phase).toBe("validated");
+    expect(appBuilderWorkflowState.get().phase).toBe("reviewed");
     const accepted = await tool.execute({ sourceReview: reference }, context("finish-review"));
     expect(accepted).toMatchObject({
       sourceAssessment: { reviewCompleted: false, status: "blocked" },

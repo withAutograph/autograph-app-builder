@@ -362,7 +362,7 @@ operations select the verified tenant-owned installation explicitly, preserve
 current membership and provider permission checks, and retain separate
 publication approval and mutation reconciliation.
 
-The final independent source review attempt remains advisory. An unavailable
+Independent source review is optional and advisory. An unavailable
 or interrupted assessment is reported as unassessed and does not block private
 Preview or publication, require another technical validation, or authorize a
 replacement app. See [Product source review](product-source-review.md).
