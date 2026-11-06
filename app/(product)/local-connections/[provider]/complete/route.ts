@@ -9,33 +9,38 @@ import {
 } from "@/lib/integrations/provider-emulation-seed";
 
 const allowed = new Set(["vercel", "github"]);
+const invalidRequest = "Invalid request";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function validEmulatorRedirect(input: {
+const formString = (value: FormDataEntryValue | null): string | null =>
+  value instanceof File ? null : value;
+
+const validEmulatorRedirect = (input: {
   response: Response;
   origin: string;
   path: string;
   state: string;
-}) {
+}): URL | null => {
   const location = input.response.headers.get("location");
-  if (!location || input.response.status < 300 || input.response.status >= 400) {
-    return;
+  if (
+    location === null ||
+    location === "" ||
+    input.response.status < 300 ||
+    input.response.status >= 400
+  ) {
+    return null;
   }
   const destination = new URL(location);
-  if (
-    destination.origin !== input.origin ||
-    destination.pathname !== input.path ||
-    destination.searchParams.getAll("code").length !== 1 ||
-    destination.searchParams.getAll("state").length !== 1 ||
-    destination.searchParams.get("state") !== input.state
-  ) {
-    return;
+  const matchesRoute = destination.origin === input.origin && destination.pathname === input.path;
+  const hasSingleCode = destination.searchParams.getAll("code").length === 1;
+  const hasSingleState = destination.searchParams.getAll("state").length === 1;
+  const matchesState = destination.searchParams.get("state") === input.state;
+  if (!matchesRoute || !hasSingleCode || !hasSingleState || !matchesState) {
+    return null;
   }
   return destination;
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function POST(request: Request, context: { params: Promise<{ provider: string }> }) {
+const post = async (request: Request, context: { params: Promise<{ provider: string }> }) => {
   const { provider } = await context.params;
   let emulation;
   try {
@@ -44,25 +49,23 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     return new Response("Not found", { status: 404 });
   }
   const origin = emulation?.canonicalOrigin;
-  if (!emulation || !allowed.has(provider) || request.headers.get("origin") !== origin) {
+  const providerAllowed = allowed.has(provider);
+  const originMatches = request.headers.get("origin") === origin;
+  if (!emulation || !providerAllowed || !originMatches) {
     return new Response("Not found", { status: 404 });
   }
   const form = await request.formData();
-  const state = form.get("state");
-  const phase = form.get("phase");
-  if (
-    typeof state !== "string" ||
-    state.length < 20 ||
-    state.length > 2048 ||
-    (phase !== null && phase !== "authorize")
-  ) {
-    return new Response("Invalid request", { status: 400 });
+  const state = formString(form.get("state"));
+  const phase = formString(form.get("phase"));
+  const validState = state !== null && state.length >= 20 && state.length <= 2048;
+  if (!validState || (phase !== null && phase !== "authorize")) {
+    return new Response(invalidRequest, { status: 400 });
   }
   const callback = new URL(`/${provider}/installations/callback`, origin);
   callback.searchParams.set("state", state);
   if (provider === "vercel") {
     if (phase !== null) {
-      return new Response("Invalid request", { status: 400 });
+      return new Response(invalidRequest, { status: 400 });
     }
     const relay = signLocalVercelRelay(
       {
@@ -105,18 +108,16 @@ export async function POST(request: Request, context: { params: Promise<{ provid
   }
 
   if (phase === "authorize") {
-    const clientId = form.get("client_id");
-    const redirectUri = form.get("redirect_uri");
-    const codeChallenge = form.get("code_challenge");
-    const codeChallengeMethod = form.get("code_challenge_method");
-    if (
-      clientId !== emulation.githubClientId ||
-      redirectUri !== `${origin}/github/installations/callback` ||
-      typeof codeChallenge !== "string" ||
-      !/^[A-Za-z0-9_-]{43}$/u.test(codeChallenge) ||
-      codeChallengeMethod !== "S256"
-    ) {
-      return new Response("Invalid request", { status: 400 });
+    const clientId = formString(form.get("client_id"));
+    const redirectUri = formString(form.get("redirect_uri"));
+    const codeChallenge = formString(form.get("code_challenge"));
+    const codeChallengeMethod = formString(form.get("code_challenge_method"));
+    const clientMatches = clientId === emulation.githubClientId;
+    const redirectMatches = redirectUri === `${origin}/github/installations/callback`;
+    const challengeValid = codeChallenge !== null && /^[A-Za-z0-9_-]{43}$/u.test(codeChallenge);
+    const methodMatches = codeChallengeMethod === "S256";
+    if (!clientMatches || !redirectMatches || !challengeValid || !methodMatches) {
+      return new Response(invalidRequest, { status: 400 });
     }
     const response = await providerEmulationFetch(
       new URL(`${emulation.githubOrigin}/login/oauth/callback`),
@@ -156,4 +157,6 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     callback.searchParams.set("setup_action", "install");
   }
   return NextResponse.redirect(callback, { status: 303 });
-}
+};
+
+export const POST = post;

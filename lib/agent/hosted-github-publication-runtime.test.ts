@@ -1,13 +1,14 @@
 import { readFile } from "node:fs/promises";
 
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import type {
   GitHubPublicationAdapter,
   GitHubPublicationReceiptStore,
 } from "../repository/github-publication";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
-import type { BuilderHandoffIntent } from "../handoff/contracts";
+import { builderHandoffIntentSchema } from "../handoff/contracts";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
 import { createGitHubTargetSourceResolutionAdapter } from "../repository/github-app-adapter";
 import { createHostedGitHubPublicationRuntimeResolver } from "./hosted-github-publication-runtime";
@@ -51,25 +52,51 @@ const installation = {
   updatedAt: new Date("2026-08-28T00:00:00.000Z"),
 };
 
+const preparedHandoff = (
+  overrides: Partial<ReturnType<typeof builderHandoffIntentSchema.parse>> = {},
+) =>
+  builderHandoffIntentSchema.parse({
+    appId: "spend-review",
+    appName: "Spend Review",
+    brief: "Review spending",
+    connections: [],
+    modelId: "openai/gpt-6-luna",
+    repository: { private: true, requestedName: "spend-review" },
+    ...overrides,
+  });
+
 const proposals: GitHubPublicationProposalStore = {
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  async read() {},
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  async save(proposal) {
-    return proposal;
+  read: async () => {
+    await Promise.resolve();
   },
+  save: async (proposal) => await Promise.resolve(proposal),
 };
 
 const receipts: GitHubPublicationReceiptStore = {
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  async compareAndSet() {
-    return true;
+  compareAndSet: async () => await Promise.resolve(true),
+  read: async () => {
+    await Promise.resolve();
   },
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  async read() {},
 };
 
-const adapter = {} as GitHubPublicationAdapter;
+const adapter: GitHubPublicationAdapter = {
+  createPrivateFreshHistoryRepository: async () =>
+    await Promise.reject(new Error("Unexpected repository creation")),
+  inspectDestination: async () =>
+    await Promise.reject(new Error("Unexpected destination inspection")),
+  inspectDraftPublication: async () =>
+    await Promise.reject(new Error("Unexpected draft publication inspection")),
+  inspectExistingDraft: async () => await Promise.reject(new Error("Unexpected draft inspection")),
+  inspectFreshRepositoryOutcome: async () =>
+    await Promise.reject(new Error("Unexpected fresh repository read")),
+  inspectInstallation: async () =>
+    await Promise.reject(new Error("Unexpected installation inspection")),
+  inspectRepository: async () =>
+    await Promise.reject(new Error("Unexpected repository inspection")),
+  publishDraftPullRequest: async () =>
+    await Promise.reject(new Error("Unexpected draft publication")),
+  updateExistingDraft: async () => await Promise.reject(new Error("Unexpected draft update")),
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function dependencies(input?: {
@@ -77,17 +104,20 @@ function dependencies(input?: {
   boundInstallation?: typeof installation | null;
 }) {
   const membership = vi.fn(() => ({
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    isMember: vi.fn(async () => input?.activeMember ?? true),
+    isMember: vi.fn(async () => await Promise.resolve(input?.activeMember ?? true)),
   }));
   const installationStore: HostedGitHubInstallationStore = {
     bind: vi.fn(),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    read: vi.fn(async () =>
-      input !== undefined && "boundInstallation" in input
-        ? (input.boundInstallation ?? undefined)
-        : installation,
-    ),
+    read: vi.fn(async () => {
+      await Promise.resolve();
+      if (input === undefined || !("boundInstallation" in input)) {
+        return installation;
+      }
+      if (input.boundInstallation === null) {
+        return;
+      }
+      return input.boundInstallation;
+    }),
   };
   const installations = vi.fn(() => installationStore);
   const publicationStores = vi.fn(() => ({ proposals, receipts }));
@@ -96,7 +126,9 @@ function dependencies(input?: {
       installations,
       membership,
       publicationStores,
-      readPreparedHandoff: vi.fn(async () => {}),
+      readPreparedHandoff: vi.fn(async () => {
+        await Promise.resolve();
+      }),
     },
     installationStore,
     installations,
@@ -107,7 +139,7 @@ function dependencies(input?: {
 
 describe("hosted tenant GitHub publication runtime resolver", () => {
   it("resolves an existing source through a target proof without installation inventory", async () => {
-    const inspectInstallation = vi.fn(async () => {
+    const inspectInstallation = vi.fn(() => {
       throw new Error("inventory must not be read");
     });
     const targetSourceAdapter = createGitHubTargetSourceResolutionAdapter(
@@ -143,10 +175,10 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
       enabled: true,
+      openDatabase: async () => await Promise.reject(new Error("Unexpected database access")),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      openDatabase: async () => ({}) as never,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      providerFactory: async () => ({ ...adapter, inspectInstallation, targetSourceAdapter }),
+      providerFactory: async () =>
+        await Promise.resolve({ ...adapter, inspectInstallation, targetSourceAdapter }),
     });
     const runtime = await resolver.resolve(sessionAuth());
     await expect(
@@ -170,24 +202,22 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     };
     const injected = dependencies();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const list = vi.fn(async () => [installation, selected]);
+    const list = vi.fn(async () => await Promise.resolve([installation, selected]));
     injected.installationStore.list = list;
     const readPreparedHandoff = vi.fn(
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async () =>
-        ({
-          providers: { githubInstallationId: "789" },
-        }) as BuilderHandoffIntent & {
-          providers: { githubInstallationId: string };
-        },
+        await Promise.resolve(
+          preparedHandoff({
+            providers: { githubInstallationId: "789" },
+          }),
+        ),
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const providerFactory = vi.fn(async () => adapter);
+    const providerFactory = vi.fn(async () => await Promise.resolve(adapter));
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: { ...injected.dependencies, readPreparedHandoff },
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      openDatabase: async () => ({}) as never,
+      openDatabase: async () => await Promise.reject(new Error("Unexpected database access")),
       providerFactory,
     });
     const auth = sessionAuth();
@@ -212,27 +242,29 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     async (state) => {
       const injected = dependencies();
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      injected.installationStore.list = vi.fn(async () =>
-        state === "missing"
-          ? [installation]
-          : [installation, { ...installation, active: false, installationId: "789" }],
+      injected.installationStore.list = vi.fn(
+        async () =>
+          await Promise.resolve(
+            state === "missing"
+              ? [installation]
+              : [installation, { ...installation, active: false, installationId: "789" }],
+          ),
       );
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      const providerFactory = vi.fn(async () => adapter);
+      const providerFactory = vi.fn(async () => await Promise.resolve(adapter));
       const resolver = createHostedGitHubPublicationRuntimeResolver({
         dependencies: {
           ...injected.dependencies,
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           readPreparedHandoff: async () =>
-            ({
-              providers: { githubInstallationId: "789" },
-            }) as BuilderHandoffIntent & {
-              providers: { githubInstallationId: string };
-            },
+            await Promise.resolve(
+              preparedHandoff({
+                providers: { githubInstallationId: "789" },
+              }),
+            ),
         },
         enabled: true,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        openDatabase: async () => ({}) as never,
+        openDatabase: async () => await Promise.reject(new Error("Unexpected database access")),
         providerFactory,
       });
       await expect(resolver.resolve(sessionAuth())).rejects.toThrow(
@@ -246,21 +278,43 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   it("reads the selected installation from an older provisioning result and supports legacy-only storage", async () => {
     const injected = dependencies();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const providerFactory = vi.fn(async () => adapter);
+    const providerFactory = vi.fn(async () => await Promise.resolve(adapter));
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: {
         ...injected.dependencies,
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         readPreparedHandoff: async () =>
-          ({
-            provisioning: {
-              github: { installationId: "123", status: "succeeded" },
-            },
-          }) as BuilderHandoffIntent,
+          await Promise.resolve(
+            preparedHandoff({
+              provisioning: {
+                appId: "spend-review",
+                github: {
+                  defaultBranch: "main",
+                  fullName: "withAutograph/spend-review",
+                  headSha: "1".repeat(40),
+                  headTree: "2".repeat(40),
+                  installationId: "123",
+                  name: "spend-review",
+                  owner: "withAutograph",
+                  repositoryId: "200",
+                  scope: { id: "456", login: "withAutograph", type: "organization" },
+                  starter: { kind: "legacy" },
+                  status: "succeeded",
+                  url: "https://github.com/withAutograph/spend-review",
+                  visibility: "private",
+                },
+                requestDigest: "a".repeat(64),
+                requestId: "00000000-0000-4000-8000-000000000000",
+                status: "settled",
+                updatedAt: "2026-08-28T00:00:00.000Z",
+                vercel: { code: "not_selected", retryable: false, status: "skipped" },
+                version: 1,
+              },
+            }),
+          ),
       },
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      openDatabase: async () => ({}) as never,
+      openDatabase: async () => await Promise.reject(new Error("Unexpected database access")),
       providerFactory,
     });
     await resolver.resolve(sessionAuth());
@@ -270,16 +324,16 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   it("fails before pool, stores, or provider construction if the prepared handoff is unavailable", async () => {
     const injected = dependencies();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const openDatabase = vi.fn(async () => ({}) as never);
+    const openDatabase = vi.fn(
+      async () => await Promise.reject(new Error("Unexpected database access")),
+    );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const providerFactory = vi.fn(async () => adapter);
+    const providerFactory = vi.fn(async () => await Promise.resolve(adapter));
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: {
         ...injected.dependencies,
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        readPreparedHandoff: async () => {
-          throw new Error("Handoff unavailable");
-        },
+        readPreparedHandoff: async () => await Promise.reject(new Error("Handoff unavailable")),
       },
       enabled: true,
       openDatabase,
@@ -296,9 +350,8 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       enabled: false,
     });
 
-    await expect(
-      resolver.resolve(null).then(async (runtime) => await runtime.status()),
-    ).resolves.toMatchObject({
+    const runtime = await resolver.resolve(null);
+    await expect(runtime.status()).resolves.toMatchObject({
       adapterConfigured: false,
       durableStoreConfigured: false,
       enabled: false,
@@ -307,11 +360,24 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
   });
 
   it("composes a fresh tenant runtime while caching only the database pool", async () => {
-    const database = {} as never;
+    // SAFETY: The runtime only forwards this opaque database value to the injected store factory.
+    const database = z
+      .custom<
+        Awaited<
+          ReturnType<
+            NonNullable<
+              Parameters<typeof createHostedGitHubPublicationRuntimeResolver>[0]["openDatabase"]
+            >
+          >
+        >
+      >((value) => value !== null)
+      .parse({});
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const openDatabase = vi.fn(async () => database);
+    const openDatabase = vi.fn(async () => await Promise.resolve(database));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const providerFactory = vi.fn<HostedGitHubPublicationProviderFactory>(async () => adapter);
+    const providerFactory = vi.fn<HostedGitHubPublicationProviderFactory>(
+      async () => await Promise.resolve(adapter),
+    );
     const injected = dependencies();
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
@@ -340,7 +406,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
 
   it("accepts the live forwarded-by shape and independently validates both scope sets", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const providerFactory = vi.fn(async () => adapter);
+    const providerFactory = vi.fn(async () => await Promise.resolve(adapter));
     const injected = dependencies();
     const auth = {
       ...sessionAuth(),
@@ -355,14 +421,12 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      openDatabase: async () => ({}) as never,
+      openDatabase: async () => await Promise.reject(new Error("Unexpected database access")),
       providerFactory,
     });
 
-    await expect(
-      resolver.resolve(auth).then(async (runtime) => await runtime.status()),
-    ).resolves.toMatchObject({ enabled: true });
+    const runtime = await resolver.resolve(auth);
+    await expect(runtime.status()).resolves.toMatchObject({ enabled: true });
     expect(providerFactory).toHaveBeenCalledWith({ authority, installation });
   });
 
@@ -376,7 +440,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
           authenticator: "local-dev",
           principalId: "local-dev",
           principalType: "local-dev",
-          subject: undefined,
+          subject: null,
         },
         initiator: forwarded,
       },
@@ -415,10 +479,11 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       },
     ],
   ])("rejects %s authority before opening the pool", async (_name, auth) => {
+    const openDatabase = vi.fn(
+      async () => await Promise.reject(new Error("Unexpected database access")),
+    );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const openDatabase = vi.fn(async () => ({}) as never);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const providerFactory = vi.fn(async () => adapter);
+    const providerFactory = vi.fn(async () => await Promise.resolve(adapter));
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       enabled: true,
       openDatabase,
@@ -460,10 +525,11 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       },
     ],
   ])("rejects current and initiator %s drift before opening the pool", async (_name, current) => {
+    const openDatabase = vi.fn(
+      async () => await Promise.reject(new Error("Unexpected database access")),
+    );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const openDatabase = vi.fn(async () => ({}) as never);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const providerFactory = vi.fn(async () => adapter);
+    const providerFactory = vi.fn(async () => await Promise.resolve(adapter));
     const auth = {
       ...sessionAuth(),
       current,
@@ -483,13 +549,12 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
 
   it("requires live membership before reading an installation", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const providerFactory = vi.fn(async () => adapter);
+    const providerFactory = vi.fn(async () => await Promise.resolve(adapter));
     const injected = dependencies({ activeMember: false });
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      openDatabase: async () => ({}) as never,
+      openDatabase: async () => await Promise.reject(new Error("Unexpected database access")),
       providerFactory,
     });
 
@@ -501,15 +566,14 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
 
   it("requires an active tenant installation before store or provider composition", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const providerFactory = vi.fn(async () => adapter);
+    const providerFactory = vi.fn(async () => await Promise.resolve(adapter));
     const injected = dependencies({
       boundInstallation: { ...installation, active: false },
     });
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      openDatabase: async () => ({}) as never,
+      openDatabase: async () => await Promise.reject(new Error("Unexpected database access")),
       providerFactory,
     });
 
@@ -523,13 +587,12 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
 
   it("normalizes a missing tenant installation to the unavailable boundary", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const providerFactory = vi.fn(async () => adapter);
+    const providerFactory = vi.fn(async () => await Promise.resolve(adapter));
     const injected = dependencies({ boundInstallation: null });
     const resolver = createHostedGitHubPublicationRuntimeResolver({
       dependencies: injected.dependencies,
       enabled: true,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      openDatabase: async () => ({}) as never,
+      openDatabase: async () => await Promise.reject(new Error("Unexpected database access")),
       providerFactory,
     });
 

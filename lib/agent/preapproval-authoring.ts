@@ -120,17 +120,22 @@ export const decidePreapprovalAuthoring = (input: {
   ) {
     return { ...base, decision: "blocked" };
   }
-  const candidate = preapprovalAuthoringScopeSchema.safeParse({
-    authoritySessionId: input.adapterSessionId,
-    ...(correcting ? { correction: input.correction } : {}),
+  const authoringScope = {
+    acceptedByCallId: current.appSpec.acceptedByCallId,
     appId: current.appSpec.appId,
     appSpecDigest: current.appSpec.digest,
-    acceptedByCallId: current.appSpec.acceptedByCallId,
     artifactPath: current.appSpec.artifactPath,
     artifactRevision: current.appSpec.artifactRevision,
+    authoritySessionId: input.adapterSessionId,
     sourceReceiptDigest: current.sourceReceipt.digest,
-    workspaceId: current.workspace.workspaceId,
     workspaceDigest: current.workspace.workspaceDigest,
+    workspaceId: current.workspace.workspaceId,
+  };
+  if (correcting) {
+    Object.assign(authoringScope, { correction: input.correction });
+  }
+  const candidate = preapprovalAuthoringScopeSchema.safeParse({
+    ...authoringScope,
     planningStateDigest: createHash("sha256")
       .update(
         JSON.stringify({

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { z } from "zod";
 
 import { EmulationApproval, emulationApprovalStyles } from "@/app/ui/emulation-approval";
 import {
@@ -19,10 +20,7 @@ interface Props {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function scalarValues(values: Record<string, string | string[] | undefined>) {
   return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => [
-      key,
-      typeof value === "string" ? value : undefined,
-    ]),
+    Object.entries(values).map(([key, value]) => [key, z.string().optional().parse(value)]),
   );
 }
 
@@ -32,12 +30,10 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
   await connection();
   let parsed;
   let emulation: ProviderEmulation;
+  let configured: ProviderEmulation | undefined;
   try {
     const [{ provider }, query] = await Promise.all([params, searchParams]);
-    const configured = readProviderEmulation(process.env);
-    if (!configured) {
-      notFound();
-    }
+    configured = readProviderEmulation(process.env);
     emulation = configured;
     const appOrigin = emulation.canonicalOrigin;
     parsed = parseLocalOAuthAuthorization({
@@ -49,6 +45,10 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
       vercelClientId: emulation.vercelClientId,
     });
   } catch {
+    notFound();
+  }
+
+  if (!configured) {
     notFound();
   }
 

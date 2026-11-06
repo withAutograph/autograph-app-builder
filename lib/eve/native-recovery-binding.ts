@@ -600,7 +600,7 @@ export function createNativeDraftReviewedLineageRecovery(
       ) {
         let found: HistoricalReviewCheckpoint | undefined;
         let conflicting = false;
-        await call.visitHistoricalCheckpoints(async (checkpoint) => {
+        await call.visitHistoricalCheckpoints((checkpoint) => {
           const { value } = checkpoint;
           const phase = z.object({ phase: z.string() }).safeParse(value);
           if (!phase.success || !Object.hasOwn(workflowPhases, phase.data.phase)) {
@@ -624,7 +624,7 @@ export function createNativeDraftReviewedLineageRecovery(
           return "stop" as const;
         });
         if (conflicting) {
-          lineage = undefined;
+          lineage = null;
         }
       }
       await authorize(call);
@@ -659,7 +659,7 @@ export function createHostedNativeRecoveryBinding(
     },
     authorizeRecoveryHolderClosure: async (call: RecoveryHolderClosureCall) =>
       await get().authorizeRecoveryHolderClosure(call),
-    authorizeRepeatableRecoveryCalls: async (
+    authorizeRepeatableRecoveryCalls: (
       input: Parameters<typeof authorizeRepeatablePrivateApplyCalls>[0] & RecoveryCall,
     ) => [
       ...authorizeRepeatablePrivateApplyCalls(input),
@@ -672,9 +672,8 @@ export function createHostedNativeRecoveryBinding(
       await get().authorizeSourceObservation(call),
     commitReceipt: async (call: RecoveryCall & { recoveryBinding: NativeRecoveryBinding }) =>
       await get().commitReceipt(call),
-    observeCandidateFacts: async (
-      input: Parameters<typeof observePrivateApplyRecoveryCandidate>[0],
-    ) => observePrivateApplyRecoveryCandidate(input),
+    observeCandidateFacts: (input: Parameters<typeof observePrivateApplyRecoveryCandidate>[0]) =>
+      observePrivateApplyRecoveryCandidate(input),
     observeRecoveryHolderBinding: async (call: RecoveryHolderCall) =>
       await get().observeRecoveryHolderBinding(call),
     readReceipt: async (call: RecoveryCall) => await get().readReceipt(call),

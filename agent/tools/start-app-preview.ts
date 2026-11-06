@@ -83,15 +83,16 @@ const resolveNativePreview = async (
   current: ReturnType<typeof appBuilderWorkflowState.get>,
 ) => {
   const protectedAppId = "appSpec" in current ? current.appSpec.appId : input.appId;
-  reportHostedRuntimeHandoffDiagnostic({
+  const diagnostic: Parameters<typeof reportHostedRuntimeHandoffDiagnostic>[0] = {
     acceptedAppIdPresent: "appSpec" in current,
     inputAppIdPresent: input.appId !== undefined,
     lookupAttempted: protectedAppId !== undefined,
-    ...(input.appId === undefined || protectedAppId === undefined
-      ? {}
-      : { appIdMatches: input.appId === protectedAppId }),
     stage: "native_preview_candidate",
-  });
+  };
+  if (input.appId !== undefined && protectedAppId !== undefined) {
+    diagnostic.appIdMatches = input.appId === protectedAppId;
+  }
+  reportHostedRuntimeHandoffDiagnostic(diagnostic);
   if (protectedAppId !== undefined) {
     if (input.appId !== undefined && input.appId !== protectedAppId) {
       throw new Error("The requested app does not match the accepted app.");
@@ -236,17 +237,17 @@ export default defineTool({
             checkoutIdentity: selected.revision,
             logStore: dependencyLogStore(ctx),
             onAttempt: (attempt: DependencyAttemptResult) => {
-              appBuilderWorkflowState.update((state) =>
-                state.phase === "empty"
-                  ? state
-                  : {
-                      ...state,
-                      checkoutDependencyAttempts: [
-                        ...(state.checkoutDependencyAttempts ?? []),
-                        attempt,
-                      ],
-                    },
-              );
+              appBuilderWorkflowState.update((state) => {
+                if (state.phase === "empty") {
+                  return state;
+                }
+                const next = { ...state };
+                next.checkoutDependencyAttempts = [
+                  ...(state.checkoutDependencyAttempts ?? []),
+                  attempt,
+                ];
+                return next;
+              });
             },
             reconcileWorkspace: true,
             sessionId: ctx.session.id,

@@ -38,6 +38,30 @@ const storeName = "pending";
 const memoryFallback = new Map<string, unknown>();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function isBuilderDraftOutboxEntry<T>(value: unknown): value is BuilderDraftOutboxEntry<T> {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  if (
+    !("version" in value) ||
+    value.version !== 1 ||
+    !("baseRevision" in value) ||
+    typeof value.baseRevision !== "number"
+  ) {
+    return false;
+  }
+  if (
+    !("mutationId" in value) ||
+    typeof value.mutationId !== "string" ||
+    !("snapshot" in value) ||
+    !("createdAt" in value)
+  ) {
+    return false;
+  }
+  return typeof value.createdAt === "number";
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   const { promise, reject, resolve } = Promise.withResolvers<T>();
   request.addEventListener(
@@ -58,7 +82,7 @@ async function requestResult<T>(request: IDBRequest<T>): Promise<T> {
       once: true,
     },
   );
-  return promise;
+  return await promise;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -67,7 +91,7 @@ async function transactionResult(transaction: IDBTransaction): Promise<undefined
   transaction.addEventListener(
     "complete",
     () => {
-      resolve(undefined as undefined);
+      resolve();
     },
     { once: true },
   );
@@ -89,7 +113,7 @@ async function transactionResult(transaction: IDBTransaction): Promise<undefined
       once: true,
     },
   );
-  return promise;
+  await promise;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -124,7 +148,7 @@ async function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
       once: true,
     },
   );
-  return promise;
+  return await promise;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -145,16 +169,19 @@ export function createBuilderDraftOutbox<T>(
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
-    // This queue deliberately composes the next operation without awaiting it here.
-    // oxlint-disable-next-line promise/prefer-await-to-then
-    const result = operations.then(operation);
-    // Keep the queue usable after either outcome.
-    // oxlint-disable-next-line promise/prefer-await-to-then
-    operations = result.then(
-      () => null,
-      () => null,
-    );
-    return result;
+    const previous = operations;
+    const result = (async () => {
+      await previous;
+      return await operation();
+    })();
+    operations = (async () => {
+      try {
+        await result;
+      } catch {
+        // Keep the queue usable after either outcome.
+      }
+    })();
+    return await result;
   }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -178,9 +205,9 @@ export function createBuilderDraftOutbox<T>(
   }
 
   return {
-    clear: async () =>
-      serial(async () =>
-        withDatabase(
+    clear: async () => {
+      await serial(async () => {
+        await withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readwrite");
             transaction.objectStore(storeName).delete(options.key);
@@ -189,75 +216,88 @@ export function createBuilderDraftOutbox<T>(
           () => {
             memoryFallback.delete(options.key);
           },
-        ),
-      ),
+        );
+      });
+    },
     clearIfAcknowledged: async (acknowledgement) =>
-      serial(async () =>
-        withDatabase(
-          async (database) => {
-            const transaction = database.transaction(storeName, "readwrite");
-            const store = transaction.objectStore(storeName);
-            const entry = (await requestResult(store.get(options.key))) as
-              | BuilderDraftOutboxEntry<T>
-              | undefined;
-            const cleared = entry?.mutationId === acknowledgement.mutationId;
-            if (cleared) {
-              store.delete(options.key);
-            }
-            await transactionResult(transaction);
-            return cleared;
-          },
-          () => {
-            const entry = memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined;
-            if (entry?.mutationId !== acknowledgement.mutationId) {
-              return false;
-            }
-            memoryFallback.delete(options.key);
-            return true;
-          },
-        ),
+      await serial(
+        async () =>
+          await withDatabase(
+            async (database) => {
+              const transaction = database.transaction(storeName, "readwrite");
+              const store = transaction.objectStore(storeName);
+              const storedValue = await requestResult<unknown>(store.get(options.key));
+              const entry = isBuilderDraftOutboxEntry<unknown>(storedValue)
+                ? storedValue
+                : undefined;
+              const cleared = entry?.mutationId === acknowledgement.mutationId;
+              if (cleared) {
+                store.delete(options.key);
+              }
+              await transactionResult(transaction);
+              return cleared;
+            },
+            () => {
+              const value: unknown = memoryFallback.get(options.key);
+              const entry = isBuilderDraftOutboxEntry<unknown>(value) ? value : undefined;
+              if (entry?.mutationId !== acknowledgement.mutationId) {
+                return false;
+              }
+              memoryFallback.delete(options.key);
+              return true;
+            },
+          ),
       ),
     clearIfMutationId: async (mutationId) =>
-      serial(async () =>
-        withDatabase(
-          async (database) => {
-            const transaction = database.transaction(storeName, "readwrite");
-            const store = transaction.objectStore(storeName);
-            const entry = (await requestResult(store.get(options.key))) as
-              | BuilderDraftOutboxEntry<T>
-              | undefined;
-            const cleared = entry?.mutationId === mutationId;
-            if (cleared) {
-              store.delete(options.key);
-            }
-            await transactionResult(transaction);
-            return cleared;
-          },
-          () => {
-            const entry = memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined;
-            if (entry?.mutationId !== mutationId) {
-              return false;
-            }
-            memoryFallback.delete(options.key);
-            return true;
-          },
-        ),
+      await serial(
+        async () =>
+          await withDatabase(
+            async (database) => {
+              const transaction = database.transaction(storeName, "readwrite");
+              const store = transaction.objectStore(storeName);
+              const storedValue = await requestResult<unknown>(store.get(options.key));
+              const entry = isBuilderDraftOutboxEntry<unknown>(storedValue)
+                ? storedValue
+                : undefined;
+              const cleared = entry?.mutationId === mutationId;
+              if (cleared) {
+                store.delete(options.key);
+              }
+              await transactionResult(transaction);
+              return cleared;
+            },
+            () => {
+              const value: unknown = memoryFallback.get(options.key);
+              const entry = isBuilderDraftOutboxEntry<unknown>(value) ? value : undefined;
+              if (entry?.mutationId !== mutationId) {
+                return false;
+              }
+              memoryFallback.delete(options.key);
+              return true;
+            },
+          ),
       ),
     read: async () =>
-      serial(async () =>
-        withDatabase(
-          async (database) => {
-            const transaction = database.transaction(storeName, "readonly");
-            const result = await requestResult(transaction.objectStore(storeName).get(options.key));
-            await transactionResult(transaction);
-            return result as BuilderDraftOutboxEntry<T> | undefined;
-          },
-          () => memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined,
-        ),
+      await serial(
+        async () =>
+          await withDatabase(
+            async (database) => {
+              const transaction = database.transaction(storeName, "readonly");
+              const result = await requestResult<unknown>(
+                transaction.objectStore(storeName).get(options.key),
+              );
+              await transactionResult(transaction);
+              return isBuilderDraftOutboxEntry<unknown>(result) ? result : undefined;
+            },
+            () => {
+              const value: unknown = memoryFallback.get(options.key);
+              return isBuilderDraftOutboxEntry<T>(value) ? value : undefined;
+            },
+          ),
       ),
-    write: async (entry) =>
-      serial(async () =>
-        withDatabase(
+    write: async (entry) => {
+      await serial(async () => {
+        await withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readwrite");
             transaction.objectStore(storeName).put(entry, options.key);
@@ -266,7 +306,8 @@ export function createBuilderDraftOutbox<T>(
           () => {
             memoryFallback.set(options.key, entry);
           },
-        ),
-      ),
+        );
+      });
+    },
   };
 }

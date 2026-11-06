@@ -13,8 +13,16 @@ export const choiceRequest: PublicInputRequest = {
 };
 
 export const semanticChoiceRequest: PublicInputRequest = {
-  ...choiceRequest,
+  allowFreeform: false,
+  description: "Select where you want to continue building.",
+  kind: "question",
+  options: [
+    { id: "codex", label: "ChatGPT / Codex" },
+    { id: "cursor", label: "Cursor" },
+  ],
   presentation: { control: "choice", section: "build-with" },
+  requestId: "build-client",
+  title: "Choose a build client",
 };
 
 export const repositoryScopeRequest: PublicInputRequest = {

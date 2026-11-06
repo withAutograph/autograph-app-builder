@@ -286,36 +286,38 @@ describe("service recovery of historical native approval", () => {
           };
         },
       );
-      const getSession = vi.fn(async () => current);
+      const getSession = vi.fn(() => current);
+      const observedEvents: { index: number }[] = [];
       const observeSessionPaged = vi.fn<NonNullable<HostedEveStore["observeSessionPaged"]>>(
         async (input) => {
           expect(input.expectedCheckpointDigest).toBe(current.checkpointDigest);
           if (input.replayBinding !== undefined) {
             expect(input.replayBinding.adapterSessionId).toBe("adapter_1");
           }
-          let eventCount = 0;
+          const observedPageEvents: { index: number }[] = [];
           for await (const event of input.events) {
-            expect(event.index).toBe(eventCount);
-            eventCount += 1;
+            observedPageEvents.push(event);
           }
-          expect(eventCount).toBe(0);
-          metadata = input.metadata;
+          observedEvents.push(...observedPageEvents);
+          ({ metadata } = input);
           revision += 1;
           const next = `sha256:${revision.toString(16).padStart(64, "0")}`;
-          current = durableHostedSessionRecordSchema.parse({
+          const { verifiedReplayReceipts } = input;
+          const nextSession = {
             ...current,
-            ...(input.verifiedReplayReceipts === undefined
-              ? {}
-              : { privateApprovalReceipts: input.verifiedReplayReceipts }),
             checkpointDigest: next,
             checkpointRef: { ...current.checkpointRef, digest: next },
             updatedAtEpochMs: input.nowEpochMs,
-          });
+          };
+          if (verifiedReplayReceipts !== undefined) {
+            nextSession.privateApprovalReceipts = verifiedReplayReceipts;
+          }
+          current = durableHostedSessionRecordSchema.parse(nextSession);
           return current;
         },
       );
       const readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(
-        async (input) => ({
+        (input) => ({
           checkpointDigest: input.checkpointRef.digest,
           cursor: 0,
           events: [],
@@ -328,8 +330,10 @@ describe("service recovery of historical native approval", () => {
         listSessions: base.listSessions.bind(base),
         observeSessionPaged,
         readCheckpointPage,
-        reserveOperation: vi.fn(async () => ({ disposition: "existing" as const, operation })),
-        settleSucceeded: vi.fn<HostedEveStore["settleSucceeded"]>(async (input) =>
+        reserveOperation: vi.fn(
+          async () => await Promise.resolve({ disposition: "existing" as const, operation }),
+        ),
+        settleSucceeded: vi.fn<HostedEveStore["settleSucceeded"]>((input) =>
           hostedOperationRecordSchema.parse({
             ...withoutHostedOperationError(operation),
             result: input.result,
@@ -354,6 +358,7 @@ describe("service recovery of historical native approval", () => {
       });
       await expect(service.respond(request)).rejects.toThrow();
       expect(call).toBeGreaterThanOrEqual(2);
+      expect(observedEvents.map((event) => event.index)).toEqual([]);
       expect(respond).not.toHaveBeenCalled();
       expect(store.settleSucceeded).not.toHaveBeenCalled();
       expect(metadata.approvalReplayProgress?.nativeObservationState.nextNativeIndex).toBe(3);

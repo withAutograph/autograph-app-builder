@@ -62,9 +62,32 @@ const rejectedToolError = (error: HostedRejectedOperationError, operation: McpOp
   };
 };
 
-const safeUnexpectedCause = (error: unknown): string => {
+type ToolError =
+  | Error
+  | string
+  | number
+  | boolean
+  | bigint
+  | symbol
+  | null
+  | undefined
+  | McpProviderUnavailableError
+  | McpToolAuthenticationRequiredError
+  | AdapterNotConfiguredError
+  | BuilderHandoffUnavailableError
+  | HostedSessionNotFoundError
+  | HostedAuthorizationError
+  | HostedIdempotencyConflictError
+  | HostedSubmissionUnknownError
+  | HostedRejectedOperationError
+  | HostedSessionBusyError
+  | HostedSessionRecoveryUnavailableError
+  | LocalSessionRecoveryUnavailableError
+  | HostedCancellationUnsettledError;
+
+const safeUnexpectedCause = (cause: unknown): string => {
   const messages: string[] = [];
-  let current = error;
+  let current = cause;
   for (let depth = 0; depth < 3; depth += 1) {
     if (current instanceof Error) {
       if (current.message.trim().length > 0) {
@@ -124,16 +147,23 @@ export function toolResult<const Result extends EveSessionListResult | EveSessio
       ? `${text}\n\nManage app access and people: ${result.appAccessUrl}`
       : text;
 
-  return {
-    content: [{ text: accessText, type: "text" as const }],
+  const response: {
+    content: [{ text: string; type: "text" }];
+    structuredContent: Result;
+    _meta?: { ui: { resourceUri: string } };
+  } = {
+    content: [{ text: accessText, type: "text" }],
     structuredContent: result,
-    ...(needsInteractiveSessionUi ? { _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } } } : {}),
   };
+  if (needsInteractiveSessionUi) {
+    response._meta = { ui: { resourceUri: SESSION_RESOURCE_URI } };
+  }
+  return response;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function safeToolError(
-  error: unknown,
+  error: ToolError,
   sessionId = "",
   operation: McpOperation = "autograph_get",
 ) {
@@ -165,6 +195,7 @@ export function safeToolError(
   const busy = error instanceof HostedSessionBusyError;
   const recoveryUnavailable = error instanceof HostedSessionRecoveryUnavailableError;
   const localRecoveryUnavailable = error instanceof LocalSessionRecoveryUnavailableError;
+  const { code: localRecoveryCode } = localSessionRecoveryError;
   const cancellationUnsettled = error instanceof HostedCancellationUnsettledError;
   let code = "internal_error";
   let message: string;
@@ -198,7 +229,7 @@ export function safeToolError(
     code = "already_continuing";
     message = "This app is already continuing in another place. Try again shortly.";
   } else if (localRecoveryUnavailable) {
-    code = localSessionRecoveryError.code;
+    code = localRecoveryCode;
     message =
       "Builder couldn’t recover this local session. Keep the original session open and contact your administrator before trying again.";
   } else if (recoveryUnavailable) {
@@ -206,7 +237,10 @@ export function safeToolError(
     message =
       "Builder can’t continue from the last saved point. Start again from the latest result.";
   } else if (rejected) {
-    ({ code, message } = rejectedToolError(error, operation));
+    const rejectedResult = rejectedToolError(error, operation);
+    const { code: rejectedCode, message: rejectedMessage } = rejectedResult;
+    code = rejectedCode;
+    message = rejectedMessage;
   } else {
     message = genericUnexpectedMessage(safeUnexpectedCause(error));
   }
@@ -221,9 +255,17 @@ export function safeToolError(
     sessionId,
     status: "failed",
   };
-  return {
+  const response = {
     ...toolResult(result, message),
-    ...(authenticationRequired ? { _meta: { "mcp/www_authenticate": [error.challenge] } } : {}),
     isError: true,
+  } satisfies {
+    content: [{ text: string; type: "text" }];
+    structuredContent: EveSessionResult;
+    isError: true;
+    _meta?: { "mcp/www_authenticate": [string] };
   };
+  if (error instanceof McpToolAuthenticationRequiredError) {
+    response._meta = { "mcp/www_authenticate": [error.challenge] };
+  }
+  return response;
 }

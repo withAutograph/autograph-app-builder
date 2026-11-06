@@ -10,11 +10,21 @@ const meta = {
     connected: true,
     gitScope: "101",
     gitScopeOptions: storyGitScopeOptions,
-    onConnect: fn(),
-    onGitScopeChange: fn(),
-    onPrivacyChange: fn(),
-    onProviderChange: fn(),
-    onRepositoryChange: fn(),
+    onConnect: () => {
+      fn()();
+    },
+    onGitScopeChange: () => {
+      fn()();
+    },
+    onPrivacyChange: () => {
+      fn()();
+    },
+    onProviderChange: () => {
+      fn()();
+    },
+    onRepositoryChange: () => {
+      fn()();
+    },
     privateRepository: true,
     repository: "vendor-portal",
     selected: "github",

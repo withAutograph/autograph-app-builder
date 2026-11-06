@@ -35,6 +35,8 @@ const completionSession = (ctx: ToolContext) => ({
   callbackExecution: hostedOperatorCallbackExecution(ctx.session),
   sessionAuth: ctx.session.auth,
 });
+const SHA256 = "sha256";
+const PUBLISHED_DRAFT_REPAIR = "published-draft-repair" as const;
 
 export const sealPublishedDraftRepair = async (input: {
   ctx: ToolContext;
@@ -45,7 +47,7 @@ export const sealPublishedDraftRepair = async (input: {
   const { ctx } = input;
   const state = appBuilderWorkflowState.get();
   const candidate = draftReconciliationState.get();
-  if (state.phase !== "reviewed" || candidate?.kind !== "published-draft-repair") {
+  if (state.phase !== "reviewed" || candidate?.kind !== PUBLISHED_DRAFT_REPAIR) {
     throw new Error("Prepare the current owned draft repair before sealing its update.");
   }
   if (
@@ -102,7 +104,7 @@ export const sealPublishedDraftRepair = async (input: {
       digest: review.digest,
     },
     compilation,
-    kind: "published-draft-repair" as const,
+    kind: PUBLISHED_DRAFT_REPAIR,
     proposal,
     repair,
     review,
@@ -173,7 +175,7 @@ export const updatePublishedDraftRepair = async (input: {
   const state = appBuilderWorkflowState.get();
   const candidate = draftReconciliationState.get();
   if (
-    candidate?.kind !== "published-draft-repair" ||
+    candidate?.kind !== PUBLISHED_DRAFT_REPAIR ||
     state.phase !== "reviewed" ||
     candidate.validation === undefined
   ) {
@@ -208,7 +210,7 @@ export const updatePublishedDraftRepair = async (input: {
       const bytes = await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` });
       if (
         bytes === null ||
-        createHash("sha256").update(bytes).digest("hex") !== change.after.digest
+        createHash(SHA256).update(bytes).digest("hex") !== change.after.digest
       ) {
         throw new Error("The approved draft repair postimage changed.");
       }

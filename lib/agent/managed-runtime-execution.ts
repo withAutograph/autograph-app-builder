@@ -40,6 +40,25 @@ import type { NormalActorRuntimeProjection } from "../provisioning/hosted-operat
 
 const unavailable = () => new HostedOperatorError("reconciliation_required");
 
+const writeCurrent = async (provider: ManagedRuntimeSandboxPort, record: ContinuityRecord) => {
+  if (record.current === undefined || record.locator === undefined) {
+    return;
+  }
+  const file = `${record.locator.rootDirectory}/current.json`;
+  const temporary = `${file}.${record.fence}.next`;
+  await provider.writeFiles([
+    {
+      content: JSON.stringify({
+        ...record.current,
+        leaseExpiresAt: managedRuntimeOwnerLease(record.current.leaseExpiresAt),
+      }),
+      mode: 0o600,
+      path: temporary,
+    },
+  ]);
+  await provider.fs.rename(temporary, file);
+};
+
 /** Structural subset of the supported Sandbox SDK, also used by the existing prepared runtime. */
 export interface ManagedRuntimeSandboxPort extends Omit<RuntimeTransport, "fs" | "runCommand"> {
   readonly name: string;
@@ -242,24 +261,6 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     }
     return { locator, provider };
   };
-  const writeCurrent = async (provider: ManagedRuntimeSandboxPort, record: ContinuityRecord) => {
-    if (record.current === undefined || record.locator === undefined) {
-      return;
-    }
-    const file = `${record.locator.rootDirectory}/current.json`;
-    const temporary = `${file}.${record.fence}.next`;
-    await provider.writeFiles([
-      {
-        content: JSON.stringify({
-          ...record.current,
-          leaseExpiresAt: managedRuntimeOwnerLease(record.current.leaseExpiresAt),
-        }),
-        mode: 0o600,
-        path: temporary,
-      },
-    ]);
-    await provider.fs.rename(temporary, file);
-  };
   const closeOwnedCommand = async (context: HostedOperatorContext, record: ContinuityRecord) => {
     if (record.locator === undefined) {
       return;
@@ -384,13 +385,15 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
           branch: record.plan.target.branch,
           environment: material.environment,
           files: { "environment.json": JSON.stringify(material.environment) },
-          persistFiles: async () => {},
+          persistFiles: async () => {
+            await Promise.resolve();
+          },
           projectId: record.plan.target.projectId,
           stateDirectory: `${locator.rootDirectory}/suite`,
         },
         browserTestBaseUrl: record.plan.gateway.publicOrigin,
         normalActors: material.normalActors,
-        observeInstallation: async () => material.proof,
+        observeInstallation: async () => await Promise.resolve(material.proof),
         privateValues: [capabilities.suiteSelector, capabilities.lifecycle],
         provider,
         resumeCommand: async (commandId) => await provider.getCommand(commandId),
@@ -403,22 +406,23 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         socketPath: ready.socketPath,
       });
       const { runTask } = prepared;
+      const managedRunTask = async (input: Parameters<typeof runTask>[0]) => {
+        const taskInput: Parameters<typeof runTask>[0] = {
+          ...input,
+          allowDispatch,
+          commandCheckpoint: checkpoint,
+          commandId: record.suiteCommandId,
+          environment: { ...input.environment, ...privateEnvironment },
+        };
+        if (record.plan.runtime.browserSelection !== undefined) {
+          taskInput.browserSelection = record.plan.runtime.browserSelection;
+          taskInput.frozenBrowserSelection = true;
+        }
+        return await runTask(taskInput);
+      };
       const managed = {
         ...prepared,
-        runTask: async (input: Parameters<typeof runTask>[0]) =>
-          await runTask({
-            ...input,
-            ...(record.plan.runtime.browserSelection === undefined
-              ? {}
-              : {
-                  browserSelection: record.plan.runtime.browserSelection,
-                  frozenBrowserSelection: true,
-                }),
-            allowDispatch,
-            commandCheckpoint: checkpoint,
-            commandId: record.suiteCommandId,
-            environment: { ...input.environment, ...privateEnvironment },
-          }),
+        runTask: managedRunTask,
       };
       const result = await runAppBrowserTests({
         appId: record.plan.target.appId,
@@ -430,7 +434,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         root: record.plan.runtime.root,
         runtime: managed,
         sandbox: {
-          run: async () => {
+          run: () => {
             throw unavailable();
           },
         },

@@ -1,6 +1,15 @@
 import { createSourceCandidateValidator } from "../handoff/source-candidate-validation";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import type * as databaseSchema from "../db/schema";
+import type {
+  agentOperations,
+  agentSessions,
+  builderProvisioningJournals,
+  githubRepositoryAccessContinuations,
+  hostedWorkspaceMemberships,
+  member,
+  organization,
+  user,
+} from "../db/schema";
 import { openHostedPostgresDatabase } from "../db/hosted-postgres";
 import { parseHostedDatabaseUrl } from "../db/postgres-connection-policy";
 import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
@@ -17,12 +26,21 @@ import type { ResumeRealmContinuation } from "./realm-continuation-read";
 
 export { openHostedPostgresDatabase } from "../db/hosted-postgres";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = PostgresJsDatabase<{
+  agentOperations: typeof agentOperations;
+  agentSessions: typeof agentSessions;
+  builderProvisioningJournals: typeof builderProvisioningJournals;
+  githubRepositoryAccessContinuations: typeof githubRepositoryAccessContinuations;
+  hostedWorkspaceMemberships: typeof hostedWorkspaceMemberships;
+  member: typeof member;
+  organization: typeof organization;
+  user: typeof user;
+}>;
 type ResumeRepositoryAccess = (input: {
   sessionAuth: unknown;
   sessionId: string;
   fetchImplementation?: typeof fetch;
-}) => Promise<unknown>;
+}) => Promise<number>;
 type RecheckRepositoryAccess = (input: {
   sessionAuth: unknown;
   repository: string;
@@ -30,13 +48,22 @@ type RecheckRepositoryAccess = (input: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function forwardedSessionAuth(principal: HostedPrincipal, sourceHandoffId?: string) {
+  const attributes = {
+    "mcp:audience": principal.audience,
+    "mcp:scopes": principal.scopes,
+    "mcp:workspace-id": principal.workspaceId,
+  } satisfies {
+    "mcp:audience": string;
+    "mcp:scopes": readonly string[];
+    "mcp:workspace-id": string;
+    "autograph:source-handoff-id"?: string;
+  };
+  const forwardedAttributes =
+    sourceHandoffId === undefined
+      ? attributes
+      : { ...attributes, "autograph:source-handoff-id": sourceHandoffId };
   const context = {
-    attributes: {
-      "mcp:audience": principal.audience,
-      "mcp:scopes": principal.scopes,
-      "mcp:workspace-id": principal.workspaceId,
-      ...(sourceHandoffId === undefined ? {} : { "autograph:source-handoff-id": sourceHandoffId }),
-    },
+    attributes: forwardedAttributes,
     authenticator: "mcp-oauth-jwks" as const,
     issuer: principal.issuer,
     principalId: principal.ownerUserId,
@@ -132,24 +159,28 @@ export function createDeploymentMcpRequestHandler(input: {
                 const resumeRepositoryAccess =
                   input.resumeRepositoryAccess ??
                   repositoryRuntime.resumeAuthorizedRepositoryAccessForSession;
-                await resumeRepositoryAccess({
+                const resumeInput = {
                   sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
                   sessionId: adapterSessionId,
-                  ...(input.fetchImplementation === undefined
-                    ? {}
-                    : { fetchImplementation: input.fetchImplementation }),
-                });
+                };
+                await resumeRepositoryAccess(
+                  input.fetchImplementation === undefined
+                    ? resumeInput
+                    : { ...resumeInput, fetchImplementation: input.fetchImplementation },
+                );
               } catch {
                 // A lost callback notification is recoverable. Repository
                 // access remains parked and the ordinary session read still
                 // returns its exact outstanding authorization request.
               }
-              await resumeRealmContinuation({
+              const continuationInput = {
                 adapterSessionId,
                 principal,
                 sessionId,
-                ...(sourceHandoffId === undefined ? {} : { sourceHandoffId }),
-              });
+              };
+              await (sourceHandoffId === undefined
+                ? resumeRealmContinuation(continuationInput)
+                : resumeRealmContinuation({ ...continuationInput, sourceHandoffId }));
             },
             handoffs: {
               ...handoffService,
@@ -176,7 +207,7 @@ export function createDeploymentMcpRequestHandler(input: {
       if (request.url !== hostedResourceUrl) {
         throw new Error("The hosted request does not match the configured MCP resource.");
       }
-      return hostedHandler(request);
+      return await hostedHandler(request);
     } catch {
       return unavailableResponse();
     }

@@ -20,9 +20,34 @@ import { promisify } from "node:util";
 import nodePath from "node:path";
 import { runSequentially } from "../async-sequential";
 
-const execFileAsync = promisify(execFile);
+const execFileAsync: (
+  file: string,
+  args: string[],
+  options: { encoding: "buffer"; env: NodeJS.ProcessEnv; maxBuffer: number },
+) => Promise<{ stderr: Buffer; stdout: Buffer }> = promisify(
+  // SAFETY: execFile's callback completes with stdout and stderr buffers for buffer encoding.
+  execFile as (
+    file: string,
+    args: string[],
+    options: { encoding: "buffer"; env: NodeJS.ProcessEnv; maxBuffer: number },
+    callback: (error: Error | null, stdout: Buffer, stderr: Buffer) => void,
+  ) => void,
+);
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const { dirname, isAbsolute, join, relative, resolve: pathResolve, sep } = nodePath;
+const ARRUSTED_CHECKOUT_LABEL = "Arrusted checkout";
+const DEVELOPMENT_RUN_ROOT_LABEL = "Development run root";
+const GIT_EXECUTABLE = "/usr/bin/git";
+const MISSING_FILE = "ENOENT";
+
+interface DevelopmentAbortHandlers {
+  aborted?: () => void;
+}
+interface DevelopmentAuditTimers {
+  audit?: NodeJS.Timeout;
+}
+const isErrnoException = (error: unknown): error is NodeJS.ErrnoException =>
+  error instanceof Error && "code" in error;
 
 const dependencyInputs = [
   ".config/mise/config.toml",
@@ -129,22 +154,10 @@ const hostedSessionResource = (value: string): string => {
 
 // oxlint-disable-next-line eslint/complexity -- Each named development option validates only its own argument.
 export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentArguments => {
-  const parsed: {
-    arrustedRoot?: string;
-    stateRoot?: string;
-    destinationRoot?: string;
-    resumeCycle?: string;
-    emulatedWeb?: boolean;
-    installPlugin?: boolean;
-    webCertificate?: string;
-    webKey?: string;
-    webCa?: string;
-    nextPort: number;
-    hostedSessionResource?: string;
-    hostedSessionCodexBin?: string;
-    nextBundler?: "turbopack" | "webpack";
-    evePort: number;
-  } = { evePort: 2000, nextPort: 3000 };
+  const parsed: Omit<DevelopmentArguments, "arrustedRoot"> & { arrustedRoot?: string } = {
+    evePort: 2000,
+    nextPort: 3000,
+  };
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
     if (name === undefined || !name.startsWith("--")) {
@@ -295,7 +308,7 @@ const assertSafeSourceAncestors = async (sourceRoot: string, absolute: string) =
 
 const sourcePaths = async (sourceRoot: string): Promise<string[]> => {
   const { stdout } = await execFileAsync(
-    "/usr/bin/git",
+    GIT_EXECUTABLE,
     [
       "-c",
       "core.hooksPath=/dev/null",
@@ -318,34 +331,33 @@ const sourcePaths = async (sourceRoot: string): Promise<string[]> => {
   for (const entry of stdout.toString("utf-8").split("\0").filter(Boolean)) {
     const staged = /^(?<mode>\d{6}) [0-9a-f]+ [0-3]\t(?<path>[\s\S]*)$/u.exec(entry);
     const path = staged?.[2] ?? entry;
-    if (!safeRelativePath(path)) {
-      continue;
-    }
-    if (staged?.[1] === "160000") {
-      const absolute = join(sourceRoot, path);
-      try {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await assertSafeSourceAncestors(sourceRoot, absolute);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        const info = await lstat(absolute);
-        if (info.isDirectory() && !info.isSymbolicLink()) {
-          // An uninitialized gitlink has no checkout bytes to snapshot. An
-          // initialized submodule contributes its live, nonignored files.
+    if (safeRelativePath(path)) {
+      if (staged?.[1] === "160000") {
+        const absolute = join(sourceRoot, path);
+        try {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          await lstat(join(absolute, ".git"));
+          await assertSafeSourceAncestors(sourceRoot, absolute);
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          const children = await sourcePaths(absolute);
-          paths.push(...children.map((child) => `${path}/${child}`));
-          continue;
+          const info = await lstat(absolute);
+          if (info.isDirectory() && !info.isSymbolicLink()) {
+            // An uninitialized gitlink has no checkout bytes to snapshot. An
+            // initialized submodule contributes its live, nonignored files.
+            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+            await lstat(join(absolute, ".git"));
+            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+            const children = await sourcePaths(absolute);
+            paths.push(...children.map((child) => `${path}/${child}`));
+            continue;
+          }
+        } catch (error) {
+          // SAFETY: ENOENT identifies an absent or uninitialized gitlink path.
+          if (!isErrnoException(error) || error.code !== MISSING_FILE) {
+            throw error;
+          }
         }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-          continue;
-        }
-        throw error;
       }
+      paths.push(path);
     }
-    paths.push(path);
   }
   return [...new Set(paths)].toSorted((left, right) =>
     Buffer.from(left).compare(Buffer.from(right)),
@@ -403,8 +415,9 @@ const sourceEntry = async (sourceRoot: string, path: string) => {
       `Development source supports only regular files and safe symbolic links: ${path}`,
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return;
+    // SAFETY: ENOENT means this source entry disappeared during the snapshot.
+    if (isErrnoException(error) && error.code === MISSING_FILE) {
+      return null;
     }
     throw error;
   }
@@ -412,7 +425,7 @@ const sourceEntry = async (sourceRoot: string, path: string) => {
 
 const developmentEntries = async (sourceRoot: string) => {
   const paths = await sourcePaths(sourceRoot);
-  const entries: Awaited<ReturnType<typeof sourceEntry>>[] = [];
+  const entries: Exclude<Awaited<ReturnType<typeof sourceEntry>>, null>[] = [];
   for (let offset = 0; offset < paths.length; offset += 32) {
     entries.push(
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -421,7 +434,7 @@ const developmentEntries = async (sourceRoot: string) => {
       )),
     );
   }
-  return entries.filter((entry) => entry !== undefined);
+  return entries.filter((entry) => entry !== null);
 };
 
 const fingerprintEntries = (entries: readonly Awaited<ReturnType<typeof sourceEntry>>[]) => {
@@ -443,7 +456,7 @@ const fingerprintEntries = (entries: readonly Awaited<ReturnType<typeof sourceEn
 };
 
 export const fingerprintDevelopmentSource = async (sourceRoot: string) => {
-  await canonicalOwnedDirectory(sourceRoot, "Arrusted checkout");
+  await canonicalOwnedDirectory(sourceRoot, ARRUSTED_CHECKOUT_LABEL);
   return fingerprintEntries(await developmentEntries(sourceRoot));
 };
 
@@ -458,9 +471,9 @@ export const waitForDevelopmentSourceChange = async (input: {
   let checking = false;
   let pending = false;
   let settled = false;
-  const handlers: { aborted?: () => void } = {};
+  const handlers: DevelopmentAbortHandlers = {};
   let debounce: NodeJS.Timeout | undefined;
-  const timers: { audit?: NodeJS.Timeout } = {};
+  const timers: DevelopmentAuditTimers = {};
   let watcher: FSWatcher | undefined;
   const finish = (changed: boolean) => {
     if (settled) {
@@ -512,10 +525,10 @@ export const waitForDevelopmentSourceChange = async (input: {
       clearTimeout(debounce);
     }
     debounce = setTimeout(() => {
-      check();
+      void check();
     }, delay);
   };
-  if (input.signal?.aborted) {
+  if (input.signal?.aborted === true) {
     finish(false);
     return await promise;
   }
@@ -540,8 +553,10 @@ export const createDevelopmentSnapshot = async (input: {
   sourceRoot: string;
   runRoot: string;
 }): Promise<DevelopmentSnapshot> => {
-  const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, "Arrusted checkout");
-  const runRoot = await canonicalOwnedDirectory(input.runRoot, "Development run root");
+  const [sourceRoot, runRoot] = await Promise.all([
+    canonicalOwnedDirectory(input.sourceRoot, ARRUSTED_CHECKOUT_LABEL),
+    canonicalOwnedDirectory(input.runRoot, DEVELOPMENT_RUN_ROOT_LABEL),
+  ]);
   const root = join(runRoot, "source");
   await mkdir(root, { mode: 0o700 });
   try {
@@ -567,7 +582,7 @@ export const createDevelopmentSnapshot = async (input: {
     // The captured entries identify this planning input. Ordinary checkout
     // edits during copying are picked up by the source watcher in the next
     // cycle; they must not terminate development or discard active sessions.
-    execFileSync("/usr/bin/git", ["init", "-q"], {
+    execFileSync(GIT_EXECUTABLE, ["init", "-q"], {
       cwd: root,
       env: gitEnvironment(),
     });
@@ -575,7 +590,7 @@ export const createDevelopmentSnapshot = async (input: {
     // by the selected source. Stage exactly the captured inventory, including
     // those files, without traversing ignored dependencies or private state.
     execFileSync(
-      "/usr/bin/git",
+      GIT_EXECUTABLE,
       ["--literal-pathspecs", "add", "--force", "--pathspec-from-file=-", "--pathspec-file-nul"],
       {
         cwd: root,
@@ -584,7 +599,7 @@ export const createDevelopmentSnapshot = async (input: {
       },
     );
     execFileSync(
-      "/usr/bin/git",
+      GIT_EXECUTABLE,
       [
         "-c",
         "user.name=Autograph Development Snapshot",
@@ -605,12 +620,12 @@ export const createDevelopmentSnapshot = async (input: {
         },
       },
     );
-    const commit = execFileSync("/usr/bin/git", ["rev-parse", "HEAD"], {
+    const commit = execFileSync(GIT_EXECUTABLE, ["rev-parse", "HEAD"], {
       cwd: root,
       encoding: "utf-8",
       env: gitEnvironment(),
     }).trim();
-    const tree = execFileSync("/usr/bin/git", ["rev-parse", "HEAD^{tree}"], {
+    const tree = execFileSync(GIT_EXECUTABLE, ["rev-parse", "HEAD^{tree}"], {
       cwd: root,
       encoding: "utf-8",
       env: gitEnvironment(),
@@ -661,7 +676,8 @@ export const removeDevelopmentSnapshot = async (root: string) => {
   try {
     await makeWritable(root);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    // SAFETY: ENOENT means the snapshot was already removed.
+    if (!isErrnoException(error) || error.code !== MISSING_FILE) {
       throw error;
     }
   }
@@ -678,7 +694,8 @@ const digestFileOrAbsent = async (path: string) => {
     }
     return sha256(await readFile(path));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    // SAFETY: ENOENT identifies a missing optional dependency input.
+    if (isErrnoException(error) && error.code === MISSING_FILE) {
       return "absent";
     }
     throw error;
@@ -690,16 +707,15 @@ export const developmentDependencyKey = async (input: {
   platform: string;
   tools: DevelopmentTools;
 }) => {
-  const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, "Arrusted checkout");
+  const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, ARRUSTED_CHECKOUT_LABEL);
   if (!/^linux\/(?:arm64|amd64)$/u.test(input.platform)) {
     throw new Error("Development dependency platform is unsupported.");
   }
-  const lockfiles = Object.fromEntries(
+  const lockfiles: Record<(typeof dependencyInputs)[number], string> = Object.fromEntries(
     await Promise.all(
-      dependencyInputs.map(async (path) => [
-        path,
-        await digestFileOrAbsent(join(sourceRoot, path)),
-      ]),
+      dependencyInputs.map(
+        async (path) => [path, await digestFileOrAbsent(join(sourceRoot, path))] as const,
+      ),
     ),
   );
   return sha256(

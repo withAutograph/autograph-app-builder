@@ -25,7 +25,7 @@ import {
   sha256,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
-import type { TargetIdentityReceipt } from "@/lib/agent/workflow-state";
+import type { AppBuilderWorkflowState, TargetIdentityReceipt } from "@/lib/agent/workflow-state";
 import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
@@ -33,10 +33,50 @@ import {
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
 
-const frameworkPlanningOptions = (fixture: boolean, requested?: "latest", accepted?: "latest") => ({
-  frameworkUpgradeRequested: (requested ?? accepted) === "latest",
-  ...(fixture ? {} : { resolveFrameworkVersions: resolveLatestFrameworkVersions }),
-});
+interface FrameworkPlanningOptions {
+  frameworkUpgradeRequested: boolean;
+  resolveFrameworkVersions?: typeof resolveLatestFrameworkVersions;
+}
+
+interface PrivateComputePlanningInput {
+  callId: string;
+  repairChanges?: readonly ExistingAppChange[];
+  requested?: typeof PRIVATE_COMPUTE_PROFILE_ID;
+  sandbox: Awaited<ReturnType<typeof refreshPlanningSource>>;
+  state: AppBuilderWorkflowState;
+}
+
+const frameworkPlanningOptions = (fixture: boolean, requested?: "latest", accepted?: "latest") => {
+  const options: FrameworkPlanningOptions = {
+    frameworkUpgradeRequested: (requested ?? accepted) === "latest",
+  };
+  if (!fixture) {
+    options.resolveFrameworkVersions = resolveLatestFrameworkVersions;
+  }
+  return options;
+};
+
+type ReusableTargetPhase =
+  | "planned"
+  | "apply_failed"
+  | "applied"
+  | "validation_pending"
+  | "validation_failed"
+  | "validated"
+  | "reviewed";
+
+const canReusePlannedTarget = (
+  state: DependencyReadyState,
+): state is Extract<DependencyReadyState, { phase: ReusableTargetPhase }> =>
+  [
+    "planned",
+    "apply_failed",
+    "applied",
+    "validation_pending",
+    "validation_failed",
+    "validated",
+    "reviewed",
+  ].some((phase) => phase === state.phase);
 
 // oxlint-disable-next-line eslint/complexity -- Preserve the existing phase protocol and explicit same-app repair boundary in one producer.
 export const prepareAppCreation = async (
@@ -71,13 +111,16 @@ export const prepareAppCreation = async (
     current: planningState,
     sandbox: sandboxForPlanning,
   });
-  const computeProfile = await preparePrivateComputePlanning({
-    state: planningState,
-    ...(repair === undefined ? {} : { repairChanges: existingAppChanges }),
-    sandbox: sandboxForPlanning,
-    requested: privateCompute,
+  const computePlanningInput: PrivateComputePlanningInput = {
     callId: ctx.callId,
-  });
+    requested: privateCompute,
+    sandbox: sandboxForPlanning,
+    state: planningState,
+  };
+  if (repair !== undefined) {
+    computePlanningInput.repairChanges = existingAppChanges;
+  }
+  const computeProfile = await preparePrivateComputePlanning(computePlanningInput);
   repair?.assertCurrent();
   const stateForPlanning = appBuilderWorkflowState.get();
   if (
@@ -96,16 +139,7 @@ export const prepareAppCreation = async (
   const current: DependencyReadyState = prepared.state;
   const { sandbox } = prepared;
   const execution = targetExecutionBinding(undefined, process.env);
-  if (
-    (current.phase === "planned" ||
-      current.phase === "apply_failed" ||
-      current.phase === "applied" ||
-      current.phase === "validation_pending" ||
-      current.phase === "validation_failed" ||
-      current.phase === "validated" ||
-      current.phase === "reviewed") &&
-    (repair === undefined || repair.reuse)
-  ) {
+  if (canReusePlannedTarget(current) && (repair === undefined || repair.reuse)) {
     return {
       appId: current.appSpec.appId,
       productAcceptance: productAcceptanceObligations(current.appSpec),
@@ -134,10 +168,15 @@ export const prepareAppCreation = async (
     sessionAuth: ctx.session.auth,
     sessionId: ctx.session.id,
   };
-  const appSpecSource =
-    current.appSpec.version === 2
-      ? { appSpecStream: resolveAcceptedAppSpecStream(appSpecReference) }
-      : { appSpecContent: await resolveAcceptedAppSpecContent(appSpecReference) };
+  const appSpecSource: Pick<
+    Parameters<typeof executeTargetIdentityAndPlanning>[0],
+    "appSpecContent" | "appSpecStream"
+  > = {};
+  if (current.appSpec.version === 2) {
+    appSpecSource.appSpecStream = resolveAcceptedAppSpecStream(appSpecReference);
+  } else {
+    appSpecSource.appSpecContent = await resolveAcceptedAppSpecContent(appSpecReference);
+  }
   const imported = applicationSourceImportState.get();
   if (
     imported !== undefined &&
@@ -147,25 +186,14 @@ export const prepareAppCreation = async (
   ) {
     throw new Error("The app plan must retain its exact imported application source.");
   }
-  const result = await executeTargetIdentityAndPlanning({
-    ...(imported === undefined
-      ? {}
-      : {
-          applicationSourceImport: {
-            appId: imported.reference.appId,
-            importedSessionId: imported.importedSessionId,
-            manifestDigest: imported.reference.manifestDigest,
-          },
-        }),
+  const planningInput: Parameters<typeof executeTargetIdentityAndPlanning>[0] = {
     appId: current.appSpec.appId,
-    ...appSpecSource,
     appSpecDigest: current.appSpec.digest,
     artifactRevision: current.appSpec.artifactRevision,
     environment: process.env,
     executor: execution.fixture
       ? fixtureTargetCommandExecutor()
       : sandboxTargetCommandExecutor(sandbox),
-    existingAppChanges,
     localSourceReconciliation: localSourceReconciliationForPlanning(current),
     privateCompute: computeProfile,
     ...frameworkPlanningOptions(
@@ -192,18 +220,20 @@ export const prepareAppCreation = async (
         // Keep the settled workflow intact until the entire new proposal is ready.
         return;
       }
-      const identityState = {
+      const identityState: Extract<AppBuilderWorkflowState, { phase: "identity_resolved" }> = {
+        appSpec: current.appSpec,
+        artifacts: current.artifacts,
+        dependencyReceipt: current.dependencyReceipt,
+        identityReceipt: recordedIdentityReceipt,
         phase: "identity_resolved",
         preparedByCallId: current.preparedByCallId,
         sourceReceipt: current.sourceReceipt,
         version: APP_BUILDER_WORKFLOW_VERSION,
         workspace: current.workspace,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-        appSpec: current.appSpec,
-        artifacts: current.artifacts,
-        dependencyReceipt: current.dependencyReceipt,
-        identityReceipt: recordedIdentityReceipt,
-      } as const;
+      };
+      if (current.githubSource !== undefined) {
+        identityState.githubSource = current.githubSource;
+      }
       updateExactWorkflow({
         expected: current,
         operation: "target identity receipt recording",
@@ -213,7 +243,24 @@ export const prepareAppCreation = async (
     },
     sandbox,
     sourceReceipt: current.sourceReceipt,
-  });
+  };
+  if (appSpecSource.appSpecContent !== undefined) {
+    planningInput.appSpecContent = appSpecSource.appSpecContent;
+  }
+  if (appSpecSource.appSpecStream !== undefined) {
+    planningInput.appSpecStream = appSpecSource.appSpecStream;
+  }
+  if (existingAppChanges !== undefined) {
+    planningInput.existingAppChanges = existingAppChanges;
+  }
+  if (imported !== undefined) {
+    planningInput.applicationSourceImport = {
+      appId: imported.reference.appId,
+      importedSessionId: imported.importedSessionId,
+      manifestDigest: imported.reference.manifestDigest,
+    };
+  }
+  const result = await executeTargetIdentityAndPlanning(planningInput);
   if (identityReceipt === undefined) {
     throw new Error("Target identity receipt was not recorded.");
   }
@@ -229,22 +276,25 @@ export const prepareAppCreation = async (
   const proposal = { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
   ctx.abortSignal?.throwIfAborted();
   repair?.assertCurrent();
+  const plannedState: Extract<AppBuilderWorkflowState, { phase: "planned" }> = {
+    appSpec: current.appSpec,
+    artifacts: current.artifacts,
+    dependencyReceipt: current.dependencyReceipt,
+    identityReceipt: recordedIdentity,
+    phase: "planned",
+    preparedByCallId: current.preparedByCallId,
+    proposal,
+    sourceReceipt: current.sourceReceipt,
+    version: APP_BUILDER_WORKFLOW_VERSION,
+    workspace: current.workspace,
+  };
+  if (current.githubSource !== undefined) {
+    Object.assign(plannedState, { githubSource: current.githubSource });
+  }
   updateExactWorkflow({
     expected: workflowBeforeProposal,
     operation: "target proposal recording",
-    transition: () => ({
-      phase: "planned",
-      preparedByCallId: current.preparedByCallId,
-      sourceReceipt: current.sourceReceipt,
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      workspace: current.workspace,
-      ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-      appSpec: current.appSpec,
-      artifacts: current.artifacts,
-      dependencyReceipt: current.dependencyReceipt,
-      identityReceipt: recordedIdentity,
-      proposal,
-    }),
+    transition: () => plannedState,
   });
   if (repair?.approvedBase !== undefined) {
     existingAppRepairHistory.update((history) => [

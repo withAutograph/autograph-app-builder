@@ -10,18 +10,32 @@ const compareSourcePath = (left: string, right: string) => {
   return 0;
 };
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const sourcePathSeparator = "/";
+const currentDirectorySegment = ".";
+const parentDirectorySegment = "..";
 const sourcePath = z
   .string()
   .min(1)
   .refine(
     (value) =>
-      !value.startsWith("/") &&
+      !value.startsWith(sourcePathSeparator) &&
       !value.includes("\\") &&
       !value.includes("\0") &&
-      value.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
+      value
+        .split(sourcePathSeparator)
+        .every(
+          (part) =>
+            part !== "" && part !== currentDirectorySegment && part !== parentDirectorySegment,
+        ),
     "An unambiguous repository-relative source path is required",
   );
-const sourceOmissionKindSchema = z.enum(["credential", "runtime-state", "dependency-cache"]);
+const runtimeStateOmissionKind = "runtime-state";
+const dependencyCacheOmissionKind = "dependency-cache";
+const sourceOmissionKindSchema = z.enum([
+  "credential",
+  runtimeStateOmissionKind,
+  dependencyCacheOmissionKind,
+]);
 const credentialPathSegments = new Set([
   ".npmrc",
   ".pypirc",
@@ -61,13 +75,13 @@ export const applicationSourceOmissionReason = (
       ].includes(part),
     )
   ) {
-    return "runtime-state";
+    return runtimeStateOmissionKind;
   }
   if (
     parts.some((part) => ["node_modules", ".turbo", ".cache"].includes(part)) ||
     [".next", "coverage", "dist", "build"].includes(parts[0] ?? "")
   ) {
-    return "dependency-cache";
+    return dependencyCacheOmissionKind;
   }
   return undefined;
 };

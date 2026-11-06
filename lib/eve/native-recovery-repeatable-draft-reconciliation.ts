@@ -19,6 +19,16 @@ import type {
 const workflowKey = "autograph-app-builder.workflow.v17";
 const candidateKey = "autograph-app-builder.draft-reconciliation.v1";
 const completionsKey = "autograph-app-builder.draft-reconciliation-completions.v1";
+const toolApprovalRequestType = "tool-approval-request";
+const toolApprovalResponseType = "tool-approval-response";
+const inputRequestedEventType = "input.requested";
+const approvalSettledEventType = "approval.settled";
+const actionResultEventType = "action.result";
+const policyRelevantEventTypes = new Set([
+  inputRequestedEventType,
+  approvalSettledEventType,
+  actionResultEventType,
+]);
 const part = z.looseObject({
   approvalId: z.string().optional(),
   approved: z.boolean().optional(),
@@ -94,11 +104,7 @@ const readRecoveryHistory = (
     if (parsed === undefined) {
       return undefined;
     }
-    if (
-      parsed.type === "input.requested" ||
-      parsed.type === "approval.settled" ||
-      parsed.type === "action.result"
-    ) {
+    if (policyRelevantEventTypes.has(parsed.type)) {
       nativeEvents.push(parsed);
     }
   }
@@ -128,22 +134,23 @@ const readRecoveryHistory = (
 
 const uniqueHistoryApproval = (parts: Part[], callId: string): boolean => {
   const requests = parts.filter(
-    (value) => value.type === "tool-approval-request" && value.toolCallId === callId,
+    (value) => value.type === toolApprovalRequestType && value.toolCallId === callId,
   );
   if (
     requests.length !== 1 ||
-    requests[0].approvalId === undefined ||
-    requests[0].approvalId.length === 0
+    requests[0]?.approvalId === undefined ||
+    requests[0]?.approvalId.length === 0
   ) {
     return false;
   }
-  const { approvalId } = requests[0];
+  const [request] = requests;
+  const { approvalId } = request;
   const responses = parts.filter(
-    (value) => value.type === "tool-approval-response" && value.approvalId === approvalId,
+    (value) => value.type === toolApprovalResponseType && value.approvalId === approvalId,
   );
   return (
     parts.filter(
-      (value) => value.type === "tool-approval-request" && value.approvalId === approvalId,
+      (value) => value.type === toolApprovalRequestType && value.approvalId === approvalId,
     ).length === 1 &&
     responses.length === 1 &&
     responses[0].approved === true
@@ -153,7 +160,7 @@ const uniqueHistoryApproval = (parts: Part[], callId: string): boolean => {
 /** Native server frames, not a model/history approval response, establish the human decision. */
 const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: string): boolean => {
   const requests = events.flatMap((value, index) => {
-    if (value.type !== "input.requested") {
+    if (value.type !== inputRequestedEventType) {
       return [];
     }
     const parsed = z.object({ requests: z.array(z.unknown()) }).safeParse(value.data).data;
@@ -167,12 +174,13 @@ const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: s
       return [{ index, request }];
     });
   });
-  if (requests.length !== 1 || requests[0].request === undefined) {
+  if (requests.length !== 1 || requests[0]?.request === undefined) {
     return false;
   }
-  const { request, index } = requests[0];
+  const [matchedRequest] = requests;
+  const { request, index } = matchedRequest;
   const requestIdMatches = events.flatMap((value) => {
-    if (value.type !== "input.requested") {
+    if (value.type !== inputRequestedEventType) {
       return [];
     }
     const parsed = z.object({ requests: z.array(z.unknown()) }).safeParse(value.data).data;
@@ -189,7 +197,7 @@ const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: s
     return false;
   }
   const settlements = events.flatMap((value, settledIndex) => {
-    if (value.type !== "approval.settled") {
+    if (value.type !== approvalSettledEventType) {
       return [];
     }
     if (
@@ -367,7 +375,7 @@ export const authorizeRepeatableDraftReconciliationCalls = (
     if (
       nativeEvents.some(
         (value) =>
-          value.type === "action.result" &&
+          value.type === actionResultEventType &&
           z.object({ result: z.object({ callId: z.string() }) }).safeParse(value.data).data?.result
             .callId === callId,
       ) ||

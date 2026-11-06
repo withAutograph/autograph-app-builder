@@ -26,16 +26,19 @@ export function logProviderConnectionFailure(input: {
     installationValidation?: string;
   };
 }) {
-  console.error(
-    JSON.stringify({
-      ...(input.diagnostic === undefined ? {} : { diagnostic: input.diagnostic }),
-      durationMs: Math.max(0, Date.now() - input.startedAt),
-      level: "error",
-      message: "provider_connection_failed",
-      phase: input.phase,
-      provider: input.provider,
-      reason: input.reason,
-      requestId: input.request.headers.get("x-vercel-id") ?? "unavailable",
-    }),
-  );
+  const logEntry = {
+    durationMs: Math.max(0, Date.now() - input.startedAt),
+    level: "error",
+    message: "provider_connection_failed",
+    phase: input.phase,
+    provider: input.provider,
+    reason: input.reason,
+    requestId: input.request.headers.get("x-vercel-id") ?? "unavailable",
+  };
+
+  if (input.diagnostic !== undefined) {
+    Object.assign(logEntry, { diagnostic: input.diagnostic });
+  }
+
+  console.error(JSON.stringify(logEntry));
 }

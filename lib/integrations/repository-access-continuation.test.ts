@@ -19,6 +19,57 @@ function sameAuthority(left: typeof authority, right: typeof authority) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+const isAvailable = (
+  candidate: RepositoryAccessContinuation,
+  input: Parameters<RepositoryAccessContinuationStore["authorize"]>[0],
+) =>
+  [
+    candidate.continuationDigest === input.continuationDigest,
+    sameAuthority(candidate.authority, input.authority),
+    candidate.authorizedAt === undefined,
+    candidate.consumedAt === undefined,
+    candidate.expiresAt > input.now,
+  ].every(Boolean);
+
+const matchesConsumption = (
+  candidate: RepositoryAccessContinuation,
+  input: Parameters<RepositoryAccessContinuationStore["consume"]>[0],
+) =>
+  [
+    candidate.continuationDigest === input.continuationDigest,
+    sameAuthority(candidate.authority, input.authority),
+    candidate.sessionId === input.sessionId,
+    candidate.requestId === input.requestId,
+    candidate.repository.fullName === input.repository.fullName,
+    candidate.selectedInstallationId === input.selectedInstallationId,
+    candidate.authorizedAt !== undefined,
+    candidate.consumedAt === undefined,
+    candidate.expiresAt > input.now,
+  ].every(Boolean);
+
+const matchesInspection = (
+  candidate: RepositoryAccessContinuation,
+  input: Parameters<RepositoryAccessContinuationStore["inspect"]>[0],
+) =>
+  [
+    candidate.continuationDigest === input.continuationDigest,
+    sameAuthority(candidate.authority, input.authority),
+    candidate.consumedAt === undefined,
+    candidate.expiresAt > input.now,
+  ].every(Boolean);
+
+const isAuthorizedForSession = (
+  candidate: RepositoryAccessContinuation,
+  input: Parameters<RepositoryAccessContinuationStore["listAuthorizedForSession"]>[0],
+) =>
+  [
+    sameAuthority(candidate.authority, input.authority),
+    candidate.sessionId === input.sessionId,
+    candidate.authorizedAt !== undefined,
+    candidate.consumedAt === undefined,
+    candidate.expiresAt > input.now,
+  ].every(Boolean);
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function memoryStore(): RepositoryAccessContinuationStore & {
   records: RepositoryAccessContinuation[];
@@ -27,38 +78,18 @@ function memoryStore(): RepositoryAccessContinuationStore & {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async authorize(input) {
-      const record = records.find(
-        (candidate) =>
-          candidate.continuationDigest === input.continuationDigest &&
-          sameAuthority(candidate.authority, input.authority) &&
-          candidate.authorizedAt === undefined &&
-          candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
-      );
-      if (!record) {
-        return;
+      const record = records.find((candidate) => isAvailable(candidate, input));
+      if (record) {
+        record.authorizedAt = input.now;
       }
-      record.authorizedAt = input.now;
       return record;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async consume(input) {
-      const record = records.find(
-        (candidate) =>
-          candidate.continuationDigest === input.continuationDigest &&
-          sameAuthority(candidate.authority, input.authority) &&
-          candidate.sessionId === input.sessionId &&
-          candidate.requestId === input.requestId &&
-          candidate.repository.fullName === input.repository.fullName &&
-          candidate.selectedInstallationId === input.selectedInstallationId &&
-          candidate.authorizedAt !== undefined &&
-          candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
-      );
-      if (!record) {
-        return;
+      const record = records.find((candidate) => matchesConsumption(candidate, input));
+      if (record) {
+        record.consumedAt = input.now;
       }
-      record.consumedAt = input.now;
       return record;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -67,24 +98,11 @@ function memoryStore(): RepositoryAccessContinuationStore & {
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async inspect(input) {
-      return records.find(
-        (candidate) =>
-          candidate.continuationDigest === input.continuationDigest &&
-          sameAuthority(candidate.authority, input.authority) &&
-          candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
-      );
+      return records.find((candidate) => matchesInspection(candidate, input));
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async listAuthorizedForSession(input) {
-      return records.filter(
-        (candidate) =>
-          sameAuthority(candidate.authority, input.authority) &&
-          candidate.sessionId === input.sessionId &&
-          candidate.authorizedAt !== undefined &&
-          candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
-      );
+      return records.filter((candidate) => isAuthorizedForSession(candidate, input));
     },
     records,
   };

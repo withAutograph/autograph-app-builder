@@ -58,8 +58,8 @@ export default defineHook({
         (event.data.result.kind === "tool-result" && event.data.result.isError === true);
       boundary.update((current) => ({
         ...current,
-        pendingCalls: current.pendingCalls.filter((callId) => callId !== event.data.result.callId),
         blocked: current.blocked || event.data.status !== "completed" || resultFailed,
+        pendingCalls: current.pendingCalls.filter((callId) => callId !== event.data.result.callId),
       }));
       await record(ctx);
     },

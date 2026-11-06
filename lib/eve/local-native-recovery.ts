@@ -171,7 +171,7 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       owners.push(receipt.ownerRunId);
     }
   };
-  const authorize: Ports["authorize"] = async ({ auth, descriptor }) => {
+  const authorize: Ports["authorize"] = ({ auth, descriptor }) => {
     assertLocal();
     if (
       auth.authenticator !== "local-dev" ||
@@ -200,7 +200,6 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       owners.at(-2) !== descriptor.sourceOwnerRunId
     )
       throw unavailable();
-    return;
   };
   const ports: Ports = {
     authorize,

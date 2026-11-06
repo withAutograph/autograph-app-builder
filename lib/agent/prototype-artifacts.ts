@@ -17,7 +17,25 @@ export const prototypeArtifactPathPattern =
   // oxlint-disable-next-line prefer-named-capture-group -- Tool JSON Schema validators reject named groups.
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/(app-spec\.md|decisions\.md|index\.html)$/u;
 
-export const prototypeArtifactMediaTypes = ["text/markdown", "text/html"] as const;
+const PROTOTYPE_ARTIFACT_FILE_NAMES = {
+  appSpec: "app-spec.md",
+  decisions: "decisions.md",
+  index: "index.html",
+} as const;
+const PROTOTYPE_ARTIFACT_MARKDOWN_MEDIA_TYPE = "text/markdown";
+const PROTOTYPE_ARTIFACT_FILE_NAME_LIST = Object.values(PROTOTYPE_ARTIFACT_FILE_NAMES);
+const [PROTOTYPE_ARTIFACT_MARKDOWN_MEDIA_TYPE_VALUE, PROTOTYPE_ARTIFACT_HTML_MEDIA_TYPE] = [
+  PROTOTYPE_ARTIFACT_MARKDOWN_MEDIA_TYPE,
+  "text/html",
+] as const;
+const PROTOTYPE_ARTIFACT_INDEX_HTML = PROTOTYPE_ARTIFACT_FILE_NAMES.index;
+const PROTOTYPE_ARTIFACT_MEDIA_TYPES = [
+  PROTOTYPE_ARTIFACT_MARKDOWN_MEDIA_TYPE_VALUE,
+  PROTOTYPE_ARTIFACT_HTML_MEDIA_TYPE,
+] as const;
+type PrototypeArtifactFileName = (typeof PROTOTYPE_ARTIFACT_FILE_NAME_LIST)[number];
+
+export const prototypeArtifactMediaTypes = PROTOTYPE_ARTIFACT_MEDIA_TYPES;
 
 export type PrototypeArtifactMediaType = (typeof prototypeArtifactMediaTypes)[number];
 
@@ -43,9 +61,9 @@ export const shouldRecordHostedPrototypeDurably = (input: {
 }): boolean => {
   if (
     !input.hosted ||
-    (input.mediaType !== "text/html" &&
-      !input.path.endsWith("/decisions.md") &&
-      !input.path.endsWith("/app-spec.md"))
+    (input.mediaType !== PROTOTYPE_ARTIFACT_HTML_MEDIA_TYPE &&
+      !input.path.endsWith(`/${PROTOTYPE_ARTIFACT_FILE_NAMES.decisions}`) &&
+      !input.path.endsWith(`/${PROTOTYPE_ARTIFACT_FILE_NAMES.appSpec}`))
   ) {
     return false;
   }
@@ -124,30 +142,30 @@ const assertArtifactChunkFitsEve = (input: Parameters<typeof artifactChunkEnvelo
   }
 };
 
+const isPrototypeArtifactFileName = (
+  value: string | undefined,
+): value is PrototypeArtifactFileName =>
+  PROTOTYPE_ARTIFACT_FILE_NAME_LIST.some((candidate) => candidate === value);
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parsePrototypeArtifactPath(path: string): {
-  appId: string;
-  fileName: "app-spec.md" | "decisions.md" | "index.html";
-} {
+export function parsePrototypeArtifactPath(path: string) {
   const match = prototypeArtifactPathPattern.exec(path);
   const appId = match?.[1];
-  const fileName = match?.[2];
-  if (
-    appId === undefined ||
-    !validAppId(appId) ||
-    !["app-spec.md", "decisions.md", "index.html"].includes(fileName ?? "")
-  ) {
+  if (appId === undefined || !validAppId(appId)) {
     throw new Error("Prototype artifact path is not allowed.");
   }
-  return {
-    appId,
-    fileName: fileName as "app-spec.md" | "decisions.md" | "index.html",
-  };
+  const fileName = match?.[2];
+  if (!isPrototypeArtifactFileName(fileName)) {
+    throw new Error("Prototype artifact path is not allowed.");
+  }
+  return { appId, fileName };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function expectedPrototypeArtifactMediaType(path: string): PrototypeArtifactMediaType {
-  return parsePrototypeArtifactPath(path).fileName === "index.html" ? "text/html" : "text/markdown";
+  return parsePrototypeArtifactPath(path).fileName === PROTOTYPE_ARTIFACT_INDEX_HTML
+    ? PROTOTYPE_ARTIFACT_HTML_MEDIA_TYPE
+    : PROTOTYPE_ARTIFACT_MARKDOWN_MEDIA_TYPE;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -159,11 +177,7 @@ export function recordPrototypeArtifactRevision(input: {
   sessionId: string;
   callId: string;
   expectedAppId?: string | null;
-}): {
-  artifact: PrototypeArtifact;
-  artifacts: readonly StoredPrototypeArtifact[];
-  reused: boolean;
-} {
+}) {
   const { appId } = parsePrototypeArtifactPath(input.path);
   if (expectedPrototypeArtifactMediaType(input.path) !== input.mediaType) {
     throw new Error("Prototype artifact media type is not allowed for its path.");
@@ -194,7 +208,11 @@ export function recordPrototypeArtifactRevision(input: {
   const revision = sha256(JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }));
   const prior = input.artifacts.find(({ path }) => path === input.path);
   if (prior?.version !== 2 && prior?.revision === revision) {
-    return { artifact: prior, artifacts: input.artifacts, reused: true };
+    return { artifact: prior, artifacts: input.artifacts, reused: true } satisfies {
+      artifact: PrototypeArtifact | undefined;
+      artifacts: readonly StoredPrototypeArtifact[];
+      reused: boolean;
+    };
   }
 
   const artifact: PrototypeArtifact = {
@@ -207,14 +225,27 @@ export function recordPrototypeArtifactRevision(input: {
     revision,
     sessionId: input.sessionId,
   };
-  return {
+  const result = {
     artifact,
     artifacts: [...input.artifacts.filter(({ path }) => path !== input.path), artifact].toSorted(
       (left, right) => left.path.localeCompare(right.path),
     ),
     reused: false,
   };
+  return result;
 }
+
+const isExactArtifactMatch = (
+  candidate: StoredPrototypeArtifact,
+  input: { path: string; digest: string; revision?: string; sessionId: string },
+) => {
+  if (candidate.path !== input.path) return false;
+  if (candidate.digest !== input.digest) return false;
+  if (candidate.transfer !== undefined) return false;
+  if (candidate.sessionId !== input.sessionId) return false;
+  if (input.revision !== undefined && candidate.revision !== input.revision) return false;
+  return true;
+};
 
 export function exactPrototypeArtifact(
   artifacts: readonly PrototypeArtifact[],
@@ -224,6 +255,7 @@ export function exactPrototypeArtifact(
   artifacts: readonly StoredPrototypeArtifact[],
   input: { path: string; digest: string; revision?: string; sessionId: string },
 ): StoredPrototypeArtifact;
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactPrototypeArtifact(
   artifacts: readonly StoredPrototypeArtifact[],
@@ -235,14 +267,7 @@ export function exactPrototypeArtifact(
   },
 ): StoredPrototypeArtifact {
   parsePrototypeArtifactPath(input.path);
-  const artifact = artifacts.find(
-    (candidate) =>
-      candidate.path === input.path &&
-      candidate.digest === input.digest &&
-      candidate.transfer === undefined &&
-      (input.revision === undefined || candidate.revision === input.revision) &&
-      candidate.sessionId === input.sessionId,
-  );
+  const artifact = artifacts.find((candidate) => isExactArtifactMatch(candidate, input));
   if (artifact === undefined) {
     throw new Error(
       "The prototype artifact digest or revision is stale or unavailable in this session.",
@@ -368,7 +393,28 @@ const pendingChunkRetry = (
     complete: false,
     nextChunkIndex: transfer.nextChunkIndex,
     reused: true,
-  };
+  } satisfies PrototypeArtifactChunkResult;
+};
+
+const isCompletedChunkRetry = (
+  prior: PrototypeArtifact | undefined,
+  input: PrototypeArtifactChunkInput,
+  chunkDigest: string,
+) => {
+  const receipt = prior?.lastChunkReceipt;
+  if (prior?.transfer !== undefined || receipt === undefined) return false;
+  if (receipt.expectedDigest !== input.expectedDigest) return false;
+  if (receipt.lastChunkIndex !== input.chunkIndex) return false;
+  if (receipt.lastChunkDigest !== chunkDigest) return false;
+  return receipt.lastCallId === input.callId;
+};
+
+const shouldRestartTransfer = (
+  prior: PrototypeArtifact | undefined,
+  input: PrototypeArtifactChunkInput,
+) => {
+  if (prior?.transfer === undefined || input.chunkIndex !== 0) return false;
+  return input.expectedDigest !== prior.transfer.expectedDigest;
 };
 
 const resolveChunkContinuation = (
@@ -376,13 +422,7 @@ const resolveChunkContinuation = (
   input: PrototypeArtifactChunkInput,
   chunkDigest: string,
 ): ChunkContinuation => {
-  if (
-    prior?.transfer === undefined &&
-    prior?.lastChunkReceipt?.expectedDigest === input.expectedDigest &&
-    prior.lastChunkReceipt.lastChunkIndex === input.chunkIndex &&
-    prior.lastChunkReceipt.lastChunkDigest === chunkDigest &&
-    prior.lastChunkReceipt.lastCallId === input.callId
-  ) {
+  if (isCompletedChunkRetry(prior, input, chunkDigest)) {
     return {
       kind: "retry",
       result: {
@@ -394,10 +434,7 @@ const resolveChunkContinuation = (
       },
     };
   }
-  const restart =
-    prior?.transfer !== undefined &&
-    input.chunkIndex === 0 &&
-    input.expectedDigest !== prior.transfer.expectedDigest;
+  const restart = shouldRestartTransfer(prior, input);
   if (prior?.transfer !== undefined && !restart) {
     const { transfer } = prior;
     if (transfer.expectedDigest !== input.expectedDigest) {
@@ -456,10 +493,13 @@ const artifactForCompletedChunk = (
     revision,
     sessionId: input.sessionId,
   };
-  const artifacts = [
-    ...input.artifacts.filter(({ path }) => path !== input.path),
-    artifact,
-  ].toSorted((left, right) => left.path.localeCompare(right.path));
+  const artifactsWithoutPrior: StoredPrototypeArtifact[] = [];
+  for (const existing of input.artifacts) {
+    if (existing.path !== input.path) artifactsWithoutPrior.push(existing);
+  }
+  const artifacts = [...artifactsWithoutPrior, artifact].toSorted((left, right) =>
+    left.path.localeCompare(right.path),
+  );
   return {
     artifact,
     artifacts,
@@ -535,7 +575,8 @@ export const recordPrototypeArtifactChunk = (
   const continuation = resolveChunkContinuation(prior, input, chunkDigest);
   if (continuation.kind === "retry") return continuation.result;
   const { restart, transfer } = continuation;
-  const chunks =
+  let chunks: string[];
+  chunks =
     transfer === undefined || restart ? [input.content] : [...transfer.chunks, input.content];
   if (input.finalChunk) {
     return artifactForCompletedChunk(input, appId, chunks, chunkDigest);
@@ -549,27 +590,39 @@ export const recordPrototypeArtifactChunk = (
  * workflow-phase check: recording a valid AppSpec must not turn an exploratory
  * draft into accepted planning state.
  */
+const hasCompletePrototypeBundle = (
+  byPath: ReadonlyMap<string, StoredPrototypeArtifact>,
+  prefix: string,
+  appSpec: StoredPrototypeArtifact | undefined,
+) => {
+  if (appSpec === undefined) return false;
+  if (
+    !byPath.has(`${prefix}${PROTOTYPE_ARTIFACT_FILE_NAMES.index}`) ||
+    !byPath.has(`${prefix}${PROTOTYPE_ARTIFACT_FILE_NAMES.decisions}`)
+  )
+    return false;
+  if (
+    appSpec.mediaType !== PROTOTYPE_ARTIFACT_MARKDOWN_MEDIA_TYPE ||
+    isPrototypeArtifactV2(appSpec)
+  )
+    return false;
+  return validateBuildReadyAppSpec(appSpec.content).valid;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function completeBuildReadyPrototypeAppSpec(input: {
   artifacts: readonly StoredPrototypeArtifact[];
   appId: string;
 }): PrototypeArtifact | undefined {
   const prefix = `prototype/${input.appId}/`;
-  const byPath = new Map(
-    input.artifacts
-      .filter((artifact) => artifact.path.startsWith(prefix))
-      .filter((artifact) => artifact.transfer === undefined)
-      .map((artifact) => [artifact.path, artifact]),
-  );
-  const appSpec = byPath.get(`${prefix}app-spec.md`);
-  if (
-    appSpec === undefined ||
-    !byPath.has(`${prefix}index.html`) ||
-    !byPath.has(`${prefix}decisions.md`) ||
-    appSpec.mediaType !== "text/markdown" ||
-    isPrototypeArtifactV2(appSpec) ||
-    !validateBuildReadyAppSpec(appSpec.content).valid
-  ) {
+  const byPath = new Map<string, StoredPrototypeArtifact>();
+  for (const artifact of input.artifacts) {
+    if (artifact.path.startsWith(prefix) && artifact.transfer === undefined) {
+      byPath.set(artifact.path, artifact);
+    }
+  }
+  const appSpec = byPath.get(`${prefix}${PROTOTYPE_ARTIFACT_FILE_NAMES.appSpec}`);
+  if (!hasCompletePrototypeBundle(byPath, prefix, appSpec)) {
     return undefined;
   }
   return appSpec;
@@ -585,29 +638,25 @@ export function recordPrototypeArtifactBundle(input: {
   sessionId: string;
   callId: string;
   expectedAppId?: string;
-}): {
-  artifacts: readonly StoredPrototypeArtifact[];
-  appSpec: PrototypeArtifact;
-  reused: boolean;
-} {
+}) {
   const appSpecMarkdown = normalizeBuildReadyAppSpec(input.appSpecMarkdown);
   let { artifacts } = input;
   let reused = true;
   for (const artifact of [
     {
       content: input.indexHtml,
-      mediaType: "text/html" as const,
-      path: `prototype/${input.appId}/index.html`,
+      mediaType: PROTOTYPE_ARTIFACT_HTML_MEDIA_TYPE,
+      path: `prototype/${input.appId}/${PROTOTYPE_ARTIFACT_FILE_NAMES.index}`,
     },
     {
       content: input.decisionsMarkdown,
-      mediaType: "text/markdown" as const,
-      path: `prototype/${input.appId}/decisions.md`,
+      mediaType: PROTOTYPE_ARTIFACT_MARKDOWN_MEDIA_TYPE,
+      path: `prototype/${input.appId}/${PROTOTYPE_ARTIFACT_FILE_NAMES.decisions}`,
     },
     {
       content: appSpecMarkdown,
-      mediaType: "text/markdown" as const,
-      path: `prototype/${input.appId}/app-spec.md`,
+      mediaType: PROTOTYPE_ARTIFACT_MARKDOWN_MEDIA_TYPE,
+      path: `prototype/${input.appId}/${PROTOTYPE_ARTIFACT_FILE_NAMES.appSpec}`,
     },
   ]) {
     const recorded = recordPrototypeArtifactRevision({

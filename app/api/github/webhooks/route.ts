@@ -4,13 +4,13 @@ import { createGitHubProvisioningWebhookHandler } from "@/lib/provisioning/githu
 
 let handler: ((request: Request) => Promise<Response>) | undefined;
 
-export const POST = (request: Request) => {
+const handlePost = async (request: Request): Promise<Response> => {
   try {
     handler ??= createGitHubProvisioningWebhookHandler({
       database: openHostedPostgresDatabase(readPreviewOAuthRuntimeConfig(process.env).databaseUrl),
       secret: process.env.GITHUB_APP_WEBHOOK_SECRET ?? "",
     });
-    return handler(request);
+    return await handler(request);
   } catch {
     return Response.json(
       { error: "github_webhook_unavailable" },
@@ -18,3 +18,5 @@ export const POST = (request: Request) => {
     );
   }
 };
+
+export { handlePost as POST };

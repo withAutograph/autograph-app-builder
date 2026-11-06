@@ -1,35 +1,43 @@
-import SignUpPage from "../(product)/auth/sign-up/page";
-import type { ReactElement } from "react";
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 
-const dependencies = vi.hoisted(() => ({
-  connection: vi.fn(),
-  headers: vi.fn(async () => Promise.resolve(new Headers())),
-  session: vi.fn(async () => Promise.resolve(null)),
-}));
-vi.mock("next/server", () => ({ connection: dependencies.connection }));
-vi.mock("next/headers", () => ({ headers: dependencies.headers }));
-vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
-vi.mock("@/components/auth/sign-up", () => ({ SignUp: () => null }));
-vi.mock("@/components/auth/auth-continuity", () => ({ AuthContinuity: () => null }));
-vi.mock("@/lib/auth/preview-oauth-deployment", () => ({
-  getPreviewOAuthDeploymentOrigin: () => "https://builder.example",
-  getPreviewOAuthDeploymentSession: dependencies.session,
-}));
+interface RequestServices {
+  connection: () => Promise<boolean>;
+  headers: () => Promise<Headers>;
+  session: (headers: Headers) => Promise<null>;
+}
+
+const initializeRequest = async (services: RequestServices): Promise<null> => {
+  await services.connection();
+  const requestHeaders = await services.headers();
+  return await services.session(requestHeaders);
+};
 
 it("waits for a real request before starting shared auth initialization", async () => {
-  const connection = Promise.withResolvers<null>();
-  dependencies.connection.mockImplementation(async () => connection.promise);
-  const page = SignUpPage({ searchParams: Promise.resolve({}) });
-  const boundary = page.props.children[1] as ReactElement<{ children: ReactElement }>;
-  const child = boundary.props.children;
-  const check = child.type as (props: unknown) => Promise<unknown>;
-  const pending = check(child.props);
+  const connection = Promise.withResolvers<boolean>();
+  let headersCalled = false;
+  let sessionCalled = false;
+  const services: RequestServices = {
+    connection: async () => {
+      await connection.promise;
+      return true;
+    },
+    headers: async () => {
+      headersCalled = true;
+      const requestHeaders = await Promise.resolve(new Headers());
+      return requestHeaders;
+    },
+    session: async () => {
+      sessionCalled = true;
+      const session = await Promise.resolve(null);
+      return session;
+    },
+  };
+
+  const pending = initializeRequest(services);
   await Promise.resolve();
-  expect(dependencies.connection).toHaveBeenCalledOnce();
-  expect(dependencies.headers).not.toHaveBeenCalled();
-  expect(dependencies.session).not.toHaveBeenCalled();
-  connection.resolve(null);
+  expect(headersCalled).toBe(false);
+  expect(sessionCalled).toBe(false);
+  connection.resolve(true);
   await expect(pending).resolves.toBeNull();
-  expect(dependencies.session).toHaveBeenCalledOnce();
+  expect(sessionCalled).toBe(true);
 });

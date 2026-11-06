@@ -13,7 +13,13 @@ function AnonymousBuilder({ onContinue }: { onContinue?: (brief: string) => void
 }
 
 const meta = {
-  args: { onContinue: fn() },
+  args: {
+    onContinue: fn((brief: string) => {
+      if (brief) {
+        return;
+      }
+    }),
+  },
   component: AnonymousBuilder,
   parameters: { layout: "fullscreen" },
   title: "Create App/Flow/Anonymous Entry",

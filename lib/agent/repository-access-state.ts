@@ -56,6 +56,56 @@ export const repositoryAccessReceiptSchema = repositoryAccessReceiptUnsignedSche
 export type RepositoryAccessReceipt = z.infer<typeof repositoryAccessReceiptSchema>;
 type ReadyRepositoryAccess = Extract<RepositoryAccessResult, { status: "ready" }>;
 
+const receiptObservationMatches = (
+  current: RepositoryAccessReceipt,
+  observation: ReturnType<typeof receiptObservation>,
+) =>
+  JSON.stringify({
+    providerAccessDigest: current.providerAccessDigest,
+    repository: current.repository,
+    scope: current.scope,
+    sessionId: current.sessionId,
+    version: current.version,
+  }) === JSON.stringify(observation);
+
+const repositoryAccessReceiptMatchesSource = (
+  receipt: RepositoryAccessReceipt,
+  input: {
+    expectedDigest: string;
+    sessionId: string;
+    repositoryId: string;
+    ref: string;
+    expectedSha: string;
+    expectedTree: string;
+  },
+) => {
+  const { repository } = receipt;
+  return [
+    receipt.digest === input.expectedDigest,
+    receipt.sessionId === input.sessionId,
+    repository.repositoryId === input.repositoryId,
+    `refs/heads/${repository.defaultBranch}` === input.ref,
+    repository.headSha === input.expectedSha,
+    repository.headTree === input.expectedTree,
+  ].every(Boolean);
+};
+
+const resolvedRepositoryMatchesAccess = (
+  access: RepositoryAccessReceipt,
+  source: ImmutableGitHubSourceReceipt,
+) => {
+  const { repository } = source;
+  if (repository.repositoryId !== access.repository.repositoryId) return false;
+  if (repository.owner !== access.repository.owner) return false;
+  if (repository.name !== access.repository.name) return false;
+  if (repository.defaultBranch !== access.repository.defaultBranch) return false;
+  if (repository.headSha !== access.repository.headSha) return false;
+  if (repository.headTree !== access.repository.headTree) return false;
+  if (source.resolvedRef !== `refs/heads/${access.repository.defaultBranch}`) return false;
+  if (source.resolvedSha !== access.repository.headSha) return false;
+  return source.resolvedTree === access.repository.headTree;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function receiptObservation(input: { sessionId: string; access: ReadyRepositoryAccess }) {
   return {
@@ -87,16 +137,7 @@ export function recordRepositoryAccessReceipt(input: {
   if (current !== undefined && current.sessionId !== input.sessionId) {
     throw new Error("Repository access state belongs to a different session.");
   }
-  if (
-    current !== undefined &&
-    JSON.stringify({
-      providerAccessDigest: current.providerAccessDigest,
-      repository: current.repository,
-      scope: current.scope,
-      sessionId: current.sessionId,
-      version: current.version,
-    }) === JSON.stringify(observation)
-  ) {
+  if (current !== undefined && receiptObservationMatches(current, observation)) {
     return current;
   }
 
@@ -124,14 +165,7 @@ export function assertRepositoryAccessReceiptForSource(input: {
     throw new Error("No confirmed repository access receipt is available.");
   }
   const receipt = repositoryAccessReceiptSchema.parse(input.receipt);
-  if (
-    receipt.digest !== input.expectedDigest ||
-    receipt.sessionId !== input.sessionId ||
-    receipt.repository.repositoryId !== input.repositoryId ||
-    `refs/heads/${receipt.repository.defaultBranch}` !== input.ref ||
-    receipt.repository.headSha !== input.expectedSha ||
-    receipt.repository.headTree !== input.expectedTree
-  ) {
+  if (!repositoryAccessReceiptMatchesSource(receipt, input)) {
     throw new Error("The repository access receipt does not match this session and source.");
   }
   return receipt;
@@ -143,18 +177,7 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
   source: ImmutableGitHubSourceReceipt;
 }): void {
   const access = repositoryAccessReceiptSchema.parse(input.access);
-  const { repository } = input.source;
-  if (
-    repository.repositoryId !== access.repository.repositoryId ||
-    repository.owner !== access.repository.owner ||
-    repository.name !== access.repository.name ||
-    repository.defaultBranch !== access.repository.defaultBranch ||
-    repository.headSha !== access.repository.headSha ||
-    repository.headTree !== access.repository.headTree ||
-    input.source.resolvedRef !== `refs/heads/${access.repository.defaultBranch}` ||
-    input.source.resolvedSha !== access.repository.headSha ||
-    input.source.resolvedTree !== access.repository.headTree
-  ) {
+  if (!resolvedRepositoryMatchesAccess(access, input.source)) {
     throw new Error(
       "The live GitHub source does not match the confirmed repository access receipt.",
     );

@@ -12,8 +12,7 @@ import HandoffError from "../(product)/handoff/error";
 import GitHubError from "../(product)/github/error";
 import VercelError from "../(product)/vercel/error";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe("native route error recovery", () => {
   it.each([
@@ -26,13 +25,15 @@ describe("native route error recovery", () => {
   ] as const)(
     "recovers %s with Next retry without exposing error details",
     async (Boundary, title) => {
-      const retry = vi.fn();
+      const retry = vi.fn((): void => {});
       const error = Object.assign(new Error("sensitive provider token"), {
         digest: "internal-digest",
       });
       const element = <Boundary error={error} retry={retry} />;
       const container = document.createElement("div");
-      container.innerHTML = renderToString(element);
+      const markup = renderToString(element);
+      const parsed = new DOMParser().parseFromString(markup, "text/html");
+      container.append(...parsed.body.childNodes);
       document.body.append(container);
       expect(container.textContent).toContain(title);
       expect(container.textContent).not.toContain(error.message);
@@ -52,14 +53,12 @@ describe("native route error recovery", () => {
         expect(container.querySelector("button")).toBe(button);
         expect(button.disabled).toBe(false);
         expect(retry).not.toHaveBeenCalled();
-        // oxlint-disable-next-line eslint/require-await -- preserve React act callback contract
         await act(async () => {
           button.click();
         });
         expect(retry).toHaveBeenCalledOnce();
       } finally {
-        // oxlint-disable-next-line eslint/require-await -- preserve React act callback contract
-        await act(async () => {
+        act(() => {
           root.unmount();
         });
         container.remove();

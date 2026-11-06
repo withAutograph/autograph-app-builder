@@ -7,7 +7,8 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { Sql } from "postgres";
 
-import * as databaseSchema from "./schema";
+import { account, hostedWorkspaceMemberships, jwks, oauthResource, user } from "./schema";
+import type { PreviewActivationPlanRequest, PreviewActivationStore } from "./preview-activation";
 import {
   assertRuntimeRoleReadback,
   executePreviewActivation,
@@ -15,15 +16,55 @@ import {
   previewActivationApplyRequestSchema,
   previewActivationPlanRequestSchema,
 } from "./preview-activation";
-import type { PreviewActivationStore } from "./preview-activation";
 import { readPrivateDatabaseUrl } from "./private-database-url";
 import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
 import { createPreviewOAuthServer } from "../auth/preview-oauth-runtime";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
+const GITHUB_ISSUER = "local:oauth:github";
+const TASK_OAUTH_CREDENTIAL = "task-scoped-oauth-initialization";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function readPrivateRequest(path: string): Promise<unknown> {
+const validInvitedUser = (
+  users: { id: string; email: string; name: string; email_verified: boolean }[],
+  input: { userId: string; email: string; githubLogin: string },
+) => {
+  const [existing] = users;
+  if (users.length !== 1 || existing?.id !== input.userId) {
+    return false;
+  }
+  if (existing.email !== input.email || existing.name !== input.githubLogin) {
+    return false;
+  }
+  return existing.email_verified;
+};
+
+const validGithubAccount = (
+  accounts: {
+    id: string;
+    issuer: string;
+    account_id: string;
+    provider_id: string;
+    user_id: string;
+    password: string | null;
+  }[],
+  accountId: string,
+  input: { githubAccountId: string; userId: string },
+) => {
+  const [existing] = accounts;
+  if (accounts.length !== 1 || existing?.id !== accountId) {
+    return false;
+  }
+  if (existing.issuer !== GITHUB_ISSUER || existing.account_id !== input.githubAccountId) {
+    return false;
+  }
+  return (
+    existing.provider_id === "github" &&
+    existing.user_id === input.userId &&
+    existing.password === null
+  );
+};
+
+const readPrivateRequest = async (path: string): Promise<PreviewActivationPlanRequest> => {
   if (!nodePath.isAbsolute(path)) {
     throw new Error("Activation request path must be absolute.");
   }
@@ -32,18 +73,15 @@ async function readPrivateRequest(path: string): Promise<unknown> {
     throw new Error("Activation request path must be canonical and unsymlinked.");
   }
   const metadata = await stat(path);
-  if (
-    !metadata.isFile() ||
-    metadata.uid !== process.getuid?.() ||
+  const invalidFile = !metadata.isFile() || metadata.uid !== process.getuid?.();
+  const invalidPermissions =
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (metadata.mode & 0o077) !== 0 ||
-    metadata.size === 0 ||
-    metadata.size > MAX_REQUEST_BYTES
-  ) {
+    (metadata.mode & 0o077) !== 0 || metadata.size === 0;
+  if (invalidFile || invalidPermissions || metadata.size > MAX_REQUEST_BYTES) {
     throw new Error("Activation request must be an owner-only nonempty regular file.");
   }
-  return JSON.parse(await readFile(path, "utf-8"));
-}
+  return previewActivationPlanRequestSchema.parse(JSON.parse(await readFile(path, "utf-8")));
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stableId(prefix: string, value: string) {
@@ -199,36 +237,37 @@ function createStore(sql: Sql): PreviewActivationStore {
     },
 
     async initializeOAuth(input) {
-      const beforeResource = await sql<
-        { count: number }[]
-      >`select count(*)::integer as count from oauth_resource where identifier = ${input.resource}`;
-      const beforeJwks = await sql<
-        { count: number }[]
-      >`select count(*)::integer as count from jwks`;
-      const database = drizzle(sql, { schema: databaseSchema });
+      const [beforeResource, beforeJwks] = await Promise.all([
+        sql<
+          { count: number }[]
+        >`select count(*)::integer as count from oauth_resource where identifier = ${input.resource}`,
+        sql<{ count: number }[]>`select count(*)::integer as count from jwks`,
+      ]);
+      const schema = { account, hostedWorkspaceMemberships, jwks, oauthResource, user };
+      const database = drizzle(sql, { schema });
       const auth = createPreviewOAuthServer({
         config: {
           databaseUrl: "postgresql://task-scoped.invalid/database",
           environment: "preview",
-          githubClientId: "task-scoped-oauth-initialization",
-          githubClientSecret: "task-scoped-oauth-initialization",
+          githubClientId: TASK_OAUTH_CREDENTIAL,
+          githubClientSecret: TASK_OAUTH_CREDENTIAL,
           hostedAdapter: "1",
           issuer: input.issuer,
           passkeyOnboarding: null,
           resource: input.resource,
           secret: input.authSecret,
-          vercelClientId: "task-scoped-oauth-initialization",
-          vercelClientSecret: "task-scoped-oauth-initialization",
+          vercelClientId: TASK_OAUTH_CREDENTIAL,
+          vercelClientSecret: TASK_OAUTH_CREDENTIAL,
         },
         database: drizzleAdapter(database, {
           provider: "pg",
-          schema: databaseSchema,
+          schema,
           transaction: true,
         }),
         membership: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           async activeWorkspaceForUser() {
-            return;
+            return await Promise.resolve(null);
           },
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           async isActiveMember() {
@@ -236,17 +275,19 @@ function createStore(sql: Sql): PreviewActivationStore {
           },
         },
       });
-      const metadata = await auth.handler(
-        new Request(`${input.issuer}/.well-known/oauth-authorization-server`),
-      );
-      const keys = await auth.handler(new Request(`${input.issuer}/jwks`));
+      const [metadata, keys] = await Promise.all([
+        auth.handler(new Request(`${input.issuer}/.well-known/oauth-authorization-server`)),
+        auth.handler(new Request(`${input.issuer}/jwks`)),
+      ]);
       if (metadata.status !== 200 || keys.status !== 200) {
         throw new Error("OAuth resource or JWKS initialization failed closed.");
       }
-      const afterResource = await sql<
-        { count: number }[]
-      >`select count(*)::integer as count from oauth_resource where identifier = ${input.resource}`;
-      const afterJwks = await sql<{ count: number }[]>`select count(*)::integer as count from jwks`;
+      const [afterResource, afterJwks] = await Promise.all([
+        sql<
+          { count: number }[]
+        >`select count(*)::integer as count from oauth_resource where identifier = ${input.resource}`,
+        sql<{ count: number }[]>`select count(*)::integer as count from jwks`,
+      ]);
       if (afterResource[0]?.count !== 1 || (afterJwks[0]?.count ?? 0) < 1) {
         throw new Error("OAuth resource or JWKS initialization readback failed.");
       }
@@ -261,30 +302,32 @@ function createStore(sql: Sql): PreviewActivationStore {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async provisionInvitedUser(input) {
       return await sql.begin(async (transaction) => {
-        const users = await transaction<
-          {
-            id: string;
-            name: string;
-            email: string;
-            email_verified: boolean;
-          }[]
-        >`select id, name, email, email_verified from "user" where id = ${input.userId} or email = ${input.email} for update`;
         const accountId = stableId("account", `github:${input.githubAccountId}`);
-        const accounts = await transaction<
-          {
-            id: string;
-            issuer: string;
-            account_id: string;
-            provider_id: string;
-            user_id: string;
-            password: string | null;
-          }[]
-        >`select id, issuer, account_id, provider_id, user_id, password from account where id = ${accountId} or (issuer = 'local:oauth:github' and account_id = ${input.githubAccountId}) for update`;
-        const memberships = await transaction<
-          {
-            active: boolean;
-          }[]
-        >`select active from hosted_workspace_membership where issuer = ${input.issuer} and audience = ${input.resource} and workspace_id = ${input.workspaceId} and owner_user_id = ${input.userId} for update`;
+        const [users, accounts, memberships] = await Promise.all([
+          transaction<
+            {
+              id: string;
+              name: string;
+              email: string;
+              email_verified: boolean;
+            }[]
+          >`select id, name, email, email_verified from "user" where id = ${input.userId} or email = ${input.email} for update`,
+          transaction<
+            {
+              id: string;
+              issuer: string;
+              account_id: string;
+              provider_id: string;
+              user_id: string;
+              password: string | null;
+            }[]
+          >`select id, issuer, account_id, provider_id, user_id, password from account where id = ${accountId} or (issuer = ${GITHUB_ISSUER} and account_id = ${input.githubAccountId}) for update`,
+          transaction<
+            {
+              active: boolean;
+            }[]
+          >`select active from hosted_workspace_membership where issuer = ${input.issuer} and audience = ${input.resource} and workspace_id = ${input.workspaceId} and owner_user_id = ${input.userId} for update`,
+        ]);
         let userRowsAffected = 0;
         let accountRowsAffected = 0;
         let membershipRowsAffected = 0;
@@ -292,32 +335,15 @@ function createStore(sql: Sql): PreviewActivationStore {
           const now = new Date(input.requestedAt);
           await transaction`insert into "user" (id, name, email, email_verified, created_at, updated_at) values (${input.userId}, ${input.githubLogin}, ${input.email}, true, ${now}, ${now})`;
           userRowsAffected = 1;
-        } else if (
-          users.length !== 1 ||
-          users[0]?.id !== input.userId ||
-          users[0]?.email !== input.email ||
-          users[0]?.name !== input.githubLogin ||
-          !users[0]?.email_verified
-        ) {
+        } else if (!validInvitedUser(users, input)) {
           throw new Error("Invited user identity conflicts with an existing row.");
         }
         if (accounts.length === 0) {
           const now = new Date(input.requestedAt);
-          await transaction`insert into account (id, issuer, account_id, provider_id, user_id, password, created_at, updated_at) values (${accountId}, 'local:oauth:github', ${input.githubAccountId}, 'github', ${input.userId}, null, ${now}, ${now})`;
+          await transaction`insert into account (id, issuer, account_id, provider_id, user_id, password, created_at, updated_at) values (${accountId}, ${GITHUB_ISSUER}, ${input.githubAccountId}, 'github', ${input.userId}, null, ${now}, ${now})`;
           accountRowsAffected = 1;
-        } else {
-          const [account] = accounts;
-          if (
-            accounts.length !== 1 ||
-            account?.id !== accountId ||
-            account.issuer !== "local:oauth:github" ||
-            account.account_id !== input.githubAccountId ||
-            account.provider_id !== "github" ||
-            account.user_id !== input.userId ||
-            account.password !== null
-          ) {
-            throw new Error("Invited GitHub identity conflicts with an existing row.");
-          }
+        } else if (!validGithubAccount(accounts, accountId, input)) {
+          throw new Error("Invited GitHub identity conflicts with an existing row.");
         }
         if (memberships.length === 0) {
           const now = new Date(input.requestedAt);
@@ -337,6 +363,11 @@ function createStore(sql: Sql): PreviewActivationStore {
 }
 
 const argv = process.argv.slice(2);
+const hasApplyArguments = (args: string[]) => {
+  const expectedOptions = args[1] === "--expected-action" && args[3] === "--database-url-fd";
+  const expectedFdAndFile = args[4] === "0" && args[5] === "--request-file";
+  return args.length === 7 && expectedOptions && expectedFdAndFile;
+};
 if (argv[0] === "plan") {
   if (argv.length !== 3 || argv[1] !== "--request-file") {
     throw new Error("hosted:activation-plan requires --request-file PATH.");
@@ -344,13 +375,7 @@ if (argv[0] === "plan") {
   const request = previewActivationPlanRequestSchema.parse(await readPrivateRequest(argv[2]));
   process.stdout.write(`${JSON.stringify(planPreviewActivation(request))}\n`);
 } else if (argv[0] === "apply") {
-  if (
-    argv.length !== 7 ||
-    argv[1] !== "--expected-action" ||
-    argv[3] !== "--database-url-fd" ||
-    argv[4] !== "0" ||
-    argv[5] !== "--request-file"
-  ) {
+  if (!hasApplyArguments(argv)) {
     throw new Error("Preview activation apply arguments were invalid.");
   }
   const request = previewActivationApplyRequestSchema.parse(await readPrivateRequest(argv[6]));

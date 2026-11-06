@@ -1,9 +1,10 @@
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/no-unknown-parameters -- Eve tool context and sandbox are isolated to verify the actual publication gate. */
 /* oxlint-disable anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, typescript/no-unsafe-type-assertion -- Deliberately minimal Eve state and tool context stubs for this publication gate test. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ToolContext } from "eve/tools";
 
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
-import sealReconciliation from "../../agent/tools/seal_github_draft_pr_reconciliation";
+import sealReconciliation from "../../agent/tools/seal-github-draft-pr-reconciliation";
 import {
   draftReconciliationCompletions,
   retainDraftReconciliationCompletion,
@@ -34,7 +35,7 @@ vi.mock("eve/context", () => ({
         : (mocks.states.get(name) ?? initial()),
     update: (transition: (current: unknown) => unknown) => {
       if (name === "autograph-app-builder.draft-reconciliation.v1") {
-        mocks.candidate = transition(mocks.candidate) as Record<string, unknown> | null;
+        Reflect.set(mocks, "candidate", transition(mocks.candidate));
       } else {
         mocks.states.set(name, transition(mocks.states.get(name) ?? initial()));
       }
@@ -55,14 +56,25 @@ vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   restoreDraftReconciliationCandidateFile: mocks.restore,
 }));
 
-const context = {
+const context: ToolContext = {
+  abortSignal: new AbortController().signal,
   callId: "seal",
-  // oxlint-disable-next-line eslint/require-await -- Eve's sandbox accessor is asynchronous in production.
   async getSandbox() {
     return {};
   },
-  session: { auth: {} },
-} as never;
+  getToken() {
+    throw new Error("No provider authorization is requested by this test.");
+  },
+  requireAuth() {
+    throw new Error("No provider authorization is requested by this test.");
+  },
+  session: {
+    auth: { current: null, initiator: null },
+    id: "test-session",
+    turn: { id: "test-turn", sequence: 0 },
+  },
+  toolName: "draft_reconciliation_test",
+};
 
 describe("draft reconciliation publication review", () => {
   beforeEach(() => {
@@ -110,7 +122,7 @@ describe("draft reconciliation publication review", () => {
 
   it("returns bounded candidate pages with continuation without invalidating review", async () => {
     const retained = mocks.candidate;
-    mocks.read.mockImplementation(async (input: { cursor?: number; expectedDigest?: string }) => ({
+    mocks.read.mockImplementation((input: { cursor?: number; expectedDigest?: string }) => ({
       content: "bounded text",
       cursor: input.cursor ?? 0,
       digest: input.expectedDigest ?? digest,

@@ -63,13 +63,16 @@ export const retainProductInputs = (
       request.kind === "tool-approval" &&
       request.action?.kind === "tool-call" &&
       authorizationOnlyTools.has(request.action.toolName);
-    pending.push({
-      ...(authorizationOnly ? { authorizationOnly: true as const } : {}),
+    const retainedInput: RetainedProductInput = {
       kind: request.kind,
       options,
       prompt: request.prompt,
       requestId: request.requestId,
-    });
+    };
+    if (authorizationOnly) {
+      retainedInput.authorizationOnly = true;
+    }
+    pending.push(retainedInput);
   }
   return { ...current, pendingInputs: pending };
 };

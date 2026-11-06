@@ -37,12 +37,11 @@ vi.mock("./preapproval-authoring-runtime", async (original) => {
   const actual = await original<typeof import("./preapproval-authoring-runtime")>();
   return {
     ...actual,
-    recordPreapprovalAuthoringDecision: async (
+    recordPreapprovalAuthoringDecision: (
       _ctx: Pick<HookContext, "session">,
       decision: Parameters<typeof actual.recordPreapprovalAuthoringDecision>[1],
     ) => {
       actual.diagnosticAuthoringDecisionState.update(() => decision);
-      return;
     },
   };
 });
@@ -50,8 +49,8 @@ const ctx = (turnId = "correction", sequence = 2): HookContext =>
   ({
     session: { id: "owned", turn: { id: turnId, sequence } },
   }) as HookContext;
+const hash = (letter: string) => letter.repeat(64);
 const seed = () => {
-  const hash = (letter: string) => letter.repeat(64);
   const changes = [
     {
       after: {
@@ -149,8 +148,9 @@ const inspection = (current: ReturnType<typeof seed>, owner = ctx(), callId = "a
     type: "action.result",
   } as unknown as Parameters<typeof observePlannedAuthoringInspection>[0];
 };
-const run = (operation: () => void | Promise<void>) =>
-  contextStorage.run(new ContextContainer(), operation);
+const run = async (operation: () => void | Promise<void>) => {
+  await contextStorage.run(new ContextContainer(), operation);
+};
 const decision = (owner = ctx()) =>
   currentAuthoringDecision(owner, {
     blocked: false,
@@ -159,8 +159,8 @@ const decision = (owner = ctx()) =>
   });
 
 describe("declined current-proposal drafting observation", () => {
-  it("binds a genuine later user message and actual successful inspection without touching denial or grant", () =>
-    run(() => {
+  it("binds a genuine later user message and actual successful inspection without touching denial or grant", async () => {
+    await run(() => {
       const current = seed();
       deny(current);
       const authority = readPrivateApplyAuthority();
@@ -179,43 +179,48 @@ describe("declined current-proposal drafting observation", () => {
       expect(preapprovalAuthoringDecisionSchema.parse(observed)).toEqual(observed);
       expect(readPrivateApplyAuthority()).toEqual(authority);
       expect(appBuilderWorkflowState.get()).toEqual(current);
-    }));
-  it("never arms denial alone, a pre-denial user message, or inspection-only activity", () =>
-    run(() => {
+    });
+  });
+  it("never arms denial alone, a pre-denial user message, or inspection-only activity", async () => {
+    await run(() => {
       const current = seed();
       request();
       deny(current);
       observePlannedAuthoringInspection(inspection(current), ctx());
       expect(decision().decision).toBe("planned");
-    }));
-  it.each(["missing", "foreign", "granted", "pending"] as const)("blocks %s authority", (mode) =>
-    run(() => {
-      const current = seed();
-      if (mode !== "missing") {
-        deny(current);
-      }
-      if (mode === "granted") {
-        requestPrivateApplyApproval(scope(current), "approved");
-        recordApprovedPrivateApply(scope(current), "approved");
-      }
-      if (mode === "pending") {
-        requestPrivateApplyApproval({ ...scope(current), proposalDigest: "other" }, "pending");
-      }
-      const owner =
-        mode === "foreign"
-          ? ({ ...ctx(), session: { ...ctx().session, id: "foreign" } } as HookContext)
-          : ctx();
-      request(owner);
-      if (mode !== "granted") {
-        observePlannedAuthoringInspection(inspection(current, owner), owner);
-      }
-      expect(decision(owner).decision).not.toBe("runnable");
-    }),
+    });
+  });
+  it.each(["missing", "foreign", "granted", "pending"] as const)(
+    "blocks %s authority",
+    async (mode) => {
+      await run(() => {
+        const current = seed();
+        if (mode !== "missing") {
+          deny(current);
+        }
+        if (mode === "granted") {
+          requestPrivateApplyApproval(scope(current), "approved");
+          recordApprovedPrivateApply(scope(current), "approved");
+        }
+        if (mode === "pending") {
+          requestPrivateApplyApproval({ ...scope(current), proposalDigest: "other" }, "pending");
+        }
+        const owner =
+          mode === "foreign"
+            ? ({ ...ctx(), session: { ...ctx().session, id: "foreign" } } as HookContext)
+            : ctx();
+        request(owner);
+        if (mode !== "granted") {
+          observePlannedAuthoringInspection(inspection(current, owner), owner);
+        }
+        expect(decision(owner).decision).not.toBe("runnable");
+      });
+    },
   );
   it.each(["failed", "isError", "other-turn", "other-proposal"] as const)(
     "requires a genuine successful same-turn matching inspection: %s",
-    (mode) =>
-      run(() => {
+    async (mode) => {
+      await run(() => {
         const current = seed();
         deny(current);
         request();
@@ -236,10 +241,11 @@ describe("declined current-proposal drafting observation", () => {
         }
         observePlannedAuthoringInspection(event, mode === "other-turn" ? ctx("other", 3) : ctx());
         expect(decision().decision).toBe("planned");
-      }),
+      });
+    },
   );
-  it("keeps the first inspection stable and disables correction for successor or source drift", () =>
-    run(() => {
+  it("keeps the first inspection stable and disables correction for successor or source drift", async () => {
+    await run(() => {
       const current = seed();
       deny(current);
       request();
@@ -257,7 +263,8 @@ describe("declined current-proposal drafting observation", () => {
         proposal: { ...current.proposal, digest: "e".repeat(64) },
       }));
       expect(decision().decision).toBe("planned");
-    }));
+    });
+  });
   it("uses the actual request and authoring hooks and blocks an unchanged internal correction turn", async () => {
     await run(async () => {
       const current = seed();
@@ -332,8 +339,8 @@ describe("declined current-proposal drafting observation", () => {
       });
     },
   );
-  it("does not transfer the declined correction to a genuine successor proposal or its new pending Build", () =>
-    run(() => {
+  it("does not transfer the declined correction to a genuine successor proposal or its new pending Build", async () => {
+    await run(() => {
       const current = seed();
       deny(current);
       request();
@@ -354,9 +361,10 @@ describe("declined current-proposal drafting observation", () => {
       expect(readPrivateApplyAuthority().terminalDecisions?.[0]?.scope.proposalDigest).toBe(
         current.proposal.digest,
       );
-    }));
-  it("rejects a substituted replay of the same real user event instead of resetting the inspection fence", () =>
-    run(() => {
+    });
+  });
+  it("rejects a substituted replay of the same real user event instead of resetting the inspection fence", async () => {
+    await run(() => {
       const current = seed();
       deny(current);
       request();
@@ -369,7 +377,8 @@ describe("declined current-proposal drafting observation", () => {
       });
       expect(decision().decision).toBe("planned");
       expect(readPrivateApplyAuthority().grant).toBeNull();
-    }));
+    });
+  });
   it.each(["internal-unchanged", "fresh-external", "internal-successor"] as const)(
     "uses actual apply approval without replay or consent transfer: %s",
     async (mode) => {

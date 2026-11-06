@@ -146,14 +146,16 @@ const metadata = {
   version: 1 as const,
 };
 
+const events = async function* events() {};
+
 const fixture = () => {
   let current = { ...row };
   const update = vi.fn();
-  const rows = async () => [current];
+  const rows = () => [current];
   const limit = () => ({ for: rows });
   const selectWhere = () => ({ limit });
   const selectFrom = () => ({ where: selectWhere });
-  const returning = (values: typeof row) => async () => {
+  const returning = (values: typeof row) => () => {
     update(values);
     current = { ...current, ...values };
     return [current];
@@ -209,7 +211,7 @@ const fixture = () => {
   }
   const submit = async (override: Partial<Parameters<typeof observe>[0]> = {}) =>
     await observe({
-      events: (async function* events() {})(),
+      events: events(),
       expectedCheckpointDigest: oldDigest,
       metadata,
       nowEpochMs: 2000,
@@ -245,7 +247,7 @@ describe("atomic verified replay publication", () => {
     ["adapter", { replayBinding: { ...replayBinding, adapterSessionId: "other" } }],
     ["generation", { replayBinding: { ...replayBinding, adapterGeneration: 2 } }],
     ["cancellation", { replayBinding: { ...replayBinding, cancellationRevision: 1 } }],
-    ["missing binding", { replayBinding: undefined }],
+    ["missing binding", { replayBinding: null }],
     [
       "receipt absent from capture",
       {

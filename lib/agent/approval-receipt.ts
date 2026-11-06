@@ -28,26 +28,53 @@ import type { ExistingDraftReconciliationProposal } from "@/lib/repository/githu
 export const gitObjectIdSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+const approvalReceiptFormat = "autograph-eve-approval-receipt-v2" as const;
+const localApprovalSubjectFormat = "autograph-local-approval-subject-v1" as const;
+const approvalRecordSchema = z.record(z.string(), z.json());
+type UnknownApprovalRecord = z.infer<typeof approvalRecordSchema>;
+const authMembershipEffectKind = "auth-membership";
+const skippedEffectKinds = new Set(["access", authMembershipEffectKind, "auth-signup-policy"]);
+const approvalOutcome = {
+  appSpec: "accept-appspec",
+  changeSet: "accept_change_set",
+  draftUpdate: "update-draft-pr",
+  publication: "create-draft-pr",
+} as const;
+const approvalOutcomes = [
+  approvalOutcome.appSpec,
+  approvalOutcome.changeSet,
+  approvalOutcome.publication,
+  approvalOutcome.draftUpdate,
+] as const;
+const resourceSelectionSummary = (plan: NativeTargetApprovalInput["plan"]) => {
+  const profile =
+    plan.resourceProfileId === undefined
+      ? "The configured resource"
+      : `Approved profile ${plan.resourceProfileId}`;
+  return `Resource selection:\n- ${profile} uses Neon project ${plan.nativeNeon.scope.projectId}, branch ${plan.nativeNeon.scope.branchId}, store ${plan.appDatabase.resourceId}.\n- Reserve database ${plan.appDatabase.database} and roles ${plan.appDatabase.migratorRole} / ${plan.appDatabase.runtimeRole}.`;
+};
+const draftedAccountLine = (actor: { name: string; email: string }) =>
+  `${actor.name} (${actor.email})`;
 
 export const approvalReceiptSchema = z
   .strictObject({
     baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
     baseSha: gitObjectIdSchema,
-    format: z.literal("autograph-eve-approval-receipt-v2"),
-    outcome: z.enum(["accept-appspec", "accept_change_set", "create-draft-pr", "update-draft-pr"]),
+    format: z.literal(approvalReceiptFormat),
+    outcome: z.enum(approvalOutcomes),
     phase: z.enum(["appspec", "change_set", "publication", "draft_update"]),
     repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
     repositoryId: z.string().regex(/^\d+$/u),
     subjectDigest: digest,
   })
   .superRefine((receipt, context) => {
-    let expectedOutcome = "create-draft-pr";
+    let expectedOutcome: (typeof approvalOutcomes)[number] = approvalOutcome.publication;
     if (receipt.phase === "appspec") {
-      expectedOutcome = "accept-appspec";
+      expectedOutcome = approvalOutcome.appSpec;
     } else if (receipt.phase === "change_set") {
-      expectedOutcome = "accept_change_set";
+      expectedOutcome = approvalOutcome.changeSet;
     } else if (receipt.phase === "draft_update") {
-      expectedOutcome = "update-draft-pr";
+      expectedOutcome = approvalOutcome.draftUpdate;
     }
     if (receipt.outcome !== expectedOutcome) {
       context.addIssue({
@@ -65,7 +92,9 @@ export type ApprovalTarget = Pick<
 >;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
+export function parseApprovalReceipt(
+  value: z.input<typeof approvalReceiptSchema>,
+): ApprovalReceipt {
   return approvalReceiptSchema.parse(value);
 }
 
@@ -139,8 +168,8 @@ export const approvalReceiptForExistingDraftUpdate = (
 ): ApprovalReceipt =>
   approvalReceiptSchema.parse({
     ...approvalTargetFromDraftHead(proposal),
-    format: "autograph-eve-approval-receipt-v2",
-    outcome: "update-draft-pr",
+    format: approvalReceiptFormat,
+    outcome: approvalOutcome.draftUpdate,
     phase: "draft_update",
     subjectDigest: proposal.digest,
   });
@@ -152,14 +181,14 @@ export function assertApprovalReceipt(input: {
   target: ApprovalTarget;
   subjectDigest: string;
 }): ApprovalReceipt {
-  const actual = parseApprovalReceipt(input.actual);
-  let expectedOutcome = "create-draft-pr";
+  const { actual } = input;
+  let expectedOutcome: (typeof approvalOutcomes)[number] = approvalOutcome.publication;
   if (input.phase === "appspec") {
-    expectedOutcome = "accept-appspec";
+    expectedOutcome = approvalOutcome.appSpec;
   } else if (input.phase === "change_set") {
-    expectedOutcome = "accept_change_set";
+    expectedOutcome = approvalOutcome.changeSet;
   } else if (input.phase === "draft_update") {
-    expectedOutcome = "update-draft-pr";
+    expectedOutcome = approvalOutcome.draftUpdate;
   }
   const fields: readonly (readonly [string, string, string])[] = [
     ["phase", actual.phase, input.phase],
@@ -189,12 +218,12 @@ const isDraftPullRequestTool = (toolName?: string) =>
   toolName === "publish_github_draft_pr" || toolName === "publish-github-draft-pr";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function publicReceiptDescription(receipt: unknown, toolName?: string): string | undefined {
+function publicReceiptDescription(receipt: ApprovalReceipt, toolName?: string): string | undefined {
   const parsed = approvalReceiptSchema.safeParse(receipt);
   let expectedPhase: ApprovalReceipt["phase"] | undefined;
   if (toolName === "accept_app_spec") {
     expectedPhase = "appspec";
-  } else if (toolName === "accept_change_set") {
+  } else if (toolName === approvalOutcome.changeSet) {
     expectedPhase = "change_set";
   } else if (isDraftPullRequestTool(toolName)) {
     expectedPhase = "publication";
@@ -244,7 +273,7 @@ const effectSummaryByKind = {
     plan.action === "cleanup"
       ? "Revoke the app access created by this setup."
       : "Grant the app's approved Preview access.",
-  "auth-membership": (plan: HostedOperatorPlan) =>
+  [authMembershipEffectKind]: (plan: HostedOperatorPlan) =>
     plan.action === "cleanup"
       ? "Remove the organization memberships created by this setup."
       : "Create the planned organization and add its approved members.",
@@ -284,12 +313,7 @@ const planHasEffect = (
 const operatorEffectSummaries = (plan: HostedOperatorPlan) => {
   const summaries = new Set<string>();
   for (const effect of plan.effects) {
-    if (
-      effect.kind === "access" ||
-      effect.kind === "auth-membership" ||
-      effect.kind === "auth-signup-policy"
-    )
-      continue;
+    if (skippedEffectKinds.has(effect.kind)) continue;
     summaries.add(effectSummaryByKind[effect.kind](plan, effect));
   }
   return [...summaries];
@@ -297,9 +321,12 @@ const operatorEffectSummaries = (plan: HostedOperatorPlan) => {
 const signupApprovalDescription = (plan: HostedOperatorPlan) => {
   const signupPolicy = plan.authSignupPolicy;
   if (signupPolicy === undefined || !planHasEffect(plan, "auth-signup-policy")) return "";
-  return plan.action === "cleanup"
-    ? `Sign-up access:\n- Remove sign-up access for ${signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only"}, including its ${signupPolicy.membershipRole} membership and app roles: ${signupPolicy.appRoles.join(", ")}.`
-    : `Sign-up access:\n- Eligibility: ${signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only"}.\n- New members receive the ${signupPolicy.membershipRole} membership and these app roles: ${signupPolicy.appRoles.join(", ")}.`;
+  const eligibility =
+    signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only";
+  if (plan.action === "cleanup") {
+    return `Sign-up access:\n- Remove sign-up access for ${eligibility}, including its ${signupPolicy.membershipRole} membership and app roles: ${signupPolicy.appRoles.join(", ")}.`;
+  }
+  return `Sign-up access:\n- Eligibility: ${eligibility}.\n- New members receive the ${signupPolicy.membershipRole} membership and these app roles: ${signupPolicy.appRoles.join(", ")}.`;
 };
 const operatorActorLookups = (plan: HostedOperatorPlan) => {
   const program = plan.normalActorProgram;
@@ -312,7 +339,7 @@ const operatorActorLookups = (plan: HostedOperatorPlan) => {
   return { actorByKey, organizationById };
 };
 const operatorMembershipNames = (plan: HostedOperatorPlan) => {
-  if (!planHasEffect(plan, "auth-membership")) return [];
+  if (!planHasEffect(plan, authMembershipEffectKind)) return [];
   const membership = plan.authMembership;
   if (membership === undefined)
     return plan.normalActorProgram?.organizations.map((organization) => organization.name) ?? [];
@@ -322,7 +349,7 @@ const operatorMembershipNames = (plan: HostedOperatorPlan) => {
 };
 const operatorOwnedOrganizations = (plan: HostedOperatorPlan) => {
   const membership = plan.authMembership;
-  if (!planHasEffect(plan, "auth-membership") || membership === undefined) return [];
+  if (!planHasEffect(plan, authMembershipEffectKind) || membership === undefined) return [];
   return membership.kind === "create-owned-organization" ? [membership] : membership.organizations;
 };
 const operatorInstallationScopeSummary = (plan: HostedOperatorPlan) => {
@@ -339,7 +366,7 @@ const operatorMembershipSummary = (plan: HostedOperatorPlan) => {
   const program = plan.normalActorProgram;
   const membershipNames = operatorMembershipNames(plan);
   const { actorByKey, organizationById } = operatorActorLookups(plan);
-  const memberLines = planHasEffect(plan, "auth-membership")
+  const memberLines = planHasEffect(plan, authMembershipEffectKind)
     ? (program?.memberships ?? []).map((grant) => {
         const actor = actorByKey.get(grant.actorKey);
         const person =
@@ -364,11 +391,16 @@ const operatorMembershipSummary = (plan: HostedOperatorPlan) => {
   const membershipSummary =
     memberLines.length === 0
       ? ""
-      : `Organization access:\n${memberLines.map((line) => `- ${line}`).join("\n")}`;
+      : ["Organization access:", ...memberLines.map((line) => `- ${line}`)].join("\n");
   const organizationReferenceSummary =
     organizationReferenceLines.length === 0
       ? ""
-      : `Organization details (provider identity references):\n${organizationReferenceLines.map((line) => `- ${plan.action === "cleanup" ? "Remove" : "Create"} ${line}`).join("\n")}`;
+      : [
+          "Organization details (provider identity references):",
+          ...organizationReferenceLines.map(
+            (line) => `- ${plan.action === "cleanup" ? "Remove" : "Create"} ${line}`,
+          ),
+        ].join("\n");
   return { membershipSummary, organizationReferenceSummary };
 };
 const operatorAccessEffect = (plan: HostedOperatorPlan) => {
@@ -382,7 +414,7 @@ const operatorAccessSummary = (
   accessDescription: string,
 ) => {
   if (appAccessLines.length > 0)
-    return `${accessDescription}\n${appAccessLines.map((line) => `- ${line}`).join("\n")}`;
+    return [accessDescription, ...appAccessLines.map((line) => `- ${line}`)].join("\n");
   if (unresolvedAccessLines.length > 0)
     return "See Access details for each app user and its roles.";
   if (accessEffect === undefined) return "No app-user access changes are included in this plan.";
@@ -419,7 +451,10 @@ const operatorAccessDescriptions = (plan: HostedOperatorPlan) => {
   const unresolvedAccessSummary =
     unresolvedAccessLines.length === 0
       ? ""
-      : `Access details (provider identity references):\n${unresolvedAccessLines.map((line) => `- ${unresolvedAccessVerb} ${line}`).join("\n")}`;
+      : [
+          "Access details (provider identity references):",
+          ...unresolvedAccessLines.map((line) => `- ${unresolvedAccessVerb} ${line}`),
+        ].join("\n");
   return { accessSummary, unresolvedAccessSummary };
 };
 const operatorAccountSummary = (plan: HostedOperatorPlan) => {
@@ -430,7 +465,7 @@ const operatorAccountSummary = (plan: HostedOperatorPlan) => {
       : [];
   const accountSummary =
     newAccountActors.length > 0
-      ? ` Create sign-in accounts for ${newAccountActors.map((actor) => `${actor.name} (${actor.email})`).join(", ")}.`
+      ? ` Create sign-in accounts for ${newAccountActors.map(draftedAccountLine).join(", ")}.`
       : "";
   return accountSummary;
 };
@@ -445,27 +480,31 @@ const operatorRetentionSummary = (plan: HostedOperatorPlan) => {
 };
 
 const validatedHostedOperatorApprovalPlan = (
-  record: Record<string, unknown>,
+  record: UnknownApprovalRecord,
   toolName: string,
 ): HostedOperatorPlan | undefined => {
   const parsed = hostedOperatorPlanSchema.safeParse(record.plan);
+  if (!parsed.success) return undefined;
+  const expectedAction = toolName === "cleanup-app-hosted-runtime" ? "cleanup" : "prepare";
+  const plan = parsed.data;
+  const identityMatches =
+    plan.selection.appId === record.appId &&
+    plan.selection.projectId === record.projectId &&
+    plan.selection.branch === record.branch;
   if (
-    !parsed.success ||
-    record.planDigest !== operatorPlanDigest(parsed.data) ||
-    parsed.data.action !== (toolName === "cleanup-app-hosted-runtime" ? "cleanup" : "prepare") ||
+    record.planDigest !== operatorPlanDigest(plan) ||
+    plan.action !== expectedAction ||
     record.environment !== "preview" ||
-    parsed.data.selection.appId !== record.appId ||
-    parsed.data.selection.projectId !== record.projectId ||
-    parsed.data.selection.branch !== record.branch
+    !identityMatches
   ) {
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional descriptions explicitly return no public approval.
     return undefined;
   }
-  return parsed.data;
+  return plan;
 };
 
 const operatorApprovalDescription = (
-  record: Record<string, unknown>,
+  record: UnknownApprovalRecord,
   toolName: string,
 ): string | undefined => {
   const plan = validatedHostedOperatorApprovalPlan(record, toolName);
@@ -513,7 +552,7 @@ const operatorApprovalDescription = (
     resourceSentence,
     "Production will not be deployed or activated.",
     ...(effectSummaries.length > 0
-      ? [`What will happen:\n${effectSummaries.map((effect) => `- ${effect}`).join("\n")}`]
+      ? [["What will happen:", ...effectSummaries.map((effect) => `- ${effect}`)].join("\n")]
       : []),
     ...(membershipSummary ? [membershipSummary] : []),
     `Access and cost:\n- ${accessSummary}${accountSummary}\n- ${plan.cost.description} Billing responsibility follows ${costOwner}. Check the provider's billing page for amounts.`,
@@ -530,7 +569,8 @@ const operatorApprovalDescription = (
     .join("\n\n");
 };
 
-const continuityApprovalDescription = (input: unknown): string | undefined => {
+type ContinuityApprovalInput = z.infer<typeof continuityApprovalToolInputSchema>;
+const continuityApprovalDescription = (input: ContinuityApprovalInput): string | undefined => {
   const parsed = continuityApprovalToolInputSchema.safeParse(input);
   if (!parsed.success) return undefined;
   let intentId: string;
@@ -541,7 +581,12 @@ const continuityApprovalDescription = (input: unknown): string | undefined => {
   }
   const actorScope =
     "plan" in parsed.data
-      ? `Test actor and organization references (provider identity references):\n${parsed.data.plan.actors.map((actor) => `- ${actor.actorId} in ${actor.organizationId}`).join("\n")}`
+      ? [
+          "Test actor and organization references (provider identity references):",
+          ...parsed.data.plan.actors.map(
+            (actor) => `- ${actor.actorId} in ${actor.organizationId}`,
+          ),
+        ].join("\n")
       : "Use only the actors, organizations and browser-test selection recorded in this saved plan. Builder verifies its full owner-scoped plan before execution; this approval does not add accounts or grant roles.";
   return [
     `Run the app's existing browser checks against its Preview environment. The checks may perform the actions written into the app and restart only this app's process.`,
@@ -551,15 +596,15 @@ const continuityApprovalDescription = (input: unknown): string | undefined => {
     "This does not change the app's main project or prove behavior after a later deployment.",
   ].join("\n\n");
 };
-const nativeTargetApprovalDescription = (input: unknown): string | undefined => {
-  const parsed = z
-    .strictObject({
-      appId,
-      operationRef: z.uuid(),
-      plan: nativeTargetOnboardingPlanSchema,
-      planDigest: digest,
-    })
-    .safeParse(input);
+const nativeTargetApprovalInputSchema = z.strictObject({
+  appId,
+  operationRef: z.uuid(),
+  plan: nativeTargetOnboardingPlanSchema,
+  planDigest: digest,
+});
+type NativeTargetApprovalInput = z.infer<typeof nativeTargetApprovalInputSchema>;
+const nativeTargetApprovalDescription = (input: NativeTargetApprovalInput): string | undefined => {
+  const parsed = nativeTargetApprovalInputSchema.safeParse(input);
   if (
     !parsed.success ||
     parsed.data.appId !== parsed.data.plan.appId ||
@@ -577,7 +622,10 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
       : ` (expires ${formatUtcExpiry(plan.retention.expiresAt)})`;
   return [
     `Create the Preview project ${plan.project.name} for app ${plan.appId}, then register its Preview branch.`,
-    `Resource selection:\n- ${plan.resourceProfileId === undefined ? "The configured resource" : `Approved profile ${plan.resourceProfileId}`} uses Neon project ${plan.nativeNeon.scope.projectId}, branch ${plan.nativeNeon.scope.branchId}, store ${plan.appDatabase.resourceId}.\n- Reserve database ${plan.appDatabase.database} and roles ${plan.appDatabase.migratorRole} / ${plan.appDatabase.runtimeRole}.`,
+    [
+      resourceSelectionSummary(plan),
+      `- Reserve database ${plan.appDatabase.database} and roles ${plan.appDatabase.migratorRole} / ${plan.appDatabase.runtimeRole}.`,
+    ].join("\n"),
     ...((plan.resourceSelectionRevision ?? 0) > 0
       ? [
           "This revised resource selection needs a new approval. Earlier approvals do not authorize this plan; their audit remains retained.",
@@ -589,11 +637,10 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
   ].join("\n\n");
 };
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function otherPublicApprovalDescription(input: unknown, toolName?: string): string | undefined {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    return undefined;
-  }
-  const record = input as Record<string, unknown>;
+function otherPublicApprovalDescription(
+  record: UnknownApprovalRecord,
+  toolName?: string,
+): string | undefined {
   if (toolName === "prepare-app-central-integrations")
     return centralHostApprovalDescription(record);
   if (toolName === "prepare-app-native-target") return nativeTargetApprovalDescription(record);
@@ -612,7 +659,8 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
   }
 
   if (Object.hasOwn(record, "approvalReceipt")) {
-    return publicReceiptDescription(record.approvalReceipt, toolName);
+    const receipt = approvalReceiptSchema.safeParse(record.approvalReceipt);
+    return receipt.success ? publicReceiptDescription(receipt.data, toolName) : undefined;
   }
   if (toolName === "accept_app_spec") {
     const parsed = z
@@ -620,8 +668,8 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
         appId,
         artifactRevision: digest,
         eligibilityDigest: digest,
-        format: z.literal("autograph-local-approval-subject-v1"),
-        outcome: z.literal("accept-appspec"),
+        format: z.literal(localApprovalSubjectFormat),
+        outcome: z.literal(approvalOutcome.appSpec),
         phase: z.literal("appspec"),
         sourceSha: gitObjectIdSchema,
         sourceTree: gitObjectIdSchema,
@@ -632,8 +680,8 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
         appId: record.appId,
         artifactRevision: record.expectedArtifactRevision,
         eligibilityDigest: record.expectedEligibilityDigest,
-        format: "autograph-local-approval-subject-v1",
-        outcome: "accept-appspec",
+        format: localApprovalSubjectFormat,
+        outcome: approvalOutcome.appSpec,
         phase: "appspec",
         sourceSha: record.expectedSourceSha,
         sourceTree: record.expectedSourceTree,
@@ -644,25 +692,21 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
       ? `Accept the reviewed AppSpec for ${parsed.data.appId} and continue with its implementation plan.`
       : undefined;
   }
-  if (toolName === "accept_change_set") {
-    const changeSet =
-      typeof record.changeSet === "object" &&
-      record.changeSet !== null &&
-      !Array.isArray(record.changeSet)
-        ? (record.changeSet as Record<string, unknown>)
-        : undefined;
+  if (toolName === approvalOutcome.changeSet) {
+    const changeSetSchema = z.strictObject({ digest });
+    const changeSet = changeSetSchema.safeParse(record.changeSet);
     const parsed = z
       .strictObject({
-        format: z.literal("autograph-local-approval-subject-v1"),
-        outcome: z.literal("accept_change_set"),
+        format: z.literal(localApprovalSubjectFormat),
+        outcome: z.literal(approvalOutcome.changeSet),
         phase: z.literal("change_set"),
         subjectDigest: digest,
       })
       .safeParse({
-        format: "autograph-local-approval-subject-v1",
-        outcome: "accept_change_set",
+        format: localApprovalSubjectFormat,
+        outcome: approvalOutcome.changeSet,
         phase: "change_set",
-        subjectDigest: changeSet?.digest,
+        subjectDigest: changeSet.success ? changeSet.data.digest : undefined,
       });
     return parsed.success
       ? "Accept the reviewed change set after its final source assessment. This records review in the Builder session; it does not publish or change an external repository."
@@ -672,21 +716,22 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
 }
 
 export const publicApprovalDescription = (
-  input: unknown,
+  input: UnknownApprovalRecord,
   toolName?: string,
 ): string | undefined => {
   if (toolName === "finish-github-pr-delivery") {
     const parsed = githubPrDeliveryApprovalSchema.safeParse(input);
     return parsed.success ? describeGitHubPrDeliveryApproval(parsed.data) : undefined;
   }
-  return otherPublicApprovalDescription(input, toolName);
+  const parsed = approvalRecordSchema.safeParse(input);
+  return parsed.success ? otherPublicApprovalDescription(parsed.data, toolName) : undefined;
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function approvalRequestDecision(input: {
   phase: "appspec" | "change_set";
-  toolName: "accept_app_spec" | "accept_change_set";
-  toolInput: Record<string, unknown>;
+  toolName: "accept_app_spec" | typeof approvalOutcome.changeSet;
+  toolInput: UnknownApprovalRecord;
   githubSource: ImmutableGitHubSourceReceipt | undefined;
   subjectDigest: string;
 }): "user-approval" | { type: "denied"; reason: string } {

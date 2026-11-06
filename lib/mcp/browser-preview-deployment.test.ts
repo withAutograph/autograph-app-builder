@@ -99,34 +99,32 @@ const ownedFixture = (
     sessionId: options.artifactSessionId ?? current,
     version: 2 as const,
   };
-  const record = {
-    ...durableHostedSessionRecordSchema.parse({
-      adapterGeneration: origin === current ? 1 : 2,
-      adapterSessionId: current,
-      checkpointDigest: `sha256:${"c".repeat(64)}`,
-      checkpointProgressDigest: `sha256:${"d".repeat(64)}`,
-      checkpointRef: {
-        digest: `sha256:${"c".repeat(64)}`,
-        eventCount: 0,
-        id: "00000000-0000-4000-8000-000000000001",
-      },
-      createdAtEpochMs: 1000,
-      lastProgressAtEpochMs: 1000,
-      originAdapterSessionId: origin,
-      parentSessionId: "ses_parent",
-      principal: owner,
-      resumability: "terminal",
-      sessionId: publicId,
-      stage: "complete",
-      status: "completed",
-      title: "Vendor queue",
-      updatedAtEpochMs: 1000,
-      version: 2,
-    }),
-    ...(options.nativeRecoveryBinding === undefined
-      ? {}
-      : { nativeRecoveryBinding: options.nativeRecoveryBinding }),
-  };
+  const record = durableHostedSessionRecordSchema.parse({
+    adapterGeneration: origin === current ? 1 : 2,
+    adapterSessionId: current,
+    checkpointDigest: `sha256:${"c".repeat(64)}`,
+    checkpointProgressDigest: `sha256:${"d".repeat(64)}`,
+    checkpointRef: {
+      digest: `sha256:${"c".repeat(64)}`,
+      eventCount: 0,
+      id: "00000000-0000-4000-8000-000000000001",
+    },
+    createdAtEpochMs: 1000,
+    lastProgressAtEpochMs: 1000,
+    originAdapterSessionId: origin,
+    parentSessionId: "ses_parent",
+    principal: owner,
+    resumability: "terminal",
+    sessionId: publicId,
+    stage: "complete",
+    status: "completed",
+    title: "Vendor queue",
+    updatedAtEpochMs: 1000,
+    version: 2,
+  });
+  if (options.nativeRecoveryBinding !== undefined) {
+    record.nativeRecoveryBinding = options.nativeRecoveryBinding;
+  }
   const metadata: HostedPagedCheckpointMetadata = {
     capturedAtEpochMs: 1000,
     status: "completed",
@@ -289,21 +287,26 @@ describe("deployment Browser preview route", () => {
   });
   it("serves the exact artifact selected by the request-scoped service", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const get = vi.fn(async () => ({
+    const get = vi.fn<EveSessionService["get"]>(async () => ({
       cursor: 1,
       events: [],
-      prototype: {
-        content,
+      prototypeRef: {
+        appId: "vendor-onboarding",
+        chunkCount: 2,
+        contentBytes: Buffer.byteLength(content),
         digest,
-        mediaType: "text/html" as const,
+        mediaType: "text/html",
         path: "prototype/vendor-onboarding/index.html",
+        recordedByCallId: "call-one",
         revision: "b".repeat(64),
+        sessionId: "session-one",
+        version: 2,
       },
       sessionId: "session-one",
       status: "completed" as const,
     }));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const serviceForRequest = vi.fn(async () => ({ get }) as unknown as EveSessionService);
+    const serviceForRequest = vi.fn(async () => ({ get }));
     const handler = createDeploymentPrototypePreviewRequestHandler({
       environment: {},
       serviceForRequest,

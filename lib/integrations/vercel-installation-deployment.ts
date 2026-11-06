@@ -68,8 +68,7 @@ function deployment(environment: NodeJS.ProcessEnv | Record<string, string | und
       config,
       emulation,
       fetch: emulation
-        ? async (resource, init) =>
-            await providerEmulationFetch(resource as string | URL, init, emulation)
+        ? async (resource, init) => await providerEmulationFetch(new URL(resource), init, emulation)
         : undefined,
       installations,
       membership: {
@@ -123,13 +122,14 @@ export function createVercelInstallationDeploymentHandler(
       return redirect("failed", reason, returnState);
     };
 
+    const invalidStartRequest =
+      request.method !== "POST" ||
+      request.headers.get("origin") !== origin ||
+      request.headers.get("content-type")?.split(";", 1)[0] !== "application/x-www-form-urlencoded";
+    const invalidCallbackRequest = request.method !== "GET";
     if (
-      (kind === "start" &&
-        (request.method !== "POST" ||
-          request.headers.get("origin") !== origin ||
-          request.headers.get("content-type")?.split(";", 1)[0] !==
-            "application/x-www-form-urlencoded")) ||
-      (kind === "callback" && request.method !== "GET")
+      (kind === "start" && invalidStartRequest) ||
+      (kind === "callback" && invalidCallbackRequest)
     ) {
       return fail("request-invalid");
     }
@@ -202,20 +202,13 @@ export function createVercelInstallationDeploymentHandler(
   };
 }
 
-const webhookSchema = z
-  .object({
-    payload: z
-      .object({
-        configuration: z
-          .object({ id: z.string().min(1) })
-          .passthrough()
-          .optional(),
-        configurationId: z.string().min(1).optional(),
-      })
-      .passthrough(),
-    type: z.string(),
-  })
-  .passthrough();
+const webhookSchema = z.looseObject({
+  payload: z.looseObject({
+    configuration: z.looseObject({ id: z.string().min(1) }).optional(),
+    configurationId: z.string().min(1).optional(),
+  }),
+  type: z.string(),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelWebhookDeploymentHandler(
@@ -237,7 +230,7 @@ export function createVercelWebhookDeploymentHandler(
       const event = webhookSchema.parse(JSON.parse(body));
       if (event.type === "integration-configuration.removed") {
         const id = event.payload.configuration?.id ?? event.payload.configurationId;
-        if (!id) {
+        if (id === undefined || id.length === 0) {
           return new Response("Invalid event", { status: 400 });
         }
         await runtime.installations.deactivate(id, new Date());

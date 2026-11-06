@@ -5,6 +5,7 @@ import { appBuilderWorkflowState } from "./workflow-state";
 import { getSourceBoundSandbox } from "./source-bound-sandbox";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
 import type { DraftInspectionRecoveryInput } from "./github-publication-runtime";
+import type { ExistingDraftObservation } from "../repository/github-draft-update";
 import { repositoryAccessRuntimeForSession } from "./deployment-repository-access-runtime";
 import {
   repositoryAccessReceiptSchema,
@@ -41,6 +42,7 @@ import type { SandboxSession } from "eve/sandbox";
 import { priorResumedBuildDraftProposal } from "./existing-app-repair-planning";
 
 type Reviewed = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
+const PUBLISHED_DRAFT_REPAIR_KIND = "published-draft-repair" as const;
 const assertCurrentOrigin = (
   expected: Reviewed,
   expectedCandidate: DraftReconciliationCandidate | null,
@@ -227,17 +229,24 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
       }),
     prepare: async () => {
       assertCurrentOrigin(state, previous);
-      return await preparePublishedDraftRepairCandidate({
+      const preparation = {
         appId: repair.appId,
         headBranch: owned.draft.headBranch,
         headSha: owned.draft.headSha,
         repository: repair.source.repository,
         sandbox,
-        ...(unpublished === undefined ? {} : { unpublished }),
-        ...(previous?.kind === "published-draft-repair" && previous.repair.digest === repair.digest
-          ? { previousCandidate: previous, replayPreviousCandidate: true }
-          : {}),
-      });
+      };
+      if (unpublished !== undefined) {
+        preparation.unpublished = unpublished;
+      }
+      if (
+        previous?.kind === PUBLISHED_DRAFT_REPAIR_KIND &&
+        previous.repair.digest === repair.digest
+      ) {
+        preparation.previousCandidate = previous;
+        preparation.replayPreviousCandidate = true;
+      }
+      return await preparePublishedDraftRepairCandidate(preparation);
     },
     sandbox: {
       setNetworkPolicy: async (policy) => {
@@ -251,7 +260,7 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
   const candidate = {
     ...preparedRepair,
     githubSourceDigest: owned.source.digest,
-    kind: "published-draft-repair" as const,
+    kind: PUBLISHED_DRAFT_REPAIR_KIND,
     originalReviewDigest: state.reviewReceipt.digest,
     pullRequestNumber: owned.draft.number,
     repair,
@@ -268,7 +277,7 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
     baseline: "draft-head" as const,
     conflicts: candidate.conflicts,
     headSha: candidate.headSha,
-    kind: "published-draft-repair" as const,
+    kind: PUBLISHED_DRAFT_REPAIR_KIND,
     nextAction:
       "Inspect or format this same draft candidate, validate it, review the app-only draft-head delta, then seal_github_draft_pr_update and request separate update approval. The original fresh source and existing published root metadata remain intact.",
     root: candidate.root,
@@ -281,7 +290,7 @@ const samePublishedDraft = (
   repair: ReturnType<typeof createPublishedDraftRepairSource>,
 ): boolean => {
   const origin =
-    previous.kind === "published-draft-repair" ? previous.repair : previous.publishedOrigin;
+    previous.kind === PUBLISHED_DRAFT_REPAIR_KIND ? previous.repair : previous.publishedOrigin;
   return (
     origin !== undefined &&
     [
@@ -394,16 +403,14 @@ const reconciliationPreparationLineage = (
   const previousInput: Pick<
     DraftReconciliationInput,
     "previousCandidate" | "replayPreviousCandidate"
-  > =
-    previousCandidate === undefined
-      ? {}
-      : {
-          previousCandidate,
-          replayPreviousCandidate:
-            input.recovery === undefined &&
-            sameOrigin &&
-            previousCandidate.headSha === repair.draft.headSha,
-        };
+  > = {};
+  if (previousCandidate !== undefined) {
+    previousInput.previousCandidate = previousCandidate;
+    previousInput.replayPreviousCandidate =
+      input.recovery === undefined &&
+      sameOrigin &&
+      previousCandidate.headSha === repair.draft.headSha;
+  }
   return { ownedPrevious, preservedPrevious, previousInput, recoveryMode, reopenCurrent };
 };
 
@@ -511,27 +518,12 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   const { access, runtime, owned, repair } = await acquireOwnedPublishedDraft(input, previous);
   const { ownedPrevious, preservedPrevious, recoveryMode, reopenCurrent, previousInput } =
     reconciliationPreparationLineage(input, previous, repair);
-  const source = await runtime.inspectExistingDraftReconciliationSource({
-    repositoryId: owned.draft.repositoryId,
-    owner: owned.draft.owner,
+  const sourceInput = {
     name: owned.draft.name,
-    pullRequestNumber: owned.draft.number,
+    owner: owned.draft.owner,
     priorPublishedProposalDigest: owned.proposal.digest,
-    recovery: draftInspectionRecoveryForSession({
-      appId: state.appSpec.appId,
-      appSpecDigest: state.appSpec.digest,
-      ctx,
-      priorPublishedProposalDigest: owned.proposal.digest,
-      pullRequestNumber: input.pullRequestNumber,
-      root: state.applyReceipt.applyRoot,
-    }),
-    ...(ownedPrevious?.proposal === undefined
-      ? {}
-      : { previousReconciliation: ownedPrevious.proposal }),
-    ...(ownedPrevious?.publishedReconciliation === undefined
-      ? {}
-      : { publishedReconciliation: ownedPrevious.publishedReconciliation }),
-    readPublishedSource: async (draft) =>
+    pullRequestNumber: owned.draft.number,
+    readPublishedSource: async (draft: ExistingDraftObservation) =>
       await readPublishedOperatorSourceForSession({
         adapterSessionId: ctx.session.id,
         appId: state.appSpec.appId,
@@ -548,7 +540,23 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
         sessionAuth: ctx.session.auth,
         signal: ctx.abortSignal,
       }),
-  });
+    recovery: draftInspectionRecoveryForSession({
+      appId: state.appSpec.appId,
+      appSpecDigest: state.appSpec.digest,
+      ctx,
+      priorPublishedProposalDigest: owned.proposal.digest,
+      pullRequestNumber: input.pullRequestNumber,
+      root: state.applyReceipt.applyRoot,
+    }),
+    repositoryId: owned.draft.repositoryId,
+  };
+  if (ownedPrevious?.proposal !== undefined) {
+    sourceInput.previousReconciliation = ownedPrevious.proposal;
+  }
+  if (ownedPrevious?.publishedReconciliation !== undefined) {
+    sourceInput.publishedReconciliation = ownedPrevious.publishedReconciliation;
+  }
+  const source = await runtime.inspectExistingDraftReconciliationSource(sourceInput);
   if (
     source.draft.headSha !== owned.draft.headSha ||
     source.draft.headTree !== owned.draft.headTree
@@ -577,7 +585,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
       }),
     prepare: async () => {
       assertCurrentOrigin(state, previous);
-      return await prepareDraftReconciliation({
+      const preparation = {
         appId: repair.appId,
         baseBranch: source.draft.baseBranch,
         baseSha: source.base.headSha,
@@ -591,7 +599,8 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
           : { forceFreshCandidate: true }),
         ...(unpublished === undefined ? {} : { unpublished }),
         ...previousInput,
-      });
+      };
+      return await prepareDraftReconciliation(preparation);
     },
     sandbox: {
       setNetworkPolicy: async (policy) => {
@@ -614,36 +623,49 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     : undefined;
   const candidate = {
     ...preparedCandidate,
-    kind: "reconciliation" as const,
-    publishedOrigin: repair,
-    ...(recoveryMode === undefined ? {} : { preservedWorkspaces, recoveryMode }),
-    ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
-    version: 1 as const,
-    repositoryId: owned.draft.repositoryId,
-    pullRequestNumber: owned.draft.number,
     githubSourceDigest: repair.source.digest,
+    kind: "reconciliation" as const,
     originalReviewDigest: state.reviewReceipt.digest,
+    publishedOrigin: repair,
+    pullRequestNumber: owned.draft.number,
+    repositoryId: owned.draft.repositoryId,
     reviewedLineage: structuredClone(state),
+    version: 1 as const,
   };
+  if (recoveryMode !== undefined) {
+    candidate.preservedWorkspaces = preservedWorkspaces;
+    candidate.recoveryMode = recoveryMode;
+  }
+  if (publishedReconciliation !== undefined) {
+    candidate.publishedReconciliation = publishedReconciliation;
+  }
   updateExactDraftReconciliation({
     expected: previous,
     operation: "preparing this owned draft's native base merge",
     transition: () => candidate,
   });
-  return {
-    status: candidate.conflicts.length === 0 ? "ready_for_validation" : "needs_resolution",
-    kind: "reconciliation" as const,
+  const result = {
     baseSha: candidate.baseSha,
-    headSha: candidate.headSha,
-    root: candidate.root,
     conflicts: candidate.conflicts,
-    ...(reopenCurrent ? { originalReviewReplayed: false, preservedWorkspaces, recoveryMode } : {}),
-    ...(preservedCandidateRoot === undefined ? {} : { preservedCandidateRoot, replayedAppChanges }),
-    ...(retriedGitFetch
-      ? { gitTransportRecovery: "Verified installation Git fetch recovered." }
-      : {}),
+    headSha: candidate.headSha,
+    kind: "reconciliation" as const,
     nextAction: reopenCurrent
       ? "The original app review was not replayed. Compare its preserved app changes through change_set_status and any retained draft candidates with this current owned draft, then apply only intended app edits. Resolve app conflicts, validate and review the candidate, then seal_github_draft_pr_reconciliation and request its exact update approval. The original source and private workspaces remain retained; their availability is established when read."
       : "Resolve any app conflicts, validate and review this native base/head merge, then seal_github_draft_pr_reconciliation and request its exact update approval. The original starter, same draft branch, and approved root registration remain intact.",
+    root: candidate.root,
+    status: candidate.conflicts.length === 0 ? "ready_for_validation" : "needs_resolution",
   };
+  if (reopenCurrent) {
+    result.originalReviewReplayed = false;
+    result.preservedWorkspaces = preservedWorkspaces;
+    result.recoveryMode = recoveryMode;
+  }
+  if (preservedCandidateRoot !== undefined) {
+    result.preservedCandidateRoot = preservedCandidateRoot;
+    result.replayedAppChanges = replayedAppChanges;
+  }
+  if (retriedGitFetch) {
+    result.gitTransportRecovery = "Verified installation Git fetch recovered.";
+  }
+  return result;
 };

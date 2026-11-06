@@ -288,6 +288,7 @@ describe("approved stopped build continuation", () => {
 
 it("projects only the independently acquired existing repository into private destination recovery", async () => {
   const { recordRepositoryAccessReceipt } = await import("./repository-access-state");
+  // SAFETY: A missing current field reads as undefined, the intended initial receipt state.
   const access = recordRepositoryAccessReceipt({
     access: {
       accessDigest: "3".repeat(64),
@@ -306,9 +307,8 @@ it("projects only the independently acquired existing repository into private de
       status: "ready",
     },
     confirmedByCallId: "actual-repository-acquisition",
-    current: undefined,
     sessionId: scope.sessionId,
-  });
+  } as Parameters<typeof recordRepositoryAccessReceipt>[0]);
   const state = {
     ...failed,
     githubSource: {

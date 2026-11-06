@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import type { SandboxSession } from "eve/sandbox";
 
 import {
   assertExistingAppImplementationFiles,
@@ -7,6 +9,59 @@ import {
   applyImplementationFiles,
   withImplementationFiles,
 } from "./apply-implementation-files";
+import { targetProposalSchema } from "../repository/target-planning";
+
+const existingAppProposal = (appId: string) => {
+  const workspacePath = `apps/${appId}`;
+  const changes = [
+    {
+      after: { content: "", digest: "a".repeat(64), mode: "0644" },
+      path: `${workspacePath}/app/page.tsx`,
+    },
+  ];
+  return targetProposalSchema.parse({
+    blockers: [],
+    contract: {
+      appId,
+      appSpec: { path: `${workspacePath}/app-spec.md`, sha256: "a".repeat(64) },
+      version: 1,
+    },
+    iteration: {
+      changes,
+      digest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
+    },
+    mutations: [],
+    operation: "iterate-existing-app",
+    plan: {
+      product: { appSpec: { path: `${workspacePath}/app-spec.md`, sha256: "a".repeat(64) } },
+      source: {
+        packageName: `@example/${appId}`,
+        runtime: "nextjs",
+        schema: { kind: "none" },
+        workspacePath,
+      },
+      topology: {
+        configPath: "microfrontends.json",
+        packageName: `@example/${appId}`,
+        projectName: appId,
+        routes: [`/${appId}`],
+      },
+    },
+  });
+};
+
+const sandboxFixture = (writeTextFile: SandboxSession["writeTextFile"]): SandboxSession => ({
+  readBinaryFile: vi.fn<SandboxSession["readBinaryFile"]>(),
+  readFile: vi.fn<SandboxSession["readFile"]>(),
+  readTextFile: vi.fn<SandboxSession["readTextFile"]>(),
+  removePath: vi.fn<SandboxSession["removePath"]>(),
+  resolvePath: (path) => path,
+  run: vi.fn<SandboxSession["run"]>(),
+  spawn: vi.fn<SandboxSession["spawn"]>(),
+  writeBinaryFile: vi.fn<SandboxSession["writeBinaryFile"]>(),
+  writeFile: vi.fn<SandboxSession["writeFile"]>(),
+  writeTextFile,
+});
 
 describe("approval-bound implementation files", () => {
   it("writes validated files into the successful apply overlay only", async () => {
@@ -25,23 +80,24 @@ describe("approval-bound implementation files", () => {
         path: "apps/stock-exceptions/db/migrations/001.sql",
       },
     ]);
-    const writeTextFile = vi.fn(async () => {});
-    const executor = vi.fn(async () => ({
-      exitCode: 0,
-      stderr: "",
-      stdout: "receipt",
-    }));
+    const writeTextFile = vi.fn<SandboxSession["writeTextFile"]>();
+    const executor = vi.fn(async () => {
+      await Promise.resolve();
+      return {
+        exitCode: 0,
+        stderr: "",
+        stdout: "receipt",
+      };
+    });
     const wrapped = withImplementationFiles(executor, files);
 
     await expect(
       wrapped({
         appId: "stock-exceptions",
         applyRoot: "/workspace/repository",
-        proposal: {
-          operation: "iterate-existing-app",
-          plan: { source: { workspacePath: "apps/stock-exceptions" } },
-        } as never,
-        sandbox: { writeTextFile } as never,
+        proposal: existingAppProposal("stock-exceptions"),
+        // SAFETY: This path only calls writeTextFile, which the test double provides.
+        sandbox: sandboxFixture(writeTextFile),
       }),
     ).resolves.toEqual({ exitCode: 0, stderr: "", stdout: "receipt" });
 
@@ -61,8 +117,11 @@ describe("approval-bound implementation files", () => {
   });
 
   it("rejects out-of-app implementation files before applying an existing-app change", async () => {
-    const writeTextFile = vi.fn(async () => {});
-    const executor = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "" }));
+    const writeTextFile = vi.fn<SandboxSession["writeTextFile"]>();
+    const executor = vi.fn(async () => {
+      await Promise.resolve();
+      return { exitCode: 0, stderr: "", stdout: "" };
+    });
     const wrapped = withImplementationFiles(executor, [
       { content: "out of scope", path: "packages/platform/src/change.ts" },
     ]);
@@ -71,11 +130,9 @@ describe("approval-bound implementation files", () => {
       wrapped({
         appId: "inventory-queue",
         applyRoot: "/workspace/repository",
-        proposal: {
-          operation: "iterate-existing-app",
-          plan: { source: { workspacePath: "apps/inventory-queue" } },
-        } as never,
-        sandbox: { writeTextFile } as never,
+        proposal: existingAppProposal("inventory-queue"),
+        // SAFETY: The rejection happens before any sandbox capability is called; writeTextFile is present if reached.
+        sandbox: sandboxFixture(writeTextFile),
       }),
     ).rejects.toThrow("Existing-app implementation files must stay inside the app workspace.");
     expect(executor).not.toHaveBeenCalled();
@@ -83,10 +140,7 @@ describe("approval-bound implementation files", () => {
   });
 
   it("rejects an out-of-app validation repair before it can write", () => {
-    const proposal = {
-      operation: "iterate-existing-app",
-      plan: { source: { workspacePath: "apps/inventory-queue" } },
-    } as never;
+    const proposal = existingAppProposal("inventory-queue");
     expect(() => {
       assertExistingAppImplementationFiles(
         [{ content: "out of scope", path: "packages/platform/src/change.ts" }],
@@ -102,8 +156,8 @@ describe("approval-bound implementation files", () => {
   });
   it("applies explicit removal non-recursively and retries an absent file safely", async () => {
     const sandbox = {
-      removePath: vi.fn(async () => {}),
-      writeTextFile: vi.fn(async () => {}),
+      removePath: vi.fn<SandboxSession["removePath"]>(),
+      writeTextFile: vi.fn<SandboxSession["writeTextFile"]>(),
     };
     const files = implementationFilesSchema.parse([
       { operation: "delete", path: "apps/example/server/demo.ts" },

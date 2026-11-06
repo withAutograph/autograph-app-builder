@@ -15,17 +15,15 @@ const TOKEN_VERSION = 1;
 const TOKEN_TTL_SECONDS = 5 * 60;
 const INTERNAL_EMAIL_DOMAIN = "passkey.autograph.invalid";
 
-const tokenPayloadSchema = z
-  .object({
-    deploymentId: z.string().min(1).max(256),
-    expiresAt: z.number().int().positive(),
-    nonce: z.string().uuid(),
-    origin: z.string().url(),
-    rpId: z.string().min(1).max(253),
-    userHandle: z.string().uuid(),
-    version: z.literal(TOKEN_VERSION),
-  })
-  .strict();
+const tokenPayloadSchema = z.strictObject({
+  deploymentId: z.string().min(1).max(256),
+  expiresAt: z.number().int().positive(),
+  nonce: z.uuid(),
+  origin: z.url(),
+  rpId: z.string().min(1).max(253),
+  userHandle: z.uuid(),
+  version: z.literal(TOKEN_VERSION),
+});
 
 export interface PasskeyOnboardingConfig {
   origin: string;
@@ -40,7 +38,6 @@ interface PasskeyOnboardingReadOptions {
   previewCanonicalOrigin?: string;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactOrigin(value: string | undefined) {
   const url = new URL(value ?? "");
   if (url.pathname !== "/api/auth" || url.search || url.hash) {
@@ -49,9 +46,73 @@ function exactOrigin(value: string | undefined) {
   return url.origin;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isLoopback(hostname: string) {
   return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+function hasValidPreviewBranchOrigin(
+  environment: Readonly<Record<string, string | undefined>>,
+  canonicalOrigin: string,
+  origin: string,
+) {
+  const canonical = new URL(canonicalOrigin);
+  if (environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION !== "1") {
+    return false;
+  }
+  if (canonical.protocol !== "https:" || canonical.pathname !== "/") {
+    return false;
+  }
+  if (canonical.search.length > 0 || canonical.hash.length > 0) {
+    return false;
+  }
+  if (canonical.username.length > 0 || canonical.password.length > 0) {
+    return false;
+  }
+  const branchUrl = environment.VERCEL_BRANCH_URL?.trim();
+  return (
+    canonical.origin === origin &&
+    branchUrl !== undefined &&
+    branchUrl.length > 0 &&
+    branchUrl === canonical.hostname
+  );
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function hasValidLocalIssuer(
+  origin: string,
+  localPort: string,
+  isHttps: boolean,
+  localProviderEmulation: boolean,
+  localAuthEmulation: boolean,
+) {
+  if (origin.startsWith("http://")) {
+    return true;
+  }
+  if (!isHttps) {
+    return false;
+  }
+  if (!/^\d{2,5}$/u.test(localPort)) {
+    return false;
+  }
+  if (origin !== `https://localhost:${localPort}`) {
+    return false;
+  }
+  return localProviderEmulation && localAuthEmulation;
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function hasRequiredPreviewMetadata(
+  deploymentId: string | undefined,
+  deploymentHostname: string | undefined,
+  origin: string,
+) {
+  if (deploymentId === undefined || deploymentId.length === 0 || deploymentId.length > 256) {
+    return false;
+  }
+  if (deploymentHostname === undefined || deploymentHostname.length === 0) {
+    return false;
+  }
+  return origin.startsWith("https://");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -64,21 +125,30 @@ export function readPasskeyOnboardingConfig(
   }
 
   const secret = environment.BETTER_AUTH_SECRET?.trim();
-  if (!secret || secret.length < 32 || /[\0\r\n]/u.test(secret)) {
+  if (
+    secret === undefined ||
+    secret.length === 0 ||
+    secret.length < 32 ||
+    /[\0\r\n]/u.test(secret)
+  ) {
     throw new Error("Passkey onboarding requires BETTER_AUTH_SECRET.");
   }
 
-  const derivedPreviewIssuer =
-    environment.VERCEL_ENV === "preview" && environment.VERCEL_URL
-      ? `https://${environment.VERCEL_URL}/api/auth`
-      : undefined;
+  const vercelUrl = environment.VERCEL_URL;
+  let derivedPreviewIssuer: string | undefined;
+  const hasPreviewDeploymentUrl = vercelUrl !== undefined && vercelUrl.length > 0;
+  if (environment.VERCEL_ENV === "preview" && hasPreviewDeploymentUrl) {
+    derivedPreviewIssuer = `https://${vercelUrl}/api/auth`;
+  }
   const origin = exactOrigin(environment.BETTER_AUTH_URL ?? derivedPreviewIssuer);
   const { hostname } = new URL(origin);
-  if (environment.VERCEL_ENV === "production") {
+  const isPreview = environment.VERCEL_ENV === "preview";
+  const isProduction = environment.VERCEL_ENV === "production";
+  if (isProduction) {
     throw new Error("Passkey onboarding is unavailable in Production.");
   }
 
-  if (environment.VERCEL_ENV === "preview") {
+  if (isPreview) {
     if (environment.PASSKEY_PREVIEW_PROTECTION !== PROTECTION_VALUE) {
       throw new Error(
         "Preview passkey onboarding requires an explicit Vercel Authentication protection acknowledgement.",
@@ -86,33 +156,15 @@ export function readPasskeyOnboardingConfig(
     }
     const deploymentId = environment.VERCEL_DEPLOYMENT_ID?.trim();
     const deploymentHostname = environment.VERCEL_URL?.trim();
-    if (
-      !deploymentId ||
-      deploymentId.length > 256 ||
-      !deploymentHostname ||
-      !origin.startsWith("https://")
-    ) {
+    if (!hasRequiredPreviewMetadata(deploymentId, deploymentHostname, origin)) {
       throw new Error("Preview passkey onboarding requires exact Vercel deployment metadata.");
     }
     if (options.previewCanonicalOrigin === undefined) {
       if (deploymentHostname !== hostname) {
         throw new Error("Preview passkey onboarding requires exact Vercel deployment metadata.");
       }
-    } else {
-      const canonical = new URL(options.previewCanonicalOrigin);
-      if (
-        environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION !== "1" ||
-        canonical.protocol !== "https:" ||
-        canonical.pathname !== "/" ||
-        canonical.search ||
-        canonical.hash ||
-        canonical.username ||
-        canonical.password ||
-        canonical.origin !== origin ||
-        environment.VERCEL_BRANCH_URL?.trim() !== canonical.hostname
-      ) {
-        throw new Error("Preview passkey onboarding requires the exact validated branch origin.");
-      }
+    } else if (!hasValidPreviewBranchOrigin(environment, options.previewCanonicalOrigin, origin)) {
+      throw new Error("Preview passkey onboarding requires the exact validated branch origin.");
     }
     return {
       deploymentId,
@@ -135,12 +187,7 @@ export function readPasskeyOnboardingConfig(
   const localPort = environment.APP_BUILDER_LOCAL_PORT ?? "3001";
   const isHttps = origin.startsWith("https://");
   if (
-    (!origin.startsWith("http://") && !isHttps) ||
-    (isHttps &&
-      (!/^\d{2,5}$/u.test(localPort) ||
-        origin !== `https://localhost:${localPort}` ||
-        !localProviderEmulation ||
-        !localAuthEmulation))
+    !hasValidLocalIssuer(origin, localPort, isHttps, localProviderEmulation, localAuthEmulation)
   ) {
     throw new Error(
       "HTTPS loopback passkey onboarding requires explicit local provider and authentication emulation gates.",
@@ -206,7 +253,7 @@ export function verifyPasskeyOnboardingToken(
   config: PasskeyOnboardingConfig,
   now = new Date(),
 ) {
-  if (!token || token.length > 4096) {
+  if (token === null || token === undefined || token.length === 0 || token.length > 4096) {
     return null;
   }
   const [encodedPayload, signature, extra] = token.split(".");
@@ -306,10 +353,10 @@ export function authenticatedPasskeyRegistration(
   userId: string | null | undefined,
   context: string | null | undefined,
 ) {
-  if (!userId) {
+  if (userId === null || userId === undefined || userId.length === 0) {
     return null;
   }
-  if (context) {
+  if (context !== null && context !== undefined && context.length > 0) {
     throw onboardingAlreadyAuthenticated();
   }
   return { name: "Additional passkey", userId };
@@ -327,7 +374,7 @@ export function createPasskeyOnboardingPlugin(input: {
       createPasskeyOnboardingContext: createAuthEndpoint(
         "/passkey/onboarding-context",
         {
-          body: z.object({}).strict(),
+          body: z.strictObject({}),
           metadata: { noStore: true },
           method: "POST",
         },
@@ -340,7 +387,7 @@ export function createPasskeyOnboardingPlugin(input: {
             throw invalidOnboardingAuthority();
           }
           const existingSession = await getSessionFromCtx(ctx);
-          if (existingSession?.user.id) {
+          if ((existingSession?.user.id.length ?? 0) > 0) {
             throw onboardingAlreadyAuthenticated();
           }
           const requestedAt = now();
@@ -360,11 +407,14 @@ export function createPasskeyOnboardingPlugin(input: {
             // Better Auth keeps registration context in its challenge record;
             // createSession is the parsed verification-body marker that
             // distinguishes first-account onboarding from Settings enrollment.
-            if (ctx.body?.createSession !== true) {
+            const { createSession } = z
+              .looseObject({ createSession: z.boolean().optional() })
+              .parse(ctx.body);
+            if (createSession !== true) {
               return;
             }
             const session = await getSessionFromCtx(ctx);
-            if (session?.user.id) {
+            if ((session?.user.id.length ?? 0) > 0) {
               throw onboardingAlreadyAuthenticated();
             }
           }),
@@ -373,7 +423,7 @@ export function createPasskeyOnboardingPlugin(input: {
         {
           handler: createAuthMiddleware(async (ctx) => {
             const session = await getSessionFromCtx(ctx);
-            if (!session?.user.id) {
+            if ((session?.user.id.length ?? 0) === 0) {
               return;
             }
             const count = await ctx.context.adapter.count({
@@ -398,35 +448,31 @@ export function createPasskeyOnboardingPlugin(input: {
           databaseHooks: {
             session: {
               create: {
-                async before(
-                  session: Record<string, unknown> & { userId: string },
-                  ctx: { path?: string; context: { adapter: unknown } } | null,
-                ) {
-                  if (ctx?.path !== "/passkey/verify-registration") {
-                    return;
-                  }
-                  const adapter = await getCurrentAdapter(
-                    ctx.context.adapter as Parameters<typeof getCurrentAdapter>[0],
-                  );
-                  const memberships = await adapter.findMany<{
-                    organizationId: string;
-                  }>({
-                    limit: 2,
-                    model: "member",
-                    where: [{ field: "userId", value: session.userId }],
-                  });
-                  if (memberships.length !== 1 || !memberships[0]) {
-                    throw APIError.from("INTERNAL_SERVER_ERROR", {
-                      code: "PASSKEY_WORKSPACE_SETUP_FAILED",
-                      message: "Passkey workspace setup failed.",
+                async before(session, ctx) {
+                  if (ctx?.path === "/passkey/verify-registration") {
+                    const adapter = await getCurrentAdapter(ctx.context.adapter);
+                    const memberships = await adapter.findMany<{
+                      organizationId: string;
+                    }>({
+                      limit: 2,
+                      model: "member",
+                      where: [{ field: "userId", value: session.userId }],
                     });
+                    const [membership] = memberships;
+                    if (memberships.length !== 1 || membership === undefined) {
+                      throw APIError.from("INTERNAL_SERVER_ERROR", {
+                        code: "PASSKEY_WORKSPACE_SETUP_FAILED",
+                        message: "Passkey workspace setup failed.",
+                      });
+                    }
+                    return {
+                      data: {
+                        ...session,
+                        activeOrganizationId: membership.organizationId,
+                      },
+                    };
                   }
-                  return {
-                    data: {
-                      ...session,
-                      activeOrganizationId: memberships[0].organizationId,
-                    },
-                  };
+                  return { data: session };
                 },
               },
             },
@@ -463,8 +509,13 @@ export function createPasskeyPlugin(input: {
   now?: () => Date;
 }) {
   const now = input.now ?? (() => new Date());
+  const passkeyOptions: Parameters<typeof passkey>[0] = {};
+  if (input.config !== null) {
+    passkeyOptions.origin = input.config.origin;
+    passkeyOptions.rpID = input.config.rpId;
+  }
   return passkey({
-    ...(input.config ? { origin: input.config.origin, rpID: input.config.rpId } : {}),
+    ...passkeyOptions,
     registration: {
       async afterVerification({ ctx, context }) {
         const existingSession = await getSessionFromCtx(ctx);

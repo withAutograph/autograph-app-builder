@@ -54,11 +54,14 @@ export const installAppIntegrations = async (input: {
 }) => {
   const command = appIntegrationsInstallCommand(input.appId);
   try {
-    const result = await input.sandbox.run({
+    const options: Parameters<typeof input.sandbox.run>[0] = {
       command,
       workingDirectory: input.root,
-      ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-    });
+    };
+    if (input.signal !== undefined) {
+      options.abortSignal = input.signal;
+    }
+    const result = await input.sandbox.run(options);
     const stderr = safeCommandOutput(result.stderr);
     if (result.exitCode !== 0) {
       return {
@@ -75,22 +78,25 @@ export const installAppIntegrations = async (input: {
       };
     }
     const receipt = integrationInstallReceipt(input.appId).parse(JSON.parse(result.stdout));
-    return {
-      command,
-      exitCode: 0,
-      status: receipt.status,
+    const response = {
       capabilityState:
         receipt.status === "omitted" ? ("source-omitted" as const) : ("source-installed" as const),
+      command,
+      exitCode: 0,
+      files: receipt.files.map((file) => safeCommandOutput(file)),
       nextStep:
         receipt.status === "omitted"
           ? "Continue normal app validation and delivery planning. Source opt-in is omitted; preserve retained bindings and resources through their existing release reconciliation."
           : "Validate the installed source. Any runtime capability setup and provider effects remain separate approved operations.",
-      files: receipt.files.map((file) => safeCommandOutput(file)),
-      providers: receipt.providers,
-      ...(receipt.readiness === undefined ? {} : { readiness: receipt.readiness }),
       providerReadiness: "unverified" as const,
+      providers: receipt.providers,
+      status: receipt.status,
       stderr,
     };
+    if (receipt.readiness !== undefined) {
+      return { ...response, readiness: receipt.readiness };
+    }
+    return response;
   } catch (error) {
     return {
       command,

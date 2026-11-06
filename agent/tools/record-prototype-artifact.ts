@@ -83,13 +83,11 @@ export default defineTool({
       }
       const db = openHostedPostgresDatabase(process.env.DATABASE_URL ?? "");
       await assertPrototypeChunkSchemaReady(db);
-      const recorded = await recordDurablePrototypeChunk({
+      const durableChunkInput = {
         appId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
         callId: ctx.callId,
         chunkIndex: chunkIndex ?? 0,
         content,
-        ...(existing && isPrototypeArtifactV2(existing) ? { current: existing } : {}),
         expectedDigest: expectedDigest ?? singleCallDigest ?? "",
         finalChunk: finalChunk ?? true,
         mediaType,
@@ -100,7 +98,14 @@ export default defineTool({
           sessionAuth: ctx.session.auth,
           sessionId: ctx.session.id,
         }),
-      });
+      };
+      if (baseRevision !== undefined) {
+        Object.assign(durableChunkInput, { baseRevision });
+      }
+      if (existing && isPrototypeArtifactV2(existing)) {
+        Object.assign(durableChunkInput, { current: existing });
+      }
+      const recorded = await recordDurablePrototypeChunk(durableChunkInput);
       if (!recorded.reused) {
         updateExactWorkflow({
           expected: current,
@@ -113,15 +118,17 @@ export default defineTool({
             if (preservesAcceptedWorkflow(current)) {
               return { ...current, artifacts };
             }
-            return {
+            const next = {
               artifacts,
               phase: "prepared",
               preparedByCallId: current.preparedByCallId,
               sourceReceipt: current.sourceReceipt,
-              ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
               version: APP_BUILDER_WORKFLOW_VERSION,
               workspace: current.workspace,
             };
+            return current.githubSource === undefined
+              ? next
+              : { ...next, githubSource: current.githubSource };
           },
         });
       }
@@ -172,13 +179,15 @@ export default defineTool({
       if (chunkIndex === undefined || finalChunk === undefined) {
         throw new Error("Chunked prototype artifact writes require chunkIndex and finalChunk.");
       }
-      recorded = recordPrototypeArtifactChunk({
+      const chunkInput = {
         ...artifactInput,
         chunkIndex,
         expectedDigest,
         finalChunk,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
-      });
+      };
+      recorded = recordPrototypeArtifactChunk(
+        baseRevision === undefined ? chunkInput : { ...chunkInput, baseRevision },
+      );
       ({ complete } = recorded);
     }
     if (!recorded.reused) {
@@ -189,15 +198,17 @@ export default defineTool({
           if (preservesAcceptedWorkflow(current)) {
             return { ...current, artifacts: recorded.artifacts };
           }
-          return {
+          const next = {
             artifacts: recorded.artifacts,
             phase: "prepared",
             preparedByCallId: current.preparedByCallId,
             sourceReceipt: current.sourceReceipt,
-            ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
             version: APP_BUILDER_WORKFLOW_VERSION,
             workspace: current.workspace,
           };
+          return current.githubSource === undefined
+            ? next
+            : { ...next, githubSource: current.githubSource };
         },
       });
     }
@@ -223,16 +234,21 @@ export default defineTool({
         );
       });
     }
-    return {
+    const receipt = {
       ...prototypeArtifactReceipt(recorded.artifact),
       complete,
       reused: recorded.reused,
-      ...("nextChunkIndex" in recorded ? { nextChunkIndex: recorded.nextChunkIndex } : {}),
-      ...(recorded.reused
-        ? {}
-        : { invalidated: !preservesAcceptedWorkflow(current) && current.phase !== "prepared" }),
       ...planning,
     };
+    if ("nextChunkIndex" in recorded) {
+      Object.assign(receipt, { nextChunkIndex: recorded.nextChunkIndex });
+    }
+    if (!recorded.reused) {
+      Object.assign(receipt, {
+        invalidated: !preservesAcceptedWorkflow(current) && current.phase !== "prepared",
+      });
+    }
+    return receipt;
   },
   inputSchema: z
     .object({

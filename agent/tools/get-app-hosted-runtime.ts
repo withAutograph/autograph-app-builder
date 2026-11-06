@@ -43,12 +43,13 @@ export default defineTool({
         ctx.abortSignal,
       );
     } catch (error) {
-      return {
+      const result = {
+        authenticatedBehavior: "unassessed" as const,
+        code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+        status: "blocked" as const,
         ...("intentId" in input ? { intentId: input.intentId } : {}),
         ...("exportId" in input ? { exportId: input.exportId } : {}),
         ...("appId" in input ? { appId: input.appId } : {}),
-        authenticatedBehavior: "unassessed" as const,
-        code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
         ...("intentId" in input &&
         error instanceof HostedOperatorError &&
         error.recoveryStage !== undefined
@@ -64,8 +65,8 @@ export default defineTool({
         error.continuityReadStage !== undefined
           ? { continuityReadStage: error.continuityReadStage }
           : {}),
-        status: "blocked" as const,
       };
+      return result;
     }
   },
   inputSchema: z.union([

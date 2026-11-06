@@ -36,6 +36,44 @@ const principal: HostedPrincipal = {
 
 const config = { baseUrl: "https://builder.example.test" };
 
+const requestUrl = (input: RequestInfo | URL | undefined): string => {
+  if (input === undefined) return "";
+  if (input instanceof Request) return input.url;
+  if (input instanceof URL) return input.href;
+  return input;
+};
+
+const requestBodyText = (body: BodyInit | null | undefined): string => z.string().parse(body);
+const requestBodySchema = z.record(z.string(), z.json());
+const parseRequestBody = (body: BodyInit | null | undefined) =>
+  requestBodySchema.parse(JSON.parse(requestBodyText(body)));
+
+const requestEvent = (requestId: string, digest = "a".repeat(64)) => ({
+  data: {
+    requests: [
+      {
+        action: {
+          callId: `call-${requestId}`,
+          input: {
+            action: "continuity",
+            idempotencyKey: "retained-exercise",
+            planDigest: digest,
+            planRef: "_protected-operator/continuity-plans/00000000-0000-4000-8000-000000000001",
+          },
+          kind: "tool-call",
+          toolName: "run-app-continuity-tests",
+        },
+        kind: "tool-approval",
+        requestId,
+      },
+    ],
+    sequence: 0,
+    stepIndex: 0,
+    turnId: "confirmation-turn",
+  },
+  type: "input.requested",
+});
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function identity(token = "project-oidc-token"): HostedWorkloadIdentity {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -694,7 +732,7 @@ describe("same-origin canonical Eve transport", () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning fetch test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
-      String(url).includes("/stream?") ? stream() : accepted(),
+      requestUrl(url).includes("/stream?") ? stream() : accepted(),
     );
     const transport = createSameOriginEveTransport({
       config,
@@ -719,13 +757,13 @@ describe("same-origin canonical Eve transport", () => {
 
   it("forwards the prepared reference on start and every mutating continuation without putting it in messages", async () => {
     const sourceHandoffId = "123e4567-e89b-42d3-a456-426614174001";
-    const bodies: Record<string, unknown>[] = [];
+    const bodies: z.infer<typeof requestBodySchema>[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).includes("/stream?")) {
+      if (requestUrl(url).includes("/stream?")) {
         return stream();
       }
-      bodies.push(JSON.parse(String(init?.body)));
+      bodies.push(parseRequestBody(init?.body));
       return accepted();
     });
     const adapter = createSameOriginEveTransport({
@@ -763,7 +801,7 @@ describe("same-origin canonical Eve transport", () => {
         },
       });
       expect(body).not.toHaveProperty("sourceHandoffId");
-      expect(String(body.message)).not.toContain(sourceHandoffId);
+      expect(JSON.stringify(body.message)).not.toContain(sourceHandoffId);
     }
   });
 
@@ -792,8 +830,8 @@ describe("same-origin canonical Eve transport", () => {
     };
     // oxlint-disable-next-line eslint/require-await -- The transport test double follows fetch's async contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).endsWith("/eve/v1/session")) {
-        expect(JSON.parse(String(init?.body))).toMatchObject({
+      if (requestUrl(url).endsWith("/eve/v1/session")) {
+        expect(parseRequestBody(init?.body)).toMatchObject({
           operationId: recovery.operationId,
           recovery,
         });
@@ -818,7 +856,7 @@ describe("same-origin canonical Eve transport", () => {
     await expect(
       transport.activateRecovery?.({ operationId: recovery.operationId, principal, recovery }),
     ).resolves.toEqual(recoveryBinding);
-    expect(JSON.parse(String(fetchImplementation.mock.calls[1]?.[1]?.body))).toMatchObject({
+    expect(parseRequestBody(fetchImplementation.mock.calls[1]?.[1]?.body)).toMatchObject({
       recovery,
       recoveryPhase: "activate",
     });
@@ -831,7 +869,7 @@ describe("same-origin canonical Eve transport", () => {
         principal,
       }),
     ).resolves.toBeUndefined();
-    expect(fetchImplementation.mock.calls.map(([url]) => String(url))).toEqual([
+    expect(fetchImplementation.mock.calls.map(([url]) => requestUrl(url))).toEqual([
       "https://builder.example.test/eve/v1/session",
       "https://builder.example.test/eve/v1/session",
       "https://builder.example.test/eve/v1/session/run_parent",
@@ -921,10 +959,10 @@ describe("same-origin canonical Eve transport", () => {
       expect(init?.redirect).toBe("manual");
       expect(headers.get("authorization")).toBe("Bearer project-oidc-token");
       expect(headers.get("x-vercel-trusted-oidc-idp-token")).toBe("project-oidc-token");
-      if (String(url).includes("/stream?")) {
+      if (requestUrl(url).includes("/stream?")) {
         return stream();
       }
-      const body = JSON.parse(String(init?.body));
+      const body = parseRequestBody(init?.body);
       expect(body).toMatchObject({
         forwardedPrincipal: {
           current: {
@@ -975,7 +1013,7 @@ describe("same-origin canonical Eve transport", () => {
     const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
     // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
-      String(url).includes("/stream?") ? stream([]) : accepted("wrun_1", false),
+      requestUrl(url).includes("/stream?") ? stream([]) : accepted("wrun_1", false),
     );
     try {
       const transport = createSameOriginEveTransport({
@@ -995,7 +1033,9 @@ describe("same-origin canonical Eve transport", () => {
       controller.abort();
       await rejected;
       expect(
-        fetchImplementation.mock.calls.filter(([url]) => String(url).endsWith("/eve/v1/session")),
+        fetchImplementation.mock.calls.filter(([url]) =>
+          requestUrl(url).endsWith("/eve/v1/session"),
+        ),
       ).toHaveLength(1);
     } finally {
       timeout.mockRestore();
@@ -1023,7 +1063,7 @@ describe("same-origin canonical Eve transport", () => {
     );
     // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
-      String(url).includes("/stream?") ? startup : accepted("wrun_1", false),
+      requestUrl(url).includes("/stream?") ? startup : accepted("wrun_1", false),
     );
     await expect(
       createSameOriginEveTransport({
@@ -1042,8 +1082,8 @@ describe("same-origin canonical Eve transport", () => {
     let retry = false;
     // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).endsWith("/eve/v1/session")) {
-        createBodies.push(JSON.parse(String(init?.body)));
+      if (requestUrl(url).endsWith("/eve/v1/session")) {
+        createBodies.push(parseRequestBody(init?.body));
         return accepted(retry ? "wrun_owner" : "wrun_loser", false);
       }
       const response = stream(
@@ -1194,7 +1234,9 @@ describe("same-origin canonical Eve transport", () => {
     try {
       // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract in this test double.
       const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
-        String(url).includes("/stream?") ? stream(pendingApprovalEvents("approval_1")) : accepted(),
+        requestUrl(url).includes("/stream?")
+          ? stream(pendingApprovalEvents("approval_1"))
+          : accepted(),
       );
       const transport = createSameOriginEveTransport({
         config,
@@ -1221,10 +1263,10 @@ describe("same-origin canonical Eve transport", () => {
     const bodies: unknown[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).includes("/stream?")) {
+      if (requestUrl(url).includes("/stream?")) {
         return stream();
       }
-      bodies.push(JSON.parse(String(init?.body)));
+      bodies.push(parseRequestBody(init?.body));
       return accepted();
     });
     const transport = createSameOriginEveTransport({
@@ -1284,7 +1326,7 @@ describe("same-origin canonical Eve transport", () => {
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
-      if (String(url).includes("/stream?")) {
+      if (requestUrl(url).includes("/stream?")) {
         streamReads += 1;
         return stream(streamReads === 1 ? pending : settled);
       }
@@ -1339,11 +1381,11 @@ describe("same-origin canonical Eve transport", () => {
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).includes("/stream?")) {
+      if (requestUrl(url).includes("/stream?")) {
         streamReads += 1;
         return stream(streamReads < 3 ? pending : settled);
       }
-      expect(JSON.parse(String(init?.body))).toMatchObject({
+      expect(parseRequestBody(init?.body)).toMatchObject({
         inputResponses: [{ optionId: "cancel", requestId }],
       });
       return accepted();
@@ -1386,8 +1428,8 @@ describe("same-origin canonical Eve transport", () => {
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).endsWith("/cancel")) {
-        expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
+      if (requestUrl(url).endsWith("/cancel")) {
+        expect(parseRequestBody(init?.body)).toEqual({ turnId: "turn_1" });
         return Response.json(
           { ok: true, sessionId: "wrun_1", status: "accepted" },
           { status: 202 },
@@ -1415,8 +1457,8 @@ describe("same-origin canonical Eve transport", () => {
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).endsWith("/cancel")) {
-        expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
+      if (requestUrl(url).endsWith("/cancel")) {
+        expect(parseRequestBody(init?.body)).toEqual({ turnId: "turn_1" });
         return Response.json(
           { ok: true, sessionId: "wrun_1", status: "accepted" },
           { status: 202 },
@@ -1424,7 +1466,7 @@ describe("same-origin canonical Eve transport", () => {
       }
       streamReads += 1;
       const events = streamReads === 1 ? active : settled;
-      const start = Number(new URL(String(url)).searchParams.get("startIndex"));
+      const start = Number(new URL(requestUrl(url)).searchParams.get("startIndex"));
       return streamFromIndex(events, start);
     });
     const transport = createSameOriginEveTransport({
@@ -1446,9 +1488,12 @@ describe("same-origin canonical Eve transport", () => {
       const active = [{ data: { turnId: "turn_1" }, type: "step.started" }];
       // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
       const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
-        String(url).endsWith("/cancel")
+        requestUrl(url).endsWith("/cancel")
           ? Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 })
-          : streamFromIndex(active, Number(new URL(String(url)).searchParams.get("startIndex"))),
+          : streamFromIndex(
+              active,
+              Number(new URL(requestUrl(url)).searchParams.get("startIndex")),
+            ),
       );
       const transport = createSameOriginEveTransport({
         config,
@@ -1484,7 +1529,7 @@ describe("same-origin canonical Eve transport", () => {
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
-      if (String(url).endsWith("/cancel")) {
+      if (requestUrl(url).endsWith("/cancel")) {
         return Response.json(
           { ok: true, sessionId: "wrun_1", status: "accepted" },
           { status: 202 },
@@ -1538,7 +1583,7 @@ describe("same-origin canonical Eve transport", () => {
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const noActiveFetch = vi.fn<typeof fetch>(async (url) =>
-      String(url).endsWith("/cancel")
+      requestUrl(url).endsWith("/cancel")
         ? Response.json({ ok: true, status: "no_active_turn" })
         : stream(waiting),
     );
@@ -1554,7 +1599,7 @@ describe("same-origin canonical Eve transport", () => {
   it("rejects inconsistent canonical cancellation replies", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
-      String(url).endsWith("/cancel")
+      requestUrl(url).endsWith("/cancel")
         ? Response.json({ ok: true, status: "no_active_turn" }, { status: 202 })
         : stream([{ data: { turnId: "turn_1" }, type: "step.started" }]),
     );
@@ -1666,8 +1711,8 @@ describe("same-origin canonical Eve transport", () => {
 
   it("accepts a create reply without a continuation delivery identity", async () => {
     // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
-    const fetchImplementation = vi.fn(async (url) =>
-      String(url).includes("/stream?") ? stream() : accepted("wrun_1", false),
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      requestUrl(url).includes("/stream?") ? stream() : accepted("wrun_1", false),
     );
     await expect(
       createSameOriginEveTransport({
@@ -1752,13 +1797,14 @@ describe("same-origin canonical Eve transport", () => {
   });
 
   it("rejects a stream that is not bound to the pinned Eve 0.68 protocol", async () => {
-    for (const headers of [
-      { "x-eve-session-id": "wrun_other" },
-      { "x-eve-stream-format": "sse" },
-      { "x-eve-stream-version": "24" },
-    ]) {
+    const headerCases: [string, string][][] = [
+      [["x-eve-session-id", "wrun_other"]],
+      [["x-eve-stream-format", "sse"]],
+      [["x-eve-stream-version", "24"]],
+    ];
+    for (const headers of headerCases) {
       const response = stream();
-      for (const [name, value] of Object.entries(headers)) {
+      for (const [name, value] of headers) {
         response.headers.set(name, value);
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -2208,7 +2254,7 @@ describe("explicit cold-read catch-up frontier", () => {
     ];
     const resumed = await observeSameOriginEveStream({
       ...catchupInput(async (url) => {
-        expect(String(url)).toContain("startIndex=1&includeTailIndex=1");
+        expect(requestUrl(url)).toContain("startIndex=1&includeTailIndex=1");
         return await Promise.resolve(
           pinnedResponse(`${rest.map((event) => JSON.stringify(event)).join("\n")}\n`, 2),
         );
@@ -2337,7 +2383,7 @@ describe("response settlement from owner-checked complete native preflight", () 
         postCount += 1;
         return accepted();
       }
-      const next = Number(new URL(String(url)).searchParams.get("startIndex"));
+      const next = Number(new URL(requestUrl(url)).searchParams.get("startIndex"));
       paths.push(next);
       const event = deltas[paths.length - 1];
       if (event === undefined) throw new Error("unexpected settlement poll");
@@ -2435,9 +2481,9 @@ it.each(["turn.cancelled", "turn.completed", "turn.failed"] as const)(
     let settlementReads = 0;
     // oxlint-disable-next-line eslint/require-await -- Preserve the terminal fetch contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (request, init) => {
-      const url = new URL(String(request));
+      const url = new URL(requestUrl(request));
       if (url.pathname.endsWith("/cancel")) {
-        expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
+        expect(parseRequestBody(init?.body)).toEqual({ turnId: "turn_1" });
         cancelledPosted = true;
         return Response.json(
           { ok: true, sessionId: "wrun_1", status: "accepted" },
@@ -2521,7 +2567,7 @@ it.each(["changed-turn", "no-active-turn"] as const)(
       }),
     ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
     expect(fetchImplementation).toHaveBeenCalledOnce();
-    expect(String(fetchImplementation.mock.calls[0]?.[0])).toContain("startIndex=1");
+    expect(requestUrl(fetchImplementation.mock.calls[0]?.[0])).toContain("startIndex=1");
   },
 );
 
@@ -2532,7 +2578,7 @@ it("does not treat a newer turn's waiting boundary as settlement of the original
   const starts: number[] = [];
   // oxlint-disable-next-line eslint/require-await -- Preserve the terminal stream fetch contract.
   const fetchImplementation = vi.fn<typeof fetch>(async (request) => {
-    const url = new URL(String(request));
+    const url = new URL(requestUrl(request));
     if (url.pathname.endsWith("/cancel")) {
       posted = true;
       return Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 });
@@ -2568,7 +2614,7 @@ it("does not treat a newer turn's waiting boundary as settlement of the original
   expect(starts).toEqual([1, 1, 2]);
   expect(fetchImplementation).toHaveBeenCalledTimes(4);
   expect(
-    fetchImplementation.mock.calls.filter(([request]) => String(request).endsWith("/cancel")),
+    fetchImplementation.mock.calls.filter(([request]) => requestUrl(request).endsWith("/cancel")),
   ).toHaveLength(1);
 });
 
@@ -2580,7 +2626,7 @@ it.each(["preguard", "accepted-settlement"] as const)(
     const readFailure = new Error("Canonical Eve durable-tail read failed");
     // oxlint-disable-next-line eslint/require-await -- Terminal fetch preserves the native HTTP boundary.
     const fetchImplementation = vi.fn<typeof fetch>(async (request) => {
-      if (String(request).endsWith("/cancel")) {
+      if (requestUrl(request).endsWith("/cancel")) {
         posted = true;
         return Response.json(
           { ok: true, sessionId: "wrun_1", status: "accepted" },
@@ -2612,7 +2658,7 @@ it.each(["preguard", "accepted-settlement"] as const)(
       );
     }
     expect(
-      fetchImplementation.mock.calls.filter(([request]) => String(request).endsWith("/cancel")),
+      fetchImplementation.mock.calls.filter(([request]) => requestUrl(request).endsWith("/cancel")),
     ).toHaveLength(stage === "preguard" ? 0 : 1);
     expect(fetchImplementation).toHaveBeenCalledTimes(stage === "preguard" ? 1 : 3);
   },
@@ -2648,9 +2694,7 @@ describe("activation transport diagnostics", () => {
       name: "dispatch failure",
       phase: "transport_dispatch",
       rejected: false,
-      response: async () => {
-        throw new Error(secret);
-      },
+      response: async () => await Promise.reject(new Error(secret)),
     },
     {
       category: "rejected_before_dispatch",
@@ -2659,9 +2703,11 @@ describe("activation transport diagnostics", () => {
       phase: "transport_acceptance",
       rejected: true,
       response: async () =>
-        Response.json(
-          { code: "session_access_denied", ok: false, private: secret },
-          { status: 403 },
+        await Promise.resolve(
+          Response.json(
+            { code: "session_access_denied", ok: false, private: secret },
+            { status: 403 },
+          ),
         ),
     },
     {
@@ -2671,9 +2717,11 @@ describe("activation transport diagnostics", () => {
       phase: "transport_acceptance",
       rejected: false,
       response: async () =>
-        Response.json(
-          { code: "terminal_recovery_submission_unknown", ok: false, private: secret },
-          { status: 503 },
+        await Promise.resolve(
+          Response.json(
+            { code: "terminal_recovery_submission_unknown", ok: false, private: secret },
+            { status: 503 },
+          ),
         ),
     },
     {
@@ -2683,13 +2731,15 @@ describe("activation transport diagnostics", () => {
       phase: "transport_acceptance",
       rejected: false,
       response: async () =>
-        Response.json(
-          {
-            ok: true,
-            sessionId: binding.ownerRunId,
-            status: "accepted",
-          },
-          { status: 202 },
+        await Promise.resolve(
+          Response.json(
+            {
+              ok: true,
+              sessionId: binding.ownerRunId,
+              status: "accepted",
+            },
+            { status: 202 },
+          ),
         ),
     },
     {
@@ -2699,14 +2749,16 @@ describe("activation transport diagnostics", () => {
       phase: "transport_acceptance",
       rejected: false,
       response: async () =>
-        Response.json(
-          {
-            ok: true,
-            recoveryBinding: binding,
-            sessionId: "different-private-child",
-            status: "accepted",
-          },
-          { status: 202 },
+        await Promise.resolve(
+          Response.json(
+            {
+              ok: true,
+              recoveryBinding: binding,
+              sessionId: "different-private-child",
+              status: "accepted",
+            },
+            { status: 202 },
+          ),
         ),
     },
   ])(
@@ -2750,31 +2802,6 @@ describe("activation transport diagnostics", () => {
 
 describe("retained confirmation presentation recovery", () => {
   const observerConfig = { ...config, timeoutMs: 10_000 };
-  const requestEvent = (requestId: string, digest = "a".repeat(64)) => ({
-    data: {
-      requests: [
-        {
-          action: {
-            callId: `call-${requestId}`,
-            input: {
-              action: "continuity",
-              idempotencyKey: "retained-exercise",
-              planDigest: digest,
-              planRef: "_protected-operator/continuity-plans/00000000-0000-4000-8000-000000000001",
-            },
-            kind: "tool-call",
-            toolName: "run-app-continuity-tests",
-          },
-          kind: "tool-approval",
-          requestId,
-        },
-      ],
-      sequence: 0,
-      stepIndex: 0,
-      turnId: "confirmation-turn",
-    },
-    type: "input.requested",
-  });
   const seedFailure = async (events: unknown[]) => {
     const observed = await observeSameOriginEveStream({
       config: observerConfig,
@@ -2864,10 +2891,13 @@ describe("retained confirmation presentation recovery", () => {
     const projected: InternalEveEvent[] = [];
     const observed = await observeSameOriginEveStream({
       config: observerConfig,
-      fetchImplementation: vi.fn(
+      fetchImplementation: vi.fn<typeof fetch>(
         async (url) =>
           await Promise.resolve(
-            streamFromIndex(events, Number(new URL(String(url)).searchParams.get("startIndex"))),
+            streamFromIndex(
+              events,
+              Number(new URL(requestUrl(url)).searchParams.get("startIndex")),
+            ),
           ),
       ),
       nativeObservationState: state,
@@ -2888,10 +2918,10 @@ describe("retained confirmation presentation recovery", () => {
       { data: { message: "native failure" }, type: "session.failed" },
     ];
     const state = await seedFailure(events);
-    const fetchImplementation = vi.fn(
+    const fetchImplementation = vi.fn<typeof fetch>(
       async (url) =>
         await Promise.resolve(
-          streamFromIndex(events, Number(new URL(String(url)).searchParams.get("startIndex"))),
+          streamFromIndex(events, Number(new URL(requestUrl(url)).searchParams.get("startIndex"))),
         ),
     );
     const observed = await observeSameOriginEveStream({

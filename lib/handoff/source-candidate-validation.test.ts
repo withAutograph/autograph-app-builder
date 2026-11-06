@@ -48,12 +48,12 @@ const intent = builderHandoffIntentSchema.parse({
 it("checks the exact owner before and after completed artifact I/O", async () => {
   const observed: string[] = [];
   const validate = createOwnedSourceCandidateValidator({
-    isActiveMember: async (current) => {
+    isActiveMember: (current) => {
       expect(current).toEqual(authority);
       observed.push("membership");
       return true;
     },
-    readCompleted: async (selection) => {
+    readCompleted: (selection) => {
       expect(selection).toEqual({ authority, reference: intent.sourceCandidate });
       observed.push("artifact");
       return verified.artifact;
@@ -66,8 +66,8 @@ it("checks the exact owner before and after completed artifact I/O", async () =>
 it("denies acknowledgment when membership is revoked during artifact read", async () => {
   let active = true;
   const validate = createOwnedSourceCandidateValidator({
-    isActiveMember: async () => active,
-    readCompleted: async () => {
+    isActiveMember: () => active,
+    readCompleted: () => {
       active = false;
       return verified.artifact;
     },
@@ -78,8 +78,8 @@ it("denies acknowledgment when membership is revoked during artifact read", asyn
 it("does not read source for an inactive member", async () => {
   let reads = 0;
   const validate = createOwnedSourceCandidateValidator({
-    isActiveMember: async () => false,
-    readCompleted: async () => {
+    isActiveMember: () => false,
+    readCompleted: () => {
       reads += 1;
       return verified.artifact;
     },

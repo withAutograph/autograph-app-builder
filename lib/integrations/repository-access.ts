@@ -23,12 +23,10 @@ const repositoryPart = z
   .max(100)
   .regex(/^[A-Za-z0-9_.-]+$/u);
 
-const repositoryReferenceInputSchema = z
-  .object({
-    name: repositoryPart,
-    owner: repositoryPart,
-  })
-  .strict();
+const repositoryReferenceInputSchema = z.strictObject({
+  name: repositoryPart,
+  owner: repositoryPart,
+});
 
 export const repositoryReferenceSchema = repositoryReferenceInputSchema.transform((value) => ({
   ...value,
@@ -36,12 +34,11 @@ export const repositoryReferenceSchema = repositoryReferenceInputSchema.transfor
 }));
 
 const repositoryReferenceResultSchema = z
-  .object({
+  .strictObject({
     fullName: z.string().min(3).max(201),
     name: repositoryPart,
     owner: repositoryPart,
   })
-  .strict()
   .refine((value) => value.fullName === `${value.owner}/${value.name}`, {
     message: "repository-full-name-mismatch",
   });
@@ -63,88 +60,79 @@ export function parseRepositoryReference(value: string): RepositoryReference {
   });
 }
 
-const readPermissionsSchema = z
-  .object({
-    administration: z.literal("none"),
-    contents: z.literal("read"),
-    metadata: z.literal("read"),
-    pullRequests: z.literal("none"),
-    variables: z.literal("read"),
-    workflows: z.literal("none"),
-  })
-  .strict();
+const readPermissionsSchema = z.strictObject({
+  administration: z.literal("none"),
+  contents: z.literal("read"),
+  metadata: z.literal("read"),
+  pullRequests: z.literal("none"),
+  variables: z.literal("read"),
+  workflows: z.literal("none"),
+});
 
-const installationReadBackSchema = z
-  .object({
-    accountId: decimal,
-    accountLogin: z.string().min(1).max(100),
-    accountType: z.enum(["Organization", "User"]),
-    grantedPermissions: readPermissionsSchema,
-    installationId: decimal,
-    repositorySelection: z.enum(["all", "selected"]),
-    selectedRepositoryIds: z.array(decimal),
-  })
-  .strict();
+const installationReadBackSchema = z.strictObject({
+  accountId: decimal,
+  accountLogin: z.string().min(1).max(100),
+  accountType: z.enum(["Organization", "User"]),
+  grantedPermissions: readPermissionsSchema,
+  installationId: decimal,
+  repositorySelection: z.enum(["all", "selected"]),
+  selectedRepositoryIds: z.array(decimal),
+});
 
-export const repositoryAccessSnapshotSchema = z
-  .object({
-    archived: z.literal(false),
-    defaultBranch: z.string().min(1).max(255),
-    headSha: objectId,
-    headTree: objectId,
-    name: repositoryPart,
-    owner: repositoryPart,
-    repositoryId: decimal,
-    repositoryVariableNames: z.array(z.string().min(1).max(255)),
-    visibility: z.literal("private"),
-  })
-  .strict();
+export const repositoryAccessSnapshotSchema = z.strictObject({
+  archived: z.literal(false),
+  defaultBranch: z.string().min(1).max(255),
+  headSha: objectId,
+  headTree: objectId,
+  name: repositoryPart,
+  owner: repositoryPart,
+  repositoryId: decimal,
+  repositoryVariableNames: z.array(z.string().min(1).max(255)),
+  visibility: z.literal("private"),
+});
 
 export type RepositoryAccessSnapshot = z.infer<typeof repositoryAccessSnapshotSchema>;
 
-const scopeSchema = z
-  .object({
-    accountLogin: z.string().min(1).max(100),
-    accountType: z.enum(["Organization", "User"]),
-    installationId: decimal,
-  })
-  .strict();
+const scopeSchema = z.strictObject({
+  accountLogin: z.string().min(1).max(100),
+  accountType: z.enum(["Organization", "User"]),
+  installationId: decimal,
+});
+
+const STATUS_READY = "ready" as const;
+const STATUS_SCOPE_SELECTION_REQUIRED = "scope-selection-required" as const;
+const STATUS_AUTHORIZATION_REQUIRED = "authorization-required" as const;
+const STATUS_PROVIDER_UNAVAILABLE = "provider-unavailable" as const;
 
 export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
-  z
-    .object({
-      accessDigest: digest,
-      repository: repositoryAccessSnapshotSchema,
-      scope: scopeSchema,
-      status: z.literal("ready"),
-      targetProof: githubTargetAccessProofSchema.optional(),
-    })
-    .strict(),
-  z
-    .object({
-      repository: repositoryReferenceResultSchema,
-      scopes: z.array(scopeSchema).min(2),
-      status: z.literal("scope-selection-required"),
-    })
-    .strict(),
-  z
-    .object({
-      action: z.enum(["connect", "update"]),
-      repository: repositoryReferenceResultSchema,
-      scopes: z.array(scopeSchema),
-      status: z.literal("authorization-required"),
-    })
-    .strict(),
-  z
-    .object({
-      repository: repositoryReferenceResultSchema,
-      status: z.literal("provider-unavailable"),
-    })
-    .strict(),
+  z.strictObject({
+    accessDigest: digest,
+    repository: repositoryAccessSnapshotSchema,
+    scope: scopeSchema,
+    status: z.literal("ready"),
+    targetProof: githubTargetAccessProofSchema.optional(),
+  }),
+  z.strictObject({
+    repository: repositoryReferenceResultSchema,
+    scopes: z.array(scopeSchema).min(2),
+    status: z.literal("scope-selection-required"),
+  }),
+  z.strictObject({
+    action: z.enum(["connect", "update"]),
+    repository: repositoryReferenceResultSchema,
+    scopes: z.array(scopeSchema),
+    status: z.literal("authorization-required"),
+  }),
+  z.strictObject({
+    repository: repositoryReferenceResultSchema,
+    status: z.literal(STATUS_PROVIDER_UNAVAILABLE),
+  }),
 ]);
 
 export type RepositoryAccessResult = z.infer<typeof repositoryAccessResultSchema>;
 export type ReadyRepositoryAccess = Extract<RepositoryAccessResult, { status: "ready" }>;
+
+type InstallationReadBack = z.infer<typeof installationReadBackSchema>;
 
 const exactTargetBinding = (
   binding: HostedGitHubInstallationBinding,
@@ -159,8 +147,11 @@ export interface GitHubRepositoryAccessProvider {
   inspectInstallation: (input: {
     operation: "resolve-existing-source";
     requestedPermissions: z.infer<typeof readPermissionsSchema>;
-  }) => Promise<unknown>;
-  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
+  }) => Promise<InstallationReadBack>;
+  inspectRepositoryByName: (input: {
+    owner: string;
+    name: string;
+  }) => Promise<RepositoryAccessSnapshot | undefined>;
   inspectTargetAccess?: GitHubTargetAccessProvider["inspectTargetAccess"];
 }
 
@@ -178,7 +169,18 @@ const READ_PERMISSIONS = readPermissionsSchema.parse({
   workflows: "none",
 });
 
-const sha256 = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+interface AccessDigestInput {
+  authority: HostedGitHubTenantAuthority;
+  permissions?: z.infer<typeof readPermissionsSchema>;
+  proofDigest?: string;
+  repository: RepositoryAccessSnapshot;
+  repositorySelection?: "all" | "selected";
+  scope: z.infer<typeof scopeSchema>;
+  selectedRepositoryIds?: string[];
+}
+
+const sha256 = (value: AccessDigestInput) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function scope(binding: HostedGitHubInstallationBinding) {
@@ -217,17 +219,17 @@ export async function classifyGitHubRepositoryAccess(input: {
 }): Promise<RepositoryAccessResult> {
   const authority = hostedTenantAuthoritySchema.parse(input.authority);
   const repository = parseRepositoryReference(input.repository);
-  const selectedInstallationId = input.selectedInstallationId
-    ? decimal.parse(input.selectedInstallationId)
-    : undefined;
+  const selectedInstallationId =
+    input.selectedInstallationId !== undefined && input.selectedInstallationId !== ""
+      ? decimal.parse(input.selectedInstallationId)
+      : undefined;
   const listed = (await input.installations.list?.(authority)) ?? [];
   const legacy = await input.installations.read(authority);
-  const active = mergeHostedGitHubInstallationBindings(listed, legacy)
-    .filter((binding) => binding.active)
-    .filter(
-      (binding) =>
-        selectedInstallationId === undefined || binding.installationId === selectedInstallationId,
-    );
+  const active = mergeHostedGitHubInstallationBindings(listed, legacy).filter(
+    (binding) =>
+      binding.active &&
+      (selectedInstallationId === undefined || binding.installationId === selectedInstallationId),
+  );
   const publicScopes = active.map(scope);
   if (active.length === 0) {
     const anyActive = mergeHostedGitHubInstallationBindings(listed, legacy).some(
@@ -237,64 +239,55 @@ export async function classifyGitHubRepositoryAccess(input: {
       action: anyActive ? "update" : "connect",
       repository,
       scopes: publicScopes,
-      status: "authorization-required",
+      status: STATUS_AUTHORIZATION_REQUIRED,
     });
   }
 
-  const matches: {
-    binding: HostedGitHubInstallationBinding;
-    snapshot: RepositoryAccessSnapshot;
-    installation: z.infer<typeof installationReadBackSchema>;
-  }[] = [];
-  let providerFailures = 0;
-  for (const binding of active) {
-    try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const provider = await input.providerFactory({
-        authority,
-        installation: binding,
-      });
-      const installation = installationReadBackSchema.parse(
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await provider.inspectInstallation({
-          operation: "resolve-existing-source",
-          requestedPermissions: READ_PERMISSIONS,
-        }),
-      );
-      if (!exactInstallation(binding, installation)) {
-        providerFailures += 1;
-        continue;
+  const inspected = await Promise.all(
+    active.map(async (binding) => {
+      try {
+        const provider = await input.providerFactory({
+          authority,
+          installation: binding,
+        });
+        const installation = installationReadBackSchema.parse(
+          await provider.inspectInstallation({
+            operation: "resolve-existing-source",
+            requestedPermissions: READ_PERMISSIONS,
+          }),
+        );
+        if (!exactInstallation(binding, installation)) {
+          return { failure: true } as const;
+        }
+        const candidate = await provider.inspectRepositoryByName(repository);
+        if (candidate === undefined) return { failure: false } as const;
+        const snapshot = repositoryAccessSnapshotSchema.parse(candidate);
+        if (
+          snapshot.owner.toLowerCase() !== repository.owner.toLowerCase() ||
+          snapshot.name.toLowerCase() !== repository.name.toLowerCase() ||
+          (installation.repositorySelection === "selected" &&
+            !installation.selectedRepositoryIds.includes(snapshot.repositoryId))
+        ) {
+          return { failure: true } as const;
+        }
+        return { failure: false, match: { binding, installation, snapshot } } as const;
+      } catch {
+        return { failure: true } as const;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const candidate = await provider.inspectRepositoryByName(repository);
-      if (candidate === undefined) {
-        continue;
-      }
-      const snapshot = repositoryAccessSnapshotSchema.parse(candidate);
-      if (
-        snapshot.owner.toLowerCase() !== repository.owner.toLowerCase() ||
-        snapshot.name.toLowerCase() !== repository.name.toLowerCase() ||
-        (installation.repositorySelection === "selected" &&
-          !installation.selectedRepositoryIds.includes(snapshot.repositoryId))
-      ) {
-        providerFailures += 1;
-        continue;
-      }
-      matches.push({ binding, installation, snapshot });
-    } catch {
-      providerFailures += 1;
-    }
-  }
+    }),
+  );
+  const providerFailures = inspected.filter((result) => result.failure).length;
+  const matches = inspected.flatMap((result) => (result.match ? [result.match] : []));
 
   if (matches.length > 1 && selectedInstallationId === undefined) {
     return repositoryAccessResultSchema.parse({
       repository,
       scopes: matches.map(({ binding }) => scope(binding)),
-      status: "scope-selection-required",
+      status: STATUS_SCOPE_SELECTION_REQUIRED,
     });
   }
   const [match] = matches;
-  if (match) {
+  if (match !== undefined) {
     const selectedScope = scope(match.binding);
     return repositoryAccessResultSchema.parse({
       accessDigest: sha256({
@@ -307,7 +300,7 @@ export async function classifyGitHubRepositoryAccess(input: {
       }),
       repository: match.snapshot,
       scope: selectedScope,
-      status: "ready",
+      status: STATUS_READY,
     });
   }
   if (providerFailures === active.length) {
@@ -320,7 +313,7 @@ export async function classifyGitHubRepositoryAccess(input: {
     action: "update",
     repository,
     scopes: publicScopes,
-    status: "authorization-required",
+    status: STATUS_AUTHORIZATION_REQUIRED,
   });
 }
 
@@ -335,9 +328,10 @@ export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
 }): Promise<RepositoryAccessResult> {
   const authority = hostedTenantAuthoritySchema.parse(input.authority);
   const repository = parseRepositoryReference(input.repository);
-  const selectedInstallationId = input.selectedInstallationId
-    ? decimal.parse(input.selectedInstallationId)
-    : undefined;
+  const selectedInstallationId =
+    input.selectedInstallationId !== undefined && input.selectedInstallationId !== ""
+      ? decimal.parse(input.selectedInstallationId)
+      : undefined;
   const listed = (await input.installations.list?.(authority)) ?? [];
   const legacy = await input.installations.read(authority);
   const allActive = mergeHostedGitHubInstallationBindings(listed, legacy).filter(
@@ -352,76 +346,75 @@ export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
       action: allActive.length > 0 ? "update" : "connect",
       repository,
       scopes: [],
-      status: "authorization-required",
+      status: STATUS_AUTHORIZATION_REQUIRED,
     });
   }
-  const matches: ReadyRepositoryAccess[] = [];
-  let providerFailures = 0;
-  for (const binding of active) {
-    try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Provider authority is checked sequentially for each installation.
-      const provider = await input.providerFactory({ authority, installation: binding });
-      if (!provider.inspectTargetAccess) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- compatibility fallback rechecks the whole installation.
-        return await classifyGitHubRepositoryAccess(input);
-      }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- The target id comes from the provider read.
-      const candidate = await provider.inspectRepositoryByName(repository);
-      if (candidate === undefined) {
-        continue;
-      }
-      const snapshot = repositoryAccessSnapshotSchema.parse(candidate);
-      if (
-        snapshot.owner.toLowerCase() !== repository.owner.toLowerCase() ||
-        snapshot.name.toLowerCase() !== repository.name.toLowerCase()
-      ) {
-        providerFailures += 1;
-        continue;
-      }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- The target proof follows this exact provider observation.
-      const proof = await createGitHubTargetAccessAdapter(
-        { inspectTargetAccess: provider.inspectTargetAccess },
-        authority,
-      ).inspectTargetAccess("resolve-existing-source", snapshot.repositoryId);
-      if (!exactTargetBinding(binding, proof)) {
-        providerFailures += 1;
-        continue;
-      }
-      const selectedScope = scope(binding);
-      const parsed = repositoryAccessResultSchema.options[0].parse({
-        accessDigest: sha256({
+  const inspected = await Promise.all(
+    active.map(async (binding) => {
+      try {
+        const provider = await input.providerFactory({ authority, installation: binding });
+        if (provider.inspectTargetAccess === undefined) {
+          return { fallback: true } as const;
+        }
+        const candidate = await provider.inspectRepositoryByName(repository);
+        if (candidate === undefined) return { failure: false } as const;
+        const snapshot = repositoryAccessSnapshotSchema.parse(candidate);
+        if (
+          snapshot.owner.toLowerCase() !== repository.owner.toLowerCase() ||
+          snapshot.name.toLowerCase() !== repository.name.toLowerCase()
+        ) {
+          return { failure: true } as const;
+        }
+        const proof = await createGitHubTargetAccessAdapter(
+          { inspectTargetAccess: provider.inspectTargetAccess },
           authority,
-          proofDigest: proof.digest,
-          repository: snapshot,
-          scope: selectedScope,
-        }),
-        repository: snapshot,
-        scope: selectedScope,
-        status: "ready",
-        targetProof: proof,
-      });
-      matches.push(parsed);
-    } catch {
-      providerFailures += 1;
-    }
+        ).inspectTargetAccess("resolve-existing-source", snapshot.repositoryId);
+        if (exactTargetBinding(binding, proof)) {
+          const selectedScope = scope(binding);
+          return {
+            failure: false,
+            match: repositoryAccessResultSchema.options[0].parse({
+              accessDigest: sha256({
+                authority,
+                proofDigest: proof.digest,
+                repository: snapshot,
+                scope: selectedScope,
+              }),
+              repository: snapshot,
+              scope: selectedScope,
+              status: STATUS_READY,
+              targetProof: proof,
+            }),
+          } as const;
+        }
+        return { failure: true } as const;
+      } catch {
+        return { failure: true } as const;
+      }
+    }),
+  );
+  if (inspected.some((result) => result.fallback === true)) {
+    return await classifyGitHubRepositoryAccess(input);
   }
+  const providerFailures = inspected.filter((result) => result.failure === true).length;
+  const matches = inspected.flatMap((result) => (result.match === undefined ? [] : [result.match]));
   if (matches.length > 1 && selectedInstallationId === undefined) {
     return repositoryAccessResultSchema.parse({
       repository,
       scopes: matches.map((match) => match.scope),
-      status: "scope-selection-required",
+      status: STATUS_SCOPE_SELECTION_REQUIRED,
     });
   }
-  if (matches[0]) {
+  if (matches[0] !== undefined) {
     return matches[0];
   }
   if (providerFailures === active.length) {
-    return repositoryAccessResultSchema.parse({ repository, status: "provider-unavailable" });
+    return repositoryAccessResultSchema.parse({ repository, status: STATUS_PROVIDER_UNAVAILABLE });
   }
   return repositoryAccessResultSchema.parse({
     action: "update",
     repository,
     scopes: active.map(scope),
-    status: "authorization-required",
+    status: STATUS_AUTHORIZATION_REQUIRED,
   });
 }

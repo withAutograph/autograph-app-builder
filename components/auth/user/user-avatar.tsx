@@ -33,29 +33,44 @@ export interface UserAvatarProps {
 export function UserAvatar({ className, user, isPending, fallback }: UserAvatarProps) {
   const { authClient } = useAuth<UsernameAuthClient>();
   const { data: session, isPending: sessionPending } = useSession(authClient, {
-    enabled: !user && !isPending,
+    enabled: user === null || user === undefined ? isPending !== true : false,
   });
 
-  if ((isPending || sessionPending) && !user) {
+  if ((isPending === true || sessionPending) && (user === null || user === undefined)) {
     return <Skeleton className={cn("size-8 rounded-full", className)} />;
   }
 
   const resolvedUser = user ?? session?.user;
 
-  const initials = (resolvedUser?.username || resolvedUser?.name || resolvedUser?.email)
-    ?.slice(0, 2)
-    .toUpperCase();
+  const username = resolvedUser?.username;
+  const name = resolvedUser?.name;
+  const email = resolvedUser?.email;
+  let initials: string | undefined;
+  if (username !== undefined && username.length > 0) {
+    initials = username;
+  } else if (name !== undefined && name.length > 0) {
+    initials = name;
+  } else if (email !== undefined && email.length > 0) {
+    initials = email.slice(0, 2).toUpperCase();
+  }
+  const displayName = resolvedUser?.displayUsername;
+  let alt: string | undefined;
+  if (displayName !== undefined && displayName.length > 0) {
+    alt = displayName;
+  } else if (name !== undefined && name.length > 0) {
+    alt = name;
+  } else if (email !== undefined && email.length > 0) {
+    alt = email;
+  }
+  const fallbackContent =
+    fallback ??
+    (initials !== undefined && initials.length > 0 ? initials : <User2 className="size-4" />);
 
   return (
     <Avatar className={cn("size-8 bg-muted text-foreground text-sm rounded-full", className)}>
-      <AvatarImage
-        src={resolvedUser?.image ?? undefined}
-        alt={resolvedUser?.displayUsername || resolvedUser?.name || resolvedUser?.email}
-      />
+      <AvatarImage src={resolvedUser?.image ?? undefined} alt={alt} />
 
-      <AvatarFallback className="text-muted-foreground!">
-        {fallback || initials || <User2 className="size-4" />}
-      </AvatarFallback>
+      <AvatarFallback className="text-muted-foreground!">{fallbackContent}</AvatarFallback>
     </Avatar>
   );
 }

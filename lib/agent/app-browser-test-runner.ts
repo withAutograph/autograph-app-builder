@@ -105,23 +105,31 @@ export const runAppBrowserTests = async (input: {
       runtime?.browserTestEntryPath === undefined
         ? undefined
         : browserEntryPathSchema.parse(runtime.browserTestEntryPath);
-    const browserEnvironment = {
-      ...(runtime?.browserTestBaseUrl === undefined
-        ? {}
-        : { APP_TEST_BASE_URL: runtime.browserTestBaseUrl }),
-      ...(entryPath === undefined ? {} : { APP_TEST_ENTRY_PATH: entryPath }),
-    };
+    const browserEnvironment: Record<string, string> = {};
+    if (runtime?.browserTestBaseUrl !== undefined) {
+      browserEnvironment.APP_TEST_BASE_URL = runtime.browserTestBaseUrl;
+    }
+    if (entryPath !== undefined) {
+      browserEnvironment.APP_TEST_ENTRY_PATH = entryPath;
+    }
     const runTask = async () => {
       if (runtime) {
-        return await runtime.runTask({
-          signal: input.signal,
+        const taskInput: Parameters<PreparedRuntimeExecution["runTask"]>[0] = {
           task: "test-e2e",
-          ...(selection === undefined ? {} : { browserSelection: selection }),
-          ...input.continuation,
-          ...(Object.keys(browserEnvironment).length === 0
-            ? {}
-            : { environment: browserEnvironment }),
-        });
+        };
+        if (input.signal !== undefined) {
+          taskInput.signal = input.signal;
+        }
+        if (selection !== undefined) {
+          taskInput.browserSelection = selection;
+        }
+        if (input.continuation !== undefined) {
+          Object.assign(taskInput, input.continuation);
+        }
+        if (Object.keys(browserEnvironment).length > 0) {
+          taskInput.environment = browserEnvironment;
+        }
+        return await runtime.runTask(taskInput);
       }
       const privateCommand =
         selection === undefined

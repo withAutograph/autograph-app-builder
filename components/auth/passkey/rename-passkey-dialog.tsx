@@ -5,7 +5,7 @@ import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import { useUpdatePasskey } from "@better-auth-ui/react/plugins/passkey";
 import { useState } from "react";
 import type { SubmitEvent } from "react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -67,7 +67,7 @@ export function RenamePasskeyDialog({
             />
           </Field>
           <DialogFooter>
-            <DialogClose className={buttonVariants({ variant: "outline" })} type="button">
+            <DialogClose render={<Button variant="outline" type="button" />}>
               {localization.settings.cancel}
             </DialogClose>
             <Button disabled={!name.trim() || updatePasskey.isPending} type="submit">

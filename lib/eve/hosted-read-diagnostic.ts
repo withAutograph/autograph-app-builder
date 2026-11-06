@@ -180,8 +180,10 @@ export const createHostedReadTrace = (input: {
       phaseElapsedMs: Math.max(0, Math.round(at - phaseStarted)),
       sessionIdHash,
       ...counters,
-      ...(streamContract === undefined ? {} : { streamContract }),
     };
+    if (streamContract !== undefined) {
+      diagnostic.streamContract = streamContract;
+    }
     try {
       if (input.sink === undefined) {
         console.info("[builder:hosted-read]", diagnostic);

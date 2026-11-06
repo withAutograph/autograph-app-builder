@@ -28,6 +28,8 @@ const scope = {
 };
 // SAFETY: The hook only consumes the actual session ID; no I/O or channel mutation is available.
 const ctx = { session: { id: "owned" } } as HookContext;
+const observe = (values: ReturnType<typeof privateApplyDenialEvents>) =>
+  observePrivateApplyDenials({ calls: ["denied-call"], events: values, sessionId: "owned" });
 describe("genuine private Build denial lifecycle", () => {
   it("retires only a real paired denial and preserves both the newer grant and terminal evidence", async () => {
     await contextStorage.run(new ContextContainer(), async () => {
@@ -106,8 +108,6 @@ describe("genuine private Build denial lifecycle", () => {
   });
   it("history catch-up rejects incomplete, contradictory and reordered outcomes", () => {
     const events = privateApplyDenialEvents();
-    const observe = (values: typeof events) =>
-      observePrivateApplyDenials({ calls: ["denied-call"], events: values, sessionId: "owned" });
     expect(observe(events)).toHaveLength(1);
     expect(observe(events.filter((e) => e.type !== "input.resolved"))).toEqual([]);
     expect(observe(events.toReversed())).toEqual([]);

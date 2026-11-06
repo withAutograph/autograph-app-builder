@@ -2,56 +2,92 @@ import http from "node:http";
 import { describe, expect, it } from "vitest";
 import { executeProductReadback } from "./product-behavior";
 
-const run = async (
-  mode: "stored" | "fake" | "wrong" | "redirect" | "invalid" | "auth",
-  expired = false,
-) => {
+type RunMode = "stored" | "fake" | "wrong" | "redirect" | "invalid" | "auth";
+interface ParsedValue {
+  value: unknown;
+}
+
+const isRecord = (
+  value: unknown,
+): value is Record<
+  string,
+  string | number | boolean | null | unknown[] | Record<string, string | number | boolean | null>
+> => value !== null && typeof value === "object" && !Array.isArray(value);
+
+const parseValue = (body: string): ParsedValue => {
+  const parsed: unknown = JSON.parse(body);
+  if (!isRecord(parsed) || !("value" in parsed)) {
+    throw new Error("Invalid test request body");
+  }
+  return { value: parsed.value };
+};
+
+const parseAddress = (address: ReturnType<typeof http.Server.prototype.address>) => {
+  if (address === null || address === false) {
+    return null;
+  }
+  if ("port" in address) {
+    return address;
+  }
+  return null;
+};
+
+const run = async (mode: RunMode, expired = false) => {
   let stored: unknown;
   const requests: { path: string; cookie?: string; body: string }[] = [];
-  const server = http.createServer(async (request, response) => {
-    let body = "";
-    for await (const chunk of request) {
-      body += chunk;
-    }
-    requests.push({ body, cookie: request.headers.cookie, path: request.url ?? "" });
-    if (request.url?.startsWith("/__autograph_preview_launch")) {
-      response.writeHead(303, { location: "/", "set-cookie": "preview=private; HttpOnly; Path=/" });
-    } else if (request.method === "POST") {
-      if (mode === "auth") {
-        response.writeHead(401);
-      } else if (mode === "redirect") {
-        response.writeHead(307, { location: "https://outside.test/leak" });
-      } else {
-        if (mode === "stored") {
-          stored = JSON.parse(body).value;
+  const server = http.createServer((request, response) => {
+    void (async () => {
+      try {
+        let body = "";
+        for await (const chunk of request) {
+          body += chunk;
         }
-        response.writeHead(200, { "content-type": "application/json" });
+        requests.push({ body, cookie: request.headers.cookie, path: request.url ?? "" });
+        if ((request.url ?? "").startsWith("/__autograph_preview_launch")) {
+          response.writeHead(303, {
+            location: "/",
+            "set-cookie": "preview=private; HttpOnly; Path=/",
+          });
+        } else if (request.method === "POST") {
+          if (mode === "auth") {
+            response.writeHead(401);
+          } else if (mode === "redirect") {
+            response.writeHead(307, { location: "https://outside.test/leak" });
+          } else {
+            if (mode === "stored") {
+              stored = parseValue(body).value;
+            }
+            response.writeHead(200, { "content-type": "application/json" });
+          }
+        } else {
+          response.writeHead(200, { "content-type": "application/json" });
+        }
+        if (mode === "invalid" && request.method === "GET" && request.url === "/record") {
+          response.end("<html>Not JSON</html>");
+          return;
+        }
+        response.end(
+          JSON.stringify(
+            request.method === "POST"
+              ? { saved: true }
+              : { value: mode === "wrong" ? "wrong" : stored },
+          ),
+        );
+      } catch {
+        response.destroy(new Error("Request handler failed"));
       }
-    } else {
-      response.writeHead(200, { "content-type": "application/json" });
-    }
-    if (mode === "invalid" && request.method === "GET" && request.url === "/record") {
-      response.end("<html>Not JSON</html>");
-      return;
-    }
-    response.end(
-      JSON.stringify(
-        request.method === "POST"
-          ? { saved: true }
-          : { value: mode === "wrong" ? "wrong" : stored },
-      ),
-    );
+    })();
   });
   // oxlint-disable-next-line promise/avoid-new -- Adapt Node server listen callback.
   await new Promise<void>((resolve) => {
     server.listen(0, "127.0.0.1", resolve);
   });
-  const address = server.address();
-  if (!address || typeof address === "string") {
+  const address = parseAddress(server.address());
+  if (address === null) {
     throw new Error("Missing server address");
   }
   const transport: typeof fetch = async (url, options) => {
-    const target = new URL(String(url));
+    const target = new URL(url instanceof URL ? url.href : url);
     expect(target.origin).toBe("https://preview.test");
     expect(options?.redirect).toBe("manual");
     expect(options?.credentials).toBe("omit");
@@ -96,8 +132,8 @@ describe("independent product action/readback", () => {
   it.each(["fake", "wrong", "invalid"] as const)(
     "fails %s success without stored marker",
     async (mode) => {
-      const { result } = await run(mode);
-      expect(result.status).toBe("failed");
+      const outcome = await run(mode);
+      expect(outcome.result.status).toBe("failed");
     },
   );
   it("reads actual stored value without sending marker in read", async () => {
@@ -122,12 +158,12 @@ describe("independent product action/readback", () => {
 
 it("blocks cross-origin paths before transport receives a capability", async () => {
   let called = false;
-  const result = await executeProductReadback({
+  const outcome = await executeProductReadback({
     authority: {
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
-    fetch: async () => {
+    fetch: () => {
       called = true;
       throw new Error("Must not run");
     },
@@ -141,17 +177,17 @@ it("blocks cross-origin paths before transport receives a capability", async () 
     },
   });
   expect(called).toBe(false);
-  expect(result.status).toBe("blocked");
+  expect(outcome.status).toBe("blocked");
 });
 
 it("honors cancellation before access exchange", async () => {
   let called = false;
-  const result = await executeProductReadback({
+  const outcome = await executeProductReadback({
     authority: {
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
-    fetch: async () => {
+    fetch: () => {
       called = true;
       throw new Error("Must not run");
     },
@@ -166,17 +202,17 @@ it("honors cancellation before access exchange", async () => {
     signal: AbortSignal.abort(),
   });
   expect(called).toBe(false);
-  expect(result.reason).toContain("aborted");
+  expect(outcome.reason).toContain("aborted");
 });
 
 it("bounds untrusted read response and omits its contents", async () => {
   let count = 0;
-  const result = await executeProductReadback({
+  const outcome = await executeProductReadback({
     authority: {
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
-    fetch: async () => {
+    fetch: () => {
       count += 1;
       if (count === 1) {
         return new Response(null, {
@@ -195,8 +231,8 @@ it("bounds untrusted read response and omits its contents", async () => {
       writePath: "/record",
     },
   });
-  expect(result.status).toBe("failed");
-  expect(JSON.stringify(result)).not.toContain("sensitive");
+  expect(outcome.status).toBe("failed");
+  expect(JSON.stringify(outcome)).not.toContain("sensitive");
 });
 
 it("validates the complete streamed read even when an early marker matches", async () => {
@@ -216,11 +252,8 @@ it("validates the complete streamed read even when an early marker matches", asy
         });
       }
       if (options?.method === "POST") {
-        const submitted: unknown = JSON.parse(String(options.body));
-        if (typeof submitted !== "object" || submitted === null || !("value" in submitted)) {
-          throw new Error("Invalid test request");
-        }
-        marker = String(submitted.value);
+        const body = await new Request("https://preview.test", options).text();
+        marker = JSON.stringify(parseValue(body).value);
         return new Response("ok");
       }
       return new Response(`{"value":"${marker}","other":${"1".repeat(1_000_000)}x}`);

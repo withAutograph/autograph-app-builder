@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
@@ -5,7 +7,7 @@ import { setTimeout } from "node:timers/promises";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import * as databaseSchema from "../../../../lib/db/schema";
+import { sandboxExecutionLeases } from "../../../../lib/db/schema";
 import type { HostedPrincipal } from "../../../../lib/eve/hosted-auth";
 import { reconcileExpiredSandboxLeases } from "../../../../lib/sandbox/execution-lease";
 import type { SandboxExecutionLease } from "../../../../lib/sandbox/execution-lease";
@@ -14,6 +16,9 @@ import {
   sandboxExecutionPolicyDigest,
 } from "../../../../lib/sandbox/execution-policy";
 import { createPostgresSandboxExecutionLeaseStore } from "../../../../lib/sandbox/postgres-execution-lease-store";
+
+// This integration script is intentionally outside the application type-check
+// graph: unrelated in-progress app edits must not poison its inferred types.
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function argument(name: string) {
@@ -36,10 +41,12 @@ const client = postgres({
   username: "postgres",
 });
 
-const database = drizzle(client, { schema: databaseSchema });
+const database = drizzle(client, { schema: { sandboxExecutionLeases } });
 const store = createPostgresSandboxExecutionLeaseStore(database);
 const policy = SANDBOX_EXECUTION_POLICY;
 const policyDigest = sandboxExecutionPolicyDigest();
+const recoveryInProgress = "recovery-in-progress";
+const expectedLeaseClaim = "Expected a lease claim.";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function principal(ownerUserId: string, workspaceId = "workspace_1") {
@@ -115,12 +122,13 @@ try {
     acquire("user_1", "session_1"),
     acquire("user_1", "session_2"),
   ]);
-  assert.deepEqual(sameSubject.map(({ disposition }) => disposition).toSorted(), [
-    "acquired",
-    "acquired",
-  ]);
+  assert.deepEqual(
+    [sameSubject[0].disposition, sameSubject[1].disposition],
+    ["acquired", "acquired"],
+  );
   const acquired = sameSubject.find((result) => result.disposition === "acquired");
-  assert.ok(acquired?.disposition === "acquired");
+  assert.equal(acquired?.disposition, "acquired");
+  if (acquired === undefined) throw new Error("Expected an acquired lease.");
   assert.ok(acquired.lease.acquiredAtEpochMs > Date.now() - 60_000);
   const replay = await store.acquire({
     adapterSessionId: acquired.lease.adapterSessionId,
@@ -175,7 +183,8 @@ try {
 
   await expire(heartbeat);
   const [claimed] = await store.claimExpired({ limit: 1, nowEpochMs: 0 });
-  assert.ok(claimed);
+  assert.notEqual(claimed, undefined);
+  if (claimed === undefined) throw new Error(expectedLeaseClaim);
   assert.equal(claimed.state, "orphaned");
   const stopFailed = await store.settleRecovery({
     lease: claimed,
@@ -201,12 +210,13 @@ try {
       }),
     ]),
     [
-      { disposition: "rejected", reason: "recovery-in-progress" },
-      { disposition: "rejected", reason: "recovery-in-progress" },
+      { disposition: "rejected", reason: recoveryInProgress },
+      { disposition: "rejected", reason: recoveryInProgress },
     ],
   );
   const [reclaimed] = await store.claimExpired({ limit: 1, nowEpochMs: 0 });
-  assert.ok(reclaimed);
+  assert.notEqual(reclaimed, undefined);
+  if (reclaimed === undefined) throw new Error(expectedLeaseClaim);
   assert.equal(reclaimed.epoch, claimed.epoch + 1);
   assert.deepEqual(
     await store.acquire({
@@ -216,7 +226,7 @@ try {
       principal: reclaimed.principal,
       providerSandboxId: reclaimed.providerSandboxId,
     }),
-    { disposition: "rejected", reason: "recovery-in-progress" },
+    { disposition: "rejected", reason: recoveryInProgress },
   );
   assert.equal(
     await store.settleRecovery({
@@ -276,15 +286,18 @@ try {
       acquire("user_failed", "batch_failed"),
     ]),
     [
-      { disposition: "rejected", reason: "recovery-in-progress" },
-      { disposition: "rejected", reason: "recovery-in-progress" },
+      { disposition: "rejected", reason: recoveryInProgress },
+      { disposition: "rejected", reason: recoveryInProgress },
     ],
   );
   const stoppedReacquired = await acquire("user_stopped", "batch_stopped");
   assert.equal(stoppedReacquired.disposition, "acquired");
   const retry = await reconcileExpiredSandboxLeases({
     nowEpochMs: 0,
-    stopSandbox: async () => {},
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning tool or script contract
+    async stopSandbox() {
+      await Promise.resolve();
+    },
     store,
   });
   assert.equal(retry.claimed, 1);

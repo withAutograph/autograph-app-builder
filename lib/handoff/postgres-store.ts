@@ -1,14 +1,106 @@
 import { and, desc, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import type * as databaseSchema from "../db/schema";
+import type {
+  user,
+  session,
+  organization,
+  member,
+  personalWorkspace,
+  invitation,
+  account,
+  verification,
+  passkey,
+  passkeyOnboarding,
+  jwks,
+  oauthClient,
+  oauthResource,
+  oauthClientResource,
+  oauthRefreshToken,
+  oauthAccessToken,
+  oauthConsent,
+  oauthClientAssertion,
+  hostedWorkspaceMemberships,
+  agentSessions,
+  agentSessionCheckpointManifests,
+  agentSessionCheckpointItems,
+  agentSessionCheckpointChunks,
+  agentOperations,
+  sandboxExecutionLeases,
+  githubPublicationProposals,
+  githubPublicationJournals,
+  hostedGitHubInstallations,
+  hostedGitHubInstallationBindings,
+  hostedVercelInstallations,
+  hostedGitHubUserCredentials,
+  builderDrafts,
+  vercelInstallationAuthorizationStates,
+  githubInstallationAuthorizationStates,
+  githubRepositoryAccessContinuations,
+  hostedGitHubPublicationProposals,
+  hostedGitHubPublicationJournals,
+  hostedGitHubPrEffectJournals,
+  hostedGitHubDraftAdoptions,
+  emulatePreviewState,
+  prototypeArtifactChunks,
+  validationLogChunks,
+  validationLogManifests,
+  productSourceReviewJournal,
+} from "../db/schema";
 import { builderHandoffs, builderProvisioningJournals } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderHandoffIntentSchema, builderHandoffRecordSchema } from "./contracts";
 import type { BuilderHandoffRecord } from "./contracts";
 import type { BuilderHandoffStore } from "./service";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = PostgresJsDatabase<{
+  user: typeof user;
+  session: typeof session;
+  organization: typeof organization;
+  member: typeof member;
+  personalWorkspace: typeof personalWorkspace;
+  invitation: typeof invitation;
+  account: typeof account;
+  verification: typeof verification;
+  passkey: typeof passkey;
+  passkeyOnboarding: typeof passkeyOnboarding;
+  jwks: typeof jwks;
+  oauthClient: typeof oauthClient;
+  oauthResource: typeof oauthResource;
+  oauthClientResource: typeof oauthClientResource;
+  oauthRefreshToken: typeof oauthRefreshToken;
+  oauthAccessToken: typeof oauthAccessToken;
+  oauthConsent: typeof oauthConsent;
+  oauthClientAssertion: typeof oauthClientAssertion;
+  hostedWorkspaceMemberships: typeof hostedWorkspaceMemberships;
+  agentSessions: typeof agentSessions;
+  agentSessionCheckpointManifests: typeof agentSessionCheckpointManifests;
+  agentSessionCheckpointItems: typeof agentSessionCheckpointItems;
+  agentSessionCheckpointChunks: typeof agentSessionCheckpointChunks;
+  agentOperations: typeof agentOperations;
+  sandboxExecutionLeases: typeof sandboxExecutionLeases;
+  githubPublicationProposals: typeof githubPublicationProposals;
+  githubPublicationJournals: typeof githubPublicationJournals;
+  hostedGitHubInstallations: typeof hostedGitHubInstallations;
+  hostedGitHubInstallationBindings: typeof hostedGitHubInstallationBindings;
+  hostedVercelInstallations: typeof hostedVercelInstallations;
+  hostedGitHubUserCredentials: typeof hostedGitHubUserCredentials;
+  builderProvisioningJournals: typeof builderProvisioningJournals;
+  builderHandoffs: typeof builderHandoffs;
+  builderDrafts: typeof builderDrafts;
+  vercelInstallationAuthorizationStates: typeof vercelInstallationAuthorizationStates;
+  githubInstallationAuthorizationStates: typeof githubInstallationAuthorizationStates;
+  githubRepositoryAccessContinuations: typeof githubRepositoryAccessContinuations;
+  hostedGitHubPublicationProposals: typeof hostedGitHubPublicationProposals;
+  hostedGitHubPublicationJournals: typeof hostedGitHubPublicationJournals;
+  hostedGitHubPrEffectJournals: typeof hostedGitHubPrEffectJournals;
+  hostedGitHubDraftAdoptions: typeof hostedGitHubDraftAdoptions;
+  emulatePreviewState: typeof emulatePreviewState;
+  prototypeArtifactChunks: typeof prototypeArtifactChunks;
+  validationLogChunks: typeof validationLogChunks;
+  validationLogManifests: typeof validationLogManifests;
+  productSourceReviewJournal: typeof productSourceReviewJournal;
+}>;
 type Authority = BuilderHandoffRecord["authority"];
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -24,7 +116,7 @@ function authorityPredicate(authorityInput: Authority) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function rowRecord(row: typeof builderHandoffs.$inferSelect): BuilderHandoffRecord {
-  return builderHandoffRecordSchema.parse({
+  const record = {
     authority: {
       audience: row.audience,
       issuer: row.issuer,
@@ -38,9 +130,14 @@ function rowRecord(row: typeof builderHandoffs.$inferSelect): BuilderHandoffReco
     intent: builderHandoffIntentSchema.parse(row.intent),
     requestDigest: row.requestDigest,
     version: 1,
-    ...(row.redeemedAt === null ? {} : { redeemedAt: row.redeemedAt }),
-    ...(row.sessionId === null ? {} : { sessionId: row.sessionId }),
-  });
+  };
+  if (row.redeemedAt !== null) {
+    Object.assign(record, { redeemedAt: row.redeemedAt });
+  }
+  if (row.sessionId !== null) {
+    Object.assign(record, { sessionId: row.sessionId });
+  }
+  return builderHandoffRecordSchema.parse(record);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -53,7 +150,7 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
         and(authorityPredicate(input.authority), eq(builderHandoffs.handoffId, input.handoffId)),
       )
       .limit(1);
-    return rows[0] ? rowRecord(rows[0]) : undefined;
+    return rows[0] === undefined ? undefined : rowRecord(rows[0]);
   };
 
   const findLatestPending: NonNullable<BuilderHandoffStore["findLatestPending"]> = async ({
@@ -80,7 +177,7 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
       .where(authorityPredicate(authority))
       .orderBy(desc(builderProvisioningJournals.updatedAt), desc(builderHandoffs.createdAt))
       .limit(1);
-    return rows[0] ? rowRecord(rows[0].handoff) : undefined;
+    return rows[0] === undefined ? undefined : rowRecord(rows[0].handoff);
   };
 
   return {
@@ -100,7 +197,7 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
           ),
         )
         .returning();
-      if (updated[0]) {
+      if (updated[0] !== undefined) {
         return rowRecord(updated[0]);
       }
       const existing = await read({
@@ -132,7 +229,7 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
           ),
         )
         .returning();
-      if (updated[0]) {
+      if (updated[0] !== undefined) {
         return { disposition: "renewed", record: rowRecord(updated[0]) };
       }
       // A concurrent renewal or bind won the CAS. Return its current reference.
@@ -157,7 +254,7 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
         })
         .onConflictDoNothing()
         .returning();
-      if (inserted[0]) {
+      if (inserted[0] !== undefined) {
         return { disposition: "created", record: rowRecord(inserted[0]) };
       }
       const existing = await database
@@ -170,7 +267,7 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
           ),
         )
         .limit(1);
-      if (!existing[0]) {
+      if (existing[0] === undefined) {
         throw new Error("builder-handoff-not-durable");
       }
       return { disposition: "existing", record: rowRecord(existing[0]) };

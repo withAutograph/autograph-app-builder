@@ -52,7 +52,7 @@ describe("frozen private check policy", () => {
     expect(
       await verifyPrivateComputeCheckIntegrity({
         appId: "example",
-        profile: undefined,
+        profile: null,
         root: "/workspace/repository",
         sandbox: { run },
       }),

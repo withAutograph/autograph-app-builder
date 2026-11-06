@@ -127,14 +127,16 @@ const exportTextPathChunk = async (input: {
     }),
     offsetBytes,
   });
-  return {
-    ...(chunk.nextOffsetBytes < contentBytes
-      ? {
-          contentCursor: { digest, offsetBytes: chunk.nextOffsetBytes, path: input.path },
-        }
-      : {}),
+  const result: {
+    contentCursor?: ChangeSetExportCursor;
+    file: ExportFile;
+  } = {
     file: { content: chunk.content, digest, offsetBytes, path: input.path },
   };
+  if (chunk.nextOffsetBytes < contentBytes) {
+    result.contentCursor = { digest, offsetBytes: chunk.nextOffsetBytes, path: input.path };
+  }
+  return result;
 };
 
 export const changedAppTextPaths = (
@@ -243,20 +245,17 @@ export const destinationReviewReadProgress = (input: {
   }
   const priorReadable = input.side === "before" ? previous.beforeReadable : previous.afterReadable;
   const readable = input.readable && (input.cursor === undefined || priorReadable !== false);
-  return {
-    ...previous,
-    ...(input.side === "before"
-      ? {
-          beforeComplete: readable && input.nextCursor === undefined,
-          beforeCursor: input.nextCursor,
-          beforeReadable: readable,
-        }
-      : {
-          afterComplete: readable && input.nextCursor === undefined,
-          afterCursor: input.nextCursor,
-          afterReadable: readable,
-        }),
-  };
+  const progress = { ...previous };
+  if (input.side === "before") {
+    progress.beforeComplete = readable && input.nextCursor === undefined;
+    progress.beforeCursor = input.nextCursor;
+    progress.beforeReadable = readable;
+  } else {
+    progress.afterComplete = readable && input.nextCursor === undefined;
+    progress.afterCursor = input.nextCursor;
+    progress.afterReadable = readable;
+  }
+  return progress;
 };
 
 const currentDestinationProgress = (
@@ -486,17 +485,18 @@ export const observeNormalizedChangeSet = async (input: {
           includeBaselinePlanningSpecs,
           input.state.proposal.target.frameworkUpgrade !== undefined,
         );
+  const reviewedApplyReceipt = { ...input.state.applyReceipt };
+  if (selectedBaseline !== undefined || destination !== undefined) {
+    Object.assign(reviewedApplyReceipt, {
+      preTree,
+      preTreeDigest: createHash("sha256")
+        .update(JSON.stringify(canonicalOverlayFiles(preTree)))
+        .digest("hex"),
+    });
+  }
   const changeSet = deriveNormalizedChangeSet(
     {
-      ...input.state.applyReceipt,
-      ...(selectedBaseline === undefined && destination === undefined
-        ? {}
-        : {
-            preTree,
-            preTreeDigest: createHash("sha256")
-              .update(JSON.stringify(canonicalOverlayFiles(preTree)))
-              .digest("hex"),
-          }),
+      ...reviewedApplyReceipt,
       changedContentDigest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
       changes,
       postTree: observed.files,

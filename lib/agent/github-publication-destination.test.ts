@@ -57,7 +57,7 @@ const access = (installationId: string) => ({
       status: "ready",
     },
     confirmedByCallId: "review",
-    current: undefined,
+    current: null,
     sessionId: "saved",
   }),
 });

@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { lstatSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -23,12 +25,17 @@ const listRegularFiles = (directory: string, relativeDirectory = "."): string[] 
   return files;
 };
 
-const skillEntries = listRegularFiles(skillSourceRoot)
-  .toSorted((left, right) => left.localeCompare(right))
-  .map((relativePath) => ({
-    content: readFileSync(path.join(skillSourceRoot, relativePath), "utf-8"),
-    path: relativePath,
-  }));
+interface HostedSkillEntry {
+  content: string;
+  path: string;
+}
+
+const skillPaths: string[] = listRegularFiles(skillSourceRoot);
+skillPaths.sort((left, right) => left.localeCompare(right));
+const skillEntries: HostedSkillEntry[] = skillPaths.map((relativePath: string) => ({
+  content: readFileSync(path.join(skillSourceRoot, relativePath), "utf-8"),
+  path: relativePath,
+}));
 
 if (skillEntries.length === 0) throw new Error("The hosted managed skill seed set is empty.");
 

@@ -1,37 +1,37 @@
 import type { ProductSourceAssessment } from "./product-source-review";
 import type { AcceptedAppSpec } from "./workflow-state";
 
+const acceptanceWalkthroughFromContent = (content: string | undefined) => {
+  const lines = content?.split(/\r?\n/u) ?? [];
+  const selected: string[] = [];
+  let inWalkthrough = false;
+  let fence: string | null = null;
+  for (const line of lines) {
+    const marker = /^\s*(?<marker>```+|~~~+)/u.exec(line)?.groups?.marker;
+    if (marker !== undefined && marker.length > 0) {
+      if (fence === null) {
+        fence = marker.charAt(0);
+      } else if (marker.startsWith(fence)) {
+        fence = null;
+      }
+    }
+    const isLevelTwoHeading = fence === null && line.startsWith("##") && /\s/u.test(line[2] ?? "");
+    if (isLevelTwoHeading) {
+      inWalkthrough = !inWalkthrough && /^##\s+Acceptance walkthrough\s*$/iu.test(line);
+    } else if (inWalkthrough) {
+      selected.push(line);
+    }
+  }
+  return selected.join("\n").trim();
+};
+
 /** Retain product outcomes independently of successful compiler/test commands. */
 export const productAcceptanceObligations = (
   appSpec: Pick<AcceptedAppSpec, "content" | "digest" | "walkthrough">,
   evidence: readonly unknown[] = [],
   sourceAssessment?: ProductSourceAssessment,
 ) => {
-  const lines = appSpec.content?.split(/\r?\n/u) ?? [];
-  const selected: string[] = [];
-  let inWalkthrough = false;
-  let fence: string | undefined;
-  for (const line of lines) {
-    const marker = /^\s*(?<marker>```+|~~~+)/u.exec(line)?.groups?.marker;
-    if (marker) {
-      if (fence === undefined) {
-        fence = marker.charAt(0);
-      } else if (marker.startsWith(fence)) {
-        fence = undefined;
-      }
-    }
-    if (fence === undefined && line.startsWith("##") && /\s/u.test(line[2] ?? "")) {
-      if (inWalkthrough) {
-        break;
-      }
-      inWalkthrough = /^##\s+Acceptance walkthrough\s*$/iu.test(line);
-      continue;
-    }
-    if (inWalkthrough) {
-      selected.push(line);
-    }
-  }
-  const walkthrough = appSpec.walkthrough ?? selected.join("\n").trim();
+  const walkthrough = appSpec.walkthrough ?? acceptanceWalkthroughFromContent(appSpec.content);
   return {
     appSpecDigest: appSpec.digest,
     evidence,

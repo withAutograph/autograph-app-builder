@@ -1,5 +1,6 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   DEFAULT_AUTH_REDIRECT_TO,
@@ -22,7 +23,7 @@ describe("Preview Better Auth UI", () => {
   it("serializes complete and repeated auth-page search parameters", () => {
     const search = serializeAuthPageSearchParams({
       callbackURL: ["/workspace?source=one#first", "/workspace?source=two#second"],
-      omitted: undefined,
+      omitted: null,
       passkey: "unavailable",
       redirectTo: "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",
     });
@@ -160,22 +161,24 @@ describe("Preview Better Auth UI", () => {
       method: "POST",
     };
     const clientPlugin = oauthProviderClient();
-    const onRequest = clientPlugin.fetchPlugins?.[0]?.hooks?.onRequest;
+    const hooks = clientPlugin.fetchPlugins?.[0]?.hooks;
+    if (hooks?.onRequest === undefined) {
+      throw new TypeError("OAuth provider request hook is unavailable");
+    }
+    await hooks.onRequest(request);
 
-    expect(onRequest).toBeTypeOf("function");
-    await onRequest?.(request as never);
-
-    const body = JSON.parse(request.body) as Record<string, string>;
-    expect(new URLSearchParams(body.oauth_query).getAll("ba_param")).toEqual([
+    const parsedBody = z.object({ oauth_query: z.string() }).parse(JSON.parse(request.body));
+    const oauthQuery = parsedBody.oauth_query;
+    expect(new URLSearchParams(oauthQuery).getAll("ba_param")).toEqual([
       "client_id",
       "scope",
       "state",
       "sig",
       "ba_param",
     ]);
-    expect(body.oauth_query).toContain("client_id=one");
-    expect(body.oauth_query).toContain("scope=autograph%3Aget");
-    expect(body.oauth_query).toContain("state=opaque");
-    expect(body.oauth_query).toContain("sig=signed");
+    expect(oauthQuery).toContain("client_id=one");
+    expect(oauthQuery).toContain("scope=autograph%3Aget");
+    expect(oauthQuery).toContain("state=opaque");
+    expect(oauthQuery).toContain("sig=signed");
   });
 });

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createLocalJWKSet, jwtVerify } from "jose";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { previewOAuthRateLimit } from "./preview-oauth-runtime";
 import { cursorClientId, cursorRedirectUri } from "./cursor-client";
 import { previewOAuthScopes } from "./preview-oauth-contract";
@@ -28,6 +29,20 @@ const required = <T>(value: T | null | undefined, name: string): T => {
   return value;
 };
 
+const consentResponseSchema = z.object({
+  redirect_uri: z.string().optional(),
+  url: z.string().optional(),
+});
+const sessionResponseSchema = z.object({ user: z.object({ id: z.string() }) });
+const tokenResponseSchema = z.object({
+  access_token: z.string(),
+  expires_in: z.number(),
+  refresh_token: z.string().optional(),
+  scope: z.string(),
+  token_type: z.string(),
+});
+const jwksResponseSchema = z.object({ keys: z.array(z.custom<JsonWebKey>()) });
+
 describe("real Better Auth Preview OAuth handler", () => {
   it("reuses one web login for Cursor and Codex, persists consent, and refreshes actual tokens", async () => {
     const harness = await setup(["workspace_1"], codexClientMetadata);
@@ -36,7 +51,8 @@ describe("real Better Auth Preview OAuth handler", () => {
     const session = await harness.customFetchImpl(`${issuer}/get-session`, {
       headers: browser,
     });
-    const { user } = (await session.json()) as { user: { id: string } };
+    const sessionBody = sessionResponseSchema.parse(await session.json());
+    const userId = sessionBody.user.id;
     for (const client of [
       { id: cursorClientId, redirectUri: cursorRedirectUri },
       { id: codexClientId, redirectUri: codexRedirectUris[0] },
@@ -47,23 +63,23 @@ describe("real Better Auth Preview OAuth handler", () => {
       expect(first.claims).toMatchObject({
         aud: resource,
         iss: issuer,
-        sub: user.id,
+        sub: userId,
         workspace_id: "workspace_1",
       });
       expect(first.tokens).toMatchObject({
         expires_in: 300,
-        refresh_token: expect.any(String),
         token_type: "Bearer",
       });
+      expect(first.tokens.refresh_token).toMatch(/.+/u);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const repeated = await grantRealOAuth(harness, browser, client, previewOAuthScopes.join(" "));
       expect(repeated.consentRequired).toBe(false);
-      expect(repeated.claims.sub).toBe(user.id);
+      expect(repeated.claims.sub).toBe(userId);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const refreshed = await refreshRealOAuth(harness, client.id, first.tokens.refresh_token);
       expect(refreshed.claims).toMatchObject({
         aud: resource,
-        sub: user.id,
+        sub: userId,
         workspace_id: "workspace_1",
       });
       expect(refreshed.tokens.refresh_token).not.toBe(first.tokens.refresh_token);
@@ -139,9 +155,7 @@ describe("real Better Auth Preview OAuth handler", () => {
 
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
     expect(jwksResponse.status).toBe(200);
-    const jwks = (await jwksResponse.json()) as {
-      keys: Record<string, unknown>[];
-    };
+    const jwks = jwksResponseSchema.parse(await jwksResponse.json());
     expect(jwks.keys).toHaveLength(1);
     expect(jwks.keys[0]).toMatchObject({
       alg: "ES256",
@@ -219,10 +233,7 @@ describe("real Better Auth Preview OAuth handler", () => {
       method: "POST",
     });
     expect(consent.status).toBe(200);
-    const consentBody = (await consent.json()) as {
-      redirect_uri?: string;
-      url?: string;
-    };
+    const consentBody = consentResponseSchema.parse(await consent.json());
     const callback = new URL(
       required(consentBody.redirect_uri ?? consentBody.url, "consent callback"),
     );
@@ -247,25 +258,21 @@ describe("real Better Auth Preview OAuth handler", () => {
       method: "POST",
     });
     expect(token.status).toBe(200);
-    const tokenBody = (await token.json()) as {
-      access_token: string;
-      expires_in: number;
-      refresh_token?: string;
-      scope: string;
-      token_type: string;
-    };
+    const tokenBody = tokenResponseSchema.parse(await token.json());
+    const accessToken = tokenBody.access_token;
+    const refreshToken = required(tokenBody.refresh_token, "refresh token");
     expect(tokenBody).toMatchObject({
       expires_in: 300,
       scope: requestedScope,
       token_type: "Bearer",
     });
-    expect(tokenBody.refresh_token).toMatch(/^[A-Za-z0-9_-]+$/u);
+    expect(refreshToken).toMatch(/^[A-Za-z0-9_-]+$/u);
 
     const refreshed = await customFetchImpl(`${issuer}/oauth2/token`, {
       body: new URLSearchParams({
         client_id: clientId,
         grant_type: "refresh_token",
-        refresh_token: required(tokenBody.refresh_token, "refresh token"),
+        refresh_token: refreshToken,
         resource,
       }),
       headers: {
@@ -275,17 +282,18 @@ describe("real Better Auth Preview OAuth handler", () => {
       method: "POST",
     });
     expect(refreshed.status).toBe(200);
-    await expect(refreshed.json()).resolves.toMatchObject({
-      access_token: expect.any(String),
+    const refreshedBody = tokenResponseSchema.parse(await refreshed.json());
+    expect(refreshedBody).toMatchObject({
       expires_in: 300,
-      refresh_token: expect.any(String),
       scope: requestedScope,
       token_type: "Bearer",
     });
+    expect(refreshedBody.access_token).toMatch(/.+/u);
+    expect(refreshedBody.refresh_token).toMatch(/.+/u);
 
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
-    const jwks = (await jwksResponse.json()) as { keys: JsonWebKey[] };
-    const verified = await jwtVerify(tokenBody.access_token, createLocalJWKSet(jwks), {
+    const jwks = jwksResponseSchema.parse(await jwksResponse.json());
+    const verified = await jwtVerify(accessToken, createLocalJWKSet(jwks), {
       algorithms: ["ES256"],
       audience: resource,
       issuer,
@@ -293,9 +301,9 @@ describe("real Better Auth Preview OAuth handler", () => {
     expect(verified.payload).toMatchObject({
       aud: resource,
       iss: issuer,
-      sub: expect.any(String),
       workspace_id: "workspace_1",
     });
+    expect(verified.payload.sub).toMatch(/.+/u);
     expect(Number.isInteger(verified.payload.nbf)).toBe(true);
     expect(Number.isInteger(verified.payload.iat)).toBe(true);
     expect(Number.isInteger(verified.payload.exp)).toBe(true);
@@ -337,10 +345,7 @@ describe("real Better Auth Preview OAuth handler", () => {
       }),
       method: "POST",
     });
-    const consentBody = (await consent.json()) as {
-      redirect_uri?: string;
-      url?: string;
-    };
+    const consentBody = consentResponseSchema.parse(await consent.json());
     const code = new URL(
       required(consentBody.redirect_uri ?? consentBody.url, "consent callback"),
     ).searchParams.get("code");
@@ -382,14 +387,15 @@ describe("real Better Auth Preview OAuth handler", () => {
       method: "POST",
     });
     expect(token.status).toBe(200);
-    const tokenBody = (await token.json()) as Record<string, unknown>;
+    const tokenBody = tokenResponseSchema.parse(await token.json());
+    const accessToken = tokenBody.access_token;
     expect(tokenBody).toMatchObject({
-      access_token: expect.any(String),
       expires_in: 300,
-      refresh_token: expect.any(String),
       scope: requestedScope,
       token_type: "Bearer",
     });
+    expect(tokenBody.access_token).toMatch(/.+/u);
+    expect(tokenBody.refresh_token).toMatch(/.+/u);
     expect(tokenBody).not.toHaveProperty("accessToken");
     expect(tokenBody).not.toHaveProperty("expiresIn");
     expect(tokenBody).not.toHaveProperty("tokenType");
@@ -400,7 +406,7 @@ describe("real Better Auth Preview OAuth handler", () => {
       const response = await customFetchImpl(`${issuer}/sign-in/email`, {
         body: JSON.stringify({
           email: `unknown-${attempt}@example.test`,
-          password: "not-a-valid-password",
+          password: `invalid-${attempt}-credential`,
         }),
         headers: { "content-type": "application/json", origin },
         method: "POST",
@@ -410,9 +416,9 @@ describe("real Better Auth Preview OAuth handler", () => {
     expect(signInStatuses.at(-1)).toBe(429);
 
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
-    const jwks = (await jwksResponse.json()) as { keys: JsonWebKey[] };
+    const jwks = jwksResponseSchema.parse(await jwksResponse.json());
     await expect(
-      jwtVerify(tokenBody.access_token as string, createLocalJWKSet(jwks), {
+      jwtVerify(accessToken, createLocalJWKSet(jwks), {
         algorithms: ["ES256"],
         audience: resource,
         issuer,
@@ -566,10 +572,7 @@ describe("real Better Auth Preview OAuth handler", () => {
       }),
       method: "POST",
     });
-    const consentBody = (await consent.json()) as {
-      redirect_uri?: string;
-      url?: string;
-    };
+    const consentBody = consentResponseSchema.parse(await consent.json());
     const code = new URL(
       required(consentBody.redirect_uri ?? consentBody.url, "consent callback"),
     ).searchParams.get("code");
@@ -619,10 +622,7 @@ describe("real Better Auth Preview OAuth handler", () => {
       method: "POST",
     });
     expect(denial.status).toBe(200);
-    const denialBody = (await denial.json()) as {
-      redirect_uri?: string;
-      url?: string;
-    };
+    const denialBody = consentResponseSchema.parse(await denial.json());
     const denialLocation = new URL(
       required(denialBody.redirect_uri ?? denialBody.url, "denial callback"),
     );

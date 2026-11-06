@@ -33,25 +33,30 @@ import {
 } from "@/lib/agent/apply-implementation-files";
 import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 
+const NOT_APPLICABLE = "not-applicable" as const;
+const PLANNED_PHASE = "planned" as const;
+const APPLY_FAILED_PHASE = "apply_failed" as const;
+const APPLIED_PHASE = "applied" as const;
+
 export default defineTool({
   approval(ctx) {
     if (internalCorrectionRequiresSuccessor(ctx)) {
       discardPendingPrivateApplyApproval(ctx.callId);
-      return "not-applicable";
+      return NOT_APPLICABLE;
     }
     const current = appBuilderWorkflowState.get();
     if (
-      current.phase !== "planned" &&
-      current.phase !== "apply_failed" &&
-      current.phase !== "applied"
+      current.phase !== PLANNED_PHASE &&
+      current.phase !== APPLY_FAILED_PHASE &&
+      current.phase !== APPLIED_PHASE
     ) {
       discardPendingPrivateApplyApproval(ctx.callId);
       // Only the read-only prerequisite report can execute in this phase.
-      return "not-applicable";
+      return NOT_APPLICABLE;
     }
     if (ctx.toolInput?.privateCompute !== current.proposal.target.privateCompute?.id) {
       discardPendingPrivateApplyApproval(ctx.callId);
-      return "not-applicable";
+      return NOT_APPLICABLE;
     }
     return requestPrivateApplyApproval(
       {
@@ -78,9 +83,9 @@ export default defineTool({
       };
     }
     if (
-      current.phase !== "planned" &&
-      current.phase !== "apply_failed" &&
-      current.phase !== "applied"
+      current.phase !== PLANNED_PHASE &&
+      current.phase !== APPLY_FAILED_PHASE &&
+      current.phase !== APPLIED_PHASE
     ) {
       return {
         guidance: completionGuidance(current),
@@ -179,7 +184,7 @@ export default defineTool({
       workspaceDigest: current.workspace.workspaceDigest,
     };
     invalidateProductBehaviorEvidence("source-apply");
-    const result = await executeProposalBoundApply({
+    const applyOptions: Parameters<typeof executeProposalBoundApply>[0] = {
       appliedByCallId: ctx.callId,
       artifactRevision: current.appSpec.artifactRevision,
       binding,
@@ -191,13 +196,14 @@ export default defineTool({
       ),
       proposal: current.proposal.target,
       sandbox,
-      ...(fixture
-        ? {
-            snapshotter: async (fixtureSandbox, applyRoot) =>
-              inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId),
-          }
-        : {}),
-    });
+    };
+    if (fixture) {
+      applyOptions.snapshotter = async (
+        fixtureSandbox: Parameters<typeof inspectFixtureApplyOverlay>[0],
+        applyRoot: Parameters<typeof inspectFixtureApplyOverlay>[1],
+      ) => await inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId);
+    }
+    const result = await executeProposalBoundApply(applyOptions);
     if (!result.ok) {
       updateExactWorkflow({
         expected: current,
@@ -233,8 +239,14 @@ export default defineTool({
         repair =
           " No safe command diagnostic was captured; inspect the named command in the isolated checkout before changing app files.";
       }
+      const missingDependencyMessage =
+        result.receipt.missingDependency === undefined
+          ? ""
+          : ` while resolving ${result.receipt.missingDependency}`;
+      const diagnosticMessage = diagnostics === "" ? "" : ` Diagnostic:\n${diagnostics}`;
+      const failureKind = result.receipt.commandFailureKind ?? "unknown";
       throw new Error(
-        `Builder failed to run ${command} (exit ${result.receipt.command.exitCode}, ${result.receipt.commandFailureKind ?? "unknown"})${result.receipt.missingDependency === undefined ? "" : ` while resolving ${result.receipt.missingDependency}`}.${diagnostics === "" ? "" : ` Diagnostic:\n${diagnostics}`}${repair}`,
+        `Builder failed to run ${command} (exit ${result.receipt.command.exitCode}, ${failureKind})${missingDependencyMessage}.${diagnosticMessage}${repair}`,
       );
     }
     updateExactWorkflow({

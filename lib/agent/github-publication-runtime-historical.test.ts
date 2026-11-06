@@ -157,16 +157,16 @@ const ownedDraftFixture = (
     ...unsigned,
     digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
   };
-  const read = vi.fn<GitHubPublicationReceiptStore["read"]>(async () => receipt);
+  const read = vi.fn<GitHubPublicationReceiptStore["read"]>(() => receipt);
   const findDraftByPullRequest = vi.fn<
     NonNullable<GitHubPublicationReceiptStore["findDraftByPullRequest"]>
-  >(async () => receipt);
+  >(() => receipt);
   const runtime = composeGitHubPublicationRuntime({
     adapter: {
       ...adapterWithoutHistoricalLookup(),
-      inspectExistingDraft: async () => draft,
-      inspectInstallation: async () => installation,
-      inspectRepository: async () => repository,
+      inspectExistingDraft: () => draft,
+      inspectInstallation: () => installation,
+      inspectRepository: () => repository,
       ...adapterOverrides,
     },
     enabled: true,
@@ -188,7 +188,7 @@ const recordedSource = (draft: ExistingDraftObservation) => ({
 describe("same-session owned draft repair", () => {
   it("recovers the exact owned historical published head without retained reconciliation slots", async () => {
     const { draft, runtime } = ownedDraftFixture();
-    const readPublishedSource = vi.fn(async () => recordedSource(draft));
+    const readPublishedSource = vi.fn(() => recordedSource(draft));
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
       owner: draft.owner,
@@ -212,7 +212,7 @@ describe("same-session owned draft repair", () => {
         name: draft.name,
         owner: draft.owner,
         pullRequestNumber: draft.number,
-        readPublishedSource: async () => recordedSource(draft),
+        readPublishedSource: () => recordedSource(draft),
         repositoryId: draft.repositoryId,
       });
       expect(result.publishedHeadSha).toBe(draft.headSha);
@@ -239,7 +239,7 @@ describe("same-session owned draft repair", () => {
         name: draft.name,
         owner: draft.owner,
         pullRequestNumber: draft.number,
-        readPublishedSource: async () => changed,
+        readPublishedSource: () => changed,
         repositoryId: draft.repositoryId,
       });
       expect(result.publishedHeadSha).toBe(receipt.branchSha);
@@ -250,7 +250,7 @@ describe("same-session owned draft repair", () => {
   it("never consults a marker without the tenant-owned original publication receipt", async () => {
     const { draft, findDraftByPullRequest, runtime } = ownedDraftFixture();
     findDraftByPullRequest.mockImplementationOnce(missingPublicationReceipt);
-    const readPublishedSource = vi.fn(async () => recordedSource(draft));
+    const readPublishedSource = vi.fn(() => recordedSource(draft));
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
       owner: draft.owner,
@@ -264,7 +264,7 @@ describe("same-session owned draft repair", () => {
 
   it("keeps the existing original-head baseline without an additional marker read", async () => {
     const { draft, runtime } = ownedDraftFixture({ branchSha: "1".repeat(40) });
-    const readPublishedSource = vi.fn(async () => recordedSource(draft));
+    const readPublishedSource = vi.fn(() => recordedSource(draft));
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
       owner: draft.owner,
@@ -293,7 +293,7 @@ describe("same-session owned draft repair", () => {
   it.each([true, false])(
     "uses the last approved merge as the second revision baseline only with provider proof (%s)",
     async (applied) => {
-      const inspectAppliedDraftReconciliation = vi.fn(async () => applied);
+      const inspectAppliedDraftReconciliation = vi.fn(() => applied);
       const { draft, receipt, repository, runtime } = ownedDraftFixture(
         {},
         {
@@ -533,12 +533,14 @@ describe("same-session owned draft repair", () => {
       });
       const request = {
         githubSource,
-        ...(marker === "retained" ? { priorPublishedProposalDigest: receipt.proposalDigest } : {}),
         pullRequestNumber: draft.number,
         review,
         selectedCheckoutHeadSha: draft.headSha,
         selectedCheckoutHeadTree: draft.headTree,
       };
+      if (marker === "retained") {
+        request.priorPublishedProposalDigest = receipt.proposalDigest;
+      }
       if (marker === "unavailable") {
         findDraftByPullRequest.mockImplementationOnce(missingPublicationReceipt);
         await expect(runtime.sealExistingDraftReconciliation(request)).rejects.toThrow();

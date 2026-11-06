@@ -19,6 +19,8 @@ import type { PrivateComputeProfile } from "../sandbox/private-compute-profile";
 import type { SandboxSession } from "eve/sandbox";
 import { canAutoSelectDevelopmentSource } from "../repository/development-source";
 
+const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+
 /** Select one declared, provider-observed profile before the new proposal is hashed; this performs no resource effect. */
 export const planPrivateComputeProfile = async (
   sandbox: SandboxSession,
@@ -57,7 +59,6 @@ export const planPrivateComputeProfile = async (
       "This app has a custom check task. Preserve it and plan its compute-aware adaptation through the normal reviewed app change flow; no task was replaced.",
     );
   }
-  const hash = (text: string) => createHash("sha256").update(text).digest("hex");
   return privateComputeProfileSchema.parse({
     checkPolicy: {
       afterSha256: hash(PRIVATE_COMPUTE_CHECK_TASK),
@@ -129,7 +130,7 @@ export const refreshPrivateComputePlanning = (
   }
   appBuilderWorkflowState.update((latest) => {
     assertExactWorkflowState(latest, current, "prepare a new private compute plan");
-    return {
+    const next: AppBuilderWorkflowState = {
       appSpec: current.appSpec,
       artifacts: current.artifacts,
       phase: "app_spec_accepted",
@@ -137,11 +138,14 @@ export const refreshPrivateComputePlanning = (
       sourceReceipt: current.sourceReceipt,
       version: APP_BUILDER_WORKFLOW_VERSION,
       workspace: current.workspace,
-      ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-      ...(current.checkoutDependencyAttempts === undefined
-        ? {}
-        : { checkoutDependencyAttempts: current.checkoutDependencyAttempts }),
     };
+    if (current.githubSource !== undefined) {
+      next.githubSource = current.githubSource;
+    }
+    if (current.checkoutDependencyAttempts !== undefined) {
+      next.checkoutDependencyAttempts = current.checkoutDependencyAttempts;
+    }
+    return next;
   });
 };
 export const preparePrivateComputePlanning = async (input: {

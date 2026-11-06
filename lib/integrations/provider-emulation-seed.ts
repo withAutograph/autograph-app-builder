@@ -5,6 +5,10 @@ export const EMULATED_GITHUB_REPOSITORY = "autograph-local/demo-app";
 export const EMULATED_GITHUB_INSTALLATION_ID = 1001;
 export const EMULATED_VERCEL_CONFIGURATION_ID = "icfg_local_1";
 export const EMULATED_VERCEL_TEAM_ID = "autograph-local";
+const EMULATED_APP_NAME = "Autograph App Builder";
+const EMULATED_LOCAL_ACCOUNT = "autograph-local";
+const EMULATED_DEVELOPER_EMAIL = "dev@autograph.local";
+const EMULATED_DEVELOPER_LOGIN = "autograph-dev";
 
 interface SeedInput {
   origin: string;
@@ -17,62 +21,73 @@ interface SeedInput {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function providerEmulationSeed(input: SeedInput): {
-  github: GitHubSeedConfig;
-  vercel: VercelSeedConfig;
-} {
-  const github: GitHubSeedConfig = {
-    apps: [
-      {
-        app_id: 12_345,
-        installations: [
-          {
-            account: "autograph-local",
-            installation_id: EMULATED_GITHUB_INSTALLATION_ID,
-            repositories: [EMULATED_GITHUB_REPOSITORY],
-            repository_selection: "selected",
-          },
-        ],
-        name: "Autograph App Builder",
-        ...(input.githubAppPrivateKey ? { private_key: input.githubAppPrivateKey } : {}),
-        slug: "autograph-app-builder",
-      },
-    ],
-    ...(input.strictGitHubOAuth
+export function providerEmulationSeed(input: SeedInput) {
+  const app: GitHubSeedConfig["apps"][number] =
+    input.githubAppPrivateKey !== undefined && input.githubAppPrivateKey !== ""
       ? {
-          oauth_apps: [
+          app_id: 12_345,
+          installations: [
             {
-              client_id: input.githubClientId,
-              client_secret: input.githubClientSecret,
-              name: "Autograph App Builder",
-              redirect_uris: [
-                `${input.origin}/github/installations/callback`,
-                `${input.origin}/api/auth/callback/github`,
-              ],
+              account: EMULATED_LOCAL_ACCOUNT,
+              installation_id: EMULATED_GITHUB_INSTALLATION_ID,
+              repositories: [EMULATED_GITHUB_REPOSITORY],
+              repository_selection: "selected",
             },
           ],
+          name: EMULATED_APP_NAME,
+          private_key: input.githubAppPrivateKey,
+          slug: "autograph-app-builder",
         }
-      : {}),
-    orgs: [{ login: "autograph-local", name: "Autograph Local" }],
-    repos: [{ auto_init: true, name: "demo-app", owner: "autograph-local" }],
+      : {
+          app_id: 12_345,
+          installations: [
+            {
+              account: EMULATED_LOCAL_ACCOUNT,
+              installation_id: EMULATED_GITHUB_INSTALLATION_ID,
+              repositories: [EMULATED_GITHUB_REPOSITORY],
+              repository_selection: "selected",
+            },
+          ],
+          name: EMULATED_APP_NAME,
+          slug: "autograph-app-builder",
+        };
+
+  const github: GitHubSeedConfig = {
+    apps: [app],
+    orgs: [{ login: EMULATED_LOCAL_ACCOUNT, name: "Autograph Local" }],
+    repos: [{ auto_init: true, name: "demo-app", owner: EMULATED_LOCAL_ACCOUNT }],
     tokens: {
       emulate_local_provider_token: {
-        login: "autograph-dev",
+        login: EMULATED_DEVELOPER_LOGIN,
         scopes: ["repo", "user"],
       },
       emulate_preview_provider_token: {
-        login: "autograph-dev",
+        login: EMULATED_DEVELOPER_LOGIN,
         scopes: ["repo", "user"],
       },
     },
     users: [
       {
-        email: "dev@autograph.local",
-        login: "autograph-dev",
+        email: EMULATED_DEVELOPER_EMAIL,
+        login: EMULATED_DEVELOPER_LOGIN,
         name: "Autograph Developer",
       },
     ],
   };
+  if (input.strictGitHubOAuth) {
+    github.oauth_apps = [
+      {
+        client_id: input.githubClientId,
+        client_secret: input.githubClientSecret,
+        name: EMULATED_APP_NAME,
+        redirect_uris: [
+          `${input.origin}/github/installations/callback`,
+          `${input.origin}/api/auth/callback/github`,
+        ],
+      },
+    ];
+  }
+
   return {
     github,
     vercel: {
@@ -80,21 +95,21 @@ export function providerEmulationSeed(input: SeedInput): {
         {
           client_id: input.vercelClientId,
           client_secret: input.vercelClientSecret,
-          name: "Autograph App Builder",
+          name: EMULATED_APP_NAME,
           redirect_uris: [
             `${input.origin}/local-connections/vercel/oauth-callback`,
             `${input.origin}/api/auth/callback/vercel`,
           ],
         },
       ],
-      teams: [{ name: "Autograph Local", slug: "autograph-local" }],
+      teams: [{ name: "Autograph Local", slug: EMULATED_LOCAL_ACCOUNT }],
       users: [
         {
-          email: "dev@autograph.local",
+          email: EMULATED_DEVELOPER_EMAIL,
           name: "Autograph Developer",
-          username: "autograph-dev",
+          username: EMULATED_DEVELOPER_LOGIN,
         },
       ],
     },
-  };
+  } satisfies { github: GitHubSeedConfig; vercel: VercelSeedConfig };
 }

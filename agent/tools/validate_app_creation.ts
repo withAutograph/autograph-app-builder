@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex -- Preserve the registered public tool name. */
 import { assertApprovedPrivateApplySession } from "@/lib/agent/private-apply-authority";
 import {
   ReviewedCheckRecipeRequiredError,
@@ -35,6 +36,7 @@ import {
   assertExistingAppImplementationFiles,
   implementationFilesSchema,
 } from "@/lib/agent/apply-implementation-files";
+import type { AppBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -176,6 +178,12 @@ const appValidationRuntime: AppValidationRuntime = {
   executeValidation: executeProposalBoundValidation,
   validateBackend: validatePersistentBackend,
 };
+const appValidationInputSchema = z.object({
+  implementationFiles: implementationFilesSchema.default([]),
+  repairOnly: z.boolean().optional(),
+  runBrowserTests: z.boolean().optional(),
+});
+type AppValidationInput = z.infer<typeof appValidationInputSchema>;
 /** Internal execution ports keep the public tool fixed and focused fixtures faithful. */
 export const createAppValidationTool = (
   executionPorts: AppValidationRuntime = appValidationRuntime,
@@ -184,18 +192,63 @@ export const createAppValidationTool = (
     description:
       "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Use repairOnly with implementationFiles to update the already approved app in its private checkout without running checks or requesting another Build. Open the updated app with start_app_preview. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. Set runBrowserTests only when authenticated browser testing is wanted for this app. Report those results separately; a runtime block preserves the technical receipt. Independent paid source assessment can be requested at accept_change_set after implementation and technical checks are ready. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
     // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep the workflow phase, cancellation and original failure receipt branches explicit.
-    async execute(input, ctx) {
-      const current = appBuilderWorkflowState.get();
+    async execute(input: AppValidationInput, ctx) {
+      const workflowState = appBuilderWorkflowState.get();
+      let current: AppBuilderWorkflowState;
+      switch (workflowState.phase) {
+        case "applied": {
+          current = workflowState;
+          break;
+        }
+        case "validation_pending": {
+          current = workflowState;
+          break;
+        }
+        case "validation_failed": {
+          current = workflowState;
+          break;
+        }
+        case "validated": {
+          current = workflowState;
+          break;
+        }
+        case "reviewed": {
+          current = workflowState;
+          break;
+        }
+        case "empty":
+        case "prepared":
+        case "ui_previewed":
+        case "ui_accepted":
+        case "app_spec_accepted":
+        case "dependencies_prepared":
+        case "identity_resolved":
+        case "planned":
+        case "apply_failed":
+        case "publication_pending":
+        case "publication_failed":
+        case "published_local":
+        case "branch_publication_pending":
+        case "branch_publication_failed":
+        case "published_branch_worktree":
+        case "fresh_bootstrap_pending":
+        case "fresh_bootstrap_failed":
+        case "published_fresh_bootstrap": {
+          throw new Error("Apply the requested changes before running the repository checks.");
+        }
+        default: {
+          return workflowState satisfies never;
+        }
+      }
       if (input.repairOnly === true && input.implementationFiles.length === 0) {
         throw new Error("Supply the app files to repair before opening a working preview.");
       }
       const candidate = draftReconciliationState.get();
-      if (
-        input.implementationFiles.length === 0 &&
+      const hasReviewedDraft =
         candidate !== null &&
         resolveDraftReviewedWorkflow(current, candidate) !== undefined &&
-        currentDraftCandidateSource(current, candidate) !== undefined
-      ) {
+        currentDraftCandidateSource(current, candidate) !== undefined;
+      if (input.implementationFiles.length === 0 && hasReviewedDraft) {
         return await validateDraftReconciliation(
           {
             additionalCheckTasks: [],
@@ -204,15 +257,6 @@ export const createAppValidationTool = (
           },
           ctx,
         );
-      }
-      if (
-        current.phase !== "applied" &&
-        current.phase !== "validation_pending" &&
-        current.phase !== "validation_failed" &&
-        current.phase !== "validated" &&
-        current.phase !== "reviewed"
-      ) {
-        throw new Error("Apply the requested changes before running the repository checks.");
       }
       if (input.repairOnly === true) {
         assertApprovedPrivateApplySession({
@@ -264,27 +308,36 @@ export const createAppValidationTool = (
       const priorPublishedGitHubDraftProposalDigest =
         current.publishedGitHubDraftProposalDigest ??
         (current.phase === "reviewed" ? current.githubDraftProposal?.proposal.digest : undefined);
-      let base = {
+      const base = {
         appSpec: current.appSpec,
         applyReceipt: current.applyReceipt,
         artifacts: current.artifacts,
-        ...(priorPublishedGitHubDraftProposalDigest === undefined
-          ? {}
-          : { publishedGitHubDraftProposalDigest: priorPublishedGitHubDraftProposalDigest }),
         dependencyReceipt: current.dependencyReceipt,
-        ...(current.checkoutDependencyAttempts === undefined
-          ? {}
-          : { checkoutDependencyAttempts: current.checkoutDependencyAttempts }),
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
         identityReceipt: current.identityReceipt,
         preparedByCallId: current.preparedByCallId,
         proposal: current.proposal,
         sourceReceipt: current.sourceReceipt,
         version: APP_BUILDER_WORKFLOW_VERSION,
         workspace: current.workspace,
-      } as const;
+      };
+      // SAFETY: workflowState was narrowed to validation-capable phases, whose shared fields match base.
+      const workflowBase = { ...base } as typeof base & {
+        publishedGitHubDraftProposalDigest?: string;
+        checkoutDependencyAttempts?: typeof current.checkoutDependencyAttempts;
+        githubSource?: typeof current.githubSource;
+      };
+      if (priorPublishedGitHubDraftProposalDigest !== undefined) {
+        workflowBase.publishedGitHubDraftProposalDigest = priorPublishedGitHubDraftProposalDigest;
+      }
+      if (current.checkoutDependencyAttempts !== undefined) {
+        workflowBase.checkoutDependencyAttempts = current.checkoutDependencyAttempts;
+      }
+      if (current.githubSource !== undefined) {
+        workflowBase.githubSource = current.githubSource;
+      }
+      let checkoutDependencyAttempts = current.checkoutDependencyAttempts ?? [];
       appBuilderWorkflowState.update(() => ({
-        ...base,
+        ...workflowBase,
         phase: "applied",
       }));
       if (input.implementationFiles.length > 0) {
@@ -335,14 +388,14 @@ export const createAppValidationTool = (
               });
           await repairCheckoutDependenciesAfterValidationFailure({
             assertCurrent,
-            attempts: base.checkoutDependencyAttempts ?? [],
+            attempts: checkoutDependencyAttempts,
             checkoutIdentity: current.applyReceipt.digest,
             failure: current.validationFailure,
             logStore,
             onAttempt: (dependencyAttempt) => {
               assertCurrent();
               const attempts = [
-                ...(base.checkoutDependencyAttempts ?? []).filter(
+                ...checkoutDependencyAttempts.filter(
                   (saved) => saved.attemptDigest !== dependencyAttempt.attemptDigest,
                 ),
                 dependencyAttempt,
@@ -352,7 +405,8 @@ export const createAppValidationTool = (
                 return { ...latest, checkoutDependencyAttempts: attempts };
               });
               expected = appBuilderWorkflowState.get();
-              base = { ...base, checkoutDependencyAttempts: attempts };
+              checkoutDependencyAttempts = attempts;
+              workflowBase.checkoutDependencyAttempts = attempts;
             },
             prepareInstall: async () => {
               ctx.abortSignal?.throwIfAborted();
@@ -368,14 +422,15 @@ export const createAppValidationTool = (
           appBuilderWorkflowState.update((latest) => {
             assertExactWorkflowState(latest, expected, "retain failed dependency recovery");
             return {
-              ...base,
+              ...workflowBase,
+              checkoutDependencyAttempts,
               phase: "validation_failed",
               validationFailure: current.validationFailure,
             };
           });
           ctx.abortSignal?.throwIfAborted();
           return {
-            dependencyAttempts: base.checkoutDependencyAttempts ?? [],
+            dependencyAttempts: checkoutDependencyAttempts,
             problem:
               error instanceof Error ? error.message : "Repository dependency recovery failed.",
             reason: "dependency-recovery",
@@ -402,7 +457,7 @@ export const createAppValidationTool = (
         port: executionPorts.prepareSchemaInput,
       });
       if (!schemaInput.ok) {
-        appBuilderWorkflowState.update(() => ({ ...base, phase: "applied" }));
+        appBuilderWorkflowState.update(() => ({ ...workflowBase, phase: "applied" }));
         return schemaInput.result;
       }
       if (!fixture) {
@@ -418,7 +473,7 @@ export const createAppValidationTool = (
           });
         } catch (error) {
           ctx.abortSignal?.throwIfAborted();
-          appBuilderWorkflowState.update(() => ({ ...base, phase: "applied" }));
+          appBuilderWorkflowState.update(() => ({ ...workflowBase, phase: "applied" }));
           return {
             problem:
               error instanceof Error ? error.message : "Authenticated runtime preparation failed.",
@@ -437,7 +492,7 @@ export const createAppValidationTool = (
       });
       const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId, testShards);
       appBuilderWorkflowState.update(() => ({
-        ...base,
+        ...workflowBase,
         phase: "validation_pending",
         validationAttempt: attempt,
       }));
@@ -464,7 +519,7 @@ export const createAppValidationTool = (
       validationPhase(ctx.callId, "repository_commands_finished", result.ok);
       if (!result.ok) {
         appBuilderWorkflowState.update(() => ({
-          ...base,
+          ...workflowBase,
           phase: "validation_failed",
           validationFailure: result.receipt,
         }));
@@ -484,7 +539,7 @@ export const createAppValidationTool = (
         };
       }
       appBuilderWorkflowState.update(() => ({
-        ...base,
+        ...workflowBase,
         phase: "validated",
         validationReceipt: result.receipt,
       }));
@@ -501,7 +556,7 @@ export const createAppValidationTool = (
       });
       validationPhase(ctx.callId, "validation_app_described", description !== undefined);
       appBuilderWorkflowState.update(() => ({
-        ...base,
+        ...workflowBase,
         appBackendKind: description?.backend.kind,
         phase: "validated",
         validationReceipt: result.receipt,
@@ -594,14 +649,16 @@ export const createAppValidationTool = (
         attemptDigest: result.receipt.attemptDigest,
         backendValidation,
         commandCount: result.receipt.commands.length,
-        logs: result.receipt.commands.map((command) => ({
-          name: command.name,
-          ...(command.logs === undefined
-            ? {}
-            : {
-                logs: validationLogsWithReadInputs(result.receipt.attemptDigest, command),
-              }),
-        })),
+        logs: result.receipt.commands.map(
+          (command) =>
+            ({
+              logs:
+                command.logs === undefined
+                  ? undefined
+                  : validationLogsWithReadInputs(result.receipt.attemptDigest, command),
+              name: command.name,
+            }) satisfies { name: string; logs?: ReturnType<typeof validationLogsWithReadInputs> },
+        ),
         productAcceptance: productAcceptanceObligations(
           current.appSpec,
           evidence,
@@ -611,15 +668,11 @@ export const createAppValidationTool = (
         productionHandoff,
         reused: false,
         sourceAssessment,
-        status: backendValidationStatus(backendValidation.status),
         technicalStatus: "passed" as const,
+        status: backendValidationStatus(backendValidation.status),
       };
     },
-    inputSchema: z.object({
-      implementationFiles: implementationFilesSchema.default([]),
-      repairOnly: z.boolean().optional(),
-      runBrowserTests: z.boolean().optional(),
-    }),
+    inputSchema: appValidationInputSchema,
   });
 
 export default createAppValidationTool();

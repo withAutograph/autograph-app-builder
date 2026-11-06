@@ -6,24 +6,23 @@ import { activeBuilderModelId } from "./active-model";
 
 const GATEWAY_MODELS_URL = "https://ai-gateway.vercel.sh/v1/models";
 
-const gatewayModelSchema = z
-  .object({
-    id: z.string().min(3).max(256),
-    name: z.string().min(1).max(256),
-    owned_by: z.string().min(1).max(128),
-    tags: z.array(z.string().min(1).max(128)).max(64).default([]),
-    type: z.string().max(64),
-    // Zod's schema fallback API is not a Promise method.
-    // oxlint-disable-next-line promise/prefer-await-to-then
-    zdr: z.enum(["all", "some", "none"]).catch("none"),
-  })
-  .passthrough();
+const gatewayModelSchema = z.looseObject({
+  id: z.string().min(3).max(256),
+  name: z.string().min(1).max(256),
+  owned_by: z.string().min(1).max(128),
+  tags: z.array(z.string().min(1).max(128)).max(64).default([]),
+  type: z.string().max(64),
+  zdr: z.preprocess(
+    (value) => (value === "all" || value === "some" || value === "none" ? value : "none"),
+    z.enum(["all", "some", "none"]),
+  ),
+});
 
-const responseSchema = z.object({ data: z.array(gatewayModelSchema).max(1000) }).passthrough();
+const responseSchema = z.looseObject({ data: z.array(gatewayModelSchema).max(1000) });
 
 type ModelState = BuilderIntegrationState["models"];
 // Availability fallback only, never a freshness cache. The Next adapter owns TTL.
-let lastKnownGood: ModelState | undefined;
+let lastKnownGood: ModelState | null = null;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadGatewayModels(input?: {
@@ -40,18 +39,21 @@ export async function loadGatewayModels(input?: {
       throw new Error("gateway-models-unavailable");
     }
     const parsed = responseSchema.parse(await response.json());
-    const entries = parsed.data
-      .filter((model) => model.type === "language" && model.owned_by === "openai")
-      .map((model) =>
-        builderModelSchema.parse({
-          capabilities: model.tags,
-          id: model.id,
-          name: model.name,
-          provider: model.owned_by,
-          zdr: model.zdr,
-        }),
-      )
-      .toSorted((left, right) => left.name.localeCompare(right.name));
+    const entries: ModelState["entries"] = [];
+    for (const model of parsed.data) {
+      if (model.type === "language" && model.owned_by === "openai") {
+        entries.push(
+          builderModelSchema.parse({
+            capabilities: model.tags,
+            id: model.id,
+            name: model.name,
+            provider: model.owned_by,
+            zdr: model.zdr,
+          }),
+        );
+      }
+    }
+    entries.sort((left, right) => left.name.localeCompare(right.name));
     if (entries.length === 0) {
       throw new Error("gateway-models-empty");
     }
@@ -61,9 +63,11 @@ export async function loadGatewayModels(input?: {
     const value: ModelState = {
       cached: false,
       entries,
-      ...(defaultModelId ? { defaultModelId } : {}),
       status: "ready",
     };
+    if (defaultModelId) {
+      value.defaultModelId = defaultModelId;
+    }
     lastKnownGood = value;
     return value;
   } catch {
@@ -76,5 +80,5 @@ export async function loadGatewayModels(input?: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function resetGatewayModelCacheForTests() {
-  lastKnownGood = undefined;
+  lastKnownGood = null;
 }

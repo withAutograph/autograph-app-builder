@@ -5,17 +5,34 @@ import { verifiedHostedClaimsSchema } from "../eve/hosted-auth";
 import type { VerifiedHostedClaims } from "../eve/hosted-auth";
 
 const strongAlgorithmSchema = z.enum(["RS256", "PS256", "ES256", "EdDSA"]);
+const hostedMcpAuthConfigFields = {
+  algorithm: strongAlgorithmSchema,
+  audience: z.url(),
+  issuer: z.url(),
+  jwksUrl: z.url(),
+  resourceUrl: z.url(),
+};
+const protectedTokenClaimsSchema = z.object({
+  aud: z.union([z.string(), z.array(z.string())]),
+  exp: z.number().int(),
+  iat: z.number().int(),
+  iss: z.string(),
+  nbf: z.number().int(),
+  scope: z.string(),
+  sub: z.string(),
+  workspace_id: z.string(),
+});
+const cacheControlHeader = "no-store";
+const defaultSessionScope = "autograph:session";
 
 export const hostedMcpAuthConfigSchema = z
-  .object({
-    algorithm: strongAlgorithmSchema,
-    audience: z.string().url().startsWith("https://"),
-    issuer: z.string().url().startsWith("https://"),
-    jwksUrl: z.string().url().startsWith("https://"),
-    resourceUrl: z.string().url().startsWith("https://"),
-  })
-  .strict()
+  .strictObject(hostedMcpAuthConfigFields)
   .superRefine((config, context) => {
+    for (const [field, value] of Object.entries(config)) {
+      if (field !== "algorithm" && !value.startsWith("https://")) {
+        context.addIssue({ code: "custom", message: `${field} must use HTTPS.`, path: [field] });
+      }
+    }
     for (const [field, value] of [
       ["issuer", config.issuer],
       ["jwksUrl", config.jwksUrl],
@@ -152,13 +169,11 @@ export function createRemoteJwksAccessTokenVerifier(input: {
       const protectedHeader = decodeProtectedHeader(token);
       if (
         protectedHeader.alg !== config.algorithm ||
-        typeof protectedHeader.kid !== "string" ||
-        protectedHeader.kid.length === 0 ||
-        protectedHeader.kid.length > 200
+        !z.string().min(1).max(200).safeParse(protectedHeader.kid).success
       ) {
         throw new Error("Invalid protected token header.");
       }
-      const { payload } = await jwtVerify(token, remoteJwks, {
+      const { payload: rawPayload } = await jwtVerify(token, remoteJwks, {
         algorithms: [config.algorithm],
         audience: config.audience,
         clockTolerance: 0,
@@ -166,26 +181,17 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         issuer: config.issuer,
         requiredClaims: ["iss", "aud", "sub", "exp", "iat", "nbf", "scope"],
       });
+      const payload = protectedTokenClaimsSchema.parse(rawPayload);
       const { exp, iat, nbf } = payload;
+      const identityMismatch = payload.iss !== config.issuer || payload.aud !== config.audience;
+      const outsideValidityWindow =
+        exp <= nowEpochSeconds || nbf > nowEpochSeconds || iat > nowEpochSeconds;
+      const lifetimeTooLong = exp - nbf > 300 || exp - iat > 300;
       if (
-        payload.iss !== config.issuer ||
-        payload.aud !== config.audience ||
-        typeof payload.sub !== "string" ||
-        typeof exp !== "number" ||
-        !Number.isInteger(exp) ||
-        typeof iat !== "number" ||
-        !Number.isInteger(iat) ||
-        typeof nbf !== "number" ||
-        !Number.isInteger(nbf) ||
-        exp <= nowEpochSeconds ||
-        nbf > nowEpochSeconds ||
-        iat > nowEpochSeconds ||
-        // Issuance precedes async membership claims; nbf can legitimately be later.
-        exp - nbf > 300 ||
-        exp - iat > 300 ||
-        typeof payload.scope !== "string" ||
-        !oauthScopeTokenPattern.test(payload.scope) ||
-        typeof payload.workspace_id !== "string"
+        identityMismatch ||
+        outsideValidityWindow ||
+        lifetimeTooLong ||
+        !oauthScopeTokenPattern.test(payload.scope)
       ) {
         throw new Error("Invalid verified token claims.");
       }
@@ -221,19 +227,20 @@ export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function challenge(config: HostedMcpAuthConfig, attributes: string[]) {
   const metadataUrl = new URL("/.well-known/oauth-protected-resource", config.resourceUrl).href;
-  return `Bearer ${[...attributes, `resource_metadata="${metadataUrl}"`].join(", ")}`;
+  const resourceMetadata = `resource_metadata="${metadataUrl}"`;
+  return `Bearer ${[...attributes, resourceMetadata].join(", ")}`;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function unauthorizedResponse(
   config: HostedMcpAuthConfig,
-  scopes = ["autograph:session"],
+  scopes = [defaultSessionScope],
 ): Response {
   return Response.json(
     { error: "unauthorized" },
     {
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": cacheControlHeader,
         "WWW-Authenticate": challenge(config, [
           'error="invalid_token"',
           'error_description="Sign in to Autograph App Builder to continue"',
@@ -248,13 +255,13 @@ export function unauthorizedResponse(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function forbiddenResponse(
   config: HostedMcpAuthConfig,
-  scopes = ["autograph:session"],
+  scopes = [defaultSessionScope],
 ): Response {
   return Response.json(
     { error: "forbidden" },
     {
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": cacheControlHeader,
         "WWW-Authenticate": challenge(config, [
           'error="insufficient_scope"',
           'error_description="Reconnect Autograph App Builder to grant the required permissions"',
@@ -270,7 +277,7 @@ export function forbiddenResponse(
 export function notFoundResponse(): Response {
   return Response.json(
     { error: "not_found" },
-    { headers: { "Cache-Control": "no-store" }, status: 404 },
+    { headers: { "Cache-Control": cacheControlHeader }, status: 404 },
   );
 }
 
@@ -278,6 +285,6 @@ export function notFoundResponse(): Response {
 export function unavailableResponse(): Response {
   return Response.json(
     { error: "service_unavailable" },
-    { headers: { "Cache-Control": "no-store" }, status: 503 },
+    { headers: { "Cache-Control": cacheControlHeader }, status: 503 },
   );
 }

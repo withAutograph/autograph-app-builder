@@ -1,5 +1,5 @@
 /** Stories render client state without uploading or importing application source. */
-const unavailable = (): Promise<never> => {
+const unavailable = async (): Promise<never> => {
   throw new Error("Source upload actions are unavailable in Storybook.");
 };
 export const beginBuilderSourceUpload = unavailable;

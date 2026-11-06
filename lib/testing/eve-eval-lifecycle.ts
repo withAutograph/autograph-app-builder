@@ -46,11 +46,7 @@ function parseProcessFailure(value: Error): ProcessFailure {
 }
 
 function ownerBound(info: Awaited<ReturnType<typeof lstat>>) {
-  return (
-    info.uid === process.getuid?.() &&
-    !info.isSymbolicLink() &&
-    (info.mode & 0o022) === 0
-  );
+  return info.uid === process.getuid?.() && !info.isSymbolicLink() && (info.mode & 0o022) === 0;
 }
 
 function sameFile(
@@ -295,11 +291,7 @@ export function createEveEvalRuntimeDirectories(parent: string = tmpdir()) {
   for (const path of [root, home, workflowData]) {
     const info = lstatSync(path);
     const safePath = realpathSync(path) === path && info.isDirectory() && !info.isSymbolicLink();
-    if (
-      !safePath ||
-      info.uid !== process.getuid?.() ||
-      (info.mode & 0o077) !== 0
-    ) {
+    if (!safePath || info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0) {
       throw new Error("The Eve eval runtime directory was not owner-only.");
     }
   }

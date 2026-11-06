@@ -5,49 +5,58 @@ import { z } from "zod";
 import { hostedIdentifierSchema } from "../eve/hosted-auth";
 
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
-const instantSchema = z.string().datetime({ offset: true });
+const instantSchema = z.iso.datetime({ offset: true });
+const hostedUrlSchema = z.url({ protocol: /^https$/u });
+const hostedAdminAction = {
+  membershipRevoke: "membership.revoke",
+  membershipSeed: "membership.seed",
+  retentionApply: "retention.apply",
+  tenantDelete: "tenant.delete",
+} as const;
+const issuerPath = "/api/auth";
+const audiencePath = "/mcp";
+const issuerUrlMessage = "Hosted Preview issuer must be the exact /api/auth URL.";
+const audienceUrlMessage = "Hosted Preview audience must be the exact /mcp URL.";
+const sharedOriginMessage = "Hosted Preview issuer and audience must share one origin.";
+const hostedAdminActionsSchema = z.enum([
+  hostedAdminAction.membershipRevoke,
+  hostedAdminAction.membershipSeed,
+  hostedAdminAction.retentionApply,
+  hostedAdminAction.tenantDelete,
+]);
 
 export const hostedTenantAuthoritySchema = z
-  .object({
-    audience: z.string().url().startsWith("https://"),
-    issuer: z.string().url().startsWith("https://"),
+  .strictObject({
+    audience: hostedUrlSchema,
+    issuer: hostedUrlSchema,
     ownerUserId: hostedIdentifierSchema,
     workspaceId: hostedIdentifierSchema,
   })
-  .strict()
   .superRefine((authority, context) => {
     const issuer = new URL(authority.issuer);
     const audience = new URL(authority.audience);
-    if (
-      issuer.username ||
-      issuer.password ||
-      issuer.search ||
-      issuer.hash ||
-      issuer.pathname !== "/api/auth"
-    ) {
+    const issuerHasCredentials = Boolean(issuer.username || issuer.password);
+    const issuerHasQueryOrHash = Boolean(issuer.search || issuer.hash);
+    if (issuerHasCredentials || issuerHasQueryOrHash || issuer.pathname !== issuerPath) {
       context.addIssue({
         code: "custom",
-        message: "Hosted Preview issuer must be the exact /api/auth URL.",
+        message: issuerUrlMessage,
         path: ["issuer"],
       });
     }
-    if (
-      audience.username ||
-      audience.password ||
-      audience.search ||
-      audience.hash ||
-      audience.pathname !== "/mcp"
-    ) {
+    const audienceHasCredentials = Boolean(audience.username || audience.password);
+    const audienceHasQueryOrHash = Boolean(audience.search || audience.hash);
+    if (audienceHasCredentials || audienceHasQueryOrHash || audience.pathname !== audiencePath) {
       context.addIssue({
         code: "custom",
-        message: "Hosted Preview audience must be the exact /mcp URL.",
+        message: audienceUrlMessage,
         path: ["audience"],
       });
     }
     if (issuer.origin !== audience.origin) {
       context.addIssue({
         code: "custom",
-        message: "Hosted Preview issuer and audience must share one origin.",
+        message: sharedOriginMessage,
         path: ["audience"],
       });
     }
@@ -59,24 +68,24 @@ const requestBase = {
   version: z.literal(1),
 };
 
-const seedPlanSchema = z.object({ ...requestBase, action: z.literal("membership.seed") }).strict();
-const revokePlanSchema = z
-  .object({ ...requestBase, action: z.literal("membership.revoke") })
-  .strict();
-const retentionPlanSchema = z
-  .object({
-    ...requestBase,
-    action: z.literal("retention.apply"),
-    deleteBefore: instantSchema,
-  })
-  .strict();
-const deletePlanSchema = z
-  .object({
-    ...requestBase,
-    action: z.literal("tenant.delete"),
-    membershipRevokedBefore: instantSchema,
-  })
-  .strict();
+const seedPlanSchema = z.strictObject({
+  ...requestBase,
+  action: z.literal(hostedAdminAction.membershipSeed),
+});
+const revokePlanSchema = z.strictObject({
+  ...requestBase,
+  action: z.literal(hostedAdminAction.membershipRevoke),
+});
+const retentionPlanSchema = z.strictObject({
+  ...requestBase,
+  action: z.literal(hostedAdminAction.retentionApply),
+  deleteBefore: instantSchema,
+});
+const deletePlanSchema = z.strictObject({
+  ...requestBase,
+  action: z.literal(hostedAdminAction.tenantDelete),
+  membershipRevokedBefore: instantSchema,
+});
 
 export const hostedAdminPlanRequestSchema = z.discriminatedUnion("action", [
   seedPlanSchema,
@@ -88,43 +97,37 @@ export const hostedAdminPlanRequestSchema = z.discriminatedUnion("action", [
 export type HostedAdminPlanRequest = z.infer<typeof hostedAdminPlanRequestSchema>;
 
 export const hostedAdminApplyRequestSchema = z.discriminatedUnion("action", [
-  seedPlanSchema.extend({ confirmationDigest: sha256Schema }).strict(),
-  revokePlanSchema.extend({ confirmationDigest: sha256Schema }).strict(),
-  retentionPlanSchema.extend({ confirmationDigest: sha256Schema }).strict(),
-  deletePlanSchema.extend({ confirmationDigest: sha256Schema }).strict(),
+  z.strictObject({ ...seedPlanSchema.shape, confirmationDigest: sha256Schema }),
+  z.strictObject({ ...revokePlanSchema.shape, confirmationDigest: sha256Schema }),
+  z.strictObject({ ...retentionPlanSchema.shape, confirmationDigest: sha256Schema }),
+  z.strictObject({ ...deletePlanSchema.shape, confirmationDigest: sha256Schema }),
 ]);
 
 export type HostedAdminApplyRequest = z.infer<typeof hostedAdminApplyRequestSchema>;
 
-const effectsSchema = z
-  .object({
-    authorizationStateRowsDeleted: z.number().int().min(0),
-    integrationRowsDeleted: z.number().int().min(0),
-    membershipRowsAffected: z.number().int().min(0),
-    membershipRowsDeleted: z.number().int().min(0),
-    operationRowsDeleted: z.number().int().min(0),
-    sessionRowsDeleted: z.number().int().min(0),
-  })
-  .strict();
+const effectsSchema = z.strictObject({
+  authorizationStateRowsDeleted: z.number().int().min(0),
+  integrationRowsDeleted: z.number().int().min(0),
+  membershipRowsAffected: z.number().int().min(0),
+  membershipRowsDeleted: z.number().int().min(0),
+  operationRowsDeleted: z.number().int().min(0),
+  sessionRowsDeleted: z.number().int().min(0),
+});
 
-export const hostedAdminReceiptSchema = z
-  .object({
-    action: z.enum(["membership.seed", "membership.revoke", "retention.apply", "tenant.delete"]),
-    appliedAt: instantSchema,
-    authorityDigest: sha256Schema,
-    database: z
-      .object({
-        dialect: z.literal("postgresql"),
-        maxConnections: z.literal(1),
-        secretTransport: z.literal("task-scoped-stdin"),
-      })
-      .strict(),
-    effects: effectsSchema,
-    requestDigest: sha256Schema,
-    status: z.enum(["applied", "no-op"]),
-    version: z.literal(1),
-  })
-  .strict();
+export const hostedAdminReceiptSchema = z.strictObject({
+  action: hostedAdminActionsSchema,
+  appliedAt: instantSchema,
+  authorityDigest: sha256Schema,
+  database: z.strictObject({
+    dialect: z.literal("postgresql"),
+    maxConnections: z.literal(1),
+    secretTransport: z.literal("task-scoped-stdin"),
+  }),
+  effects: effectsSchema,
+  requestDigest: sha256Schema,
+  status: z.enum(["applied", "no-op"]),
+  version: z.literal(1),
+});
 
 export type HostedAdminReceipt = z.infer<typeof hostedAdminReceiptSchema>;
 
@@ -164,7 +167,7 @@ export interface HostedAdminStore {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalRequest(request: HostedAdminPlanRequest): string {
-  if (request.action === "retention.apply") {
+  if (request.action === hostedAdminAction.retentionApply) {
     return JSON.stringify({
       action: request.action,
       authority: request.authority,
@@ -173,7 +176,7 @@ function canonicalRequest(request: HostedAdminPlanRequest): string {
       version: request.version,
     });
   }
-  if (request.action === "tenant.delete") {
+  if (request.action === hostedAdminAction.tenantDelete) {
     return JSON.stringify({
       action: request.action,
       authority: request.authority,
@@ -196,19 +199,25 @@ function digest(value: string): `sha256:${string}` {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function planHostedAdminRequest(input: unknown) {
-  const request = hostedAdminPlanRequestSchema.parse(input);
-  return {
+export function planHostedAdminRequest(request: HostedAdminPlanRequest) {
+  let plan = {
     action: request.action,
     authorityDigest: digest(JSON.stringify(request.authority)),
     requestDigest: digest(canonicalRequest(request)),
     requestedAt: request.requestedAt,
     requiredConfirmationDigest: digest(`confirm\n${canonicalRequest(request)}`),
     version: 1 as const,
-    ...(request.action === "retention.apply"
-      ? { deleteBeforeDigest: digest(request.deleteBefore) }
-      : {}),
   };
+  if (request.action === hostedAdminAction.retentionApply) {
+    plan = { ...plan, deleteBeforeDigest: digest(request.deleteBefore) };
+  }
+  return plan;
+}
+
+export interface HostedAdminExecutionInput {
+  request: HostedAdminApplyRequest;
+  store: HostedAdminStore;
+  now?: () => number;
 }
 
 const emptyEffects = {
@@ -221,14 +230,12 @@ const emptyEffects = {
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function executeHostedAdminRequest(input: {
-  request: unknown;
-  store: HostedAdminStore;
-  now?: () => number;
-}): Promise<HostedAdminReceipt> {
+export async function executeHostedAdminRequest(
+  input: HostedAdminExecutionInput,
+): Promise<HostedAdminReceipt> {
   const request = hostedAdminApplyRequestSchema.parse(input.request);
   let planRequest: HostedAdminPlanRequest;
-  if (request.action === "retention.apply") {
+  if (request.action === hostedAdminAction.retentionApply) {
     planRequest = {
       action: request.action,
       authority: request.authority,
@@ -236,7 +243,7 @@ export async function executeHostedAdminRequest(input: {
       requestedAt: request.requestedAt,
       version: request.version,
     };
-  } else if (request.action === "tenant.delete") {
+  } else if (request.action === hostedAdminAction.tenantDelete) {
     planRequest = {
       action: request.action,
       authority: request.authority,
@@ -263,13 +270,13 @@ export async function executeHostedAdminRequest(input: {
     throw new Error("Hosted database action plan is stale.");
   }
   if (
-    request.action === "retention.apply" &&
+    request.action === hostedAdminAction.retentionApply &&
     Date.parse(request.deleteBefore) >= requestedAtEpochMs
   ) {
     throw new Error("Hosted retention cutoff must precede the plan.");
   }
   if (
-    request.action === "tenant.delete" &&
+    request.action === hostedAdminAction.tenantDelete &&
     Date.parse(request.membershipRevokedBefore) > requestedAtEpochMs - 5 * 60_000
   ) {
     throw new Error("Hosted tenant deletion requires a five-minute revocation drain.");
@@ -277,7 +284,7 @@ export async function executeHostedAdminRequest(input: {
 
   let effects = { ...emptyEffects };
   switch (request.action) {
-    case "membership.seed": {
+    case hostedAdminAction.membershipSeed: {
       const result = await input.store.seedMembership({
         authority: request.authority,
         now: new Date(nowEpochMs),
@@ -285,7 +292,7 @@ export async function executeHostedAdminRequest(input: {
       effects.membershipRowsAffected = result.membershipRowsAffected;
       break;
     }
-    case "membership.revoke": {
+    case hostedAdminAction.membershipRevoke: {
       const result = await input.store.revokeMembership({
         authority: request.authority,
         now: new Date(nowEpochMs),
@@ -293,7 +300,7 @@ export async function executeHostedAdminRequest(input: {
       effects.membershipRowsAffected = result.membershipRowsAffected;
       break;
     }
-    case "retention.apply": {
+    case hostedAdminAction.retentionApply: {
       const result = await input.store.applyRetention({
         authority: request.authority,
         deleteBefore: new Date(request.deleteBefore),
@@ -301,7 +308,7 @@ export async function executeHostedAdminRequest(input: {
       effects = { ...effects, ...result };
       break;
     }
-    case "tenant.delete": {
+    case hostedAdminAction.tenantDelete: {
       const result = await input.store.deleteTenant({
         authority: request.authority,
         membershipRevokedBefore: new Date(request.membershipRevokedBefore),

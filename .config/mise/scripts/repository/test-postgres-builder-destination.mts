@@ -318,14 +318,13 @@ try {
   const nativeStore = createPostgresNativeTargetOnboardingStore(drizzle(client, { schema }));
   const legacyNow = new Date("2026-10-21T15:00:00.000Z");
   const nativeRegistry = createNativeTargetOnboardingRegistry({
-    assertPlanOrigin: async (owner, plan) => {
+    assertPlanOrigin: (owner, plan) => {
       assert.deepEqual(owner, legacyOwner);
       assert.deepEqual(plan, legacyPlan);
-      return;
     },
-    authorize: async () => legacyOwner,
+    authorize: () => legacyOwner,
     now: () => legacyNow,
-    readApproval: async () => ({
+    readApproval: () => ({
       callId: "legacy-call",
       observedAt: legacyNow.toISOString(),
       outcome: "approved",

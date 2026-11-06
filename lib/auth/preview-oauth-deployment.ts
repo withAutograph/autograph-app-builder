@@ -1,6 +1,53 @@
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
-import * as databaseSchema from "../db/schema";
+import {
+  account,
+  agentOperations,
+  agentSessionCheckpointChunks,
+  agentSessionCheckpointItems,
+  agentSessionCheckpointManifests,
+  agentSessions,
+  builderDrafts,
+  builderHandoffs,
+  builderProvisioningJournals,
+  emulatePreviewState,
+  githubInstallationAuthorizationStates,
+  githubPublicationJournals,
+  githubPublicationProposals,
+  githubRepositoryAccessContinuations,
+  hostedGitHubDraftAdoptions,
+  hostedGitHubInstallationBindings,
+  hostedGitHubInstallations,
+  hostedGitHubPrEffectJournals,
+  hostedGitHubPublicationJournals,
+  hostedGitHubPublicationProposals,
+  hostedGitHubUserCredentials,
+  hostedVercelInstallations,
+  hostedWorkspaceMemberships,
+  invitation,
+  jwks,
+  member,
+  oauthAccessToken,
+  oauthClient,
+  oauthClientAssertion,
+  oauthClientResource,
+  oauthConsent,
+  oauthRefreshToken,
+  oauthResource,
+  organization,
+  passkey,
+  passkeyOnboarding,
+  personalWorkspace,
+  productSourceReviewJournal,
+  prototypeArtifactChunks,
+  sandboxExecutionLeases,
+  session,
+  user,
+  validationLogChunks,
+  validationLogManifests,
+  vercelInstallationAuthorizationStates,
+  verification,
+} from "../db/schema";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPreviewOAuthServer, readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
 import type { PreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
@@ -9,6 +56,18 @@ import { readProviderEmulation } from "../integrations/local-provider-emulation"
 import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 import type { PreviewOrganizationUserAuthority } from "./preview-user-management";
 import { logWorkspaceOnboardingFailure } from "./workspace-onboarding";
+import { z } from "zod";
+
+const providerEmulationErrorSchema = z.object({
+  issues: z.array(
+    z.object({
+      path: z.array(z.union([z.string(), z.number()])),
+    }),
+  ),
+});
+const previewOAuthRedirectResponseSchema = z.object({
+  url: z.string().optional(),
+});
 
 type PreviewOAuthServer = ReturnType<typeof createPreviewOAuthServer>;
 
@@ -41,16 +100,16 @@ function getPreviewOAuthDeploymentRuntime(
   try {
     providerEmulation = readProviderEmulation(environment);
   } catch (error) {
-    const invalidFields =
-      error && typeof error === "object" && "issues" in error && Array.isArray(error.issues)
-        ? error.issues
-            .map((issue) =>
-              issue && typeof issue === "object" && "path" in issue
-                ? String((issue as { path: unknown[] }).path[0] ?? "unknown")
-                : "unknown",
-            )
-            .join(",")
-        : "unknown";
+    const parsedError = providerEmulationErrorSchema.safeParse(error);
+    let invalidFields = "unknown";
+    if (parsedError.success) {
+      invalidFields = parsedError.data.issues
+        .map(({ path: [segment] }) => {
+          if (segment === undefined) return "unknown";
+          return String(segment);
+        })
+        .join(",");
+    }
     throw new Error(`preview-oauth-emulation-config:${invalidFields}`, {
       cause: error,
     });
@@ -82,7 +141,54 @@ function getPreviewOAuthDeploymentRuntime(
       config,
       database: drizzleAdapter(database, {
         provider: "pg",
-        schema: databaseSchema,
+        schema: {
+          account,
+          agentOperations,
+          agentSessionCheckpointChunks,
+          agentSessionCheckpointItems,
+          agentSessionCheckpointManifests,
+          agentSessions,
+          builderDrafts,
+          builderHandoffs,
+          builderProvisioningJournals,
+          emulatePreviewState,
+          githubInstallationAuthorizationStates,
+          githubPublicationJournals,
+          githubPublicationProposals,
+          githubRepositoryAccessContinuations,
+          hostedGitHubDraftAdoptions,
+          hostedGitHubInstallationBindings,
+          hostedGitHubInstallations,
+          hostedGitHubPrEffectJournals,
+          hostedGitHubPublicationJournals,
+          hostedGitHubPublicationProposals,
+          hostedGitHubUserCredentials,
+          hostedVercelInstallations,
+          hostedWorkspaceMemberships,
+          invitation,
+          jwks,
+          member,
+          oauthAccessToken,
+          oauthClient,
+          oauthClientAssertion,
+          oauthClientResource,
+          oauthConsent,
+          oauthRefreshToken,
+          oauthResource,
+          organization,
+          passkey,
+          passkeyOnboarding,
+          personalWorkspace,
+          productSourceReviewJournal,
+          prototypeArtifactChunks,
+          sandboxExecutionLeases,
+          session,
+          user,
+          validationLogChunks,
+          validationLogManifests,
+          vercelInstallationAuthorizationStates,
+          verification,
+        },
         transaction: true,
       }),
       infrastructure: {
@@ -167,22 +273,14 @@ interface PreviewSessionOrganizationAuth {
  * or provider-link callbacks that reuse an existing session.
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function ensurePreviewSessionOrganization(input: {
-  auth: PreviewSessionOrganizationAuth;
-  authority: PreviewOrganizationUserAuthority;
-  headers: Headers;
-}) {
-  let current: Awaited<ReturnType<PreviewSessionOrganizationAuth["api"]["getSession"]>>;
-  try {
-    current = await input.auth.api.getSession({ headers: input.headers });
-  } catch (error) {
-    logWorkspaceOnboardingFailure(error, "session-lookup");
-    throw error;
-  }
-  if (!current?.user) {
-    return;
-  }
-
+const ensureOrganizationForSessionUser = async (
+  input: {
+    auth: PreviewSessionOrganizationAuth;
+    authority: PreviewOrganizationUserAuthority;
+    headers: Headers;
+  },
+  current: NonNullable<Awaited<ReturnType<PreviewSessionOrganizationAuth["api"]["getSession"]>>>,
+) => {
   let ensured: Awaited<
     ReturnType<PreviewOrganizationUserAuthority["ensureOrganizationForVerifiedUser"]>
   >;
@@ -216,7 +314,22 @@ export async function ensurePreviewSessionOrganization(input: {
     organization: ensured,
     user: current.user,
   };
-}
+};
+
+export const ensurePreviewSessionOrganization = async (input: {
+  auth: PreviewSessionOrganizationAuth;
+  authority: PreviewOrganizationUserAuthority;
+  headers: Headers;
+}) => {
+  let current: Awaited<ReturnType<PreviewSessionOrganizationAuth["api"]["getSession"]>>;
+  try {
+    current = await input.auth.api.getSession({ headers: input.headers });
+  } catch (error) {
+    logWorkspaceOnboardingFailure(error, "session-lookup");
+    throw error;
+  }
+  return current?.user ? await ensureOrganizationForSessionUser(input, current) : undefined;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function ensurePreviewOAuthDeploymentSessionOrganization(input: {
@@ -250,8 +363,8 @@ export function createPreviewOAuthRequestHandler(input: {
       if (new URL(request.url).pathname === "/api/auth/sign-in/social") {
         let hasRedirect = false;
         try {
-          const payload = (await response.clone().json()) as { url?: unknown };
-          hasRedirect = typeof payload.url === "string";
+          const payload = previewOAuthRedirectResponseSchema.parse(await response.clone().json());
+          hasRedirect = payload.url !== undefined;
         } catch {
           // The response shape is diagnostic only; auth owns the response.
         }

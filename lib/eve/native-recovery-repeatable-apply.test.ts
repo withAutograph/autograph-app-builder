@@ -23,28 +23,10 @@ const fixture = () => ({
             pending: [{ callId: "call", scope: { ...scope } }],
           },
           "autograph-app-builder.workflow.v17": {
-            phase: "planned",
             appSpec: { digest: "spec" },
+            phase: "planned",
             proposal: { digest: "proposal", target: { contract: { appId: "app" } } },
             workspace: { workspaceDigest: "workspace-digest", workspaceId: "workspace" },
-            // SAFETY: Synthetic receipt variants are assigned by the cases below.
-            applyReceipt: undefined as
-              | {
-                  appliedByCallId: string;
-                  appSpecDigest: string;
-                  proposalDigest: string;
-                  workspaceDigest: string;
-                }
-              | undefined,
-            // SAFETY: Synthetic failure variants use the same call-bound receipt fields.
-            applyFailure: undefined as
-              | {
-                  appliedByCallId: string;
-                  appSpecDigest: string;
-                  proposalDigest: string;
-                  workspaceDigest: string;
-                }
-              | undefined,
           },
           "eve.sessionId": "logical",
         },
@@ -140,6 +122,7 @@ it("rejects wrong physical owner and logical identity", () => {
 it("does not authorize other tools, denied approvals, completed calls, or missing state", () => {
   const input = fixture();
   const { session } = input.payload.candidates[0].sessionState.snapshot;
+  const [firstHistoryEntry] = session.history;
   for (const history of [
     [
       {
@@ -149,7 +132,7 @@ it("does not authorize other tools, denied approvals, completed calls, or missin
     ],
     [...session.history, { content: [{ toolCallId: "call", type: "tool-result" }], role: "tool" }],
     [
-      session.history[0],
+      firstHistoryEntry,
       {
         content: [{ approvalId: "approval", approved: false, type: "tool-approval-response" }],
         role: "tool",
@@ -176,7 +159,7 @@ it("does not authorize other tools, denied approvals, completed calls, or missin
 
 it("validates every old candidate while selecting the greatest slot without changing input", () => {
   const input = fixture();
-  const latest = input.payload.candidates[0];
+  const [latest] = input.payload.candidates;
   const older = structuredClone(latest);
   older.origin.slot = 2;
   older.sessionState.snapshot.session.history = [];

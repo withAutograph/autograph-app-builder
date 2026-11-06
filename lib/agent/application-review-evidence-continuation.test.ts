@@ -31,7 +31,7 @@ const fixture = (
   restoredSourceReads: readonly unknown[] = [],
   options: { abortSignal?: AbortSignal; actualSource?: string } = {},
 ) => {
-  const readFile = vi.fn(async ({ path }: { path: string }) =>
+  const readFile = vi.fn(({ path }: { path: string }) =>
     path === `repository/${sourcePath}`
       ? new ReadableStream<Uint8Array>({
           start(controller) {

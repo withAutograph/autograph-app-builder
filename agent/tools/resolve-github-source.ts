@@ -297,7 +297,7 @@ export default defineTool({
         githubSource: selectedGitHubSource,
         sandbox: await getSourceBoundSandbox(ctx),
       });
-      return {
+      const result = {
         githubSource: selectedGitHubSource,
         repository: access.access.repository,
         repositoryAccessReceiptDigest: access.receipt.digest,
@@ -306,36 +306,40 @@ export default defineTool({
           branch: selectedGitHubSource.resolvedRef.slice("refs/heads/".length),
           pullRequestNumber,
         },
-        ...(selectionCorrection === null ? {} : { selectionCorrection }),
-        ...(selectedBaseline?.receipt === undefined
-          ? {}
-          : { appBaseline: selectedBaseline.receipt }),
         sourceReceipt: initialWorkflow.sourceReceipt,
         workspace,
       };
+      if (selectionCorrection !== null) {
+        Object.assign(result, { selectionCorrection });
+      }
+      if (selectedBaseline?.receipt !== undefined) {
+        Object.assign(result, { appBaseline: selectedBaseline.receipt });
+      }
+      return result;
     }
 
-    const prepared = await runtime.prepareExistingSource({
+    const prepareInput = {
       access: access.access,
       callId: ctx.callId,
       currentAccessReceipt: access.receipt,
-      ...(selectedBaseline === undefined ? {} : { appBaseline: selectedBaseline.selection }),
-      ...(revision === null
-        ? {}
-        : {
-            revision,
-          }),
       // Source credentials are resolved first. The backend consumes the
       // server-owned context while `getSandbox()` creates the provider
       // session, so Vercel performs the Git clone itself.
-      ...(initialSource.phase === "empty" || initialSource.githubSource === undefined
-        ? {}
-        : { currentGitHubSource: initialSource.githubSource }),
       repository: input.repository,
-      sandbox: async () => ctx.getSandbox(),
+      sandbox: async () => await ctx.getSandbox(),
       selectedInstallationId: input.selectedInstallationId,
       sessionId: ctx.session.id,
-    });
+    };
+    if (selectedBaseline !== undefined) {
+      Object.assign(prepareInput, { appBaseline: selectedBaseline.selection });
+    }
+    if (revision !== null) {
+      Object.assign(prepareInput, { revision });
+    }
+    if (initialSource.phase !== "empty" && initialSource.githubSource !== undefined) {
+      Object.assign(prepareInput, { currentGitHubSource: initialSource.githubSource });
+    }
+    const prepared = await runtime.prepareExistingSource(prepareInput);
     assertExactImmutableGitHubSourceReceipt(prepared.githubSource);
     const selectedPreparedSource = selectedGitHubSourceForSandboxRestore({
       sourceState: prepared.githubSource,
@@ -396,12 +400,11 @@ export default defineTool({
         workspace: prepared.workspace,
       };
     });
-    return {
+    const result = {
       githubSource: preparedGitHubSource,
       repository: access.access.repository,
       repositoryAccessReceiptDigest: prepared.accessReceipt.digest,
       scope: access.access.scope,
-      ...(prepared.appBaseline === undefined ? {} : { appBaseline: prepared.appBaseline }),
       selectedSource: {
         branch: prepared.githubSource.resolvedRef.slice("refs/heads/".length),
         pullRequestNumber,
@@ -409,6 +412,10 @@ export default defineTool({
       sourceReceipt: prepared.sourceReceipt,
       workspace: prepared.workspace,
     };
+    if (prepared.appBaseline !== undefined) {
+      Object.assign(result, { appBaseline: prepared.appBaseline });
+    }
+    return result;
   },
   inputSchema,
 });

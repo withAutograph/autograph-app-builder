@@ -39,8 +39,8 @@ const record = () =>
     sessionId: "same-session",
     state: workflow,
   });
-const decide = (sourcePrerequisite?: ReturnType<typeof record>) =>
-  decideApprovedBuildContinuation({
+const decide = (sourcePrerequisite?: ReturnType<typeof record>) => {
+  const input = {
     adapterSessionId: "same-session",
     approvalMatches: () => true,
     blocked: false,
@@ -48,8 +48,12 @@ const decide = (sourcePrerequisite?: ReturnType<typeof record>) =>
     state: workflow,
     turnId: "current-turn",
     turnSequence: 4,
-    ...(sourcePrerequisite === undefined ? {} : { sourcePrerequisite }),
-  });
+  };
+  if (sourcePrerequisite !== undefined) {
+    Object.assign(input, { sourcePrerequisite });
+  }
+  return decideApprovedBuildContinuation(input);
+};
 
 describe("typed local source prerequisite observations", () => {
   it("blocks stale command-failed auto continuation without changing the old validator or approval", () => {

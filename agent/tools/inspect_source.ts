@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/filename-case -- Preserve the registered Eve tool name and public workflow identity. */
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -15,6 +16,9 @@ import {
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import { isHostedVercelRuntime } from "@/lib/sandbox/backend";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
+
+const SOURCE_UNAVAILABLE_MESSAGE =
+  "The selected source is not available in this app build session.";
 
 const retainedSourceReceipt = (
   source: SourceWorkflowState,
@@ -52,13 +56,13 @@ export default defineTool({
     ) {
       receipt = await acquireCanonicalArrustedTemplate({
         callId: ctx.callId,
-        sandbox: async () => ctx.getSandbox(),
+        sandbox: async () => await ctx.getSandbox(),
         sessionId: ctx.session.id,
       });
     }
     if (receipt === undefined && isHostedVercelRuntime(process.env)) {
       const current = sourceWorkflowState.get();
-      if (current.phase !== "empty") {
+      if (current.phase !== EMPTY_PHASE) {
         ({ receipt } = current);
       }
     }
@@ -66,7 +70,7 @@ export default defineTool({
       receipt = await inspectSourceReceipt(sourceKind, path);
     }
     if (receipt === undefined) {
-      throw new Error("The selected source is not available in this app build session.");
+      throw new Error(SOURCE_UNAVAILABLE_MESSAGE);
     }
     sourceWorkflowState.update(() => {
       const next: SourceWorkflowState = {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   bindProductBehaviorPreview,
   captureProductBehaviorProvenance,
@@ -12,18 +12,6 @@ import {
   recordProductBehaviorEvidence,
 } from "./product-behavior-state";
 import type { ProductBehaviorEvidence } from "./product-behavior-state";
-
-vi.mock("eve/context", () => ({
-  defineState: (_name: string, initial: () => unknown) => {
-    let value = initial();
-    return {
-      get: () => value,
-      update: (change: (current: unknown) => unknown) => {
-        value = change(value);
-      },
-    };
-  },
-}));
 
 const observation = (status: "passed" | "failed" | "blocked"): ProductBehaviorEvidence => ({
   acceptedOutcomeText: "Save draft and read it back.",

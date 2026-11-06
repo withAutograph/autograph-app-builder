@@ -14,6 +14,8 @@ import type { TargetApplyFailureReceipt } from "../repository/target-apply";
 import type { TargetValidationFailureReceipt } from "../repository/target-validation";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const commandFailedReason = "command-failed";
+const proposalKey = "proposal";
 export const approvedBuildScopeSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
   appSpecDigest: digest,
@@ -46,7 +48,7 @@ export const approvedBuildDecisionSchema = z.strictObject({
       command: z.enum(["check-build", "test"]),
       exitCode: z.number().int(),
       failureClass: z.enum(["native-tool-panic", "missing-app-task"]).optional(),
-      reason: z.enum(["command-failed", "tooling-prerequisite"]),
+      reason: z.enum([commandFailedReason, "tooling-prerequisite"]),
     })
     .optional(),
   version: z.literal(1),
@@ -63,7 +65,7 @@ export type InternalBuildContinuation = z.infer<typeof internalBuildContinuation
 
 /** Compare the work that remains, ignoring fresh turn and attempt identifiers. */
 export const approvedBuildProgress = (state: AppBuilderWorkflowState): string => {
-  const proposal = "proposal" in state ? state.proposal.digest : null;
+  const proposal = proposalKey in state ? state.proposal.digest : null;
   const appliedTree = "applyReceipt" in state ? state.applyReceipt.postTreeDigest : null;
   if (state.phase === "apply_failed") {
     const failure = state.applyFailure;
@@ -139,7 +141,7 @@ const projectExistingRepositorySource = (
 };
 
 const canRepairApplyFailure = (failure: TargetApplyFailureReceipt): boolean =>
-  failure.reason === "command-failed" &&
+  failure.reason === commandFailedReason &&
   failure.command.exitCode > 0 &&
   !["app-lock", "partial-state", "stale-proposal", "timeout"].includes(
     failure.commandFailureKind ?? "",
@@ -187,7 +189,7 @@ export const decideApprovedBuildContinuation = (input: {
       sessionId: input.adapterSessionId,
       workspaceId: state.workspace.workspaceId,
     };
-    if ("proposal" in state) {
+    if (proposalKey in state) {
       currentSpec.proposalDigest = state.proposal.digest;
     }
     Object.assign(base, { currentSpec });
@@ -203,7 +205,7 @@ export const decideApprovedBuildContinuation = (input: {
   if (sourcePrerequisite !== undefined) {
     return { ...base, decision: "blocked", sourcePrerequisite };
   }
-  if (input.blocked || !("proposal" in input.state)) {
+  if (input.blocked || !(proposalKey in input.state)) {
     return { ...base, decision: "blocked" };
   }
   const { state } = input;
@@ -249,7 +251,7 @@ export const decideApprovedBuildContinuation = (input: {
   // The validator runs the approved app's check/test command. Diagnostic paths
   // describe stack frames, not repair ownership: unchanged tests and shared
   // runtime frames must not stop the approved app's private repair loop.
-  if (failure.reason !== "command-failed" || !isAppValidationFailure(command)) {
+  if (failure.reason !== commandFailedReason || !isAppValidationFailure(command)) {
     return { ...base, decision: "blocked", scope };
   }
   return approvedBuildDecisionSchema.parse({

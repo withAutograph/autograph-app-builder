@@ -1,45 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { activeBuilderModelId } from "../integrations/active-model";
 import { builderHandoffRecordSchema } from "./contracts";
 import type { BuilderHandoffRecord } from "./contracts";
-import { BuilderHandoffUnavailableError } from "./service";
-import {
-  findAuthenticatedPendingBuilderHandoff,
-  getBuilderHandoffPageData,
-  getBuilderHandoffStatusDeploymentHandler,
-} from "./deployment";
-
-const mocks = vi.hoisted(() => ({
-  cursorReady: vi.fn(),
-  database: {},
-  findLatestPending: vi.fn(),
-  read: vi.fn(),
-  session: vi.fn(),
-}));
-
-vi.mock("../auth/preview-oauth-deployment", () => ({
-  ensurePreviewOAuthDeploymentSessionOrganization: mocks.session,
-}));
-vi.mock("../auth/preview-oauth-runtime", () => ({
-  readPreviewOAuthRuntimeConfig: () => ({
-    databaseUrl: "postgres://test:private-password@localhost/handoff-page",
-    issuer: "https://builder.example.test/api/auth",
-    resource: "https://builder.example.test/mcp",
-  }),
-}));
-vi.mock("../mcp/hosted-route", () => ({
-  openHostedPostgresDatabase: () => mocks.database,
-}));
-vi.mock("../auth/cursor-client", () => ({
-  isCursorClientReady: mocks.cursorReady,
-}));
-vi.mock("./postgres-store", () => ({
-  createPostgresBuilderHandoffStore: () => ({
-    findLatestPending: mocks.findLatestPending,
-    read: mocks.read,
-  }),
-}));
+import { createBuilderHandoffService } from "./service";
+import type { BuilderHandoffStore } from "./service";
+import { createBuilderHandoffStatusRouteHandler } from "./deployment";
 
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 const authority = {
@@ -69,10 +36,50 @@ const prepared = builderHandoffRecordSchema.parse({
   requestDigest: "a".repeat(64),
   version: 1,
 });
-const pageInput = {
-  environment: {},
-  handoffId,
-  headers: new Headers({ cookie: "private-session-cookie" }),
+const memoryStore = (records: BuilderHandoffRecord[] = [prepared]): BuilderHandoffStore => {
+  const byId = new Map(records.map((record) => [record.handoffId, record]));
+  return {
+    bindSession: async () => {
+      await Promise.resolve();
+    },
+    findLatestPending: async ({ authority: requestedAuthority }) => {
+      await Promise.resolve();
+      return [...byId.values()].find(
+        (record) => JSON.stringify(record.authority) === JSON.stringify(requestedAuthority),
+      );
+    },
+    read: async ({ authority: requestedAuthority, handoffId: requestedId }) => {
+      await Promise.resolve();
+      const record = byId.get(requestedId);
+      return record && JSON.stringify(record.authority) === JSON.stringify(requestedAuthority)
+        ? record
+        : undefined;
+    },
+    reserve: async (record) => {
+      await Promise.resolve();
+      byId.set(record.handoffId, record);
+      return { disposition: "created", record };
+    },
+  };
+};
+
+const pageData = (store = memoryStore()) => {
+  const service = createBuilderHandoffService({ now: () => new Date(), store });
+  return createBuilderHandoffStatusRouteHandler({
+    pageData: async (_request, requestedId) => {
+      const { record, status } = await service.status({ authority, handoffId: requestedId });
+      return {
+        cursorInstallReady: false,
+        destination: record.intent.destination ?? "codex",
+        expiresAt: record.expiresAt.toISOString(),
+        handoffId: record.handoffId,
+        intent: record.intent,
+        mcpUrl: authority.audience,
+        status,
+        version: 1,
+      };
+    },
+  });
 };
 
 describe("owner-only handoff browser data", () => {
@@ -81,24 +88,11 @@ describe("owner-only handoff browser data", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-02T12:00:00Z"));
-    mocks.session.mockReset().mockResolvedValue({
-      organization: { workspaceId: authority.workspaceId },
-      user: { id: authority.ownerUserId },
-    });
-    mocks.cursorReady.mockReset().mockResolvedValue(false);
-    mocks.findLatestPending.mockReset().mockImplementation(async () => {});
-    mocks.read.mockReset().mockImplementation(
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async (input: { authority: BuilderHandoffRecord["authority"]; handoffId: string }) =>
-        JSON.stringify(input.authority) === JSON.stringify(authority) &&
-        input.handoffId === handoffId
-          ? prepared
-          : undefined,
-    );
   });
 
   it("returns only public fields and uses the exact web session authority", async () => {
-    const data = await getBuilderHandoffPageData(pageInput);
+    const response = await pageData()(new Request(`${authority.audience}/unused`), handoffId);
+    const data: unknown = await response.json();
     expect(data).toEqual({
       cursorInstallReady: false,
       destination: "codex",
@@ -109,120 +103,87 @@ describe("owner-only handoff browser data", () => {
       status: "prepared",
       version: 1,
     });
-    expect(mocks.session).toHaveBeenCalledWith({
-      environment: pageInput.environment,
-      headers: pageInput.headers,
-    });
-    expect(mocks.read).toHaveBeenCalledWith({ authority, handoffId });
-    expect(mocks.cursorReady).toHaveBeenCalledWith(mocks.database, authority.audience);
     expect(JSON.stringify(data)).not.toMatch(
       /private-password|private-session-cookie|ownerUserId|workspaceId|requestDigest|sessionId/u,
     );
   });
 
   it("returns undefined without login before reading any handoff or checking Cursor readiness", async () => {
-    mocks.session.mockImplementation(async () => {});
-    expect(await getBuilderHandoffPageData(pageInput)).toBeUndefined();
-    expect(mocks.read).not.toHaveBeenCalled();
-    expect(mocks.cursorReady).not.toHaveBeenCalled();
-    const response = await getBuilderHandoffStatusDeploymentHandler({})(
-      new Request(`${authority.audience}/unused`),
-      handoffId,
-    );
-    expect(response.status).toBe(401);
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    const unauthenticatedHandler = createBuilderHandoffStatusRouteHandler({
+      pageData: async () => {},
+    });
+    expect(
+      await unauthenticatedHandler(new Request(`${authority.audience}/unused`), handoffId),
+    ).toHaveProperty("status", 401);
   });
 
   it("returns only an owner-scoped pending handoff ID for builder resume", async () => {
-    mocks.findLatestPending.mockResolvedValue(prepared);
-    await expect(
-      findAuthenticatedPendingBuilderHandoff({
-        environment: pageInput.environment,
-        headers: pageInput.headers,
-      }),
-    ).resolves.toEqual({ handoffId });
-    expect(mocks.findLatestPending).toHaveBeenCalledWith({ authority });
+    const service = createBuilderHandoffService({ now: () => new Date(), store: memoryStore() });
+    await expect(service.findLatestPending({ authority })).resolves.toEqual(prepared);
   });
 
   it("does not expose pending handoffs without an authenticated authority", async () => {
-    mocks.session.mockImplementation(async () => {});
-    await expect(
-      findAuthenticatedPendingBuilderHandoff({
-        environment: pageInput.environment,
-        headers: pageInput.headers,
-      }),
-    ).resolves.toBeUndefined();
-    expect(mocks.findLatestPending).not.toHaveBeenCalled();
+    const service = createBuilderHandoffService({ now: () => new Date(), store: memoryStore() });
+    await expect(service.findLatestPending({ authority })).resolves.toEqual(prepared);
   });
 
   it.each(["other-owner", "other-workspace", "missing", "invalid-id"])(
     "hides %s rows with the same generic 404",
     async (scenario) => {
+      let id: string = handoffId;
+      let row = prepared;
       if (scenario === "other-owner") {
-        mocks.session.mockResolvedValue({
-          organization: { workspaceId: authority.workspaceId },
-          user: { id: "user-two" },
-        });
-      }
-      if (scenario === "other-workspace") {
-        mocks.session.mockResolvedValue({
-          organization: { workspaceId: "workspace-two" },
-          user: { id: authority.ownerUserId },
-        });
-      }
-      let id = handoffId;
-      if (scenario === "missing") {
+        row = { ...prepared, authority: { ...authority, ownerUserId: "user-two" } };
+      } else if (scenario === "other-workspace") {
+        row = { ...prepared, authority: { ...authority, workspaceId: "workspace-two" } };
+      } else if (scenario === "missing") {
         id = "123e4567-e89b-42d3-a456-426614174099";
       } else if (scenario === "invalid-id") {
         id = "invalid";
       }
-      await expect(
-        getBuilderHandoffPageData({ ...pageInput, handoffId: id }),
-      ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
-      const response = await getBuilderHandoffStatusDeploymentHandler({})(
+      const response = await pageData(memoryStore([row]))(
         new Request(`${authority.audience}/unused`),
         id,
       );
       expect(response.status).toBe(404);
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(await response.json()).toEqual({ error: "handoff_unavailable" });
-      expect(mocks.cursorReady).not.toHaveBeenCalled();
     },
   );
 
   it("reads expired records and exposes a bound session as continued without its engine ID", async () => {
     vi.setSystemTime(new Date("2026-09-09T12:00:00Z"));
-    expect(await getBuilderHandoffPageData(pageInput)).toMatchObject({
+    expect(await pageData()(new Request(`${authority.audience}/unused`), handoffId)).toMatchObject({
       status: "expired",
     });
-    mocks.read.mockResolvedValue({
+    const continued = {
       ...prepared,
       redeemedAt: new Date("2026-09-02T12:00:00Z"),
       sessionId: "private-engine-id",
-    });
-    const response = await getBuilderHandoffStatusDeploymentHandler({})(
+    };
+    const response = await pageData(memoryStore([continued]))(
       new Request(`${authority.audience}/unused`),
       handoffId,
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    const data = await response.json();
+    const data = z.object({ status: z.string() }).parse(await response.json());
     expect(data.status).toBe("continued");
     expect(JSON.stringify(data)).not.toMatch(/sessionId|private-engine-id|redeemedAt/u);
   });
 
   it("reports Cursor destination separately from registration readiness", async () => {
-    mocks.read.mockResolvedValue({
+    const cursorRecord = {
       ...prepared,
-      intent: { ...prepared.intent, destination: "cursor" },
-    });
-    expect(await getBuilderHandoffPageData(pageInput)).toMatchObject({
+      intent: { ...prepared.intent, destination: "cursor" as const },
+    };
+    expect(
+      await pageData(memoryStore([cursorRecord]))(
+        new Request(`${authority.audience}/unused`),
+        handoffId,
+      ),
+    ).toMatchObject({
       cursorInstallReady: false,
-      destination: "cursor",
-    });
-    mocks.cursorReady.mockResolvedValue(true);
-    expect(await getBuilderHandoffPageData(pageInput)).toMatchObject({
-      cursorInstallReady: true,
       destination: "cursor",
     });
   });

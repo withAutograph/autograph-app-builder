@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import {
   decryptVersionedVercelToken,
   encryptVercelToken,
@@ -12,6 +14,8 @@ import {
   readVercelInstallationBindings,
 } from "./postgres-vercel-installation";
 
+type AuthorizationStateDatabase = Parameters<typeof createPostgresVercelAuthorizationStateStore>[0];
+
 const authority = {
   audience: "https://builder.example/mcp",
   issuer: "https://builder.example/api/auth",
@@ -21,8 +25,8 @@ const authority = {
 const returnTo = "/handoff/ed5bc83d-a08f-42be-9635-4677fa7bdb32";
 const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function databaseFixture(rows: unknown[]) {
+const databaseFixture = (rows: unknown[]) => {
+  const predicates: SQL[] = [];
   const query = {
     from: vi.fn(),
     insert: vi.fn(),
@@ -37,29 +41,33 @@ function databaseFixture(rows: unknown[]) {
     set: vi.fn(),
     update: vi.fn(),
     values: vi.fn(),
-    where: vi.fn(),
+    where: vi.fn((predicate: SQL) => {
+      predicates.push(predicate);
+      return query;
+    }),
   };
   for (const key of [
-    "select",
-    "update",
     "from",
-    "set",
     "insert",
     "values",
     "onConflictDoUpdate",
-    "where",
+    "select",
+    "set",
+    "update",
   ] as const) {
     query[key].mockReturnValue(query);
   }
+  const database = query satisfies AuthorizationStateDatabase;
   return {
-    database: query as unknown as Parameters<typeof createPostgresVercelAuthorizationStateStore>[0],
+    database,
+    predicates,
     query,
   };
-}
+};
 
 describe("durable Vercel connection return", () => {
   it("retains the handoff route and resume key on consume and recovery", async () => {
-    const { database, query } = databaseFixture([{ resumeKey, returnTo }]);
+    const { database, predicates } = databaseFixture([{ resumeKey, returnTo }]);
     const store = createPostgresVercelAuthorizationStateStore(database);
     const input = {
       authority,
@@ -70,8 +78,8 @@ describe("durable Vercel connection return", () => {
     expect(await store.consume(input)).toEqual({ resumeKey, returnTo });
     expect(await store.recover(input)).toEqual({ resumeKey, returnTo });
     const dialect = new PgDialect();
-    for (const [where] of query.where.mock.calls) {
-      const observed = dialect.sqlToQuery(where);
+    for (const predicate of predicates) {
+      const observed = dialect.sqlToQuery(predicate);
       expect(observed.params).toEqual(expect.arrayContaining(Object.values(authority)));
       expect(observed.params).toContain(input.stateDigest);
       expect(observed.params).toContain(input.authorityDigest);
@@ -96,7 +104,7 @@ describe("durable Vercel connection return", () => {
   });
 
   it("narrows credential reads to all four tenant fields, active status, and selected installation", async () => {
-    const { database, query } = databaseFixture([]);
+    const { database, predicates } = databaseFixture([]);
     expect(
       await readActiveVercelInstallationToken({
         authority,
@@ -108,7 +116,7 @@ describe("durable Vercel connection return", () => {
         installationId: "icfg_selected",
       }),
     ).toBeUndefined();
-    const observed = new PgDialect().sqlToQuery(query.where.mock.calls[0]?.[0]);
+    const observed = new PgDialect().sqlToQuery(predicates[0]);
     expect(observed.params).toEqual([
       ...Object.values(authority).slice(0, 2),
       authority.workspaceId,
@@ -129,9 +137,9 @@ describe("durable Vercel connection return", () => {
       slug: "owner-team",
       updatedAt: new Date(),
     };
-    const { database, query } = databaseFixture([row]);
+    const { database, predicates } = databaseFixture([row]);
     expect(await readVercelInstallationBindings({ authority, database })).toEqual([row]);
-    const observed = new PgDialect().sqlToQuery(query.where.mock.calls[0]?.[0]);
+    const observed = new PgDialect().sqlToQuery(predicates[0]);
     expect(observed.params).toEqual([
       authority.audience,
       authority.issuer,
@@ -317,23 +325,26 @@ describe("durable Vercel connection return", () => {
       now: new Date(),
       token: "new-provider-token",
     });
-    const stored: unknown = query.values.mock.calls[0]?.[0];
+    const storedRow: unknown = query.values.mock.calls[0]?.[0];
+    const stored = z
+      .strictObject({
+        encryptedToken: z.string(),
+        tokenIv: z.string(),
+        tokenKeyVersion: z.string(),
+        tokenTag: z.string(),
+      })
+      .parse(storedRow);
     expect(stored).toMatchObject({ tokenKeyVersion: "current_v2" });
     expect(
       decryptVersionedVercelToken({
-        ...(stored as {
-          encryptedToken: string;
-          tokenIv: string;
-          tokenTag: string;
-          tokenKeyVersion: string;
-        }),
+        ...stored,
         associatedData: vercelInstallationTokenAssociatedData(authority, "icfg_current"),
         config: {
           previousTokenKeys: config.previousTokenKeys,
           tokenKey: config.tokenKey,
           tokenKeyVersion: config.tokenKeyVersion,
         },
-        keyVersion: (stored as { tokenKeyVersion: string }).tokenKeyVersion,
+        keyVersion: stored.tokenKeyVersion,
       }),
     ).toBe("new-provider-token");
   });

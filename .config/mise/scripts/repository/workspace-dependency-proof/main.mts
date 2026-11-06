@@ -8,7 +8,7 @@ import type { SandboxSession } from "eve/sandbox";
 import { ensureCheckoutDependencies } from "../../../../../lib/agent/checkout-dependencies";
 
 const bun = process.argv.at(2);
-if (!bun || !path.isAbsolute(bun)) {
+if (bun === undefined || bun === "" || !path.isAbsolute(bun)) {
   throw new Error("An absolute declared Bun executable is required.");
 }
 const binary = await stat(bun);
@@ -16,6 +16,20 @@ if ((await realpath(bun)) !== bun || !binary.isFile()) {
   throw new Error("An absolute declared Bun executable is required.");
 }
 const root = await mkdtemp(path.join(tmpdir(), "builder-workspace-dependency-proof-"));
+const channel = (readable: Readable) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      readable.on("data", (chunk: Buffer) => {
+        controller.enqueue(chunk);
+      });
+      readable.once("end", () => {
+        controller.close();
+      });
+      readable.once("error", (error: Error) => {
+        controller.error(error);
+      });
+    },
+  });
 const run = (args: string[], workingDirectory: string) => {
   const child = spawnChild(bun, args, {
     cwd: workingDirectory,
@@ -32,24 +46,9 @@ const run = (args: string[], workingDirectory: string) => {
       resolve({ exitCode: code ?? 1 });
     });
   });
-  const channel = (readable: Readable) =>
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        readable.on("data", (chunk: Buffer) => {
-          controller.enqueue(chunk);
-        });
-        readable.once("end", () => {
-          controller.close();
-        });
-        readable.once("error", (error: Error) => {
-          controller.error(error);
-        });
-      },
-    });
   return {
-    kill: async () => {
+    kill: () => {
       child.kill();
-      return;
     },
     stderr: channel(child.stderr),
     stdout: channel(child.stdout),
@@ -93,7 +92,7 @@ try {
   assert.ok(!before.includes('"apps/finance"'));
   let installations = 0;
   const sandbox: Pick<SandboxSession, "spawn"> = {
-    async spawn(options) {
+    spawn(options) {
       assert.equal(options.command, "bun install");
       assert.equal(options.workingDirectory, root);
       installations += 1;

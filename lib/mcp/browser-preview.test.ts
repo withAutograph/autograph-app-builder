@@ -64,7 +64,7 @@ describe("Browser prototype preview", () => {
       }
       const handler = createPrototypePreviewRequestHandler({
         // oxlint-disable-next-line unicorn/no-useless-undefined, typescript/no-confusing-void-expression -- No legacy artifact can authorize the unmatched alias.
-        resolvePrototype: async () => await Promise.resolve(undefined),
+        resolvePrototype: async () => await Promise.resolve(null),
         resolveStreamedPrototype: async () => await Promise.resolve(resolverResult),
       });
       // Browser-supplied aliases cannot replace the server's stored binding.
@@ -231,7 +231,7 @@ describe("Browser prototype preview", () => {
         route: { digest, sessionId: "session-one" },
       },
       {
-        prototype: undefined,
+        prototype: null,
         route: { digest, sessionId: "session-one" },
       },
       {
@@ -285,7 +285,14 @@ describe("Browser prototype preview", () => {
   it("reads the requested owned session through the selected service", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const get = vi.fn(async () => result);
-    const service = { get } as unknown as EveSessionService;
+    const service = {
+      cancel: vi.fn(),
+      get,
+      list: vi.fn(),
+      respond: vi.fn(),
+      send: vi.fn(),
+      start: vi.fn(),
+    } satisfies EveSessionService;
     const resolver = createServicePrototypePreviewResolver({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       serviceForRequest: async () => service,
@@ -306,11 +313,19 @@ describe("Browser prototype preview", () => {
   it("waits briefly for a prototype event that is still being delivered", async () => {
     const get = vi
       .fn()
-      .mockResolvedValueOnce({ ...result, prototype: undefined })
+      .mockResolvedValueOnce({ ...result, prototype: null })
       .mockResolvedValueOnce(result);
+    const service = {
+      cancel: vi.fn(),
+      get,
+      list: vi.fn(),
+      respond: vi.fn(),
+      send: vi.fn(),
+      start: vi.fn(),
+    } satisfies EveSessionService;
     const resolver = createServicePrototypePreviewResolver({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-      serviceForRequest: async () => ({ get }) as unknown as EveSessionService,
+      serviceForRequest: async () => service,
     });
     await expect(
       resolver({

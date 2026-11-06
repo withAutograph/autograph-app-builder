@@ -11,38 +11,29 @@ const gitObject = z.string().regex(/^[a-f0-9]{40}$/u);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sortedUnique<T extends z.ZodType<string>>(item: T) {
-  return z.array(item).superRefine((values, context) => {
-    const sorted = [...values].toSorted();
-    if (
-      new Set(values).size !== values.length ||
-      values.some((value, index) => value !== sorted[index])
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "Values must be sorted and contain no duplicates.",
-      });
-    }
-  });
+  return z.array(item).refine((values) => {
+    const sorted = [...values].toSorted((left, right) => left.localeCompare(right));
+    return (
+      new Set(values).size === values.length &&
+      values.every((value, index) => value === sorted[index])
+    );
+  }, "Values must be sorted and contain no duplicates.");
 }
 
 /** The target-owned policy is copied into every source-bound apply overlay. */
 export const ARRUSTED_COMPONENT_COMPOSITION_POLICY_PATH = "docs/component-composition.json";
 
-export const arrustedComponentCompositionPolicySchema = z
-  .object({
-    kind: z.literal("arrusted-component-composition-v1"),
-    providers: sortedUnique(identifier),
-    publicImports: sortedUnique(identifier),
-    routeGlue: z
-      .object({
-        allowedFiles: sortedUnique(relativePath),
-        allowedStyleFiles: sortedUnique(relativePath),
-      })
-      .strict(),
-    tokenEntrypoints: sortedUnique(identifier),
-    version: z.literal(1),
-  })
-  .strict();
+export const arrustedComponentCompositionPolicySchema = z.strictObject({
+  kind: z.literal("arrusted-component-composition-v1"),
+  providers: sortedUnique(identifier),
+  publicImports: sortedUnique(identifier),
+  routeGlue: z.strictObject({
+    allowedFiles: sortedUnique(relativePath),
+    allowedStyleFiles: sortedUnique(relativePath),
+  }),
+  tokenEntrypoints: sortedUnique(identifier),
+  version: z.literal(1),
+});
 
 export type ArrustedComponentCompositionPolicy = z.infer<
   typeof arrustedComponentCompositionPolicySchema
@@ -60,15 +51,18 @@ export type CompositionPolicyResolution =
   | { status: "unavailable"; reasons: readonly string[] };
 
 export interface CompositionViolation {
-  code:
-    | "unapproved-public-import"
-    | "local-component-file"
-    | "local-component-definition"
-    | "unapproved-style-file"
-    | "replacement-design-token"
-    | "inline-visual-style";
+  code: CompositionViolationCode;
   path: string;
   message: string;
+}
+
+export enum CompositionViolationCode {
+  UnapprovedPublicImport = "unapproved-public-import",
+  LocalComponentFile = "local-component-file",
+  LocalComponentDefinition = "local-component-definition",
+  UnapprovedStyleFile = "unapproved-style-file",
+  ReplacementDesignToken = "replacement-design-token",
+  InlineVisualStyle = "inline-visual-style",
 }
 
 export type AppliedAppCompositionResult =
@@ -119,7 +113,8 @@ export function bindArrustedComponentCompositionPolicy(input: {
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(input.content) as unknown;
+    // SAFETY: JSON.parse produces untrusted data assigned to unknown and schema-validated below.
+    parsed = JSON.parse(input.content);
   } catch {
     return {
       reasons: ["The Arrusted component-composition manifest is not valid JSON."],
@@ -154,7 +149,7 @@ function importsFrom(content: string): string[] {
       imports.add(specifier);
     }
   }
-  return [...imports].toSorted();
+  return [...imports].toSorted((left, right) => left.localeCompare(right));
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -162,6 +157,81 @@ function appRelativePath(appId: string, path: string): string | undefined {
   const prefix = `apps/${appId}/`;
   return path.startsWith(prefix) ? path.slice(prefix.length) : undefined;
 }
+
+const auditStyle = (
+  relative: string,
+  file: { path: string; content: string },
+  isStyle: boolean,
+  allowedStyles: ReadonlySet<string>,
+  addViolation: (code: CompositionViolationCode, message: string, path: string) => void,
+): void => {
+  if (isStyle && !allowedStyles.has(relative)) {
+    addViolation(
+      CompositionViolationCode.UnapprovedStyleFile,
+      "Generated apps may not add component-local style files.",
+      file.path,
+    );
+  }
+  if (isStyle && /--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content)) {
+    addViolation(
+      CompositionViolationCode.ReplacementDesignToken,
+      "Generated apps may not define replacement design tokens.",
+      file.path,
+    );
+  }
+};
+
+const auditCompositionFile = (
+  file: { path: string; content: string },
+  appId: string,
+  allowedImports: ReadonlySet<string>,
+  allowedRouteGlue: ReadonlySet<string>,
+  allowedStyles: ReadonlySet<string>,
+  addViolation: (code: CompositionViolationCode, message: string, path: string) => void,
+): void => {
+  const relative = appRelativePath(appId, file.path);
+  if (relative === undefined) return;
+
+  const isStyle = /\.(?:css|scss|sass|less)$/u.test(relative);
+  const isComponentSource = /\.(?:[cm]?[jt]sx?)$/u.test(relative);
+  if (/(?:^|\/)components(?:\/|$)/u.test(relative)) {
+    addViolation(
+      CompositionViolationCode.LocalComponentFile,
+      "Generated apps may not add local visual component files.",
+      file.path,
+    );
+  }
+  if (
+    isComponentSource &&
+    !allowedRouteGlue.has(relative) &&
+    /(?:export\s+(?:default\s+)?function|function\s+[A-Z]|const\s+[A-Z][A-Za-z0-9]*\s*=\s*\()/u.test(
+      file.content,
+    )
+  ) {
+    addViolation(
+      CompositionViolationCode.LocalComponentDefinition,
+      "Generated apps may only define visual route glue named by the Arrusted policy.",
+      file.path,
+    );
+  }
+  auditStyle(relative, file, isStyle, allowedStyles, addViolation);
+  if (/style\s*=\s*\{\s*\{/u.test(file.content)) {
+    addViolation(
+      CompositionViolationCode.InlineVisualStyle,
+      "Generated apps may not add inline visual styling.",
+      file.path,
+    );
+  }
+  for (const specifier of importsFrom(file.content)) {
+    if (specifier.startsWith("@autograph/") && !allowedImports.has(specifier)) {
+      addViolation(
+        CompositionViolationCode.UnapprovedPublicImport,
+        `The import ${specifier} is not declared by the selected Arrusted policy.`,
+        file.path,
+      );
+    }
+  }
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function auditAppliedAppComposition(input: {
@@ -179,69 +249,19 @@ export function auditAppliedAppComposition(input: {
   const allowedRouteGlue = new Set(input.binding.policy.routeGlue.allowedFiles);
   const allowedStyles = new Set(input.binding.policy.routeGlue.allowedStyleFiles);
 
+  const addViolation = (code: CompositionViolationCode, message: string, path: string) => {
+    violations.push({ code, message, path });
+  };
+
   for (const file of input.files) {
-    const relative = appRelativePath(input.appId, file.path);
-    if (relative === undefined) {
-      continue;
-    }
-    const isStyle = /\.(?:css|scss|sass|less)$/u.test(relative);
-    const isComponentSource = /\.(?:[cm]?[jt]sx?)$/u.test(relative);
-
-    if (/(?:^|\/)components(?:\/|$)/u.test(relative)) {
-      violations.push({
-        code: "local-component-file",
-        message: "Generated apps may not add local visual component files.",
-        path: file.path,
-      });
-    }
-
-    if (
-      isComponentSource &&
-      !allowedRouteGlue.has(relative) &&
-      /(?:export\s+(?:default\s+)?function|function\s+[A-Z]|const\s+[A-Z][A-Za-z0-9]*\s*=\s*\()/u.test(
-        file.content,
-      )
-    ) {
-      violations.push({
-        code: "local-component-definition",
-        message: "Generated apps may only define visual route glue named by the Arrusted policy.",
-        path: file.path,
-      });
-    }
-
-    if (isStyle && !allowedStyles.has(relative)) {
-      violations.push({
-        code: "unapproved-style-file",
-        message: "Generated apps may not add component-local style files.",
-        path: file.path,
-      });
-    }
-
-    if (isStyle && /--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content)) {
-      violations.push({
-        code: "replacement-design-token",
-        message: "Generated apps may not define replacement design tokens.",
-        path: file.path,
-      });
-    }
-
-    if (/style\s*=\s*\{\s*\{/u.test(file.content)) {
-      violations.push({
-        code: "inline-visual-style",
-        message: "Generated apps may not add inline visual styling.",
-        path: file.path,
-      });
-    }
-
-    for (const specifier of importsFrom(file.content)) {
-      if (specifier.startsWith("@autograph/") && !allowedImports.has(specifier)) {
-        violations.push({
-          code: "unapproved-public-import",
-          message: `The import ${specifier} is not declared by the selected Arrusted policy.`,
-          path: file.path,
-        });
-      }
-    }
+    auditCompositionFile(
+      file,
+      input.appId,
+      allowedImports,
+      allowedRouteGlue,
+      allowedStyles,
+      addViolation,
+    );
   }
 
   return violations.length === 0

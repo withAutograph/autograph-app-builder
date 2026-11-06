@@ -1,4 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
+import { z } from "zod";
 import { expect, vi } from "vitest";
 import { createPreparedHandoffReader } from "../agent/handoff-context";
 import {
@@ -14,6 +15,17 @@ import { createGitHubAppHttpProvider } from "../repository/github-app-http-provi
 import { initialBuilderProvisionJournalRecord } from "../provisioning/journal";
 import type { BuilderProvisionJournalRow } from "../provisioning/journal";
 
+const preparedRepositoryName = "prepared-vendor-review";
+const preparedRepositoryFullName = `acme/${preparedRepositoryName}`;
+const githubTokenRequestSchema = z.object({
+  permissions: z.record(z.string(), z.string()),
+});
+
+const requestUrl = (request: RequestInfo | URL): string => {
+  if (request instanceof Request) return request.url;
+  return request instanceof URL ? request.href : request;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function preparedJournal(
   authority: HostedSessionTenantAuthority,
@@ -28,7 +40,7 @@ export function preparedJournal(
         githubInstallationId: "10",
         vercelInstallationId: "icfg_prepared",
       },
-      repository: { name: "prepared-vendor-review", private: true },
+      repository: { name: preparedRepositoryName, private: true },
       requestId,
       version: 1,
     },
@@ -37,27 +49,27 @@ export function preparedJournal(
   record.response.status = "settled";
   record.response.github = {
     defaultBranch: "main",
-    fullName: "acme/prepared-vendor-review",
+    fullName: preparedRepositoryFullName,
     headSha: "a".repeat(40),
     headTree: "b".repeat(40),
     installationId: "10",
-    name: "prepared-vendor-review",
+    name: preparedRepositoryName,
     owner: "acme",
     repositoryId: "100",
     scope: { id: "110", login: "acme", type: "organization" },
     starter: { sourceSha: "c".repeat(40), sourceTree: "d".repeat(40) },
     status: "succeeded",
-    url: "https://github.com/acme/prepared-vendor-review",
+    url: `https://github.com/${preparedRepositoryFullName}`,
     visibility: "private",
   };
   record.response.vercel = {
-    dashboardUrl: "https://vercel.com/acme/prepared-vendor-review",
+    dashboardUrl: `https://vercel.com/${preparedRepositoryFullName}`,
     framework: "nextjs",
     installationId: "icfg_prepared",
-    linkedGitHubRepository: "acme/prepared-vendor-review",
-    name: "prepared-vendor-review",
+    linkedGitHubRepository: preparedRepositoryFullName,
+    name: preparedRepositoryName,
     projectId: "prj_prepared",
-    rootDirectory: "apps/prepared-vendor-review",
+    rootDirectory: `apps/${preparedRepositoryName}`,
     scope: { id: "team_prepared", slug: "acme", type: "team" },
     status: "succeeded",
   };
@@ -109,7 +121,7 @@ export function preparedProviderFixture(input: {
   const vercelToken = () => `mock_server_vercel_token_${credentialRevision}`;
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const githubHttp = vi.fn<typeof fetch>(async (request, init) => {
-    const url = new URL(String(request));
+    const url = new URL(requestUrl(request));
     expect(url.origin).toBe("https://api.github.com");
     const headers = new Headers(init?.headers);
     if (url.pathname.startsWith("/app/installations/")) {
@@ -118,7 +130,7 @@ export function preparedProviderFixture(input: {
       expect(headers.get("authorization")).toMatch(/^bearer ey/iu);
       if (url.pathname.endsWith("/access_tokens")) {
         expect(init?.method).toBe("POST");
-        const body = JSON.parse(String(init?.body));
+        const body = githubTokenRequestSchema.parse(JSON.parse(z.string().parse(init?.body)));
         expect(Object.values(body.permissions).every((permission) => permission === "read")).toBe(
           true,
         );
@@ -142,30 +154,30 @@ export function preparedProviderFixture(input: {
     if (url.pathname === "/installation/repositories") {
       return Response.json({ repositories: [{ id: 100 }] });
     }
-    if (["/repositories/100", "/repos/acme/prepared-vendor-review"].includes(url.pathname)) {
+    if (["/repositories/100", `/repos/${preparedRepositoryFullName}`].includes(url.pathname)) {
       return Response.json({
         archived: false,
         default_branch: "main",
         id: 100,
-        name: "prepared-vendor-review",
+        name: preparedRepositoryName,
         owner: { login: "acme" },
         private: true,
       });
     }
-    if (url.pathname === "/repos/acme/prepared-vendor-review/commits/main") {
+    if (url.pathname === `/repos/${preparedRepositoryFullName}/commits/main`) {
       return Response.json({
         commit: { tree: { sha: "b".repeat(40) } },
         sha: "a".repeat(40),
       });
     }
-    if (url.pathname === "/repos/acme/prepared-vendor-review/actions/variables") {
+    if (url.pathname === `/repos/${preparedRepositoryFullName}/actions/variables`) {
       return Response.json({ variables: [] });
     }
     throw new Error("Unexpected mocked GitHub request.");
   });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const vercelHttp = vi.fn<typeof fetch>(async (request, init) => {
-    expect(String(request)).toBe(
+    expect(requestUrl(request)).toBe(
       "https://api.vercel.com/v9/projects/prj_prepared?teamId=team_prepared",
     );
     expect(init?.method).toBe("GET");
@@ -212,13 +224,13 @@ export function preparedProviderFixture(input: {
   const github = vi.fn(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async (
-      sessionAuth: unknown,
+      sessionAuth: Parameters<typeof exactForwardedSessionAuthority>[0],
       selection: { repository: string; selectedInstallationId?: string },
     ) => {
       const { authority } = exactForwardedSessionAuthority(sessionAuth);
       expect(authority).toEqual(input.authority);
       expect(selection).toEqual({
-        repository: "acme/prepared-vendor-review",
+        repository: preparedRepositoryFullName,
         selectedInstallationId: "10",
       });
       return await classifyGitHubRepositoryAccess({

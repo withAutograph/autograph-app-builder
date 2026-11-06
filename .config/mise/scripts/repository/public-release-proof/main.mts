@@ -49,6 +49,10 @@ import {
 } from "../../../../../lib/provisioning/hosted-operator-contract";
 
 const postgresFlag = process.argv.indexOf("--postgres-bin");
+const invoiceAppDatabaseBinding = "INVOICE_APP_DATABASE_URL";
+const observedEnvId = "env-observed";
+const fixtureTokenKeyVersion = "fixture-v1";
+const gatewayEffectKinds = new Set(["gateway-bindings", "gateway-delivery"]);
 const postgresBin = postgresFlag === -1 ? undefined : process.argv[postgresFlag + 1];
 if (postgresBin === undefined || !path.isAbsolute(postgresBin)) {
   throw new Error("An explicit local PostgreSQL binary directory is required");
@@ -142,20 +146,20 @@ try {
   );
   const pending = await store.compareAndSet(initial, {
     ...initial.record,
-    bindings: { INVOICE_APP_DATABASE_URL: { state: "pending" } },
+    bindings: { [invoiceAppDatabaseBinding]: { state: "pending" } },
     effects: { ...initial.record.effects, "bind-production-runtime": "pending" },
   });
   assert.ok(pending);
   assert.equal(await store.compareAndSet(initial, initial.record), undefined);
   const accepted = await store.compareAndSet(pending, {
     ...pending.record,
-    bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "pending" } },
+    bindings: { [invoiceAppDatabaseBinding]: { acceptedEnvId: observedEnvId, state: "pending" } },
   });
   assert.ok(accepted);
   await assert.rejects(
     store.compareAndSet(accepted, {
       ...accepted.record,
-      bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "foreign-env", state: "pending" } },
+      bindings: { [invoiceAppDatabaseBinding]: { acceptedEnvId: "foreign-env", state: "pending" } },
     }),
   );
   await assert.rejects(
@@ -166,13 +170,15 @@ try {
   );
   const verified = await store.compareAndSet(accepted, {
     ...accepted.record,
-    bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "applied" } },
+    bindings: { [invoiceAppDatabaseBinding]: { acceptedEnvId: observedEnvId, state: "applied" } },
   });
   assert.ok(verified);
   await assert.rejects(
     store.compareAndSet(verified, {
       ...verified.record,
-      bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "pending" } },
+      bindings: {
+        [invoiceAppDatabaseBinding]: { acceptedEnvId: observedEnvId, state: "pending" },
+      },
     }),
   );
   const owner = operatorOwnerContextSchema.parse({
@@ -242,7 +248,7 @@ try {
 
     database: drizzle(writer, { schema }),
 
-    keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture-v1" },
+    keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: fixtureTokenKeyVersion },
 
     target: privateTarget,
   });
@@ -294,14 +300,14 @@ try {
     createPublicReleaseRuntimeConfigurationStore({
       assertCurrentOwner: checkpointInput.assertCurrentOwner,
       database: drizzle(writer, { schema }),
-      keyring: { tokenKey: Buffer.alloc(32, 8), tokenKeyVersion: "fixture-v1" },
+      keyring: { tokenKey: Buffer.alloc(32, 8), tokenKeyVersion: fixtureTokenKeyVersion },
       target: privateTarget,
     }).read(privateScope),
   );
   const seedInput = {
     assertCurrentOwner: checkpointInput.assertCurrentOwner,
     database: drizzle(writer, { schema }),
-    keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture-v1" },
+    keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: fixtureTokenKeyVersion },
     scope: {
       ...privateTarget,
       authResourceIdentity: "e".repeat(64),
@@ -376,16 +382,14 @@ try {
       composition: "single-project-services",
       gateway: { ...fixtureBoundary.gateway, projectId: fixtureTarget.projectId },
     },
-    effects: retainedFixture.plan.effects.filter(
-      (effect) => !["gateway-bindings", "gateway-delivery"].includes(effect.kind),
-    ),
-    gatewayBindings: undefined,
-    gatewayDelivery: undefined,
+    effects: retainedFixture.plan.effects.filter((effect) => !gatewayEffectKinds.has(effect.kind)),
+    gatewayBindings: null,
+    gatewayDelivery: null,
     publicGateway: { ...retainedFixture.plan.publicGateway, projectId: fixtureTarget.projectId },
   });
   const freshNormalSetup = retainedOperatorAuthSchema.parse({
     ...retainedFixture,
-    gatewayEnvironment: undefined,
+    gatewayEnvironment: null,
     operationRef: randomUUID(),
     plan: freshNormalPlan,
     planDigest: operatorPlanDigest(freshNormalPlan),
@@ -480,7 +484,7 @@ try {
   assert.equal(await store.read(authority, otherRef), undefined);
   const restarted = createPostgresPublicReleaseStore(drizzle(writer, { schema }));
   const observed = await restarted.read(authority, initial.operationRef);
-  assert.equal(observed?.record.bindings.INVOICE_APP_DATABASE_URL.acceptedEnvId, "env-observed");
+  assert.equal(observed?.record.bindings[invoiceAppDatabaseBinding].acceptedEnvId, observedEnvId);
   console.log(
     "Public release PostgreSQL proof passed: restricted writer, restart readback, stale CAS, immutable target/row receipt, foreign owner and record-kind isolation, revision credential reuse with new AAD and revoked current/original approval denial.",
   );

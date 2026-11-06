@@ -1,5 +1,6 @@
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
+import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 
 import { activeBuilderModelId } from "../integrations/active-model";
@@ -37,39 +38,60 @@ const renewal = {
   now: row.expiresAt,
   requestDigest: row.requestDigest,
 };
+type HandoffRow = typeof builderHandoffs.$inferSelect;
+interface Query {
+  params: unknown[];
+  sql: string;
+}
+type UpdateValues = PgUpdateSetSource<typeof builderHandoffs>;
+
+const queryResult = (condition: SQL): Query => {
+  const query = new PgDialect().sqlToQuery(condition);
+  return { params: query.params, sql: query.sql };
+};
+
+const limitedRows = (rows: HandoffRow[]) => ({
+  limit: async () => rows,
+});
+
+const whereRead = (readWhere: Query[], rows: HandoffRow[]) => {
+  const applyWhere = (condition: SQL) => {
+    readWhere.push(queryResult(condition));
+    return limitedRows(rows);
+  };
+  return applyWhere;
+};
+
+const whereUpdate = (updateWhere: Query[], rows: HandoffRow[]) => {
+  const applyWhere = (condition: SQL) => {
+    updateWhere.push(queryResult(condition));
+    return {
+      returning: async () => rows,
+    };
+  };
+  return applyWhere;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function store(input: {
-  updated?: (typeof builderHandoffs.$inferSelect)[];
-  current?: (typeof builderHandoffs.$inferSelect)[];
-}) {
+function store(input: { updated?: HandoffRow[]; current?: HandoffRow[] }) {
   const set = vi.fn();
-  const updateWhere = vi.fn();
-  const readWhere = vi.fn();
-  const select = vi.fn(() => ({
-    from: () => ({
-      where: (condition: SQL) => {
-        readWhere(new PgDialect().sqlToQuery(condition));
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        return { limit: async () => input.current ?? [] };
-      },
-    }),
-  }));
-  const database = {
+  const updateWhere: Query[] = [];
+  const readWhere: Query[] = [];
+  const readRows = input.current ?? [];
+  const updatedRows = input.updated ?? [];
+  const from = () => ({ where: whereRead(readWhere, readRows) });
+  const select = vi.fn(() => ({ from }));
+  const database: Parameters<typeof createPostgresBuilderHandoffStore>[0] = {
     select,
     update: () => ({
-      set: (values: unknown) => {
+      set: (values: UpdateValues) => {
         set(values);
         return {
-          where: (condition: SQL) => {
-            updateWhere(new PgDialect().sqlToQuery(condition));
-            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-            return { returning: async () => input.updated ?? [] };
-          },
+          where: whereUpdate(updateWhere, updatedRows),
         };
       },
     }),
-  } as unknown as Parameters<typeof createPostgresBuilderHandoffStore>[0];
+  };
   const handoffs = createPostgresBuilderHandoffStore(database);
   const { renewExpired } = handoffs;
   if (!renewExpired) {
@@ -79,8 +101,6 @@ function store(input: {
     handoffs: {
       ...handoffs,
       renewExpired,
-    } as Omit<typeof handoffs, "renewExpired"> & {
-      renewExpired: NonNullable<typeof renewExpired>;
     },
     readWhere,
     select,
@@ -105,7 +125,7 @@ describe("PostgreSQL handoff renewal", () => {
     expect(test.set).toHaveBeenCalledExactlyOnceWith({
       expiresAt: renewal.expiresAt,
     });
-    const [[query]] = test.updateWhere.mock.calls;
+    const [query] = test.updateWhere;
     for (const column of [
       "issuer",
       "audience",
@@ -141,7 +161,7 @@ describe("PostgreSQL handoff renewal", () => {
     expect(await test.handoffs.renewExpired({ ...renewal, now: timestamp })).toMatchObject({
       disposition: "renewed",
     });
-    const [[query]] = test.updateWhere.mock.calls;
+    const [query] = test.updateWhere;
     // The SQL must compare expiry only against current time, not the lossy
     // readback. The stored .000789 timestamp is already before .001000.
     expect(query.sql.match(/"expires_at"/gu)).toHaveLength(1);
@@ -166,21 +186,27 @@ describe("PostgreSQL handoff renewal", () => {
   it.each([false, true])(
     "returns the winner when a concurrent renewal or bind wins (bound=%s)",
     async (bound) => {
-      const current = {
+      const current: HandoffRow = {
         ...row,
         expiresAt: renewal.expiresAt,
-        ...(bound ? { redeemedAt: row.createdAt, sessionId: "existing-session" } : {}),
       };
+      if (bound) {
+        current.redeemedAt = row.createdAt;
+        current.sessionId = "existing-session";
+      }
       const test = store({ current: [current] });
+      const expectedRecord = {
+        expiresAt: current.expiresAt,
+        handoffId: row.handoffId,
+      };
+      if (bound) {
+        Object.assign(expectedRecord, { sessionId: "existing-session" });
+      }
       expect(await test.handoffs.renewExpired(renewal)).toMatchObject({
         disposition: "existing",
-        record: {
-          expiresAt: current.expiresAt,
-          handoffId: row.handoffId,
-          ...(bound ? { sessionId: "existing-session" } : {}),
-        },
+        record: expectedRecord,
       });
-      expect(test.readWhere.mock.calls[0][0].params).toEqual([
+      expect(test.readWhere[0].params).toEqual([
         authority.issuer,
         authority.audience,
         authority.workspaceId,
@@ -210,7 +236,7 @@ describe("PostgreSQL handoff renewal", () => {
         sessionId: "session-one",
       }),
     ).toBeUndefined();
-    expect(test.updateWhere.mock.calls[0][0].sql).toContain('"builder_handoff"."expires_at" >');
-    expect(test.updateWhere.mock.calls[0][0].params).toContain(row.expiresAt.toISOString());
+    expect(test.updateWhere[0].sql).toContain('"builder_handoff"."expires_at" >');
+    expect(test.updateWhere[0].params).toContain(row.expiresAt.toISOString());
   });
 });

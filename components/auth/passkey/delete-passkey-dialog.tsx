@@ -33,12 +33,14 @@ export interface DeletePasskeyDialogProps {
   passkey: ListedPasskey;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePasskeyDialogProps) {
+const getPasskeyName = (name: string | null | undefined, fallback: string): string =>
+  name === null || name === undefined || name === "" ? fallback : name;
+
+export const DeletePasskeyDialog = ({ open, onOpenChange, passkey }: DeletePasskeyDialogProps) => {
   const { authClient, localization } = useAuth<PasskeyAuthClient>();
   const { localization: passkeyLocalization } = useAuthPlugin(passkeyPlugin);
 
-  const passkeyName = passkey.name || passkeyLocalization.passkey;
+  const passkeyName = getPasskeyName(passkey.name, passkeyLocalization.passkey);
   const previewId = `delete-passkey-preview-${passkey.id}`;
 
   const { mutate: deletePasskey, isPending: isDeleting } = useDeletePasskey(authClient, {
@@ -63,7 +65,9 @@ export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePassk
         </AlertDialogHeader>
 
         <Field>
-          <FieldLabel htmlFor={previewId}>{passkey.name || passkeyLocalization.passkey}</FieldLabel>
+          <FieldLabel htmlFor={previewId}>
+            {getPasskeyName(passkey.name, passkeyLocalization.passkey)}
+          </FieldLabel>
 
           <Input id={previewId} value={passkeyName} readOnly disabled />
         </Field>
@@ -89,4 +93,4 @@ export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePassk
       </AlertDialogContent>
     </AlertDialog>
   );
-}
+};

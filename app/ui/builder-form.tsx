@@ -32,7 +32,12 @@ export function Builder({
         inert={submissionPending || preparingSubmission || sourceUploadPending}
         aria-busy={submissionPending || preparingSubmission || sourceUploadPending}
       >
-        <form className={styles.builderCard} onSubmit={submit}>
+        <form
+          className={styles.builderCard}
+          onSubmit={(event) => {
+            void submit(event);
+          }}
+        >
           {draftStatus}
           <fieldset
             className={styles.builderControls}
@@ -51,7 +56,9 @@ export function Builder({
             onStageChange={(stage) => {
               setConnectionFlow((current) => (current ? { ...current, stage } : current));
             }}
-            onConnected={completeConnection}
+            onConnected={() => {
+              completeConnection();
+            }}
           />
         ) : null}
       </main>

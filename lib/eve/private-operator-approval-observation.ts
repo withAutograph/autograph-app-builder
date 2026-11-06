@@ -108,7 +108,7 @@ export const createPrivateOperatorApprovalCapture = (input: {
       if (approved.length > 1) {
         throw new Error("Private approval is ambiguous.");
       }
-      const entry = approved[0];
+      const [entry] = approved;
       return entry === undefined
         ? null
         : { approvalId: entry.requestId, approvedByCallId: entry.callId };

@@ -2,8 +2,8 @@ import { and, asc, eq, gt, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import type { z } from "zod";
 import { parseProviderConnectionReturn } from "./provider-connection-return";
-import type * as databaseSchema from "../db/schema";
 import { hostedVercelInstallations, vercelInstallationAuthorizationStates } from "../db/schema";
 import {
   decryptVersionedVercelInstallationToken,
@@ -19,11 +19,11 @@ import type {
   VercelInstallationStore,
 } from "./vercel-installation";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = PostgresJsDatabase;
+type TenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function tenant(table: typeof hostedVercelInstallations, authorityInput: unknown) {
-  const authority = hostedTenantAuthoritySchema.parse(authorityInput);
+function tenant(table: typeof hostedVercelInstallations, authority: TenantAuthority) {
   return and(
     eq(table.audience, authority.audience),
     eq(table.issuer, authority.issuer),
@@ -36,10 +36,10 @@ function tenant(table: typeof hostedVercelInstallations, authorityInput: unknown
 export async function readActiveVercelInstallationToken(input: {
   database: Database;
   config: VercelTokenKeyringConfig;
-  authority: unknown;
+  authority: TenantAuthority;
   installationId: string;
 }) {
-  const authority = hostedTenantAuthoritySchema.parse(input.authority);
+  const { authority } = input;
   const rows = await input.database
     .select()
     .from(hostedVercelInstallations)
@@ -52,8 +52,8 @@ export async function readActiveVercelInstallationToken(input: {
     )
     .limit(1);
   const [row] = rows;
-  if (!row) {
-    return;
+  if (row === undefined) {
+    return null;
   }
   let token: string;
   try {
@@ -68,7 +68,7 @@ export async function readActiveVercelInstallationToken(input: {
     });
   } catch (error) {
     if (error instanceof VercelTokenDecryptionKeyError) {
-      return;
+      return null;
     }
     throw error;
   }
@@ -79,7 +79,8 @@ export async function readActiveVercelInstallationToken(input: {
       installationId: row.installationId,
       plan: row.plan,
       scopeId: row.scopeId,
-      scopeType: row.scopeType as "team" | "user",
+      // SAFETY: the database column is constrained to the Vercel scope enum at storage time.
+      scopeType: row.scopeType,
       slug: row.slug,
       updatedAt: row.updatedAt,
     },
@@ -90,7 +91,7 @@ export async function readActiveVercelInstallationToken(input: {
 /** Lists owner-scoped bindings without requiring OAuth client credentials or token keys. */
 export const readVercelInstallationBindings = async (input: {
   database: Database;
-  authority: unknown;
+  authority: TenantAuthority;
 }): Promise<VercelInstallationBinding[]> => {
   const rows = await input.database
     .select({
@@ -106,7 +107,8 @@ export const readVercelInstallationBindings = async (input: {
     .from(hostedVercelInstallations)
     .where(tenant(hostedVercelInstallations, input.authority))
     .orderBy(asc(hostedVercelInstallations.displayName));
-  return rows as VercelInstallationBinding[];
+  // SAFETY: every selected field is the corresponding VercelInstallationBinding field.
+  return rows satisfies VercelInstallationBinding[];
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -135,13 +137,16 @@ export function createPostgresVercelAuthorizationStateStore(
           returnTo: vercelInstallationAuthorizationStates.returnTo,
         });
       const [row] = rows;
-      if (!row || rows.length !== 1) {
-        return;
+      if (row === undefined || rows.length !== 1) {
+        return null;
       }
-      return parseProviderConnectionReturn({
-        returnTo: row.returnTo,
-        ...(row.resumeKey ? { resumeKey: row.resumeKey } : {}),
-      });
+      const returnState = { returnTo: row.returnTo } satisfies Parameters<
+        typeof parseProviderConnectionReturn
+      >[0];
+      if (row.resumeKey !== null && row.resumeKey !== "") {
+        returnState.resumeKey = row.resumeKey;
+      }
+      return parseProviderConnectionReturn(returnState);
     },
     async create(input) {
       await database.insert(vercelInstallationAuthorizationStates).values({
@@ -175,13 +180,16 @@ export function createPostgresVercelAuthorizationStateStore(
           ),
         )
         .limit(1);
-      if (!rows[0]) {
-        return;
+      if (rows[0] === undefined) {
+        return null;
       }
-      return parseProviderConnectionReturn({
-        returnTo: rows[0].returnTo,
-        ...(rows[0].resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
-      });
+      const returnState = { returnTo: rows[0].returnTo } satisfies Parameters<
+        typeof parseProviderConnectionReturn
+      >[0];
+      if (rows[0].resumeKey !== null && rows[0].resumeKey !== "") {
+        returnState.resumeKey = rows[0].resumeKey;
+      }
+      return parseProviderConnectionReturn(returnState);
     },
   };
 }
@@ -237,7 +245,8 @@ export function createPostgresVercelInstallationStore(input: {
       if (rows.length !== 1) {
         throw new Error("Vercel installation was not durable.");
       }
-      return rows[0] as VercelInstallationBinding;
+      // SAFETY: returning projection contains exactly the binding fields selected above.
+      return rows[0] satisfies VercelInstallationBinding;
     },
     async deactivate(installationId, now) {
       const rows = await input.database

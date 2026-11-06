@@ -1,6 +1,6 @@
 /* oxlint-disable anti-slop/no-module-mocking -- Actual recording/acceptance tools and reducers run against faithful in-memory harness globals and persistence ports; no database or sandbox effects are allowed. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import recordArtifact from "../../agent/tools/record_prototype_artifact";
+import recordArtifact from "../../agent/tools/record-prototype-artifact";
 import acceptAppSpec from "../../agent/tools/accept_app_spec";
 import { BUILD_READY_APP_SPEC } from "../../evals/support/app-spec";
 import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState, sha256 } from "./workflow-state";
@@ -105,14 +105,18 @@ beforeEach(() => {
   vi.unstubAllEnvs();
   const chunks = new Map<string, string>();
   ports.store.mockReturnValue({
-    get: async (input) =>
-      chunks.get(JSON.stringify([input.path, input.transferDigest, input.chunkIndex])),
+    get: async (input) => {
+      const key = JSON.stringify([input.path, input.transferDigest, input.chunkIndex]);
+      const chunk = chunks.get(key);
+      return await Promise.resolve(chunk);
+    },
     put: async (input) => {
       chunks.set(
         JSON.stringify([input.path, input.transferDigest, input.chunkIndex]),
         input.content,
       );
-      return sha256(input.content);
+      const digest = sha256(input.content);
+      return await Promise.resolve(digest);
     },
   });
 });

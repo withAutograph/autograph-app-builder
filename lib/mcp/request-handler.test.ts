@@ -1,4 +1,5 @@
 import { McpUiResourceMetaSchema } from "@modelcontextprotocol/ext-apps";
+import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 
 import type { HostedEveTransport } from "../eve/hosted-service";
@@ -26,6 +27,8 @@ const exactTools = [
   "autograph_send",
   "autograph_start",
 ];
+const requestParamsSchema = z.record(z.string(), z.json());
+type RequestParams = z.infer<typeof requestParamsSchema>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function claims(input: Partial<VerifiedHostedClaims> = {}): VerifiedHostedClaims {
@@ -104,7 +107,7 @@ function runtime(
 function mcpRequest(
   headers: Record<string, string> = {},
   method = "tools/list",
-  params: Record<string, unknown> = {},
+  params: RequestParams = {},
 ): Request {
   return new Request(auth.resourceUrl, {
     body: JSON.stringify({
@@ -123,7 +126,7 @@ function mcpRequest(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function mcpToolRequest(name: string, args: Record<string, unknown>): Request {
+function mcpToolRequest(name: string, args: RequestParams): Request {
   return new Request(auth.resourceUrl, {
     body: JSON.stringify({
       id: 1,
@@ -140,24 +143,32 @@ function mcpToolRequest(name: string, args: Record<string, unknown>): Request {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function mcpResult<T>(response: Response): Promise<T> {
+async function mcpResult<T>(response: Response, schema: z.ZodType<T>): Promise<T> {
   const body = await response.text();
   const data = body
     .split("\n")
     .find((line) => line.startsWith("data: "))
     ?.slice("data: ".length);
-  const payload = JSON.parse(data ?? body) as { result?: T };
-  if (payload.result === undefined) {
+  const payloadSchema = z.object({ result: schema.optional() });
+  const decoded: unknown = JSON.parse(data ?? body);
+  const parsed = payloadSchema.safeParse(decoded);
+  if (!parsed.success) {
     throw new Error(`MCP result was missing: ${body}`);
   }
-  return payload.result;
+  if (parsed.data.result === undefined) {
+    throw new Error(`MCP result was missing: ${body}`);
+  }
+  return parsed.data.result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function toolNames(response: Response): Promise<string[]> {
-  const result = await mcpResult<{
-    tools?: { name?: string }[];
-  }>(response);
+  const result = await mcpResult(
+    response,
+    z.custom<{
+      tools?: { name?: string }[];
+    }>(),
+  );
   return (result.tools ?? []).map((tool) => tool.name ?? "").toSorted();
 }
 
@@ -468,16 +479,43 @@ describe("branded public tool mapping", () => {
   });
 
   it("keeps ordinary tools free of unconditional MCP App resources", async () => {
-    const handler = createAutographMcpHandler({} as EveSessionService);
+    const service = {
+      async cancel() {
+        await Promise.reject(new Error("Unexpected session call"));
+      },
+      async get() {
+        await Promise.reject(new Error("Unexpected session call"));
+      },
+      async list() {
+        await Promise.reject(new Error("Unexpected session call"));
+      },
+      async respond() {
+        await Promise.reject(new Error("Unexpected session call"));
+      },
+      async send() {
+        await Promise.reject(new Error("Unexpected session call"));
+      },
+      async start() {
+        await Promise.reject(new Error("Unexpected session call"));
+      },
+    } satisfies EveSessionService;
+    const handler = createAutographMcpHandler(service);
     const response = await handler(mcpRequest());
-    const result = await mcpResult<{
-      tools?: {
-        name?: string;
-        _meta?: { ui?: { resourceUri?: string; visibility?: string[] } };
-      }[];
-    }>(response);
+    const result = await mcpResult(
+      response,
+      z.custom<{
+        tools?: {
+          name?: string;
+          _meta?: { ui?: { resourceUri?: string; visibility?: string[] } };
+        }[];
+      }>(),
+    );
 
-    expect((result.tools ?? []).map(({ name }) => name).toSorted()).toEqual(exactTools);
+    expect(
+      (result.tools ?? [])
+        .map(({ name }) => name)
+        .toSorted((left, right) => left.localeCompare(right)),
+    ).toEqual(exactTools);
     expect((result.tools ?? []).every(({ _meta }) => _meta?.ui?.resourceUri === undefined)).toBe(
       true,
     );
@@ -560,7 +598,7 @@ describe("branded public tool mapping", () => {
       const response = await handler(mcpToolRequest(name, args));
       expect(response.status).toBe(200);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const callResult = await mcpResult<{ structuredContent?: unknown }>(response);
+      const callResult = await mcpResult(response, z.custom<{ structuredContent?: unknown }>());
       expect(callResult.structuredContent).toEqual(result);
     }
 
@@ -610,7 +648,7 @@ describe("branded public tool mapping", () => {
     } satisfies EveSessionService;
     const handler = createAutographMcpHandler(service);
     const response = await handler(mcpToolRequest("autograph_get", { cursor: 0, limit: 25 }));
-    const result = await mcpResult<{ structuredContent: unknown }>(response);
+    const result = await mcpResult(response, z.custom<{ structuredContent: unknown }>());
 
     expect(result.structuredContent).toEqual(listed);
     expect(service.list).toHaveBeenCalledWith({ cursor: 0, limit: 25 });
@@ -618,10 +656,12 @@ describe("branded public tool mapping", () => {
     // oxlint-disable-next-line eslint/require-await -- Session read test double.
     const getStart = vi.fn(async () => sessionResult);
     const recoveringHandler = createAutographMcpHandler({ ...service, getStart });
-    const recovered = await mcpResult<{ structuredContent: unknown }>(
-      await recoveringHandler(
-        mcpToolRequest("autograph_get", { clientRequestId: "lost-start", cursor: 4, limit: 25 }),
-      ),
+    const recoveredResponse = await recoveringHandler(
+      mcpToolRequest("autograph_get", { clientRequestId: "lost-start", cursor: 4, limit: 25 }),
+    );
+    const recovered = await mcpResult(
+      recoveredResponse,
+      z.custom<{ structuredContent: unknown }>(),
     );
     expect(recovered.structuredContent).toEqual(sessionResult);
     expect(getStart).toHaveBeenCalledWith({ clientRequestId: "lost-start", cursor: 4, limit: 25 });
@@ -673,13 +713,16 @@ describe("branded public tool mapping", () => {
         sessionId: "session-one",
       }),
     );
-    const callResult = await mcpResult<{
-      structuredContent: Omit<typeof result, "prototype"> & {
-        appAccessUrl: string;
-        prototype: typeof result.prototype & { previewUrl: string };
-      };
-      _meta?: unknown;
-    }>(response);
+    const callResult = await mcpResult(
+      response,
+      z.custom<{
+        structuredContent: Omit<typeof result, "prototype"> & {
+          appAccessUrl: string;
+          prototype: typeof result.prototype & { previewUrl: string };
+        };
+        _meta?: unknown;
+      }>(),
+    );
 
     expect(callResult.structuredContent.prototype.previewUrl).toBe(
       `https://builder.example.test/preview/session-one/${result.prototype.digest}`,
@@ -705,14 +748,18 @@ describe("request-scoped MCP service selection", () => {
       hostedRuntime,
     });
 
-    const discovery = await mcpResult<{
-      tools: {
-        name: string;
-        _meta?: {
-          securitySchemes?: { type: string; scopes?: string[] }[];
-        };
-      }[];
-    }>(await handler(mcpRequest({}, "tools/list")));
+    const discoveryResponse = await handler(mcpRequest({}, "tools/list"));
+    const discovery = await mcpResult(
+      discoveryResponse,
+      z.custom<{
+        tools: {
+          name: string;
+          _meta?: {
+            securitySchemes?: { type: string; scopes?: string[] }[];
+          };
+        }[];
+      }>(),
+    );
     expect(discovery.tools.map(({ name }) => name).toSorted()).toEqual(exactTools);
     for (const tool of discovery.tools) {
       expect(tool._meta?.securitySchemes).toEqual([
@@ -814,9 +861,12 @@ describe("request-scoped MCP service selection", () => {
     for (const response of responses) {
       expect(response.status).toBe(200);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const result = await mcpResult<{
-        _meta: { "mcp/www_authenticate": string[] };
-      }>(response);
+      const result = await mcpResult(
+        response,
+        z.custom<{
+          _meta: { "mcp/www_authenticate": string[] };
+        }>(),
+      );
       expect(result._meta["mcp/www_authenticate"][0]).toContain('error="invalid_token"');
       expect(result._meta["mcp/www_authenticate"][0]).toContain(
         'scope="autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel"',
@@ -836,13 +886,17 @@ describe("request-scoped MCP service selection", () => {
       }),
     );
     expect(invalidResponse.status).toBe(200);
-    const invalidResult = await mcpResult<{
-      _meta: { "mcp/www_authenticate": string[] };
-    }>(invalidResponse);
+    const invalidResult = await mcpResult(
+      invalidResponse,
+      z.custom<{
+        _meta: { "mcp/www_authenticate": string[] };
+      }>(),
+    );
     expect(invalidResult._meta["mcp/www_authenticate"][0]).toContain('error="invalid_token"');
 
+    const environment: NodeJS.ProcessEnv = { EVE_HOSTED_ADAPTER: "1" };
     const insufficient = createMcpRequestHandler({
-      environment: { EVE_HOSTED_ADAPTER: "1" },
+      environment,
       hostedRuntime: runtime({
         verifiedClaims: claims({ scopes: ["autograph:session"] }),
       }),
@@ -854,9 +908,12 @@ describe("request-scoped MCP service selection", () => {
       }),
     );
     expect(insufficientResponse.status).toBe(200);
-    const insufficientResult = await mcpResult<{
-      _meta: { "mcp/www_authenticate": string[] };
-    }>(insufficientResponse);
+    const insufficientResult = await mcpResult(
+      insufficientResponse,
+      z.custom<{
+        _meta: { "mcp/www_authenticate": string[] };
+      }>(),
+    );
     expect(insufficientResult._meta["mcp/www_authenticate"][0]).toContain(
       'error="insufficient_scope"',
     );
@@ -893,7 +950,7 @@ describe("request-scoped MCP service selection", () => {
     ];
     const projections = await Promise.all(
       responses.map(async (response) => ({
-        body: await response.json(),
+        body: JSON.stringify(await response.json()),
         cache: response.headers.get("cache-control"),
         status: response.status,
       })),
@@ -978,19 +1035,22 @@ describe("request-scoped MCP service selection", () => {
     expect(resourceResponse.status).toBe(200);
     expect(resourceReadResponse.status).toBe(200);
 
-    const toolResult = await mcpResult<{
-      tools: {
-        name: string;
-        title?: string;
-        description?: string;
-        annotations?: {
-          readOnlyHint?: boolean;
-          destructiveHint?: boolean;
-          idempotentHint?: boolean;
-          openWorldHint?: boolean;
-        };
-      }[];
-    }>(toolResponse);
+    const toolResult = await mcpResult(
+      toolResponse,
+      z.custom<{
+        tools: {
+          name: string;
+          title?: string;
+          description?: string;
+          annotations?: {
+            readOnlyHint?: boolean;
+            destructiveHint?: boolean;
+            idempotentHint?: boolean;
+            openWorldHint?: boolean;
+          };
+        }[];
+      }>(),
+    );
     expect(toolResult.tools.map(({ name }) => name).toSorted()).toEqual(exactTools);
     expect(toolResult.tools.every(({ name }) => !name.startsWith("eve_"))).toBe(true);
     expect(Object.fromEntries(toolResult.tools.map(({ name, title }) => [name, title]))).toEqual({
@@ -1049,14 +1109,17 @@ describe("request-scoped MCP service selection", () => {
       },
     });
 
-    const resourceResult = await mcpResult<{
-      resources: {
-        name: string;
-        title?: string;
-        description?: string;
-        _meta?: { ui?: unknown };
-      }[];
-    }>(resourceResponse);
+    const resourceResult = await mcpResult(
+      resourceResponse,
+      z.custom<{
+        resources: {
+          name: string;
+          title?: string;
+          description?: string;
+          _meta?: { ui?: unknown };
+        }[];
+      }>(),
+    );
     expect(resourceResult.resources).toContainEqual(
       expect.objectContaining({
         _meta: {
@@ -1078,9 +1141,12 @@ describe("request-scoped MCP service selection", () => {
     const resourceMeta = resourceResult.resources[0]?._meta?.ui;
     expect(McpUiResourceMetaSchema.parse(resourceMeta)).toEqual(resourceMeta);
 
-    const resourceRead = await mcpResult<{
-      contents: { _meta?: { ui?: unknown } }[];
-    }>(resourceReadResponse);
+    const resourceRead = await mcpResult(
+      resourceReadResponse,
+      z.custom<{
+        contents: { _meta?: { ui?: unknown } }[];
+      }>(),
+    );
     expect(resourceRead.contents).toHaveLength(1);
     expect(resourceRead.contents[0]?._meta?.ui).toEqual(resourceMeta);
     expect(McpUiResourceMetaSchema.parse(resourceRead.contents[0]?._meta?.ui)).toEqual(

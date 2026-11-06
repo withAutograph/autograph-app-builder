@@ -73,35 +73,34 @@ const fixture = () => {
   const dependencies = {
     acceptDelivery: vi
       .fn<ProvisioningEventRouteDependencies["acceptDelivery"]>()
-      .mockImplementation(async (_claim, id) => {
+      .mockImplementation((_claim, id) => {
         accepted.add(id);
-        return Promise.resolve();
       }),
     authorize: vi
       .fn<ProvisioningEventRouteDependencies["authorize"]>()
-      .mockResolvedValue({ claim, auth }),
+      .mockResolvedValue({ auth, claim }),
     claimDelivery: vi
       .fn<ProvisioningEventRouteDependencies["claimDelivery"]>()
-      .mockImplementation(async (_claim, id, _streamStartIndex) => {
+      .mockImplementation((_claim, id, _streamStartIndex) => {
         if (delivered.has(id)) {
-          return Promise.resolve(false);
+          return false;
         }
         delivered.add(id);
-        return Promise.resolve(true);
+        return true;
       }),
     findObsoleteAuthWait: vi
       .fn<ProvisioningEventRouteDependencies["findObsoleteAuthWait"]>()
       .mockResolvedValue({ requestId: "legacy-auth-wait" }),
     readDeliveryClaim: vi
       .fn<ProvisioningEventRouteDependencies["readDeliveryClaim"]>()
-      .mockImplementation(async (_claim, id) => Promise.resolve(delivered.has(id))),
+      .mockImplementation((_claim, id) => delivered.has(id)),
     readDeliveryReceipt: vi
       .fn<ProvisioningEventRouteDependencies["readDeliveryReceipt"]>()
-      .mockImplementation(async (_claim, id) => {
+      .mockImplementation((_claim, id) => {
         if (accepted.has(id)) {
-          return Promise.resolve("accepted");
+          return "accepted";
         }
-        return Promise.resolve(delivered.has(id) ? "unknown" : "not-submitted");
+        return delivered.has(id) ? "unknown" : "not-submitted";
       }),
     readDeliveryStartIndex: vi
       .fn<ProvisioningEventRouteDependencies["readDeliveryStartIndex"]>()
@@ -114,7 +113,7 @@ const fixture = () => {
       .mockResolvedValue([{ requestId: "legacy-auth-wait" }]),
     respond: vi
       .fn<ProvisioningEventRouteDependencies["respond"]>()
-      .mockResolvedValue({ status: "accepted", sessionId: claim.adapterSessionId }),
+      .mockResolvedValue({ sessionId: claim.adapterSessionId, status: "accepted" }),
     streamTailIndex: vi
       .fn<ProvisioningEventRouteDependencies["streamTailIndex"]>()
       .mockResolvedValue(7),
@@ -424,22 +423,19 @@ const question = (requestId: string): InputRequest => ({
   requestId,
 });
 const streamSession = (events: NativeEvent[], live = false) => {
-  const getEventStream = vi
-    .fn<NativeSession["getEventStream"]>()
-    .mockImplementation(async (options) =>
-      Promise.resolve(
-        new ReadableStream<NativeEvent>({
-          start(controller) {
-            for (const event of events.slice(options?.startIndex ?? 0)) {
-              controller.enqueue(event);
-            }
-            if (!live) {
-              controller.close();
-            }
-          },
-        }),
-      ),
-    );
+  const getEventStream = vi.fn<NativeSession["getEventStream"]>().mockImplementation(
+    (options) =>
+      new ReadableStream<NativeEvent>({
+        start(controller) {
+          for (const event of events.slice(options?.startIndex ?? 0)) {
+            controller.enqueue(event);
+          }
+          if (!live) {
+            controller.close();
+          }
+        },
+      }),
+  );
   const respond = vi
     .fn<
       (
@@ -453,7 +449,7 @@ const streamSession = (events: NativeEvent[], live = false) => {
     });
   const getStreamTailIndex = vi
     .fn<NativeSession["getStreamTailIndex"]>()
-    .mockImplementation(async () => Promise.resolve(events.length - 1));
+    .mockImplementation(() => events.length - 1);
   const session: NativeSession = {
     cancel: vi.fn<NativeSession["cancel"]>().mockResolvedValue({ status: "no_active_turn" }),
     clear: vi.fn<NativeSession["clear"]>().mockResolvedValue({ status: "no_active_session" }),
@@ -462,7 +458,7 @@ const streamSession = (events: NativeEvent[], live = false) => {
     getStreamTailIndex,
     id: claim.adapterSessionId,
     reset: vi.fn<NativeSession["reset"]>().mockResolvedValue({ status: "no_active_session" }),
-    respond: async (responses, options) => respond(responses, options),
+    respond: async (responses, options) => await respond(responses, options),
     send: vi
       .fn<NativeSession["send"]>()
       .mockRejectedValue(new Error("Fixture must not send generic messages.")),
@@ -477,7 +473,7 @@ describe("exact legacy technical response and owner proof", () => {
     const pending = new Set(["legacy-auth-wait", "product-decision"]);
     const events: NativeEvent[] = [];
     const native = streamSession(events, true);
-    native.respond.mockImplementation(async (responses, options) => {
+    native.respond.mockImplementation((responses, options) => {
       expect(options.auth).toBe(auth);
       for (const response of responses) {
         pending.delete(response.requestId);
@@ -492,7 +488,7 @@ describe("exact legacy technical response and owner proof", () => {
           }),
         );
       }
-      return Promise.resolve({ sessionId: claim.adapterSessionId, status: "accepted" });
+      return { sessionId: claim.adapterSessionId, status: "accepted" };
     });
     dependencies.respond.mockImplementation(respondToRealmContinuationWait);
     dependencies.wasAccepted.mockImplementation(wasRealmContinuationResponseApplied);
@@ -518,9 +514,9 @@ describe("exact legacy technical response and owner proof", () => {
     const pending = new Set(["product-decision"]);
     const events: NativeEvent[] = [];
     const native = streamSession(events, true);
-    native.respond.mockImplementation(async (responses) => {
+    native.respond.mockImplementation((responses) => {
       events.push(nativeEvent({ data: { message: responses[0]?.text }, type: "message.received" }));
-      return Promise.resolve({ sessionId: claim.adapterSessionId, status: "accepted" });
+      return { sessionId: claim.adapterSessionId, status: "accepted" };
     });
     dependencies.respond.mockImplementation(respondToRealmContinuationWait);
     dependencies.wasAccepted.mockImplementation(wasRealmContinuationResponseApplied);
@@ -585,11 +581,15 @@ describe("exact legacy technical response and owner proof", () => {
         throw new Error("Expected submitted technical response.");
       }
       const [, submitted] = submittedCall;
-      const response = {
+      const response: typeof submitted = {
         ...submitted,
-        ...(variant === "wrong-text" ? { text: "different" } : {}),
-        ...(variant === "approval-option" ? { optionId: "approve" } : {}),
       };
+      if (variant === "wrong-text") {
+        response.text = "different";
+      }
+      if (variant === "approval-option") {
+        response.optionId = "approve";
+      }
       const events = [
         nativeEvent(
           variant === "message-only"

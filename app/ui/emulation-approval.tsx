@@ -16,11 +16,6 @@ export function VercelMark({ size = 20 }: { size?: number }) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function ProviderMark({ provider }: { provider: EmulatedProvider }) {
-  return provider === "github" ? <FaGithub aria-hidden="true" size={20} /> : <VercelMark />;
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function EmulationApproval({
   provider,
   environment,
@@ -46,6 +41,9 @@ export function EmulationApproval({
   action: ReactNode;
   backHref?: string;
 }) {
+  const providerMark =
+    provider === "github" ? <FaGithub aria-hidden="true" size={20} /> : <VercelMark />;
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -63,18 +61,14 @@ export function EmulationApproval({
               <VercelMark />
             </span>
             <ArrowRight className={styles.arrow} size={16} />
-            <span className={styles.mark}>
-              <ProviderMark provider={provider} />
-            </span>
+            <span className={styles.mark}>{providerMark}</span>
           </div>
           <div className={styles.heading}>
             <h1 id="approval-title">{title}</h1>
             <p>{description}</p>
           </div>
           <div className={styles.identity}>
-            <span className={styles.identityMark}>
-              <ProviderMark provider={provider} />
-            </span>
+            <span className={styles.identityMark}>{providerMark}</span>
             <span className={styles.identityText}>
               <strong>{account}</strong>
               <span>{handle}</span>
@@ -95,9 +89,9 @@ export function EmulationApproval({
             <LockKeyhole aria-hidden="true" size={16} />
             <span>{scope}</span>
           </div>
-          <div className={styles.form} aria-label={actionLabel}>
+          <form className={styles.form} aria-label={actionLabel}>
             {action}
-          </div>
+          </form>
           <p className={styles.footer}>{environment} only · Powered by Emulate</p>
         </section>
       </main>

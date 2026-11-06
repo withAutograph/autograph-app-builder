@@ -124,17 +124,21 @@ const fixture = () => {
   let onRead: ((operationId: string) => void) | undefined;
   const binding = createNativeRecoveryBinding({
     assertOwner: async () => {
+      await Promise.resolve();
       if (!allowed) {
         throw new Error("closure-current-owner-revoked");
       }
-      return;
     },
     store: {
       getPrivateOperation: async (_principal, operationId) => {
+        await Promise.resolve();
         onRead?.(operationId);
         return operations.get(operationId) ?? null;
       },
-      getSession: async (_principal, sessionId) => sessions.get(sessionId) ?? null,
+      getSession: async (_principal, sessionId) => {
+        await Promise.resolve();
+        return sessions.get(sessionId) ?? null;
+      },
     },
   });
   return {
@@ -177,14 +181,14 @@ describe("fresh authorization to close an immutable recovery loser", () => {
     "does not infer nonexecution from a %s holder without a committed winner",
     async (state) => {
       const f = fixture();
-      f.operations.set(
-        holderDescriptor.operationId,
-        hostedOperationRecordSchema.parse({
-          ...operation(holderDescriptor),
-          ...(state === "reserved" ? {} : { safeErrorCode: "unknown" }),
-          state,
-        }),
-      );
+      const record = {
+        ...operation(holderDescriptor),
+        state,
+      };
+      if (state !== "reserved") {
+        record.safeErrorCode = "unknown";
+      }
+      f.operations.set(holderDescriptor.operationId, hostedOperationRecordSchema.parse(record));
       await expect(f.binding.authorizeRecoveryHolderClosure(call)).rejects.toThrow();
     },
   );

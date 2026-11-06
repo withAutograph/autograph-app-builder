@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
@@ -12,7 +14,9 @@ const TREE_ENTRY = /^(?<mode>100644|100755) blob [0-9a-f]{40}\t(?<path>.+)$/u;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sha256(value: Uint8Array) {
-  return createHash("sha256").update(value).digest("hex");
+  const hash = createHash("sha256");
+  hash.update(value);
+  return hash.digest("hex");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -28,7 +32,13 @@ function argumentsFrom(values: readonly string[]) {
   const root = args.get("--arrusted-root");
   const output = args.get("--output");
   const releaseOrigin = args.get("--release-origin");
-  if (!root || !output || !releaseOrigin || args.size !== 3)
+  if (root === undefined || root === "")
+    throw new Error("--arrusted-root must be a non-empty path.");
+  if (output === undefined || output === "")
+    throw new Error("--output must be a non-empty directory.");
+  if (releaseOrigin === undefined || releaseOrigin === "")
+    throw new Error("--release-origin must be a non-empty HTTPS origin.");
+  if (args.size !== 3)
     throw new Error(
       "usage: hosted:starter-source-build -- --arrusted-root <path> --output <directory> --release-origin <https-origin>",
     );

@@ -4,6 +4,15 @@ import type { ReactNode } from "react";
 import { AuthRouteProvider } from "@/components/providers";
 import { passkeysFlag } from "@/lib/feature-flags";
 
+const hasProviderCredentials = function hasProviderCredentials(
+  clientId: string | undefined,
+  clientSecret: string | undefined,
+) {
+  return (
+    clientId !== undefined && clientId !== "" && clientSecret !== undefined && clientSecret !== ""
+  );
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function AuthConfiguration({ children }: { children: ReactNode }) {
   const passkeysEnabled = await passkeysFlag();
@@ -14,13 +23,17 @@ async function AuthConfiguration({ children }: { children: ReactNode }) {
 
   return (
     <AuthRouteProvider
-      githubAuthEnabled={Boolean(
-        showEmulatedProviders || (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
-      )}
-      vercelAuthEnabled={Boolean(
+      githubAuthEnabled={
         showEmulatedProviders ||
-        (process.env.VERCEL_AUTH_CLIENT_ID && process.env.VERCEL_AUTH_CLIENT_SECRET),
-      )}
+        hasProviderCredentials(process.env.GITHUB_CLIENT_ID, process.env.GITHUB_CLIENT_SECRET)
+      }
+      vercelAuthEnabled={
+        showEmulatedProviders ||
+        hasProviderCredentials(
+          process.env.VERCEL_AUTH_CLIENT_ID,
+          process.env.VERCEL_AUTH_CLIENT_SECRET,
+        )
+      }
       passkeysEnabled={passkeysEnabled}
     >
       {children}

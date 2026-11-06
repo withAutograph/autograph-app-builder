@@ -37,6 +37,7 @@ const listingSchema = z.array(
   }),
 );
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+const changedDuringCaptureMessage = "Application source changed during capture";
 /** Capture actual current app-owned Sandbox bytes; never read the host source or a previous artifact. */
 export const captureApplicationSource = async (input: {
   sandbox: Pick<SandboxSession, "run" | "readBinaryFile">;
@@ -87,7 +88,7 @@ export const captureApplicationSource = async (input: {
     const bytes = await input.sandbox.readBinaryFile({ path: `/workspace/repository/${row.path}` });
     input.signal.throwIfAborted();
     if (bytes === null || bytes.byteLength !== row.bytes) {
-      throw new Error("Application source changed during capture");
+      throw new Error(changedDuringCaptureMessage);
     }
     const data = Buffer.from(bytes);
     files.push({ contentBase64: data.toString("base64"), path: row.path });
@@ -104,11 +105,11 @@ export const captureApplicationSource = async (input: {
     });
     input.signal.throwIfAborted();
     if (observed === null || createHash("sha256").update(observed).digest("hex") !== entry.sha256) {
-      throw new Error("Application source changed during capture");
+      throw new Error(changedDuringCaptureMessage);
     }
   }
   if (JSON.stringify(await list()) !== JSON.stringify(inventory)) {
-    throw new Error("Application source changed during capture");
+    throw new Error(changedDuringCaptureMessage);
   }
   await input.assertCurrent();
   input.signal.throwIfAborted();
