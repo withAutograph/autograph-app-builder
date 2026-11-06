@@ -112,8 +112,9 @@ const waitForEveAttempt = async (
   await waitForEveAttempt(url, signal, deadline);
 };
 
-const waitForEve = async (url: string, signal: AbortSignal) =>
+const waitForEve = async (url: string, signal: AbortSignal) => {
   await waitForEveAttempt(url, signal, Date.now() + 120_000);
+};
 
 const availableDistinctLoopbackPort = async (
   excludedPort: number,

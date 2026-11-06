@@ -111,26 +111,25 @@ await writeFile(
 const clientRoot = path.join(output, "clients");
 await mkdir(clientRoot);
 await Promise.all(
-  (["vscode", "cursor", "codex"] as const).map(
-    async (client) =>
-      await writeFile(
-        path.join(clientRoot, `${client}.client-harness.json`),
-        `${JSON.stringify(
-          {
-            client,
-            format: "agent-plugins-client-harness-v2",
-            mcp: "../app-builder/mcp.json",
-            oauth: {
-              protectedResourceMetadata: `${endpoint}/.well-known/oauth-protected-resource`,
-            },
-            pluginRoot: "../app-builder",
-            transport: { type: "streamable-http", url: `${endpoint}/mcp` },
+  (["vscode", "cursor", "codex"] as const).map(async (client) => {
+    await writeFile(
+      path.join(clientRoot, `${client}.client-harness.json`),
+      `${JSON.stringify(
+        {
+          client,
+          format: "agent-plugins-client-harness-v2",
+          mcp: "../app-builder/mcp.json",
+          oauth: {
+            protectedResourceMetadata: `${endpoint}/.well-known/oauth-protected-resource`,
           },
-          null,
-          2,
-        )}\n`,
-      ),
-  ),
+          pluginRoot: "../app-builder",
+          transport: { type: "streamable-http", url: `${endpoint}/mcp` },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }),
 );
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

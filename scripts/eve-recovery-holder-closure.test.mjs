@@ -73,7 +73,6 @@ const fixture = () => {
       if (currentError !== null) {
         throw new Error(currentError);
       }
-      return;
     },
     descriptor,
     ports: {

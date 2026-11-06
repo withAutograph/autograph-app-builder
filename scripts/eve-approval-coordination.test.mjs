@@ -601,7 +601,6 @@ it.each([400, 503])(
             : {
                 handleEvent: async (event) => {
                   events.push(event);
-                  return;
                 },
               }),
         })(session, input),

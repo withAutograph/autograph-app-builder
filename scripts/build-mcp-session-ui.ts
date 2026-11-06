@@ -14,7 +14,7 @@ async function main() {
         emptyOutDir: true,
         minify: true,
         outDir: temporaryDirectory,
-        rollupOptions: {
+        rolldownOptions: {
           input: path.resolve("lib/mcp/session-app/index.tsx"),
           output: {
             assetFileNames: "[name][extname]",

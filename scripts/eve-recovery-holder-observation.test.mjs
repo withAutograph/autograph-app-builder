@@ -114,7 +114,6 @@ const fixture = () => {
       if (currentRejection !== null) {
         throw new Error(`current-${currentRejection}-canary`);
       }
-      return;
     },
     descriptor,
     ports,

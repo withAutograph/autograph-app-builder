@@ -452,7 +452,6 @@ test("trusted Builder call contract flows through actual native prepare and reco
           metadata: Promise.resolve({ recoveryBinding: binding }),
           runId: binding.ownerRunId,
         };
-        return;
       },
       wait: async () => {
         throw new Error("unexpected wait");

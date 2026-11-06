@@ -317,19 +317,18 @@ test("attributes a matched stylesheet declaration through its CSS source map", a
     // while the authored declaration itself begins at column 10.
     version: 3,
   });
-  await page.route("http://example.test/page", async (route) => await route.fulfill({ body: "" }));
-  await page.route(
-    "http://example.test/generated.css.map",
-    async (route) => await route.fulfill({ body: map, contentType: "application/json" }),
-  );
-  await page.route(
-    "http://example.test/compiled.css",
-    async (route) =>
-      await route.fulfill({
-        body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
-        contentType: "text/css",
-      }),
-  );
+  await page.route("http://example.test/page", async (route) => {
+    await route.fulfill({ body: "" });
+  });
+  await page.route("http://example.test/generated.css.map", async (route) => {
+    await route.fulfill({ body: map, contentType: "application/json" });
+  });
+  await page.route("http://example.test/compiled.css", async (route) => {
+    await route.fulfill({
+      body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
+      contentType: "text/css",
+    });
+  });
   await page.goto("http://example.test/page");
   const sourceFiles = [{ content: authoredCss, path: "src/generated.css" }];
   const sourceRules = collectCssRuleEvidence(sourceFiles);
@@ -386,19 +385,18 @@ test("reports an exactly mapped shared declaration as shared without scoring cre
     sourcesContent: [authoredCss],
     version: 3,
   });
-  await page.route("http://example.test/page", async (route) => await route.fulfill({ body: "" }));
-  await page.route(
-    "http://example.test/shared.css.map",
-    async (route) => await route.fulfill({ body: map, contentType: "application/json" }),
-  );
-  await page.route(
-    "http://example.test/compiled.css",
-    async (route) =>
-      await route.fulfill({
-        body: `${compiledCss}\n/*# sourceMappingURL=/shared.css.map */`,
-        contentType: "text/css",
-      }),
-  );
+  await page.route("http://example.test/page", async (route) => {
+    await route.fulfill({ body: "" });
+  });
+  await page.route("http://example.test/shared.css.map", async (route) => {
+    await route.fulfill({ body: map, contentType: "application/json" });
+  });
+  await page.route("http://example.test/compiled.css", async (route) => {
+    await route.fulfill({
+      body: `${compiledCss}\n/*# sourceMappingURL=/shared.css.map */`,
+      contentType: "text/css",
+    });
+  });
   await page.goto("http://example.test/page");
   const sharedFiles = [{ content: authoredCss, path: sharedPath }];
   const withoutMap = await measureStyles(
@@ -455,19 +453,18 @@ test("keeps multiple mapped cascade declarations unknown", async ({ page }) => {
     sourcesContent: [authoredCss],
     version: 3,
   });
-  await page.route("http://example.test/page", async (route) => await route.fulfill({ body: "" }));
-  await page.route(
-    "http://example.test/ambiguous.css.map",
-    async (route) => await route.fulfill({ body: map, contentType: "application/json" }),
-  );
-  await page.route(
-    "http://example.test/ambiguous.css",
-    async (route) =>
-      await route.fulfill({
-        body: `${compiledCss}\n/*# sourceMappingURL=/ambiguous.css.map */`,
-        contentType: "text/css",
-      }),
-  );
+  await page.route("http://example.test/page", async (route) => {
+    await route.fulfill({ body: "" });
+  });
+  await page.route("http://example.test/ambiguous.css.map", async (route) => {
+    await route.fulfill({ body: map, contentType: "application/json" });
+  });
+  await page.route("http://example.test/ambiguous.css", async (route) => {
+    await route.fulfill({
+      body: `${compiledCss}\n/*# sourceMappingURL=/ambiguous.css.map */`,
+      contentType: "text/css",
+    });
+  });
   await page.goto("http://example.test/page");
   const sharedFiles = [{ content: authoredCss, path: sharedPath }];
   await measureStyles(
@@ -511,19 +508,18 @@ test("does not trust mismatched CSS source-map content", async ({ page }) => {
     sourcesContent: [".origin { color: red; }"],
     version: 3,
   });
-  await page.route("http://example.test/page", async (route) => await route.fulfill({ body: "" }));
-  await page.route(
-    "http://example.test/generated.css.map",
-    async (route) => await route.fulfill({ body: map, contentType: "application/json" }),
-  );
-  await page.route(
-    "http://example.test/compiled.css",
-    async (route) =>
-      await route.fulfill({
-        body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
-        contentType: "text/css",
-      }),
-  );
+  await page.route("http://example.test/page", async (route) => {
+    await route.fulfill({ body: "" });
+  });
+  await page.route("http://example.test/generated.css.map", async (route) => {
+    await route.fulfill({ body: map, contentType: "application/json" });
+  });
+  await page.route("http://example.test/compiled.css", async (route) => {
+    await route.fulfill({
+      body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
+      contentType: "text/css",
+    });
+  });
   await page.goto("http://example.test/page");
   await page.setContent(
     `<link rel="stylesheet" href="/compiled.css"><main class="screen">Stock</main>`,

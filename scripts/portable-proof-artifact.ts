@@ -25,34 +25,30 @@ const hash = z.string().regex(/^[0-9a-f]{64}$/u);
 const sourceHash = z.string().regex(/^[0-9a-f]{40}$/u);
 const digestRecord = z.record(z.string().min(1), hash);
 
-export const portableReleaseReceiptSchema = z
-  .object({
-    archive: z.object({ name: z.string().min(1), sha256: hash }).strict(),
-    auxiliaryFiles: digestRecord,
-    codexMarketplaceArchive: z.object({ name: z.string().min(1), sha256: hash }).strict(),
-    codexMarketplaceAssets: digestRecord,
-    coreFiles: digestRecord,
-    endpoint: z.string().url().startsWith("https://"),
-    format: z.literal("autograph-portable-plugin-release-v3"),
-    name: z.literal("app-builder"),
-    source: z
-      .object({
-        repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
-        sha: sourceHash,
-        tree: sourceHash,
-      })
-      .strict(),
-    specification: z.literal("1.0.0"),
-    tools: z.tuple([
-      z.literal("autograph_start"),
-      z.literal("autograph_get"),
-      z.literal("autograph_send"),
-      z.literal("autograph_respond"),
-      z.literal("autograph_cancel"),
-    ]),
-    version: z.string().min(1),
-  })
-  .strict();
+export const portableReleaseReceiptSchema = z.strictObject({
+  archive: z.strictObject({ name: z.string().min(1), sha256: hash }),
+  auxiliaryFiles: digestRecord,
+  codexMarketplaceArchive: z.strictObject({ name: z.string().min(1), sha256: hash }),
+  codexMarketplaceAssets: digestRecord,
+  coreFiles: digestRecord,
+  endpoint: z.url().startsWith("https://"),
+  format: z.literal("autograph-portable-plugin-release-v3"),
+  name: z.literal("app-builder"),
+  source: z.strictObject({
+    repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
+    sha: sourceHash,
+    tree: sourceHash,
+  }),
+  specification: z.literal("1.0.0"),
+  tools: z.tuple([
+    z.literal("autograph_start"),
+    z.literal("autograph_get"),
+    z.literal("autograph_send"),
+    z.literal("autograph_respond"),
+    z.literal("autograph_cancel"),
+  ]),
+  version: z.string().min(1),
+});
 
 export type PortableReleaseReceipt = z.infer<typeof portableReleaseReceiptSchema>;
 
@@ -82,7 +78,7 @@ export function archiveFiles(archive: Uint8Array) {
     const name = header.subarray(0, 100).toString("utf-8").replace(/\0.*$/u, "");
     const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/u, "").trim();
     const size = Number.parseInt(sizeText, 8);
-    const [type] = header.slice(156);
+    const [type] = header.subarray(156);
     if (!safeRelative(name) || !Number.isSafeInteger(size) || size < 0) {
       throw new Error("Archive entry name or size was invalid.");
     }
@@ -331,24 +327,19 @@ export async function verifyPortableProofArtifact(input: {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const clientHarnessBytes = await regularFile(nodePath.join(clientRoot, "client-harness.json"));
     const harness = z
-      .object({
+      .strictObject({
         client: z.literal(client),
         format: z.literal("agent-plugins-client-harness-v2"),
         mcp: z.literal("./app-builder/mcp.json"),
-        oauth: z
-          .object({
-            protectedResourceMetadata: z.literal(`${origin}/.well-known/oauth-protected-resource`),
-          })
-          .strict(),
+        oauth: z.strictObject({
+          protectedResourceMetadata: z.literal(`${origin}/.well-known/oauth-protected-resource`),
+        }),
         pluginRoot: z.literal("./app-builder"),
-        transport: z
-          .object({
-            type: z.literal("streamable-http"),
-            url: z.literal(receipt.endpoint),
-          })
-          .strict(),
+        transport: z.strictObject({
+          type: z.literal("streamable-http"),
+          url: z.literal(receipt.endpoint),
+        }),
       })
-      .strict()
       .parse(JSON.parse(clientHarnessBytes.toString("utf-8")));
     if (harness.client !== client) {
       throw new Error("Client adapter drifted.");
@@ -358,18 +349,15 @@ export async function verifyPortableProofArtifact(input: {
       nodePath.join(clientRoot, "installation-receipt.json"),
     );
     const installation = z
-      .object({
+      .strictObject({
         client: z.literal(client),
         format: z.literal("agent-plugins-offline-installation-v1"),
         pluginRoot: z.literal("./app-builder"),
-        releaseArchive: z
-          .object({
-            name: z.literal(receipt.archive.name),
-            sha256: z.literal(receipt.archive.sha256),
-          })
-          .strict(),
+        releaseArchive: z.strictObject({
+          name: z.literal(receipt.archive.name),
+          sha256: z.literal(receipt.archive.sha256),
+        }),
       })
-      .strict()
       .parse(JSON.parse(installationReceiptBytes.toString("utf-8")));
     if (installation.client !== client) {
       throw new Error("Installed client receipt drifted.");

@@ -86,7 +86,6 @@ const setup = () => {
       if (state.denied) {
         throw new Error("denied");
       }
-      return;
     },
     authorizeActivation: effect,
     commitReceipt: effect,
