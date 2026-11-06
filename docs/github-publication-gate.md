@@ -344,6 +344,12 @@ content with `change_set_status` as needed, then accept the fresh change set.
 Preparation invalidates the previous review and sealed proposal while retaining
 its mutation journal. A pending or potentially partial prior publication must
 be recovered before another destination review.
+A starter-created app's first destination review includes its complete
+app-owned source even when its latest repair diff contains only a few files.
+Builder includes the retained registration and dependency changes against the
+original starter manifest. If the destination has independently changed one of
+those shared files, reconcile that file against the current destination before
+publishing.
 
 Builder reuses the saved app's recorded repository. When a new app still needs
 a destination, `prepare_github_draft_review` returns the same saved build's
