@@ -29,24 +29,24 @@ const auth = {
   subject: principal.ownerUserId,
 };
 const descriptor: NativeRecoveryDescriptor = {
-  version: 1,
-  operationId: "op_recovery",
-  sourcePublicSessionId: "ses_parent",
-  sourceOwnerRunId: "run_parent",
-  sourceAdapterGeneration: 1,
   logicalSessionId: "run_parent",
+  operationId: "op_recovery",
   originalAuthoritySessionId: "ses_parent",
   parentCancellationRevision: 0,
+  sourceAdapterGeneration: 1,
+  sourceOwnerRunId: "run_parent",
+  sourcePublicSessionId: "ses_parent",
+  version: 1,
 };
 const receipt: NativeRecoveryBinding = {
   ...descriptor,
   ownerRunId: "run_child",
   provenance: {
+    checkpointVersion: 1,
     kind: "completed-terminal-turn-input",
-    sourceStepId: "step_1",
     sourceEventId: "event_1",
     sourceSlot: 0,
-    checkpointVersion: 1,
+    sourceStepId: "step_1",
   },
 };
 
@@ -91,11 +91,11 @@ describe("native recovery authority", () => {
     });
     const canary = "private-auth-error-canary";
     let ownerError: Error | null = null;
-    const assertOwner = vi.fn(() => {
+    const assertOwner = vi.fn(async () => {
       if (ownerError !== null) {
         throw ownerError;
       }
-      return Promise.resolve();
+      return;
     });
     const activationLog = vi.spyOn(console, "info").mockImplementation(() => {});
     const binding = createNativeRecoveryBinding({
@@ -125,34 +125,34 @@ describe("native recovery authority", () => {
     child = durableHostedSessionRecordSchema.parse({
       ...source,
       adapterSessionId: receipt.ownerRunId,
-      originAdapterSessionId: receipt.ownerRunId,
       nativeRecoveryBinding: receipt,
+      originAdapterSessionId: receipt.ownerRunId,
       parentSessionId: source.sessionId,
-      sessionId: "ses_child",
-      status: "working",
       resumability: "live",
+      sessionId: "ses_child",
       stage: "planning",
+      status: "working",
     });
     currentOperation = hostedOperationRecordSchema.parse({
       ...operation,
-      state: "succeeded",
       nativeRecoveryReceipt: receipt,
+      result: { cursor: 0, events: [], sessionId: child.sessionId, status: "working" },
       sessionId: child.sessionId,
       sessionRecordDigest: hostedSessionCreationDigest(child),
-      result: { sessionId: child.sessionId, cursor: 0, events: [], status: "working" },
+      state: "succeeded",
     });
     child = null;
     await expect(binding.authorizeActivation(call)).rejects.toThrow("unavailable");
     child = durableHostedSessionRecordSchema.parse({
       ...source,
       adapterSessionId: receipt.ownerRunId,
-      originAdapterSessionId: receipt.ownerRunId,
       nativeRecoveryBinding: receipt,
+      originAdapterSessionId: receipt.ownerRunId,
       parentSessionId: "ses_other",
-      sessionId: "ses_child",
-      status: "working",
       resumability: "live",
+      sessionId: "ses_child",
       stage: "planning",
+      status: "working",
     });
     await expect(binding.authorizeActivation(call)).rejects.toThrow();
     child = durableHostedSessionRecordSchema.parse({ ...child, parentSessionId: source.sessionId });
@@ -218,32 +218,32 @@ describe("read-only native source observation authority", () => {
       adapterSessionId: "run_parent",
       createdAtEpochMs: 1,
       lastProgressAtEpochMs: 1,
-      stage: "needs_attention",
-      title: "App",
       originAdapterSessionId: "run_parent",
       principal,
       resumability: "live",
       sessionId: "ses_parent",
+      stage: "needs_attention",
       status: "input_required",
+      title: "App",
       updatedAtEpochMs: 2,
       version: 2,
     });
-    const getPrivateOperation = vi.fn(() => Promise.resolve(null));
-    const commitNativeRecoveryReceipt = vi.fn(() => Promise.resolve(receipt));
-    const assertOwner = vi.fn(() => Promise.resolve());
+    const getPrivateOperation = vi.fn(async () => null);
+    const commitNativeRecoveryReceipt = vi.fn(async () => receipt);
+    const assertOwner = vi.fn(async () => {});
     const binding = createNativeRecoveryBinding({
       assertOwner,
       store: {
-        getSession: () => Promise.resolve(source),
-        getPrivateOperation,
         commitNativeRecoveryReceipt,
+        getPrivateOperation,
+        getSession: async () => source,
       },
     });
     const coordinates = {
-      sourcePublicSessionId: "ses_parent",
-      sourceAdapterSessionId: "run_parent",
-      sourceAdapterGeneration: 1,
       cancellationRevision: 0,
+      sourceAdapterGeneration: 1,
+      sourceAdapterSessionId: "run_parent",
+      sourcePublicSessionId: "ses_parent",
     };
     const getOnlyAuth = {
       ...auth,
@@ -251,7 +251,7 @@ describe("read-only native source observation authority", () => {
     };
     await expect(
       binding.authorizeSourceObservation({ auth: getOnlyAuth, source: coordinates }),
-    ).resolves.toEqual({ ownerRunId: "run_parent", logicalSessionId: "run_parent" });
+    ).resolves.toEqual({ logicalSessionId: "run_parent", ownerRunId: "run_parent" });
     for (const changed of [
       { ...coordinates, sourceAdapterGeneration: 2 },
       { ...coordinates, cancellationRevision: 1 },

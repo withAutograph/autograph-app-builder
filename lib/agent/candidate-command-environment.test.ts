@@ -32,14 +32,14 @@ describe("candidate command environment", () => {
 
   it("preserves spawn process handles, explicit profiles, and sandbox capabilities", async () => {
     const process: SandboxProcess = {
-      kill: () => Promise.resolve(),
+      kill: async () => {},
       stderr: new ReadableStream<Uint8Array>(),
       stdout: new ReadableStream<Uint8Array>(),
-      wait: () => Promise.resolve({ exitCode: 0 }),
+      wait: async () => ({ exitCode: 0 }),
     };
     const spawn = vi.fn<SandboxSession["spawn"]>().mockResolvedValue(process);
     const run = vi.fn<SandboxSession["run"]>();
-    const setNetworkPolicy = vi.fn((_policy: SandboxNetworkPolicy) => Promise.resolve());
+    const setNetworkPolicy = vi.fn(async (_policy: SandboxNetworkPolicy) => {});
     const session = {
       id: "sandbox-id",
       run,

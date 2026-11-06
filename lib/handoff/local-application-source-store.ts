@@ -55,7 +55,7 @@ export const createLocalApplicationSourceStore = (
     async put(artifact: ApplicationSourceArtifact) {
       current();
       const verified = validateApplicationSourceArtifact(artifact);
-      await mkdir(root, { recursive: true, mode: 0o700 });
+      await mkdir(root, { mode: 0o700, recursive: true });
       owned(path.dirname(root), true);
       owned(root, true);
       const filename = key(artifact.manifest.sourceSessionId, verified.manifestDigest);
@@ -91,7 +91,7 @@ export const createLocalApplicationSourceStore = (
       } finally {
         await rm(temporary, { force: true });
       }
-      return { manifestDigest: verified.manifestDigest, bytes: bytes.length };
+      return { bytes: bytes.length, manifestDigest: verified.manifestDigest };
     },
     async read(sessionId: string, digest: string) {
       current();

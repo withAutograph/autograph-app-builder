@@ -34,7 +34,7 @@ export const validateApplicationSourceArtifact = (input: unknown) => {
     ) {
       throw new Error("Application source byte digest mismatch");
     }
-    return { path: entry.path, mode: entry.mode, bytes };
+    return { bytes, mode: entry.mode, path: entry.path };
   });
-  return { artifact, manifestDigest: applicationSourceManifestDigest(artifact.manifest), files };
+  return { artifact, files, manifestDigest: applicationSourceManifestDigest(artifact.manifest) };
 };

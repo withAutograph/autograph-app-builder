@@ -13,12 +13,12 @@ const digest = "a".repeat(64);
 const sha = "b".repeat(40);
 const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
-  states: new Map<string, unknown>(),
   inspect: vi.fn(),
   read: vi.fn(),
   replace: vi.fn(),
   restore: vi.fn(),
   seal: vi.fn(),
+  states: new Map<string, unknown>(),
   workflow: null as Record<string, unknown> | null,
 }));
 
@@ -80,7 +80,6 @@ describe("draft reconciliation publication review", () => {
       review: { digest, resolvedTree: sha },
       root: "/workspace/.app-builder/draft-reconcile/candidate",
       validation: {
-        resolvedTree: sha,
         compilation: {
           context: {
             authority: { ownerUserId: "owner" },
@@ -88,13 +87,14 @@ describe("draft reconciliation publication review", () => {
           },
           release: { status: "not-required" },
         },
+        resolvedTree: sha,
       },
     };
     mocks.workflow = {
       appSpec: { appId: "spend-review", digest },
       githubSource: { digest, repository: { repositoryId: "1" } },
       phase: "reviewed",
-      reviewReceipt: { digest, appSpecDigest: digest, changeSetDigest: "d".repeat(64) },
+      reviewReceipt: { appSpecDigest: digest, changeSetDigest: "d".repeat(64), digest },
     };
     mocks.inspect.mockResolvedValue({ resolvedTree: sha, unresolvedConflicts: [] });
     mocks.restore.mockResolvedValue({ digest, mode: "755" });
@@ -110,15 +110,13 @@ describe("draft reconciliation publication review", () => {
 
   it("returns bounded candidate pages with continuation without invalidating review", async () => {
     const retained = mocks.candidate;
-    mocks.read.mockImplementation((input: { cursor?: number; expectedDigest?: string }) =>
-      Promise.resolve({
-        content: "bounded text",
-        cursor: input.cursor ?? 0,
-        digest: input.expectedDigest ?? digest,
-        nextCursor: (input.cursor ?? 0) + 12,
-        totalBytes: 100_000,
-      }),
-    );
+    mocks.read.mockImplementation(async (input: { cursor?: number; expectedDigest?: string }) => ({
+      content: "bounded text",
+      cursor: input.cursor ?? 0,
+      digest: input.expectedDigest ?? digest,
+      nextCursor: (input.cursor ?? 0) + 12,
+      totalBytes: 100_000,
+    }));
     const expectedDigest = "c".repeat(64);
     const result = await editCandidate.execute(
       { cursor: 32_768, expectedDigest, kind: "read", path: "apps/demo/large.sql" },
@@ -234,10 +232,10 @@ describe("draft reconciliation publication review", () => {
       expect(mocks.candidate).toHaveProperty("proposal.digest", "c".repeat(64));
       expect(draftReconciliationCompletions.get()).toMatchObject([
         {
-          preparation: "sealed-before-approval",
-          proposal: { digest: "c".repeat(64) },
           appReview: { appSpecDigest: digest, changeSetDigest: "d".repeat(64), digest },
           compilation: { release: { status: "not-required" } },
+          preparation: "sealed-before-approval",
+          proposal: { digest: "c".repeat(64) },
         },
       ]);
     },
@@ -283,13 +281,13 @@ describe("draft reconciliation publication review", () => {
   it.each([
     {
       field: "githubSource",
-      value: { digest: "changed-source" },
       reason: "source_binding_changed",
+      value: { digest: "changed-source" },
     },
     {
       field: "reviewReceipt",
-      value: { digest: "changed-app-review" },
       reason: "app_review_changed",
+      value: { digest: "changed-app-review" },
     },
   ])("refuses changed $field authority without publication", async ({ field, value, reason }) => {
     mocks.workflow = { ...mocks.workflow, [field]: value };

@@ -31,14 +31,16 @@ const category = z.enum([
 ]);
 const count = z.number().int().nonnegative().nullable();
 const stepCounts = z.strictObject({
+  cancelled: count,
   completed: count,
+  failed: count,
   pending: count,
   running: count,
-  failed: count,
-  cancelled: count,
   unknown: count,
 });
 const boundary = z.strictObject({
+  allowParked: z.boolean().nullable(),
+  parentStatus: nativeStatus.optional(),
   stage: z.enum([
     "authority_anchor",
     "handoff_parent",
@@ -47,13 +49,31 @@ const boundary = z.strictObject({
     "other",
   ]),
   status: nativeStatus,
-  parentStatus: nativeStatus.optional(),
-  allowParked: z.boolean().nullable(),
 });
 
 /** Private, closed structural facts. Never checkpoint content or authority. */
 export const nativeSourceDiagnosticSchema = z.strictObject({
-  version: z.literal(1),
+  anchorRead: z.strictObject({
+    errorCategory: category.nullable(),
+    httpStatus: z.number().int().min(400).max(599).nullable().optional(),
+    outcome: z.enum(["succeeded", "failed"]),
+    stage: z.enum([
+      "complete",
+      "dependencies",
+      "world",
+      "run_read",
+      "run_identity",
+      "steps_list",
+      "step_identity",
+      "step_pagination",
+      "other",
+    ]),
+    status: nativeStatus.nullable(),
+    stepCounts: stepCounts.nullable(),
+    unsettledStepCount: count,
+  }),
+  collectionBoundary: boundary.nullable(),
+  collectionErrorCategory: category.nullable(),
   collectionKind: z.enum(["candidate", "preflight", "unavailable", "failed", "other"]),
   collectionReason: z
     .enum([
@@ -66,10 +86,17 @@ export const nativeSourceDiagnosticSchema = z.strictObject({
       "other",
     ])
     .nullable(),
-  collectionBoundary: boundary.nullable(),
-  collectionErrorCategory: category.nullable(),
   collectionStage: z.enum(["dependencies", "candidate_collect", "candidate_read"]),
+  lineageRead: z.strictObject({
+    errorCategory: category.nullable(),
+    httpStatus: z.number().int().min(400).max(599).nullable(),
+    outcome: z.enum(["succeeded", "failed", "unassessed"]),
+    provenRunCount: count,
+    stepCounts: stepCounts.nullable(),
+    unsettledStepCount: count,
+  }),
   reconciliation: z.strictObject({
+    errorCategory: category.nullable(),
     kind: z.enum(["ready", "uncertain", "unavailable", "failed", "unassessed"]),
     reason: z
       .enum([
@@ -96,35 +123,8 @@ export const nativeSourceDiagnosticSchema = z.strictObject({
         "other",
       ])
       .nullable(),
-    errorCategory: category.nullable(),
   }),
-  lineageRead: z.strictObject({
-    outcome: z.enum(["succeeded", "failed", "unassessed"]),
-    provenRunCount: count,
-    unsettledStepCount: count,
-    stepCounts: stepCounts.nullable(),
-    errorCategory: category.nullable(),
-    httpStatus: z.number().int().min(400).max(599).nullable(),
-  }),
-  anchorRead: z.strictObject({
-    outcome: z.enum(["succeeded", "failed"]),
-    stage: z.enum([
-      "complete",
-      "dependencies",
-      "world",
-      "run_read",
-      "run_identity",
-      "steps_list",
-      "step_identity",
-      "step_pagination",
-      "other",
-    ]),
-    errorCategory: category.nullable(),
-    httpStatus: z.number().int().min(400).max(599).nullable().optional(),
-    status: nativeStatus.nullable(),
-    unsettledStepCount: count,
-    stepCounts: stepCounts.nullable(),
-  }),
+  version: z.literal(1),
 });
 
 /** Validation failure and missing older summaries are advisory, with no raw body logging. */
@@ -139,9 +139,9 @@ export const reportNativeSourceDiagnostic = (
       JSON.stringify(
         parsed.success && unavailableReason === undefined
           ? {
+              diagnostic: parsed.data,
               event: "builder.native_source_observation_relay",
               outcome: "available",
-              diagnostic: parsed.data,
             }
           : {
               event: "builder.native_source_observation_relay",

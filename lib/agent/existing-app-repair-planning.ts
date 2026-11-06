@@ -86,8 +86,8 @@ const assertRepairApproval = (base: Settled, sessionId: string) => {
     appId: base.appSpec.appId,
     appSpecDigest: base.appSpec.digest,
     proposalDigest: base.proposal.digest,
-    workspaceId: base.workspace.workspaceId,
     sessionId,
+    workspaceId: base.workspace.workspaceId,
   });
 };
 
@@ -282,7 +282,7 @@ const inspectUnapprovedPlan = (
   validateRepairChanges(changes, current);
   // The target planner captures the current preimages for the successor.
   // No approvedBase: the new proposal must obtain its own Build approval.
-  return { requestDigest, approvedBase: undefined, reuse: false, assertCurrent };
+  return { approvedBase: undefined, assertCurrent, requestDigest, reuse: false };
 };
 
 export const inspectExistingAppRepair = async (input: {
@@ -337,7 +337,7 @@ export const inspectExistingAppRepair = async (input: {
   if (current.phase === "planned" && previous?.requestDigest === requestDigest) {
     const reuse = await hasUnchangedPreparedPreimages(current, sandbox);
     assertCurrent();
-    return { requestDigest, approvedBase: base, reuse, assertCurrent };
+    return { approvedBase: base, assertCurrent, requestDigest, reuse };
   }
   ctx.abortSignal?.throwIfAborted();
   assertExactWorkflowState(
@@ -346,5 +346,5 @@ export const inspectExistingAppRepair = async (input: {
     "prepare an explicit app repair",
   );
   assertCurrent();
-  return { requestDigest, approvedBase: base, reuse: false, assertCurrent };
+  return { approvedBase: base, assertCurrent, requestDigest, reuse: false };
 };

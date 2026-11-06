@@ -204,12 +204,12 @@ describe("direct app creation", () => {
       ]);
       const writes: string[] = [];
       const iterationChanges = [
-        { path: appPath, after: { content: appContent, digest: sha256(appContent), mode: "644" } },
+        { after: { content: appContent, digest: sha256(appContent), mode: "644" }, path: appPath },
       ];
       const iterationProposal: TargetProposal = {
         ...proposal,
-        operation: "iterate-existing-app",
         iteration: { changes: iterationChanges, digest: sha256(JSON.stringify(iterationChanges)) },
+        operation: "iterate-existing-app",
       };
       const sandbox = {
         readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
@@ -265,9 +265,9 @@ describe("direct app creation", () => {
           const snapshot = [...files]
             .filter(([path]) => path.startsWith("repository/"))
             .map(([path, text]) => ({
-              path: path.slice("repository/".length),
-              mode: "644",
               digest: sha256(text),
+              mode: "644",
+              path: path.slice("repository/".length),
             }));
           return { files: snapshot, treeDigest: sha256(JSON.stringify(snapshot)) };
         },

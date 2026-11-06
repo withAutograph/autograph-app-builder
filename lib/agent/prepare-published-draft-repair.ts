@@ -85,24 +85,24 @@ export const draftInspectionRecoveryForSession = (input: {
   const published = sameApp ? candidate.publishedReconciliation : undefined;
   return {
     priorPublishedProposalDigest: input.priorPublishedProposalDigest,
-    reconciliations: published === undefined ? [] : [published],
     readPublishedSource: async (draft) =>
       await readPublishedOperatorSourceForSession({
+        adapterSessionId: input.ctx.session.id,
         appId: input.appId,
         appSpecDigest: input.appSpecDigest,
-        root: input.root,
         callId: input.ctx.callId,
-        sessionAuth: input.ctx.session.auth,
-        adapterSessionId: input.ctx.session.id,
         callbackExecution: hostedOperatorCallbackExecution(input.ctx.session),
-        signal: input.ctx.abortSignal,
         lookup: {
-          repositoryId: draft.repositoryId,
           branch: draft.headBranch,
           gitSha: draft.headSha,
           gitTree: draft.headTree,
+          repositoryId: draft.repositoryId,
         },
+        root: input.root,
+        sessionAuth: input.ctx.session.auth,
+        signal: input.ctx.abortSignal,
       }),
+    reconciliations: published === undefined ? [] : [published],
   };
 };
 
@@ -134,30 +134,30 @@ const acquireOwnedPublishedDraft = async (
     throw new Error("The publication runtime cannot prepare a same-session owned draft repair.");
   }
   const owned = await runtime.inspectOwnedPublishedDraftRepairSource({
-    publishedProposalDigest: proposalDigest,
     appId: state.appSpec.appId,
     expectedInstallationId: access.scope.installationId,
-    resolvedByCallId: ctx.callId,
-    recovery: draftInspectionRecoveryForSession({
-      ctx,
-      appId: state.appSpec.appId,
-      appSpecDigest: state.appSpec.digest,
-      root: state.applyReceipt.applyRoot,
-      pullRequestNumber: input.pullRequestNumber,
-      priorPublishedProposalDigest: proposalDigest,
-    }),
+    publishedProposalDigest: proposalDigest,
     readPublishedSource: async (lookup) =>
       await readPublishedOperatorSourceForSession({
+        adapterSessionId: ctx.session.id,
         appId: state.appSpec.appId,
         appSpecDigest: state.appSpec.digest,
-        root: state.applyReceipt.applyRoot,
         callId: ctx.callId,
-        sessionAuth: ctx.session.auth,
-        adapterSessionId: ctx.session.id,
         callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-        signal: ctx.abortSignal,
         lookup,
+        root: state.applyReceipt.applyRoot,
+        sessionAuth: ctx.session.auth,
+        signal: ctx.abortSignal,
       }),
+    recovery: draftInspectionRecoveryForSession({
+      appId: state.appSpec.appId,
+      appSpecDigest: state.appSpec.digest,
+      ctx,
+      priorPublishedProposalDigest: proposalDigest,
+      pullRequestNumber: input.pullRequestNumber,
+      root: state.applyReceipt.applyRoot,
+    }),
+    resolvedByCallId: ctx.callId,
   });
   if (
     owned.draft.number !== input.pullRequestNumber ||
@@ -172,15 +172,15 @@ const acquireOwnedPublishedDraft = async (
   const repair = createPublishedDraftRepairSource({
     appId: state.appSpec.appId,
     appSpecDigest: state.appSpec.digest,
-    originSourceReceiptDigest: state.sourceReceipt.digest,
-    publicationProposalDigest: owned.proposal.digest,
-    publicationDigest: owned.publication.digest,
-    installationId: access.scope.installationId,
-    source: owned.source,
     draft: owned.draft,
+    installationId: access.scope.installationId,
+    originSourceReceiptDigest: state.sourceReceipt.digest,
+    publicationDigest: owned.publication.digest,
+    publicationProposalDigest: owned.proposal.digest,
+    source: owned.source,
   });
   assertCurrentOrigin(state, previous);
-  return { access, runtime, owned, repair };
+  return { access, owned, repair, runtime };
 };
 
 /** Acquire a second private checkout for this session's actual published app, never replace its starter. */
@@ -205,10 +205,10 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
     originAlreadyCarried || state.reviewReceipt.changes.length === 0
       ? undefined
       : {
-          reviewDigest: state.reviewReceipt.digest,
           changes: state.reviewReceipt.changes,
-          priorPublishedHeadSha: owned.publication.branchSha,
           contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
+          priorPublishedHeadSha: owned.publication.branchSha,
+          reviewDigest: state.reviewReceipt.digest,
         };
   const accessRuntime = await repositoryAccessRuntimeForSession(ctx.session.auth);
   const { prepared } = await prepareWithVerifiedGitHubFetchRecovery({
@@ -218,24 +218,24 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
         repository: repair.source.repository,
         sessionId: ctx.session.id,
       }),
-    sandbox: {
-      setNetworkPolicy: async (policy) => {
-        await setBuilderSandboxNetworkPolicy(sandbox, policy);
-      },
-    },
     prepare: async () => {
       assertCurrentOrigin(state, previous);
       return await preparePublishedDraftRepairCandidate({
-        sandbox,
-        repository: repair.source.repository,
         appId: repair.appId,
         headBranch: owned.draft.headBranch,
         headSha: owned.draft.headSha,
+        repository: repair.source.repository,
+        sandbox,
         ...(unpublished === undefined ? {} : { unpublished }),
         ...(previous?.kind === "published-draft-repair" && previous.repair.digest === repair.digest
           ? { previousCandidate: previous, replayPreviousCandidate: true }
           : {}),
       });
+    },
+    sandbox: {
+      setNetworkPolicy: async (policy) => {
+        await setBuilderSandboxNetworkPolicy(sandbox, policy);
+      },
     },
   });
   assertCurrentOrigin(state, previous);
@@ -243,14 +243,14 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
   void _publicationScope;
   const candidate = {
     ...preparedRepair,
-    kind: "published-draft-repair" as const,
-    repair,
-    version: 1 as const,
-    repositoryId: owned.draft.repositoryId,
-    pullRequestNumber: owned.draft.number,
     githubSourceDigest: owned.source.digest,
+    kind: "published-draft-repair" as const,
     originalReviewDigest: state.reviewReceipt.digest,
+    pullRequestNumber: owned.draft.number,
+    repair,
+    repositoryId: owned.draft.repositoryId,
     reviewedLineage: structuredClone(state),
+    version: 1 as const,
   };
   updateExactDraftReconciliation({
     expected: previous,
@@ -258,14 +258,14 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
     transition: () => candidate,
   });
   return {
-    status: "ready_for_validation" as const,
-    kind: "published-draft-repair" as const,
     baseline: "draft-head" as const,
-    headSha: candidate.headSha,
-    root: candidate.root,
     conflicts: candidate.conflicts,
+    headSha: candidate.headSha,
+    kind: "published-draft-repair" as const,
     nextAction:
       "Inspect or format this same draft candidate, validate it, review the app-only draft-head delta, then seal_github_draft_pr_update and request separate update approval. The original fresh source and existing published root metadata remain intact.",
+    root: candidate.root,
+    status: "ready_for_validation" as const,
   };
 };
 
@@ -340,25 +340,25 @@ const preservedDraftWorkspaces = (
       : [
           {
             kind: "draft-candidate" as const,
-            root: preservedCandidateRoot,
             reviewDigest: state.reviewReceipt.digest,
+            root: preservedCandidateRoot,
           },
         ]),
     {
       kind: "app-review",
-      root: state.applyReceipt.applyRoot,
-      reviewDigest: state.reviewReceipt.digest,
       paths: state.reviewReceipt.changes.flatMap((change) =>
         change.path.startsWith(`apps/${state.appSpec.appId}/`) ? [change.path] : [],
       ),
+      reviewDigest: state.reviewReceipt.digest,
+      root: state.applyReceipt.applyRoot,
     },
     ...(previous === undefined || previous.root === currentRoot
       ? []
       : [
           {
             kind: "draft-candidate" as const,
-            root: previous.root,
             reviewDigest: previous.originalReviewDigest,
+            root: previous.root,
           },
         ]),
   ];
@@ -397,7 +397,7 @@ const reconciliationPreparationLineage = (
             sameOrigin &&
             previousCandidate.headSha === repair.draft.headSha,
         };
-  return { ownedPrevious, recoveryMode, reopenCurrent, previousInput };
+  return { ownedPrevious, previousInput, recoveryMode, reopenCurrent };
 };
 
 /** Reconcile the owned draft with its live base without changing the accepted starter source. */
@@ -414,12 +414,12 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     pullRequestNumber: owned.draft.number,
     priorPublishedProposalDigest: owned.proposal.digest,
     recovery: draftInspectionRecoveryForSession({
-      ctx,
       appId: state.appSpec.appId,
       appSpecDigest: state.appSpec.digest,
-      root: state.applyReceipt.applyRoot,
-      pullRequestNumber: input.pullRequestNumber,
+      ctx,
       priorPublishedProposalDigest: owned.proposal.digest,
+      pullRequestNumber: input.pullRequestNumber,
+      root: state.applyReceipt.applyRoot,
     }),
     ...(ownedPrevious?.proposal === undefined
       ? {}
@@ -429,20 +429,20 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
       : { publishedReconciliation: ownedPrevious.publishedReconciliation }),
     readPublishedSource: async (draft) =>
       await readPublishedOperatorSourceForSession({
+        adapterSessionId: ctx.session.id,
         appId: state.appSpec.appId,
         appSpecDigest: state.appSpec.digest,
-        root: state.applyReceipt.applyRoot,
         callId: ctx.callId,
-        sessionAuth: ctx.session.auth,
-        adapterSessionId: ctx.session.id,
         callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-        signal: ctx.abortSignal,
         lookup: {
-          repositoryId: draft.repositoryId,
           branch: draft.headBranch,
           gitSha: draft.headSha,
           gitTree: draft.headTree,
+          repositoryId: draft.repositoryId,
         },
+        root: state.applyReceipt.applyRoot,
+        sessionAuth: ctx.session.auth,
+        signal: ctx.abortSignal,
       }),
   });
   if (
@@ -461,10 +461,10 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     reopenCurrent || reviewedOriginAlreadyPublished(state, owned, repair) || changes.length === 0
       ? undefined
       : {
-          reviewDigest: state.reviewReceipt.digest,
           changes,
-          priorPublishedHeadSha: owned.publication.branchSha,
           contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
+          priorPublishedHeadSha: owned.publication.branchSha,
+          reviewDigest: state.reviewReceipt.digest,
         };
   const accessRuntime = await repositoryAccessRuntimeForSession(ctx.session.auth);
   const { prepared, retriedGitFetch } = await prepareWithVerifiedGitHubFetchRecovery({
@@ -474,26 +474,26 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
         repository: repair.source.repository,
         sessionId: ctx.session.id,
       }),
-    sandbox: {
-      setNetworkPolicy: async (policy) => {
-        await setBuilderSandboxNetworkPolicy(sandbox, policy);
-      },
-    },
     prepare: async () => {
       assertCurrentOrigin(state, previous);
       return await prepareDraftReconciliation({
-        sandbox,
-        repository: repair.source.repository,
         appId: repair.appId,
         baseBranch: source.draft.baseBranch,
         baseSha: source.base.headSha,
         headBranch: source.draft.headBranch,
         headSha: source.draft.headSha,
         ownedPublication: { proposal: owned.proposal, publication: owned.publication },
+        repository: repair.source.repository,
+        sandbox,
         ...(input.recovery === undefined ? {} : { forceFreshCandidate: true }),
         ...(unpublished === undefined ? {} : { unpublished }),
         ...previousInput,
       });
+    },
+    sandbox: {
+      setNetworkPolicy: async (policy) => {
+        await setBuilderSandboxNetworkPolicy(sandbox, policy);
+      },
     },
   });
   assertCurrentOrigin(state, previous);
@@ -513,7 +513,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     ...preparedCandidate,
     kind: "reconciliation" as const,
     publishedOrigin: repair,
-    ...(recoveryMode === undefined ? {} : { recoveryMode, preservedWorkspaces }),
+    ...(recoveryMode === undefined ? {} : { preservedWorkspaces, recoveryMode }),
     ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
     version: 1 as const,
     repositoryId: owned.draft.repositoryId,
@@ -534,7 +534,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     headSha: candidate.headSha,
     root: candidate.root,
     conflicts: candidate.conflicts,
-    ...(reopenCurrent ? { recoveryMode, originalReviewReplayed: false, preservedWorkspaces } : {}),
+    ...(reopenCurrent ? { originalReviewReplayed: false, preservedWorkspaces, recoveryMode } : {}),
     ...(preservedCandidateRoot === undefined ? {} : { preservedCandidateRoot, replayedAppChanges }),
     ...(retriedGitFetch
       ? { gitTransportRecovery: "Verified installation Git fetch recovered." }

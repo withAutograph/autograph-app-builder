@@ -221,7 +221,7 @@ export function preparedProviderFixture(input: {
         repository: "acme/prepared-vendor-review",
         selectedInstallationId: "10",
       });
-      return classifyGitHubRepositoryAccess({
+      return await classifyGitHubRepositoryAccess({
         authority,
         ...selection,
         installations: {
@@ -261,7 +261,7 @@ export function preparedProviderFixture(input: {
       }),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
       vercel: async (sessionAuth, intent) =>
-        readPreparedVercelAccess({
+        await readPreparedVercelAccess({
           authority: exactForwardedSessionAuthority(sessionAuth).authority,
           fetch: vercelHttp,
           intent,

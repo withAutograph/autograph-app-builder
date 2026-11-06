@@ -233,7 +233,8 @@ export const createGitHubTargetAccessAdapter = (
     const observed = targetAccessObservationSchema.parse(
       // eslint-disable-next-line eslint/no-use-before-define -- Function declaration is hoisted; the adapter uses the shared sanitization boundary.
       await sanitizedProviderCall(
-        () => provider.inspectTargetAccess({ operation, repositoryId, requestedPermissions }),
+        async () =>
+          await provider.inspectTargetAccess({ operation, repositoryId, requestedPermissions }),
         "verify the selected repository's GitHub installation access",
       ),
     );
@@ -412,7 +413,7 @@ export const createGitHubTargetSourceResolutionAdapter = (
       }
       return repositoryObservation(
         await sanitizedProviderCall(
-          () => provider.inspectRepository({ ref, repositoryId }),
+          async () => await provider.inspectRepository({ ref, repositoryId }),
           inspectSelectedRepositoryRevisionAction,
         ),
         proof.digest,
@@ -438,8 +439,8 @@ export function createGitHubAppPublicationAdapter(
     const snapshot = parseProviderResponse(
       installationSnapshotSchema,
       await sanitizedProviderCall(
-        () =>
-          provider.inspectInstallation({
+        async () =>
+          await provider.inspectInstallation({
             operation,
             requestedPermissions: expected,
           }),
@@ -478,17 +479,18 @@ export function createGitHubAppPublicationAdapter(
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(
-          () => provider.createPrivateFreshHistoryRepository(proposal, content),
+          async () => await provider.createPrivateFreshHistoryRepository(proposal, content),
           "create the private repository",
         ),
-      ) as GitHubMutationAcknowledgement;
+      );
     },
     async inspectAppliedDraftReconciliation(proposal, observed, recovery) {
       return z
         .boolean()
         .parse(
           await sanitizedProviderCall(
-            () => provider.inspectAppliedDraftReconciliation(proposal, observed, recovery),
+            async () =>
+              await provider.inspectAppliedDraftReconciliation(proposal, observed, recovery),
             "verify whether the draft PR reconciliation was applied",
           ),
         );
@@ -498,7 +500,7 @@ export function createGitHubAppPublicationAdapter(
         .boolean()
         .parse(
           await sanitizedProviderCall(
-            () => provider.inspectAppliedDraftUpdate(proposal, content, observed),
+            async () => await provider.inspectAppliedDraftUpdate(proposal, content, observed),
             "verify whether the draft PR update was applied",
           ),
         );
@@ -514,14 +516,14 @@ export function createGitHubAppPublicationAdapter(
         .boolean()
         .parse(
           await sanitizedProviderCall(
-            () => inspect.call(provider, proposal, resolvedTree, observed),
+            async () => await inspect.call(provider, proposal, resolvedTree, observed),
             "verify the exact published draft repair",
           ),
         );
     },
     async inspectDestination(input) {
       const raw = await sanitizedProviderCall(
-        () => provider.inspectDestination(input),
+        async () => await provider.inspectDestination(input),
         "inspect the repository destination",
       );
       if (raw === "absent") {
@@ -534,7 +536,7 @@ export function createGitHubAppPublicationAdapter(
       const snapshot = parseProviderResponse(
         draftReadBackSchema,
         await sanitizedProviderCall(
-          () => provider.inspectDraftPublication(proposal),
+          async () => await provider.inspectDraftPublication(proposal),
           "inspect the draft PR publication result",
         ),
       );
@@ -550,20 +552,20 @@ export function createGitHubAppPublicationAdapter(
       return {
         ...unsigned,
         digest: hash(unsigned),
-      } as DraftPublicationReadBack;
+      };
     },
     async inspectExistingDraft(input) {
       return parseProviderResponse(
         existingDraftSchema,
         await sanitizedProviderCall(
-          () => provider.inspectExistingDraft(input),
+          async () => await provider.inspectExistingDraft(input),
           "inspect the existing draft PR",
         ),
-      ) as ExistingDraftObservation;
+      );
     },
     async inspectFreshRepositoryOutcome(proposal) {
       const raw = await sanitizedProviderCall(
-        () => provider.inspectFreshRepositoryOutcome(proposal),
+        async () => await provider.inspectFreshRepositoryOutcome(proposal),
         "inspect the repository creation result",
       );
       if (raw === undefined) {
@@ -590,9 +592,9 @@ export function createGitHubAppPublicationAdapter(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async inspectRepository(input) {
       const { operation, repositoryId, ref } = input;
-      return observationFor(
+      return await observationFor(
         operation,
-        () => provider.inspectRepository({ ref, repositoryId }),
+        async () => await provider.inspectRepository({ ref, repositoryId }),
         inspectSelectedRepositoryRevisionAction,
       );
     },
@@ -600,28 +602,28 @@ export function createGitHubAppPublicationAdapter(
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(
-          () => provider.publishDraftPullRequest(proposal, content),
+          async () => await provider.publishDraftPullRequest(proposal, content),
           "publish the draft PR",
         ),
-      ) as GitHubMutationAcknowledgement;
+      );
     },
     async reconcileExistingDraft(proposal, content, recovery) {
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(
-          () => provider.reconcileExistingDraft(proposal, content, recovery),
+          async () => await provider.reconcileExistingDraft(proposal, content, recovery),
           "update the existing draft PR",
         ),
-      ) as GitHubMutationAcknowledgement;
+      );
     },
     async updateExistingDraft(proposal, content) {
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(
-          () => provider.updateExistingDraft(proposal, content),
+          async () => await provider.updateExistingDraft(proposal, content),
           "update the existing draft PR",
         ),
-      ) as GitHubMutationAcknowledgement;
+      );
     },
   };
   const destinationFileSchema = z.object({
@@ -636,7 +638,7 @@ export function createGitHubAppPublicationAdapter(
       const files = parseProviderResponse(
         z.array(destinationFileSchema),
         await sanitizedProviderCall(
-          () => inspectDestinationFiles(input),
+          async () => await inspectDestinationFiles(input),
           "inspect destination files",
         ),
       );
@@ -655,7 +657,10 @@ export function createGitHubAppPublicationAdapter(
         z
           .object({ bytes: z.instanceof(Uint8Array), digest, mode: z.enum(["644", "755"]) })
           .nullable(),
-        await sanitizedProviderCall(() => readDestinationFile(input), "read the destination file"),
+        await sanitizedProviderCall(
+          async () => await readDestinationFile(input),
+          "read the destination file",
+        ),
       );
       if (file !== null && createHash("sha256").update(file.bytes).digest("hex") !== file.digest) {
         throw new Error("Invalid GitHub destination file digest.");
@@ -668,7 +673,7 @@ export function createGitHubAppPublicationAdapter(
     adapter.inspectHistoricalAppSource = async (input) =>
       historicalAppSourceObservationSchema.parse(
         await sanitizedProviderCall(
-          () => inspectHistoricalAppSource(input),
+          async () => await inspectHistoricalAppSource(input),
           "inspect the historical App source",
         ),
       );
@@ -692,8 +697,8 @@ export function createGitHubAppSourceResolutionAdapter(
     const snapshot = parseProviderResponse(
       installationSnapshotSchema,
       await sanitizedProviderCall(
-        () =>
-          provider.inspectInstallation({
+        async () =>
+          await provider.inspectInstallation({
             operation,
             requestedPermissions,
           }),
@@ -720,7 +725,7 @@ export function createGitHubAppSourceResolutionAdapter(
       const identity = await inspectInstallation(operation);
       return repositoryObservation(
         await sanitizedProviderCall(
-          () => provider.inspectRepository({ ref, repositoryId }),
+          async () => await provider.inspectRepository({ ref, repositoryId }),
           inspectSelectedRepositoryRevisionAction,
         ),
         identity.digest,

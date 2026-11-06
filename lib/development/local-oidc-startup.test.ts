@@ -207,17 +207,16 @@ describe("local Development OIDC startup", () => {
           environment: {
             ...input.environment,
             ...(dataHome === undefined ? {} : { XDG_DATA_HOME: dataHome }),
-            XDG_CONFIG_HOME: "/owner/unneeded-config",
-            XDG_CACHE_HOME: "/owner/unneeded-cache",
-            XDG_STATE_HOME: "/owner/unneeded-state",
-            XDG_BIN_HOME: "/owner/unneeded-bin",
             OPENAI_API_KEY: "must-not-be-forwarded",
+            XDG_BIN_HOME: "/owner/unneeded-bin",
+            XDG_CACHE_HOME: "/owner/unneeded-cache",
+            XDG_CONFIG_HOME: "/owner/unneeded-config",
+            XDG_STATE_HOME: "/owner/unneeded-state",
           },
           runCommand: (invocation) => {
             invocations.push(invocation);
             runLocalOidcStartupCommand({
               ...invocation,
-              executable: process.execPath,
               args: [
                 "-e",
                 `const assert = require("node:assert/strict");
@@ -228,6 +227,7 @@ describe("local Development OIDC startup", () => {
                 JSON.stringify({ value: dataHome }),
                 ...excluded,
               ],
+              executable: process.execPath,
             });
             if (invocation.operation === "development-env-pull") {
               writeFileSync(
@@ -329,7 +329,7 @@ describe("local Development OIDC startup", () => {
 
   it("does not include child output in a command failure", () => {
     const leaked = "secret-token-and-claims";
-    expect(() =>
+    expect(() => {
       runLocalOidcStartupCommand({
         args: ["-c", `printf '%s' '${leaked}' >&2; exit 1`],
         cwd: "/tmp",
@@ -340,8 +340,8 @@ describe("local Development OIDC startup", () => {
         },
         executable: "/bin/sh",
         operation: "development-env-pull",
-      }),
-    ).toThrow("Local OIDC development-env-pull failed.");
+      });
+    }).toThrow("Local OIDC development-env-pull failed.");
     try {
       runLocalOidcStartupCommand({
         args: ["-c", `printf '%s' '${leaked}' >&2; exit 1`],

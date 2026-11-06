@@ -191,17 +191,17 @@ describe("session-bound repository access receipt", () => {
       version: 2 as const,
     };
 
-    expect(() =>
-      assertResolvedSourceMatchesRepositoryAccess({ access: receipt, source }),
-    ).not.toThrow();
-    expect(() =>
+    expect(() => {
+      assertResolvedSourceMatchesRepositoryAccess({ access: receipt, source });
+    }).not.toThrow();
+    expect(() => {
       assertResolvedSourceMatchesRepositoryAccess({
         access: receipt,
         source: {
           ...source,
           repository: { ...source.repository, name: "another-repository" },
         },
-      }),
-    ).toThrow("The live GitHub source does not match the confirmed repository access receipt.");
+      });
+    }).toThrow("The live GitHub source does not match the confirmed repository access receipt.");
   });
 });

@@ -23,8 +23,8 @@ describe("high-fidelity design guidance", () => {
     if (reference === undefined) {
       throw new Error("Hosted preview authoring guidance is unavailable.");
     }
-    const content = reference.match(/```tsx\n(?<content>[\s\S]*?)\n```/u)?.groups?.content;
-    const manifest = reference.match(/```json\n(?<manifest>[\s\S]*?)\n```/u)?.groups?.manifest;
+    const content = /```tsx\n(?<content>[\s\S]*?)\n```/u.exec(reference)?.groups?.content;
+    const manifest = /```json\n(?<manifest>[\s\S]*?)\n```/u.exec(reference)?.groups?.manifest;
     expect(content).toBeDefined();
     expect(manifest).toBeDefined();
     if (manifest === undefined) {
@@ -37,7 +37,9 @@ describe("high-fidelity design guidance", () => {
       manifest: JSON.parse(manifest),
       routes: ["/"],
     });
-    expect(() => validateUiPreview(input)).not.toThrow();
+    expect(() => {
+      validateUiPreview(input);
+    }).not.toThrow();
   });
 
   it.each([

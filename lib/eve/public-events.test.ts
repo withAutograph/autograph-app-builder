@@ -407,8 +407,8 @@ describe("installed Eve 0.68 projection", () => {
           result: {
             callId: "integration_install_1",
             kind: "tool-result",
+            output: { problem: "private installer diagnosis", status },
             toolName: "install-app-integrations",
-            output: { status, problem: "private installer diagnosis" },
           },
           status: "completed",
         },
@@ -417,9 +417,9 @@ describe("installed Eve 0.68 projection", () => {
     ]);
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "progress",
         label: "Installing the app's requested integrations",
         state,
+        type: "progress",
       }),
     );
     expect(JSON.stringify(events)).not.toContain("private installer diagnosis");
@@ -1033,24 +1033,24 @@ describe("installed Eve 0.68 projection", () => {
   it("shows the selected private compute footprint and ephemeral billing on the ordinary Build card", () => {
     const projected = projectInstalledEveEvent(
       installedEvent({
-        type: "input.requested",
         data: {
           requests: [
             {
-              kind: "tool-approval",
-              requestId: "compute-build",
-              prompt: "Build",
               action: {
+                input: {
+                  privateCompute: "private-checks-16gib-v1",
+                  productSummary: "Build the reviewed app.",
+                },
                 kind: "tool-call",
                 toolName: "apply_app_creation",
-                input: {
-                  productSummary: "Build the reviewed app.",
-                  privateCompute: "private-checks-16gib-v1",
-                },
               },
+              kind: "tool-approval",
+              prompt: "Build",
+              requestId: "compute-build",
             },
           ],
         },
+        type: "input.requested",
       }),
       4,
     );
@@ -1661,29 +1661,29 @@ describe("suspended hosted identity invitation", () => {
   const link = "https://auth.example.com/api/auth/platform/operator-link?nonce=ordinary-link-nonce";
   const partial = (output: unknown, toolName = "prepare-app-hosted-runtime") =>
     installedEvent({
-      type: "action.partial",
       data: {
-        turnId: "owner-turn",
+        result: { callId: "prepare-call", kind: "tool-result", output, toolName },
         sequence: 8,
         stepIndex: 2,
-        result: { kind: "tool-result", toolName, callId: "prepare-call", output },
+        turnId: "owner-turn",
       },
+      type: "action.partial",
     });
   it("exposes the ordinary link before completion without creating a response request", () => {
     const event = partial({
       authIdentityLink: link,
       authIdentityLinkExpiresAt: "2026-10-15T15:00:00Z",
       nextStep: "private instruction must not be copied",
-      token: "private-hook-token",
       proof: "private-proof",
       sealedAuthority: "private-seal",
+      token: "private-hook-token",
     });
     const projected = projectInstalledEveEvents([event]);
     expect(projected).toHaveLength(2);
     expect(projected[0]).toMatchObject({ type: "assistant_message" });
     expect(projected[1]).toMatchObject({
-      type: "auth_identity_invitation",
       callId: "prepare-call",
+      type: "auth_identity_invitation",
       url: link,
     });
     expect(JSON.stringify(projected)).toContain(link);
@@ -1700,8 +1700,8 @@ describe("suspended hosted identity invitation", () => {
     const projected = projectInstalledEveEvents([
       partial({ authIdentityLink: link }),
       installedEvent({
+        data: { message: "Ready", turnId: "owner-turn" },
         type: "message.completed",
-        data: { turnId: "owner-turn", message: "Ready" },
       }),
     ]);
     expect(projected).toHaveLength(2);
@@ -1728,24 +1728,24 @@ describe("suspended hosted identity invitation", () => {
 it("closes only the finished hosted identity tool invitation", () => {
   const events = projectInstalledEveEvents([
     installedEvent({
-      type: "action.result",
       data: {
-        turnId: "owner-turn",
-        sequence: 9,
-        stepIndex: 2,
-        status: "completed",
         result: {
-          kind: "tool-result",
-          toolName: "prepare-app-hosted-runtime",
           callId: "prepare-call",
+          kind: "tool-result",
           output: { status: "prepared" },
+          toolName: "prepare-app-hosted-runtime",
         },
+        sequence: 9,
+        status: "completed",
+        stepIndex: 2,
+        turnId: "owner-turn",
       },
+      type: "action.result",
     }),
   ]);
   expect(events).toContainEqual({
-    type: "auth_identity_invitation_resolved",
     callId: "prepare-call",
     index: 1,
+    type: "auth_identity_invitation_resolved",
   });
 });

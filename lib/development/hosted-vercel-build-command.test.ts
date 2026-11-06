@@ -75,8 +75,8 @@ it("prepares the hosted app and delegates Eve output to the generated service bu
     );
     const environment: NodeJS.ProcessEnv = {
       ...process.env,
-      VERCEL: "1",
       PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+      VERCEL: "1",
     };
     delete environment.NODE_OPTIONS;
     delete environment.EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY;
@@ -100,6 +100,6 @@ it("prepares the hosted app and delegates Eve output to the generated service bu
     // The child build leaves the host's generated routing/service output intact.
     expect(await readFile(outputPath, "utf-8")).toBe(hostOutput);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 });

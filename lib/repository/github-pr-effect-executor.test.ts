@@ -11,68 +11,73 @@ import type { GitHubPrEffectIntent, GitHubPrEffectReceipt } from "./github-pr-ef
 const readyAt = "2026-11-05T15:30:00Z";
 const newerReadyAt = "2026-11-05T15:45:00Z";
 const readyIntent = {
-  kind: "pr-ready",
-  publicationDigest: "a".repeat(64),
-  installationIdentityDigest: "b".repeat(64),
-  repositoryId: "100",
-  owner: "withAutograph",
-  name: "app",
-  pullRequestNumber: 12,
-  headSha: "c".repeat(40),
   baseBranch: "main",
+  headSha: "c".repeat(40),
+  installationIdentityDigest: "b".repeat(64),
+  kind: "pr-ready",
+  name: "app",
+  owner: "withAutograph",
+  publicationDigest: "a".repeat(64),
+  pullRequestNumber: 12,
+  repositoryId: "100",
 } satisfies GitHubPrEffectIntent;
 const mergeIntent = { ...readyIntent, kind: "pr-merge", readyAt } satisfies GitHubPrEffectIntent;
 const draft: GitHubPrDeliveryObservation = {
-  state: "open",
-  draft: true,
-  headSha: readyIntent.headSha,
   baseBranch: readyIntent.baseBranch,
   checks: "pending",
+  draft: true,
+  headSha: readyIntent.headSha,
+  state: "open",
 };
 const ready: GitHubPrDeliveryObservation = { ...draft, draft: false, readyAt };
-const passed: GitHubPrDeliveryObservation = { ...ready, checks: "passed", checkRunId: 42 };
+const passed: GitHubPrDeliveryObservation = { ...ready, checkRunId: 42, checks: "passed" };
 const merged: GitHubPrDeliveryObservation = {
   ...passed,
-  state: "merged",
   mergeCommitSha: "d".repeat(40),
+  state: "merged",
 };
 
 const fixture = (initial: GitHubPrDeliveryObservation, onClaim?: () => void) => {
   const rows = new Map<string, GitHubPrEffectReceipt>();
   const store = {
-    read: vi.fn((key: string) => Promise.resolve(rows.get(key))),
     compareAndSet: vi.fn(
-      (key: string, expected: string | undefined, receipt: GitHubPrEffectReceipt) => {
+      async (key: string, expected: string | undefined, receipt: GitHubPrEffectReceipt) => {
         if (rows.get(key)?.digest !== expected) {
-          return Promise.resolve(false);
+          return false;
         }
         if (expected === undefined) {
           onClaim?.();
         }
         rows.set(key, receipt);
-        return Promise.resolve(true);
+        return true;
       },
     ),
+    read: vi.fn(async (key: string) => rows.get(key)),
   };
   const provider = {
-    inspect: vi.fn(() => Promise.resolve(initial)),
-    markReady: vi.fn(() => Promise.resolve(ready)),
-    merge: vi.fn(() => Promise.resolve(merged)),
+    inspect: vi.fn(async () => initial),
+    markReady: vi.fn(async () => ready),
+    merge: vi.fn(async () => merged),
   };
-  const execute = (
+  const execute = async (
     intent: GitHubPrEffectIntent,
     approvedByCallId = "original-approval",
     abortSignal?: AbortSignal,
   ) =>
-    executeApprovedGitHubPrEffect({
+    await executeApprovedGitHubPrEffect({
       ...(abortSignal === undefined ? {} : { abortSignal }),
-      intent,
       approvedByCallId,
-      store,
+      intent,
       provider,
+      store,
     });
-  const reconcile = (intent: GitHubPrEffectIntent) =>
-    reconcileApprovedGitHubPrEffect({ intent, approvedByCallId: "recovery-call", store, provider });
+  const reconcile = async (intent: GitHubPrEffectIntent) =>
+    await reconcileApprovedGitHubPrEffect({
+      approvedByCallId: "recovery-call",
+      intent,
+      provider,
+      store,
+    });
   return { execute, provider, reconcile, rows, store };
 };
 
@@ -91,22 +96,22 @@ it("uses the original ready journal to confirm a lost response without a second 
   provider.inspect.mockResolvedValueOnce(ready);
   await expect(reconcile(readyIntent)).resolves.toMatchObject({
     approvedByCallId: "original-approval",
-    status: "succeeded",
     evidence: { kind: "pr-ready", readyAt },
+    status: "succeeded",
   });
   expect(provider.markReady).toHaveBeenCalledTimes(1);
 });
 
 it("claims a single pending intent before concurrent ready calls can write", async () => {
   const { execute, provider, rows } = fixture(draft);
-  provider.markReady.mockImplementation(() => {
+  provider.markReady.mockImplementation(async () => {
     expect([...rows.values()]).toMatchObject([{ status: "pending" }]);
-    return Promise.resolve(ready);
+    return ready;
   });
   await Promise.all([execute(readyIntent), execute(readyIntent, "concurrent-approval")]);
   expect(provider.markReady).toHaveBeenCalledTimes(1);
   expect([...rows.values()]).toMatchObject([
-    { status: "succeeded", evidence: { kind: "pr-ready", readyAt } },
+    { evidence: { kind: "pr-ready", readyAt }, status: "succeeded" },
   ]);
 });
 
@@ -122,8 +127,8 @@ it("reconciles a lost merge response by readback and preserves the original appr
   provider.inspect.mockResolvedValueOnce(merged);
   await expect(reconcile(mergeIntent)).resolves.toMatchObject({
     approvedByCallId: "original-approval",
-    status: "succeeded",
     evidence: { kind: "pr-merge", mergeCommitSha: merged.mergeCommitSha },
+    status: "succeeded",
   });
   expect(provider.merge).toHaveBeenCalledExactlyOnceWith(mergeIntent, readyAt, signal);
 });
@@ -131,9 +136,9 @@ it("reconciles a lost merge response by readback and preserves the original appr
 it("aborts without reserving an effect when cancellation arrives during inspection", async () => {
   const { execute, provider, store } = fixture(passed);
   const controller = new AbortController();
-  provider.inspect.mockImplementationOnce(() => {
+  provider.inspect.mockImplementationOnce(async () => {
     controller.abort();
-    return Promise.resolve(passed);
+    return passed;
   });
   await expect(execute(mergeIntent, "original-approval", controller.signal)).rejects.toMatchObject({
     name: "AbortError",
@@ -163,8 +168,8 @@ it("records a definitive provider rejection without treating it as an uncertain 
   const { execute, provider, reconcile } = fixture(passed);
   provider.merge.mockRejectedValueOnce(new GitHubPrEffectRejectedError("provider-rejected"));
   await expect(execute(mergeIntent)).resolves.toMatchObject({
-    status: "failed",
     code: "provider-rejected",
+    status: "failed",
   });
   await expect(reconcile(mergeIntent)).resolves.toMatchObject({ status: "failed" });
   expect(provider.inspect).toHaveBeenCalledTimes(1);

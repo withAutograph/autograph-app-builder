@@ -118,7 +118,7 @@ describe("destination review progress readback", () => {
       readable: true,
       side: "after",
     });
-    expect(complete).toMatchObject({ beforeComplete: true, afterComplete: true });
+    expect(complete).toMatchObject({ afterComplete: true, beforeComplete: true });
   });
 
   it("does not expose stale completed coverage or cursors for a changed diff", () => {
@@ -176,9 +176,9 @@ describe("concurrent destination inspection metadata", () => {
     changeSetDigest: digest("diff"),
   };
   const expected = {
+    githubDestinationReviewRead: progress,
     phase: "validated",
     sourceReceipt: { digest: "source" },
-    githubDestinationReviewRead: progress,
   };
   it("reproduces the old full aggregate conflict and merges opposite-side completion", () => {
     const latest = {
@@ -194,9 +194,9 @@ describe("concurrent destination inspection metadata", () => {
     });
     expect(merged.githubDestinationReviewRead).toMatchObject({
       afterComplete: true,
+      afterReadable: true,
       beforeComplete: true,
       beforeReadable: true,
-      afterReadable: true,
     });
     expect(merged.sourceReceipt).toBe(expected.sourceReceipt);
   });

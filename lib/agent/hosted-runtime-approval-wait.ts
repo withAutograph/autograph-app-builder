@@ -61,7 +61,7 @@ export async function readHostedRuntimeApprovalReceiptStep(
     ),
     approval.openHostedRuntimeApprovalStore(),
   ]);
-  const read = receipt.createHostedRuntimeApprovalReceiptReader({ store, now: Date.now });
+  const read = receipt.createHostedRuntimeApprovalReceiptReader({ now: Date.now, store });
   const state = await read(input, ctx, operator, expected, delayMs);
   if (state.status === "approved" || !catchUp) {
     return state;

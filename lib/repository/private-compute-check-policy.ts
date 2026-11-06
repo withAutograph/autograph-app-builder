@@ -88,17 +88,17 @@ export const applyPrivateComputeCheckPolicy = async (input: {
     throw new Error("The reviewed compute check policy requires the owned application checkout.");
   }
   const result = await input.sandbox.run({
-    workingDirectory: input.applyRoot,
     abortSignal: input.abortSignal,
     command: `node -e ${shellQuote(installProgram)} ${shellQuote(
       JSON.stringify({
-        root: input.applyRoot,
-        path: policy.path,
-        beforeSha256: policy.beforeSha256,
         afterSha256: policy.afterSha256,
+        beforeSha256: policy.beforeSha256,
         content: PRIVATE_COMPUTE_CHECK_TASK,
+        path: policy.path,
+        root: input.applyRoot,
       }),
     )}`,
+    workingDirectory: input.applyRoot,
   });
   input.abortSignal?.throwIfAborted();
   let observed: unknown;
@@ -130,7 +130,7 @@ export const applyPrivateComputeCheckPolicy = async (input: {
       `${reasons.get(code) ?? "The approved check task could not be installed and verified."} Apply is incomplete.`,
     );
   }
-  if (JSON.stringify(observed) !== JSON.stringify({ sha256: policy.afterSha256, mode: "755" })) {
+  if (JSON.stringify(observed) !== JSON.stringify({ mode: "755", sha256: policy.afterSha256 })) {
     throw new Error(
       "The approved app check task bytes or executable mode failed readback; apply is incomplete.",
     );

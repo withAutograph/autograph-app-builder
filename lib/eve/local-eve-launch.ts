@@ -141,8 +141,8 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
   return {
     applicationRoot,
     destinationRoot,
-    runtimeHome,
     runsRoot,
+    runtimeHome,
     sourceRoot,
     supervisorRoot,
     workflowData,
@@ -353,11 +353,11 @@ export async function runLocalEve(input: {
   });
   const invocation = createLocalEveInvocation({
     environment,
-    resume: input.resume,
     eveCli: resolveInstalledEveCli(repositoryRoot),
     oidcToken,
     pinnedNode: process.execPath,
     repositoryRoot,
+    resume: input.resume,
     vercelProject: project,
     ...(environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS === undefined
       ? {}

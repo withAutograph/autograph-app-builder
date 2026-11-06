@@ -126,7 +126,7 @@ function installationStore(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     list: vi.fn(async () => bindings),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    read: vi.fn(async () => undefined as undefined),
+    read: vi.fn(async () => {}),
   };
 }
 
@@ -213,9 +213,9 @@ describe("deployment repository access authorization", () => {
   it("uses a target proof without reading an installation repository inventory", async () => {
     const legacy = mutableProvider({ repositoryAvailable: () => true });
     const provider = await legacy({ authority, installation });
-    const inspectInstallation = vi.fn(() =>
-      Promise.reject(new Error("inventory must not be read")),
-    );
+    const inspectInstallation = vi.fn(async () => {
+      throw new Error("inventory must not be read");
+    });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const providerFactory = vi.fn(async () => ({
       ...provider,
@@ -400,8 +400,8 @@ describe("deployment repository access authorization", () => {
       principal,
     });
     await fixture.continuations.authorize({ authority, continuationId });
-    const complete = () =>
-      authorization.completeAuthorization({
+    const complete = async () =>
+      await authorization.completeAuthorization({
         callback: {
           method: "GET",
           params: { provider: "github", status: "connected" },
@@ -439,8 +439,8 @@ describe("deployment repository access authorization", () => {
     });
     await fixture.continuations.authorize({ authority, continuationId });
     fixture.makeAvailable();
-    const complete = (bypass: string) =>
-      authorization.completeAuthorization({
+    const complete = async (bypass: string) =>
+      await authorization.completeAuthorization({
         callback: {
           method: "GET",
           params: {

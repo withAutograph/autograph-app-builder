@@ -34,16 +34,16 @@ vi.mock("./hosted-prototype-chunk-store", () => ({
   createHostedPrototypeChunkStore: () => ports.store(),
 }));
 vi.mock("./postgres-prototype-chunks", () => ({
-  assertPrototypeChunkSchemaReady: () => Promise.resolve(),
+  assertPrototypeChunkSchemaReady: async () => {},
 }));
 vi.mock("../mcp/hosted-route", () => ({ openHostedPostgresDatabase: () => ({}) }));
 
 const specArtifact = recordPrototypeArtifactRevision({
   artifacts: [],
+  callId: "spec-recorded",
   content: BUILD_READY_APP_SPEC,
   mediaType: "text/markdown",
   path: "prototype/inventory/app-spec.md",
-  callId: "spec-recorded",
   sessionId: "session",
 }).artifact;
 
@@ -59,40 +59,40 @@ const accepted = {
 // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- The actual tools only consume the specified context; all sandbox effects remain forbidden ports.
 const context = {
   callId: "record-notes",
-  session: { id: "session", auth: {} },
   getSandbox: vi.fn(),
   getSkill: vi.fn(),
+  session: { auth: {}, id: "session" },
 } as unknown as Parameters<typeof recordArtifact.execute>[1];
 const seed = (phase: AppBuilderWorkflowState["phase"] = "reviewed") => {
   const fixture = {
     appSpec: accepted,
+    applyReceipt: { digest: "apply" },
     artifacts: recordPrototypeArtifactRevision({
       artifacts: recordPrototypeArtifactRevision({
         artifacts: [specArtifact],
+        callId: "prototype-recorded",
         content: "<!doctype html><main>Accepted prototype</main>",
         mediaType: "text/html",
         path: "prototype/inventory/index.html",
-        callId: "prototype-recorded",
         sessionId: "session",
       }).artifacts,
+      callId: "decisions-recorded",
       content: "Accepted design decisions.",
       mediaType: "text/markdown",
       path: "prototype/inventory/decisions.md",
-      callId: "decisions-recorded",
       sessionId: "session",
     }).artifacts,
-    phase,
-    preparedByCallId: "prepared",
-    version: APP_BUILDER_WORKFLOW_VERSION,
-    workspace: { workspaceDigest: "workspace" },
-    sourceReceipt: { digest: "source" },
     dependencyReceipt: { digest: "dependencies" },
     identityReceipt: { digest: "identity" },
+    phase,
+    preparedByCallId: "prepared",
     proposal: { digest: "proposal" },
-    applyReceipt: { digest: "apply" },
-    validationReceipt: { digest: "validation" },
     reviewReceipt: { digest: "review" },
+    sourceReceipt: { digest: "source" },
     validationAttempt: { digest: "attempt" },
+    validationReceipt: { digest: "validation" },
+    version: APP_BUILDER_WORKFLOW_VERSION,
+    workspace: { workspaceDigest: "workspace" },
   };
   // SAFETY: opaque receipt internals are not executed; their identities must survive artifact recording.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Receipt fields are opaque identity sentinels, never executed.
@@ -105,17 +105,15 @@ beforeEach(() => {
   vi.unstubAllEnvs();
   const chunks = new Map<string, string>();
   ports.store.mockReturnValue({
-    put: (input) => {
+    get: async (input) =>
+      chunks.get(JSON.stringify([input.path, input.transferDigest, input.chunkIndex])),
+    put: async (input) => {
       chunks.set(
         JSON.stringify([input.path, input.transferDigest, input.chunkIndex]),
         input.content,
       );
-      return Promise.resolve(sha256(input.content));
+      return sha256(input.content);
     },
-    get: (input) =>
-      Promise.resolve(
-        chunks.get(JSON.stringify([input.path, input.transferDigest, input.chunkIndex])),
-      ),
   });
 });
 
@@ -128,9 +126,9 @@ for (const hosted of [false, true]) {
         const before = seed();
         await recordArtifact.execute(
           {
-            path: "prototype/inventory/decisions.md",
-            mediaType: "text/markdown",
             content: "Preview preparation needs an operator diagnosis.",
+            mediaType: "text/markdown",
+            path: "prototype/inventory/decisions.md",
           },
           context,
         );
@@ -155,7 +153,7 @@ for (const hosted of [false, true]) {
           "A revised outcome selected later.",
         );
         await recordArtifact.execute(
-          { path: specArtifact.path, mediaType: "text/markdown", content: changed },
+          { content: changed, mediaType: "text/markdown", path: specArtifact.path },
           context,
         );
         const after = appBuilderWorkflowState.get();
@@ -191,7 +189,7 @@ for (const hosted of [false, true]) {
         vi.stubEnv("EVE_HOSTED_ADAPTER", hosted ? "1" : "0");
         const before = seed();
         const recorded = await recordArtifact.execute(
-          { path: specArtifact.path, mediaType: "text/markdown", content: specArtifact.content },
+          { content: specArtifact.content, mediaType: "text/markdown", path: specArtifact.path },
           context,
         );
         expect(recorded).toMatchObject({ reused: true });
@@ -218,9 +216,9 @@ it("keeps validation-pending and publication mutation fences ahead of artifact s
     await expect(
       recordArtifact.execute(
         {
-          path: "prototype/inventory/decisions.md",
-          mediaType: "text/markdown",
           content: "New notes",
+          mediaType: "text/markdown",
+          path: "prototype/inventory/decisions.md",
         },
         context,
       ),

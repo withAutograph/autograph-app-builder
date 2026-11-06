@@ -142,9 +142,9 @@ const resolveCompiledArtifactSession = async (
         adapterSessionId: input.adapterSessionId,
         authority,
         environment: process.env,
+        execution: input.callbackExecution,
         principal,
         sessionAuth: input.sessionAuth,
-        execution: input.callbackExecution,
       });
     const owner = await resolve();
     context = {
@@ -221,7 +221,7 @@ const resolveCompiledArtifactSession = async (
     context,
     ...(privateApplyScope === undefined ? {} : { privateApplyScope }),
   };
-  return { assertCurrentOwner, context, localAuthority, captureAuthority };
+  return { assertCurrentOwner, captureAuthority, context, localAuthority };
 };
 
 const openCompiledArtifactStorage = async (
@@ -293,8 +293,8 @@ export const assertReconciliationCompletionOwnerForSession = async (input: {
       ...input,
       appId: input.completion.appId,
       appSpecDigest: input.completion.appReview.appSpecDigest,
-      root: input.completion.root,
       callId: input.completion.proposal.digest,
+      root: input.completion.root,
     },
     input.completion,
   );
@@ -319,8 +319,8 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
       ...input,
       appId: completion.appId,
       appSpecDigest: completion.appReview.appSpecDigest,
-      root: completion.root,
       callId: completion.proposal.digest,
+      root: completion.root,
     },
     completion,
   );
@@ -352,8 +352,8 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
       assertCurrentOwner: binding.assertCurrentOwner,
       context: binding.context,
       lookup: {
-        artifactRef: release.selection.artifactRef,
         appSpecDigest: release.selection.appSpecDigest,
+        artifactRef: release.selection.artifactRef,
       },
       selections: storage.selections,
       store: storage.store,
@@ -374,8 +374,8 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
       }
       return await storage.selections.associatePublishedSource(binding.context, {
         approvedSelection: release.selection,
-        publishedSource: input.publishedSource,
         operationId: `draft-reconciliation:${completion.proposal.digest}`,
+        publishedSource: input.publishedSource,
       });
     }
     const selection = await storage.selections.record(
@@ -493,11 +493,11 @@ export const publishCompiledOperatorArtifactsForSession = async (
     observe({ outcome: "completed", stage: "description" });
     if (description.backend.kind === "static") {
       return {
-        status: "not-required" as const,
         compilation: {
           ...binding.captureAuthority,
           release: { status: "not-required" as const },
         } satisfies ReconciliationCompilation,
+        status: "not-required" as const,
       };
     }
     observe({ outcome: "started", stage: "storage" });
@@ -546,12 +546,12 @@ export const publishCompiledOperatorArtifactsForSession = async (
     checkStopped();
     observe({ outcome: "completed", stage: "selection" });
     return {
-      selection,
-      status: "published" as const,
       compilation: {
         ...binding.captureAuthority,
-        release: { status: "published" as const, selection },
+        release: { selection, status: "published" as const },
       } satisfies ReconciliationCompilation,
+      selection,
+      status: "published" as const,
     };
   } catch (error) {
     observe({ outcome: input.signal?.aborted === true ? "cancelled" : "failed", stage });

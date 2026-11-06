@@ -89,24 +89,24 @@ describe("recovered approved build continuation", () => {
       },
     });
     const recovery = {
-      version: 1 as const,
-      operationId: "recovery-operation",
-      sourcePublicSessionId: authoritySessionId,
-      sourceOwnerRunId: logicalSessionId,
-      sourceAdapterGeneration: 1,
       logicalSessionId,
+      operationId: "recovery-operation",
       originalAuthoritySessionId: authoritySessionId,
       parentCancellationRevision: 0,
+      sourceAdapterGeneration: 1,
+      sourceOwnerRunId: logicalSessionId,
+      sourcePublicSessionId: authoritySessionId,
+      version: 1 as const,
     };
     const receipt = {
       ...recovery,
       ownerRunId: physicalOwnerRunId,
       provenance: {
+        checkpointVersion: 1 as const,
         kind: "failed-turn-input" as const,
-        sourceStepId: "step-one",
         sourceEventId: "event-one",
         sourceSlot: 1,
-        checkpointVersion: 1 as const,
+        sourceStepId: "step-one",
       },
     };
     const recoveryStart = {

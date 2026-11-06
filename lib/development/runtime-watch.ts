@@ -79,7 +79,7 @@ export async function fingerprintDevelopmentRuntime(repositoryRoot: string): Pro
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function waitForDevelopmentRuntimeChange(input: {
+export async function waitForDevelopmentRuntimeChange(input: {
   repositoryRoot: string;
   expectedFingerprint: string;
   signal?: AbortSignal;
@@ -113,7 +113,9 @@ export function waitForDevelopmentRuntimeChange(input: {
       }
       resolve(changed);
     };
-    handlers.aborted = () => finish(false);
+    handlers.aborted = () => {
+      finish(false);
+    };
     const check = async () => {
       if (checking) {
         pending = true;
@@ -151,7 +153,7 @@ export function waitForDevelopmentRuntimeChange(input: {
     };
     if (input.signal?.aborted) {
       finish(false);
-      return promise;
+      return await promise;
     }
     input.signal?.addEventListener("abort", handlers.aborted, { once: true });
     try {
@@ -163,7 +165,7 @@ export function waitForDevelopmentRuntimeChange(input: {
     audit = setInterval(schedule, input.auditMs ?? 30_000);
     schedule();
   }
-  return promise;
+  return await promise;
 }
 
 /** Observe edits without terminating the worker that owns existing local sessions. */

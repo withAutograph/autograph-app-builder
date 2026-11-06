@@ -306,7 +306,7 @@ describe("Preview OAuth deployment handlers", () => {
         "lib/integrations/vercel-installation-deployment.ts",
         "lib/auth/github-app-installation-deployment.ts",
         "lib/mcp/browser-preview-deployment.ts",
-      ].map((path) => readFile(path, "utf-8")),
+      ].map(async (path) => await readFile(path, "utf-8")),
     );
 
     expect(builder).toContain("authenticated: true");

@@ -16,33 +16,33 @@ const authority = {
   workspaceId: "workspace_one",
 };
 const intent = createGitHubPrEffectIntent({
-  kind: "pr-merge",
-  publicationDigest: "a".repeat(64),
-  installationIdentityDigest: "b".repeat(64),
-  repositoryId: "100",
-  owner: "withAutograph",
-  name: "example",
-  pullRequestNumber: 42,
-  headSha: "c".repeat(40),
   baseBranch: "main",
+  headSha: "c".repeat(40),
+  installationIdentityDigest: "b".repeat(64),
+  kind: "pr-merge",
+  name: "example",
+  owner: "withAutograph",
+  publicationDigest: "a".repeat(64),
+  pullRequestNumber: 42,
   readyAt: "2026-11-05T21:20:00.000Z",
+  repositoryId: "100",
 });
 const pending = createGitHubPrEffectReceipt({
-  intent,
   approvedByCallId: "approved-call",
+  intent,
   status: "pending",
 });
 const succeeded = createGitHubPrEffectReceipt({
-  intent,
   approvedByCallId: pending.approvedByCallId,
-  status: "succeeded",
   evidence: { kind: "pr-merge", mergeCommitSha: "d".repeat(40) },
+  intent,
+  status: "succeeded",
 });
 
 const databaseFixture = (rows: readonly (readonly (object | string)[])[] = []) => {
-  const request = vi.fn((_sql: string, _params: readonly (object | string | number)[]) =>
-    Promise.resolve({ rows: [...rows] }),
-  );
+  const request = vi.fn(async (_sql: string, _params: readonly (object | string | number)[]) => ({
+    rows: [...rows],
+  }));
   return { database: drizzle(request), request };
 };
 
@@ -64,10 +64,10 @@ describe("tenant GitHub PR effect journal", () => {
   it("rejects evidence for a different effect and an invalid merge cycle", () => {
     expect(() =>
       createGitHubPrEffectReceipt({
-        intent,
         approvedByCallId: pending.approvedByCallId,
-        status: "succeeded",
         evidence: { kind: "pr-ready", readyAt: "2026-11-05T21:20:00.000Z" },
+        intent,
+        status: "succeeded",
       }),
     ).toThrow("match the approved effect");
     expect(() =>

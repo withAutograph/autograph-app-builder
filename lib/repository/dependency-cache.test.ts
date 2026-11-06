@@ -660,13 +660,13 @@ describe("offline dependency cache", () => {
         tree: target.sourceTree,
       }),
     );
-    expect(() =>
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         sourceReceipt: target,
         workspace: target,
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("rejects source-tree and durable dependency-receipt drift", async () => {
@@ -677,14 +677,14 @@ describe("offline dependency cache", () => {
     };
     const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
 
-    expect(() =>
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         sourceReceipt: { ...target, sourceTree: "5".repeat(40) },
         workspace: target,
-      }),
-    ).toThrow("prepared source does not match");
-    expect(() =>
+      });
+    }).toThrow("prepared source does not match");
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         dependencyReceipt: {
@@ -695,9 +695,9 @@ describe("offline dependency cache", () => {
         },
         sourceReceipt: target,
         workspace: target,
-      }),
-    ).toThrow("prepared source does not match");
-    expect(() =>
+      });
+    }).toThrow("prepared source does not match");
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         dependencyReceipt: {
@@ -708,8 +708,8 @@ describe("offline dependency cache", () => {
         },
         sourceReceipt: target,
         workspace: target,
-      }),
-    ).toThrow("prepared source does not match");
+      });
+    }).toThrow("prepared source does not match");
   });
 
   it("binds reusable development dependencies to the per-run source without making source bytes part of the cache key", () => {
@@ -751,13 +751,13 @@ describe("offline dependency cache", () => {
       sha: workspace.sourceSha,
       tree: workspace.sourceTree,
     });
-    expect(() =>
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         sourceReceipt: workspace,
         workspace,
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("reports a typed live-template miss without falling through to another cache", async () => {
@@ -1260,21 +1260,21 @@ describe("linked package dependency views", () => {
       }
       const layout = {
         kind: "cache",
-        version: 1,
         roots: [
-          { path: "node_modules", cachePath: rootModules },
-          { path: "apps/example/node_modules", cachePath: appModules },
+          { cachePath: rootModules, path: "node_modules" },
+          { cachePath: appModules, path: "apps/example/node_modules" },
         ],
+        version: 1,
         workspaceLinks: [
           {
             path: "node_modules/@fixture/local",
-            target: "../../packages/local",
             sourcePath: "packages/local",
+            target: "../../packages/local",
           },
           {
             path: "apps/example/node_modules/@fixture/local",
-            target: "../../../../packages/local",
             sourcePath: "packages/local",
+            target: "../../../../packages/local",
           },
         ],
       };
@@ -1294,18 +1294,18 @@ describe("linked package dependency views", () => {
       ]);
     };
     return {
-      root,
-      workspace,
-      source,
-      candidate,
-      view,
-      rootModules,
       appModules,
-      physicalPackage,
+      candidate,
       packageBytes,
-      sourceBytes,
       packageMode,
+      physicalPackage,
+      root,
+      rootModules,
       run,
+      source,
+      sourceBytes,
+      view,
+      workspace,
     };
   };
 
@@ -1366,7 +1366,7 @@ describe("linked package dependency views", () => {
           fixture.sourceBytes,
         );
       } finally {
-        await rm(fixture.root, { recursive: true, force: true });
+        await rm(fixture.root, { force: true, recursive: true });
       }
     },
   );
@@ -1445,7 +1445,7 @@ describe("linked package dependency views", () => {
         code: "ENOENT",
       });
     } finally {
-      await rm(fixture.root, { recursive: true, force: true });
+      await rm(fixture.root, { force: true, recursive: true });
     }
   });
 
@@ -1480,7 +1480,7 @@ describe("linked package dependency views", () => {
           fixture.packageBytes,
         );
       } finally {
-        await rm(fixture.root, { recursive: true, force: true });
+        await rm(fixture.root, { force: true, recursive: true });
       }
     },
   );
@@ -1514,7 +1514,7 @@ describe("linked package dependency views", () => {
           'module.exports="candidate-install";',
         );
       } finally {
-        await rm(fixture.root, { recursive: true, force: true });
+        await rm(fixture.root, { force: true, recursive: true });
       }
     },
   );

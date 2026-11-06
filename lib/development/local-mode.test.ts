@@ -48,7 +48,9 @@ afterEach(async () => {
   };
   await Promise.all(roots.map(makeWritable));
   await Promise.all(
-    roots.splice(0).map((root) => removePath(root, { force: true, recursive: true })),
+    roots.splice(0).map(async (root) => {
+      await removePath(root, { force: true, recursive: true });
+    }),
   );
 });
 
@@ -173,12 +175,12 @@ describe("development source snapshots", () => {
     const runRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-ignored-tracked-")));
     roots.push(runRoot);
     await chmod(runRoot, 0o700);
-    const snapshot = await createDevelopmentSnapshot({ sourceRoot: source, runRoot });
+    const snapshot = await createDevelopmentSnapshot({ runRoot, sourceRoot: source });
     const { execFileSync } = await import("node:child_process");
     const actual = execFileSync(
       "/usr/bin/git",
       ["-C", snapshot.root, "show", `${snapshot.commit}:.config/mise/config.toml`],
-      { encoding: "utf-8", env: { HOME: "/dev/null", PATH: "/usr/bin:/bin", NODE_ENV: "test" } },
+      { encoding: "utf-8", env: { HOME: "/dev/null", NODE_ENV: "test", PATH: "/usr/bin:/bin" } },
     );
     expect(actual).toBe(await readFile(join(source, ".config/mise/config.toml"), "utf-8"));
     expect(snapshot.fingerprint).toBe(await fingerprintDevelopmentSource(snapshot.root));

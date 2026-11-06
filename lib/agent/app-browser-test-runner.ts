@@ -58,9 +58,9 @@ export const runAppBrowserTests = async (input: {
       return {
         command,
         exitCode: null,
-        status: "failed" as const,
         problem:
           "Browser verification needs an app-owned catalog entry. Declare autograph.browserEntryPath for ambiguous routes, then refresh the runtime binding. App creation, runtime preparation and release remain available.",
+        status: "failed" as const,
         stderr: "",
         stdout: "",
       };
@@ -141,12 +141,12 @@ export const runAppBrowserTests = async (input: {
         return {
           command,
           exitCode: result.exitCode,
-          status: "failed" as const,
-          reason: "private-preview-refresh-required",
           problem:
             "Refresh the selected app's owner-bound private preview at its current Auth origin before browser verification. Private tests require trace off and the supported bounded reporter.",
-          stdout,
+          reason: "private-preview-refresh-required",
+          status: "failed" as const,
           stderr,
+          stdout,
         };
       }
       return {

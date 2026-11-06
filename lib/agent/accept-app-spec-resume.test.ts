@@ -148,8 +148,8 @@ describe("accepted AppSpec resume", () => {
     const before = seed("planned");
     mocks.prepare.mockImplementationOnce(() => {
       expect(appBuilderWorkflowState.get()).toMatchObject({
+        appSpec: { digest: accepted.digest, frameworkUpgrade: "latest" },
         phase: "app_spec_accepted",
-        appSpec: { frameworkUpgrade: "latest", digest: accepted.digest },
       });
       const current = appBuilderWorkflowState.get();
       appBuilderWorkflowState.update(
@@ -182,8 +182,8 @@ describe("accepted AppSpec resume", () => {
     expect(result).toMatchObject({
       frameworkUpgradePlan: {
         scope: "workspace",
-        versions: { next: "16.4.3" },
         sharedPaths: ["package.json", "bun.lock"],
+        versions: { next: "16.4.3" },
       },
     });
     expect(mocks.prepare).toHaveBeenCalledOnce();

@@ -5,19 +5,18 @@ const scope = {
   appId: "app",
   appSpecDigest: "spec",
   proposalDigest: "proposal",
-  workspaceId: "workspace",
   sessionId: "logical",
+  workspaceId: "workspace",
 };
 const fixture = () => ({
+  binding: { logicalSessionId: "logical", ownerRunId: "physical" },
   descriptor: { logicalSessionId: "logical" },
-  binding: { ownerRunId: "physical", logicalSessionId: "logical" },
   payload: {
-    binding: { ownerRunId: "physical", logicalSessionId: "logical" },
+    binding: { logicalSessionId: "logical", ownerRunId: "physical" },
     candidates: [
       {
         origin: { slot: 24 },
         serializedContext: {
-          "eve.sessionId": "logical",
           "autograph-app-builder.private-apply-authority.v1": {
             // SAFETY: Synthetic authority is mutated only to the exact fixture scope.
             grant: null as typeof scope | null,
@@ -27,7 +26,7 @@ const fixture = () => ({
             phase: "planned",
             appSpec: { digest: "spec" },
             proposal: { digest: "proposal", target: { contract: { appId: "app" } } },
-            workspace: { workspaceId: "workspace", workspaceDigest: "workspace-digest" },
+            workspace: { workspaceDigest: "workspace-digest", workspaceId: "workspace" },
             // SAFETY: Synthetic receipt variants are assigned by the cases below.
             applyReceipt: undefined as
               | {
@@ -47,27 +46,28 @@ const fixture = () => ({
                 }
               | undefined,
           },
+          "eve.sessionId": "logical",
         },
         sessionState: {
           snapshot: {
             session: {
-              sessionId: "logical",
               history: [
                 {
-                  role: "assistant",
                   content: [
-                    { type: "tool-call", toolName: "apply_app_creation", toolCallId: "call" },
-                    { type: "tool-approval-request", toolCallId: "call", approvalId: "approval" },
+                    { toolCallId: "call", toolName: "apply_app_creation", type: "tool-call" },
+                    { approvalId: "approval", toolCallId: "call", type: "tool-approval-request" },
                   ],
+                  role: "assistant",
                 },
                 {
-                  role: "tool",
                   content: [
-                    { type: "tool-approval-response", approvalId: "approval", approved: true },
+                    { approvalId: "approval", approved: true, type: "tool-approval-response" },
                   ],
+                  role: "tool",
                 },
-                { role: "assistant", content: "retained terminal text" },
+                { content: "retained terminal text", role: "assistant" },
               ],
+              sessionId: "logical",
             },
           },
         },
@@ -114,8 +114,8 @@ for (const phase of ["applied", "apply_failed"]) {
     const workflow = state["autograph-app-builder.workflow.v17"];
     workflow.phase = phase;
     const receipt = {
-      appliedByCallId: "call",
       appSpecDigest: "spec",
+      appliedByCallId: "call",
       proposalDigest: "proposal",
       workspaceDigest: "workspace-digest",
     };
@@ -139,20 +139,20 @@ it("rejects wrong physical owner and logical identity", () => {
 });
 it("does not authorize other tools, denied approvals, completed calls, or missing state", () => {
   const input = fixture();
-  const session = input.payload.candidates[0].sessionState.snapshot.session;
+  const { session } = input.payload.candidates[0].sessionState.snapshot;
   for (const history of [
     [
       {
+        content: [{ toolCallId: "call", toolName: "external_mutation", type: "tool-call" }],
         role: "assistant",
-        content: [{ type: "tool-call", toolName: "external_mutation", toolCallId: "call" }],
       },
     ],
-    [...session.history, { role: "tool", content: [{ type: "tool-result", toolCallId: "call" }] }],
+    [...session.history, { content: [{ toolCallId: "call", type: "tool-result" }], role: "tool" }],
     [
       session.history[0],
       {
+        content: [{ approvalId: "approval", approved: false, type: "tool-approval-response" }],
         role: "tool",
-        content: [{ type: "tool-approval-response", approvalId: "approval", approved: false }],
       },
     ],
   ]) {
@@ -187,7 +187,7 @@ it("validates every old candidate while selecting the greatest slot without chan
   const malformed = {
     ...older,
     sessionState: {
-      snapshot: { session: { sessionId: "logical", history: [{ role: 7, content: [] }] } },
+      snapshot: { session: { history: [{ content: [], role: 7 }], sessionId: "logical" } },
     },
   };
   expect(

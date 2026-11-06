@@ -111,7 +111,6 @@ const cancelledSendFixture = () => {
   const operation = {
     ...operationRecord,
     kind: "send" as const,
-    sessionId: record.sessionId,
     sendDelivery: {
       adapterGeneration: record.adapterGeneration,
       adapterSessionId: record.adapterSessionId,
@@ -120,6 +119,7 @@ const cancelledSendFixture = () => {
       resumeCancellationRevision: 1,
       sessionId: record.sessionId,
     },
+    sessionId: record.sessionId,
   };
   const sendRow = {
     ...operationRow,
@@ -127,24 +127,24 @@ const cancelledSendFixture = () => {
     record: operation,
     sessionId: record.sessionId,
   };
-  const selected = (table: PgTable) => {
+  const selected = async (table: PgTable) => {
     const rows = getTableName(table) === "agent_session" ? [row] : [sendRow];
-    return Object.assign(Promise.resolve(rows), {
+    return await Object.assign(Promise.resolve(rows), {
       // oxlint-disable-next-line eslint/require-await -- The terminal row-lock double preserves the database contract.
       for: async () => rows,
     });
   };
   const updates = vi.fn();
   const selectTable = (table: PgTable) => {
-    const limit = () => selected(table);
+    const limit = async () => await selected(table);
     const where = () => ({ limit });
     return { where };
   };
   const updateValues = (values: typeof row) => {
-    const returning = () => {
+    const returning = async () => {
       updates(values);
       row = { ...row, ...values };
-      return Promise.resolve([row]);
+      return [row];
     };
     const where = () => ({ returning });
     return { where };
@@ -154,7 +154,8 @@ const cancelledSendFixture = () => {
     update: () => ({ set: updateValues }),
   };
   const database = {
-    transaction: <T>(execute: (input: typeof transaction) => Promise<T>) => execute(transaction),
+    transaction: async <T>(execute: (input: typeof transaction) => Promise<T>) =>
+      await execute(transaction),
   };
   // SAFETY: The terminal double implements only the tenant-scoped locked reads and UPDATEs exercised below.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Provider-free database fixture.
@@ -171,11 +172,11 @@ const cancelledSendFixture = () => {
       type: "turn.started",
     },
   ]);
-  const observe = (explicit = true, stamped = true) => {
+  const observe = async (explicit = true, stamped = true) => {
     if (store.observeSession === undefined) {
       throw new Error("Expected the PostgreSQL observation writer");
     }
-    return store.observeSession({
+    return await store.observeSession({
       checkpoint: {
         capturedAtEpochMs: 4000,
         events: [],
@@ -227,8 +228,8 @@ describe("PostgreSQL explicit SEND cancellation authority", () => {
       adapterGeneration: f.record.adapterGeneration,
       adapterSessionId: f.record.adapterSessionId,
       cancellationRevision: 1,
-      resumedCancellationRevision: 1,
       resumability: "live",
+      resumedCancellationRevision: 1,
       sessionId: f.record.sessionId,
       status: "working",
     });
@@ -244,9 +245,9 @@ describe("PostgreSQL explicit SEND cancellation authority", () => {
     if (f.store.recordCancellationIntent === undefined)
       throw new Error("Missing cancellation writer");
     await f.store.recordCancellationIntent({
+      nowEpochMs: 5000,
       principal,
       sessionId: f.record.sessionId,
-      nowEpochMs: 5000,
     });
     expect(f.row().record).toMatchObject({
       cancellationRevision: 2,
@@ -677,13 +678,13 @@ type CheckpointFixtureRow = Record<
   string | number | Date | null | HostedSessionRecord | readonly string[]
 >;
 
-const terminalReadRows = (rows: CheckpointFixtureRow[]) => {
+const terminalReadRows = async (rows: CheckpointFixtureRow[]) => {
   const result = Object.assign(Promise.resolve(rows), {
     // oxlint-disable-next-line eslint/require-await -- Terminal database double preserves the async read contract.
     limit: async (limit: number) => rows.slice(0, limit),
-    orderBy: () => result,
+    orderBy: async () => await result,
   });
-  return result;
+  return await result;
 };
 
 /** Terminal query doubles exercise the real store, history reader, and Drizzle predicates. */
@@ -731,7 +732,7 @@ const checkpointReadFixture = () => {
   });
   rows.set("agent_session_checkpoint_item", items);
   rows.set("agent_session_checkpoint_chunk", items);
-  const selectRows = (table: PgTable, predicate: SQL) => {
+  const selectRows = async (table: PgTable, predicate: SQL) => {
     const query = dialect.sqlToQuery(predicate);
     queries.push(query);
     const name = getTableName(table);
@@ -760,12 +761,12 @@ const checkpointReadFixture = () => {
           Number(row.partIndex) > Number(query.params[Number(afterPart.groups?.parameter) - 1]))
       );
     });
-    return terminalReadRows(selected);
+    return await terminalReadRows(selected);
   };
   const database = {
     select: () => ({
       from: (table: PgTable) => ({
-        where: (predicate: SQL) => selectRows(table, predicate),
+        where: async (predicate: SQL) => await selectRows(table, predicate),
       }),
     }),
   };
@@ -1082,9 +1083,9 @@ const queuedSendFixture = () => {
             return query;
           },
           // oxlint-disable-next-line sonarjs/no-nested-functions -- Terminal SELECT double mirrors Drizzle fluent limit.
-          limit: (limit: number) => {
+          limit: async (limit: number) => {
             const rows = selected.slice(0, limit);
-            return Object.assign(Promise.resolve(rows), {
+            return await Object.assign(Promise.resolve(rows), {
               // oxlint-disable-next-line eslint/require-await, sonarjs/no-nested-functions -- Terminal SELECT double mirrors the asynchronous Drizzle row-lock contract.
               for: async () => {
                 locks.push(getTableName(table));
@@ -1103,11 +1104,11 @@ const queuedSendFixture = () => {
       set: (values: Partial<SendFixtureOperationRow>) => ({
         where: (predicate: SQL) => ({
           // oxlint-disable-next-line sonarjs/no-nested-functions -- Terminal UPDATE double mirrors Drizzle fluent returning.
-          returning: () => {
+          returning: async () => {
             const rows = selectedRows(table, predicate);
             writes.push({ locks: [...locks], values });
             for (const row of rows) Object.assign(row, values);
-            return Promise.resolve(rows);
+            return rows;
           },
         }),
       }),
@@ -1115,7 +1116,8 @@ const queuedSendFixture = () => {
   };
   const database = {
     ...transaction,
-    transaction: <T>(execute: (input: typeof transaction) => Promise<T>) => execute(transaction),
+    transaction: async <T>(execute: (input: typeof transaction) => Promise<T>) =>
+      await execute(transaction),
   };
   // SAFETY: The terminal double interprets the real tenant/keyset predicates and row locks used by these source tests.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- No provider or live database is involved.
@@ -1155,9 +1157,12 @@ const queuedSendFixture = () => {
     requestDigest: operationRecord.requestDigest,
     sessionId: session.sessionId,
   };
-  const acknowledge = (row: SendFixtureOperationRow, cancellationRevisionAtDispatch?: number) => {
+  const acknowledge = async (
+    row: SendFixtureOperationRow,
+    cancellationRevisionAtDispatch?: number,
+  ) => {
     if (store.recordSendDelivery === undefined) throw new Error("Expected ACK writer.");
-    return store.recordSendDelivery({
+    return await store.recordSendDelivery({
       cancellationRevisionAtDispatch,
       delivery,
       nowEpochMs: 3000,
@@ -1165,7 +1170,7 @@ const queuedSendFixture = () => {
       principal,
     });
   };
-  const read = (
+  const read = async (
     input: {
       operationId?: string;
       principal?: HostedPrincipal;
@@ -1176,7 +1181,7 @@ const queuedSendFixture = () => {
   ) => {
     if (store.readUnsettledSendAcknowledgements === undefined)
       throw new Error("Expected ACK reader.");
-    return store.readUnsettledSendAcknowledgements({
+    return await store.readUnsettledSendAcknowledgements({
       limit: 2,
       principal,
       sessionId: session.sessionId,
@@ -1337,15 +1342,15 @@ describe("PostgreSQL queued SEND acknowledgement sidecar", () => {
     const first = f.add({ operationId: "send_a", sendDelivery: f.delivery }, 0);
     const second = f.add({
       operationId: "send_b",
+      safeErrorCode: "submission_unknown",
       sendDelivery: f.delivery,
       state: "submission_unknown",
-      safeErrorCode: "submission_unknown",
     });
-    f.add({ sendDelivery: f.delivery, state: "rejected", safeErrorCode: "rejected" });
+    f.add({ safeErrorCode: "rejected", sendDelivery: f.delivery, state: "rejected" });
     f.add({
+      result: { cursor: 0, events: [], sessionId: f.session.sessionId, status: "working" },
       sendDelivery: f.delivery,
       state: "succeeded",
-      result: { cursor: 0, events: [], sessionId: f.session.sessionId, status: "working" },
     });
     f.add();
     f.add({ kind: "respond" });
@@ -1364,16 +1369,18 @@ describe("PostgreSQL queued SEND acknowledgement sidecar", () => {
       sendDelivery: f.delivery,
     });
     f.add({
-      sessionId: "another_session",
       sendDelivery: { ...f.delivery, sessionId: "another_session" },
+      sessionId: "another_session",
     });
     const missingPages = await Promise.all(
-      (["issuer", "audience", "workspaceId", "ownerUserId"] as const).map((field) => {
+      (["issuer", "audience", "workspaceId", "ownerUserId"] as const).map(async (field) => {
         f.add({
           principal: { ...principal, [field]: `${principal[field]}/foreign` },
           sendDelivery: f.delivery,
         });
-        return f.read({ principal: { ...principal, [field]: `${principal[field]}/missing` } });
+        return await f.read({
+          principal: { ...principal, [field]: `${principal[field]}/missing` },
+        });
       }),
     );
     for (const missingPage of missingPages) expect(missingPage.acknowledgements).toEqual([]);

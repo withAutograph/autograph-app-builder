@@ -488,8 +488,8 @@ const inspectDraftAfterWrite = async (input: {
       name: input.proposal.name,
       number: input.proposal.pullRequestNumber,
       owner: input.proposal.owner,
-      repositoryId: input.proposal.repositoryId,
       reconciliation: input.proposal,
+      repositoryId: input.proposal.repositoryId,
       ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
     });
   } catch (readbackError) {
@@ -548,8 +548,8 @@ export const inspectAppliedExistingDraftReconciliation = async (input: {
     name: proposal.name,
     number: proposal.pullRequestNumber,
     owner: proposal.owner,
-    repositoryId: proposal.repositoryId,
     reconciliation: proposal,
+    repositoryId: proposal.repositoryId,
     ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
   });
   if (!sameDraft(proposal, current)) {

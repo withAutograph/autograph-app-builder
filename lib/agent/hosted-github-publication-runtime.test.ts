@@ -96,7 +96,7 @@ function dependencies(input?: {
       installations,
       membership,
       publicationStores,
-      readPreparedHandoff: vi.fn(() => Promise.resolve(undefined as undefined)),
+      readPreparedHandoff: vi.fn(async () => {}),
     },
     installationStore,
     installations,
@@ -107,9 +107,9 @@ function dependencies(input?: {
 
 describe("hosted tenant GitHub publication runtime resolver", () => {
   it("resolves an existing source through a target proof without installation inventory", async () => {
-    const inspectInstallation = vi.fn(() =>
-      Promise.reject(new Error("inventory must not be read")),
-    );
+    const inspectInstallation = vi.fn(async () => {
+      throw new Error("inventory must not be read");
+    });
     const targetSourceAdapter = createGitHubTargetSourceResolutionAdapter(
       {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -296,14 +296,14 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       enabled: false,
     });
 
-    await expect(resolver.resolve(null).then((runtime) => runtime.status())).resolves.toMatchObject(
-      {
-        adapterConfigured: false,
-        durableStoreConfigured: false,
-        enabled: false,
-        liveGitHubCallsAvailable: false,
-      },
-    );
+    await expect(
+      resolver.resolve(null).then(async (runtime) => await runtime.status()),
+    ).resolves.toMatchObject({
+      adapterConfigured: false,
+      durableStoreConfigured: false,
+      enabled: false,
+      liveGitHubCallsAvailable: false,
+    });
   });
 
   it("composes a fresh tenant runtime while caching only the database pool", async () => {
@@ -360,9 +360,9 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       providerFactory,
     });
 
-    await expect(resolver.resolve(auth).then((runtime) => runtime.status())).resolves.toMatchObject(
-      { enabled: true },
-    );
+    await expect(
+      resolver.resolve(auth).then(async (runtime) => await runtime.status()),
+    ).resolves.toMatchObject({ enabled: true });
     expect(providerFactory).toHaveBeenCalledWith({ authority, installation });
   });
 

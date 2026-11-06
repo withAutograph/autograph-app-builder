@@ -22,10 +22,10 @@ export const prepareDevelopmentEveWrapperEnvironment = async (input: {
   let limits: Awaited<ReturnType<typeof observePrivateComputeLimits>> | undefined;
   try {
     limits = await observePrivateComputeLimits({
-      repositoryRoot: input.repositoryRoot,
-      vercelExecutable: input.vercelExecutable,
       environment: input.environment,
+      repositoryRoot: input.repositoryRoot,
       signal: input.signal,
+      vercelExecutable: input.vercelExecutable,
     });
   } catch {
     // The unselected default footprint needs no resource-change observation.

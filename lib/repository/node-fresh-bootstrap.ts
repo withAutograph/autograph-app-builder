@@ -615,7 +615,7 @@ export const productionFreshBootstrapCapability = async (
     systemPython,
     systemPythonIdentity: await executableIdentity(systemPython),
   };
-  return assertCapability(capability);
+  return await assertCapability(capability);
 };
 
 const syncDirectory = async (path: string): Promise<void> => {
@@ -876,7 +876,7 @@ const acquireLease = async (
   const { promise: exited, resolve: resolveExit } = Promise.withResolvers<undefined>();
   holder.once("error", (error) => {
     terminal = error;
-    resolveExit(undefined as undefined);
+    resolveExit();
   });
   holder.once("exit", (code, signal) => {
     if (terminal === undefined && (!releasing || code !== 0 || signal !== null)) {
@@ -884,7 +884,7 @@ const acquireLease = async (
         `The fresh-bootstrap lease was lost (code ${String(code)}, signal ${String(signal)})${helperError.trim() === "" ? "." : `: ${helperError.trim()}`}`,
       );
     }
-    resolveExit(undefined as undefined);
+    resolveExit();
   });
   const { promise: ready, reject, resolve } = Promise.withResolvers<undefined>();
   const timeout = setTimeout(() => {
@@ -895,7 +895,7 @@ const acquireLease = async (
   holder.stdout.once("data", (chunk: string) => {
     clearTimeout(timeout);
     if (chunk === "READY\n") {
-      resolve(undefined as undefined);
+      resolve();
     } else {
       reject(new Error("Lease handshake failed."));
     }
@@ -994,7 +994,9 @@ const quiesceAbandonedLease = async (
   holder.stderr.setEncoding("utf-8");
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
   const { promise: exited, resolve: resolveExit } = Promise.withResolvers<undefined>();
-  holder.once("exit", () => resolveExit(undefined as undefined));
+  holder.once("exit", () => {
+    resolveExit();
+  });
   const { promise: ready, reject, resolve } = Promise.withResolvers<undefined>();
   const timeout = setTimeout(() => {
     holder.kill("SIGKILL");
@@ -1004,7 +1006,7 @@ const quiesceAbandonedLease = async (
   holder.stdout.once("data", (chunk: string) => {
     clearTimeout(timeout);
     if (chunk === "READY\n") {
-      resolve(undefined as undefined);
+      resolve();
     } else {
       reject(new Error("Lease quiescence handshake failed."));
     }
@@ -1748,7 +1750,9 @@ const materializeFile = async (
         const completion = new Promise<{ status: number | null; signal: NodeJS.Signals | null }>(
           (resolve, reject) => {
             child.once("error", reject);
-            child.once("close", (status, signal) => resolve({ signal, status }));
+            child.once("close", (status, signal) => {
+              resolve({ signal, status });
+            });
           },
         );
         // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Observe early spawn failures while piping input.
@@ -2865,7 +2869,7 @@ const executeBootstrap = async (input: {
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export const publishFreshBootstrap = async (
   input: Omit<Parameters<typeof executeBootstrap>[0], "recoveryOfDigest">,
-) => executeBootstrap(input);
+) => await executeBootstrap(input);
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export const recoverFreshBootstrap = async (
@@ -2873,7 +2877,7 @@ export const recoverFreshBootstrap = async (
     expectedJournalDigest: string;
   },
 ) =>
-  executeBootstrap({
+  await executeBootstrap({
     ...input,
     recoveryOfDigest: input.expectedJournalDigest,
   });

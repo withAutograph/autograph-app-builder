@@ -369,7 +369,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       if (!authority || !input.repositoryAccess) {
         return;
       }
-      return input.repositoryAccess.inspect({ authority, continuationId });
+      return await input.repositoryAccess.inspect({ authority, continuationId });
     },
   };
 }
@@ -403,9 +403,9 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const emulation = readProviderEmulation(resolvedEnvironment);
   const installations = createPostgresHostedGitHubInstallationStore(database);
   const providerFetch = emulation
-    ? (resource: string | URL | Request, init?: RequestInit) => {
+    ? async (resource: string | URL | Request, init?: RequestInit) => {
         const url = new URL(resource instanceof Request ? resource.url : resource);
-        return providerEmulationFetch(
+        return await providerEmulationFetch(
           `${emulation.githubOrigin}${url.pathname}${url.search}`,
           init,
           emulation,
@@ -417,11 +417,12 @@ export function getGitHubAppInstallationDeploymentHandlers(
     credentialStore,
     emulation,
     fetch: emulation
-      ? (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
+      ? async (resource, init) =>
+          await providerEmulationFetch(resource as string | URL, init, emulation)
       : undefined,
     installationStore: installations,
     membership: {
-      isActiveMember: (authority) => membership.isActiveMember(authority),
+      isActiveMember: async (authority) => await membership.isActiveMember(authority),
     },
     stateStore: createPostgresGitHubInstallationAuthorizationStateStore(database),
   });
@@ -431,7 +432,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const builderDrafts = createBuilderDraftService({
     store: createBuilderDraftStore(database),
   });
-  const classify = (value: {
+  const classify = async (value: {
     authority: Authority;
     repository: string;
     selectedInstallationId?: string;
@@ -451,7 +452,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
       repository: value.repository,
       selectedInstallationId: value.selectedInstallationId,
     };
-    return classifyGitHubRepositoryAccessWithTargetProof(options);
+    return await classifyGitHubRepositoryAccessWithTargetProof(options);
   };
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
     async authorityForRequest(request) {
@@ -475,18 +476,18 @@ export function getGitHubAppInstallationDeploymentHandlers(
       if (!returnState.resumeKey) {
         return;
       }
-      return repositoryAccessContinuations.authorize({
+      return await repositoryAccessContinuations.authorize({
         authority,
         continuationId: returnState.resumeKey,
       });
     },
     origin: new URL(config.issuer).origin,
     repositoryAccess: {
-      authorize: (value) => repositoryAccessContinuations.authorize(value),
+      authorize: async (value) => await repositoryAccessContinuations.authorize(value),
       classify,
       hasBuilderDraft: async ({ authority, draftId }) =>
         (await builderDrafts.read(authority, draftId)) !== undefined,
-      inspect: (value) => repositoryAccessContinuations.inspect(value),
+      inspect: async (value) => await repositoryAccessContinuations.inspect(value),
     },
   });
   return deploymentHandlers;

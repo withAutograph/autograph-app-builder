@@ -102,9 +102,9 @@ const acceptedTurnSchema = z
   .object({
     deliveryId: z.string().min(1).max(500).optional(),
     ok: z.literal(true),
+    recoveryBinding: nativeRecoveryBindingSchema.optional(),
     sessionId: z.string().min(1).max(500),
     status: z.literal("accepted"),
-    recoveryBinding: nativeRecoveryBindingSchema.optional(),
   })
   .strict();
 
@@ -330,7 +330,7 @@ async function authenticatedFetch(input: {
   input.readTrace?.enter("workload_identity");
   const headers = await workloadHeaders(input.workloadIdentity);
   input.readTrace?.enter("fetch");
-  return input.fetchImplementation(endpoint(input.config, input.path), {
+  return await input.fetchImplementation(endpoint(input.config, input.path), {
     ...input.init,
     headers: { ...headers, ...input.init?.headers },
     redirect: "manual",
@@ -780,10 +780,10 @@ const reprojectRetainedPendingInputs = async (
   try {
     for await (const event of streamSameOriginEveEvents({
       ...input,
-      startIndex: 0,
       onNativeTail: (index) => {
         tail = index;
       },
+      startIndex: 0,
     })) {
       if (count < state.nextNativeIndex) {
         if (event.type === "input.requested") {
@@ -1503,9 +1503,9 @@ export function createSameOriginEveTransport(input: {
     workloadIdentity: input.workloadIdentity,
   };
   return {
-    observeStarted(request) {
+    async observeStarted(request) {
       // Public observation catches up to the opened durable tail; it never waits for a long-running turn.
-      return observeSameOriginEveStream({
+      return await observeSameOriginEveStream({
         ...common,
         nativeObservationState:
           "nativeObservationState" in request && request.nativeObservationState !== undefined
@@ -1520,6 +1520,30 @@ export function createSameOriginEveTransport(input: {
     ...(input.verifyReadAuthority === undefined
       ? {}
       : {
+          async observe(request) {
+            const principal = hostedPrincipalSchema.parse(request.principal);
+            const authorized = await input.verifyReadAuthority?.({
+              adapterSessionId: request.adapterSessionId,
+              principal,
+              sessionId: request.sessionId,
+            });
+            if (authorized !== true) {
+              throw new SubmissionRejectedBeforeDispatchError("session_access_denied");
+            }
+            return await observeSameOriginEveStream({
+              allowPartialObservation:
+                "allowPartialObservation" in request && request.allowPartialObservation === true,
+              ...common,
+              nativeObservationState:
+                "nativeObservationState" in request && request.nativeObservationState !== undefined
+                  ? nativeObservationStateSchema.parse(request.nativeObservationState)
+                  : undefined,
+              onEvent: request.onEvent,
+              onPrivateEvent: request.onPrivateEvent,
+              readDeadline: request.readDeadline ?? true,
+              sessionId: request.adapterSessionId,
+            });
+          },
           async observePrivateHistory(request) {
             const principal = hostedPrincipalSchema.parse(request.principal);
             const authorized = await input.verifyReadAuthority?.({
@@ -1543,13 +1567,13 @@ export function createSameOriginEveTransport(input: {
               try {
                 for await (const event of streamSameOriginEveEvents({
                   ...common,
-                  sessionId: request.adapterSessionId,
-                  startIndex: nextNativeIndex,
-                  readSignal: signal,
-                  readTrace,
                   onNativeTail: (tail) => {
                     nativeTailIndex = tail;
                   },
+                  readSignal: signal,
+                  readTrace,
+                  sessionId: request.adapterSessionId,
+                  startIndex: nextNativeIndex,
                 })) {
                   eventInFlight = true;
                   readTrace.enter("private_callback");
@@ -1580,37 +1604,13 @@ export function createSameOriginEveTransport(input: {
               } else {
                 readTrace.failed();
               }
-              return { nextNativeIndex, nativeTailIndex, complete };
+              return { complete, nativeTailIndex, nextNativeIndex };
             } catch (error) {
               readTrace.failed();
               throw error;
             } finally {
               stopWatching();
             }
-          },
-          async observe(request) {
-            const principal = hostedPrincipalSchema.parse(request.principal);
-            const authorized = await input.verifyReadAuthority?.({
-              adapterSessionId: request.adapterSessionId,
-              principal,
-              sessionId: request.sessionId,
-            });
-            if (authorized !== true) {
-              throw new SubmissionRejectedBeforeDispatchError("session_access_denied");
-            }
-            return observeSameOriginEveStream({
-              allowPartialObservation:
-                "allowPartialObservation" in request && request.allowPartialObservation === true,
-              ...common,
-              nativeObservationState:
-                "nativeObservationState" in request && request.nativeObservationState !== undefined
-                  ? nativeObservationStateSchema.parse(request.nativeObservationState)
-                  : undefined,
-              onEvent: request.onEvent,
-              onPrivateEvent: request.onPrivateEvent,
-              readDeadline: request.readDeadline ?? true,
-              sessionId: request.adapterSessionId,
-            });
           },
         }),
     async cancel(request) {
@@ -1746,8 +1746,8 @@ export function createSameOriginEveTransport(input: {
         throw new HostedCancellationUnsettledError();
       }
     },
-    get: (request) =>
-      readSnapshot({ ...common, readDeadline: true, sessionId: request.adapterSessionId }),
+    get: async (request) =>
+      await readSnapshot({ ...common, readDeadline: true, sessionId: request.adapterSessionId }),
     async respond(request) {
       if (request.internalSessionLimitResponse !== undefined) {
         const marker = internalSessionLimitResponseSchema.parse(
@@ -1779,7 +1779,7 @@ export function createSameOriginEveTransport(input: {
       if (accepted.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)) {
         throw new SubmissionOutcomeUnknownError();
       }
-      return readRespondSettlement({
+      return await readRespondSettlement({
         ...common,
         ...(request.internalSessionLimitResponse === undefined
           ? {}
@@ -1961,10 +1961,10 @@ export function createSameOriginEveTransport(input: {
         return binding;
       } catch (error) {
         reportHostedSubmissionDiagnostic({
+          error,
           operationId: request.operationId,
           operationKind: "start",
           phase: "transport_acceptance",
-          error,
           sink: input.onSubmissionDiagnostic,
         });
         throw error;

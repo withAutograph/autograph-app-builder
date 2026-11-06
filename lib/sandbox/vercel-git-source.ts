@@ -146,8 +146,8 @@ export const materializeVercelGitSource = async (input: {
     if (
       await recognizesOwnedCheckout({
         allow: input.reuseOwnedCheckout,
-        occupied,
         git,
+        occupied,
         repository: source.url,
       })
     ) {

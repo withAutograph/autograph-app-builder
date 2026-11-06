@@ -7,23 +7,22 @@ import { builderProvisionRequestDigest } from "../provisioning/contracts";
 
 const fixture = () => {
   const authority = {
-    issuer: "https://builder.example/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/auth",
     ownerUserId: "owner",
+    workspaceId: "workspace",
   };
   const request = {
-    version: 1 as const,
-    operation: "vercel" as const,
     appName: "saved-app",
-    requestId: "11111111-1111-4111-a111-111111111111",
-    repository: { name: "saved-app", private: true },
+    operation: "vercel" as const,
     providers: { githubInstallationId: "456", vercelInstallationId: "vercel-installation" },
+    repository: { name: "saved-app", private: true },
+    requestId: "11111111-1111-4111-a111-111111111111",
+    version: 1 as const,
   };
   const digest = builderProvisionRequestDigest(request);
   const record = initialBuilderProvisionJournalRecord(request, new Date());
   record.response.github = {
-    status: "succeeded",
     defaultBranch: "main",
     fullName: "owner/saved-app",
     headSha: "a".repeat(40),
@@ -34,11 +33,11 @@ const fixture = () => {
     repositoryId: "123",
     scope: { id: "987", login: "owner", type: "organization" },
     starter: { sourceSha: "a".repeat(40), sourceTree: "b".repeat(40) },
+    status: "succeeded",
     url: "https://github.com/owner/saved-app",
     visibility: "private",
   };
   record.response.vercel = {
-    status: "succeeded",
     dashboardUrl: "https://vercel.com/team/apps-saved-app",
     framework: "services",
     installationId: "vercel-installation",
@@ -47,45 +46,46 @@ const fixture = () => {
     projectId: "prj_app",
     rootDirectory: ".",
     scope: { id: "team", slug: "team", type: "team" },
+    status: "succeeded",
   };
   const row: BuilderProvisionJournalRow = {
     authority,
-    requestId: request.requestId,
-    requestDigest: digest,
-    state: "settled",
-    revision: 4,
-    record,
     createdAt: new Date(),
+    record,
+    requestDigest: digest,
+    requestId: request.requestId,
+    revision: 4,
+    state: "settled",
     updatedAt: new Date(),
   };
   let epoch = 1;
   let drift = false;
   let reads = 0;
   const read = createBuilderPublicationDestinationReader({
-    readSelection: async () => {
-      if (drift) {
-        epoch += 1;
-      }
-      return {
-        authority,
-        appId: "saved-app",
-        destination: { appId: "saved-app", requestId: request.requestId, requestDigest: digest },
-        owner: { adapterGeneration: epoch },
-      };
-    },
     readProvisioning: async (input) => {
       reads += 1;
       expect(input.authority).toEqual(authority);
       return row;
     },
+    readSelection: async () => {
+      if (drift) {
+        epoch += 1;
+      }
+      return {
+        appId: "saved-app",
+        authority,
+        destination: { appId: "saved-app", requestDigest: digest, requestId: request.requestId },
+        owner: { adapterGeneration: epoch },
+      };
+    },
   });
   return {
-    read,
-    row,
     drift: () => {
       drift = true;
     },
+    read,
     reads: () => reads,
+    row,
   };
 };
 it("selects the saved Builder-created destination without changing starter provenance or performing writes", async () => {

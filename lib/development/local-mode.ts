@@ -417,7 +417,7 @@ const developmentEntries = async (sourceRoot: string) => {
     entries.push(
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       ...(await Promise.all(
-        paths.slice(offset, offset + 32).map((path) => sourceEntry(sourceRoot, path)),
+        paths.slice(offset, offset + 32).map(async (path) => await sourceEntry(sourceRoot, path)),
       )),
     );
   }
@@ -447,7 +447,7 @@ export const fingerprintDevelopmentSource = async (sourceRoot: string) => {
   return fingerprintEntries(await developmentEntries(sourceRoot));
 };
 
-export const waitForDevelopmentSourceChange = (input: {
+export const waitForDevelopmentSourceChange = async (input: {
   sourceRoot: string;
   expectedFingerprint: string;
   signal?: AbortSignal;
@@ -479,7 +479,9 @@ export const waitForDevelopmentSourceChange = (input: {
     }
     resolve(changed);
   };
-  handlers.aborted = () => finish(false);
+  handlers.aborted = () => {
+    finish(false);
+  };
   const check = async () => {
     if (checking) {
       pending = true;
@@ -515,19 +517,23 @@ export const waitForDevelopmentSourceChange = (input: {
   };
   if (input.signal?.aborted) {
     finish(false);
-    return promise;
+    return await promise;
   }
   input.signal?.addEventListener("abort", handlers.aborted, { once: true });
   try {
-    watcher = watch(input.sourceRoot, { recursive: true }, () => schedule(input.debounceMs ?? 150));
+    watcher = watch(input.sourceRoot, { recursive: true }, () => {
+      schedule(input.debounceMs ?? 150);
+    });
   } catch {
     finish(true);
-    return promise;
+    return await promise;
   }
-  watcher.once("error", () => finish(true));
+  watcher.once("error", () => {
+    finish(true);
+  });
   timers.audit = setInterval(schedule, input.auditMs ?? 30_000);
   schedule();
-  return promise;
+  return await promise;
 };
 
 export const createDevelopmentSnapshot = async (input: {

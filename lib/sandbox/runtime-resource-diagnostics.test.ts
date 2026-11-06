@@ -8,11 +8,13 @@ import {
 
 const facts = (program = runtimeResourceDiagnosticProgram) => {
   const result = spawnSync(process.execPath, ["-e", program], { encoding: "utf-8" });
-  return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+  return { exitCode: result.status ?? 1, stderr: result.stderr, stdout: result.stdout };
 };
 describe("bounded runtime resource diagnostics", () => {
   it("runs the actual fixed observation program and preserves advisory scope", async () => {
-    const observed = await inspectSandboxRuntimeResources({ run: () => Promise.resolve(facts()) });
+    const observed = await inspectSandboxRuntimeResources({
+      run: async () => facts(),
+    });
     expect(observed.available).toBe(true);
     if (!observed.available) {
       throw new Error("Expected actual process observation");
@@ -36,6 +38,13 @@ describe("bounded runtime resource diagnostics", () => {
     ]);
     // oxlint-disable-next-line sonarjs/code-eval -- Execute only the repository-owned fixed diagnostic program with closed fixture I/O.
     runInNewContext(runtimeResourceDiagnosticProgram, {
+      process: {
+        stdout: {
+          write: (value: string) => {
+            output = value;
+          },
+        },
+      },
       require: (name: string) => {
         if (name === "node:fs") {
           return {
@@ -45,9 +54,9 @@ describe("bounded runtime resource diagnostics", () => {
         }
         if (name === "node:os") {
           return {
-            platform: () => "linux",
             arch: () => "x64",
             availableParallelism: () => 2,
+            platform: () => "linux",
             totalmem: () => 4_000_000_000,
           };
         }
@@ -55,19 +64,12 @@ describe("bounded runtime resource diagnostics", () => {
           return {
             spawnSync: (_file: string, args: string[]) => ({
               status: 0,
-              stdout: args[0] === "toolchain" ? "oxlint@1.81.0\nprivate" : "",
               stderr: args[0] === "--version" ? "vp v0.3.1\nprivate" : "private",
+              stdout: args[0] === "toolchain" ? "oxlint@1.81.0\nprivate" : "",
             }),
           };
         }
         throw new Error("Unexpected dependency");
-      },
-      process: {
-        stdout: {
-          write: (value: string) => {
-            output = value;
-          },
-        },
       },
     });
     expect(output).toContain('"overcommitMemory":"2"');
@@ -79,8 +81,7 @@ describe("bounded runtime resource diagnostics", () => {
   });
   it("preserves command refusal without retaining raw output or guessing capacity", async () => {
     const result = await inspectSandboxRuntimeResources({
-      run: () =>
-        Promise.resolve({ exitCode: 1, stdout: "private stdout", stderr: "private stderr" }),
+      run: async () => ({ exitCode: 1, stderr: "private stderr", stdout: "private stdout" }),
     });
     expect(result).toEqual({ available: false, exitCode: 1 });
   });

@@ -5,58 +5,58 @@ import { validateApplicationSourceArtifact } from "./application-source-bytes";
 import { createOwnedSourceCandidateValidator } from "./source-candidate-validation";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-one",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "user-one",
+  workspaceId: "workspace-one",
 };
 const content = Buffer.from("source data");
 const verified = validateApplicationSourceArtifact({
+  files: [{ contentBase64: content.toString("base64"), path: "apps/supplier-spend/README.md" }],
   manifest: {
-    version: 1,
-    kind: "application-source-v1",
     appId: "supplier-spend",
     displayName: "Supplier Spend",
-    sourceSessionId: "local-source",
     files: [
       {
-        path: "apps/supplier-spend/README.md",
-        mode: "100644",
         bytes: content.length,
+        mode: "100644",
+        path: "apps/supplier-spend/README.md",
         sha256: createHash("sha256").update(content).digest("hex"),
       },
     ],
+    kind: "application-source-v1",
     omissions: [],
+    sourceSessionId: "local-source",
+    version: 1,
   },
-  files: [{ path: "apps/supplier-spend/README.md", contentBase64: content.toString("base64") }],
 });
 const intent = builderHandoffIntentSchema.parse({
   appId: "supplier-spend",
   appName: "Supplier Spend",
   brief: "Continue this app",
-  modelId: "openai/gpt-6-luna",
   connections: [],
+  modelId: "openai/gpt-6-luna",
   repository: { private: true, requestedName: "supplier-spend" },
   sourceCandidate: {
-    kind: "application-source-candidate-v1",
-    uploadId: "123e4567-e89b-42d3-a456-426614174000",
     appId: "supplier-spend",
+    kind: "application-source-candidate-v1",
     manifestDigest: verified.manifestDigest,
+    uploadId: "123e4567-e89b-42d3-a456-426614174000",
   },
 });
 
 it("checks the exact owner before and after completed artifact I/O", async () => {
   const observed: string[] = [];
   const validate = createOwnedSourceCandidateValidator({
-    isActiveMember: (current) => {
+    isActiveMember: async (current) => {
       expect(current).toEqual(authority);
       observed.push("membership");
-      return Promise.resolve(true);
+      return true;
     },
-    readCompleted: (selection) => {
+    readCompleted: async (selection) => {
       expect(selection).toEqual({ authority, reference: intent.sourceCandidate });
       observed.push("artifact");
-      return Promise.resolve(verified.artifact);
+      return verified.artifact;
     },
   });
   await validate({ authority, intent });
@@ -66,10 +66,10 @@ it("checks the exact owner before and after completed artifact I/O", async () =>
 it("denies acknowledgment when membership is revoked during artifact read", async () => {
   let active = true;
   const validate = createOwnedSourceCandidateValidator({
-    isActiveMember: () => Promise.resolve(active),
-    readCompleted: () => {
+    isActiveMember: async () => active,
+    readCompleted: async () => {
       active = false;
-      return Promise.resolve(verified.artifact);
+      return verified.artifact;
     },
   });
   await expect(validate({ authority, intent })).rejects.toThrow();
@@ -78,10 +78,10 @@ it("denies acknowledgment when membership is revoked during artifact read", asyn
 it("does not read source for an inactive member", async () => {
   let reads = 0;
   const validate = createOwnedSourceCandidateValidator({
-    isActiveMember: () => Promise.resolve(false),
-    readCompleted: () => {
+    isActiveMember: async () => false,
+    readCompleted: async () => {
       reads += 1;
-      return Promise.resolve(verified.artifact);
+      return verified.artifact;
     },
   });
   await expect(validate({ authority, intent })).rejects.toThrow();

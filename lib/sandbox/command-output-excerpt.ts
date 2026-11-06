@@ -12,8 +12,8 @@ export const runSandboxCommandWithExcerpt = async (input: {
     const result = await input.sandbox.run(input.options);
     return {
       ...result,
-      stdout: input.sanitize(result.stdout),
       stderr: input.sanitize(result.stderr),
+      stdout: input.sanitize(result.stdout),
     };
   }
   const process = await input.sandbox.spawn(input.options);
@@ -66,7 +66,7 @@ export const runSandboxCommandWithExcerpt = async (input: {
       process.wait(),
     ]);
     input.options.abortSignal?.throwIfAborted();
-    return { stdout, stderr, exitCode: status.exitCode };
+    return { exitCode: status.exitCode, stderr, stdout };
   } catch (error) {
     await process.kill();
     throw error;

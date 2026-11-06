@@ -3,15 +3,15 @@ import { expect, test } from "vitest";
 import { localPlanningSourceBase } from "./local-planning-source-base";
 
 const fixture = () => {
-  const appSpec = { appId: "example", digest: "a".repeat(64), artifactRevision: "b".repeat(64) };
-  const sourceReceipt = { sourceSha: "c".repeat(40), digest: "d".repeat(64) };
+  const appSpec = { appId: "example", artifactRevision: "b".repeat(64), digest: "a".repeat(64) };
+  const sourceReceipt = { digest: "d".repeat(64), sourceSha: "c".repeat(40) };
   const original = {
-    sourceSha: sourceReceipt.sourceSha,
-    sourceReceiptDigest: sourceReceipt.digest,
-    workspaceDigest: "e".repeat(64),
     appSpecDigest: appSpec.digest,
     artifactRevision: appSpec.artifactRevision,
+    sourceReceiptDigest: sourceReceipt.digest,
+    sourceSha: sourceReceipt.sourceSha,
     target: { contract: { appId: appSpec.appId } },
+    workspaceDigest: "e".repeat(64),
   };
   const proposal = {
     ...original,
@@ -24,25 +24,25 @@ const fixture = () => {
     workspacePath: "/workspace/repository" as const,
   };
   const applyReceipt = {
-    proposalDigest: proposal.digest,
-    sourceSha: original.sourceSha,
-    workspaceDigest: original.workspaceDigest,
-    sourceReceiptDigest: sourceReceipt.digest,
     appSpecDigest: appSpec.digest,
     applyRoot: workspace.workspacePath,
+    proposalDigest: proposal.digest,
+    sourceReceiptDigest: sourceReceipt.digest,
+    sourceSha: original.sourceSha,
+    workspaceDigest: original.workspaceDigest,
   };
-  return { appSpec, sourceReceipt, proposal, workspace, applyReceipt };
+  return { appSpec, applyReceipt, proposal, sourceReceipt, workspace };
 };
 test("saved proposal/apply provenance identifies old bytes after live workspace metadata was overlaid", () => {
   const state = fixture();
   expect(localPlanningSourceBase(state)).toEqual({
-    sourceSha: state.proposal.sourceSha,
-    workspaceDigest: state.proposal.workspaceDigest,
-    workspaceId: state.workspace.workspaceId,
     sourceOverlay: {
       sourceSha: state.workspace.sourceSha,
       workspaceDigest: state.workspace.workspaceDigest,
     },
+    sourceSha: state.proposal.sourceSha,
+    workspaceDigest: state.proposal.workspaceDigest,
+    workspaceId: state.workspace.workspaceId,
   });
 });
 test("changed product, proposal, source or apply provenance cannot invent an original baseline", () => {

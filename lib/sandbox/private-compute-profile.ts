@@ -5,16 +5,16 @@ export const PRIVATE_COMPUTE_CHECK_TASK = `#!/bin/sh\n#MISE description="Check g
 export const PRIVATE_COMPUTE_PROFILE_ID = "private-checks-16gib-v1" as const;
 export const privateComputeLimitsSchema = z
   .strictObject({
-    version: z.literal(1),
-    teamId: z.string().startsWith("team_"),
-    projectId: z.string().startsWith("prj_"),
-    plan: z.enum(["hobby", "pro", "enterprise"]),
-    maxVcpus: z.union([z.literal(4), z.literal(8), z.literal(32)]),
     limited: z.literal(false),
+    maxVcpus: z.union([z.literal(4), z.literal(8), z.literal(32)]),
     observedAt: z.iso.datetime(),
+    plan: z.enum(["hobby", "pro", "enterprise"]),
+    projectId: z.string().startsWith("prj_"),
+    teamId: z.string().startsWith("team_"),
+    version: z.literal(1),
   })
   .superRefine((value, ctx) => {
-    const limit = { hobby: 4, pro: 8, enterprise: 32 }[value.plan];
+    const limit = { enterprise: 32, hobby: 4, pro: 8 }[value.plan];
     if (value.maxVcpus !== limit) {
       ctx.addIssue({
         code: "custom",
@@ -25,18 +25,18 @@ export const privateComputeLimitsSchema = z
 export type PrivateComputeLimits = z.infer<typeof privateComputeLimitsSchema>;
 export const privateComputeProfileSchema = z
   .strictObject({
-    version: z.literal(1),
-    id: z.literal(PRIVATE_COMPUTE_PROFILE_ID),
-    vcpus: z.literal(8),
-    memoryMiB: z.literal(16_384),
-    lintWorkers: z.literal(1),
     checkPolicy: z.strictObject({
-      path: z.string().regex(/^apps\/[a-z][a-z0-9-]*\/\.config\/mise\/tasks\/check$/u),
-      beforeSha256: z.string().regex(/^[a-f0-9]{64}$/u),
       afterSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+      beforeSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+      path: z.string().regex(/^apps\/[a-z][a-z0-9-]*\/\.config\/mise\/tasks\/check$/u),
     }),
-    target: z.strictObject({ sandboxId: z.string().min(1), workspaceDrive: z.string().min(1) }),
+    id: z.literal(PRIVATE_COMPUTE_PROFILE_ID),
     limits: privateComputeLimitsSchema,
+    lintWorkers: z.literal(1),
+    memoryMiB: z.literal(16_384),
+    target: z.strictObject({ sandboxId: z.string().min(1), workspaceDrive: z.string().min(1) }),
+    vcpus: z.literal(8),
+    version: z.literal(1),
   })
   .refine((value) => value.limits.maxVcpus >= value.vcpus, {
     message: "The observed team plan does not support this compute profile.",
@@ -64,13 +64,13 @@ export const readPrivateComputeLimits = (
 };
 
 export const privateComputeActivationSchema = z.strictObject({
-  sandboxId: z.string().min(1),
-  workspaceDrive: z.string().min(1),
-  proposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   appId: z.string().min(1),
-  sessionId: z.string().min(1),
+  completedByCallId: z.string().optional(),
   phase: z.enum(["stopping", "configuring", "resuming", "ready"]),
   profileId: z.literal(PRIVATE_COMPUTE_PROFILE_ID),
-  completedByCallId: z.string().optional(),
+  proposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  sandboxId: z.string().min(1),
+  sessionId: z.string().min(1),
+  workspaceDrive: z.string().min(1),
 });
 export type PrivateComputeActivation = z.infer<typeof privateComputeActivationSchema>;

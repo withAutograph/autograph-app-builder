@@ -48,10 +48,10 @@ describe("draft reconciliation app formatter", () => {
       proposal: { digest },
       review: { digest },
       root: "/workspace/candidate",
-      workspaceRoot: "/workspace",
       validation: { resolvedTree: "b".repeat(40) },
       validationRun: { nextIndex: 2 },
       version: 1,
+      workspaceRoot: "/workspace",
     };
     mocks.workflow = {
       appSpec: { appId: "example", digest },

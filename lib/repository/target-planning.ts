@@ -70,13 +70,12 @@ const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
   z
     .strictObject({
       blockers: z.array(z.string()),
-      frameworkUpgrade: frameworkUpgradeSchema.optional(),
-      privateCompute: privateComputeProfileSchema.optional(),
       contract: z.strictObject({
         appId,
         appSpec: appSpecBindingSchema,
         version: z.literal(1),
       }),
+      frameworkUpgrade: frameworkUpgradeSchema.optional(),
       mutations: z.tuple([]),
       plan: z.strictObject({
         product: z.strictObject({
@@ -101,6 +100,7 @@ const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
           routes: z.array(z.string().startsWith("/")),
         }),
       }),
+      privateCompute: privateComputeProfileSchema.optional(),
     })
     .superRefine((proposal, context) => {
       if (
@@ -146,21 +146,21 @@ const iterationChangeSchema = z
 
 const applicationSourceImportPlanningSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  manifestDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   importedSessionId: z.string().min(1),
+  manifestDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   registration: applicationSourceRegistrationSchema.optional(),
 });
 
 const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
   targetCreationProposalSchemaForTopology(topologyOwner)
     .safeExtend({
+      applicationSourceImport: applicationSourceImportPlanningSchema.optional(),
       iteration: z.strictObject({
         changes: z.array(iterationChangeSchema),
         digest,
       }),
       operation: z.literal("iterate-existing-app"),
       sourceReconciliation: localSourceReconciliationSchema.optional(),
-      applicationSourceImport: applicationSourceImportPlanningSchema.optional(),
     })
     .superRefine((proposal, context) => {
       if (
@@ -436,7 +436,7 @@ export const sandboxTargetCommandExecutor =
     if (setup.exitCode !== 0) {
       return setup;
     }
-    return sandbox.run(request);
+    return await sandbox.run(request);
   };
 
 const creationPlan = (

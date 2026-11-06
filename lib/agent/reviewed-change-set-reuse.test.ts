@@ -16,7 +16,7 @@ describe("reviewed change-set reuse", () => {
   };
 
   it("permits an unchanged reviewed receipt", () => {
-    expect(() =>
+    expect(() => {
       assertAtomicReviewedChangeSetReuse({
         ...current,
         latest: {
@@ -25,21 +25,21 @@ describe("reviewed change-set reuse", () => {
           reviewReceipt: expected,
           validationDigest: current.expectedValidationDigest,
         },
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("fails closed when artifact invalidation changes reviewed to prepared after recomputation", () => {
-    expect(() =>
+    expect(() => {
       assertAtomicReviewedChangeSetReuse({
         ...current,
         latest: { phase: "prepared" },
-      }),
-    ).toThrow("changed concurrently");
+      });
+    }).toThrow("changed concurrently");
   });
 
   it("fails closed when a concurrent reviewed receipt differs", () => {
-    expect(() =>
+    expect(() => {
       assertAtomicReviewedChangeSetReuse({
         ...current,
         latest: {
@@ -48,7 +48,7 @@ describe("reviewed change-set reuse", () => {
           reviewReceipt: { ...expected, digest: "e".repeat(64) },
           validationDigest: current.expectedValidationDigest,
         },
-      }),
-    ).toThrow("changed concurrently");
+      });
+    }).toThrow("changed concurrently");
   });
 });

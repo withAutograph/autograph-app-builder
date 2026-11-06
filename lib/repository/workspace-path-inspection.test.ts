@@ -13,7 +13,11 @@ import {
 
 const roots: string[] = [];
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(
+    roots.splice(0).map(async (root) => {
+      await rm(root, { force: true, recursive: true });
+    }),
+  );
 });
 const fixture = async () => {
   const parent = await realpath(await mkdtemp(path.join(tmpdir(), "workspace-inspection-")));
@@ -26,8 +30,8 @@ const fixture = async () => {
     JSON.stringify({
       exports: {
         "./normal-actor-login": {
-          types: "./normal-actor-login.d.ts",
           default: "./normal-actor-login.js",
+          types: "./normal-actor-login.d.ts",
         },
       },
     }),
@@ -40,19 +44,19 @@ const fixture = async () => {
   return { parent, root };
 };
 const resultSchema = z.object({
+  continuation: z.object({ directoryOffset: z.number() }).optional(),
+  entries: z.array(z.object({ kind: z.string(), path: z.string() })).optional(),
+  entryKind: z.string().optional(),
   kind: z.string(),
   path: z.string().optional(),
-  entryKind: z.string().optional(),
-  entries: z.array(z.object({ path: z.string(), kind: z.string() })).optional(),
-  continuation: z.object({ directoryOffset: z.number() }).optional(),
 });
 const inspect = (root: string, relativePath: string, directoryOffset = 0, entryBytes = 100_000) => {
   const program = workspaceInspectionProgram({
-    root,
-    relativePath,
-    requestedPath: `/workspace/repository/${relativePath}`,
     directoryOffset,
     entryBytes,
+    relativePath,
+    requestedPath: `/workspace/repository/${relativePath}`,
+    root,
   });
   return resultSchema.parse(
     JSON.parse(
@@ -67,8 +71,8 @@ describe("actual selected workspace entry program", () => {
   it("lists both formerly failing subdirectories and their real package export file names", async () => {
     const f = await fixture();
     expect(inspect(f.root, "packages")).toMatchObject({
+      entries: [{ kind: "directory", path: "/workspace/repository/packages/playwright-config" }],
       kind: "workspace-directory",
-      entries: [{ path: "/workspace/repository/packages/playwright-config", kind: "directory" }],
     });
     const nested = inspect(f.root, "packages/playwright-config");
     expect(nested.kind).toBe("workspace-directory");
@@ -85,8 +89,8 @@ describe("actual selected workspace entry program", () => {
       kind: "workspace-missing",
     });
     expect(inspect(f.root, "packages/playwright-config/normal-actor-login.js")).toMatchObject({
-      kind: "workspace-entry",
       entryKind: "file",
+      kind: "workspace-entry",
     });
   });
   it("rejects traversal and a directory symlink outside its selected source", async () => {
@@ -111,9 +115,9 @@ describe("actual selected workspace entry program", () => {
     const directory = path.join(f.root, "many");
     await mkdir(directory);
     await Promise.all(
-      Array.from({ length: 80 }, (_, index) =>
-        writeFile(path.join(directory, `entry-${index}.js`), "fixture"),
-      ),
+      Array.from({ length: 80 }, async (_, index) => {
+        await writeFile(path.join(directory, `entry-${index}.js`), "fixture");
+      }),
     );
     await symlink(path.join(f.parent, "missing"), path.join(directory, "link"));
     const rows = [];
@@ -140,11 +144,11 @@ describe("actual selected workspace entry program", () => {
     await mkdir(path.join(f.root, relativePath));
     await writeFile(path.join(f.root, relativePath, "actual.js"), "source");
     const command = workspaceInspectionCommand({
-      root: f.root,
-      relativePath,
-      requestedPath: `/workspace/repository/${relativePath}`,
       directoryOffset: 0,
       entryBytes: 100_000,
+      relativePath,
+      requestedPath: `/workspace/repository/${relativePath}`,
+      root: f.root,
     });
     const output = execFileSync("/bin/sh", ["-c", command], {
       encoding: "utf-8",
@@ -155,8 +159,8 @@ describe("actual selected workspace entry program", () => {
       },
     });
     expect(resultSchema.parse(JSON.parse(output))).toMatchObject({
+      entries: [{ kind: "file", path: `/workspace/repository/${relativePath}/actual.js` }],
       kind: "workspace-directory",
-      entries: [{ path: `/workspace/repository/${relativePath}/actual.js`, kind: "file" }],
     });
   });
 });

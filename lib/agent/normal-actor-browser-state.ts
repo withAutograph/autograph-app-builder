@@ -6,8 +6,8 @@ const storageSchema = z.looseObject({
   cookies: z.array(z.looseObject({ domain: z.string(), value: z.string() })),
   origins: z.array(
     z.looseObject({
-      origin: z.string(),
       localStorage: z.array(z.looseObject({ value: z.string() })),
+      origin: z.string(),
     }),
   ),
 });
@@ -79,5 +79,5 @@ export const normalActorBrowserFiles = (
     ...capturedFiles.values(),
     { content: identitiesContent, mode: 0o600, path: identitiesPath },
   ];
-  return { directory, files, identitiesPath, privateValues, origin: projection.origin };
+  return { directory, files, identitiesPath, origin: projection.origin, privateValues };
 };

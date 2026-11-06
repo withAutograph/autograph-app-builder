@@ -38,13 +38,13 @@ const retainsCapture = (previous: ApprovalReplayProgress, next: ApprovalReplayPr
   );
 };
 const identity = (binding: Binding) => ({
-  issuer: binding.principal.issuer,
+  adapterGeneration: binding.adapterGeneration,
+  adapterSessionId: binding.adapterSessionId,
   audience: binding.principal.audience,
-  workspaceId: binding.principal.workspaceId,
+  issuer: binding.principal.issuer,
   ownerUserId: binding.principal.ownerUserId,
   sessionId: binding.sessionId,
-  adapterSessionId: binding.adapterSessionId,
-  adapterGeneration: binding.adapterGeneration,
+  workspaceId: binding.principal.workspaceId,
 });
 
 /**
@@ -135,12 +135,12 @@ export const runHistoricalApprovalReplay = async (input: {
     yield* progress.events;
   };
   await verifyHistoricalApprovalReplay({
-    trustedBinding: identity(input.binding),
+    nativeTail,
     replayBinding: identity(progress.binding),
+    replayEvents: eventStream(),
+    trustedBinding: identity(input.binding),
     trustedEventCount: input.checkpoint.eventCount,
     trustedEvents: input.trustedEvents(),
-    replayEvents: eventStream(),
-    nativeTail,
   });
   await input.assertOwner();
   if (!(await input.publishVerified(progress, input.checkpoint))) {

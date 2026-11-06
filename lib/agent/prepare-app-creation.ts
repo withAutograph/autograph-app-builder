@@ -66,10 +66,10 @@ export const prepareAppCreation = async (
   const sandboxForPlanning = await refreshPlanningSource(ctx);
   const planningState = appBuilderWorkflowState.get();
   const repair = await inspectExistingAppRepair({
-    current: planningState,
     changes: existingAppChanges,
-    sandbox: sandboxForPlanning,
     ctx,
+    current: planningState,
+    sandbox: sandboxForPlanning,
   });
   const computeProfile = await preparePrivateComputePlanning({
     state: planningState,
@@ -153,8 +153,8 @@ export const prepareAppCreation = async (
       : {
           applicationSourceImport: {
             appId: imported.reference.appId,
-            manifestDigest: imported.reference.manifestDigest,
             importedSessionId: imported.importedSessionId,
+            manifestDigest: imported.reference.manifestDigest,
           },
         }),
     appId: current.appSpec.appId,
@@ -250,11 +250,11 @@ export const prepareAppCreation = async (
     existingAppRepairHistory.update((history) => [
       ...history,
       {
-        requestDigest: repair.requestDigest,
-        proposalDigest: proposal.digest,
-        sessionId: ctx.session.id,
-        previousWorkflow: current,
         approvedBase: repair.approvedBase,
+        previousWorkflow: current,
+        proposalDigest: proposal.digest,
+        requestDigest: repair.requestDigest,
+        sessionId: ctx.session.id,
       },
     ]);
   }

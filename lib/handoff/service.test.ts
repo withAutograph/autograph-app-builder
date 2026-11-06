@@ -374,9 +374,9 @@ describe("opaque App Builder handoffs", () => {
       }
       vi.spyOn(store, "read").mockResolvedValue(forged);
       await Promise.all(
-        [service.read, service.status, service.resolve].map((read) =>
-          expect(read(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError),
-        ),
+        [service.read, service.status, service.resolve].map(async (read) => {
+          await expect(read(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
+        }),
       );
       await expect(
         service.renew({ ...lookup, creationRequestId: randomUUID() }),
@@ -596,10 +596,10 @@ describe("opaque App Builder handoffs", () => {
 
 describe("application source handoff authority", () => {
   const sourceCandidate = {
-    kind: "application-source-candidate-v1" as const,
-    uploadId: "46024567-225f-4169-9b78-2b2e19ba8848",
     appId: intent.appId,
+    kind: "application-source-candidate-v1" as const,
     manifestDigest: "a".repeat(64),
+    uploadId: "46024567-225f-4169-9b78-2b2e19ba8848",
   };
   it("preserves the digest of omitted legacy source fields", () => {
     const parsed = builderHandoffIntentSchema.parse(intent);

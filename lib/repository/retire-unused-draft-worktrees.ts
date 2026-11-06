@@ -5,13 +5,16 @@ import { z } from "zod";
 const countSchema = z.number().int().nonnegative();
 const decimalSchema = z.string().regex(/^\d+$/u);
 const capacitySnapshotSchema = z.strictObject({
-  bytes: z.strictObject({ total: decimalSchema, available: decimalSchema }).optional(),
-  inodes: z.strictObject({ total: decimalSchema, free: decimalSchema }).optional(),
+  bytes: z.strictObject({ available: decimalSchema, total: decimalSchema }).optional(),
+  inodes: z.strictObject({ free: decimalSchema, total: decimalSchema }).optional(),
 });
 const retirementAdvisorySchema = z.strictObject({
-  status: z.enum(["complete", "partial", "unavailable"]),
-  retired: countSchema,
-  retained: countSchema,
+  capacity: z
+    .strictObject({
+      after: capacitySnapshotSchema.optional(),
+      before: capacitySnapshotSchema.optional(),
+    })
+    .optional(),
   reasons: z.partialRecord(
     z.enum([
       "referenced",
@@ -24,21 +27,18 @@ const retirementAdvisorySchema = z.strictObject({
     ]),
     countSchema,
   ),
-  capacity: z
-    .strictObject({
-      before: capacitySnapshotSchema.optional(),
-      after: capacitySnapshotSchema.optional(),
-    })
-    .optional(),
+  retained: countSchema,
+  retired: countSchema,
+  status: z.enum(["complete", "partial", "unavailable"]),
 });
 
 export type DraftWorktreeRetirementAdvisory = z.infer<typeof retirementAdvisorySchema>;
 
 const unavailableAdvisory = (): DraftWorktreeRetirementAdvisory => ({
-  status: "unavailable",
-  retired: 0,
-  retained: 0,
   reasons: {},
+  retained: 0,
+  retired: 0,
+  status: "unavailable",
 });
 
 /** Preserve the same failure and cause; reporting must never mask it or change cancellation. */
@@ -320,8 +320,8 @@ export const retireUnusedDraftWorktrees = async (input: {
       abortSignal: input.signal,
       command: `node -e ${quote(retirementProgram)} ${quote(
         JSON.stringify({
-          workspaceRoot: path.posix.resolve(input.workspaceRoot ?? "/workspace"),
           retainedRoots: input.retainedRoots,
+          workspaceRoot: path.posix.resolve(input.workspaceRoot ?? "/workspace"),
         }),
       )}`,
       workingDirectory: input.workspaceRoot ?? "/workspace",

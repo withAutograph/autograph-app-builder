@@ -28,41 +28,41 @@ const numericLimit = z
   .regex(/^(?:[0-9]+|max)$/u)
   .nullable();
 const resourceSchema = z.strictObject({
-  platform: z.string(),
   architecture: z.string(),
   availableParallelism: z.number().int().positive(),
-  totalMemoryBytes: z.number().int().nonnegative(),
-  linux: z.strictObject({
-    overcommitMemory: numericLimit,
-    overcommitRatio: numericLimit,
-    memoryKiB: z.partialRecord(
-      z.enum(["MemTotal", "MemAvailable", "SwapTotal", "SwapFree", "CommitLimit", "Committed_AS"]),
-      z.number().int().nonnegative(),
-    ),
-    cgroupMemoryMax: numericLimit,
-    cgroupSwapMax: numericLimit,
-    processLimits: z.array(
-      z.strictObject({
-        name: z.enum(["Max address space", "Max data size", "Max locked memory", "Max processes"]),
-        soft: z.string().regex(/^(?:[0-9]+|unlimited)$/u),
-        hard: z.string().regex(/^(?:[0-9]+|unlimited)$/u),
-        unit: z.enum(["bytes", "processes"]),
-      }),
-    ),
-  }),
   installed: z.array(
     z.strictObject({
-      name: z.enum(["oxlint", "vp"]),
       available: z.boolean(),
+      exitCode: z.number().int().nullable().optional(),
+      name: z.enum(["oxlint", "vp"]),
       path: z.string().optional(),
       version: z
         .string()
         .regex(/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/u)
         .optional(),
-      exitCode: z.number().int().nullable().optional(),
       versionSource: z.enum(["vite-plus-toolchain", "executable-version"]).optional(),
     }),
   ),
+  linux: z.strictObject({
+    cgroupMemoryMax: numericLimit,
+    cgroupSwapMax: numericLimit,
+    memoryKiB: z.partialRecord(
+      z.enum(["MemTotal", "MemAvailable", "SwapTotal", "SwapFree", "CommitLimit", "Committed_AS"]),
+      z.number().int().nonnegative(),
+    ),
+    overcommitMemory: numericLimit,
+    overcommitRatio: numericLimit,
+    processLimits: z.array(
+      z.strictObject({
+        hard: z.string().regex(/^(?:[0-9]+|unlimited)$/u),
+        name: z.enum(["Max address space", "Max data size", "Max locked memory", "Max processes"]),
+        soft: z.string().regex(/^(?:[0-9]+|unlimited)$/u),
+        unit: z.enum(["bytes", "processes"]),
+      }),
+    ),
+  }),
+  platform: z.string(),
+  totalMemoryBytes: z.number().int().nonnegative(),
 });
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 

@@ -39,22 +39,24 @@ export function createDevelopmentShutdown(target: SignalTarget = process): Reado
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => number) {
+export async function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => number) {
   if (signal.aborted) {
-    return Promise.resolve({ code: exitCode(), kind: "stop" as const });
+    return { code: exitCode(), kind: "stop" as const };
   }
-  return once(signal, "abort").then(() => ({ code: exitCode(), kind: "stop" as const }));
+  return await once(signal, "abort").then(() => ({ code: exitCode(), kind: "stop" as const }));
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function developmentChildExit(child: ChildProcess) {
+export async function developmentChildExit(child: ChildProcess) {
   if (child.exitCode !== null) {
-    return Promise.resolve(child.exitCode);
+    return child.exitCode;
   }
   if (child.signalCode !== null) {
-    return Promise.resolve(1);
+    return 1;
   }
-  return once(child, "exit").then(([code, signal]) => (code as number | null) ?? (signal ? 1 : 0));
+  return await once(child, "exit").then(
+    ([code, signal]) => (code as number | null) ?? (signal ? 1 : 0),
+  );
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

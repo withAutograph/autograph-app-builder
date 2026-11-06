@@ -28,25 +28,21 @@ export interface PreparedApplicationReviewContext {
 
 const text = z.string();
 const digest = text.regex(/^[a-f0-9]{64}$/u);
-const sourceFile = z.strictObject({ path: text, mode: text, digest: text });
-const fileState = z.strictObject({ mode: text, digest: text });
+const sourceFile = z.strictObject({ digest: text, mode: text, path: text });
+const fileState = z.strictObject({ digest: text, mode: text });
 export const preparedApplicationReviewContextSchema = z.strictObject({
-  version: z.literal(1),
   appId: text,
-  parentSessionId: text,
-  sandboxName: text,
   applyRoot: text,
-  observed: z.strictObject({ treeDigest: text, files: z.array(sourceFile) }),
   normalizedChanges: z.array(
     z.strictObject({
-      path: text,
-      kind: z.enum(["added", "modified", "deleted"]),
-      before: fileState.optional(),
       after: fileState.optional(),
+      before: fileState.optional(),
+      kind: z.enum(["added", "modified", "deleted"]),
+      path: text,
     }),
   ),
-  visiblePaths: z.array(text),
-  reviewKey: digest,
+  observed: z.strictObject({ files: z.array(sourceFile), treeDigest: text }),
+  parentSessionId: text,
   reviewInput: z.strictObject({
     appSpec: text,
     appSpecDigest: text,
@@ -55,28 +51,32 @@ export const preparedApplicationReviewContextSchema = z.strictObject({
     originalRequest: text.nullable(),
     sourceDigest: text,
   }),
+  reviewKey: digest,
+  sandboxName: text,
+  version: z.literal(1),
+  visiblePaths: z.array(text),
 });
 const count = z.number().int().nonnegative();
 const assessmentSchema = completedSourceAssessmentSchema.extend({
-  reviewCompleted: z.boolean(),
-  status: z.enum(["failed", "unassessed", "blocked"]),
   invocation: z
     .strictObject({
-      requestAttempts: count,
-      successfulRequests: count,
-      journalReuses: count,
-      splits: count,
-      requestsWithIncompleteUsage: count,
       freshUsage: z.strictObject({ inputTokens: count, outputTokens: count, totalTokens: count }),
+      journalReuses: count,
+      requestAttempts: count,
+      requestsWithIncompleteUsage: count,
+      splits: count,
+      successfulRequests: count,
     })
     .optional(),
+  reviewCompleted: z.boolean(),
+  status: z.enum(["failed", "unassessed", "blocked"]),
 });
 const outcomeSchema = z.strictObject({
+  assessment: assessmentSchema,
   contextRef: text,
   reviewKey: digest,
-  assessment: assessmentSchema,
 });
-const binding = { version: z.literal(1), ownerDigest: digest, appId: text, parentSessionId: text };
+const binding = { appId: text, ownerDigest: digest, parentSessionId: text, version: z.literal(1) };
 const envelopeSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     ...binding,
@@ -86,14 +86,14 @@ const envelopeSchema = z.discriminatedUnion("kind", [
   z.strictObject({ ...binding, kind: z.literal("outcome"), value: outcomeSchema }),
 ]);
 const completionSchema = z.strictObject({
-  version: z.literal(1),
   chunkCount: z.number().int().positive(),
   contentBytes: z.number().int().positive(),
+  version: z.literal(1),
 });
 const chunkCharacters = 65_536;
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const ownerDigest = (context: OperatorArtifactContext) => {
-  const authority = context.authority;
+  const { authority } = context;
   return hash(
     JSON.stringify(
       "kind" in authority
@@ -202,15 +202,15 @@ export const createApplicationReviewContextStore = (input: {
     await putChunk(
       ref,
       0,
-      JSON.stringify({ version: 1, chunkCount, contentBytes: Buffer.byteLength(content, "utf-8") }),
+      JSON.stringify({ chunkCount, contentBytes: Buffer.byteLength(content, "utf-8"), version: 1 }),
     );
     return ref;
   };
   const common = () => ({
-    version: 1 as const,
-    ownerDigest: ownerDigest(artifactContext),
     appId: artifactContext.target.appId,
+    ownerDigest: ownerDigest(artifactContext),
     parentSessionId: artifactContext.target.sessionId,
+    version: 1 as const,
   });
   const readContext = async (ref: string): Promise<PreparedApplicationReviewContext> => {
     const envelope = await readEnvelope(ref);
@@ -226,7 +226,6 @@ export const createApplicationReviewContextStore = (input: {
       matches(context);
       return await publish({ ...common(), kind: "context", value: context });
     },
-    readContext,
     async publishOutcome(contextRef: string, assessment: ProductSourceAssessment): Promise<string> {
       const context = await readContext(contextRef);
       const parsed = assessmentSchema.parse(assessment);
@@ -236,9 +235,10 @@ export const createApplicationReviewContextStore = (input: {
       return await publish({
         ...common(),
         kind: "outcome",
-        value: { contextRef, reviewKey: context.reviewKey, assessment: parsed },
+        value: { assessment: parsed, contextRef, reviewKey: context.reviewKey },
       });
     },
+    readContext,
     async readOutcome(
       outcomeRef: string,
     ): Promise<{ contextRef: string; reviewKey: string; assessment: ProductSourceAssessment }> {

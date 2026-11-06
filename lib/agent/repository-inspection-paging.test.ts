@@ -97,8 +97,8 @@ describe("repository inspection paging", () => {
   it("continues across files and missing paths without skipping or duplicating source", async () => {
     const input = fixture({
       "first.ts": "a".repeat(EVE_NATIVE_RESULT_PAGE_BYTES - 400),
-      "second.ts": "second🙂".repeat(EVE_NATIVE_RESULT_PAGE_BYTES / 8),
       "last.ts": "last",
+      "second.ts": "second🙂".repeat(EVE_NATIVE_RESULT_PAGE_BYTES / 8),
     });
     input.paths = [
       "missing-before",
@@ -181,7 +181,7 @@ describe("repository inspection paging", () => {
     const input = fixture({ "first.ts": "first", "restricted.ts": "private release" });
     vi.mocked(readableAppBaselinePaths).mockResolvedValueOnce(["first.ts"]);
     await expect(
-      readRepositoryInspectionPage({ ...input, pathIndex: 1, offsetBytes: 1 }),
+      readRepositoryInspectionPage({ ...input, offsetBytes: 1, pathIndex: 1 }),
     ).rejects.toThrow("outside the selected app baseline");
     expect(input.sandbox.readTextFile).not.toHaveBeenCalled();
   });

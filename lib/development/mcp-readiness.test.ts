@@ -91,15 +91,15 @@ describe("development MCP readiness", () => {
     const requestedWaits: number[] = [];
     let elapsedMs = 0;
     const now = vi.spyOn(Date, "now").mockImplementation(() => elapsedMs);
-    const deterministicDelay = (ms: number, value?: unknown) => {
+    const deterministicDelay = async (ms: number, value?: unknown) => {
       requestedWaits.push(ms);
       elapsedMs += ms;
       if (requestedWaits.length === 7) {
         const aborted = new Error("test aborted");
         controller.abort(aborted);
-        return Promise.reject(aborted);
+        throw aborted;
       }
-      return Promise.resolve(value);
+      return value;
     };
     for (let wait = 0; wait < 7; wait += 1) {
       vi.mocked(delay).mockImplementationOnce(deterministicDelay as typeof delay);
@@ -134,10 +134,10 @@ describe("development MCP readiness", () => {
     let elapsedMs = 0;
     const requestedWaits: number[] = [];
     const now = vi.spyOn(Date, "now").mockImplementation(() => elapsedMs);
-    const deterministicDelay = (ms: number, value?: unknown) => {
+    const deterministicDelay = async (ms: number, value?: unknown) => {
       requestedWaits.push(ms);
       elapsedMs += ms;
-      return Promise.resolve(value);
+      return value;
     };
     for (let wait = 0; wait < 3; wait += 1) {
       vi.mocked(delay).mockImplementationOnce(deterministicDelay as typeof delay);

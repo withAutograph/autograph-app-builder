@@ -309,7 +309,7 @@ export const createPrivateHostedApprovalCapture = (
       if (event.type === "input.requested") {
         for (const request of event.data.requests) {
           if (request.kind === "tool-approval") {
-            const toolName = request.action.toolName;
+            const { toolName } = request.action;
             if (
               hostedRuntimeToolName.safeParse(toolName).success ||
               toolName === "prepare-app-native-target"

@@ -234,7 +234,7 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     ) {
       throw new Error("The sandbox execution lease authority is stale.");
     }
-    return this.release({
+    return await this.release({
       adapterSessionId: input.adapterSessionId,
       epoch: current.epoch,
       nowEpochMs: input.nowEpochMs,

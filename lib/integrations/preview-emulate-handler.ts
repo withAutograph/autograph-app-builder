@@ -50,10 +50,10 @@ export function createPreviewEmulateHandler(input: {
   const emulateHandler = createEmulateHandler({
     persistence: {
       load: persistence.load,
-      save(state) {
+      async save(state) {
         persistenceRevision += 1;
         pendingPersistence = persistence.save(state);
-        return pendingPersistence;
+        await pendingPersistence;
       },
     },
     services: {
@@ -132,7 +132,7 @@ export async function invokePreviewEmulateRequest(request: Request) {
   if (typeof selectedMethod !== "function") {
     return new Response("Method not allowed", { status: 405 });
   }
-  return selectedMethod(request, { params: Promise.resolve({ path }) });
+  return await selectedMethod(request, { params: Promise.resolve({ path }) });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

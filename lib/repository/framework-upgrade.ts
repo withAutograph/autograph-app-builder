@@ -14,19 +14,19 @@ export const frameworkVersionsSchema = z.strictObject({
 export type FrameworkVersions = z.infer<typeof frameworkVersionsSchema>;
 export const frameworkSharedPaths = ["package.json", "bun.lock"] as const;
 export const frameworkUpgradeSchema = z.strictObject({
-  versions: frameworkVersionsSchema,
-  scope: z.literal("workspace"),
   baseline: z.array(
     z.strictObject({
-      path: z.enum(frameworkSharedPaths),
       before: z
         .strictObject({
           digest: z.string().regex(/^[0-9a-f]{64}$/u),
           mode: z.string().regex(/^[0-7]{3,4}$/u),
         })
         .optional(),
+      path: z.enum(frameworkSharedPaths),
     }),
   ),
+  scope: z.literal("workspace"),
+  versions: frameworkVersionsSchema,
 });
 export type FrameworkUpgrade = z.infer<typeof frameworkUpgradeSchema>;
 class RegistryPackageNotFoundError extends Error {
@@ -34,8 +34,8 @@ class RegistryPackageNotFoundError extends Error {
 }
 
 const metadataSchema = z.object({
-  version: stableVersion,
   peerDependencies: z.record(z.string(), z.string()).optional(),
+  version: stableVersion,
 });
 
 /** Resolve once during planning. Apply and resume use only the stored concrete versions. */

@@ -90,7 +90,7 @@ const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies = 
   publicationStores: createPostgresGitHubPublicationStores,
   async readPreparedHandoff(sessionAuth) {
     const { readPreparedHandoffContext } = await import("./handoff-context");
-    return readPreparedHandoffContext(sessionAuth);
+    return await readPreparedHandoffContext(sessionAuth);
   },
 };
 
@@ -148,7 +148,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       throw error;
     });
     // oxlint-enable promise/prefer-await-to-callbacks
-    return databasePromise;
+    return await databasePromise;
   }
 
   return {
@@ -161,8 +161,9 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       }
 
       const { authority, principal } = exactGitHubPublicationAuthority(sessionAuth);
-      const selectedInstallationId = await selectedPublicationInstallation(selection, () =>
-        dependencies.readPreparedHandoff(sessionAuth),
+      const selectedInstallationId = await selectedPublicationInstallation(
+        selection,
+        async () => await dependencies.readPreparedHandoff(sessionAuth),
       );
       // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Reject unavailable handoff authority before opening the database pool.
       const pool = await database();

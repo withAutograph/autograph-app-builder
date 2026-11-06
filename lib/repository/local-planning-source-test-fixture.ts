@@ -55,25 +55,7 @@ export const localPlanningSourceArchiveFixture = async () => {
   };
   const sandbox: BuilderSandboxSession = {
     id: "same-owned-workspace",
-    setNetworkPolicy: async () => {
-      /* File-backed fixture has no network lifecycle. */
-    },
-    resolvePath: translate,
-    run: async (options) => {
-      const result = spawnSync(
-        "/bin/bash",
-        ["-c", options.command.replaceAll("/workspace", workspace)],
-        {
-          cwd: translate(options.workingDirectory ?? "."),
-          env: { NODE_ENV: "test", PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin` },
-          encoding: "utf-8",
-        },
-      );
-      return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
-    },
-    spawn: async () => {
-      throw new Error("unused spawn");
-    },
+    readBinaryFile: async (options) => read(options.path),
     readFile: async (options) => {
       const bytes = read(options.path);
       return bytes === null
@@ -85,22 +67,40 @@ export const localPlanningSourceArchiveFixture = async () => {
             },
           });
     },
-    readBinaryFile: async (options) => read(options.path),
     readTextFile: async (options) => read(options.path)?.toString("utf-8") ?? null,
-    writeFile: async (options) => {
-      store(options.path, new Uint8Array(await new Response(options.content).arrayBuffer()));
-    },
-    writeBinaryFile: async (options) => {
-      store(options.path, options.content);
-    },
-    writeTextFile: async (options) => {
-      store(options.path, options.content);
-    },
     removePath: async (options) => {
       rmSync(translate(options.path), {
         force: options.force ?? false,
         recursive: options.recursive ?? false,
       });
+    },
+    resolvePath: translate,
+    run: async (options) => {
+      const result = spawnSync(
+        "/bin/bash",
+        ["-c", options.command.replaceAll("/workspace", workspace)],
+        {
+          cwd: translate(options.workingDirectory ?? "."),
+          encoding: "utf-8",
+          env: { NODE_ENV: "test", PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin` },
+        },
+      );
+      return { exitCode: result.status ?? 1, stderr: result.stderr, stdout: result.stdout };
+    },
+    setNetworkPolicy: async () => {
+      /* File-backed fixture has no network lifecycle. */
+    },
+    spawn: async () => {
+      throw new Error("unused spawn");
+    },
+    writeBinaryFile: async (options) => {
+      store(options.path, options.content);
+    },
+    writeFile: async (options) => {
+      store(options.path, new Uint8Array(await new Response(options.content).arrayBuffer()));
+    },
+    writeTextFile: async (options) => {
+      store(options.path, options.content);
     },
   };
   const original = await prepareDevelopmentSandboxWorkspace(source, sandbox, "normal-prepare");
@@ -112,16 +112,16 @@ export const localPlanningSourceArchiveFixture = async () => {
   write(candidate, ".env.local", "private retained\n");
   write(candidate, "node_modules/cache", "retained dependency cache\n");
   return {
-    root,
-    source,
-    workspace,
     candidate,
-    sandbox,
-    original,
-    git,
-    write,
     dispose: () => {
       rmSync(root, { force: true, recursive: true });
     },
+    git,
+    original,
+    root,
+    sandbox,
+    source,
+    workspace,
+    write,
   };
 };

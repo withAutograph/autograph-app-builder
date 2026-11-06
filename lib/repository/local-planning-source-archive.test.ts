@@ -18,20 +18,20 @@ test("normal file-archive preparation recovers its proven original Git base and 
     const capture = await captureLocalPlanningSource(f.source, f.original.sourceSha);
     try {
       const result = await reconcileLocalPlanningSource({
-        sandbox: f.sandbox,
-        assertCurrent: () => {},
         appId: "example",
-        sessionId: "saved-session",
+        assertCurrent: () => {},
         callId: "normal-replan",
+        capture,
         originalSourceSha: f.original.sourceSha,
         originalWorkspaceDigest: f.original.workspaceDigest,
-        workspaceId: f.original.workspaceId,
         receipt: {
+          eligibilityDigest: capture.generation.eligibilityDigest,
           sourceSha: capture.sourceSha,
           sourceTree: capture.generation.generation,
-          eligibilityDigest: capture.generation.eligibilityDigest,
         },
-        capture,
+        sandbox: f.sandbox,
+        sessionId: "saved-session",
+        workspaceId: f.original.workspaceId,
       });
       expect(readFileSync(path.join(f.candidate, "shared.txt"), "utf-8")).toBe(
         "current shared source\n",
@@ -70,20 +70,20 @@ test("a dirty original baseline with no matching retained Git artifact fails bef
     try {
       await expect(
         reconcileLocalPlanningSource({
-          sandbox: f.sandbox,
-          assertCurrent: () => {},
           appId: "example",
-          sessionId: "saved-session",
+          assertCurrent: () => {},
           callId: "normal-replan",
+          capture,
           originalSourceSha: f.original.sourceSha,
           originalWorkspaceDigest: "f".repeat(64),
-          workspaceId: f.original.workspaceId,
           receipt: {
+            eligibilityDigest: capture.generation.eligibilityDigest,
             sourceSha: capture.sourceSha,
             sourceTree: capture.generation.generation,
-            eligibilityDigest: capture.generation.eligibilityDigest,
           },
-          capture,
+          sandbox: f.sandbox,
+          sessionId: "saved-session",
+          workspaceId: f.original.workspaceId,
         }),
       ).rejects.toThrow("do not match");
       expect(existsSync(path.join(f.candidate, ".git"))).toBe(false);
@@ -104,20 +104,20 @@ test("foreign workspace identity never initializes or rewrites the retained cand
     try {
       await expect(
         reconcileLocalPlanningSource({
-          sandbox: f.sandbox,
-          assertCurrent: () => {},
           appId: "example",
-          sessionId: "saved-session",
+          assertCurrent: () => {},
           callId: "normal-replan",
+          capture,
           originalSourceSha: f.original.sourceSha,
           originalWorkspaceDigest: f.original.workspaceDigest,
-          workspaceId: "foreign-workspace",
           receipt: {
+            eligibilityDigest: capture.generation.eligibilityDigest,
             sourceSha: capture.sourceSha,
             sourceTree: capture.generation.generation,
-            eligibilityDigest: capture.generation.eligibilityDigest,
           },
-          capture,
+          sandbox: f.sandbox,
+          sessionId: "saved-session",
+          workspaceId: "foreign-workspace",
         }),
       ).rejects.toThrow("another saved workspace");
       expect(existsSync(path.join(f.candidate, ".git"))).toBe(false);
@@ -146,20 +146,20 @@ test("archive recovery imports a clean merged host tree without excluded ancesto
       expect(capture.snapshotSha).not.toBe(reviewedHostHead);
       expect(capture.snapshotTree).toBe(f.git("rev-parse", "HEAD^{tree}"));
       const result = await reconcileLocalPlanningSource({
-        sandbox: f.sandbox,
-        assertCurrent: () => {},
         appId: "example",
-        sessionId: "saved-session",
+        assertCurrent: () => {},
         callId: "merged-replan",
+        capture,
         originalSourceSha: f.original.sourceSha,
         originalWorkspaceDigest: f.original.workspaceDigest,
-        workspaceId: f.original.workspaceId,
         receipt: {
+          eligibilityDigest: capture.generation.eligibilityDigest,
           sourceSha: capture.sourceSha,
           sourceTree: capture.generation.generation,
-          eligibilityDigest: capture.generation.eligibilityDigest,
         },
-        capture,
+        sandbox: f.sandbox,
+        sessionId: "saved-session",
+        workspaceId: f.original.workspaceId,
       });
       expect(readFileSync(path.join(f.candidate, "independent.txt"), "utf-8")).toBe(
         "independent merged repair\n",
@@ -197,20 +197,20 @@ test("archive recovery imports a clean merged host tree without excluded ancesto
       const later = await captureLocalPlanningSource(f.source, reviewedHostHead);
       try {
         await reconcileLocalPlanningSource({
-          sandbox: f.sandbox,
-          assertCurrent: () => {},
           appId: "example",
-          sessionId: "saved-session",
+          assertCurrent: () => {},
           callId: "repeat-replan",
+          capture: later,
           originalSourceSha: reviewedHostHead,
           originalWorkspaceDigest: capture.generation.workspaceDigest,
-          workspaceId: f.original.workspaceId,
           receipt: {
+            eligibilityDigest: later.generation.eligibilityDigest,
             sourceSha: later.sourceSha,
             sourceTree: later.generation.generation,
-            eligibilityDigest: later.generation.eligibilityDigest,
           },
-          capture: later,
+          sandbox: f.sandbox,
+          sessionId: "saved-session",
+          workspaceId: f.original.workspaceId,
         });
         expect(readFileSync(path.join(f.candidate, "later.txt"), "utf-8")).toBe(
           "second ordinary source repair\n",
@@ -254,21 +254,21 @@ test("recorded dirty source transport is recognized without adopting mixed candi
     const capture = await captureLocalPlanningSource(f.source, f.original.sourceSha);
     try {
       const result = await reconcileLocalPlanningSource({
-        sandbox: f.sandbox,
-        assertCurrent: () => {},
         appId: "example",
-        sessionId: "saved-session",
+        assertCurrent: () => {},
         callId: "recognized-source-overlay",
+        capture,
         originalSourceSha: f.original.sourceSha,
         originalWorkspaceDigest: f.original.workspaceDigest,
-        workspaceId: f.original.workspaceId,
-        sourceOverlay: { sourceSha: overlay.sourceSha, workspaceDigest: overlay.workspaceDigest },
         receipt: {
+          eligibilityDigest: capture.generation.eligibilityDigest,
           sourceSha: capture.sourceSha,
           sourceTree: capture.generation.generation,
-          eligibilityDigest: capture.generation.eligibilityDigest,
         },
-        capture,
+        sandbox: f.sandbox,
+        sessionId: "saved-session",
+        sourceOverlay: { sourceSha: overlay.sourceSha, workspaceDigest: overlay.workspaceDigest },
+        workspaceId: f.original.workspaceId,
       });
       expect(readFileSync(path.join(f.candidate, "shared.txt"), "utf-8")).toBe(
         "new shared source\n",
@@ -311,21 +311,21 @@ test("recognized overlay never erases a genuine shared edit or accepts a foreign
     const capture = await captureLocalPlanningSource(f.source, f.original.sourceSha);
     try {
       const input = {
-        sandbox: f.sandbox,
-        assertCurrent: () => {},
         appId: "example",
-        sessionId: "saved-session",
+        assertCurrent: () => {},
         callId: "authored-conflict",
+        capture,
         originalSourceSha: f.original.sourceSha,
         originalWorkspaceDigest: f.original.workspaceDigest,
-        workspaceId: f.original.workspaceId,
-        sourceOverlay: { sourceSha: overlay.sourceSha, workspaceDigest: overlay.workspaceDigest },
         receipt: {
+          eligibilityDigest: capture.generation.eligibilityDigest,
           sourceSha: capture.sourceSha,
           sourceTree: capture.generation.generation,
-          eligibilityDigest: capture.generation.eligibilityDigest,
         },
-        capture,
+        sandbox: f.sandbox,
+        sessionId: "saved-session",
+        sourceOverlay: { sourceSha: overlay.sourceSha, workspaceDigest: overlay.workspaceDigest },
+        workspaceId: f.original.workspaceId,
       };
       await expect(reconcileLocalPlanningSource(input)).rejects.toThrow(
         "conflicts with authored changes",

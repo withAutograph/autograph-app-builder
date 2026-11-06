@@ -41,11 +41,11 @@ export const createSourceCandidateValidator = (
   database: Parameters<typeof createSourceArtifactStore>[0],
 ) =>
   createOwnedSourceCandidateValidator({
-    readCompleted: async (selection) =>
-      await createSourceArtifactStore(database).readCompleted(selection),
     isActiveMember: async (authority) =>
       await createPostgresPreviewOrganizationAuthority(database, {
-        issuer: authority.issuer,
         audience: authority.audience,
+        issuer: authority.issuer,
       }).isActiveMember(authority),
+    readCompleted: async (selection) =>
+      await createSourceArtifactStore(database).readCompleted(selection),
   });

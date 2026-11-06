@@ -170,7 +170,6 @@ type ApplicationModelStep =
 const applicationModel = (steps: ApplicationModelStep[]) => {
   let index = 0;
   return new MockLanguageModelV4({
-    modelId: "openai/gpt-6.1-sol",
     async doGenerate() {
       const step = steps[index];
       index += 1;
@@ -183,27 +182,28 @@ const applicationModel = (steps: ApplicationModelStep[]) => {
       const calls = Array.isArray(step) ? step : step.calls;
       return await Promise.resolve({
         content: calls.map(({ toolName, input: args }, offset) => ({
-          type: "tool-call" as const,
+          input: JSON.stringify(args),
           toolCallId: `step-${index}-${offset}`,
           toolName,
-          input: JSON.stringify(args),
+          type: "tool-call" as const,
         })),
         finishReason: {
-          unified: Array.isArray(step) ? ("tool-calls" as const) : ("length" as const),
           raw: "tool_calls",
+          unified: Array.isArray(step) ? ("tool-calls" as const) : ("length" as const),
         },
         response: {
           id: `application-${index}`,
-          timestamp: new Date(),
           modelId: "openai/gpt-6.1-sol",
+          timestamp: new Date(),
         },
         usage: {
-          inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
-          outputTokens: { total: 5, text: 5, reasoning: 0 },
+          inputTokens: { cacheRead: 0, cacheWrite: 0, noCache: 10, total: 10 },
+          outputTokens: { reasoning: 0, text: 5, total: 5 },
         },
         warnings: [],
       });
     },
+    modelId: "openai/gpt-6.1-sol",
   });
 };
 const applicationEvidence = () => {
@@ -217,85 +217,81 @@ const applicationEvidence = () => {
     ["packages/shared/server.ts", input.files[0].content],
   ]);
   const evidence: ApplicationReviewEvidence = {
+    changedPaths: ["apps/example/actions.ts"],
+    readRedactionTexts: async () => [...documents.values()],
+    readRequirements: vi.fn(
+      async ({ id }: Parameters<ApplicationReviewEvidence["readRequirements"]>[0]) => ({
+        text: documents.get(id) ?? "",
+      }),
+    ),
+    readSource: vi.fn(async ({ path }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => ({
+      content: source.get(path) ?? "",
+      digest: path,
+      endColumn: (source.get(path)?.length ?? 0) + 1,
+      endLine: 1,
+      path,
+      startColumn: 1,
+      startLine: 1,
+      totalLines: 1,
+    })),
     requirements: [
       { id: "original", kind: "original", order: 0 },
       { id: "clarification", kind: "clarification", order: 1 },
       { id: "spec", kind: "app-spec", order: 2 },
     ],
-    changedPaths: ["apps/example/actions.ts"],
-    readRedactionTexts: () => Promise.resolve([...documents.values()]),
-    sourceFiles: [...source.keys()].map((path) => ({ path, digest: path, mode: "644" })),
-    readRequirements: vi.fn(
-      ({ id }: Parameters<ApplicationReviewEvidence["readRequirements"]>[0]) =>
-        Promise.resolve({ text: documents.get(id) ?? "" }),
-    ),
-    readSource: vi.fn(({ path }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) =>
-      Promise.resolve({
-        path,
-        digest: path,
-        content: source.get(path) ?? "",
-        startLine: 1,
-        endLine: 1,
-        startColumn: 1,
-        endColumn: (source.get(path)?.length ?? 0) + 1,
-        totalLines: 1,
-      }),
-    ),
+    sourceFiles: [...source.keys()].map((path) => ({ digest: path, mode: "644", path })),
     verifyRequirementQuote: vi.fn(
-      ({ documentId, quote }: Parameters<ApplicationReviewEvidence["verifyRequirementQuote"]>[0]) =>
-        Promise.resolve(documents.get(documentId)?.includes(quote) ?? false),
+      async ({
+        documentId,
+        quote,
+      }: Parameters<ApplicationReviewEvidence["verifyRequirementQuote"]>[0]) =>
+        documents.get(documentId)?.includes(quote) ?? false,
     ),
     verifySourceCitation: vi.fn(
-      ({
+      async ({
         path,
         startLine,
         endLine,
         excerpt,
       }: Parameters<ApplicationReviewEvidence["verifySourceCitation"]>[0]) =>
-        Promise.resolve(startLine === 1 && endLine === 1 && source.get(path) === excerpt),
+        startLine === 1 && endLine === 1 && source.get(path) === excerpt,
     ),
   };
   return evidence;
 };
 const applicationFinding = {
   ...judgment.findings[0],
-  requirementDocumentId: "original",
   citations: [{ ...judgment.findings[0].citations[0], path: "packages/shared/server.ts" }],
+  requirementDocumentId: "original",
 };
 const inspectApplication: ApplicationToolCall[] = [
-  { toolName: "readRequirements", input: { id: "original" } },
-  { toolName: "readRequirements", input: { id: "clarification" } },
-  { toolName: "readRequirements", input: { id: "spec" } },
-  { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
-  { toolName: "readSource", input: { path: "packages/shared/server.ts" } },
+  { input: { id: "original" }, toolName: "readRequirements" },
+  { input: { id: "clarification" }, toolName: "readRequirements" },
+  { input: { id: "spec" }, toolName: "readRequirements" },
+  { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
+  { input: { path: "packages/shared/server.ts" }, toolName: "readSource" },
 ];
 const recordApplication: ApplicationToolCall[] = [
   {
-    toolName: "recordReviewEvidence",
     input: {
       findings: [applicationFinding],
       remainingRuntimeChecks: ["Exercise server save and reload."],
     },
+    toolName: "recordReviewEvidence",
   },
 ];
 const completeApplication: ApplicationToolCall[] = [
-  { toolName: "completeReview", input: { remainingRuntimeChecks: [] } },
+  { input: { remainingRuntimeChecks: [] }, toolName: "completeReview" },
 ];
 
 const applicationJournalFixture = () => {
   const records = new Map<string, SourceReviewJournalRecord>();
   let revoked = false;
-  const assertCurrentOwner = vi.fn(() =>
-    revoked ? Promise.reject(new Error("owner revoked")) : Promise.resolve(),
-  );
+  const assertCurrentOwner = vi.fn(async () => {
+    revoked ? await Promise.reject(new Error("owner revoked")) : await Promise.resolve();
+  });
   const journal: OwnerAuthorizedSourceReviewJournal = {
     assertCurrentOwner,
-    async read(key) {
-      await assertCurrentOwner();
-      const record = records.get(key);
-      await assertCurrentOwner();
-      return record;
-    },
     async put(key, record) {
       await assertCurrentOwner();
       if (!records.has(key)) {
@@ -307,6 +303,12 @@ const applicationJournalFixture = () => {
       }
       await assertCurrentOwner();
       return stored;
+    },
+    async read(key) {
+      await assertCurrentOwner();
+      const record = records.get(key);
+      await assertCurrentOwner();
+      return record;
     },
   };
   return {
@@ -322,10 +324,10 @@ describe("independent application source review", () => {
     const model = applicationModel([inspectApplication, recordApplication, completeApplication]);
     const starts: ApplicationSourceReviewRequestStart[] = [];
     const options = {
-      testModel: model,
       onRequestStart: (request: ApplicationSourceReviewRequestStart) => {
         starts.push(request);
       },
+      testModel: model,
     };
     const first = await assessApplicationSourceRound(input, applicationEvidence(), options);
     expect(model.doGenerateCalls).toHaveLength(1);
@@ -357,9 +359,9 @@ describe("independent application source review", () => {
     );
     expect(model.doGenerateCalls).toHaveLength(3);
     expect(final.assessment).toMatchObject({
+      findings: [{ citations: [{ endLine: 1, path: "packages/shared/server.ts", startLine: 1 }] }],
       reviewCompleted: true,
       status: "failed",
-      findings: [{ citations: [{ path: "packages/shared/server.ts", startLine: 1, endLine: 1 }] }],
     });
     expect(final.continuation.findings[0][1].requirementQuote).toBe(
       applicationFinding.requirementQuote,
@@ -383,17 +385,17 @@ describe("independent application source review", () => {
     const text = "Primary evidence preserved across a durable round. ".repeat(100);
     const evidenceForRound = () => {
       const evidence = applicationEvidence();
-      evidence.readRequirements = vi.fn(() => Promise.resolve({ text }));
+      evidence.readRequirements = vi.fn(async () => ({ text }));
       return evidence;
     };
     const reads: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "original" } },
-      { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
+      { input: { id: "original" }, toolName: "readRequirements" },
+      { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
     ];
     const model = applicationModel([
       reads,
       reads,
-      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      [{ input: { id: "clarification" }, toolName: "readRequirements" }],
       completeApplication,
     ]);
     let continuation: ApplicationReviewContinuation | undefined;
@@ -427,7 +429,7 @@ describe("independent application source review", () => {
     ).toMatchObject({
       output: {
         type: "json",
-        value: { kind: "retained-evidence-result", firstToolCallId: "step-1-0" },
+        value: { firstToolCallId: "step-1-0", kind: "retained-evidence-result" },
       },
     });
   });
@@ -449,10 +451,10 @@ describe("independent application source review", () => {
         input,
         applicationEvidence(),
         {
-          testModel: model,
           onRequestStart: (request) => {
             starts.push(request);
           },
+          testModel: model,
         },
         continuation,
       );
@@ -469,8 +471,8 @@ describe("independent application source review", () => {
     expect(result?.assessment?.findings).toHaveLength(1);
     expect(continuation?.invocation).toMatchObject({
       requestAttempts: 5,
-      successfulRequests: 4,
       requestsWithIncompleteUsage: 1,
+      successfulRequests: 4,
     });
     expect(starts.map(({ requestOrdinal, stepNumber }) => [requestOrdinal, stepNumber])).toEqual([
       [1, 0],
@@ -484,19 +486,19 @@ describe("independent application source review", () => {
   it("rechecks owner authority before a restored round and preserves an incomplete natural stop", async () => {
     const model = applicationModel([inspectApplication, completeApplication]);
     let revoked = false;
-    const assertCurrentOwner = vi.fn(() =>
-      revoked ? Promise.reject(new Error("private revoked owner")) : Promise.resolve(),
-    );
+    const assertCurrentOwner = vi.fn(async () => {
+      revoked ? await Promise.reject(new Error("private revoked owner")) : await Promise.resolve();
+    });
     const first = await assessApplicationSourceRound(input, applicationEvidence(), {
-      testModel: model,
       assertCurrentOwner,
+      testModel: model,
     });
     revoked = true;
     const restoredEvidence = applicationEvidence();
     const second = await assessApplicationSourceRound(
       input,
       restoredEvidence,
-      { testModel: model, assertCurrentOwner },
+      { assertCurrentOwner, testModel: model },
       structuredClone(first.continuation),
     );
     expect(second.assessment).toMatchObject({ reviewCompleted: false, status: "blocked" });
@@ -522,16 +524,16 @@ describe("independent application source review", () => {
     ]);
     const { journal, revoke } = applicationJournalFixture();
     const request = {
-      reviewInput: input,
-      normalizedChanges: changes,
+      currentDigest: async () => input.sourceDigest,
       evidence: applicationEvidence(),
-      currentDigest: () => Promise.resolve(input.sourceDigest),
       journal,
+      normalizedChanges: changes,
       options: {
-        sessionId,
         cacheSessionId: "caller-metadata-is-not-authority",
+        sessionId,
         testModels: { [sourceReviewPolicy().primary.modelId]: model },
       },
+      reviewInput: input,
     };
     const result = await reviewApplicationWithJournal(request);
     expect(result.reviewCompleted).toBe(true);
@@ -565,17 +567,17 @@ describe("independent application source review", () => {
 
   it("separates Gateway affinity by original session and current bound review", async () => {
     const scopes = [
-      { sessionId: "owner-session-a", reviewInput: input, normalizedChanges: [] },
-      { sessionId: "owner-session-b", reviewInput: input, normalizedChanges: [] },
+      { normalizedChanges: [], reviewInput: input, sessionId: "owner-session-a" },
+      { normalizedChanges: [], reviewInput: input, sessionId: "owner-session-b" },
       {
-        sessionId: "owner-session-a",
-        reviewInput: { ...input, sourceDigest: "changed-source" },
         normalizedChanges: [],
+        reviewInput: { ...input, sourceDigest: "changed-source" },
+        sessionId: "owner-session-a",
       },
       {
-        sessionId: "owner-session-a",
-        reviewInput: input,
         normalizedChanges: [{ kind: "added" as const, path: "apps/example/added.ts" }],
+        reviewInput: input,
+        sessionId: "owner-session-a",
       },
     ];
     const observed = await Promise.all(
@@ -584,8 +586,8 @@ describe("independent application source review", () => {
         const { journal } = applicationJournalFixture();
         const result = await reviewApplicationWithJournal({
           ...scope,
+          currentDigest: async () => scope.reviewInput.sourceDigest,
           evidence: applicationEvidence(),
-          currentDigest: () => Promise.resolve(scope.reviewInput.sourceDigest),
           journal,
           options: {
             sessionId: scope.sessionId,
@@ -607,12 +609,12 @@ describe("independent application source review", () => {
       const model = applicationModel([completeApplication]);
       const { journal } = applicationJournalFixture();
       const result = await reviewApplicationWithJournal({
-        reviewInput: input,
-        normalizedChanges: [],
+        currentDigest: async () => input.sourceDigest,
         evidence: applicationEvidence(),
-        currentDigest: () => Promise.resolve(input.sourceDigest),
         journal,
+        normalizedChanges: [],
         options: { sessionId, testModels: { [sourceReviewPolicy().primary.modelId]: model } },
+        reviewInput: input,
       });
       expect(result.reviewCompleted).toBe(true);
       expect(model.doGenerateCalls[0].providerOptions?.gateway).toEqual({ only: ["openai"] });
@@ -622,32 +624,32 @@ describe("independent application source review", () => {
   it("measures projected request groups without logging evidence and joins actual model calls", async () => {
     const evidence = applicationEvidence();
     const secret = "private-message-shape-sentinel";
-    evidence.readRequirements = () => Promise.resolve({ text: secret.repeat(200) });
-    const readSource = evidence.readSource;
+    evidence.readRequirements = async () => ({ text: secret.repeat(200) });
+    const { readSource } = evidence;
     evidence.readSource = async (request) => ({
       ...(await readSource(request)),
       content: secret.repeat(300),
     });
     const model = applicationModel([
       [
-        { toolName: "readRequirements", input: { id: "original" } },
-        { toolName: "listEvidence", input: { kind: "source" } },
-        { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
-        { toolName: "readSource", input: { path: "packages/shared/server.ts" } },
+        { input: { id: "original" }, toolName: "readRequirements" },
+        { input: { kind: "source" }, toolName: "listEvidence" },
+        { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
+        { input: { path: "packages/shared/server.ts" }, toolName: "readSource" },
       ],
-      [{ toolName: "listEvidence", input: { kind: "requirements" } }],
+      [{ input: { kind: "requirements" }, toolName: "listEvidence" }],
       completeApplication,
     ]);
     const starts: ApplicationSourceReviewRequestStart[] = [];
     const completed: SourceReviewRequest[] = [];
     const result = await assessApplicationSource(input, evidence, {
-      testModel: model,
-      onRequestStart: (request) => {
-        starts.push(request);
-      },
       onRequest: (request) => {
         completed.push(request);
       },
+      onRequestStart: (request) => {
+        starts.push(request);
+      },
+      testModel: model,
     });
     expect(result.reviewCompleted).toBe(true);
     expect(starts.map(({ requestOrdinal }) => requestOrdinal)).toEqual([1, 2, 3]);
@@ -690,24 +692,24 @@ describe("independent application source review", () => {
   it("retains first full evidence and newest parallel rereads while compacting older exact duplicates", async () => {
     const evidence = applicationEvidence();
     const text = "Exact primary requirement evidence. ".repeat(200);
-    evidence.readRequirements = vi.fn(() => Promise.resolve({ text }));
+    evidence.readRequirements = vi.fn(async () => ({ text }));
     evidence.sourceFiles = Array.from({ length: 40 }, (_, index) => ({
-      path: `packages/independent-source-${index}.ts`,
       digest: `observed-${index}`,
       mode: "644",
+      path: `packages/independent-source-${index}.ts`,
     }));
     const first: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "original" } },
-      { toolName: "listEvidence", input: { kind: "source" } },
+      { input: { id: "original" }, toolName: "readRequirements" },
+      { input: { kind: "source" }, toolName: "listEvidence" },
     ];
     const repeated: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "original", cursor: 0 } },
-      { toolName: "listEvidence", input: { kind: "source", cursor: 0 } },
+      { input: { cursor: 0, id: "original" }, toolName: "readRequirements" },
+      { input: { cursor: 0, kind: "source" }, toolName: "listEvidence" },
     ];
     const model = applicationModel([
       first,
       repeated,
-      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      [{ input: { id: "clarification" }, toolName: "readRequirements" }],
       repeated,
       completeApplication,
     ]);
@@ -721,21 +723,21 @@ describe("independent application source review", () => {
     for (const [offset, expected] of [{ text }, { items: evidence.sourceFiles }].entries()) {
       expect(results).toContainEqual(
         expect.objectContaining({
-          toolCallId: `step-1-${offset}`,
           output: { type: "json", value: expected },
+          toolCallId: `step-1-${offset}`,
         }),
       );
       expect(results).toContainEqual(
         expect.objectContaining({
-          toolCallId: `step-2-${offset}`,
           output: {
             type: "json",
             value: {
-              kind: "retained-evidence-result",
               firstToolCallId: `step-1-${offset}`,
+              kind: "retained-evidence-result",
               resultDigest: createHash("sha256").update(JSON.stringify(expected)).digest("hex"),
             },
           },
+          toolCallId: `step-2-${offset}`,
         }),
       );
     }
@@ -746,14 +748,14 @@ describe("independent application source review", () => {
     );
     expect(newest).toContainEqual(
       expect.objectContaining({
-        toolCallId: "step-4-0",
         output: { type: "json", value: { text } },
+        toolCallId: "step-4-0",
       }),
     );
     expect(newest).toContainEqual(
       expect.objectContaining({
-        toolCallId: "step-4-1",
         output: { type: "json", value: { items: evidence.sourceFiles } },
+        toolCallId: "step-4-1",
       }),
     );
     for (const call of model.doGenerateCalls) {
@@ -782,31 +784,31 @@ describe("independent application source review", () => {
       50,
     );
     let originalReads = 0;
-    evidence.readRequirements = vi.fn(({ id, cursor }) => {
+    evidence.readRequirements = vi.fn(async ({ id, cursor }) => {
       if (id === "original" && cursor === undefined) {
         originalReads += 1;
       }
-      return Promise.resolve({ text, nextCursor: originalReads });
+      return { nextCursor: originalReads, text };
     });
     evidence.sourceFiles = Array.from({ length: 205 }, (_, index) => ({
-      path: `packages/source-${index}.ts`,
       digest: `observed-${index}`,
       mode: "644",
+      path: `packages/source-${index}.ts`,
     }));
     const selections: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "original" } },
-      { toolName: "readRequirements", input: { id: "spec" } },
-      { toolName: "readRequirements", input: { id: "original", cursor: 1 } },
-      { toolName: "listEvidence", input: { kind: "source" } },
-      { toolName: "listEvidence", input: { kind: "source", prefix: "packages/" } },
-      { toolName: "listEvidence", input: { kind: "source", cursor: 200 } },
-      { toolName: "listEvidence", input: { kind: "changes" } },
-      { toolName: "listEvidence", input: { kind: "requirements" } },
+      { input: { id: "original" }, toolName: "readRequirements" },
+      { input: { id: "spec" }, toolName: "readRequirements" },
+      { input: { cursor: 1, id: "original" }, toolName: "readRequirements" },
+      { input: { kind: "source" }, toolName: "listEvidence" },
+      { input: { kind: "source", prefix: "packages/" }, toolName: "listEvidence" },
+      { input: { cursor: 200, kind: "source" }, toolName: "listEvidence" },
+      { input: { kind: "changes" }, toolName: "listEvidence" },
+      { input: { kind: "requirements" }, toolName: "listEvidence" },
     ];
     const model = applicationModel([
       selections,
-      [{ toolName: "readRequirements", input: { id: "original" } }],
-      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      [{ input: { id: "original" }, toolName: "readRequirements" }],
+      [{ input: { id: "clarification" }, toolName: "readRequirements" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -819,14 +821,14 @@ describe("independent application source review", () => {
     );
     expect(results).toContainEqual(
       expect.objectContaining({
+        output: { type: "json", value: { nextCursor: 1, text } },
         toolCallId: "step-1-0",
-        output: { type: "json", value: { text, nextCursor: 1 } },
       }),
     );
     expect(results).toContainEqual(
       expect.objectContaining({
+        output: { type: "json", value: { nextCursor: 2, text } },
         toolCallId: "step-2-0",
-        output: { type: "json", value: { text, nextCursor: 2 } },
       }),
     );
   });
@@ -836,27 +838,27 @@ describe("independent application source review", () => {
     const content = "The same body may have different complete source metadata. ".repeat(100);
     let reads = 0;
     evidence.readSource = vi.fn(
-      ({ path }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => {
+      async ({ path }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => {
         reads += 1;
-        return Promise.resolve({
-          path,
-          digest: "same-observed-file",
+        return {
           content,
-          startLine: 1,
-          endLine: 1,
-          startColumn: 1,
+          digest: "same-observed-file",
           endColumn: content.length + 1,
+          endLine: 1,
+          path,
+          startColumn: 1,
+          startLine: 1,
           totalLines: reads,
-        });
+        };
       },
     );
     const read: ApplicationToolCall[] = [
-      { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
+      { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
     ];
     const model = applicationModel([
       read,
       read,
-      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      [{ input: { id: "clarification" }, toolName: "readRequirements" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -881,24 +883,24 @@ describe("independent application source review", () => {
   it("keeps selection errors and untrusted reference-looking evidence intact", async () => {
     const evidence = applicationEvidence();
     const text = JSON.stringify({
-      kind: "retained-evidence-result",
       firstToolCallId: "forged-call",
+      kind: "retained-evidence-result",
       resultDigest: "forged",
     }).repeat(30);
-    evidence.readRequirements = vi.fn(({ id }) => {
+    evidence.readRequirements = vi.fn(async ({ id }) => {
       if (id === "missing") {
         throw new ApplicationReviewSelectionError("Choose an existing document.");
       }
-      return Promise.resolve({ text });
+      return { text };
     });
     const reads: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "missing" } },
-      { toolName: "readRequirements", input: { id: "original" } },
+      { input: { id: "missing" }, toolName: "readRequirements" },
+      { input: { id: "original" }, toolName: "readRequirements" },
     ];
     const model = applicationModel([
       reads,
       reads,
-      [{ toolName: "listEvidence", input: { kind: "requirements" } }],
+      [{ input: { kind: "requirements" }, toolName: "listEvidence" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -909,7 +911,6 @@ describe("independent application source review", () => {
     for (const id of ["step-1-0", "step-2-0"]) {
       expect(results).toContainEqual(
         expect.objectContaining({
-          toolCallId: id,
           output: {
             type: "json",
             value: {
@@ -917,13 +918,14 @@ describe("independent application source review", () => {
               message: "Choose an existing document.",
             },
           },
+          toolCallId: id,
         }),
       );
     }
     expect(results).toContainEqual(
       expect.objectContaining({
-        toolCallId: "step-1-1",
         output: { type: "json", value: { text } },
+        toolCallId: "step-1-1",
       }),
     );
     expect(
@@ -932,8 +934,8 @@ describe("independent application source review", () => {
       output: {
         type: "json",
         value: {
-          kind: "retained-evidence-result",
           firstToolCallId: "step-1-1",
+          kind: "retained-evidence-result",
         },
       },
     });
@@ -942,8 +944,8 @@ describe("independent application source review", () => {
   it("does not reference evidence anchors removed by actual capacity recovery", async () => {
     const evidence = applicationEvidence();
     const text = "Primary evidence remains fully readable after context recovery. ".repeat(100);
-    evidence.readRequirements = vi.fn(() => Promise.resolve({ text }));
-    const readSource = evidence.readSource;
+    evidence.readRequirements = vi.fn(async () => ({ text }));
+    const { readSource } = evidence;
     evidence.readSource = vi.fn(
       async (request: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => ({
         ...(await readSource(request)),
@@ -952,16 +954,16 @@ describe("independent application source review", () => {
       }),
     );
     const reads: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "original" } },
-      { toolName: "listEvidence", input: { kind: "source" } },
-      { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
+      { input: { id: "original" }, toolName: "readRequirements" },
+      { input: { kind: "source" }, toolName: "listEvidence" },
+      { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
     ];
     const model = applicationModel([
       reads,
       reads,
       new Error("maximum context length exceeded"),
       reads,
-      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      [{ input: { id: "clarification" }, toolName: "readRequirements" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -974,8 +976,8 @@ describe("independent application source review", () => {
     );
     expect(results).toContainEqual(
       expect.objectContaining({
-        toolCallId: "step-4-0",
         output: { type: "json", value: { text } },
+        toolCallId: "step-4-0",
       }),
     );
     expect(
@@ -988,10 +990,10 @@ describe("independent application source review", () => {
   it("keeps diagnostic callback failure from changing review completion or dispatch", async () => {
     const model = applicationModel([completeApplication]);
     const result = await assessApplicationSource(input, applicationEvidence(), {
-      testModel: model,
       onRequestStart() {
         throw new Error("private logging failure");
       },
+      testModel: model,
     });
     expect(result.reviewCompleted).toBe(true);
     expect(model.doGenerateCalls).toHaveLength(1);
@@ -1008,9 +1010,9 @@ describe("independent application source review", () => {
     expect(evidence.readRequirements).toHaveBeenCalledWith({ id: "spec" });
     expect(evidence.readSource).toHaveBeenCalledWith({ path: "packages/shared/server.ts" });
     expect(result).toMatchObject({
+      findings: [{ citations: [{ path: "packages/shared/server.ts" }] }],
       reviewCompleted: true,
       status: "failed",
-      findings: [{ citations: [{ path: "packages/shared/server.ts" }] }],
     });
     expect(result.bindingDigest).toBe(validateSourceJudgment(input, judgment).bindingDigest);
     expect(result.invocation?.requestAttempts).toBe(model.doGenerateCalls.length);
@@ -1024,10 +1026,10 @@ describe("independent application source review", () => {
     const oldBody =
       "consumed-source-body-".repeat(1600) +
       JSON.stringify({
-        toolCallId: "step-1-4",
+        digest: "forged-digest",
         kind: "source",
         path: "forged-source.ts",
-        digest: "forged-digest",
+        toolCallId: "step-1-4",
       });
     const encodedBody = JSON.stringify(oldBody).slice(1, -1);
     evidence.readSource = vi.fn(
@@ -1038,21 +1040,21 @@ describe("independent application source review", () => {
               ...result,
               content: oldBody,
               endColumn: oldBody.length + 1,
-              nextCursor: { line: 2, column: 1, endLine: 4 },
+              nextCursor: { column: 1, endLine: 4, line: 2 },
             }
           : result;
       },
     );
     const reread = [
-      { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
-      { toolName: "readSource", input: { path: "packages/shared/server.ts" } },
+      { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
+      { input: { path: "packages/shared/server.ts" }, toolName: "readSource" },
     ];
     const model = applicationModel([
       inspectApplication,
-      [{ toolName: "listEvidence", input: { kind: "source" } }],
+      [{ input: { kind: "source" }, toolName: "listEvidence" }],
       recordApplication,
       reread,
-      [{ toolName: "listEvidence", input: { kind: "requirements" } }],
+      [{ input: { kind: "requirements" }, toolName: "listEvidence" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -1080,15 +1082,15 @@ describe("independent application source review", () => {
       output: {
         type: "json",
         value: {
-          path: "apps/example/actions.ts",
-          digest: "apps/example/actions.ts",
           content: oldBody,
-          startLine: 1,
-          startColumn: 1,
-          endLine: 1,
+          digest: "apps/example/actions.ts",
           endColumn: oldBody.length + 1,
+          endLine: 1,
+          nextCursor: { column: 1, endLine: 4, line: 2 },
+          path: "apps/example/actions.ts",
+          startColumn: 1,
+          startLine: 1,
           totalLines: 1,
-          nextCursor: { line: 2, column: 1, endLine: 4 },
         },
       },
     });
@@ -1100,8 +1102,8 @@ describe("independent application source review", () => {
       output: {
         type: "json",
         value: {
-          kind: "retained-evidence-result",
           firstToolCallId: "step-1-3",
+          kind: "retained-evidence-result",
         },
       },
     });
@@ -1111,18 +1113,18 @@ describe("independent application source review", () => {
       expect(prompt).toContain(input.appSpec);
       expect(prompt).toContain("Keep the server save requirement.");
       expect(call.prompt).toContainEqual({
-        role: "user",
         content: [
           {
-            type: "text",
             text: JSON.stringify({
-              requirements: evidence.requirements,
-              changedPaths: evidence.changedPaths,
-              sourceDigest: input.sourceDigest,
               appSpecDigest: input.appSpecDigest,
+              changedPaths: evidence.changedPaths,
+              requirements: evidence.requirements,
+              sourceDigest: input.sourceDigest,
             }),
+            type: "text",
           },
         ],
+        role: "user",
       });
       const calls = call.prompt.flatMap((message) =>
         message.role === "assistant"
@@ -1150,31 +1152,31 @@ describe("independent application source review", () => {
     const evidence = applicationEvidence();
     const line = "x".repeat(40_000);
     evidence.readSource = vi.fn(
-      ({ path, cursor, endLine }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => {
+      async ({ path, cursor, endLine }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => {
         const offset = (cursor?.column ?? 1) - 1;
         const end = Math.min(offset + 20_000, line.length);
-        return Promise.resolve({
-          path,
-          digest: "same-long-line",
+        return {
           content: line.slice(offset, end),
-          startLine: 1,
-          endLine: 1,
-          startColumn: offset + 1,
+          digest: "same-long-line",
           endColumn: end + 1,
+          endLine: 1,
+          path,
+          startColumn: offset + 1,
+          startLine: 1,
           totalLines: 1,
           ...(end < line.length
-            ? { nextCursor: { line: 1, column: end + 1, endLine: cursor?.endLine ?? endLine } }
+            ? { nextCursor: { column: end + 1, endLine: cursor?.endLine ?? endLine, line: 1 } }
             : {}),
-        });
+        };
       },
     );
     const first = [
-      { toolName: "readSource", input: { path: "apps/example/actions.ts", endLine: 1 } },
+      { input: { endLine: 1, path: "apps/example/actions.ts" }, toolName: "readSource" },
     ];
     const continued = [
       {
+        input: { cursor: { column: 20_001, endLine: 1, line: 1 }, path: "apps/example/actions.ts" },
         toolName: "readSource",
-        input: { path: "apps/example/actions.ts", cursor: { line: 1, column: 20_001, endLine: 1 } },
       },
     ];
     const model = applicationModel([first, continued, completeApplication]);
@@ -1197,39 +1199,37 @@ describe("independent application source review", () => {
       [path, longLine],
       [imported, "export const server = true;"],
     ]);
-    const readFile = vi.fn(({ path: requested }: { path: string }) => {
+    const readFile = vi.fn(async ({ path: requested }: { path: string }) => {
       const text = source.get(requested.replace(/^repository\//u, ""));
-      return Promise.resolve(
-        text === undefined
-          ? null
-          : new ReadableStream<Uint8Array>({
-              start(controller) {
-                controller.enqueue(new TextEncoder().encode(text));
-                controller.close();
-              },
-            }),
-      );
+      return text === undefined
+        ? null
+        : new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(text));
+              controller.close();
+            },
+          });
     });
     const evidence = createApplicationReviewEvidence({
-      reviewInput: input,
-      observed: {
-        treeDigest: "observed",
-        files: [...source].map(([file, text]) => ({
-          path: file,
-          mode: "644",
-          digest: createHash("sha256").update(text).digest("hex"),
-        })),
-      },
-      changedPaths: [path],
-      visiblePaths: [...source.keys()],
       applyRoot: "/workspace/repository",
+      changedPaths: [path],
+      observed: {
+        files: [...source].map(([file, text]) => ({
+          digest: createHash("sha256").update(text).digest("hex"),
+          mode: "644",
+          path: file,
+        })),
+        treeDigest: "observed",
+      },
+      reviewInput: input,
       sandbox: { readFile },
+      visiblePaths: [...source.keys()],
     });
     const windows: Awaited<ReturnType<ApplicationReviewEvidence["readSource"]>>[] = [];
     const collect = async (cursor?: ApplicationSourceReadCursor): Promise<void> => {
       const page = await evidence.readSource({
-        path,
         endLine: 1,
+        path,
         ...(cursor === undefined ? {} : { cursor }),
       });
       expect(Buffer.byteLength(JSON.stringify(page), "utf-8")).toBeLessThanOrEqual(
@@ -1253,26 +1253,26 @@ describe("independent application source review", () => {
     expect(windows[1].startColumn).toBe(windows[0].nextCursor?.column);
     expect(
       await evidence.verifySourceCitation({
-        path,
-        startLine: 1,
         endLine: 1,
         excerpt: windows[0].content,
+        path,
+        startLine: 1,
       }),
     ).toBe(true);
     expect(
       await evidence.verifySourceCitation({
-        path,
-        startLine: 1,
         endLine: 1,
         excerpt: `${windows[0].content.slice(-40)}${windows[1].content.slice(0, 40)}`,
+        path,
+        startLine: 1,
       }),
     ).toBe(true);
     expect(
       await evidence.verifySourceCitation({
-        path,
-        startLine: 1,
         endLine: 1,
         excerpt: `${windows[0].content}invented`,
+        path,
+        startLine: 1,
       }),
     ).toBe(false);
     expect(await evidence.readSource({ path: imported })).toMatchObject({
@@ -1295,8 +1295,8 @@ describe("independent application source review", () => {
       return await actualReads(request);
     };
     const model = applicationModel([
-      [{ toolName: "readSource", input: { path: "packages/guessed/server.ts" } }],
-      [{ toolName: "listEvidence", input: { kind: "source", prefix: "packages/" } }],
+      [{ input: { path: "packages/guessed/server.ts" }, toolName: "readSource" }],
+      [{ input: { kind: "source", prefix: "packages/" }, toolName: "listEvidence" }],
       inspectApplication,
       recordApplication,
       completeApplication,
@@ -1310,7 +1310,9 @@ describe("independent application source review", () => {
 
   it("keeps actual evidence read failures incomplete", async () => {
     const evidence = applicationEvidence();
-    evidence.readSource = () => Promise.reject(new Error("Observed source digest changed."));
+    evidence.readSource = async () => {
+      throw new Error("Observed source digest changed.");
+    };
     const result = await assessApplicationSource(input, evidence, {
       testModel: applicationModel([inspectApplication, completeApplication]),
     });
@@ -1323,8 +1325,8 @@ describe("independent application source review", () => {
       inspectApplication,
       [
         {
-          toolName: "recordReviewEvidence",
           input: { findings: [invented], remainingRuntimeChecks: [] },
+          toolName: "recordReviewEvidence",
         },
         ...completeApplication,
       ],
@@ -1345,7 +1347,7 @@ describe("independent application source review", () => {
       inspectApplication,
       recordApplication,
       new Error("maximum context length exceeded"),
-      [{ toolName: "readRequirements", input: { id: "original" } }],
+      [{ input: { id: "original" }, toolName: "readRequirements" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -1362,10 +1364,13 @@ describe("independent application source review", () => {
     const v2Input = { ...input, appSpec: "", appSpecDigest: "streamed-v2" };
     const evidence = applicationEvidence();
     const read = evidence.readRequirements;
-    evidence.readRequirements = (request) =>
-      request.id === "spec" ? Promise.resolve({ text: fullSpec }) : read(request);
-    evidence.readRedactionTexts = () =>
-      Promise.resolve([input.originalRequest ?? "", "Keep the server save requirement.", fullSpec]);
+    evidence.readRequirements = async (request) =>
+      request.id === "spec" ? await Promise.resolve({ text: fullSpec }) : await read(request);
+    evidence.readRedactionTexts = async () => [
+      input.originalRequest ?? "",
+      "Keep the server save requirement.",
+      fullSpec,
+    ];
     const finding = {
       ...applicationFinding,
       explanation: `The implementation contradicts ${fullSpec}`,
@@ -1374,8 +1379,8 @@ describe("independent application source review", () => {
       inspectApplication,
       [
         {
-          toolName: "recordReviewEvidence",
           input: { findings: [finding], remainingRuntimeChecks: [fullSpec] },
+          toolName: "recordReviewEvidence",
         },
       ],
       new Error("maximum context length exceeded"),
@@ -1393,14 +1398,14 @@ describe("independent application source review", () => {
   it("recovers actual output-length termination without losing validated findings", async () => {
     const resumedEvidence = [
       {
-        toolName: "recordReviewEvidence",
         input: { findings: [], remainingRuntimeChecks: ["Check independent readback."] },
+        toolName: "recordReviewEvidence",
       },
     ];
     const model = applicationModel([
       inspectApplication,
       recordApplication,
-      { length: true, calls: resumedEvidence },
+      { calls: resumedEvidence, length: true },
       resumedEvidence,
       completeApplication,
     ]);
@@ -1424,22 +1429,22 @@ describe("independent application source review", () => {
       return result;
     };
     const model = applicationModel([
-      [{ toolName: "readRequirements", input: { id: "original" } }],
+      [{ input: { id: "original" }, toolName: "readRequirements" }],
       inspectApplication,
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, {
-      testModel: model,
-      assertCurrentOwner: () => {
+      assertCurrentOwner: async () => {
         if (revoked) {
-          return Promise.reject(new Error("Membership revoked."));
+          throw new Error("Membership revoked.");
         }
         if (revokeAfterRead) {
           revoked = true;
           revokeAfterRead = false;
         }
-        return Promise.resolve();
+        return;
       },
+      testModel: model,
     });
     expect(result).toMatchObject({ reviewCompleted: false, status: "blocked" });
     expect(evidence.readSource).not.toHaveBeenCalled();
@@ -1450,17 +1455,17 @@ describe("independent application source review", () => {
   it("propagates parent Stop during an evidence read and never completes the review", async () => {
     const controller = new AbortController();
     const evidence = applicationEvidence();
-    evidence.readSource = () => {
+    evidence.readSource = async () => {
       controller.abort();
-      return Promise.resolve({
-        path: "apps/example/actions.ts",
-        digest: "source",
+      return {
         content: "",
-        startLine: 1,
-        endLine: 1,
-        startColumn: 1,
+        digest: "source",
         endColumn: 1,
-      });
+        endLine: 1,
+        path: "apps/example/actions.ts",
+        startColumn: 1,
+        startLine: 1,
+      };
     };
     await expect(
       assessApplicationSource(input, evidence, {
@@ -1498,7 +1503,7 @@ describe("independent application source review", () => {
       applicationSourceReviewKey({ ...input, clarifications: ["Additional requirement"] }, []),
     ).not.toBe(key);
     expect(
-      applicationSourceReviewKey(input, [{ path: "apps/example/added.ts", kind: "added" }]),
+      applicationSourceReviewKey(input, [{ kind: "added", path: "apps/example/added.ts" }]),
     ).not.toBe(key);
   });
 });

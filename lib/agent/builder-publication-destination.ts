@@ -108,26 +108,26 @@ export const readBuilderPublicationDestinationForTool = async (
       const owner = await resolveHostedOperatorOwnerContext({
         adapterSessionId: ctx.session.id,
         authority,
-        principal,
-        sessionAuth: ctx.session.auth,
         environment: process.env,
         execution,
+        principal,
+        sessionAuth: ctx.session.auth,
       });
       const { currentSession: session } = await readHostedOperatorCallbackSessions({
-        store: sessions,
-        owner,
         execution,
+        owner,
+        store: sessions,
       });
       if (session.appId !== appId) {
         throw new Error("The saved Builder app identity changed.");
       }
       const destination = await resolveExistingBuilderDestinationReference({
-        session,
-        authority,
         appId,
+        authority,
         findProvisioningForAppRepository: provisioning.findSettledAppRepository,
+        session,
       });
-      return { authority, appId, owner, destination };
+      return { appId, authority, destination, owner };
     },
   })();
 };

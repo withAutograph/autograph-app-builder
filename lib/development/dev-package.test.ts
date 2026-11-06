@@ -23,11 +23,11 @@ describe("development Codex package", () => {
         codexHome,
         installPlugin: false,
         marketplaceRoot: "/private/another-instance/marketplace",
-        version: "0.0.0-development.3200",
         runner: async () => {
           commands += 1;
           throw new Error("An endpoint-only launch must not execute Codex commands.");
         },
+        version: "0.0.0-development.3200",
       });
       expect(result).toMatchObject({ installed: false });
       expect(commands).toBe(0);
@@ -47,13 +47,11 @@ describe("development Codex package", () => {
         codexHome,
         installPlugin: false,
         marketplaceRoot: "/private/another-instance/marketplace",
-        version: "0.0.0-development.3200",
-        runner: () => {
+        runner: async () => {
           commands += 1;
-          return Promise.reject(
-            new Error("An endpoint-only launch must not execute Codex commands."),
-          );
+          throw new Error("An endpoint-only launch must not execute Codex commands.");
         },
+        version: "0.0.0-development.3200",
       });
       expect(result).toMatchObject({ installed: false });
       expect(commands).toBe(0);
@@ -130,15 +128,15 @@ describe("development Codex package", () => {
     const root = await realpath(await mkdtemp(path.join(tmpdir(), "autograph-native-package-")));
     try {
       const result = await createDevelopmentPackage({
-        repositoryRoot: path.resolve("."),
+        hostedSession: {
+          codexBin: "/tools/codex",
+          cwd: "/private/native-client",
+          nodeBin: "/tools/node",
+          resourceUrl: "https://builder.example.test/mcp",
+        },
         outputRoot: root,
         port: 3210,
-        hostedSession: {
-          resourceUrl: "https://builder.example.test/mcp",
-          codexBin: "/tools/codex",
-          nodeBin: "/tools/node",
-          cwd: "/private/native-client",
-        },
+        repositoryRoot: path.resolve("."),
       });
       const mcp = JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"));
       const server = mcp.mcpServers["app-builder-dev-3210-hosted"];
@@ -148,8 +146,8 @@ describe("development Codex package", () => {
       expect(server.args).toContain("/tools/codex");
       expect(server).not.toHaveProperty("oauth_resource");
       expect(result.receipt).toMatchObject({
-        hostedSessionResource: "https://builder.example.test/mcp",
         execution: "hosted",
+        hostedSessionResource: "https://builder.example.test/mcp",
       });
     } finally {
       await rm(root, { force: true, recursive: true });

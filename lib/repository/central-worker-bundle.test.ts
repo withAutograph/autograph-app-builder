@@ -49,33 +49,33 @@ const fixture = async (link?: string) => {
     });
   }
   const files = [
-    { path: "source.ts", mode: "100644", sha256: hash("export const version = 1;\n") },
+    { mode: "100644", path: "source.ts", sha256: hash("export const version = 1;\n") },
   ];
   if (link !== undefined) {
-    files.push({ path: "link", mode: "120000", sha256: hash(link) });
+    files.push({ mode: "120000", path: "link", sha256: hash(link) });
   }
   const receipt = {
-    version: 1,
-    sourceSha: git("rev-parse", "HEAD"),
-    sourceTree: git("rev-parse", "HEAD^{tree}"),
-    files,
+    appWorker: { id: "app-integration-bootstrap-v1", sha256: hash(executable) },
     deploymentProfile: "isolated-central-integrations-v1",
+    files,
     serviceIds: ["gateway", "integrations"],
     servicesManifestSha256: "a".repeat(64),
+    sourceSha: git("rev-parse", "HEAD"),
+    sourceTree: git("rev-parse", "HEAD^{tree}"),
+    version: 1,
     workers: {
       resources: { id: "neon-resource-bootstrap-v1", sha256: hash(executable) },
       schema: { id: "central-integration-bootstrap-v1", sha256: hash(executable) },
     },
-    appWorker: { id: "app-integration-bootstrap-v1", sha256: hash(executable) },
   };
   const raw = `${JSON.stringify(receipt)}\n`;
   await writeFile(path.join(artifactRoot, ".app-builder/central-source-build-receipt.json"), raw);
   return {
-    sourceRoot,
     artifactRoot,
     destination: path.join(root, "bundle"),
-    reviewedSourceSha: receipt.sourceSha,
     receiptSha256: hash(raw),
+    reviewedSourceSha: receipt.sourceSha,
+    sourceRoot,
   };
 };
 

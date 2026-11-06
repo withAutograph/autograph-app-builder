@@ -122,7 +122,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
   async acquire(input): Promise<AcquireSandboxLeaseResult> {
     const principal = hostedPrincipalSchema.parse(input.principal);
     const policyDigest = sandboxExecutionPolicyDigest(input.policy);
-    return database.transaction(async (transaction) => {
+    return await database.transaction(async (transaction) => {
       await lockExactLease(transaction, principal, input.adapterSessionId);
       const nowEpochMs = await postgresNowEpochMs(transaction);
       const existing = await exactLease(transaction, principal, input.adapterSessionId, true);
@@ -176,7 +176,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async assertCurrent(input) {
-    return database.transaction(async (transaction) => {
+    return await database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
       const lease = await exactLease(transaction, input.principal, input.adapterSessionId);
       if (
@@ -193,8 +193,8 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
-  claimExpired(input) {
-    return database.transaction(async (transaction) => {
+  async claimExpired(input) {
+    return await database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
       const rows = await transaction
         .select()
@@ -236,8 +236,8 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
-  heartbeat(input) {
-    return database.transaction(async (transaction) => {
+  async heartbeat(input) {
+    return await database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
       const current = await exactLease(transaction, input.principal, input.adapterSessionId, true);
       if (
@@ -265,8 +265,8 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
-  release(input) {
-    return database.transaction(async (transaction) => {
+  async release(input) {
+    return await database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
       const current = await exactLease(transaction, input.principal, input.adapterSessionId, true);
       if (current === null || current.epoch !== input.epoch) {
@@ -299,8 +299,8 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
-  releaseCurrent(input) {
-    return database.transaction(async (transaction) => {
+  async releaseCurrent(input) {
+    return await database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
       const current = await exactLease(transaction, input.principal, input.adapterSessionId, true);
       if (current === null) {
@@ -339,8 +339,8 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
-  settleRecovery(input) {
-    return database.transaction(async (transaction) => {
+  async settleRecovery(input) {
+    return await database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
       const current = await exactLease(
         transaction,

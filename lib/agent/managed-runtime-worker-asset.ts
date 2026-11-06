@@ -14,10 +14,10 @@ export { managedRuntimeWorkerAssetSchema } from "../provisioning/hosted-operator
 export type { ManagedRuntimeWorkerAssetState } from "../provisioning/hosted-operator-continuity-contract";
 
 const descriptorSchema = z.strictObject({
-  id: z.string().min(1),
   executablePath: z.string().min(1),
-  sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+  id: z.string().min(1),
   operationScope: z.literal("managed-app-runtime-v1"),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/u),
   subcommand: z.literal("protected-managed-app-runtime"),
 });
 export type ManagedRuntimeWorkerAssetDescriptor = z.infer<typeof descriptorSchema>;
@@ -26,12 +26,14 @@ export type ManagedRuntimeWorkerAssetSource = Pick<
   "name" | "readFileToBuffer" | "delete"
 > & { stop: () => Promise<void> };
 const sourcePort = (sandbox: Sandbox): ManagedRuntimeWorkerAssetSource => ({
+  delete: async (...args) => {
+    await sandbox.delete(...args);
+  },
   name: sandbox.name,
-  readFileToBuffer: (...args) => sandbox.readFileToBuffer(...args),
+  readFileToBuffer: async (...args) => await sandbox.readFileToBuffer(...args),
   stop: async () => {
     await sandbox.stop();
   },
-  delete: (...args) => sandbox.delete(...args),
 });
 export type ManagedRuntimeWorkerAssetTarget = Pick<Sandbox, "writeFiles" | "readFileToBuffer"> & {
   fs: Pick<Sandbox["fs"], "mkdir">;
@@ -41,8 +43,8 @@ const sourceConfigurationSchema = z.union([
   z.object({ ...sourceFields, image: z.string().min(1), source: z.never().optional() }),
   z.object({
     ...sourceFields,
-    source: z.strictObject({ type: z.literal("snapshot"), snapshotId: z.string().min(1) }),
     image: z.never().optional(),
+    source: z.strictObject({ snapshotId: z.string().min(1), type: z.literal("snapshot") }),
   }),
 ]);
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -157,7 +159,7 @@ export const createManagedRuntimeWorkerAsset = (dependencies: {
         /* Closing this already-owned handle still takes priority. */
       }
       await deleteOwnedSource(source);
-      await save({ ...state, sourceSandboxId: name, disposed: true });
+      await save({ ...state, disposed: true, sourceSandboxId: name });
     } else if (state.sourceCreationAttempted !== true) {
       await save({ ...state, disposed: true });
     }
@@ -181,7 +183,7 @@ export const createManagedRuntimeWorkerAsset = (dependencies: {
       const descriptor = descriptorSchema.parse(input.descriptor);
       const owned = ownedSourceState(input);
       const { attemptId, name } = owned;
-      let state = owned.state;
+      let { state } = owned;
       let source: ManagedRuntimeWorkerAssetSource | undefined;
       let failure: { error: unknown } | undefined;
       const save = async (next: ManagedRuntimeWorkerAssetState) => {
@@ -209,17 +211,17 @@ export const createManagedRuntimeWorkerAsset = (dependencies: {
           } else {
             const access = await credentials();
             await input.assertCurrent();
-            await save({ sourceCreationAttempted: true, installed: false, disposed: false });
+            await save({ disposed: false, installed: false, sourceCreationAttempted: true });
             // Durable dispatch precedes create. Unknown creates reconnect by the exact SDK-owned name only.
             await input.assertCurrent();
             const created = await create({
               ...hostedOperatorSandboxSourceOptions(configuration),
               ...access,
-              name,
-              persistent: false,
               env: {},
-              ports: [],
+              name,
               networkPolicy: "allow-all",
+              persistent: false,
+              ports: [],
               timeout: 300_000,
             });
             if (created.name !== name) {
@@ -243,7 +245,7 @@ export const createManagedRuntimeWorkerAsset = (dependencies: {
         });
         await input.assertCurrent();
         await input.target.writeFiles([
-          { path: descriptor.executablePath, content: bytes, mode: 0o755 },
+          { content: bytes, mode: 0o755, path: descriptor.executablePath },
         ]);
         await input.assertCurrent();
         const installed = await input.target.readFileToBuffer({ path: descriptor.executablePath });
@@ -256,7 +258,7 @@ export const createManagedRuntimeWorkerAsset = (dependencies: {
         failure = { error };
       } finally {
         try {
-          await dispose({ attemptId, state, checkpoint: input.checkpoint }, source);
+          await dispose({ attemptId, checkpoint: input.checkpoint, state }, source);
         } catch (error) {
           failure ??= { error };
         }

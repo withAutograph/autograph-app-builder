@@ -23,19 +23,19 @@ export const createPrivatePublicReleaseApprovalCapture = (input: {
   state?: PrivateOperatorApprovalCapture;
 }) => {
   const expected = publicReleaseApprovalInputSchema.parse({
+    operationRef: publicReleaseOperationRef(input.plan),
     plan: input.plan,
     planDigest: publicReleasePlanDigest(input.plan),
-    operationRef: publicReleaseOperationRef(input.plan),
   });
   const capture = createPrivateOperatorApprovalCapture({
+    callId: input.callId,
+    ownerUserId: input.plan.authority.ownerUserId,
     request: {
       action: "public-release",
-      planRef: expected.operationRef,
-      planDigest: expected.planDigest,
       idempotencyKey: input.plan.selection.appId,
+      planDigest: expected.planDigest,
+      planRef: expected.operationRef,
     },
-    ownerUserId: input.plan.authority.ownerUserId,
-    callId: input.callId,
     ...(input.state === undefined ? {} : { state: input.state }),
   });
   return {
@@ -57,6 +57,7 @@ export const createPrivatePublicReleaseApprovalCapture = (input: {
         capture.settle(event);
       }
     },
+    proveComplete: capture.proveComplete,
     read() {
       // A prior cancellation denies the same plan, even when the new call has consent.
       if (capture.snapshot().entries.some((entry) => entry.cancelled)) {
@@ -65,7 +66,6 @@ export const createPrivatePublicReleaseApprovalCapture = (input: {
       return capture.read();
     },
     snapshot: capture.snapshot,
-    proveComplete: capture.proveComplete,
   };
 };
 export const readPrivatePublicReleaseApproval = async (input: {
@@ -90,8 +90,8 @@ export const readPrivatePublicReleaseApproval = async (input: {
     ...(input.observation === undefined ? {} : { observation: input.observation }),
     capture: (state) =>
       createPrivatePublicReleaseApprovalCapture({
-        plan: input.plan,
         callId: input.callId,
+        plan: input.plan,
         ...(state === undefined ? {} : { state }),
       }),
     readHistory: input.readHistory,

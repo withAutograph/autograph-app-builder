@@ -53,7 +53,7 @@ it("refuses an ambiguous reviewed checkpoint at the selected validated slot", as
   const f = await freshFixture();
   f.input.payload.candidates.push({
     ...structuredClone(f.old),
-    origin: { ...f.current.origin, stepId: "ambiguous-step", eventId: "ambiguous-event" },
+    origin: { ...f.current.origin, eventId: "ambiguous-event", stepId: "ambiguous-step" },
   });
   expect(recoverDraftReviewedLineage(f.input)).toBeUndefined();
 });
@@ -158,7 +158,7 @@ it("accepts identical complete review contexts at repeated historical checkpoint
   const f = fixture();
   f.input.payload.candidates.unshift({
     ...structuredClone(f.old),
-    origin: { slot: 0, stepId: "earlier", eventId: "earlier-event" },
+    origin: { eventId: "earlier-event", slot: 0, stepId: "earlier" },
   });
   expect(recoverDraftReviewedLineage(f.input)).toEqual(f.reviewed);
 });
@@ -224,7 +224,7 @@ it.each([
   if (variant === "superseding-review") {
     f.input.payload.candidates.splice(1, 0, {
       ...structuredClone(f.old),
-      origin: { slot: 3, stepId: "new-review", eventId: "new-review-event" },
+      origin: { eventId: "new-review-event", slot: 3, stepId: "new-review" },
       serializedContext: {
         ...f.old.serializedContext,
         [workflowKey]: {
@@ -253,7 +253,7 @@ it("the installed native collector, reconciler and restore path append only the 
   const f = await nativeFixture();
   const result = await recoverTerminalSession(
     {
-      auth: { authenticator: "test", principalType: "user", principalId: "owner" },
+      auth: { authenticator: "test", principalId: "owner", principalType: "user" },
       descriptor: f.input.descriptor,
       ports: f.ports,
     },
@@ -269,7 +269,7 @@ it("the installed native collector, reconciler and restore path append only the 
   });
   const retried = await recoverTerminalSession(
     {
-      auth: { authenticator: "test", principalType: "user", principalId: "owner" },
+      auth: { authenticator: "test", principalId: "owner", principalType: "user" },
       descriptor: f.input.descriptor,
       ports: f.ports,
     },
@@ -289,7 +289,7 @@ it("current owner revocation during the recovery port prevents any new native st
   await expect(
     recoverTerminalSession(
       {
-        auth: { authenticator: "test", principalType: "user", principalId: "owner" },
+        auth: { authenticator: "test", principalId: "owner", principalType: "user" },
         descriptor: f.input.descriptor,
         ports: f.ports,
       },
@@ -304,7 +304,7 @@ it("the SDK refuses an application recovery registration targeting its own sessi
   f.ports.applicationStateRecovery.contextKey = "eve.sessionId";
   const result = await recoverTerminalSession(
     {
-      auth: { authenticator: "test", principalType: "user", principalId: "owner" },
+      auth: { authenticator: "test", principalId: "owner", principalType: "user" },
       descriptor: f.input.descriptor,
       ports: f.ports,
     },
@@ -325,7 +325,7 @@ it("the SDK never overwrites an existing candidate field through the recovery ho
   };
   const result = await recoverTerminalSession(
     {
-      auth: { authenticator: "test", principalType: "user", principalId: "owner" },
+      auth: { authenticator: "test", principalId: "owner", principalType: "user" },
       descriptor: f.input.descriptor,
       ports: f.ports,
     },

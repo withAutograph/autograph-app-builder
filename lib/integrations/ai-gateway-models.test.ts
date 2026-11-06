@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { loadGatewayModels, resetGatewayModelCacheForTests } from "./ai-gateway-models";
 
-afterEach(() => resetGatewayModelCacheForTests());
+afterEach(() => {
+  resetGatewayModelCacheForTests();
+});
 
 describe("AI Gateway model catalog", () => {
   it("keeps language models, live identifiers, ZDR metadata, and a valid configured default", async () => {

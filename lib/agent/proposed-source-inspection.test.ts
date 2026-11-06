@@ -22,49 +22,49 @@ import {
 
 import inspectExistingApp from "../../agent/tools/inspect_existing_app";
 
-const sandboxPort = vi.hoisted(() => ({ read: vi.fn(), run: vi.fn(), get: vi.fn() }));
+const sandboxPort = vi.hoisted(() => ({ get: vi.fn(), read: vi.fn(), run: vi.fn() }));
 vi.mock("./source-bound-sandbox", () => ({ getSourceBoundSandbox: sandboxPort.get }));
 
 const context = {
-  session: { id: "owner-session" },
   abortSignal: new AbortController().signal,
+  session: { id: "owner-session" },
 } as Pick<ToolContext, "session" | "abortSignal">;
 const run = (operation: () => void | Promise<void>) =>
   contextStorage.run(new ContextContainer(), operation);
 const fixture = (content = "proposed bytes", extra = true) => {
   const changes = [
     {
-      path: "apps/example/app/[...view]/page.tsx",
       after: { content, digest: sha256(content), mode: "644" },
+      path: "apps/example/app/[...view]/page.tsx",
     },
     ...(extra
-      ? [{ path: "apps/example/removed.ts", before: { digest: sha256("before"), mode: "755" } }]
+      ? [{ before: { digest: sha256("before"), mode: "755" }, path: "apps/example/removed.ts" }]
       : []),
   ];
   const contract = {
     appId: "example",
-    version: 1,
     appSpec: { path: "apps/example/.config/app-spec.md", sha256: "spec" },
+    version: 1,
   };
   const unsigned = {
-    version: 1,
     appSpecDigest: "spec",
-    workspaceDigest: "workspace",
-    sourceReceiptDigest: "source",
     contractDigest: sha256(JSON.stringify(contract)),
     plannedByCallId: "plan-call",
+    sourceReceiptDigest: "source",
     target: {
-      operation: "iterate-existing-app",
       contract,
       iteration: { changes, digest: sha256(JSON.stringify(changes)) },
+      operation: "iterate-existing-app",
     },
+    version: 1,
+    workspaceDigest: "workspace",
   };
   const state = {
-    phase: "planned",
     appSpec: { appId: "example", digest: "spec" },
-    workspace: { workspaceId: "sandbox", workspaceDigest: "workspace" },
-    sourceReceipt: { digest: "source" },
+    phase: "planned",
     proposal: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },
+    sourceReceipt: { digest: "source" },
+    workspace: { workspaceDigest: "workspace", workspaceId: "sandbox" },
   } as unknown as Extract<AppBuilderWorkflowState, { phase: "planned" }>;
   appBuilderWorkflowState.update(() => state);
   return state;
@@ -72,15 +72,15 @@ const fixture = (content = "proposed bytes", extra = true) => {
 const input = (state: ReturnType<typeof fixture>, paths: string[] = []) => ({
   appId: "example",
   expectedProposalDigest: state.proposal.digest,
-  paths,
   pathIndex: 0,
+  paths,
 });
 const scope = (state: ReturnType<typeof fixture>, sessionId = context.session.id) => ({
   appId: "example",
   appSpecDigest: "spec",
   proposalDigest: state.proposal.digest,
-  workspaceId: "sandbox",
   sessionId,
+  workspaceId: "sandbox",
 });
 
 describe("current frozen proposal inspection", () => {
@@ -89,9 +89,9 @@ describe("current frozen proposal inspection", () => {
       const state = fixture();
       const before = JSON.stringify(state);
       expect(inspectCurrentProposalSource(input(state), context)).toMatchObject({
+        availablePaths: ["apps/example/app/[...view]/page.tsx", "apps/example/removed.ts"],
         source: "current-proposal",
         status: "UNAPPLIED",
-        availablePaths: ["apps/example/app/[...view]/page.tsx", "apps/example/removed.ts"],
       });
       const result = inspectCurrentProposalSource(
         input(state, ["app/[...view]/page.tsx", "removed.ts", "not-in-plan.ts"]),
@@ -99,18 +99,18 @@ describe("current frozen proposal inspection", () => {
       );
       expect(result.files).toEqual([
         {
-          path: "apps/example/app/[...view]/page.tsx",
-          operation: "upsert",
+          content: "proposed bytes",
           digest: sha256("proposed bytes"),
           mode: "644",
-          content: "proposed bytes",
           offsetBytes: 0,
+          operation: "upsert",
+          path: "apps/example/app/[...view]/page.tsx",
         },
         {
-          path: "apps/example/removed.ts",
-          operation: "delete",
           beforeDigest: sha256("before"),
           mode: "755",
+          operation: "delete",
+          path: "apps/example/removed.ts",
         },
       ]);
       expect(result.missingPaths).toEqual(["apps/example/not-in-plan.ts"]);
@@ -223,10 +223,10 @@ describe("current frozen proposal inspection", () => {
         );
         expect(
           serializedPayloadBytes({
-            type: "action.result",
             data: {
               result: { kind: "tool-result", output: result, toolName: "inspect_existing_app" },
             },
+            type: "action.result",
           }),
         ).toBeLessThanOrEqual(EVE_MAX_PAYLOAD_BYTES);
         joined += result.files[0]?.content;
@@ -262,8 +262,8 @@ describe("current frozen proposal inspection", () => {
         (_, index) => `apps/example/${"segment/".repeat(400)}file-${index}.ts`,
       );
       state.proposal.target.iteration.changes = paths.map((path) => ({
-        path,
         after: { content: "", digest: sha256(""), mode: "644" },
+        path,
       }));
       state.proposal.target.iteration.digest = sha256(
         JSON.stringify(state.proposal.target.iteration.changes),
@@ -278,10 +278,10 @@ describe("current frozen proposal inspection", () => {
         observed.push(...(result.availablePaths ?? []));
         expect(
           serializedPayloadBytes({
-            type: "action.result",
             data: {
               result: { kind: "tool-result", output: result, toolName: "inspect_existing_app" },
             },
+            type: "action.result",
           }),
         ).toBeLessThanOrEqual(EVE_NATIVE_RESULT_PAGE_BYTES);
         if (result.nextPathIndex === undefined) {
@@ -314,8 +314,8 @@ it("routes explicit proposal reads through the real tool without acquiring a San
     sandboxPort.read.mockResolvedValue("actually applied bytes");
     sandboxPort.run.mockResolvedValue({
       exitCode: 0,
-      stdout: "apps/example/app/[...view]/page.tsx\0",
       stderr: "",
+      stdout: "apps/example/app/[...view]/page.tsx\0",
     });
     const resolve = inspectExistingApp.events["step.started"];
     if (resolve === undefined) {
@@ -340,22 +340,22 @@ it("routes explicit proposal reads through the real tool without acquiring a San
     expect(
       tool.inputSchema.safeParse({
         appId: "example",
-        source: "current-proposal",
         expectedProposalDigest: state.proposal.digest,
+        source: "current-proposal",
       }).success,
     ).toBe(true);
     const executeContext = { ...context, callId: "inspection-call" } as ToolContext;
     const proposedInput = {
-      source: "current-proposal" as const,
       appId: "example",
       pathIndex: 0,
       paths: ["app/[...view]/page.tsx"],
+      source: "current-proposal" as const,
     };
     const proposed = await tool.execute(proposedInput, executeContext);
     expect(proposed).toMatchObject({
-      status: "UNAPPLIED",
-      proposalDigest: state.proposal.digest,
       files: [{ content: "proposed bytes" }],
+      proposalDigest: state.proposal.digest,
+      status: "UNAPPLIED",
     });
     await expect(
       tool.execute({ ...proposedInput, pathIndex: 1 }, executeContext),

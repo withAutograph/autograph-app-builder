@@ -51,14 +51,14 @@ export const observeNativeRecoveryOperation = async (input: {
     return;
   }
   const entry = {
-    expiresAt: Number.POSITIVE_INFINITY,
     completion: input.transport.observeRecovery({
+      expectedOwnerRunId,
       operationId: operation.operationId,
       principal,
       recovery: descriptor,
-      expectedOwnerRunId,
       sourceHandoffId: source.version === 2 ? source.sourceHandoffId : undefined,
     }),
+    expiresAt: Number.POSITIVE_INFINITY,
   };
   observations.set(key, entry);
   while (observations.size > OBSERVATION_CACHE_ENTRIES) {
@@ -106,12 +106,12 @@ export const observeNativeSource = async (input: {
     return;
   }
   const entry = {
-    expiresAt: Number.POSITIVE_INFINITY,
     completion: input.transport.observeSource({
       principal: input.principal,
       source: input.source,
       sourceHandoffId: input.sourceHandoffId,
     }),
+    expiresAt: Number.POSITIVE_INFINITY,
   };
   observations.set(key, entry);
   while (observations.size > OBSERVATION_CACHE_ENTRIES) {

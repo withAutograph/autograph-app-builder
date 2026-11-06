@@ -85,8 +85,8 @@ export const observeManagedRuntimePorts = async (
   provider: Pick<ManagedRuntimeSandboxPort, "runCommand" | "routes">,
 ) => {
   const command = await provider.runCommand({
-    cmd: "node",
     args: ["-e", portObservationSource, JSON.stringify(provider.routes.map((route) => route.port))],
+    cmd: "node",
     env: {},
   });
   if (command.exitCode !== 0) {
@@ -183,14 +183,14 @@ const assertReadyIdentity = (
     throw unavailable();
   }
   const expected = {
-    intentId: record.requestId,
-    approvalRef: record.approval.approvalId,
-    owner: { ...record.plan.authority, sessionId: record.plan.target.sessionId },
     appId: record.plan.target.appId,
-    runtimeAttemptId: record.attemptId,
+    approvalRef: record.approval.approvalId,
     fence: record.fence,
-    sandboxId: locator.sandboxId,
+    intentId: record.requestId,
+    owner: { ...record.plan.authority, sessionId: record.plan.target.sessionId },
     providerSessionId: locator.providerSessionId,
+    runtimeAttemptId: record.attemptId,
+    sandboxId: locator.sandboxId,
   };
   if (!isDeepStrictEqual(continuityIdentitySchema.strip().parse(ready.current), expected)) {
     throw unavailable();
@@ -203,10 +203,10 @@ export const managedSuiteEnvironment = (input: {
   socketPath: string;
   publicProfile: ManagedRuntimePublicProfile;
 }) => ({
-  APP_TEST_MANAGED_SUITE_SELECTOR: input.capabilities.suiteSelector,
   APP_TEST_MANAGED_LIFECYCLE_CAPABILITY: input.capabilities.lifecycle,
   APP_TEST_MANAGED_LIFECYCLE_SOCKET: input.socketPath,
   APP_TEST_MANAGED_PUBLIC_PROFILE: JSON.stringify(input.publicProfile),
+  APP_TEST_MANAGED_SUITE_SELECTOR: input.capabilities.suiteSelector,
 });
 export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDependencies) => {
   const providers = new WeakMap<HostedOperatorContext, Promise<ManagedRuntimeSandboxPort>>();
@@ -226,7 +226,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     return await pending;
   };
   const assertLocator = async (context: HostedOperatorContext, record: ContinuityRecord) => {
-    const locator = record.locator;
+    const { locator } = record;
     if (
       locator === undefined ||
       locator.attemptId !== record.attemptId ||
@@ -240,7 +240,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     if (session.id !== locator.providerSessionId) {
       throw unavailable();
     }
-    return { provider, locator };
+    return { locator, provider };
   };
   const writeCurrent = async (provider: ManagedRuntimeSandboxPort, record: ContinuityRecord) => {
     if (record.current === undefined || record.locator === undefined) {
@@ -250,12 +250,12 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     const temporary = `${file}.${record.fence}.next`;
     await provider.writeFiles([
       {
-        path: temporary,
         content: JSON.stringify({
           ...record.current,
           leaseExpiresAt: managedRuntimeOwnerLease(record.current.leaseExpiresAt),
         }),
         mode: 0o600,
+        path: temporary,
       },
     ]);
     await provider.fs.rename(temporary, file);
@@ -302,7 +302,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     }
     const session = await currentSession(provider);
     if (session.id === locator.providerSessionId) {
-      return { locator, current: record.current };
+      return { current: record.current, locator };
     }
     if (!canRebindUndispatchedContinuityRuntime(record)) {
       throw unavailable();
@@ -314,174 +314,48 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     const recoveredLocator = { ...locator, providerSessionId: session.id };
     const current = continuityCurrentSchema.parse({
       ...record.current,
-      providerSessionId: session.id,
       leaseExpiresAt: expiresAt,
+      providerSessionId: session.id,
     });
     await assertCurrent();
-    await checkpoint({ locator: recoveredLocator, current });
-    return { locator: recoveredLocator, current };
+    await checkpoint({ current, locator: recoveredLocator });
+    return { current, locator: recoveredLocator };
   };
   const runtime: HostedContinuityDependencies["runtime"] = {
-    async start(context, record, _capabilities, assertCurrent, checkpoint) {
-      const descriptor = managedRuntimeWorkerDescriptorSchema.parse(
-        record.locator?.worker ?? deps.worker,
-      );
-      const { appPort, bridgePort } = record.plan.runtime;
-      await assertCurrent();
-      const provider = await providerFor(context, record.plan);
-      let locator = record.locator;
-      let retainedCurrent = record.current;
-      if (locator === undefined) {
-        if (record.attemptId === undefined || record.approval === undefined) {
-          throw unavailable();
-        }
-        const session = await currentSession(provider);
-        const expiresAt = provider.expiresAt?.toISOString();
-        if (expiresAt === undefined || Date.parse(expiresAt) <= Date.now()) {
-          throw unavailable();
-        }
-        const directory = `/tmp/autograph-managed-runtime/${record.requestId}/${record.attemptId}`;
-        locator = {
-          sandboxId: record.plan.runtime.sandboxId,
-          root: record.plan.runtime.root,
-          providerSessionId: session.id,
-          worker: descriptor,
-          attemptId: record.attemptId,
-          rootDirectory: directory,
-        };
-        const current = continuityCurrentSchema.parse({
-          intentId: record.requestId,
-          approvalRef: record.approval.approvalId,
-          owner: { ...record.plan.authority, sessionId: record.plan.target.sessionId },
-          appId: record.plan.target.appId,
-          runtimeAttemptId: record.attemptId,
-          fence: record.fence,
-          sandboxId: provider.name,
-          providerSessionId: session.id,
-          state: "starting",
-          leaseExpiresAt: expiresAt,
-        });
-        await checkpoint({ locator, current });
-      } else {
-        ({ locator, current: retainedCurrent } = await recoverUndispatchedLocator(
-          provider,
-          record,
-          locator,
-          assertCurrent,
-          checkpoint,
-        ));
+    async close(context, record, checkpoint) {
+      let failure: unknown;
+      try {
+        await closeOwnedCommand(context, record);
+      } catch (error) {
+        failure = error;
       }
-      if (locator.commandId === undefined) {
-        const current =
-          retainedCurrent ??
-          continuityCurrentSchema.parse({
-            intentId: record.requestId,
-            approvalRef: record.approval?.approvalId,
-            owner: { ...record.plan.authority, sessionId: record.plan.target.sessionId },
-            appId: record.plan.target.appId,
-            runtimeAttemptId: record.attemptId,
-            fence: record.fence,
-            sandboxId: provider.name,
-            providerSessionId: locator.providerSessionId,
-            state: "starting",
-            leaseExpiresAt: provider.expiresAt?.toISOString(),
+      if (
+        record.workerAsset?.sourceCreationAttempted === true &&
+        record.workerAsset.disposed !== true
+      ) {
+        try {
+          if (record.attemptId === undefined) {
+            throw unavailable();
+          }
+          await deps.disposeWorkerAsset({
+            attemptId: record.attemptId,
+            checkpoint,
+            state: record.workerAsset,
           });
-        if (record.attemptId === undefined) {
-          throw unavailable();
+        } catch (error) {
+          failure ??= error;
         }
-        await deps.installWorkerAsset({
-          target: provider,
-          descriptor,
-          attemptId: record.attemptId,
-          state: record.workerAsset,
-          assertCurrent,
-          checkpoint: async (workerAsset) => {
-            await checkpoint({ workerAsset });
-          },
-        });
-        // Installation verifies the configured binary and target readback through the file API.
-        const material = await deps.readExecution(context, record.plan);
-        const profile =
-          record.publicProfile ??
-          (await readManagedRuntimePublicProfile({
-            appId: record.plan.target.appId,
-            publicOrigin: record.plan.gateway.publicOrigin,
-            readPublicJwks: async (url) => await deps.readPublicJwks(context, url),
-          }));
-        await checkpoint({ publicProfile: profile });
-        const capabilities = _capabilities;
-        const input = managedRuntimeEntryInputSchema.parse({
-          version: 1,
-          current,
-          profile,
-          actors: record.plan.actors,
-          root: record.plan.runtime.root,
-          rootDirectory: locator.rootDirectory,
-          appEnvironment: restrictedOperatorEnvironment(
-            record.plan.preparedPlan,
-            material.environment,
-            record.plan.authority,
-          ),
-          appPort,
-          bridgePort,
-          lifecycleSha256: managedCapabilitySha256(capabilities.lifecycle),
-          transportSha256: managedCapabilitySha256(capabilities.transport),
-        });
-        // File API transports private runtime bytes; they are never command arguments or workflow/model results.
-        await provider.fs.mkdir(locator.rootDirectory, { recursive: true });
-        await provider.fs.chmod(locator.rootDirectory, 0o700);
-        const file = `${locator.rootDirectory}/input.json`;
-        await provider.writeFiles([{ path: file, content: JSON.stringify(input), mode: 0o600 }]);
-        await provider.update({
-          networkPolicy: "allow-all",
-          ports: [...new Set([...provider.routes.map((route) => route.port), bridgePort])],
-        });
-        await assertCurrent();
-        locator = { ...locator, dispatchAttempted: true };
-        await checkpoint({ locator });
-        const command = await provider.runCommand({
-          cmd: descriptor.executablePath,
-          args: [descriptor.subcommand, "--input-file", file],
-          env: {},
-          detached: true,
-          signal: deps.signal(context),
-        });
-        locator = { ...locator, commandId: command.cmdId };
-        await checkpoint({ locator });
       }
-      if (locator.commandId === undefined) {
-        throw unavailable();
+      if (failure !== undefined) {
+        throw failure instanceof Error ? failure : unavailable();
       }
-      const ready = await awaitReady(provider, locator, assertCurrent, deps.signal(context));
-      const approval = assertReadyIdentity(record, locator, ready);
-      const target = {
-        projectId: record.plan.runtime.projectId,
-        ownerId: record.plan.runtime.ownerId,
-        sandboxId: provider.name,
-        providerSessionId: locator.providerSessionId,
-        origin: new URL(provider.domain(bridgePort)).origin,
-        bridgePort,
-      };
-      const projection = continuityProjectionSchema.parse({
-        version: 1,
-        provenance: "trusted-operator-published-managed-target",
-        intentId: record.requestId,
-        approvalRef: approval.approvalId,
-        owner: ready.current.owner,
-        appId: record.plan.target.appId,
-        preparedOperationRef: record.plan.originalSetup.operationRef,
-        gateway: record.plan.gateway,
-        approvedTarget: target,
-        observation: { ...target, expiresAt: ready.current.leaseExpiresAt },
-        runtimeAttemptId: record.attemptId,
-        fence: record.fence,
-        leaseExpiresAt: ready.current.leaseExpiresAt,
-        state: "ready",
-        actors: record.plan.actors,
-        suiteSelectorSha256: managedCapabilitySha256(_capabilities.suiteSelector),
-        transportSha256: managedCapabilitySha256(_capabilities.transport),
-      });
-      await checkpoint({ current: ready.current, projection });
+    },
+    async renew(context, record) {
+      if (record.current === undefined || record.locator === undefined) {
+        return;
+      }
+      const provider = await providerFor(context, record.plan);
+      await writeCurrent(provider, record);
     },
     async runSuite(context, record, capabilities, assertCurrent, checkpoint, allowDispatch) {
       await assertCurrent();
@@ -506,29 +380,29 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
       }
       const prepared = await restorePreparedRuntimeExecution({
         appId: record.plan.target.appId,
-        root: record.plan.runtime.root,
-        provider,
-        browserTestBaseUrl: record.plan.gateway.publicOrigin,
-        normalActors: material.normalActors,
-        privateValues: [capabilities.suiteSelector, capabilities.lifecycle],
         binding: {
           branch: record.plan.target.branch,
           environment: material.environment,
           files: { "environment.json": JSON.stringify(material.environment) },
+          persistFiles: async () => {},
           projectId: record.plan.target.projectId,
           stateDirectory: `${locator.rootDirectory}/suite`,
-          persistFiles: () => Promise.resolve(),
         },
-        observeInstallation: () => Promise.resolve(material.proof),
+        browserTestBaseUrl: record.plan.gateway.publicOrigin,
+        normalActors: material.normalActors,
+        observeInstallation: async () => material.proof,
+        privateValues: [capabilities.suiteSelector, capabilities.lifecycle],
+        provider,
         resumeCommand: async (commandId) => await provider.getCommand(commandId),
+        root: record.plan.runtime.root,
         signal: deps.signal(context),
       });
       const privateEnvironment = managedSuiteEnvironment({
         capabilities,
-        socketPath: ready.socketPath,
         publicProfile: profile,
+        socketPath: ready.socketPath,
       });
-      const runTask = prepared.runTask;
+      const { runTask } = prepared;
       const managed = {
         ...prepared,
         runTask: async (input: Parameters<typeof runTask>[0]) =>
@@ -540,65 +414,193 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
                   browserSelection: record.plan.runtime.browserSelection,
                   frozenBrowserSelection: true,
                 }),
-            environment: { ...input.environment, ...privateEnvironment },
-            commandId: record.suiteCommandId,
-            commandCheckpoint: checkpoint,
             allowDispatch,
+            commandCheckpoint: checkpoint,
+            commandId: record.suiteCommandId,
+            environment: { ...input.environment, ...privateEnvironment },
           }),
       };
       const result = await runAppBrowserTests({
         appId: record.plan.target.appId,
-        root: record.plan.runtime.root,
-        sandbox: {
-          run: () => Promise.reject(unavailable()),
-        },
-        runtime: managed,
-        signal: deps.signal(context),
         continuation: {
-          commandId: record.suiteCommandId,
-          commandCheckpoint: checkpoint,
           allowDispatch,
+          commandCheckpoint: checkpoint,
+          commandId: record.suiteCommandId,
         },
+        root: record.plan.runtime.root,
+        runtime: managed,
+        sandbox: {
+          run: async () => {
+            throw unavailable();
+          },
+        },
+        signal: deps.signal(context),
       });
       if (result.exitCode === null) {
         throw unavailable();
       }
       return { exitCode: result.exitCode };
     },
-    async close(context, record, checkpoint) {
-      let failure: unknown;
-      try {
-        await closeOwnedCommand(context, record);
-      } catch (error) {
-        failure = error;
-      }
-      if (
-        record.workerAsset?.sourceCreationAttempted === true &&
-        record.workerAsset.disposed !== true
-      ) {
-        try {
-          if (record.attemptId === undefined) {
-            throw unavailable();
-          }
-          await deps.disposeWorkerAsset({
-            attemptId: record.attemptId,
-            state: record.workerAsset,
-            checkpoint,
-          });
-        } catch (error) {
-          failure ??= error;
-        }
-      }
-      if (failure !== undefined) {
-        throw failure instanceof Error ? failure : unavailable();
-      }
-    },
-    async renew(context, record) {
-      if (record.current === undefined || record.locator === undefined) {
-        return;
-      }
+    async start(context, record, _capabilities, assertCurrent, checkpoint) {
+      const descriptor = managedRuntimeWorkerDescriptorSchema.parse(
+        record.locator?.worker ?? deps.worker,
+      );
+      const { appPort, bridgePort } = record.plan.runtime;
+      await assertCurrent();
       const provider = await providerFor(context, record.plan);
-      await writeCurrent(provider, record);
+      let { locator } = record;
+      let retainedCurrent = record.current;
+      if (locator === undefined) {
+        if (record.attemptId === undefined || record.approval === undefined) {
+          throw unavailable();
+        }
+        const session = await currentSession(provider);
+        const expiresAt = provider.expiresAt?.toISOString();
+        if (expiresAt === undefined || Date.parse(expiresAt) <= Date.now()) {
+          throw unavailable();
+        }
+        const directory = `/tmp/autograph-managed-runtime/${record.requestId}/${record.attemptId}`;
+        locator = {
+          attemptId: record.attemptId,
+          providerSessionId: session.id,
+          root: record.plan.runtime.root,
+          rootDirectory: directory,
+          sandboxId: record.plan.runtime.sandboxId,
+          worker: descriptor,
+        };
+        const current = continuityCurrentSchema.parse({
+          appId: record.plan.target.appId,
+          approvalRef: record.approval.approvalId,
+          fence: record.fence,
+          intentId: record.requestId,
+          leaseExpiresAt: expiresAt,
+          owner: { ...record.plan.authority, sessionId: record.plan.target.sessionId },
+          providerSessionId: session.id,
+          runtimeAttemptId: record.attemptId,
+          sandboxId: provider.name,
+          state: "starting",
+        });
+        await checkpoint({ current, locator });
+      } else {
+        ({ locator, current: retainedCurrent } = await recoverUndispatchedLocator(
+          provider,
+          record,
+          locator,
+          assertCurrent,
+          checkpoint,
+        ));
+      }
+      if (locator.commandId === undefined) {
+        const current =
+          retainedCurrent ??
+          continuityCurrentSchema.parse({
+            appId: record.plan.target.appId,
+            approvalRef: record.approval?.approvalId,
+            fence: record.fence,
+            intentId: record.requestId,
+            leaseExpiresAt: provider.expiresAt?.toISOString(),
+            owner: { ...record.plan.authority, sessionId: record.plan.target.sessionId },
+            providerSessionId: locator.providerSessionId,
+            runtimeAttemptId: record.attemptId,
+            sandboxId: provider.name,
+            state: "starting",
+          });
+        if (record.attemptId === undefined) {
+          throw unavailable();
+        }
+        await deps.installWorkerAsset({
+          assertCurrent,
+          attemptId: record.attemptId,
+          checkpoint: async (workerAsset) => {
+            await checkpoint({ workerAsset });
+          },
+          descriptor,
+          state: record.workerAsset,
+          target: provider,
+        });
+        // Installation verifies the configured binary and target readback through the file API.
+        const material = await deps.readExecution(context, record.plan);
+        const profile =
+          record.publicProfile ??
+          (await readManagedRuntimePublicProfile({
+            appId: record.plan.target.appId,
+            publicOrigin: record.plan.gateway.publicOrigin,
+            readPublicJwks: async (url) => await deps.readPublicJwks(context, url),
+          }));
+        await checkpoint({ publicProfile: profile });
+        const capabilities = _capabilities;
+        const input = managedRuntimeEntryInputSchema.parse({
+          actors: record.plan.actors,
+          appEnvironment: restrictedOperatorEnvironment(
+            record.plan.preparedPlan,
+            material.environment,
+            record.plan.authority,
+          ),
+          appPort,
+          bridgePort,
+          current,
+          lifecycleSha256: managedCapabilitySha256(capabilities.lifecycle),
+          profile,
+          root: record.plan.runtime.root,
+          rootDirectory: locator.rootDirectory,
+          transportSha256: managedCapabilitySha256(capabilities.transport),
+          version: 1,
+        });
+        // File API transports private runtime bytes; they are never command arguments or workflow/model results.
+        await provider.fs.mkdir(locator.rootDirectory, { recursive: true });
+        await provider.fs.chmod(locator.rootDirectory, 0o700);
+        const file = `${locator.rootDirectory}/input.json`;
+        await provider.writeFiles([{ content: JSON.stringify(input), mode: 0o600, path: file }]);
+        await provider.update({
+          networkPolicy: "allow-all",
+          ports: [...new Set([...provider.routes.map((route) => route.port), bridgePort])],
+        });
+        await assertCurrent();
+        locator = { ...locator, dispatchAttempted: true };
+        await checkpoint({ locator });
+        const command = await provider.runCommand({
+          args: [descriptor.subcommand, "--input-file", file],
+          cmd: descriptor.executablePath,
+          detached: true,
+          env: {},
+          signal: deps.signal(context),
+        });
+        locator = { ...locator, commandId: command.cmdId };
+        await checkpoint({ locator });
+      }
+      if (locator.commandId === undefined) {
+        throw unavailable();
+      }
+      const ready = await awaitReady(provider, locator, assertCurrent, deps.signal(context));
+      const approval = assertReadyIdentity(record, locator, ready);
+      const target = {
+        bridgePort,
+        origin: new URL(provider.domain(bridgePort)).origin,
+        ownerId: record.plan.runtime.ownerId,
+        projectId: record.plan.runtime.projectId,
+        providerSessionId: locator.providerSessionId,
+        sandboxId: provider.name,
+      };
+      const projection = continuityProjectionSchema.parse({
+        actors: record.plan.actors,
+        appId: record.plan.target.appId,
+        approvalRef: approval.approvalId,
+        approvedTarget: target,
+        fence: record.fence,
+        gateway: record.plan.gateway,
+        intentId: record.requestId,
+        leaseExpiresAt: ready.current.leaseExpiresAt,
+        observation: { ...target, expiresAt: ready.current.leaseExpiresAt },
+        owner: ready.current.owner,
+        preparedOperationRef: record.plan.originalSetup.operationRef,
+        provenance: "trusted-operator-published-managed-target",
+        runtimeAttemptId: record.attemptId,
+        state: "ready",
+        suiteSelectorSha256: managedCapabilitySha256(_capabilities.suiteSelector),
+        transportSha256: managedCapabilitySha256(_capabilities.transport),
+        version: 1,
+      });
+      await checkpoint({ current: ready.current, projection });
     },
   };
   return runtime;

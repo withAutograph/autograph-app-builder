@@ -5,26 +5,20 @@ import {
 } from "./postgres-hosted-checkpoint-history";
 
 const fixture = () => ({
-  version: 1 as const,
   binding: {
+    adapterGeneration: 2,
+    adapterSessionId: "adapter",
+    approvalSessionId: "original-session",
     principal: {
-      issuer: "https://identity.example",
       audience: "builder",
-      workspaceId: "workspace",
+      issuer: "https://identity.example",
       ownerUserId: "owner",
       scopes: ["autograph:get"],
+      workspaceId: "workspace",
     },
     sessionId: "session",
-    approvalSessionId: "original-session",
-    adapterSessionId: "adapter",
-    adapterGeneration: 2,
   },
-  sourceCheckpoint: {
-    id: "00000000-0000-4000-8000-000000000001",
-    digest: `sha256:${"a".repeat(64)}`,
-    eventCount: 5,
-  },
-  events: [{ type: "status" as const, status: "working" as const, index: 0 }],
+  events: [{ index: 0, status: "working" as const, type: "status" as const }],
   nativeObservationState: {
     adapterSessionId: "adapter",
     artifactReadback: {
@@ -45,22 +39,28 @@ const fixture = () => ({
     version: 1 as const,
   },
   privateApprovalCaptureState: {
-    sessionId: "original-session",
-    version: 1 as const,
     pendingRequests: [],
     receipts: [],
+    sessionId: "original-session",
+    version: 1 as const,
   },
+  sourceCheckpoint: {
+    digest: `sha256:${"a".repeat(64)}`,
+    eventCount: 5,
+    id: "00000000-0000-4000-8000-000000000001",
+  },
+  version: 1 as const,
 });
 
 describe("approval replay checkpoint progress", () => {
   it("coexists with the normal incremental cursor and preserves the original source checkpoint", () => {
     const progress = fixture();
     const metadata = pagedCheckpointMetadataSchema.parse({
-      version: 1,
-      capturedAtEpochMs: 1,
-      status: "waiting",
-      nativeObservationState: progress.nativeObservationState,
       approvalReplayProgress: progress,
+      capturedAtEpochMs: 1,
+      nativeObservationState: progress.nativeObservationState,
+      status: "waiting",
+      version: 1,
     });
     expect(metadata.approvalReplayProgress).toEqual(progress);
     expect(metadata.nativeObservationState).toEqual(progress.nativeObservationState);
@@ -93,9 +93,9 @@ describe("approval replay checkpoint progress", () => {
   it("continues to accept legacy checkpoint metadata without replay progress", () => {
     expect(
       pagedCheckpointMetadataSchema.safeParse({
-        version: 1,
         capturedAtEpochMs: 1,
         status: "waiting",
+        version: 1,
       }).success,
     ).toBe(true);
   });

@@ -72,19 +72,17 @@ export const applicationSourceOmissionReason = (
   return undefined;
 };
 export const applicationSourceFileSchema = z.strictObject({
-  path: sourcePath,
-  mode: z.enum(["100644", "100755"]),
-  sha256: digest,
   bytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  mode: z.enum(["100644", "100755"]),
+  path: sourcePath,
+  sha256: digest,
 });
 export const applicationSourceManifestSchema = z
   .strictObject({
-    version: z.literal(1),
-    kind: z.literal("application-source-v1"),
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
     displayName: z.string().min(1),
-    sourceSessionId: z.string().min(1),
     files: z.array(applicationSourceFileSchema).min(1),
+    kind: z.literal("application-source-v1"),
     omissions: z.array(
       z.strictObject({
         path: sourcePath,
@@ -97,6 +95,8 @@ export const applicationSourceManifestSchema = z
         ]),
       }),
     ),
+    sourceSessionId: z.string().min(1),
+    version: z.literal(1),
   })
   .superRefine((manifest, context) => {
     const paths = [...manifest.files, ...manifest.omissions].map((entry) => entry.path);
@@ -126,25 +126,25 @@ export const applicationSourceManifestSchema = z
   }));
 export type ApplicationSourceManifest = z.infer<typeof applicationSourceManifestSchema>;
 export const applicationSourceArtifactSchema = z.strictObject({
+  files: z.array(z.strictObject({ contentBase64: z.string(), path: sourcePath })),
   manifest: applicationSourceManifestSchema,
-  files: z.array(z.strictObject({ path: sourcePath, contentBase64: z.string() })),
 });
 export type ApplicationSourceArtifact = z.infer<typeof applicationSourceArtifactSchema>;
 export const sourceCandidateReferenceSchema = z.strictObject({
-  kind: z.literal("application-source-candidate-v1"),
-  uploadId: z.uuid(),
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+  kind: z.literal("application-source-candidate-v1"),
   manifestDigest: digest,
+  uploadId: z.uuid(),
 });
 export type SourceCandidateReference = z.infer<typeof sourceCandidateReferenceSchema>;
 
 export const applicationSourceExportReferenceSchema = z.strictObject({
-  kind: z.literal("application-source-export-v1"),
   appId: z.string(),
-  sourceSessionId: z.string(),
-  manifestDigest: digest,
+  bytes: z.number().int().nonnegative(),
   downloadPath: z.string().regex(/^\/application-source\/[A-Za-z0-9._:@-]+\/[a-f0-9]{64}$/u),
   fileCount: z.number().int().nonnegative(),
-  bytes: z.number().int().nonnegative(),
+  kind: z.literal("application-source-export-v1"),
+  manifestDigest: digest,
   omissionCount: z.number().int().nonnegative(),
+  sourceSessionId: z.string(),
 });

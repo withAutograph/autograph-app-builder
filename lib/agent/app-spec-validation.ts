@@ -59,7 +59,7 @@ export const createBuildReadyAppSpecScanner = () => {
       const marker = /^[ \t]*(?<marker>`{3,}|~{3,})(?<info>.*)$/u.exec(line)?.groups;
       if (fence === undefined) {
         if (marker?.marker !== undefined) {
-          fence = { marker: marker.marker, json: marker.info?.trim().toLowerCase() === "json" };
+          fence = { json: marker.info?.trim().toLowerCase() === "json", marker: marker.marker };
         }
         return;
       }
@@ -83,7 +83,6 @@ export const createBuildReadyAppSpecScanner = () => {
       return ready
         ? { valid: true }
         : {
-            valid: false,
             issues: [
               {
                 code: "build_ready_intent",
@@ -91,6 +90,7 @@ export const createBuildReadyAppSpecScanner = () => {
                   "Declare explicit build-ready intent in a JSON fenced block with status build-ready. A later draft status keeps the artifact in planning.",
               },
             ],
+            valid: false,
           };
     },
   };

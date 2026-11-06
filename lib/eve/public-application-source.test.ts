@@ -3,48 +3,48 @@ import { expect, it } from "vitest";
 import { latestInstalledApplicationSource } from "./public-application-source";
 
 const reference = {
-  kind: "application-source-export-v1",
   appId: "app",
-  sourceSessionId: "session",
-  manifestDigest: "a".repeat(64),
+  bytes: 123,
   downloadPath: `/application-source/session/${"a".repeat(64)}`,
   fileCount: 2,
-  bytes: 123,
+  kind: "application-source-export-v1",
+  manifestDigest: "a".repeat(64),
   omissionCount: 1,
+  sourceSessionId: "session",
 };
-const meta = { id: "event", at: "2026-11-03T00:00:00Z" };
+const meta = { at: "2026-11-03T00:00:00Z", id: "event" };
 const request: MessageStreamEvent = {
-  type: "actions.requested",
-  meta,
   data: {
-    turnId: "turn",
-    sequence: 1,
-    stepIndex: 0,
     actions: [
       {
-        kind: "tool-call",
         callId: "export-call",
-        toolName: "export-application-source",
         input: { displayName: "App" },
+        kind: "tool-call",
+        toolName: "export-application-source",
       },
     ],
+    sequence: 1,
+    stepIndex: 0,
+    turnId: "turn",
   },
+  meta,
+  type: "actions.requested",
 };
 const result: MessageStreamEvent = {
-  type: "action.result",
-  meta,
   data: {
-    turnId: "turn",
-    sequence: 2,
-    stepIndex: 0,
-    status: "completed",
     result: {
-      kind: "tool-result",
       callId: "export-call",
-      toolName: "export-application-source",
+      kind: "tool-result",
       output: reference,
+      toolName: "export-application-source",
     },
+    sequence: 2,
+    status: "completed",
+    stepIndex: 0,
+    turnId: "turn",
   },
+  meta,
+  type: "action.result",
 };
 it("projects only a matching completed native source-export receipt", () => {
   expect(latestInstalledApplicationSource([result])).toBeUndefined();

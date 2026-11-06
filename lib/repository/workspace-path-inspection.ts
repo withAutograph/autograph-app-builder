@@ -23,22 +23,22 @@ export const normalizedWorkspacePath = (input: string): string => {
   return selected;
 };
 const entrySchema = z.strictObject({
-  path: z.string(),
   kind: z.enum(["file", "directory", "symlink", "other"]),
+  path: z.string(),
 });
 const resultSchema = z.discriminatedUnion("kind", [
   z.strictObject({
+    continuation: z.strictObject({ directoryOffset: z.number().int().nonnegative() }).optional(),
+    entries: z.array(entrySchema),
     kind: z.literal("workspace-directory"),
     path: z.string(),
     resolvedPath: z.string(),
-    entries: z.array(entrySchema),
-    continuation: z.strictObject({ directoryOffset: z.number().int().nonnegative() }).optional(),
   }),
   z.strictObject({
+    entryKind: z.enum(["file", "other"]),
     kind: z.literal("workspace-entry"),
     path: z.string(),
     resolvedPath: z.string(),
-    entryKind: z.enum(["file", "other"]),
   }),
   z.strictObject({ kind: z.literal("workspace-missing"), path: z.string() }),
   z.strictObject({ kind: z.literal("workspace-path-denied") }),
@@ -102,10 +102,10 @@ export const inspectWorkspacePath = async (input: {
     throw new Error("The requested archive is outside the selected app baseline.");
   }
   const base = {
+    continuation: { directoryOffset: Number.MAX_SAFE_INTEGER },
+    entries: [],
     kind: "workspace-directory",
     path: selected,
-    entries: [],
-    continuation: { directoryOffset: Number.MAX_SAFE_INTEGER },
   };
   const entryBytes =
     EVE_NATIVE_RESULT_PAGE_BYTES - serializedNativeActionResultBytes(base, input.metadata) - 2;
@@ -115,11 +115,11 @@ export const inspectWorkspacePath = async (input: {
   input.signal?.throwIfAborted();
   const observed = await input.sandbox.run({
     command: workspaceInspectionCommand({
-      root: WORKSPACE_REPOSITORY_ROOT,
-      relativePath: path.posix.relative(WORKSPACE_REPOSITORY_ROOT, selected),
-      requestedPath: selected,
       directoryOffset: input.directoryOffset ?? 0,
       entryBytes,
+      relativePath: path.posix.relative(WORKSPACE_REPOSITORY_ROOT, selected),
+      requestedPath: selected,
+      root: WORKSPACE_REPOSITORY_ROOT,
     }),
     abortSignal: input.signal,
     // Inspection runs only the maintained built-in reader, never inherited app preload hooks.
@@ -165,10 +165,10 @@ export const inspectWorkspacePath = async (input: {
   if (result.kind === "workspace-entry") {
     return fitOutputNativeFrame(
       {
-        kind: result.kind,
-        path: result.path,
         entryKind: result.entryKind,
         guidance: "Read file content with paths, using this exact file path.",
+        kind: result.kind,
+        path: result.path,
       },
       input.metadata,
       EVE_NATIVE_RESULT_PAGE_BYTES,

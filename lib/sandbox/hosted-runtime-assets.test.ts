@@ -94,17 +94,17 @@ it("packages edited and additional skill files for source-free runtime transfer"
       `const {readHostedManagedSeedFiles} = await import(${JSON.stringify(pathToFileURL(loader).href)});
 process.stdout.write(JSON.stringify(readHostedManagedSeedFiles().map(file => ({path:file.path,content:file.content.toString("utf-8")}))));`,
     ],
-    { cwd: root, env: childEnvironment, encoding: "utf-8" },
+    { cwd: root, encoding: "utf-8", env: childEnvironment },
   );
   expect(JSON.parse(loaded)).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
-        path: "$HOME/.agents/skills/create-app/SKILL.md",
         content: "Updated synthetic instruction.",
+        path: "$HOME/.agents/skills/create-app/SKILL.md",
       }),
       expect.objectContaining({
-        path: "$HOME/.agents/skills/additional/references/new.md",
         content: "Additional synthetic reference.",
+        path: "$HOME/.agents/skills/additional/references/new.md",
       }),
     ]),
   );

@@ -91,9 +91,10 @@ describe("preview stylesheet provenance", () => {
       from: "/reference/theme.css",
       map: { annotation: true, inline: true, sourcesContent: true },
     });
-    const sourceMap = output.css.match(
-      /sourceMappingURL=data:application\/json[^,]*,(?<sourceMap>[^*]+?)\s*\*\//u,
-    )?.[1];
+    const sourceMap =
+      /sourceMappingURL=data:application\/json[^,]*,(?<sourceMap>[^*]+?)\s*\*\//u.exec(
+        output.css,
+      )?.[1];
     expect(sourceMap).toBeDefined();
     if (!sourceMap) {
       throw new Error("Inline source map is missing");
@@ -158,9 +159,9 @@ it("preserves workspace executable modes when the preview compiler needs depende
   const html = "<html>Preview</html>";
   await expect(
     renderUiPreview(input, {
-      run,
       readTextFile: vi.fn().mockResolvedValue(html),
-      writeTextFile: vi.fn(() => Promise.resolve()),
+      run,
+      writeTextFile: vi.fn(async () => {}),
     }),
   ).resolves.toBe(html);
   const command = {

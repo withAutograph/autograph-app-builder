@@ -169,7 +169,7 @@ export function withHostedBuilderHandoffs(input: {
     ...input.service,
     async start(request) {
       if (request.handoffId === undefined) {
-        return input.service.start(request);
+        return await input.service.start(request);
       }
       if (
         input.service.bindStartAlias === undefined ||
@@ -660,7 +660,7 @@ export function createMcpRequestHandler(
         return unavailableResponse();
       }
       if (await isPublicDiscoveryRequest(request)) {
-        return createAutographMcpHandler(discoveryOnlyService, {
+        return await createAutographMcpHandler(discoveryOnlyService, {
           advertiseOauth: true,
           requestUrl: request.url,
         })(request);
@@ -673,14 +673,14 @@ export function createMcpRequestHandler(
           (selected.status === 401 || selected.status === 403) &&
           (await isToolCallRequest(request))
         ) {
-          return createAutographMcpHandler(authenticationRequiredService(challenge), {
+          return await createAutographMcpHandler(authenticationRequiredService(challenge), {
             advertiseOauth: true,
             requestUrl: request.url,
           })(request);
         }
         return selected;
       }
-      return createAutographMcpHandler(selected, {
+      return await createAutographMcpHandler(selected, {
         advertiseOauth: true,
         requestUrl: request.url,
       })(request);
@@ -697,7 +697,7 @@ export function createMcpRequestHandler(
         return unavailableResponse();
       }
     }
-    return createAutographMcpHandler(createEveSessionService(environment), {
+    return await createAutographMcpHandler(createEveSessionService(environment), {
       requestUrl: request.url,
     })(request);
   };

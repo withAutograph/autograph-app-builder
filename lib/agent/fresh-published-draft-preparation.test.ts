@@ -43,19 +43,19 @@ interface PrepareRequest {
 }
 
 const mocks = vi.hoisted(() => ({
-  workflow: undefined as unknown as Workflow,
-  candidate: undefined as unknown as Candidate,
   access: undefined as unknown as RepositoryAccessReceipt,
-  owned: undefined as unknown as Owned,
+  candidate: undefined as unknown as Candidate,
   onOwnedRead: undefined as undefined | (() => void),
   onSourceRead: undefined as undefined | (() => void),
+  owned: undefined as unknown as Owned,
   prepare: vi.fn<(request: PrepareRequest) => Promise<Candidate & { created: boolean }>>(),
+  workflow: undefined as unknown as Workflow,
 }));
 
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: () => mocks.workflow } }));
 vi.mock("./draft-reconciliation-state", () => ({
-  draftReconciliationState: { get: () => mocks.candidate },
   draftReconciliationCompletions: { get: () => [] },
+  draftReconciliationState: { get: () => mocks.candidate },
   publishedDraftRepairCompletions: { get: () => [] },
   samePersistedDraftCandidate: (left: unknown, right: unknown) =>
     // oxlint-disable-next-line unicorn/prefer-structured-clone, react-doctor/no-json-parse-stringify-clone -- Model the persisted JSON representation, which drops undefined fields.
@@ -88,13 +88,13 @@ vi.mock("./repository-access-state", async (importOriginal) => ({
 }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: async () => ({
+    inspectExistingDraftReconciliationSource: async () => {
+      mocks.onSourceRead?.();
+      return { base: { headSha: mocks.candidate.baseSha }, draft: mocks.owned.draft };
+    },
     inspectOwnedPublishedDraftRepairSource: async () => {
       mocks.onOwnedRead?.();
       return mocks.owned;
-    },
-    inspectExistingDraftReconciliationSource: async () => {
-      mocks.onSourceRead?.();
-      return { draft: mocks.owned.draft, base: { headSha: mocks.candidate.baseSha } };
     },
   }),
 }));
@@ -121,7 +121,7 @@ vi.mock("../repository/sandbox-draft-reconciliation", () => ({
 describe("owned fresh-template draft preparation after review recovery", () => {
   let fixture: Fixture;
   let root: string;
-  const ctx = { callId: "prepare", session: { id: "logical-original", auth: {} } } as never;
+  const ctx = { callId: "prepare", session: { auth: {}, id: "logical-original" } } as never;
   beforeEach(async () => {
     fixture = await freshFixture();
     root = mkdtempSync(path.join(tmpdir(), "builder-fresh-owned-"));
@@ -129,8 +129,8 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     mocks.workflow = structuredClone(fixture.currentContext[workflowKey]);
     mocks.candidate = {
       ...structuredClone(fixture.candidate),
-      root,
       reviewedLineage: structuredClone(fixture.reviewed),
+      root,
     };
     const origin = mocks.candidate.publishedOrigin;
     const scope = mocks.candidate.publicationScope;
@@ -150,30 +150,30 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     });
     mocks.owned = {
       draft: origin.draft,
-      source: origin.source,
       proposal: scope.proposal,
       publication: scope.publication,
+      source: origin.source,
     };
     mocks.onOwnedRead = undefined;
     mocks.onSourceRead = undefined;
     mocks.prepare.mockReset();
     mocks.prepare.mockImplementation(async (request) => ({
       ...structuredClone(mocks.candidate),
-      root: request.previousCandidate.root,
       created: false,
+      root: request.previousCandidate.root,
     }));
   });
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   });
 
   it("keeps the validated workflow and exact candidate/private edits when normal preparation reuses it", async () => {
     const before = structuredClone(mocks.candidate);
     const workflow = structuredClone(mocks.workflow);
     const result = await preparePublishedDraftReconciliation({
-      state: fixture.reviewed,
       ctx,
       pullRequestNumber: 42,
+      state: fixture.reviewed,
     });
     expect(result.root).toBe(before.root);
     expect(mocks.prepare).toHaveBeenCalledOnce();
@@ -208,9 +208,9 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       };
       await expect(
         preparePublishedDraftReconciliation({
-          state: fixture.reviewed,
           ctx,
           pullRequestNumber: 42,
+          state: fixture.reviewed,
         }),
       ).rejects.toThrow();
       expect(mocks.prepare).not.toHaveBeenCalled();
@@ -222,7 +222,7 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       mocks.candidate = { ...mocks.candidate, root: "/workspace/replaced" };
     };
     await expect(
-      preparePublishedDraftReconciliation({ state: fixture.reviewed, ctx, pullRequestNumber: 42 }),
+      preparePublishedDraftReconciliation({ ctx, pullRequestNumber: 42, state: fixture.reviewed }),
     ).rejects.toThrow("candidate changed");
     expect(mocks.prepare).not.toHaveBeenCalled();
   });
@@ -235,9 +235,9 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       } as Candidate;
     };
     const result = await preparePublishedDraftReconciliation({
-      state: fixture.reviewed,
       ctx,
       pullRequestNumber: 42,
+      state: fixture.reviewed,
     });
     expect(result.root).toBe(root);
     expect(readFileSync(path.join(result.root, "candidate.txt"), "utf-8")).toBe(
@@ -250,7 +250,7 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     mocks.access = signAccess({ ...unsigned, sessionId: "foreign" });
     expect(mocks.access.digest).not.toBe(digest);
     await expect(
-      preparePublishedDraftReconciliation({ state: fixture.reviewed, ctx, pullRequestNumber: 42 }),
+      preparePublishedDraftReconciliation({ ctx, pullRequestNumber: 42, state: fixture.reviewed }),
     ).rejects.toThrow("another session");
     expect(mocks.prepare).not.toHaveBeenCalled();
   });

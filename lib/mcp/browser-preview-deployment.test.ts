@@ -210,7 +210,7 @@ describe("deployment Browser preview route", () => {
     }
   });
   it("recovers the exact authenticated saved build before reading its artifact", async () => {
-    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
+    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(async () => {});
     const fixture = ownedFixture({ resumeRealmContinuation: resume });
     const response = await fixture.handler(fixture.request, {
       digest,
@@ -220,15 +220,15 @@ describe("deployment Browser preview route", () => {
     await expect(response.text()).resolves.toBe(content);
     expect(resume).toHaveBeenCalledTimes(1);
     expect(resume).toHaveBeenCalledWith({
-      principal: owner,
-      sessionId: fixture.publicId,
       adapterSessionId: fixture.record.adapterSessionId,
       environment: { EVE_HOSTED_ADAPTER: "1" },
+      principal: owner,
+      sessionId: fixture.publicId,
     });
   });
 
   it("does not recover another account's saved build", async () => {
-    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
+    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(async () => {});
     const fixture = ownedFixture({ resumeRealmContinuation: resume });
     providers.auth.mockResolvedValue({ user: { id: "other-owner" } });
     const response = await fixture.handler(fixture.request, {
@@ -341,22 +341,22 @@ describe("deployment Browser preview route", () => {
   );
 
   const recoveryBinding: NativeRecoveryBinding = {
-    version: 1,
-    operationId: "recovery-operation",
-    sourcePublicSessionId: "ses_parent",
-    sourceOwnerRunId: "wrun_original",
-    sourceAdapterGeneration: 1,
     logicalSessionId: "wrun_original",
+    operationId: "recovery-operation",
     originalAuthoritySessionId: "ses_parent",
-    parentCancellationRevision: 0,
     ownerRunId: "wrun_recovered",
+    parentCancellationRevision: 0,
     provenance: {
+      checkpointVersion: 1,
       kind: "committed-turn-output",
-      sourceStepId: "original-step",
       sourceEventId: "original-event",
       sourceSlot: 1,
-      checkpointVersion: 1,
+      sourceStepId: "original-step",
     },
+    sourceAdapterGeneration: 1,
+    sourceOwnerRunId: "wrun_original",
+    sourcePublicSessionId: "ses_parent",
+    version: 1,
   };
   const recoveredArtifact = (binding: NativeRecoveryBinding) => {
     const f = ownedFixture({

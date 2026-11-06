@@ -232,15 +232,15 @@ const ownedPublishedHead = async (input: {
   const { draft, prior, appliedReconciliation, readPublishedSource } = input;
   if (appliedReconciliation !== undefined) {
     return {
+      canonicalPublishedSourceMatched: false,
       headSha: draft.headSha,
       source: "retained-reconciliation",
-      canonicalPublishedSourceMatched: false,
     };
   }
   const fallback: ReconciliationBaseline = {
+    canonicalPublishedSourceMatched: false,
     headSha: prior?.branchSha,
     source: prior === undefined ? "none" : "original-publication",
-    canonicalPublishedSourceMatched: false,
   };
   if (
     prior === undefined ||
@@ -259,7 +259,7 @@ const ownedPublishedHead = async (input: {
       source.data.gitTree === draft.headTree,
     ].every(Boolean);
   return matched
-    ? { headSha: draft.headSha, source: "published-source", canonicalPublishedSourceMatched: true }
+    ? { canonicalPublishedSourceMatched: true, headSha: draft.headSha, source: "published-source" }
     : fallback;
 };
 
@@ -656,9 +656,9 @@ export function composeGitHubPublicationRuntime(input: {
           reconciliations: request.reconciliations ?? [],
           async verifyOwnedHead(draft, appliedReconciliation) {
             const prior = await readOwnedDraftPublication({
-              receipts,
               draft,
               proposalDigest: request.priorPublishedProposalDigest,
+              receipts,
             });
             if (
               prior === undefined ||
@@ -757,7 +757,7 @@ export function composeGitHubPublicationRuntime(input: {
       ) {
         throw new Error("The exact fresh-repository proposal is unavailable or changed.");
       }
-      return createApprovedFreshRepository({
+      return await createApprovedFreshRepository({
         adapter,
         approvedByCallId: request.approvedByCallId,
         contentSource: request.contentSource,
@@ -959,10 +959,10 @@ export function composeGitHubPublicationRuntime(input: {
       const observation = await adapter.prDelivery.inspect(reviewedTarget);
       return {
         ...observation,
-        reviewedTarget,
         reviewedRevision:
           observation.headSha === reviewedTarget.headSha &&
           observation.baseBranch === reviewedTarget.baseBranch,
+        reviewedTarget,
       };
     },
     async inspectOwnedPublishedDraftRepairSource(request) {
@@ -1003,10 +1003,10 @@ export function composeGitHubPublicationRuntime(input: {
         throw new Error("The original draft journal does not match this publication.");
       }
       const recorded = await request.readPublishedSource({
-        repositoryId: prior.repositoryId,
         branch: prior.branchName,
         gitSha: prior.branchSha,
         gitTree: prior.branchTree,
+        repositoryId: prior.repositoryId,
       });
       if (
         recorded === undefined ||
@@ -1038,20 +1038,20 @@ export function composeGitHubPublicationRuntime(input: {
         priorPublishedProposalDigest: proposal.digest,
         readPublishedSource: async (draft) =>
           await request.readPublishedSource({
-            repositoryId: draft.repositoryId,
             branch: draft.headBranch,
             gitSha: draft.headSha,
             gitTree: draft.headTree,
+            repositoryId: draft.repositoryId,
           }),
       };
       const draft = await this.inspectExistingDraftSource({
-        repositoryId: proposal.repositoryId,
-        owner: proposal.owner,
         name: proposal.name,
+        owner: proposal.owner,
         pullRequestNumber: prior.pullRequestNumber,
         recovery: recoveryInput,
+        repositoryId: proposal.repositoryId,
       });
-      await readOwnedDraftPublication({ receipts, proposalDigest: proposal.digest, draft });
+      await readOwnedDraftPublication({ draft, proposalDigest: proposal.digest, receipts });
       // verifiedBuilderOrigin.appId identifies the configured GitHub App. The generated
       // app is bound by its recorded source above and this publication's origin marker.
       if (
@@ -1062,9 +1062,9 @@ export function composeGitHubPublicationRuntime(input: {
       }
       const appliedReconciliation = await readAppliedOwnedReconciliation({
         adapter,
+        candidates: recoveryInput.reconciliations ?? [],
         draft,
         prior,
-        candidates: recoveryInput.reconciliations ?? [],
         recovery: ownedDraftRecovery(recoveryInput),
       });
       if (
@@ -1072,10 +1072,10 @@ export function composeGitHubPublicationRuntime(input: {
         (draft.headSha !== prior.branchSha || draft.headTree !== prior.branchTree)
       ) {
         const current = await request.readPublishedSource({
-          repositoryId: draft.repositoryId,
           branch: draft.headBranch,
           gitSha: draft.headSha,
           gitTree: draft.headTree,
+          repositoryId: draft.repositoryId,
         });
         const matches =
           current !== undefined &&
@@ -1092,34 +1092,34 @@ export function composeGitHubPublicationRuntime(input: {
         }
       }
       const source = await this.resolveImmutableSource({
+        approvedByCallId: request.resolvedByCallId,
         expectedInstallationId: request.expectedInstallationId,
-        repositoryId: draft.repositoryId,
-        ref: `refs/heads/${draft.headBranch}`,
         expectedSha: draft.headSha,
         expectedTree: draft.headTree,
-        approvedByCallId: request.resolvedByCallId,
+        ref: `refs/heads/${draft.headBranch}`,
+        repositoryId: draft.repositoryId,
       });
-      return { proposal, publication: prior, draft, source };
+      return { draft, proposal, publication: prior, source };
     },
     async inspectExistingDraftReconciliationSource(request) {
       const diagnostic: ReconciliationBaselineDiagnostic = {
-        source: "none",
+        canonicalPublishedSourceMatched: false,
         previousReconciliationPresent: request.previousReconciliation !== undefined,
         publishedReconciliationPresent: request.publishedReconciliation !== undefined,
-        canonicalPublishedSourceMatched: false,
+        source: "none",
       };
       try {
         const recoveryInput: DraftInspectionRecoveryInput = {
           ...request.recovery,
           priorPublishedProposalDigest:
             request.priorPublishedProposalDigest ?? request.recovery?.priorPublishedProposalDigest,
+          readPublishedSource: request.readPublishedSource ?? request.recovery?.readPublishedSource,
           reconciliations: [
             ...(request.recovery?.reconciliations ?? []),
             ...(request.publishedReconciliation === undefined
               ? []
               : [request.publishedReconciliation]),
           ],
-          readPublishedSource: request.readPublishedSource ?? request.recovery?.readPublishedSource,
         };
         const draft = await this.inspectExistingDraftSource({
           ...request,
@@ -1147,15 +1147,15 @@ export function composeGitHubPublicationRuntime(input: {
         }
         const publishedReconciliation = await readAppliedOwnedReconciliation({
           adapter,
+          candidates: [request.previousReconciliation, ...(recoveryInput.reconciliations ?? [])],
           draft,
           prior,
-          candidates: [request.previousReconciliation, ...(recoveryInput.reconciliations ?? [])],
           recovery: ownedDraftRecovery(recoveryInput),
         });
         const baseline = await ownedPublishedHead({
+          appliedReconciliation: publishedReconciliation,
           draft,
           prior,
-          appliedReconciliation: publishedReconciliation,
           readPublishedSource: recoveryInput.readPublishedSource,
         });
         diagnostic.source = baseline.source;
@@ -1186,7 +1186,7 @@ export function composeGitHubPublicationRuntime(input: {
         subjectDigest: proposal.digest,
         target: approvalTargetFromDraftProposal(proposal),
       });
-      return publishApprovedDraftPullRequest({
+      return await publishApprovedDraftPullRequest({
         adapter,
         approvedByCallId: request.approvedByCallId,
         contentSource: request.contentSource,
@@ -1198,7 +1198,7 @@ export function composeGitHubPublicationRuntime(input: {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async resolveImmutableSource(request) {
       if (adapter.targetSourceAdapter && input.authority) {
-        return resolveImmutableExistingSourceWithTargetProof({
+        return await resolveImmutableExistingSourceWithTargetProof({
           adapter: adapter.targetSourceAdapter,
           authority: input.authority,
           expectedInstallationId: request.expectedInstallationId,
@@ -1209,7 +1209,7 @@ export function composeGitHubPublicationRuntime(input: {
           resolvedByCallId: request.approvedByCallId,
         });
       }
-      return resolveImmutableExistingSource({
+      return await resolveImmutableExistingSource({
         adapter,
         expectedInstallationId: request.expectedInstallationId,
         expectedSha: request.expectedSha,
@@ -1363,7 +1363,7 @@ export function composeGitHubPublicationRuntime(input: {
         repositoryId: request.githubSource.repository.repositoryId,
       });
       const installation = await adapter.inspectInstallation(draftPublicationOperation);
-      return sealExistingDraftUpdate({
+      return await sealExistingDraftUpdate({
         adapter: draftUpdateAdapter,
         installation,
         ...(prior === undefined ? { adoptedDraft } : { priorPublication: prior }),
@@ -1481,8 +1481,8 @@ export function composeGitHubPublicationRuntime(input: {
       return await inspectAppliedExistingDraftReconciliation({
         adapter: draftReconciliationAdapter,
         proposal: request.proposal,
-        review: request.review,
         recovery: ownedDraftRecovery(request.recovery),
+        review: request.review,
       });
     },
     async reconcileExistingDraft(request) {
@@ -1490,8 +1490,8 @@ export function composeGitHubPublicationRuntime(input: {
         adapter: draftReconciliationAdapter,
         contentSource: request.contentSource,
         proposal: request.proposal,
-        review: request.review,
         recovery: ownedDraftRecovery(request.recovery),
+        review: request.review,
       });
     },
   };

@@ -62,8 +62,8 @@ describe("local Eve acceptance", () => {
       await expect(
         service.start({
           clientRequestId: "recover-original",
-          resumeSessionId: "original",
           resumeMode,
+          resumeSessionId: "original",
         }),
       ).rejects.toBeInstanceOf(LocalSessionRecoveryUnavailableError);
       expect(attach).not.toHaveBeenCalled();
@@ -76,13 +76,13 @@ describe("local Eve acceptance", () => {
     const recoverTerminal = vi.fn<() => Promise<void>>().mockResolvedValue();
     const service = createLocalEveSessionService(
       { sessions: { attach, create } as never },
-      { stateGeneration: "local-terminal-not-idle-takeover", recoverTerminal },
+      { recoverTerminal, stateGeneration: "local-terminal-not-idle-takeover" },
     );
     await expect(
       service.start({
-        resumeSessionId: "original",
-        resumeMode: "recover-idle",
         clientRequestId: "idle-mode-not-local-terminal",
+        resumeMode: "recover-idle",
+        resumeSessionId: "original",
       }),
     ).rejects.toBeInstanceOf(LocalSessionRecoveryUnavailableError);
     expect(recoverTerminal).not.toHaveBeenCalled();
@@ -143,7 +143,7 @@ describe("local Eve acceptance", () => {
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach: vi.fn(() => session),
-          create: vi.fn(() => Promise.resolve({ response, session })),
+          create: vi.fn(async () => ({ response, session })),
         } as never,
       },
       { stateGeneration: "recent-list" },
@@ -210,7 +210,7 @@ describe("local Eve acceptance", () => {
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach,
-          create: vi.fn(() => Promise.resolve({ response, session })),
+          create: vi.fn(async () => ({ response, session })),
         } as never,
       },
       { stateGeneration: "stream-recovery" },
@@ -274,7 +274,7 @@ describe("local Eve acceptance", () => {
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach,
-          create: vi.fn(() => Promise.resolve({ response, session })),
+          create: vi.fn(async () => ({ response, session })),
         } as never,
       },
       { stateGeneration: "clean-response-tail" },
@@ -292,7 +292,7 @@ describe("local Eve acceptance", () => {
     expect(snapshot).not.toHaveBeenCalled();
     expect(attach).toHaveBeenCalledWith(started.sessionId, { streamIndex: 1 });
 
-    tailReady.resolve(undefined as undefined);
+    tailReady.resolve();
     await vi.waitFor(async () => {
       await expect(
         service.get({ cursor: 0, limit: 100, sessionId: started.sessionId }),
@@ -333,7 +333,7 @@ describe("local Eve acceptance", () => {
           sessions: {
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             attach: vi.fn(() => session),
-            create: vi.fn(() => Promise.resolve({ response, session })),
+            create: vi.fn(async () => ({ response, session })),
           } as never,
         },
         { modelTurnTimeoutMs: 10, stateGeneration: "closed-response-timeout" },
@@ -391,7 +391,7 @@ describe("local Eve acceptance", () => {
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach: vi.fn(() => session),
-          create: vi.fn(() => Promise.resolve({ response, session })),
+          create: vi.fn(async () => ({ response, session })),
         } as never,
       },
       { stateGeneration },
@@ -464,14 +464,16 @@ describe("local Eve acceptance", () => {
       respond: vi.fn(async () => response),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
-      snapshot: vi.fn(() => Promise.reject(new ClientError(404, "Stored session unavailable"))),
+      snapshot: vi.fn(async () => {
+        throw new ClientError(404, "Stored session unavailable");
+      }),
       state: { sessionId: "wrun_previous_cycle" },
     };
     const client = {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
-        create: vi.fn(() => Promise.resolve({ response, session })),
+        create: vi.fn(async () => ({ response, session })),
       } as never,
     };
     const firstCycle = createLocalEveSessionService(client, {
@@ -517,16 +519,19 @@ describe("local Eve acceptance", () => {
     const events = [{ data: { turnId: "old-turn" }, type: "step.started" }] as MessageStreamEvent[];
     const tailOpened = Promise.withResolvers<AbortSignal>();
     const response = {
-      cancel: vi.fn(() => Promise.reject(new HostedCancellationUnsettledError())),
+      cancel: vi.fn(async () => {
+        throw new HostedCancellationUnsettledError();
+      }),
       async *[Symbol.asyncIterator]() {
         yield* events;
       },
     };
     const session = {
-      cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
-      snapshot: vi.fn(() =>
-        Promise.resolve({ events, session: { sessionId: "tail-restart", streamIndex: 1 } }),
-      ),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      snapshot: vi.fn(async () => ({
+        events,
+        session: { sessionId: "tail-restart", streamIndex: 1 },
+      })),
       state: { sessionId: "tail-restart" },
       async *stream({ signal }: { signal: AbortSignal }) {
         tailOpened.resolve(signal);
@@ -537,7 +542,7 @@ describe("local Eve acceptance", () => {
     const client = {
       sessions: {
         attach: vi.fn(() => session),
-        create: vi.fn(() => Promise.resolve({ response, session })),
+        create: vi.fn(async () => ({ response, session })),
       } as never,
     };
     const first = createLocalEveSessionService(client, {
@@ -610,7 +615,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach,
-        create: vi.fn(() => Promise.resolve({ response: oldResponse, session })),
+        create: vi.fn(async () => ({ response: oldResponse, session })),
       } as never,
     };
     const first = createLocalEveSessionService(client, {
@@ -657,7 +662,7 @@ describe("local Eve acceptance", () => {
       streamIndex: 1,
     });
     expect(session.snapshot).toHaveBeenCalledTimes(1);
-    oldResponseOpen.resolve(undefined as undefined);
+    oldResponseOpen.resolve();
   });
 
   it("keeps a verified prototype on cursor-at-tail and accepted follow-ups", async () => {
@@ -749,7 +754,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
-        create: vi.fn(() => Promise.resolve({ response: response(events), session })),
+        create: vi.fn(async () => ({ response: response(events), session })),
       } as never,
     });
     const started = await service.start({
@@ -880,7 +885,7 @@ describe("local Eve acceptance", () => {
       state: { sessionId: "wrun_prompt_return" },
     };
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const create = vi.fn(() => Promise.resolve({ response, session }));
+    const create = vi.fn(async () => ({ response, session }));
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService({
       sessions: { attach, create } as never,
@@ -938,15 +943,13 @@ describe("local Eve acceptance", () => {
         respond: vi.fn(async () => response),
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         send: vi.fn(async () => response),
-        snapshot: vi.fn(() =>
-          Promise.resolve({
-            events: durableEvents,
-            session: {
-              sessionId: "wrun_model_stalled",
-              streamIndex: durableEvents.length,
-            },
-          }),
-        ),
+        snapshot: vi.fn(async () => ({
+          events: durableEvents,
+          session: {
+            sessionId: "wrun_model_stalled",
+            streamIndex: durableEvents.length,
+          },
+        })),
         state: { sessionId: "wrun_model_stalled" },
       };
       const service = createLocalEveSessionService(
@@ -954,7 +957,7 @@ describe("local Eve acceptance", () => {
           sessions: {
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             attach: vi.fn(() => session),
-            create: vi.fn(() => Promise.resolve({ response, session })),
+            create: vi.fn(async () => ({ response, session })),
           } as never,
         },
         { modelTurnTimeoutMs: 10, stateGeneration: "model-turn-timeout" },
@@ -1022,7 +1025,7 @@ describe("local Eve acceptance", () => {
           sessions: {
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             attach: vi.fn(() => session),
-            create: vi.fn(() => Promise.resolve({ response, session })),
+            create: vi.fn(async () => ({ response, session })),
           } as never,
         },
         { modelTurnTimeoutMs: 10, stateGeneration: "model-turn-healthy" },
@@ -1047,7 +1050,7 @@ describe("local Eve acceptance", () => {
     const response = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => {
-        cancelled.resolve(undefined as undefined);
+        cancelled.resolve();
         return { status: "accepted" };
       }),
       async *[Symbol.asyncIterator]() {
@@ -1075,7 +1078,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
-        create: vi.fn(() => Promise.resolve({ response, session })),
+        create: vi.fn(async () => ({ response, session })),
       } as never,
     });
     const start = await service.start({
@@ -1123,7 +1126,7 @@ describe("local Eve acceptance", () => {
     try {
       const { promise: never } = Promise.withResolvers<unknown>();
       const response = {
-        cancel: vi.fn(() => never),
+        cancel: vi.fn(async () => await never),
         async *[Symbol.asyncIterator]() {
           yield {
             data: { turnId: "turn-cancel-timeout" },
@@ -1145,7 +1148,7 @@ describe("local Eve acceptance", () => {
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach: vi.fn(() => session),
-          create: vi.fn(() => Promise.resolve({ response, session })),
+          create: vi.fn(async () => ({ response, session })),
         } as never,
       });
       const started = await service.start({
@@ -1187,7 +1190,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
-        create: vi.fn(() => Promise.resolve({ response, session })),
+        create: vi.fn(async () => ({ response, session })),
       } as never,
     });
     const start = await service.start({
@@ -1258,7 +1261,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach,
-        create: vi.fn(() => Promise.resolve({ response: initial, session: created })),
+        create: vi.fn(async () => ({ response: initial, session: created })),
       } as never,
     });
     const started = await service.start({
@@ -1343,7 +1346,7 @@ const recoveryWaitingEvents: MessageStreamEvent[] = [
 ];
 
 const recoveryResponseFor = (events: MessageStreamEvent[]) => ({
-  cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
+  cancel: vi.fn(async () => ({ status: "accepted" })),
   async *[Symbol.asyncIterator]() {
     yield* events;
   },
@@ -1373,15 +1376,13 @@ describe("local public session recovery", () => {
     ];
     const sessionId = "wrun_lost_history";
     const session = {
-      cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
-      respond: vi.fn(() => Promise.resolve(recoveryResponseFor(recoveryWaitingEvents))),
-      send: vi.fn(() => Promise.resolve(recoveryResponseFor(recoveryWaitingEvents))),
-      snapshot: vi.fn(() =>
-        Promise.resolve({ events: [], session: { sessionId, streamIndex: 0 } }),
-      ),
+      cancel: vi.fn(async () => ({ status: "accepted" })),
+      respond: vi.fn(async () => recoveryResponseFor(recoveryWaitingEvents)),
+      send: vi.fn(async () => recoveryResponseFor(recoveryWaitingEvents)),
+      snapshot: vi.fn(async () => ({ events: [], session: { sessionId, streamIndex: 0 } })),
       state: { sessionId },
     };
-    const create = vi.fn(() => Promise.resolve({ response: recoveryResponseFor(events), session }));
+    const create = vi.fn(async () => ({ response: recoveryResponseFor(events), session }));
     const client = {
       sessions: {
         attach: vi.fn(() => session),
@@ -1448,9 +1449,7 @@ describe("local public session recovery", () => {
 
   it("reports a missing stored session instead of usable empty progress", async () => {
     const sessionId = "wrun_missing_worker";
-    const snapshot = vi.fn(() =>
-      Promise.resolve({ events: [], session: { sessionId, streamIndex: 0 } }),
-    );
+    const snapshot = vi.fn(async () => ({ events: [], session: { sessionId, streamIndex: 0 } }));
     const create = vi.fn();
     const service = createLocalEveSessionService(
       { sessions: { attach: vi.fn(() => ({ snapshot })), create } as never },
@@ -1473,12 +1472,15 @@ describe("local public session recovery", () => {
       JSON.stringify({ code: "session_not_active", error: "The session is no longer active." }),
     );
     const session = {
-      send: vi.fn(() => Promise.reject(inactive)),
+      send: vi.fn(async () => {
+        throw inactive;
+      }),
       state: { sessionId },
     };
-    const create = vi.fn(() =>
-      Promise.resolve({ response: recoveryResponseFor(recoveryWaitingEvents), session }),
-    );
+    const create = vi.fn(async () => ({
+      response: recoveryResponseFor(recoveryWaitingEvents),
+      session,
+    }));
     const service = createLocalEveSessionService(
       { sessions: { attach: vi.fn(() => session), create } as never },
       { stateGeneration: "inactive-worker" },

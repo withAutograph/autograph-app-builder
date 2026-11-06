@@ -60,7 +60,7 @@ const observe = async (current: SourceWorkflow) => {
   const changed =
     capture.generation.workspaceDigest !== baseline.workspaceDigest ||
     (prior !== undefined && prior.sourceSnapshotTree !== capture.snapshotTree);
-  return { receipt, capture, changed };
+  return { capture, changed, receipt };
 };
 export const refreshLocalPlanningSource = async (
   ctx: Pick<ToolContext, "callId" | "getSandbox"> &
@@ -86,15 +86,15 @@ export const refreshLocalPlanningSource = async (
         ? {}
         : { ownerAnchorRunId: ctx.session.ownerAnchorRunId }),
       expected: {
-        workspaceId: current.workspace.workspaceId,
-        workspacePath: current.workspace.workspacePath,
-        sourcePath: current.sourceReceipt.sourcePath,
         reconciliation: {
           appId: current.appSpec.appId,
           currentWorkspace: current.workspace,
-          sourceReceipt: current.sourceReceipt,
           history: localPlanningSourceHistory.get(),
+          sourceReceipt: current.sourceReceipt,
         },
+        sourcePath: current.sourceReceipt.sourcePath,
+        workspaceId: current.workspace.workspaceId,
+        workspacePath: current.workspace.workspacePath,
       },
       signal: ctx.abortSignal,
     });
@@ -159,12 +159,12 @@ export const refreshLocalPlanningSource = async (
     appBuilderWorkflowState.update((latest) => {
       assertExactWorkflowState(latest, current, "record the reconciled local planning input");
       return {
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        phase: "app_spec_accepted",
         appSpec: current.appSpec,
         artifacts: current.artifacts,
+        phase: "app_spec_accepted",
         preparedByCallId: ctx.callId,
         sourceReceipt: observed.receipt,
+        version: APP_BUILDER_WORKFLOW_VERSION,
         workspace: reconciled.workspace,
         ...(current.checkoutDependencyAttempts === undefined
           ? {}
@@ -172,9 +172,9 @@ export const refreshLocalPlanningSource = async (
       };
     });
     sourceWorkflowState.update(() => ({
-      version: APP_BUILDER_SOURCE_VERSION,
       phase: "reviewed",
       receipt: observed.receipt,
+      version: APP_BUILDER_SOURCE_VERSION,
     }));
     localPlanningSourceHistory.update((history) => [...history, record]);
     resolveLocalSourcePrerequisite(current, ctx.session.id, ctx.callId);
@@ -182,11 +182,11 @@ export const refreshLocalPlanningSource = async (
   } catch (error) {
     if (error instanceof LocalPlanningSourcePrerequisiteError) {
       recordLocalSourcePrerequisite({
-        state: current,
-        sessionId: ctx.session.id,
         callId: ctx.callId,
         originalSourceSha: error.originalSourceSha,
         originalWorkspaceDigest: error.originalWorkspaceDigest,
+        sessionId: ctx.session.id,
+        state: current,
       });
     }
     throw error;
@@ -218,18 +218,18 @@ export const localSourceReconciliationForPlanning = (
     return undefined;
   }
   return localSourceReconciliationSchema.parse({
-    kind: "local-source-reconciliation-v1",
     appId: record.appId,
     appSpecDigest: record.acceptedAppSpecDigest,
-    workspaceId: record.workspaceId,
+    checkpointRef: record.checkpointRef,
+    kind: "local-source-reconciliation-v1",
     previousApplyDigest: record.previousApplyDigest,
     previousProposalDigest: record.previousProposalDigest,
     previousSourceReceiptDigest: record.previousSourceReceiptDigest,
-    sourceReceiptDigest: record.sourceReceiptDigest,
     previousWorkspaceDigest: record.previousWorkspaceDigest,
-    workspaceDigest: record.workspaceDigest,
-    sourceSnapshotTree: record.sourceSnapshotTree,
-    checkpointRef: record.checkpointRef,
     reconciledByCallId: record.reconciledByCallId,
+    sourceReceiptDigest: record.sourceReceiptDigest,
+    sourceSnapshotTree: record.sourceSnapshotTree,
+    workspaceDigest: record.workspaceDigest,
+    workspaceId: record.workspaceId,
   });
 };

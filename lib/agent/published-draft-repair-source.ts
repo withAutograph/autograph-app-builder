@@ -22,31 +22,24 @@ export interface PublishedDraftRepairSource {
 }
 
 const digest = (value: Omit<PublishedDraftRepairSource, "digest">) => {
-  const draft = value.draft;
+  const { draft } = value;
   const material = {
-    kind: value.kind,
-    version: value.version,
     appId: value.appId,
     appSpecDigest: value.appSpecDigest,
-    originSourceReceiptDigest: value.originSourceReceiptDigest,
-    publicationProposalDigest: value.publicationProposalDigest,
-    publicationDigest: value.publicationDigest,
-    installationId: value.installationId,
-    sourceDigest: value.source.digest,
     draft: {
-      repositoryId: draft.repositoryId,
-      owner: draft.owner,
-      name: draft.name,
-      number: draft.number,
-      pullRequestId: draft.pullRequestId,
+      baseBranch: draft.baseBranch,
+      baseRepositoryId: draft.baseRepositoryId,
       draft: draft.draft,
-      state: draft.state,
-      headRepositoryId: draft.headRepositoryId,
       headBranch: draft.headBranch,
+      headRepositoryId: draft.headRepositoryId,
       headSha: draft.headSha,
       headTree: draft.headTree,
-      baseRepositoryId: draft.baseRepositoryId,
-      baseBranch: draft.baseBranch,
+      name: draft.name,
+      number: draft.number,
+      owner: draft.owner,
+      pullRequestId: draft.pullRequestId,
+      repositoryId: draft.repositoryId,
+      state: draft.state,
       verifiedBuilderOrigin:
         draft.verifiedBuilderOrigin === undefined
           ? undefined
@@ -56,6 +49,13 @@ const digest = (value: Omit<PublishedDraftRepairSource, "digest">) => {
               marker: draft.verifiedBuilderOrigin.marker,
             },
     },
+    installationId: value.installationId,
+    kind: value.kind,
+    originSourceReceiptDigest: value.originSourceReceiptDigest,
+    publicationDigest: value.publicationDigest,
+    publicationProposalDigest: value.publicationProposalDigest,
+    sourceDigest: value.source.digest,
+    version: value.version,
   };
   return createHash("sha256").update(JSON.stringify(material)).digest("hex");
 };

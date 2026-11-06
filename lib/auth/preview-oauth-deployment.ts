@@ -128,11 +128,11 @@ export function getPreviewOAuthDeploymentOrigin(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function getPreviewOAuthDeploymentSession(input: {
+export async function getPreviewOAuthDeploymentSession(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
 }) {
-  return getPreviewOAuthDeploymentRuntime(input.environment).auth.api.getSession({
+  return await getPreviewOAuthDeploymentRuntime(input.environment).auth.api.getSession({
     headers: input.headers,
   });
 }
@@ -219,7 +219,7 @@ export async function ensurePreviewSessionOrganization(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function ensurePreviewOAuthDeploymentSessionOrganization(input: {
+export async function ensurePreviewOAuthDeploymentSessionOrganization(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
   getRuntime?: typeof getPreviewOAuthDeploymentRuntime;
@@ -231,7 +231,7 @@ export function ensurePreviewOAuthDeploymentSessionOrganization(input: {
     logWorkspaceOnboardingFailure(error, "runtime-initialization");
     throw error;
   }
-  return ensurePreviewSessionOrganization({
+  return await ensurePreviewSessionOrganization({
     auth: runtime.auth,
     authority: runtime.organizationAuthority,
     headers: input.headers,
@@ -293,10 +293,10 @@ export function createPreviewOAuthWellKnownHandler(input: {
   getAuth?: typeof getPreviewOAuthDeploymentAuth;
 }) {
   const requestHandler = createPreviewOAuthRequestHandler(input);
-  return (request: Request) => {
+  return async (request: Request) => {
     const url = new URL(request.url);
     url.pathname = "/api/auth/.well-known/oauth-authorization-server";
-    return requestHandler(
+    return await requestHandler(
       new Request(url, {
         headers: request.headers,
         method: "GET",

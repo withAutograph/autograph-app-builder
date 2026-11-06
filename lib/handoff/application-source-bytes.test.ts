@@ -6,31 +6,31 @@ import {
 } from "./application-source-bytes";
 
 const entry = (path: string, bytes: Buffer) => ({
-  path,
-  mode: "100644" as const,
   bytes: bytes.length,
+  mode: "100644" as const,
+  path,
   sha256: createHash("sha256").update(bytes).digest("hex"),
 });
 const artifact = () => {
   const binary = Buffer.from([0, 255, 2, 128]);
   const code = Buffer.from("export default 1;");
   return {
+    files: [
+      { contentBase64: binary.toString("base64"), path: "apps/my-app/public/logo.bin" },
+      { contentBase64: code.toString("base64"), path: "apps/my-app/schema/release/v1/code.ts" },
+    ],
     manifest: {
-      version: 1 as const,
-      kind: "application-source-v1" as const,
       appId: "my-app",
       displayName: "My App",
-      sourceSessionId: "new-session",
       files: [
         entry("apps/my-app/public/logo.bin", binary),
         entry("apps/my-app/schema/release/v1/code.ts", code),
       ],
+      kind: "application-source-v1" as const,
       omissions: [],
+      sourceSessionId: "new-session",
+      version: 1 as const,
     },
-    files: [
-      { path: "apps/my-app/public/logo.bin", contentBase64: binary.toString("base64") },
-      { path: "apps/my-app/schema/release/v1/code.ts", contentBase64: code.toString("base64") },
-    ],
   };
 };
 describe("untrusted application source bytes", () => {
@@ -60,8 +60,8 @@ describe("untrusted application source bytes", () => {
     const bytes = Buffer.from("x");
     a.manifest.files = [entry("apps/my-app/Logo.bin", bytes), entry("apps/my-app/logo.bin", bytes)];
     a.files = a.manifest.files.map((file) => ({
-      path: file.path,
       contentBase64: bytes.toString("base64"),
+      path: file.path,
     }));
     expect(() => validateApplicationSourceArtifact(a)).toThrow();
   });
@@ -81,7 +81,7 @@ describe("untrusted application source bytes", () => {
     const a = artifact();
     const bytes = Buffer.from("x");
     a.manifest.files = [entry(path, bytes)];
-    a.files = [{ path, contentBase64: bytes.toString("base64") }];
+    a.files = [{ contentBase64: bytes.toString("base64"), path }];
     expect(() => validateApplicationSourceArtifact(a)).toThrow();
   });
 });
