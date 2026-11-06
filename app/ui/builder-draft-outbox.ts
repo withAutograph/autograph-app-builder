@@ -38,32 +38,62 @@ const storeName = "pending";
 const memoryFallback = new Map<string, unknown>();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function requestResult<T>(request: IDBRequest<T>): Promise<T> {
+async function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   const { promise, reject, resolve } = Promise.withResolvers<T>();
-  request.addEventListener("success", () => resolve(request.result), {
-    once: true,
-  });
-  request.addEventListener("error", () => reject(request.error), {
-    once: true,
-  });
+  request.addEventListener(
+    "success",
+    () => {
+      resolve(request.result);
+    },
+    {
+      once: true,
+    },
+  );
+  request.addEventListener(
+    "error",
+    () => {
+      reject(request.error);
+    },
+    {
+      once: true,
+    },
+  );
   return promise;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function transactionResult(transaction: IDBTransaction): Promise<undefined> {
+async function transactionResult(transaction: IDBTransaction): Promise<undefined> {
   const { promise, reject, resolve } = Promise.withResolvers<undefined>();
-  transaction.addEventListener("complete", () => resolve(undefined as undefined), { once: true });
-  transaction.addEventListener("abort", () => reject(transaction.error), {
-    once: true,
-  });
-  transaction.addEventListener("error", () => reject(transaction.error), {
-    once: true,
-  });
+  transaction.addEventListener(
+    "complete",
+    () => {
+      resolve(undefined as undefined);
+    },
+    { once: true },
+  );
+  transaction.addEventListener(
+    "abort",
+    () => {
+      reject(transaction.error);
+    },
+    {
+      once: true,
+    },
+  );
+  transaction.addEventListener(
+    "error",
+    () => {
+      reject(transaction.error);
+    },
+    {
+      once: true,
+    },
+  );
   return promise;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
+async function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
   const { promise, reject, resolve } = Promise.withResolvers<IDBDatabase>();
   const request = factory.open(databaseName, 1);
   request.addEventListener(
@@ -76,12 +106,24 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
     },
     { once: true },
   );
-  request.addEventListener("success", () => resolve(request.result), {
-    once: true,
-  });
-  request.addEventListener("error", () => reject(request.error), {
-    once: true,
-  });
+  request.addEventListener(
+    "success",
+    () => {
+      resolve(request.result);
+    },
+    {
+      once: true,
+    },
+  );
+  request.addEventListener(
+    "error",
+    () => {
+      reject(request.error);
+    },
+    {
+      once: true,
+    },
+  );
   return promise;
 }
 
@@ -102,7 +144,7 @@ export function createBuilderDraftOutbox<T>(
   let operations: Promise<unknown> = Promise.resolve();
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-  function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
+  async function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
     // This queue deliberately composes the next operation without awaiting it here.
     // oxlint-disable-next-line promise/prefer-await-to-then
     const result = operations.then(operation);
@@ -136,8 +178,8 @@ export function createBuilderDraftOutbox<T>(
   }
 
   return {
-    clear: () =>
-      serial(() =>
+    clear: async () =>
+      serial(async () =>
         withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readwrite");
@@ -149,8 +191,8 @@ export function createBuilderDraftOutbox<T>(
           },
         ),
       ),
-    clearIfAcknowledged: (acknowledgement) =>
-      serial(() =>
+    clearIfAcknowledged: async (acknowledgement) =>
+      serial(async () =>
         withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readwrite");
@@ -175,8 +217,8 @@ export function createBuilderDraftOutbox<T>(
           },
         ),
       ),
-    clearIfMutationId: (mutationId) =>
-      serial(() =>
+    clearIfMutationId: async (mutationId) =>
+      serial(async () =>
         withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readwrite");
@@ -201,8 +243,8 @@ export function createBuilderDraftOutbox<T>(
           },
         ),
       ),
-    read: () =>
-      serial(() =>
+    read: async () =>
+      serial(async () =>
         withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readonly");
@@ -213,8 +255,8 @@ export function createBuilderDraftOutbox<T>(
           () => memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined,
         ),
       ),
-    write: (entry) =>
-      serial(() =>
+    write: async (entry) =>
+      serial(async () =>
         withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readwrite");

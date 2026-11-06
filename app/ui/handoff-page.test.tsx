@@ -29,7 +29,7 @@ afterEach(() => vi.clearAllMocks());
 
 describe("authenticated handoff page", () => {
   it("redirects a missing web session back through the same handoff", async () => {
-    server.load.mockImplementation(() => Promise.resolve());
+    server.load.mockImplementation(async () => Promise.resolve());
     await expect(HandoffContent({ params })).rejects.toThrow("redirect:");
     expect(server.redirect).toHaveBeenCalledWith(
       `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${id}`)}`,

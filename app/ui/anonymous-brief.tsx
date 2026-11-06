@@ -48,13 +48,17 @@ export function AnonymousBrief({ onContinue }: { onContinue?: (brief: string) =>
           autoComplete="off"
           disabled={!isInteractive}
           value={brief}
-          onChange={(event) => setBrief(event.target.value)}
+          onChange={(event) => {
+            setBrief(event.target.value);
+          }}
           placeholder="Help me create a customer portal, build an internal dashboard, or launch a new workflow…"
         />
         <button
           type="button"
           disabled={!isInteractive || !brief.trim()}
-          onClick={() => continueToSignIn(brief)}
+          onClick={() => {
+            continueToSignIn(brief);
+          }}
         >
           Continue
         </button>
@@ -66,7 +70,9 @@ export function AnonymousBrief({ onContinue }: { onContinue?: (brief: string) =>
             type="button"
             key={suggestion}
             disabled={!isInteractive}
-            onClick={() => setBrief(suggestion)}
+            onClick={() => {
+              setBrief(suggestion);
+            }}
           >
             {suggestion}
           </button>

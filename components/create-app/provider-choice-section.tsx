@@ -59,7 +59,9 @@ export function ProviderChoiceSection<Provider extends string>({
               value={option.provider}
               badge={option.available ? undefined : "Coming soon"}
               icon={<Icon size={18} aria-hidden="true" />}
-              onChange={() => onChange(option.provider)}
+              onChange={() => {
+                onChange(option.provider);
+              }}
             >
               {option.name}
             </ChoiceCard>

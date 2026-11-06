@@ -129,13 +129,13 @@ export const runAppBrowserTests = async (input: {
     };
     return await withPrivatePreviewBrowserAccess({
       appId: input.appId,
-      root: input.root,
-      sandboxId: execution.sandboxId,
-      preview,
-      sandbox: input.sandbox,
-      signal: input.signal,
       assertCurrent,
       operation: async (environment) => await run(environment, assertCurrent),
+      preview,
+      root: input.root,
+      sandbox: input.sandbox,
+      sandboxId: execution.sandboxId,
+      signal: input.signal,
     });
   } catch (error) {
     input.signal?.throwIfAborted();
@@ -143,13 +143,13 @@ export const runAppBrowserTests = async (input: {
       throw error;
     }
     return {
-      status: "failed" as const,
-      reason: error.code,
-      problem: error.message,
       command: appBrowserTestCommand(input.appId),
       exitCode: null,
-      stdout: "",
+      problem: error.message,
+      reason: error.code,
+      status: "failed" as const,
       stderr: "",
+      stdout: "",
     };
   }
 };
@@ -165,42 +165,42 @@ export default defineTool({
         ? await priorValidatedPrivateArtifact({
             appId: input.appId,
             sandbox,
-            state,
             sessionId: ctx.session.id,
             signal: ctx.abortSignal,
+            state,
           })
         : undefined;
     const selected =
       priorArtifact ??
       (await runnableSelectedApp({
         appId: input.appId,
-        state,
         resolveRoot: async ({ appId, root }) =>
           await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
+        state,
       }));
-    const root = selected.root;
+    const { root } = selected;
     return await runAppBrowserTests({
       appId: selected.appId,
       execution: {
         appId: selected.appId,
+        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         root,
         sandboxId: getBuilderSandboxId(sandbox),
         sessionAuth: ctx.session.auth,
         sessionId: ctx.session.id,
-        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         signal: ctx.abortSignal,
         state,
       },
+      priorArtifact,
       root,
       sandbox,
-      signal: ctx.abortSignal,
       selection: input.selection,
-      priorArtifact,
+      signal: ctx.abortSignal,
     });
   },
   inputSchema: z.strictObject({
-    artifact: z.literal("prior-validated").optional(),
     appId: appIdSchema.optional(),
+    artifact: z.literal("prior-validated").optional(),
     selection: browserTestSelectionSchema.optional(),
   }),
 });

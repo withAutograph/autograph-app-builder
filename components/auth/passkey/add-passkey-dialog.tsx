@@ -35,7 +35,7 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
     useAuthPlugin(passkeyPlugin);
 
   const addPasskey = useAddPasskey(authClient);
-  const pendingRequest = useRef<AddPasskeyParams<PasskeyAuthClient>>(undefined as undefined);
+  const pendingRequest = useRef<AddPasskeyParams<PasskeyAuthClient>>(undefined);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -48,7 +48,9 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
   const submitRequest = (request: AddPasskeyParams<PasskeyAuthClient>) => {
     pendingRequest.current = request;
     addPasskey.mutate(request, {
-      onSuccess: () => handleOpenChange(false),
+      onSuccess: () => {
+        handleOpenChange(false);
+      },
     });
   };
 
@@ -61,7 +63,7 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
     submitRequest({
       ...(name ? { name } : {}),
       ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
-    } as AddPasskeyParams<PasskeyAuthClient>);
+    });
   };
 
   const needsFreshSession = isSessionNotFreshError(addPasskey.error);

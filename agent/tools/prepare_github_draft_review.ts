@@ -92,8 +92,8 @@ export default defineTool({
       );
     }
     const resolved = await resolvePublicationTargetForTool({
-      ctx,
       appId: state.appSpec.appId,
+      ctx,
       destination:
         input.destination === undefined
           ? undefined

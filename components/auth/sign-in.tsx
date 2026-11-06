@@ -97,7 +97,9 @@ export function SignIn({
 
       resetFetchOptions();
     },
-    onSuccess: (data) => continueSignIn(data),
+    onSuccess: (data) => {
+      continueSignIn(data);
+    },
   });
 
   const signInMutating = useIsMutating({

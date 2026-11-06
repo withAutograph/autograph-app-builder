@@ -26,18 +26,17 @@ async function continuityApproval(
       throw error;
     }
     return {
-      type: "denied",
       reason:
         "The current owner and exact saved continuity intent could not be verified. Resume the same intent when access is restored.",
+      type: "denied",
     };
   }
 }
 
 export default defineWorkflowTool({
+  approval: continuityApproval,
   description:
     "Run one explicitly requested app-authored continuity suite after approval of the exact saved plan. Prefer the exact compact request returned by get-app-hosted-runtime operation continuity: action, planRef, planDigest and idempotencyKey. Builder reloads and verifies the owner-scoped canonical plan before approval and execution, so do not copy or reconstruct its nested resource payload. Legacy full request plus plan remains supported. Review the canonical read before this normal approval. The operator starts the same owned app environment, publishes a separate capability-protected Gateway target, lets that app suite control process replacement through private IPC, then closes its runtime and removes only its own target rows. It never grants roles or changes app data outside the approved app suite. Preserve the same intent after uncertain outcomes; status never starts work. A suite result does not prove a subsequent native app deployment.",
-  inputSchema: continuityApprovalToolInputSchema,
-  approval: continuityApproval,
   async execute(input, ctx) {
     "use workflow";
     let delayMs = 1000;
@@ -52,4 +51,5 @@ export default defineWorkflowTool({
     }
     return await runHostedContinuityStep(input, ctx);
   },
+  inputSchema: continuityApprovalToolInputSchema,
 });

@@ -54,8 +54,8 @@ export default defineTool({
       if (!("workspace" in current)) {
         return {
           diagnosticOnly: true,
-          status: "no-private-workspace",
           readinessScope: "private-compute-observation",
+          status: "no-private-workspace",
         };
       }
       await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
@@ -63,7 +63,7 @@ export default defineTool({
       const computeState = await readPrivateComputeProviderState(native, async () => {
         await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
       });
-      return { diagnosticOnly: true, readinessScope: "private-compute-observation", computeState };
+      return { computeState, diagnosticOnly: true, readinessScope: "private-compute-observation" };
     }
     const sandbox = await ctx.getSandbox();
     const tools = await Promise.all(

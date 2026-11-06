@@ -54,16 +54,16 @@ export default defineTool({
       const repairReview = createPublishedDraftRepairReview({
         appId: candidate.appId,
         appSpecDigest: state.appSpec.digest,
-        originSourceReceiptDigest: candidate.repair.originSourceReceiptDigest,
-        originReviewDigest: candidate.originalReviewDigest,
-        publicationDigest: candidate.repair.publicationDigest,
-        repairSourceDigest: candidate.repair.source.digest,
+        changes: [...observed.headChanges],
         headSha: candidate.headSha,
         headTree: candidate.headTree,
+        originReviewDigest: candidate.originalReviewDigest,
+        originSourceReceiptDigest: candidate.repair.originSourceReceiptDigest,
+        publicationDigest: candidate.repair.publicationDigest,
+        repairSourceDigest: candidate.repair.source.digest,
         resolvedTree: observed.resolvedTree,
-        validationDigest: draftCandidateValidationDigest(candidate.validation),
-        changes: [...observed.headChanges],
         reviewedByCallId: ctx.callId,
+        validationDigest: draftCandidateValidationDigest(candidate.validation),
       });
       updateExactDraftReconciliation({
         expected: candidate,
@@ -71,22 +71,22 @@ export default defineTool({
         transition: () => ({ ...candidate, repairReview }),
       });
       return {
-        status: "reviewed" as const,
-        kind: "published-draft-repair" as const,
         baseline: "draft-head" as const,
-        reviewDigest: repairReview.digest,
-        headSha: repairReview.headSha,
-        resolvedTree: repairReview.resolvedTree,
         changes: repairReview.changes,
-        validation: candidate.validation,
+        headSha: repairReview.headSha,
+        kind: "published-draft-repair" as const,
         nextCall: {
-          tool: "seal_github_draft_pr_update",
           arguments: {
             expectedGitHubSourceDigest: candidate.repair.source.digest,
             expectedReviewDigest: repairReview.digest,
             pullRequestNumber: candidate.pullRequestNumber,
           },
+          tool: "seal_github_draft_pr_update",
         },
+        resolvedTree: repairReview.resolvedTree,
+        reviewDigest: repairReview.digest,
+        status: "reviewed" as const,
+        validation: candidate.validation,
       };
     }
     const review = createReconciliationReviewReceipt({
@@ -125,16 +125,16 @@ export default defineTool({
       candidate.appId,
     );
     return {
-      status: "reviewed" as const,
-      reviewDigest: review.digest,
       baseChangeSummary,
-      headChangeSummary,
+      baseChanges,
       baseSha: review.baseSha,
+      headChangeSummary,
+      headChanges,
       headSha: review.headSha,
       resolvedTree: review.resolvedTree,
+      reviewDigest: review.digest,
+      status: "reviewed" as const,
       validation: candidate.validation,
-      baseChanges,
-      headChanges,
     };
   },
   inputSchema: z.strictObject({}),

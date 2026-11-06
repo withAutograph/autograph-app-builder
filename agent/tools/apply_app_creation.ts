@@ -71,9 +71,9 @@ export default defineTool({
     const current = appBuilderWorkflowState.get();
     if (internalCorrectionRequiresSuccessor(ctx)) {
       return {
-        status: "corrected_proposal_required" as const,
         guidance:
           "Correct the declined draft through prepare_app_creation with explicit existingAppChanges and freeze a successor proposal before continuing the build. Do not retry the unchanged declined proposal.",
+        status: "corrected_proposal_required" as const,
         workflowPhase: current.phase,
       };
     }
@@ -90,10 +90,10 @@ export default defineTool({
     }
     if (input.privateCompute !== current.proposal.target.privateCompute?.id) {
       return {
-        status: "compute_profile_required" as const,
-        privateCompute: current.proposal.target.privateCompute?.id,
         guidance:
           "Use the exact private compute profile from the current plan so the user can approve the resize footprint.",
+        privateCompute: current.proposal.target.privateCompute?.id,
+        status: "compute_profile_required" as const,
       };
     }
     const scope = {
@@ -114,10 +114,6 @@ export default defineTool({
     recordApprovedPrivateApply(scope, ctx.callId);
     if (current.proposal.target.privateCompute !== undefined) {
       await applyApprovedPrivateComputeProfile({
-        profile: current.proposal.target.privateCompute,
-        proposalDigest: current.proposal.digest,
-        callId: ctx.callId,
-        sessionId: ctx.session.id,
         appId: scope.appId,
         assertCurrent: () => {
           ctx.abortSignal.throwIfAborted();
@@ -127,6 +123,10 @@ export default defineTool({
             "activate the reviewed private compute profile",
           );
         },
+        callId: ctx.callId,
+        profile: current.proposal.target.privateCompute,
+        proposalDigest: current.proposal.digest,
+        sessionId: ctx.session.id,
       });
     }
 
@@ -193,7 +193,7 @@ export default defineTool({
       sandbox,
       ...(fixture
         ? {
-            snapshotter: (fixtureSandbox, applyRoot) =>
+            snapshotter: async (fixtureSandbox, applyRoot) =>
               inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId),
           }
         : {}),
@@ -266,7 +266,7 @@ export default defineTool({
   },
   inputSchema: z.object({
     implementationFiles: implementationFilesSchema.default([]),
-    productSummary: z.string().trim().optional(),
     privateCompute: z.literal(PRIVATE_COMPUTE_PROFILE_ID).optional(),
+    productSummary: z.string().trim().optional(),
   }),
 });

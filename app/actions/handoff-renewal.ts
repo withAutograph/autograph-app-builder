@@ -13,15 +13,15 @@ import {
 
 const renewalInputSchema = z
   .object({
-    creationRequestId: z.string().uuid(),
-    handoffId: z.string().uuid(),
+    creationRequestId: z.uuid(),
+    handoffId: z.uuid(),
   })
   .strict();
 
 const renewedHandoffSchema = z
   .object({
-    expiresAt: z.string().datetime(),
-    handoffId: z.string().uuid(),
+    expiresAt: z.iso.datetime(),
+    handoffId: z.uuid(),
     version: z.literal(1),
   })
   .strict();

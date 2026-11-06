@@ -353,12 +353,12 @@ export default defineDynamic({
             return inspectCurrentProposalSource(
               {
                 appId,
-                paths,
-                pathIndex,
                 contentPath,
-                offsetBytes,
                 expectedDigest,
                 expectedProposalDigest,
+                offsetBytes,
+                pathIndex,
+                paths,
               },
               ctx,
             );
@@ -422,19 +422,19 @@ export default defineDynamic({
         inputSchema: z
           .strictObject({
             appId: z.string().min(1),
-            source: z.enum(["applied", "current-proposal"]).optional(),
-            expectedProposalDigest: z
+            contentPath: z.string().min(1).optional(),
+            expectedDigest: z
               .string()
               .regex(/^[0-9a-f]{64}$/u)
               .optional(),
-            contentPath: z.string().min(1).optional(),
-            expectedDigest: z
+            expectedProposalDigest: z
               .string()
               .regex(/^[0-9a-f]{64}$/u)
               .optional(),
             offsetBytes: z.number().int().nonnegative().optional(),
             pathIndex: z.number().int().nonnegative().default(0),
             paths: z.array(z.string().min(1)).default([]),
+            source: z.enum(["applied", "current-proposal"]).optional(),
           })
           .superRefine((input, context) => {
             if (input.source !== "current-proposal" && input.expectedProposalDigest !== undefined) {

@@ -61,10 +61,10 @@ export default defineTool({
           : {
               source: {
                 kind: "preserved-draft-candidate" as const,
-                preservedWorkspaceIndex: input.preservedWorkspaceIndex,
-                reviewDigest: preserved.reviewDigest,
                 nextAction:
                   "This digest belongs to preserved content. Read the current candidate separately before a deliberate replacement using its current digest.",
+                preservedWorkspaceIndex: input.preservedWorkspaceIndex,
+                reviewDigest: preserved.reviewDigest,
               },
             }),
         status: preserved === undefined ? ("current_file" as const) : ("preserved_file" as const),

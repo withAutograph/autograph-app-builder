@@ -76,7 +76,7 @@ function cloneSnapshot<T>(snapshot: T): T {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function browserIsOnline() {
-  return typeof navigator === "undefined" || navigator.onLine !== false;
+  return typeof navigator === "undefined" || navigator.onLine;
 }
 
 /**
@@ -129,7 +129,7 @@ export function useBuilderDraftAutosave<T>(
       }
 
       if (draining.current) {
-        return draining.current;
+        return await draining.current;
       }
       const run = async () => {
         while (queued.current) {
@@ -236,7 +236,7 @@ export function useBuilderDraftAutosave<T>(
     [dispatch, online, options.debounceMs, options.outbox, updateStatus],
   );
 
-  const restorePending = useCallback(() => options.outbox.read(), [options.outbox]);
+  const restorePending = useCallback(async () => options.outbox.read(), [options.outbox]);
 
   const resumePending = useCallback(async () => {
     const entry = await options.outbox.read();
@@ -248,7 +248,7 @@ export function useBuilderDraftAutosave<T>(
     await flush("flush");
   }, [flush, online, options.outbox, updateStatus]);
 
-  const retry = useCallback(() => flush("flush"), [flush]);
+  const retry = useCallback(async () => flush("flush"), [flush]);
 
   const discardPending = useCallback(async () => {
     if (timer.current) {
@@ -284,7 +284,9 @@ export function useBuilderDraftAutosave<T>(
       flush("flush");
     };
     window.addEventListener("online", retryWhenOnline);
-    return () => window.removeEventListener("online", retryWhenOnline);
+    return () => {
+      window.removeEventListener("online", retryWhenOnline);
+    };
   }, [flush]);
 
   useEffect(() => {

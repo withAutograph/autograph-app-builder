@@ -131,14 +131,14 @@ export default defineTool({
         const state = appBuilderWorkflowState.get();
         const selected = await runnableSelectedApp({
           appId: input.appId,
-          state,
           resolveRoot: async ({ appId, root }) =>
             await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
+          state,
         });
         continuityStage = "tool_sandbox_identity";
         const runtime = {
-          sandboxId: getBuilderSandboxId(sandbox),
           root: selected.root,
+          sandboxId: getBuilderSandboxId(sandbox),
           ...(input.browserSelection === undefined
             ? {}
             : { browserSelection: input.browserSelection }),
@@ -214,15 +214,15 @@ export default defineTool({
         })
         .optional(),
       branch: z.string().min(1).optional(),
-      environment: z.literal("preview"),
-      operation: z.enum(["prepare", "cleanup", "export", "continuity"]),
-      recoverContinuityIntentId: z.uuid().optional(),
       browserSelection: browserTestSelectionSchema.optional(),
-      releaseIntent: z.literal("prepared-preview").optional(),
       customerId: z.string().min(1).optional(),
       customerScope: z.literal("owner-organization").optional(),
+      environment: z.literal("preview"),
       normalActorProgram: normalActorProgramSchema.optional(),
+      operation: z.enum(["prepare", "cleanup", "export", "continuity"]),
       projectId: z.string().min(1).optional(),
+      recoverContinuityIntentId: z.uuid().optional(),
+      releaseIntent: z.literal("prepared-preview").optional(),
     })
     .refine(
       (input) =>

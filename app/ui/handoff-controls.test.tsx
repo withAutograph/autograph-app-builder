@@ -55,7 +55,9 @@ async function click(text: string) {
     throw new Error(`Button not found: ${text}`);
   }
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  await act(async () => button.click());
+  await act(async () => {
+    button.click();
+  });
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function visibility(value: "visible" | "hidden") {
@@ -88,7 +90,7 @@ describe("destination adapters", () => {
       const prompt = buildAppHandoffPrompt(id, destination);
       const url = new URL(buildAppHandoffUrl(destination, id));
       expect(url.searchParams.get(destination === "codex" ? "prompt" : "text")).toBe(prompt);
-      const match = prompt.match(/autograph_start with (?<payload>\{[^\n]+\})\./u);
+      const match = /autograph_start with (?<payload>\{[^\n]+\})\./u.exec(prompt);
       const serializedPayload = match?.groups?.payload;
       expect(serializedPayload).toBeDefined();
       if (!serializedPayload) {
@@ -203,28 +205,34 @@ describe("durable handoff controls", () => {
     visibility("hidden");
     await render();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     expect(request).not.toHaveBeenCalled();
     expect(open).not.toHaveBeenCalled();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => visibility("visible"));
+    await act(async () => {
+      visibility("visible");
+    });
     expect(request).toHaveBeenCalledOnce();
     await click("Open in Codex");
     expect(open).toHaveBeenCalledOnce();
     expect(container.textContent).toContain("Launch requested");
     expect(container.textContent).not.toContain("Continued in your app");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => visibility("hidden"));
+    await act(async () => {
+      visibility("hidden");
+    });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(10_000));
     expect(request).toHaveBeenCalledOnce();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     request.mockImplementation(async () => Response.json({ ...initial, status: "continued" }));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => visibility("visible"));
+    await act(async () => {
+      visibility("visible");
+    });
     expect(container.textContent).toContain("Continued in your app");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    await act(async () => await vi.advanceTimersByTimeAsync(20_000));
     expect(request).toHaveBeenCalledTimes(2);
   });
   it("keeps manual copy and retry usable after blocked launch and clipboard failure", async () => {
@@ -262,7 +270,7 @@ describe("durable handoff controls", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     request.mockImplementation(async () => Response.json({ ...data, cursorInstallReady: true }));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    await act(async () => await vi.advanceTimersByTimeAsync(5000));
     expect(container.querySelector('a[href*="mcp/install"]')?.textContent).toBe(
       "Add Autograph to Cursor",
     );
@@ -381,7 +389,7 @@ describe("durable handoff controls", () => {
     await render();
     expect(container.textContent).toContain("Status is temporarily unavailable");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    await act(async () => await vi.advanceTimersByTimeAsync(5000));
     expect(request).toHaveBeenCalledTimes(2);
     expect(container.textContent).not.toContain("Status is temporarily unavailable");
   });

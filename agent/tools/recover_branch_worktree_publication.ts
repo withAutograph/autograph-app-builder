@@ -39,11 +39,11 @@ export default defineTool({
     const result = await recoverBranchWorktreePublication({
       expectedJournalDigest,
       proposal: expectedProposal,
-      readOverlayFile: (path) =>
+      readOverlayFile: async (path) =>
         ctx
           .getSandbox()
           .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
-      readOverlayFileStream: (path) =>
+      readOverlayFileStream: async (path) =>
         ctx.getSandbox().then((sandbox) => sandbox.readFile({ path: `${relativeRoot}/${path}` })),
       recoveredByCallId: ctx.callId,
       review: workflow.reviewReceipt,

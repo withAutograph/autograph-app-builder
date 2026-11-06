@@ -38,8 +38,8 @@ const acceptanceResult = (appSpec: AcceptedAppSpec, reused: boolean) => {
       : {
           frameworkUpgradePlan: {
             scope: upgrade.scope,
-            versions: upgrade.versions,
             sharedPaths: ["package.json", "bun.lock"],
+            versions: upgrade.versions,
           },
         }),
     productAcceptance: productAcceptanceObligations(appSpec),
@@ -218,12 +218,6 @@ export default defineTool({
   },
   inputSchema: z.strictObject({
     appId: z.string().min(1),
-    frameworkUpgrade: z
-      .literal("latest")
-      .optional()
-      .describe(
-        "Upgrade this existing app to the latest stable Next.js and React versions; new apps select current stable versions automatically. Shared catalog and lockfile updates are included in the reviewed change set.",
-      ),
     existingAppChanges: existingAppChangesSchema.optional(),
     expectedArtifactDigest: z
       .string()
@@ -233,5 +227,11 @@ export default defineTool({
       .string()
       .regex(/^[0-9a-f]{64}$/u)
       .optional(),
+    frameworkUpgrade: z
+      .literal("latest")
+      .optional()
+      .describe(
+        "Upgrade this existing app to the latest stable Next.js and React versions; new apps select current stable versions automatically. Shared catalog and lockfile updates are included in the reviewed change set.",
+      ),
   }),
 });

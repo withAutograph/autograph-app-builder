@@ -251,14 +251,14 @@ export default defineTool({
         "Select the app source before repository inspection: source_status for a new app or resolve_github_source for an existing GitHub app.",
       );
     }
-    const namespace = inspectionNamespace({ path, paths, mode, directoryOffset });
+    const namespace = inspectionNamespace({ directoryOffset, mode, path, paths });
     if (namespace.kind === "repository") {
       if (!canAutoSelectDevelopmentSource()) {
         throw new Error(
           "Host repository inspection is available only in the configured local development source mode.",
         );
       }
-      return inspectSupportedRepository(namespace.path);
+      return await inspectSupportedRepository(namespace.path);
     }
     if (namespace.kind === "files") {
       const sandbox = await getSourceBoundSandbox(ctx);
@@ -278,15 +278,15 @@ export default defineTool({
     if (namespace.kind === "entry") {
       const sandbox = await getSourceBoundSandbox(ctx);
       return await inspectWorkspacePath({
-        path: namespace.path,
-        directoryOffset,
-        sandbox,
         baseline: appBaselineState.get()?.selection,
+        directoryOffset,
         metadata: {
           callId: ctx.callId,
           toolName: "inspect_repository",
           turnId: ctx.session.turn.id,
         },
+        path: namespace.path,
+        sandbox,
         signal: ctx.abortSignal,
       });
     }
@@ -329,10 +329,10 @@ export default defineTool({
           }),
         });
       }
-      return inspectSupportedRepository(receipt.sourcePath);
+      return await inspectSupportedRepository(receipt.sourcePath);
     }
     if (canAutoSelectDevelopmentSource()) {
-      return inspectSupportedRepository(selectedPath);
+      return await inspectSupportedRepository(selectedPath);
     }
 
     const sandbox = await ctx.getSandbox();
@@ -361,25 +361,6 @@ export default defineTool({
     };
   },
   inputSchema: z.object({
-    mode: z
-      .enum(["repository", "workspace"])
-      .optional()
-      .describe(
-        "Explicit namespace when needed: repository inspects an allowed local host repository root; workspace inspects the selected Sandbox entry. Omitted mode preserves the root overview and routes virtual descendants to the Sandbox.",
-      ),
-    path: z
-      .string()
-      .min(1)
-      .default(developmentWorkspacePath)
-      .describe(
-        "Repository root for overview, or an absolute /workspace/repository descendant for selected Sandbox entry inspection. Explicit local host repository roots retain their existing meaning.",
-      ),
-    paths: z
-      .array(z.string().min(1))
-      .optional()
-      .describe(
-        "Text files relative to the selected repository, or absolute /workspace/repository file paths. Read package.json exports to resolve actual file names.",
-      ),
     directoryOffset: z
       .number()
       .int()
@@ -388,7 +369,26 @@ export default defineTool({
       .describe(
         "Repeat the same workspace directory path with the returned continuation.directoryOffset; do not combine with paths.",
       ),
-    pathIndex: z.number().int().nonnegative().optional(),
+    mode: z
+      .enum(["repository", "workspace"])
+      .optional()
+      .describe(
+        "Explicit namespace when needed: repository inspects an allowed local host repository root; workspace inspects the selected Sandbox entry. Omitted mode preserves the root overview and routes virtual descendants to the Sandbox.",
+      ),
     offsetBytes: z.number().int().nonnegative().optional(),
+    path: z
+      .string()
+      .min(1)
+      .default(developmentWorkspacePath)
+      .describe(
+        "Repository root for overview, or an absolute /workspace/repository descendant for selected Sandbox entry inspection. Explicit local host repository roots retain their existing meaning.",
+      ),
+    pathIndex: z.number().int().nonnegative().optional(),
+    paths: z
+      .array(z.string().min(1))
+      .optional()
+      .describe(
+        "Text files relative to the selected repository, or absolute /workspace/repository file paths. Read package.json exports to resolve actual file names.",
+      ),
   }),
 });

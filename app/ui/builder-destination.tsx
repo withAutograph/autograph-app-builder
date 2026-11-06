@@ -69,7 +69,9 @@ export function BuildWithSection({
           value="codex"
           required
           checked={selected === "codex"}
-          onChange={() => onChange("codex")}
+          onChange={() => {
+            onChange("codex");
+          }}
         />
       </label>
       <label>
@@ -81,7 +83,9 @@ export function BuildWithSection({
           value="cursor"
           required
           checked={selected === "cursor"}
-          onChange={() => onChange("cursor")}
+          onChange={() => {
+            onChange("cursor");
+          }}
         />
       </label>
     </div>

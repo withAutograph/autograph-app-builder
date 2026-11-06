@@ -36,10 +36,9 @@ async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
   let timeout: number | undefined;
   try {
     const timeoutRejection = Promise.withResolvers<never>();
-    timeout = window.setTimeout(
-      () => timeoutRejection.reject(new Error("Passkey verification timed out.")),
-      passkeyResponseTimeoutMs,
-    );
+    timeout = window.setTimeout(() => {
+      timeoutRejection.reject(new Error("Passkey verification timed out."));
+    }, passkeyResponseTimeoutMs);
     return await Promise.race([operation, timeoutRejection.promise]);
   } finally {
     if (timeout !== undefined) {
@@ -82,10 +81,11 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   // form is open. The button stays for anyone who dismisses it.
   usePasskeyAutoFill(authClient, {
     enabled: view !== "signUp",
-    onSuccess: () =>
+    onSuccess: () => {
       navigate({
         to: resolvePasskeyRedirectTo(redirectTo, window.location.search, window.location.origin),
-      }),
+      });
+    },
   });
 
   const continueWithPasskey = async () => {

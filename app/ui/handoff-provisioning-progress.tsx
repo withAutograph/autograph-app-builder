@@ -49,7 +49,7 @@ export function HandoffProvisioningProgress({
         return { status: "error" };
       }
     },
-    undefined as undefined,
+    undefined,
   );
 
   useEffect(() => {
@@ -73,7 +73,9 @@ export function HandoffProvisioningProgress({
       return;
     }
     dispatched.current = true;
-    startTransition(() => dispatch({ handoffId }));
+    startTransition(() => {
+      dispatch({ handoffId });
+    });
   }, [dispatch, handoffId, snapshot.provisioning.status]);
 
   useEffect(() => {
@@ -145,7 +147,9 @@ export function HandoffProvisioningProgress({
     if (pending) {
       return;
     }
-    startTransition(() => dispatch({ handoffId }));
+    startTransition(() => {
+      dispatch({ handoffId });
+    });
   };
   return (
     <section aria-label="Provisioning progress">

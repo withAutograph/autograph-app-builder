@@ -36,7 +36,7 @@ export default defineTool({
     }
     const sandbox = await getSourceBoundSandbox(ctx);
     if (candidate.dependencyCatalogPending === undefined) {
-      await inspectDraftReconciliation({ sandbox, prepared: candidate });
+      await inspectDraftReconciliation({ prepared: candidate, sandbox });
     } else if (candidate.dependencyCatalogPending.dependency !== input.dependency) {
       throw new Error(
         "Resume the pending dependency normalization before selecting another dependency.",
@@ -45,9 +45,9 @@ export default defineTool({
     const intent =
       candidate.dependencyCatalogPending ??
       (await planCandidateDependencyCatalog({
-        sandbox,
-        prepared: candidate,
         dependency: input.dependency,
+        prepared: candidate,
+        sandbox,
         signal: ctx.abortSignal,
       }));
     updateExactDraftReconciliation({
@@ -69,9 +69,9 @@ export default defineTool({
       throw new Error("The candidate is unavailable after preparing dependency normalization.");
     }
     const result = await normalizeCandidateDependencyCatalog({
-      sandbox,
-      prepared: current,
       intent,
+      prepared: current,
+      sandbox,
       signal: ctx.abortSignal,
     });
     updateExactDraftReconciliation({
@@ -79,7 +79,6 @@ export default defineTool({
       operation: "recording normalized dependency metadata",
       transition: () => ({
         ...current,
-        dependencyCatalogPending: undefined,
         dependencyCatalog: {
           files: [
             ...(current.dependencyCatalog?.files ?? []).filter(
@@ -89,12 +88,13 @@ export default defineTool({
           ],
           nonAppIndexDigest: result.receipt.nonAppIndexDigest,
         },
+        dependencyCatalogPending: undefined,
       }),
     });
     return {
       ...result,
-      status: result.lockGenerated ? "normalized" : "lock_generation_failed",
       next: "Validate the current candidate, including check:package-manifests; review all metadata changes before requesting outward approval.",
+      status: result.lockGenerated ? "normalized" : "lock_generation_failed",
     };
   },
   inputSchema: z.strictObject({ dependency: catalogDependencyName }),
