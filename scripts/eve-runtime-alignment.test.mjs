@@ -109,10 +109,15 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
       sessionId,
     });
     const held = collect(await created.session.send("static-hold"));
-    await vi.waitFor(async () => await access(path.join(first.root, "started")), {
-      interval: 20,
-      timeout: 30_000,
-    });
+    await vi.waitFor(
+      async () => {
+        await access(path.join(first.root, "started"));
+      },
+      {
+        interval: 20,
+        timeout: 30_000,
+      },
+    );
     const before = z
       .string()
       .min(1)

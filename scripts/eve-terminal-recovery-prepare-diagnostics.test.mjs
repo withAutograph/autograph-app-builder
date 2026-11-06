@@ -69,7 +69,6 @@ const fixture = (failure) => {
       if (failure === "source_authorization") {
         throw fault;
       }
-      return;
     },
     async commitReceipt(input) {
       if (failure === "receipt_commit") {
@@ -142,7 +141,6 @@ const fixture = (failure) => {
         }),
         runId: "prepared-child-physical",
       };
-      return;
     },
     wait() {
       throw new Error("unexpected-wait");

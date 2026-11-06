@@ -98,16 +98,13 @@ describe("Vitest browser failure diagnostics", () => {
     };
     let originalOpenCalls = 0;
     const provider: BrowserProvider = {
-      async close() {
-        return;
-      },
+      async close() {},
       getCommandsContext() {
         return { page };
       },
       name: "playwright",
       async openPage() {
         originalOpenCalls += 1;
-        return;
       },
       supportsParallelism: false,
     };
