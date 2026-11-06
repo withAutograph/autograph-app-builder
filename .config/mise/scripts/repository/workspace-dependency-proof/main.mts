@@ -7,7 +7,7 @@ import type { Readable } from "node:stream";
 import type { SandboxSession } from "eve/sandbox";
 import { ensureCheckoutDependencies } from "../../../../../lib/agent/checkout-dependencies";
 
-const bun = process.argv[2];
+const bun = process.argv.at(2);
 if (!bun || !path.isAbsolute(bun)) {
   throw new Error("An absolute declared Bun executable is required.");
 }
@@ -20,9 +20,9 @@ const run = (args: string[], workingDirectory: string) => {
   const child = spawnChild(bun, args, {
     cwd: workingDirectory,
     env: {
+      BUN_INSTALL_CACHE_DIR: path.join(root, ".bun-cache"),
       PATH: process.env.PATH,
       TMPDIR: root,
-      BUN_INSTALL_CACHE_DIR: path.join(root, ".bun-cache"),
     },
   });
   // oxlint-disable-next-line promise/avoid-new -- Bridge the actual child process completion events.
@@ -47,13 +47,13 @@ const run = (args: string[], workingDirectory: string) => {
       },
     });
   return {
-    stdout: channel(child.stdout),
-    stderr: channel(child.stderr),
-    wait: () => completion,
-    kill: () => {
+    kill: async () => {
       child.kill();
-      return Promise.resolve();
+      return;
     },
+    stderr: channel(child.stderr),
+    stdout: channel(child.stdout),
+    wait: async () => await completion,
   };
 };
 const collect = async (command: ReturnType<typeof run>) => {
@@ -73,7 +73,7 @@ try {
   );
   await writeFile(
     path.join(root, "packages/next-config/package.json"),
-    JSON.stringify({ name: "@autograph/next-config", version: "1.0.0", main: "index.js" }),
+    JSON.stringify({ main: "index.js", name: "@autograph/next-config", version: "1.0.0" }),
   );
   await writeFile(
     path.join(root, "packages/next-config/index.js"),
@@ -88,25 +88,25 @@ try {
   await mkdir(path.join(root, "apps/finance"), { recursive: true });
   await writeFile(
     path.join(root, "apps/finance/package.json"),
-    JSON.stringify({ name: "finance", dependencies: { "@autograph/next-config": "workspace:*" } }),
+    JSON.stringify({ dependencies: { "@autograph/next-config": "workspace:*" }, name: "finance" }),
   );
   assert.ok(!before.includes('"apps/finance"'));
   let installations = 0;
   const sandbox: Pick<SandboxSession, "spawn"> = {
-    spawn(options) {
+    async spawn(options) {
       assert.equal(options.command, "bun install");
       assert.equal(options.workingDirectory, root);
       installations += 1;
-      return Promise.resolve(run(["install"], root));
+      return run(["install"], root);
     },
   };
   const result = await ensureCheckoutDependencies({
-    sandbox,
-    root,
     checkoutIdentity: "authored-workspace",
-    sessionId: "owned-disposable-proof",
     reconcileWorkspace: true,
     requiredExecutable: "next",
+    root,
+    sandbox,
+    sessionId: "owned-disposable-proof",
   });
   assert.equal(result.status, "installed");
   assert.equal(installations, 1);
@@ -125,5 +125,5 @@ try {
     "PASS: authored workspace lockfile and actual dependency resolution reconciled with declared Bun; no provider effects.",
   );
 } finally {
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { force: true, recursive: true });
 }

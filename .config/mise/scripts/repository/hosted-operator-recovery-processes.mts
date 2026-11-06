@@ -111,8 +111,8 @@ const workerConfig = () => {
 const emit = (event: WorkerEvent) =>
   process.stdout.write(`${eventPrefix}${JSON.stringify(event)}\n`);
 
-const waitForCommand = (commandName: string) =>
-  new Promise<void>((resolve, reject) => {
+const waitForCommand = async (commandName: string) =>
+  await new Promise<void>((resolve, reject) => {
     let timeout: NodeJS.Timeout | null = null;
     const onData = (chunk: Buffer | string) => {
       const text = String(chunk);
@@ -292,13 +292,13 @@ const runWorker = async (config: Exclude<ReturnType<typeof workerConfig>, null>)
         }
       });
       const withLease = createPostgresHostedOperatorResourceLease({
+        now: () => clock,
         openLockClient: (onConnectionClosed) =>
           postgres(config.databaseUrl, {
             connection: { application_name: applicationName },
             max: 1,
             onclose: onConnectionClosed,
           }),
-        now: () => clock,
         store,
       });
       emit({ applicationName, kind: "CONTENDER_STARTED", staleCasLost: true });
@@ -542,8 +542,8 @@ export const proveJournalProcessRecovery = async (input: ProofInput) => {
     "plan and target must share the frozen session identity",
   );
   const sql = postgres(input.databaseUrl, {
-    max: 2,
     connection: { application_name: `a515_process_probe_${randomUUID()}` },
+    max: 2,
   });
   const database = drizzle(sql, { schema });
   const store = createPostgresHostedRuntimeJournalStore(database);
@@ -574,10 +574,10 @@ export const proveJournalProcessRecovery = async (input: ProofInput) => {
       leaseId: firstLeaseId,
       operationRef,
       plan,
-      role: "contender",
-      staleRevision,
       raceLeaseId: randomUUID(),
       raceRevision: staleRevision,
+      role: "contender",
+      staleRevision,
       target: input.target,
     });
     await contender.waitFor("WORKER_BOOTED");

@@ -44,22 +44,22 @@ export const proveOwnedAppResourceCustody = async (input: {
     approvedByCallId: sourceCall,
     now: new Date(),
     operator: {
-      mode: "protected-operator-v1",
       approvalId: sourceApprovalId,
+      authPreparation: input.setup.authPreparation,
+      fenceGeneration: input.setup.fenceGeneration,
+      mode: "protected-operator-v1",
       operationRef: randomUUID(),
       plan,
       planDigest: sourceDigest,
       receipts: input.setup.receipts,
-      authPreparation: input.setup.authPreparation,
-      fenceGeneration: input.setup.fenceGeneration,
     },
   });
   const prepared = prepareHostedOperatorResourceCredentials({
     ...source,
-    plan,
     config: input.keyring,
-    record: sourceRow.record,
     database: "authDatabase",
+    plan,
+    record: sourceRow.record,
   });
   const sourceSaved = await journal.compareAndSet({
     ...source,
@@ -70,9 +70,9 @@ export const proveOwnedAppResourceCustody = async (input: {
   assert.ok(sourceSaved);
   const sourceValues = readHostedOperatorResourceBindings({
     ...source,
+    config: input.keyring,
     plan,
     record: sourceSaved.record,
-    config: input.keyring,
   });
   const revision: HostedOperatorContext = {
     ...source,
@@ -83,18 +83,12 @@ export const proveOwnedAppResourceCustody = async (input: {
     },
     target: {
       ...source.target,
-      sessionId: "local-revision-session",
       branch: "builder/local-revision",
+      sessionId: "local-revision-session",
     },
   };
   const revisionBase: HostedOperatorPlan = hostedOperatorPlanSchema.parse({
     ...plan,
-    selection: {
-      ...plan.selection,
-      sessionId: revision.target.sessionId,
-      branch: revision.target.branch,
-    },
-    publicGateway: { ...plan.publicGateway, branch: revision.target.branch },
     deploymentBoundary:
       plan.deploymentBoundary === undefined
         ? undefined
@@ -103,6 +97,12 @@ export const proveOwnedAppResourceCustody = async (input: {
             app: { ...plan.deploymentBoundary.app, branch: revision.target.branch },
             gateway: { ...plan.deploymentBoundary.gateway, branch: revision.target.branch },
           },
+    publicGateway: { ...plan.publicGateway, branch: revision.target.branch },
+    selection: {
+      ...plan.selection,
+      branch: revision.target.branch,
+      sessionId: revision.target.sessionId,
+    },
   });
   let originalApproved = true;
   let currentApproved = true;
@@ -111,29 +111,25 @@ export const proveOwnedAppResourceCustody = async (input: {
   const currentApprovalId = "local-revision-approval";
   const configuration: Pick<HostedOperatorSourceConfiguration, "standardRuntime"> = {
     standardRuntime: {
-      profileId: "local-dedicated-profile",
-      provisioningRequestId: randomUUID(),
-      provisioningDigest: "a".repeat(64),
-      productionDatabaseIdentity: "ep-production.neon.tech/auth",
       appSpecDigest: plan.contextId,
-      capturedReleaseId: plan.release.id,
       authOwnership: { kind: "dedicated-app-development", resource: plan.authDatabase },
+      capturedReleaseId: plan.release.id,
+      productionDatabaseIdentity: "ep-production.neon.tech/auth",
+      profileId: "local-dedicated-profile",
+      provisioningDigest: "a".repeat(64),
+      provisioningRequestId: randomUUID(),
       publicRealmWorkload: {
-        issuer: "https://oidc.vercel.com/team",
         audience: "https://vercel.com/team",
-        projectId: source.target.projectId,
-        ownerId: source.target.scopeId,
         environment: "production",
+        issuer: "https://oidc.vercel.com/team",
+        ownerId: source.target.scopeId,
+        projectId: source.target.projectId,
         subject: "local-exact-production-subject",
       },
     },
   };
   const create = () =>
     createOwnedAppResourceCustody({
-      database: input.database,
-      keyring: input.keyring,
-      configuration,
-      store: journal,
       assertCurrentOwner: async (context) => {
         if (
           !isDeepStrictEqual(context.authority, source.authority) ||
@@ -143,12 +139,10 @@ export const proveOwnedAppResourceCustody = async (input: {
           throw new Error("local_owner_denied");
         }
       },
-      sourceContext: async (_current, target) => {
-        if (!isDeepStrictEqual(target, source.target)) {
-          throw new Error("local_source_denied");
-        }
-        return source;
-      },
+      configuration,
+      database: input.database,
+      isExistingRevision: async (context) => context.target.sessionId === revision.target.sessionId,
+      keyring: input.keyring,
       readApproval: async (context) => {
         if (
           context.planDigest === sourceDigest &&
@@ -156,9 +150,9 @@ export const proveOwnedAppResourceCustody = async (input: {
           isDeepStrictEqual(context.target, source.target)
         ) {
           return {
-            approved: originalApproved,
             action: "prepare",
             approvalId: sourceApprovalId,
+            approved: originalApproved,
             callId: sourceCall,
             planDigest: sourceDigest,
           };
@@ -169,16 +163,22 @@ export const proveOwnedAppResourceCustody = async (input: {
           isDeepStrictEqual(context.target, revision.target)
         ) {
           return {
-            approved: currentApproved,
             action: "prepare",
             approvalId: currentApprovalId,
+            approved: currentApproved,
             callId: currentCall,
             planDigest: currentDigest,
           };
         }
         return null;
       },
-      isExistingRevision: async (context) => context.target.sessionId === revision.target.sessionId,
+      sourceContext: async (_current, target) => {
+        if (!isDeepStrictEqual(target, source.target)) {
+          throw new Error("local_source_denied");
+        }
+        return source;
+      },
+      store: journal,
     });
   const custody = create();
   await custody.checkpoint(source, plan, input.setup.authPreparation);
@@ -192,12 +192,12 @@ export const proveOwnedAppResourceCustody = async (input: {
   currentDigest = operatorPlanDigest(revisionPlan);
   const revisionRow = await journal.reserve({
     ...revision,
-    now: new Date(),
     approvedByCallId: currentCall,
+    now: new Date(),
     operator: {
+      approvalId: currentApprovalId,
       mode: "protected-operator-v1",
       operationRef: randomUUID(),
-      approvalId: currentApprovalId,
       plan: revisionPlan,
       planDigest: currentDigest,
       receipts: [],
@@ -233,18 +233,18 @@ export const proveOwnedAppResourceCustody = async (input: {
   assert.ok(revised);
   const revisedValues = readHostedOperatorResourceBindings({
     ...revision,
+    config: input.keyring,
     plan: revisionPlan,
     record: revised.record,
-    config: input.keyring,
   });
   assert.equal(isDeepStrictEqual(revisedValues, sourceValues), true);
   // An encrypted checkpoint for the new ordinary approval cannot be opened as the source operation.
   assert.throws(() =>
     readHostedOperatorResourceBindings({
       ...source,
+      config: input.keyring,
       plan,
       record: { ...sourceSaved.record, privateState },
-      config: input.keyring,
     }),
   );
   assert.equal(
