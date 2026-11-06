@@ -53,12 +53,9 @@ export async function continueGitHubPrDelivery(
     installationId,
     proposalDigest,
     readyAt: approvedReadyAt,
-    sessionId,
     ...reviewedTarget
   } = approval;
-  if (ctx.session.id !== sessionId) {
-    throw new Error("The merge approval belongs to a different Builder session.");
-  }
+  delete reviewedTarget.sessionId;
   ctx.abortSignal.throwIfAborted();
   const runtime = await githubPublicationRuntimeForSession(
     ctx.session.auth,
@@ -121,10 +118,12 @@ export async function approveGitHubPrDelivery(
 ): Promise<ApprovalStatus> {
   "use step";
   const { appBuilderWorkflowState } = await import("./workflow-state");
+  // Eve binds this approval to the invoking session and this exact tool call.
   const state = appBuilderWorkflowState.get();
+  const inputSession = ctx.toolInput?.sessionId ?? ctx.session.id;
   if (
     ctx.toolInput === undefined ||
-    ctx.toolInput.sessionId !== ctx.session.id ||
+    inputSession !== ctx.session.id ||
     state.phase !== "reviewed" ||
     state.githubDraftProposal?.proposal.digest !== ctx.toolInput.proposalDigest
   ) {

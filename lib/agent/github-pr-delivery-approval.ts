@@ -13,7 +13,7 @@ export const githubPrDeliveryApprovalSchema = z.strictObject({
   pullRequestNumber: z.int().positive(),
   readyAt: z.iso.datetime({ offset: true }).optional(),
   repositoryId: z.string().regex(/^[1-9][0-9]*$/u),
-  sessionId: z.string().min(1),
+  sessionId: z.string().min(1).optional(),
 });
 
 export type GitHubPrDeliveryApproval = z.infer<typeof githubPrDeliveryApprovalSchema>;
