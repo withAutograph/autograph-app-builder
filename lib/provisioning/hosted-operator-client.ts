@@ -53,6 +53,7 @@ import {
 import type { OperatorOwnerContext, OperatorRequest } from "./hosted-operator-contract";
 import {
   HostedOperatorError,
+  continuityReadDiagnosticStageSchema,
   operatorNativePreviewSchema,
   assertOperatorNativePreview,
   hostedOperatorPlanSchema,
@@ -334,6 +335,7 @@ export const createHostedOperatorClient = (input: {
     }
     return value;
   };
+  // oxlint-disable-next-line eslint/complexity -- Preserve transport and cancellation behavior while classifying read failures.
   const sendContinuity = async <T>(
     request: z.input<typeof continuityTransportRequestSchema>,
     resultSchema: z.ZodType<T>,
@@ -391,6 +393,7 @@ export const createHostedOperatorClient = (input: {
       const blocked = operatorPublicResultSchema.safeParse(value);
       if (blocked.success) {
         throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable", {
+          continuityReadStage: body.action === "continuity-read" ? "operator_response" : undefined,
           recoveryStage: blocked.data.recoveryStage,
           recoveryProgressAdvanced: blocked.data.recoveryProgressAdvanced,
         });
@@ -410,6 +413,28 @@ export const createHostedOperatorClient = (input: {
         }
       } catch {
         /* Diagnostic context lookup must preserve the original failure. */
+      }
+      if (request.action === "continuity-read" && !isCancellation(error, signal)) {
+        const diagnostic = continuityReadDiagnosticStageSchema.safeParse(stage);
+        if (diagnostic.success) {
+          throw new HostedOperatorError(
+            error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+            {
+              cause: error,
+              continuityReadStage:
+                error instanceof HostedOperatorError && error.continuityReadStage !== undefined
+                  ? error.continuityReadStage
+                  : diagnostic.data,
+              ...(error instanceof HostedOperatorError && error.recoveryStage !== undefined
+                ? { recoveryStage: error.recoveryStage }
+                : {}),
+              ...(error instanceof HostedOperatorError &&
+              error.recoveryProgressAdvanced !== undefined
+                ? { recoveryProgressAdvanced: error.recoveryProgressAdvanced }
+                : {}),
+            },
+          );
+        }
       }
       throw error;
     }

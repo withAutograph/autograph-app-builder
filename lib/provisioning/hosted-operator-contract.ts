@@ -1871,15 +1871,27 @@ export const operatorPublicResultSchema = z.strictObject({
   signupUrl: z.url().optional(),
 });
 export type OperatorPublicResult = z.infer<typeof operatorPublicResultSchema>;
+export const continuityReadDiagnosticStageSchema = z.enum([
+  "client_request_validation",
+  "client_token_resolution",
+  "client_transport",
+  "client_response_status",
+  "client_response_decode",
+  "client_response_validation",
+  "operator_response",
+]);
+
 export class HostedOperatorError extends Error {
   readonly code: NonNullable<OperatorPublicResult["code"]>;
   readonly recoveryStage?: z.infer<typeof operatorRecoveryStageSchema>;
   readonly recoveryProgressAdvanced?: boolean;
+  readonly continuityReadStage?: z.infer<typeof continuityReadDiagnosticStageSchema>;
   constructor(
     code: NonNullable<OperatorPublicResult["code"]>,
     options?: ErrorOptions & {
       recoveryStage?: z.infer<typeof operatorRecoveryStageSchema>;
       recoveryProgressAdvanced?: boolean;
+      continuityReadStage?: z.infer<typeof continuityReadDiagnosticStageSchema>;
     },
   ) {
     super(code, options);
@@ -1887,6 +1899,7 @@ export class HostedOperatorError extends Error {
     this.code = code;
     this.recoveryStage = options?.recoveryStage;
     this.recoveryProgressAdvanced = options?.recoveryProgressAdvanced;
+    this.continuityReadStage = options?.continuityReadStage;
   }
 }
 

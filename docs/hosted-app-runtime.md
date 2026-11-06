@@ -9,7 +9,11 @@ app and shared Auth databases and roles, release, exact effects and access grant
 cost ownership and retention. `get-app-hosted-runtime` reads operator journal
 status. A saved continuity lookup retains a `canonical_read` recovery stage when
 the operator identifies a journal read failure, including any observed progress
-flag. Unclassified failures remain `operator_unavailable`; the lookup does not
+flag. Client-side failures report a closed `continuityReadStage` for request
+validation, token resolution, transport, HTTP status, decoding or response
+validation, or an operator-provided blocked result; this stage does not expose
+provider details or prove the underlying
+cause. Unclassified failures remain `operator_unavailable`; the lookup does not
 infer readiness or replay the saved intent. Static apps require no database
 operation.
 

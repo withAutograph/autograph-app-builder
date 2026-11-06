@@ -549,3 +549,76 @@ describe("continuity planning failure diagnostics", () => {
     }
   });
 });
+
+/* oxlint-disable eslint/require-await -- Synthetic async provider failures. */
+describe("saved continuity read diagnostics", () => {
+  it.each([
+    [
+      "client_token_resolution",
+      async (): Promise<string> => {
+        throw new Error("private token detail");
+      },
+      undefined,
+    ],
+    [
+      "client_transport",
+      async (): Promise<string> => "synthetic",
+      async (): Promise<Response> => {
+        throw new Error("private network detail");
+      },
+    ],
+    [
+      "client_response_status",
+      async (): Promise<string> => "synthetic",
+      async (): Promise<Response> => new Response("private response", { status: 503 }),
+    ],
+    [
+      "client_response_decode",
+      async (): Promise<string> => "synthetic",
+      async (): Promise<Response> => new Response("invalid json"),
+    ],
+    [
+      "client_response_validation",
+      async (): Promise<string> => "synthetic",
+      async (): Promise<Response> => Response.json({ unexpected: "private" }),
+    ],
+    [
+      "operator_response",
+      async (): Promise<string> => "synthetic",
+      async (): Promise<Response> =>
+        Response.json({
+          appId: "test-app",
+          authenticatedBehavior: "unassessed",
+          code: "operator_unavailable",
+          status: "blocked",
+        }),
+    ],
+  ] as const)("reports %s without exposing private details", async (stage, token, fetcher) => {
+    const authority = {
+      issuer: "https://builder.fixture.test/api/auth",
+      audience: "https://builder.fixture.test/mcp",
+      workspaceId: "workspace",
+      ownerUserId: "owner",
+    };
+    const client = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      ownerContext: {
+        adapterGeneration: 1,
+        adapterSessionId: "adapter",
+        authority,
+        kind: "direct",
+        principal: { ...authority, scopes: ["autograph:send"] },
+        sessionId: selection.sessionId,
+      },
+      token,
+      ...(fetcher === undefined ? {} : { fetch: fetcher }),
+    });
+    await expect(
+      client.readContinuity("9f54c444-a3c1-447f-87c9-b6f69e232fd7"),
+    ).rejects.toMatchObject({
+      code: "operator_unavailable",
+      message: "operator_unavailable",
+      continuityReadStage: stage,
+    });
+  });
+});

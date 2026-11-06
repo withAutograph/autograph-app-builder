@@ -462,6 +462,7 @@ describe("saved continuity lookup tool", () => {
       new HostedOperatorError("operator_unavailable", {
         recoveryStage: "canonical_read",
         recoveryProgressAdvanced: false,
+        continuityReadStage: "client_response_validation",
       }),
     );
     await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
@@ -470,6 +471,7 @@ describe("saved continuity lookup tool", () => {
       code: "operator_unavailable",
       recoveryStage: "canonical_read",
       recoveryProgressAdvanced: false,
+      continuityReadStage: "client_response_validation",
       status: "blocked",
     });
     expect(hooks.readContinuity).toHaveBeenCalledOnce();
