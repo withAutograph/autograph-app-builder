@@ -7,7 +7,7 @@ import { afterAll, test } from "vitest";
 
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
-const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
+const load = async (name) => await import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const { createTerminalRecoveryCandidateCollector, readTerminalRecoveryCandidate } = await load(
   "execution/session/recovery-candidate.js",
 );
@@ -37,8 +37,8 @@ setLogRecordSubscriber((record) => {
     assert.ok(separator > 0);
     diagnosticRecords.push({
       ...record,
-      message: record.message.slice(0, separator),
       fields: JSON.parse(record.message.slice(separator + 1)),
+      message: record.message.slice(0, separator),
     });
   }
 });
@@ -46,31 +46,61 @@ const ownerRunId = "wrun_physical_original";
 const logicalSessionId = "wrun_logical_original";
 const eventId = (slot) => `evnt_${String(slot).padStart(26, "0")}`;
 const batchEvent = { sequence: 1, stepIndex: 1, turnId: "turn-original" };
-const emission = { sessionStarted: true, sequence: 1, stepIndex: 2, turnId: "turn-original" };
+const emission = { sequence: 1, sessionStarted: true, stepIndex: 2, turnId: "turn-original" };
 const actualRuntimeResult = {
-  kind: "tool-result",
   callId: "original-deferred",
-  toolName: "deferred",
+  kind: "tool-result",
   output: { value: "actual-native-outcome" },
+  toolName: "deferred",
 };
 
 const fixture = async (options = {}) => {
   const originalGrant = {
-    sessionId: logicalSessionId,
-    workspaceId: "original-private-workspace",
     appSpecDigest: "original-spec",
     proposalDigest: "original-proposal",
+    sessionId: logicalSessionId,
+    workspaceId: "original-private-workspace",
   };
   let source = {
-    sessionId: logicalSessionId,
-    continuationToken: "original-continuation",
-    rootSessionId: logicalSessionId,
     agent: {
+      modelReference: { id: "synthetic", provider: "test" },
       system: "original prompt",
       tools: [],
-      modelReference: { id: "synthetic", provider: "test" },
     },
-    compaction: { threshold: 1e6, recentWindowSize: 10 },
+    compaction: { recentWindowSize: 10, threshold: 1e6 },
+    continuationToken: "original-continuation",
+    history: [
+      { content: "Original product brief", kind: "user", role: "user" },
+      {
+        content: [
+          {
+            approvalId: "original-request",
+            approved: options.denied !== true,
+            type: "tool-approval-response",
+          },
+          ...(options.denied === true
+            ? [
+                {
+                  output: { reason: "original denial", type: "execution-denied" },
+                  toolCallId: "original-native",
+                  toolName: "native",
+                  type: "tool-result",
+                },
+              ]
+            : []),
+        ],
+        role: "tool",
+      },
+    ],
+    rootSessionId: logicalSessionId,
+    sandboxState: {
+      session: {
+        providerName: "vercel",
+        state: { name: "original-sandbox", workspaceDrive: { id: "original-drive" } },
+        stateProtocolVersion: 1,
+      },
+    },
+    sessionId: logicalSessionId,
     state: {
       "eve.harness.emission": emission,
       "eve.runtime.hitl.approvedTools": options.denied === true ? [] : ["native"],
@@ -78,69 +108,39 @@ const fixture = async (options = {}) => {
         grant: options.denied === true ? null : originalGrant,
         pending: [{ callId: "original-native", scope: originalGrant }],
       },
-      "fixture.program": { phase: "source-planned", arbitraryNestedState: { keep: true } },
+      "fixture.program": { arbitraryNestedState: { keep: true }, phase: "source-planned" },
     },
-    sandboxState: {
-      session: {
-        providerName: "vercel",
-        stateProtocolVersion: 1,
-        state: { name: "original-sandbox", workspaceDrive: { id: "original-drive" } },
-      },
-    },
-    history: [
-      { role: "user", kind: "user", content: "Original product brief" },
-      {
-        role: "tool",
-        content: [
-          {
-            type: "tool-approval-response",
-            approvalId: "original-request",
-            approved: options.denied !== true,
-          },
-          ...(options.denied === true
-            ? [
-                {
-                  type: "tool-result",
-                  toolCallId: "original-native",
-                  toolName: "native",
-                  output: { type: "execution-denied", reason: "original denial" },
-                },
-              ]
-            : []),
-        ],
-      },
-    ],
   };
   source = setPendingCoordinationBatch({
-    session: source,
     event: batchEvent,
-    runtimeActions: [],
-    tasks: [
-      {
-        kind: "workflow-task",
-        callId: "original-deferred",
-        toolName: "deferred",
-        input: {},
-        workflowId: "workflow:deferred",
-      },
-    ],
     responseMessages: [
       {
-        role: "assistant",
         content: [
           {
-            type: "tool-call",
+            input: { value: "exact-original-input" },
             toolCallId: "original-native",
             toolName: "native",
-            input: { value: "exact-original-input" },
+            type: "tool-call",
           },
-          { type: "tool-call", toolCallId: "original-deferred", toolName: "deferred", input: {} },
+          { input: {}, toolCallId: "original-deferred", toolName: "deferred", type: "tool-call" },
           {
-            type: "tool-approval-request",
             approvalId: "original-request",
             toolCallId: "original-native",
+            type: "tool-approval-request",
           },
         ],
+        role: "assistant",
+      },
+    ],
+    runtimeActions: [],
+    session: source,
+    tasks: [
+      {
+        callId: "original-deferred",
+        input: {},
+        kind: "workflow-task",
+        toolName: "deferred",
+        workflowId: "workflow:deferred",
       },
     ],
   });
@@ -168,13 +168,13 @@ const fixture = async (options = {}) => {
     ...(options.mixedStorage === true ? { history: old.messages } : {}),
     state: {
       ...old.session.state,
-      "fixture.program": { phase: "latest-committed", arbitraryNestedState: { keep: true } },
+      "fixture.program": { arbitraryNestedState: { keep: true }, phase: "latest-committed" },
     },
   };
   const sourcePair = {
     serializedContext: {
-      "eve.sessionId": logicalSessionId,
       "eve.auth": { principalId: "original-owner" },
+      "eve.sessionId": logicalSessionId,
       "fixture.privateContext": { original: true },
     },
     sessionState: createDurableSessionState({ session: source }),
@@ -191,8 +191,8 @@ const fixture = async (options = {}) => {
     ...(options.delivery === true
       ? {
           delivery: {
-            kind: "deliver",
             auth: { principalId: "original-owner" },
+            kind: "deliver",
             payloads: [{ message: "already admitted" }],
           },
         }
@@ -205,22 +205,22 @@ const fixture = async (options = {}) => {
     [
       "prior",
       {
-        runId: ownerRunId,
-        stepId: "prior",
-        stepName: "step//eve//turnStep",
-        status: "completed",
         input: await args(sourcePair),
         output: await output({ action: "park", ...sourcePair }),
+        runId: ownerRunId,
+        status: "completed",
+        stepId: "prior",
+        stepName: "step//eve//turnStep",
       },
     ],
     [
       "terminal",
       {
+        input: await args({ ...sourcePair, input: incoming }),
         runId: ownerRunId,
+        status: options.failedTurn === true ? "failed" : "completed",
         stepId: "terminal",
         stepName: "step//eve//turnStep",
-        status: options.failedTurn === true ? "failed" : "completed",
-        input: await args({ ...sourcePair, input: incoming }),
         ...(options.failedTurn === true
           ? { error: { name: "failure" } }
           : { output: await output({ action: "done", ...latestPair }) }),
@@ -229,37 +229,37 @@ const fixture = async (options = {}) => {
     [
       "finalizer",
       {
+        input: await args(latestPair),
         runId: ownerRunId,
+        status: "completed",
         stepId: "finalizer",
         stepName: "step//eve//terminateChildSessionsStep",
-        status: "completed",
-        input: await args(latestPair),
       },
     ],
   ]);
   if (options.historicalFailure === true) {
     steps.set("historical", {
+      error: { name: "older failure" },
+      input: await args(sourcePair),
       runId: ownerRunId,
+      status: "failed",
       stepId: "historical",
       stepName: "step//eve//turnStep",
-      status: "failed",
-      input: await args(sourcePair),
-      error: { name: "older failure" },
     });
   }
   if (options.unreadableLater === true) {
     steps.set("unreadable", {
+      output: new Uint8Array([99, 1, 2, 3]),
       runId: ownerRunId,
+      status: "completed",
       stepId: "unreadable",
       stepName: "step//eve//turnStep",
-      status: "completed",
-      output: new Uint8Array([99, 1, 2, 3]),
     });
   }
   const event = (slot, eventType, stepId, eventData = {}) => ({
-    runId: ownerRunId,
     eventId: eventId(slot),
     eventType,
+    runId: ownerRunId,
     ...(stepId === undefined ? {} : { correlationId: stepId }),
     eventData: {
       ...(steps.has(stepId) ? { stepName: steps.get(stepId).stepName } : {}),
@@ -288,55 +288,55 @@ const fixture = async (options = {}) => {
     event(12, "run_completed"),
   ];
   const nativeEvents = [
-    { type: "action.result", data: { ...batchEvent, result: actualRuntimeResult } },
+    { data: { ...batchEvent, result: actualRuntimeResult }, type: "action.result" },
     ...(options.uncommittedWrite === true
       ? [
           {
-            type: "action.result",
             data: {
               ...emission,
               result: {
-                kind: "tool-result",
                 callId: "original-native",
-                toolName: "native",
+                kind: "tool-result",
                 output: "may-have-written",
+                toolName: "native",
               },
             },
+            type: "action.result",
           },
         ]
       : []),
     ...(options.uncommittedDispatch === true
       ? [
           {
-            type: "actions.requested",
             data: {
               ...emission,
               actions: [
                 {
                   callId: "new-uncommitted-write",
+                  input: {},
                   kind: "tool-call",
                   toolName: "native",
-                  input: {},
                 },
               ],
             },
+            type: "actions.requested",
           },
         ]
       : []),
     ...(options.cancelled === true
-      ? [{ type: "turn.cancelled", data: { sequence: 1, turnId: "turn-original" } }]
+      ? [{ data: { sequence: 1, turnId: "turn-original" }, type: "turn.cancelled" }]
       : []),
   ];
   const world = {
+    events: { list: async () => await Promise.resolve({ data: events, hasMore: false }) },
     runs: {
       get: async () =>
         await Promise.resolve({
+          input: "original-entry-retained",
           runId: ownerRunId,
           status: options.failedTurn === true ? "failed" : "completed",
-          input: "original-entry-retained",
         }),
     },
-    events: { list: async () => await Promise.resolve({ data: events, hasMore: false }) },
     steps: {
       get: async (runId, id) => {
         assert.equal(runId, ownerRunId);
@@ -347,39 +347,39 @@ const fixture = async (options = {}) => {
   let authorized = false;
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: async () => await Promise.resolve(world),
-    resolveRunEncryptionKey: async () => {
-      await Promise.resolve();
-    },
     hydrateStepArguments: (...values) => serialization.hydrateStepArguments(...values),
     hydrateStepReturnValue: (...values) => serialization.hydrateStepReturnValue(...values),
-    readDurableSession,
-    requireEventSlot: (id) => Number(id.slice(5)),
     now: () => 0,
+    readDurableSession,
     async *readNativeEvents() {
       yield* nativeEvents;
     },
+    requireEventSlot: (id) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      await Promise.resolve();
+    },
   });
   const collected = await collect({
-    binding: { ownerRunId, logicalSessionId },
     authorizeOwner: async (currentBinding) => {
-      assert.deepEqual(currentBinding, { ownerRunId, logicalSessionId });
+      assert.deepEqual(currentBinding, { logicalSessionId, ownerRunId });
       assert.ok(Object.isFrozen(currentBinding));
       authorized = true;
       await Promise.resolve();
     },
+    binding: { logicalSessionId, ownerRunId },
   });
   assert.equal(collected.kind, "candidate");
   assert.equal(authorized, true);
   return {
     collected,
-    source,
-    latest,
-    sourcePair,
-    latestPair,
-    originalGrant,
-    incoming,
     events,
+    incoming,
+    latest,
+    latestPair,
     nativeEvents,
+    originalGrant,
+    source,
+    sourcePair,
   };
 };
 
@@ -390,27 +390,27 @@ const resumeSynthetic = async (ready, denied) => {
   const session = {
     ...durable,
     agent: {
+      modelReference: { id: "synthetic", provider: "test" },
       system: durable.agent.system,
       tools: [],
-      modelReference: { id: "synthetic", provider: "test" },
     },
-    compaction: { threshold: 1e6, recentWindowSize: 10 },
+    compaction: { recentWindowSize: 10, threshold: 1e6 },
   };
   const tools = new Map([
     [
       "native",
       {
-        name: "native",
-        inputSchema: z.object({ value: z.string() }),
         approval: () => "user-approval",
         execute: (input) => {
           executions += 1;
           assert.equal(input.value, "exact-original-input");
           return "actual-resumed-result";
         },
+        inputSchema: z.object({ value: z.string() }),
+        name: "native",
       },
     ],
-    ["deferred", { name: "deferred", inputSchema: z.object({}), workflowId: "workflow:deferred" }],
+    ["deferred", { inputSchema: z.object({}), name: "deferred", workflowId: "workflow:deferred" }],
   ]);
   const model = new MockLanguageModelV4({
     doGenerate: async ({ prompt }) => {
@@ -427,8 +427,8 @@ const resumeSynthetic = async (ready, denied) => {
         );
       }
       return await Promise.resolve({
-        content: [{ type: "text", text: "same app continued" }],
-        finishReason: { unified: "stop", raw: "stop" },
+        content: [{ text: "same app continued", type: "text" }],
+        finishReason: { raw: "stop", unified: "stop" },
         usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
         warnings: [],
       });
@@ -437,13 +437,13 @@ const resumeSynthetic = async (ready, denied) => {
   const ctx = new ContextContainer();
   const auth = { authenticator: "test", principalId: "original-owner", principalType: "user" };
   ctx.set(SessionKey, {
-    sessionId: logicalSessionId,
     auth: { current: auth, initiator: auth },
+    sessionId: logicalSessionId,
     turn: { id: "turn-original" },
   });
   assert.equal(executions, 0);
   const result = await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: async () => await Promise.resolve(model) })(
+    createToolLoopHarness({ resolveModel: async () => await Promise.resolve(model), tools })(
       session,
       {
         runtimeActionResults: ready.replayInput.runtimeResults.results,
@@ -526,34 +526,34 @@ test("historical failed step covered by a later committed turn does not block kn
 test("diagnostic never serializes prompts, tool names, arguments, outputs or provider metadata", () => {
   const secret = "NEVER-LOG-PRIVATE-CONTENT";
   const messages = [
-    { role: "user", content: secret },
+    { content: secret, role: "user" },
     {
-      role: "assistant",
       content: [
         {
-          type: "tool-call",
-          toolCallId: "opaque-call",
-          toolName: secret,
           input: { secret },
           providerOptions: { openai: { secret } },
+          toolCallId: "opaque-call",
+          toolName: secret,
+          type: "tool-call",
         },
-        { type: "tool-approval-request", approvalId: "opaque-approval", toolCallId: "opaque-call" },
+        { approvalId: "opaque-approval", toolCallId: "opaque-call", type: "tool-approval-request" },
       ],
+      role: "assistant",
     },
     {
+      content: [{ approvalId: "opaque-approval", approved: true, type: "tool-approval-response" }],
       role: "tool",
-      content: [{ type: "tool-approval-response", approvalId: "opaque-approval", approved: true }],
     },
     {
-      role: "tool",
       content: [
         {
-          type: "tool-result",
+          output: { type: "text", value: secret },
           toolCallId: "another-call",
           toolName: secret,
-          output: { type: "text", value: secret },
+          type: "tool-result",
         },
       ],
+      role: "tool",
     },
   ];
   const before = structuredClone(messages);
@@ -572,10 +572,10 @@ test("diagnostic never serializes prompts, tool names, arguments, outputs or pro
   }
   assert.deepEqual(messages, before);
   const many = Array.from({ length: 40 }, (_, index) => ({
-    role: "assistant",
     content: [
-      { type: "tool-call", toolCallId: `private-${index}`, toolName: secret, input: { secret } },
+      { input: { secret }, toolCallId: `private-${index}`, toolName: secret, type: "tool-call" },
     ],
+    role: "assistant",
   }));
   const bounded = summarizeModelProtocol(many);
   assert.equal(bounded.missingResultCount, 40);
@@ -595,34 +595,34 @@ test("diagnostic exception is advisory and does not escape", () => {
 
 test("actual SDK exposes retained mixed orphan without inventing or replaying its uncertain native output", async () => {
   const history = [
-    { role: "user", kind: "user", content: "private brief" },
+    { content: "private brief", kind: "user", role: "user" },
     {
-      role: "assistant",
       content: [
         {
-          type: "tool-call",
+          input: { value: "private-input" },
           toolCallId: "mixed-native",
           toolName: "native",
-          input: { value: "private-input" },
+          type: "tool-call",
         },
-        { type: "tool-call", toolCallId: "mixed-deferred", toolName: "deferred", input: {} },
-        { type: "tool-approval-request", approvalId: "mixed-approval", toolCallId: "mixed-native" },
+        { input: {}, toolCallId: "mixed-deferred", toolName: "deferred", type: "tool-call" },
+        { approvalId: "mixed-approval", toolCallId: "mixed-native", type: "tool-approval-request" },
       ],
+      role: "assistant",
     },
     {
+      content: [{ approvalId: "mixed-approval", approved: true, type: "tool-approval-response" }],
       role: "tool",
-      content: [{ type: "tool-approval-response", approvalId: "mixed-approval", approved: true }],
     },
     {
-      role: "tool",
       content: [
         {
-          type: "tool-result",
+          output: { type: "text", value: "actual saved deferred outcome" },
           toolCallId: "mixed-deferred",
           toolName: "deferred",
-          output: { type: "text", value: "actual saved deferred outcome" },
+          type: "tool-result",
         },
       ],
+      role: "tool",
     },
   ];
   const before = structuredClone(history);
@@ -632,52 +632,52 @@ test("actual SDK exposes retained mixed orphan without inventing or replaying it
     [
       "native",
       {
-        name: "native",
-        inputSchema: z.object({ value: z.string() }),
         approval: () => "user-approval",
         execute: () => {
           executions += 1;
           return "must not invent output";
         },
+        inputSchema: z.object({ value: z.string() }),
+        name: "native",
       },
     ],
-    ["deferred", { name: "deferred", inputSchema: z.object({}), workflowId: "workflow:deferred" }],
+    ["deferred", { inputSchema: z.object({}), name: "deferred", workflowId: "workflow:deferred" }],
   ]);
   const model = new MockLanguageModelV4({
-    doGenerate: ({ prompt }) => {
+    doGenerate: async ({ prompt }) => {
       requests += 1;
       const summary = summarizeModelProtocol(prompt);
       assert.equal(summary.missingResultCount, 1);
-      return Promise.resolve({
-        content: [{ type: "text", text: "synthetic only" }],
-        finishReason: { unified: "stop", raw: "stop" },
+      return {
+        content: [{ text: "synthetic only", type: "text" }],
+        finishReason: { raw: "stop", unified: "stop" },
         usage: { inputTokens: { total: 1 }, outputTokens: { total: 1 } },
         warnings: [],
-      });
+      };
     },
   });
   const session = {
-    sessionId: logicalSessionId,
-    rootSessionId: logicalSessionId,
-    continuationToken: "private-token",
     agent: {
+      modelReference: { id: "synthetic", provider: "test" },
       system: "private-system",
       tools: [],
-      modelReference: { id: "synthetic", provider: "test" },
     },
-    compaction: { threshold: 1e6, recentWindowSize: 10 },
-    state: { "eve.harness.emission": emission },
+    compaction: { recentWindowSize: 10, threshold: 1e6 },
+    continuationToken: "private-token",
     history,
+    rootSessionId: logicalSessionId,
+    sessionId: logicalSessionId,
+    state: { "eve.harness.emission": emission },
   };
   const ctx = new ContextContainer();
   const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
   ctx.set(SessionKey, {
-    sessionId: logicalSessionId,
     auth: { current: auth, initiator: auth },
+    sessionId: logicalSessionId,
     turn: { id: "turn-original" },
   });
   await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: () => Promise.resolve(model) })(session),
+    createToolLoopHarness({ resolveModel: async () => model, tools })(session),
   );
   assert.equal(requests, 1);
   assert.equal(executions, 0);

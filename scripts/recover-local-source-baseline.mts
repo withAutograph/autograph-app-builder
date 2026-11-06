@@ -27,15 +27,15 @@ if (runsRoot === undefined || requestFile === undefined) {
   );
 }
 const result = await recoverLocalSourceBaseline({
-  runsRoot,
   request: localSourceRecoveryRequestSchema.parse(JSON.parse(await readFile(requestFile, "utf-8"))),
+  runsRoot,
 });
 console.log(
   JSON.stringify({
-    root: result.root,
     originalSourceSha: result.manifest.originalSourceSha,
-    workspaceDigest: result.manifest.workspaceDigest,
+    root: result.root,
     sourceSha: result.manifest.sourceSha,
     sourceTree: result.manifest.sourceTree,
+    workspaceDigest: result.manifest.workspaceDigest,
   }),
 );

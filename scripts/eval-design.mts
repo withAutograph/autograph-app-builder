@@ -53,7 +53,7 @@ async function sources(root: string, relative = ""): Promise<{ path: string; con
       }
       const relativePath = path.join(relative, entry.name);
       if (entry.isDirectory()) {
-        return sources(root, relativePath);
+        return await sources(root, relativePath);
       }
       if (entry.isFile() && /\.(?<extension>tsx?|css)$/u.test(relativePath)) {
         return [
