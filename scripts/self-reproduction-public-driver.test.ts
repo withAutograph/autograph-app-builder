@@ -3,7 +3,7 @@
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   makePublicTransport,
   publicObservationReport,
@@ -12,6 +12,7 @@ import {
   runPublicSession,
   parsePublicStartFile,
 } from "../evals/support/self-reproduction-public";
+import { eveSessionResultSchema } from "../lib/mcp/contracts";
 import type { PublicState } from "../evals/support/self-reproduction-public";
 
 const session = (
@@ -665,6 +666,97 @@ describe("public self-reproduction driver", () => {
     }
     expect(current.session?.cursor).toBe(4556);
     expect(savedCursors).toContain(4552);
+  });
+  it.each(["waiting", "input_required", "completed", "failed", "cancelled"] as const)(
+    "ignores stale waiting after accepted SEND until public %s evidence",
+    async (status) => {
+      const current = state();
+      current.session = eveSessionResultSchema.parse({ ...session("waiting"), cursor: 1054 });
+      const calls: string[] = [];
+      const pages = [
+        { ...session("waiting"), cursor: 1054 },
+        { ...session("working"), cursor: 0 },
+        { ...session("waiting"), cursor: 1054 },
+        { ...session("waiting"), cursor: 1053 },
+        { ...session("waiting"), cursor: status === "waiting" ? 1055 : 1054, status },
+      ];
+      await runPublicSession({
+        message: "Continue the saved app",
+        pollMs: 1,
+        save: () => {},
+        sleep: async () => {},
+        state: current,
+        timeoutMs: 1000,
+        transport: {
+          call: async (name) => {
+            calls.push(name);
+            const page = pages.shift();
+            if (!page) {
+              throw new Error("Unexpected extra public call");
+            }
+            return page;
+          },
+        },
+      });
+      expect(calls).toEqual([
+        "autograph_get",
+        "autograph_send",
+        "autograph_get",
+        "autograph_get",
+        "autograph_get",
+      ]);
+      expect(current.outcome).toBe(status);
+      expect(current.awaitingMessageProgressAfterCursor).toBeUndefined();
+      expect(current.pendingMessage).toBeUndefined();
+    },
+  );
+  it("retains pending progress across timeout and resumes observation without another SEND", async () => {
+    vi.useFakeTimers();
+    try {
+      const current = state();
+      current.session = eveSessionResultSchema.parse({ ...session("waiting"), cursor: 1054 });
+      let saved: PublicState = current;
+      await runPublicSession({
+        message: "Continue the saved app",
+        pollMs: 1,
+        save: () => {
+          saved = structuredClone(current);
+        },
+        sleep: async () => {
+          await vi.advanceTimersByTimeAsync(1000);
+        },
+        state: current,
+        timeoutMs: 1000,
+        transport: {
+          call: async (name) => ({
+            ...session(name === "autograph_send" ? "working" : "waiting"),
+            cursor: name === "autograph_send" ? 0 : 1054,
+          }),
+        },
+      });
+      expect(saved.outcome).toBe("paused_timeout");
+      expect(saved.awaitingMessageProgressAfterCursor).toBe(1054);
+      expect(saved.pendingMessage).toBeUndefined();
+      const calls: string[] = [];
+      await runPublicSession({
+        pollMs: 1,
+        save: () => {},
+        sleep: async () => {},
+        state: saved,
+        timeoutMs: 1000,
+        transport: {
+          call: async (name) => {
+            calls.push(name);
+            return { ...session("waiting"), cursor: calls.length === 1 ? 1054 : 1055 };
+          },
+        },
+      });
+      expect(calls).toEqual(["autograph_get", "autograph_get"]);
+      expect(saved.outcome).toBe("waiting");
+      expect(saved.awaitingMessageProgressAfterCursor).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("observes waiting without inventing a message", async () => {
     const current = state();
