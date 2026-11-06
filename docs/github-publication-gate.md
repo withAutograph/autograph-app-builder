@@ -526,7 +526,10 @@ publication receipt. An open draft defers validation. On a ready Arrusted PR,
 the required evidence is a successful canonical `Check` job for the published
 head and current ready cycle. Builder reads the repository's result without
 repeating affected-code selection. A moved revision is visible but cannot use
-the original review for merge.
+the original review for merge. For a published reconciliation, Builder
+checks the retained approved reconciliation against GitHub's current commit
+before offering a new delivery approval for that head. The Ready cycle and
+required Check then bind to that reconciled head.
 
 When hosted GitHub publication is enabled, an eligible reviewed publication
 can return an input for `finish-github-pr-delivery`. Operators can explicitly

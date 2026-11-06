@@ -11,6 +11,10 @@ export const githubPrDeliveryApprovalSchema = z.strictObject({
   owner: z.string().regex(/^[A-Za-z0-9_.-]+$/u),
   proposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   pullRequestNumber: z.int().positive(),
+  reconciliationDigest: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/u)
+    .optional(),
   readyAt: z.iso.datetime({ offset: true }).optional(),
   repositoryId: z.string().regex(/^[1-9][0-9]*$/u),
   sessionId: z.string().min(1).optional(),
