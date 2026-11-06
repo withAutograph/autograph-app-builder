@@ -10,6 +10,7 @@ import {
   assertOwnedPublicationReconciliationScope,
 } from "./github-draft-reconciliation";
 import type { OwnedPublicationReconciliationScope } from "./github-draft-reconciliation";
+import { planApplicationSourceRegistration } from "./application-source-registration";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import { attachCheckoutDependencyView } from "./dependency-cache";
@@ -871,6 +872,43 @@ const replayCandidateApp = async (
   }
 };
 
+const resolveRestoredAppRegistrationConflict = async (
+  input: DraftReconciliationInput,
+  root: string,
+  workspaceRoot: string,
+) => {
+  const path = "microfrontends.json";
+  const { sandbox, appId, unpublished } = input;
+  if (
+    unpublished?.restoreInitialAppSource !== true ||
+    !unpublished.changes.some((change) => change.path === path)
+  ) {
+    return;
+  }
+  const conflicts = records(
+    await checked(sandbox, "inspect restoration conflicts", git(root, UNMERGED_PATHS)),
+  );
+  if (!conflicts.includes(path)) {
+    return;
+  }
+  const [retained, currentBase] = await Promise.all([
+    checked(sandbox, "read retained app registration", git(root, ["show", `:2:${path}`])),
+    checked(sandbox, "read the current base registration", git(root, ["show", `:3:${path}`])),
+  ]);
+  const plan = await planApplicationSourceRegistration(sandbox, appId, currentBase);
+  const config = z.object({ applications: z.record(z.string(), z.unknown()) });
+  const expected = config.parse(JSON.parse(retained)).applications[appId];
+  const added = config.parse(JSON.parse(plan.proposedBytes)).applications[appId];
+  if (expected === undefined || !isDeepStrictEqual(expected, added)) {
+    throw new Error("The current base cannot reproduce the retained app registration.");
+  }
+  await sandbox.writeTextFile({
+    path: `${root.slice(workspaceRoot.length + 1)}/${path}`,
+    content: plan.proposedBytes,
+  });
+  await checked(sandbox, "stage the restored app registration", git(root, ["add", "--", path]));
+};
+
 const readCandidateConflicts = async (
   input: DraftReconciliationInput,
   root: string,
@@ -1069,6 +1107,9 @@ export const prepareDraftReconciliation = async (
         );
       }
     }
+  }
+  if (created) {
+    await resolveRestoredAppRegistrationConflict(input, root, workspaceRoot);
   }
   // Capture only a newly created native merge, before replay or any app edits.
   let publicationScope: OwnedPublicationReconciliationScope | undefined;
