@@ -49,7 +49,13 @@ export async function continueGitHubPrDelivery(
   "use step";
   const { githubPublicationRuntimeForSession } =
     await import("./deployment-github-publication-runtime");
-  const { installationId, proposalDigest, readyAt: approvedReadyAt, ...reviewedTarget } = approval;
+  const {
+    installationId,
+    proposalDigest,
+    reconciliationDigest,
+    readyAt: approvedReadyAt,
+    ...reviewedTarget
+  } = approval;
   delete reviewedTarget.sessionId;
   ctx.abortSignal.throwIfAborted();
   const runtime = await githubPublicationRuntimeForSession(
@@ -61,12 +67,22 @@ export async function continueGitHubPrDelivery(
   if (inspect === undefined || run === undefined) {
     throw new Error("GitHub pull request delivery is unavailable.");
   }
-  const observed = await inspect(proposalDigest);
+  // The approval callback independently verifies this reconciled head before Eve
+  // dispatches the approved input to this workflow.
+  const observed = await inspect(
+    proposalDigest,
+    ...(reconciliationDigest === undefined ? [] : [reviewedTarget.headSha]),
+  );
   if (!observed.reviewedRevision || !isDeepStrictEqual(observed.reviewedTarget, reviewedTarget)) {
     return { status: "revision-changed" as const };
   }
   const approvedByCallId = ctx.callId;
-  const effect = { approvedByCallId, proposalDigest, reviewedTarget };
+  const effect = {
+    approvedByCallId,
+    proposalDigest,
+    reviewedTarget,
+    ...(reconciliationDigest === undefined ? {} : { reconciledHeadSha: reviewedTarget.headSha }),
+  };
   const activeEffect = { ...effect, abortSignal: ctx.abortSignal };
   if (observed.state === "merged" && observed.mergeCommitSha !== undefined) {
     if (readyAt !== undefined && observed.readyAt === readyAt) {
@@ -126,6 +142,33 @@ export async function approveGitHubPrDelivery(
       reason: "The approved revision must belong to this session's current reviewed publication.",
       type: "denied",
     };
+  }
+  const { reconciliationDigest } = ctx.toolInput;
+  if (reconciliationDigest !== undefined) {
+    const { draftReconciliationState } = await import("./draft-reconciliation-state");
+    const candidate = draftReconciliationState.get();
+    const reconciliation = candidate?.publishedReconciliation;
+    const installationId = state.githubDestinationReview?.installation.installationId;
+    if (
+      candidate?.appId !== state.appSpec.appId ||
+      reconciliation?.digest !== reconciliationDigest ||
+      installationId !== ctx.toolInput.installationId
+    ) {
+      return { reason: "The reviewed draft update has changed.", type: "denied" };
+    }
+    const { githubPublicationRuntimeForSession } =
+      await import("./deployment-github-publication-runtime");
+    const runtime = await githubPublicationRuntimeForSession(
+      ctx.session.auth,
+      installationId === undefined ? undefined : { selectedInstallationId: installationId },
+    );
+    const verified = await runtime.inspectPublishedReconciliationHead?.(
+      ctx.toolInput.proposalDigest,
+      reconciliation,
+    );
+    if (verified !== ctx.toolInput.headSha) {
+      return { reason: "The reviewed draft revision could not be verified.", type: "denied" };
+    }
   }
   return "user-approval";
 }

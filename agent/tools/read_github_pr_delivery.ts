@@ -3,6 +3,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
+import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 export default defineTool({
@@ -21,9 +22,16 @@ export default defineTool({
     if (runtime.inspectPublishedPullRequest === undefined) {
       throw new Error("GitHub pull request status is unavailable for this session.");
     }
-    const observation = await runtime.inspectPublishedPullRequest(
-      state.githubDraftProposal.proposal.digest,
-    );
+    const proposalDigest = state.githubDraftProposal.proposal.digest;
+    const candidate = draftReconciliationState.get();
+    const reconciliation =
+      candidate?.appId === state.appSpec.appId ? candidate.publishedReconciliation : undefined;
+    const reconciledHead =
+      reconciliation === undefined
+        ? undefined
+        : ((await runtime.inspectPublishedReconciliationHead?.(proposalDigest, reconciliation)) ??
+          undefined);
+    const observation = await runtime.inspectPublishedPullRequest(proposalDigest, reconciledHead);
     const checks = observation.draft ? "deferred" : observation.checks;
     return {
       ...observation,
@@ -35,7 +43,10 @@ export default defineTool({
             approval: {
               ...observation.reviewedTarget,
               ...(installation === undefined ? {} : { installationId: installation }),
-              proposalDigest: state.githubDraftProposal.proposal.digest,
+              proposalDigest,
+              ...(reconciledHead === undefined || reconciliation === undefined
+                ? {}
+                : { reconciliationDigest: reconciliation.digest }),
               ...(observation.readyAt === undefined ? {} : { readyAt: observation.readyAt }),
             },
           }

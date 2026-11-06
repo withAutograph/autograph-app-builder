@@ -5,12 +5,22 @@ import type { GitHubPrDeliveryObservation } from "../repository/github-pr-delive
 import type { GitHubPrDeliveryApproval } from "./github-pr-delivery-approval";
 import { approveGitHubPrDelivery, continueGitHubPrDelivery } from "./github-pr-delivery-step";
 
-const mocks = vi.hoisted(() => ({ getState: vi.fn(), inspect: vi.fn(), run: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  getState: vi.fn(),
+  getCandidate: vi.fn(),
+  inspect: vi.fn(),
+  inspectReconciled: vi.fn(),
+  run: vi.fn(),
+}));
+vi.mock("./draft-reconciliation-state", () => ({
+  draftReconciliationState: { get: mocks.getCandidate },
+}));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: mocks.getState } }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: () =>
     Promise.resolve({
       inspectPublishedPullRequest: mocks.inspect,
+      inspectPublishedReconciliationHead: mocks.inspectReconciled,
       runPublishedPullRequestEffect: mocks.run,
     }),
 }));
@@ -60,9 +70,12 @@ const step = (input: GitHubPrDeliveryApproval, cycle?: string) =>
 
 beforeEach(() => {
   mocks.inspect.mockReset();
+  mocks.inspectReconciled.mockReset();
+  mocks.getCandidate.mockReset();
   mocks.run.mockReset();
   mocks.getState.mockReturnValue({
     phase: "reviewed",
+    appSpec: { appId: "example-app" },
     githubDraftProposal: { proposal: { digest: approval.proposalDigest } },
   });
 });
@@ -77,6 +90,31 @@ it("requires approval for the session's current reviewed publication", async () 
   });
   expect(mocks.inspect).not.toHaveBeenCalled();
   expect(mocks.run).not.toHaveBeenCalled();
+});
+
+it("requires provider proof of the retained reconciliation before approving its exact head", async () => {
+  const reconciliation = { digest: "e".repeat(64) };
+  const reconciled = { ...approval, reconciliationDigest: reconciliation.digest };
+  mocks.getCandidate.mockReturnValue({
+    appId: "example-app",
+    publishedReconciliation: reconciliation,
+  });
+  mocks.inspectReconciled.mockResolvedValue(reconciled.headSha);
+  await expect(approve(reconciled)).resolves.toBe("user-approval");
+  expect(mocks.inspectReconciled).toHaveBeenCalledWith(approval.proposalDigest, reconciliation);
+  await expect(approve({ ...reconciled, headSha: "f".repeat(40) })).resolves.toMatchObject({
+    type: "denied",
+  });
+  mocks.inspect.mockResolvedValue(observe({ draft: true }));
+  mocks.run.mockResolvedValue({ status: "succeeded", evidence: { kind: "pr-ready", readyAt } });
+  await expect(step(reconciled)).resolves.toEqual({ status: "waiting-for-checks", readyAt });
+  expect(mocks.inspect).toHaveBeenCalledWith(approval.proposalDigest, approval.headSha);
+  expect(mocks.run).toHaveBeenCalledWith(
+    expect.objectContaining({
+      reviewedTarget,
+      reconciledHeadSha: approval.headSha,
+    }),
+  );
 });
 
 it("rechecks the approved proposal in the authenticated workflow without a model-carried session ID", async () => {

@@ -8,10 +8,18 @@ import type {
   DraftPullRequestProposal,
   DraftPullRequestSuccessReceipt,
 } from "../repository/github-publication";
+import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
 import type { GitHubPrDeliveryObservation } from "../repository/github-pr-delivery";
 import { composeGitHubPublicationRuntime } from "./github-publication-runtime";
 
-const mocks = vi.hoisted(() => ({ getState: vi.fn(), runtimeForSession: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  getState: vi.fn(),
+  getCandidate: vi.fn(() => null),
+  runtimeForSession: vi.fn(),
+}));
+vi.mock("./draft-reconciliation-state", () => ({
+  draftReconciliationState: { get: mocks.getCandidate },
+}));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T): T => tool }));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: mocks.getState } }));
 vi.mock("./deployment-github-publication-runtime", () => ({
@@ -85,12 +93,15 @@ const fixture = (receiptRepositoryId = "100") => {
   const inspect = vi.fn(() => Promise.resolve(observation));
   const unexpected = vi.fn(() => Promise.reject(new Error("Unexpected publication operation")));
   const compareAndSet = vi.fn();
+  const inspectExistingDraft = vi.fn().mockImplementation(unexpected);
+  const inspectAppliedDraftReconciliation = vi.fn().mockImplementation(unexpected);
   const runtime = composeGitHubPublicationRuntime({
     adapter: {
       createPrivateFreshHistoryRepository: unexpected,
       inspectDestination: unexpected,
       inspectDraftPublication: unexpected,
-      inspectExistingDraft: unexpected,
+      inspectExistingDraft,
+      inspectAppliedDraftReconciliation,
       inspectFreshRepositoryOutcome: unexpected,
       inspectInstallation: unexpected,
       inspectRepository: unexpected,
@@ -110,7 +121,18 @@ const fixture = (receiptRepositoryId = "100") => {
     pullRequestNumber: receipt.pullRequestNumber,
     repositoryId: proposal.repositoryId,
   };
-  return { compareAndSet, inspect, observation, proposal, reviewedTarget, runtime, unexpected };
+  return {
+    compareAndSet,
+    inspect,
+    inspectAppliedDraftReconciliation,
+    inspectExistingDraft,
+    observation,
+    proposal,
+    receipt,
+    reviewedTarget,
+    runtime,
+    unexpected,
+  };
 };
 
 it("reports draft checks as deferred using only the session's reviewed publication receipt", async () => {
@@ -118,6 +140,7 @@ it("reports draft checks as deferred using only the session's reviewed publicati
     fixture();
   mocks.getState.mockReturnValue({
     phase: "reviewed",
+    appSpec: { appId: "demo" },
     githubDestinationReview: { installation: { installationId: "300" } },
     githubDraftProposal: { proposal },
   });
@@ -155,4 +178,52 @@ it("distinguishes the live head from the reviewed publication when the branch mo
     reviewedRevision: false,
     reviewedTarget,
   });
+});
+
+it("selects the reconciled revision only when GitHub proves the retained commit", async () => {
+  const { inspectAppliedDraftReconciliation, inspectExistingDraft, proposal, receipt, runtime } =
+    fixture();
+  const reconciliation = {
+    version: 1,
+    intendedOutcome: "reconcile-existing-draft-pull-request",
+    repositoryId: receipt.repositoryId,
+    owner: proposal.owner,
+    name: proposal.name,
+    pullRequestNumber: receipt.pullRequestNumber,
+    pullRequestId: receipt.pullRequestId,
+    branchName: receipt.branchName,
+    baseBranch: receipt.baseBranch,
+    expectedHeadSha: receipt.branchSha,
+    expectedHeadTree: receipt.branchTree,
+    expectedBaseSha: proposal.baseSha,
+    expectedBaseTree: proposal.baseTree,
+    resolvedTree: "e".repeat(40),
+    originMarker: receipt.idempotencyKey,
+    priorPublicationDigest: receipt.digest,
+    installationIdentityDigest: proposal.installationIdentityDigest,
+    reviewDigest: proposal.reviewDigest,
+    baseChangesDigest: proposal.changeSetDigest,
+    headChangesDigest: proposal.changeSetDigest,
+    idempotencyKey: "a".repeat(64),
+    digest: "b".repeat(64),
+    approvedPaths: proposal.approvedPaths,
+  } satisfies ExistingDraftReconciliationProposal;
+  const updatedHead = "f".repeat(40);
+  inspectExistingDraft.mockResolvedValue({
+    ...reconciliation,
+    number: receipt.pullRequestNumber,
+    headBranch: receipt.branchName,
+    headSha: updatedHead,
+    headTree: reconciliation.resolvedTree,
+    headRepositoryId: receipt.repositoryId,
+    baseRepositoryId: receipt.repositoryId,
+    verifiedBuilderOrigin: { marker: receipt.idempotencyKey },
+  });
+  inspectAppliedDraftReconciliation.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+  await expect(
+    runtime.inspectPublishedReconciliationHead?.(proposal.digest, reconciliation),
+  ).resolves.toBe(updatedHead);
+  await expect(
+    runtime.inspectPublishedReconciliationHead?.(proposal.digest, reconciliation),
+  ).resolves.toBeNull();
 });
