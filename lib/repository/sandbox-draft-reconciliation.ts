@@ -97,6 +97,7 @@ export interface DraftReconciliationInput {
   unpublished?: {
     reviewDigest: string;
     restoreInitialAppSource?: true;
+    initialSourceRevision?: { sha: string; tree: string };
     /** Exact original publication head, resolved from this workflow's tenant receipt. */
     priorPublishedHeadSha?: string;
     changes: readonly OverlayChange[];
@@ -174,6 +175,15 @@ const verifyInputs = (input: DraftReconciliationInput) => {
       : [[SHA, input.unpublished.priorPublishedHeadSha] as const]),
   ] as const;
   if (fields.some(([pattern, value]) => !pattern.test(value))) {
+    throw new Error(INVALID_INPUT);
+  }
+  const initialSource = input.unpublished?.initialSourceRevision;
+  if (
+    initialSource !== undefined &&
+    (input.unpublished?.restoreInitialAppSource !== true ||
+      !SHA.test(initialSource.sha) ||
+      !SHA.test(initialSource.tree))
+  ) {
     throw new Error(INVALID_INPUT);
   }
   if (input.unpublished?.restoreInitialAppSource === true) {
@@ -300,6 +310,42 @@ const restoredRegistrationPaths = (
   return paths;
 };
 
+const initialRecoveryChanges = async (
+  input: DraftReconciliationInput,
+  root: string,
+  unpublished: NonNullable<DraftReconciliationInput["unpublished"]>,
+): Promise<readonly OverlayChange[]> => {
+  const source = unpublished.initialSourceRevision;
+  if (source === undefined) {
+    return unpublished.changes;
+  }
+  const { sandbox, appId } = input;
+  const [tree, originalApp] = await Promise.all([
+    checked(
+      sandbox,
+      "verify original app source tree",
+      git(root, ["rev-parse", `${source.sha}^{tree}`]),
+    ),
+    checked(
+      sandbox,
+      "check original app absence",
+      git(root, ["ls-tree", source.sha, "--", `apps/${appId}`]),
+    ),
+  ]);
+  if (tree !== source.tree || originalApp !== "") {
+    throw new Error("The original Git tree does not match this new app's source receipt.");
+  }
+  return await Promise.all(
+    unpublished.changes.map(async (change) => {
+      if (!initialRegistrationPaths.has(change.path)) {
+        return change;
+      }
+      const before = await currentFileState(sandbox, root, change.path, source.sha);
+      return before === null ? change : { ...change, before, kind: "modified" as const };
+    }),
+  );
+};
+
 const stageUnpublished = async (
   input: DraftReconciliationInput,
   root: string,
@@ -309,26 +355,21 @@ const stageUnpublished = async (
   if (unpublished === undefined || unpublished.changes.length === 0) {
     return;
   }
+  const changes = await initialRecoveryChanges(input, root, unpublished);
   const observed = await Promise.all(
-    unpublished.changes.map(
-      async (change) => await currentFileState(input.sandbox, root, change.path),
-    ),
+    changes.map(async (change) => await currentFileState(input.sandbox, root, change.path)),
   );
-  if (
-    unpublished.changes.every((change, index) =>
-      matchesFileState(observed[index] ?? null, change.after),
-    )
-  ) {
+  if (changes.every((change, index) => matchesFileState(observed[index] ?? null, change.after))) {
     return;
   }
-  const candidates = unpublished.changes.filter(
+  const candidates = changes.filter(
     (change, index) =>
       !matchesFileState(observed[index] ?? null, change.after) &&
       !matchesFileState(observed[index] ?? null, change.before),
   );
   const { priorPublishedHeadSha } = unpublished;
   const observedByPath = new Map(
-    unpublished.changes.map((change, index) => [change.path, observed[index] ?? null]),
+    changes.map((change, index) => [change.path, observed[index] ?? null]),
   );
   const unchangedPublished = new Set<string>();
   if (priorPublishedHeadSha !== undefined) {
@@ -355,7 +396,7 @@ const stageUnpublished = async (
       `Builder cannot replay reviewed change ${changedPreimage.path}: the current draft head matches neither its reviewed starting content nor the complete reviewed result. Reopen the current PR head and review its files again.`,
     );
   }
-  const pendingChanges = unpublished.changes.filter(
+  const pendingChanges = changes.filter(
     (change, index) => !matchesFileState(observed[index] ?? null, change.after),
   );
   const registration = restoredRegistrationPaths(

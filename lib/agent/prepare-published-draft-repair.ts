@@ -36,6 +36,7 @@ import type { DraftReconciliationInput } from "../repository/sandbox-draft-recon
 import { observeNormalizedChangeSet, reviewableChanges } from "../../agent/tools/change_set_status";
 import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import { overlayChanges } from "../repository/target-apply";
+import { ARRUSTED_TEMPLATE_REPOSITORY } from "../repository/source-receipt";
 import type { SandboxSession } from "eve/sandbox";
 import { priorResumedBuildDraftProposal } from "./existing-app-repair-planning";
 
@@ -411,6 +412,7 @@ const retainedInitialAppSource = async (input: {
   sandbox: SandboxSession;
   priorPublishedHeadSha: string;
   publishedPaths: readonly string[];
+  destination: string;
 }): Promise<NonNullable<DraftReconciliationInput["unpublished"]>> => {
   const { state, sandbox } = input;
   const appRoot = `apps/${state.appSpec.appId}/`;
@@ -418,10 +420,13 @@ const retainedInitialAppSource = async (input: {
   if (input.publishedPaths.includes(manifest)) {
     throw new Error("The first publication already included the app manifest.");
   }
-  const [{ observed }, original] = await Promise.all([
+  const sameRepository =
+    input.destination.toLowerCase() === ARRUSTED_TEMPLATE_REPOSITORY.toLowerCase();
+  const [observation, original] = await Promise.all([
     observeNormalizedChangeSet({ sandbox, state }),
-    readPreparedSandboxSourceManifest(sandbox, state.workspace),
+    sameRepository ? [] : readPreparedSandboxSourceManifest(sandbox, state.workspace),
   ]);
+  const { observed } = observation;
   if (original.some(({ path }) => path.startsWith(appRoot))) {
     throw new Error("The original starter already contained this app.");
   }
@@ -452,6 +457,14 @@ const retainedInitialAppSource = async (input: {
     contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
     priorPublishedHeadSha: input.priorPublishedHeadSha,
     restoreInitialAppSource: true,
+    ...(sameRepository
+      ? {
+          initialSourceRevision: {
+            sha: state.sourceReceipt.sourceSha,
+            tree: state.sourceReceipt.sourceTree,
+          },
+        }
+      : {}),
     reviewDigest: createHash("sha256")
       .update(JSON.stringify([state.reviewReceipt.digest, changes]))
       .digest("hex"),
@@ -473,6 +486,7 @@ const publishedDraftUnpublishedSource = async (input: {
       sandbox,
       priorPublishedHeadSha: owned.publication.branchSha,
       publishedPaths: owned.proposal.approvedPaths,
+      destination: `https://github.com/${owned.proposal.owner}/${owned.proposal.name}.git`,
     });
   }
   const changes = state.reviewReceipt.changes.filter(({ path }) =>

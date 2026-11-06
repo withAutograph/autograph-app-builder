@@ -242,8 +242,10 @@ retention does not authorize replaying its edits or its prior review.
 
 If the first owned draft omitted the new app manifest, use
 `restoreInitialAppSource: true` in the same reconciliation tool. Builder reads
-the retained app and its registration changes against the original starter
-manifest. It stages the exact app bytes and checks shared registration
+the retained app and its registration changes against the original starter.
+For a draft in the starter repository, Builder verifies the recorded starter
+commit and tree in Git and reads registration preimages there. Other repositories
+use the prepared starter manifest. Builder stages the exact app bytes and checks shared registration
 preimages before its private merge with the current base. The resulting draft
 candidate still needs its normal build, review, and approved update.
 
