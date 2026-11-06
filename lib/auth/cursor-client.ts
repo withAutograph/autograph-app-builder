@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
-import * as schema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
+import { oauthClient, oauthClientResource, oauthResource } from "../db/schema";
 import { previewOAuthScopes, readPreviewOAuthContractConfig } from "./preview-oauth-contract";
 
 export const cursorClientId = "autograph-cursor-desktop";
@@ -29,11 +28,19 @@ export function cursorClientRegistration() {
     skipConsent: false,
     tokenEndpointAuthMethod: "none",
     userId: null,
-  } satisfies Partial<typeof schema.oauthClient.$inferInsert>;
+  } satisfies Partial<typeof oauthClient.$inferInsert>;
 }
 
-type Database = PostgresJsDatabase<typeof schema>;
+type Database = HostedDatabase;
 type Reader = Pick<Database, "select">;
+
+const supportsPreviewOAuthScopes = (scopes: string[] | null | undefined): boolean => {
+  if (scopes === null || scopes === undefined) {
+    return false;
+  }
+  const allowedScopes = new Set(scopes);
+  return previewOAuthScopes.every((scope) => allowedScopes.has(scope));
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateResource(resource: string) {
@@ -49,22 +56,22 @@ export async function isCursorClientReady(database: Reader, resource: string): P
   validateResource(resource);
   const [client] = await database
     .select()
-    .from(schema.oauthClient)
-    .where(eq(schema.oauthClient.clientId, cursorClientId))
+    .from(oauthClient)
+    .where(eq(oauthClient.clientId, cursorClientId))
     .limit(1);
-  if (!client) {
+  if (client === undefined) {
     return false;
   }
   const expected = cursorClientRegistration();
-  for (const key of Object.keys(expected) as (keyof typeof expected)[]) {
-    const actual = client[key];
-    const value = expected[key];
+  const clientFields = new Map(Object.entries(client));
+  for (const [key, value] of Object.entries(expected)) {
+    const actual = clientFields.get(key);
     if (Array.isArray(value)) {
-      if (
-        !Array.isArray(actual) ||
-        actual.length !== value.length ||
-        !value.every((entry) => actual.includes(entry))
-      ) {
+      if (!Array.isArray(actual) || actual.length !== value.length) {
+        return false;
+      }
+      const actualValues = new Set(actual);
+      if (!value.every((entry) => actualValues.has(entry))) {
         return false;
       }
     } else if (actual !== value) {
@@ -73,21 +80,17 @@ export async function isCursorClientReady(database: Reader, resource: string): P
   }
   const bindings = await database
     .select()
-    .from(schema.oauthClientResource)
-    .where(eq(schema.oauthClientResource.clientId, cursorClientId));
+    .from(oauthClientResource)
+    .where(eq(oauthClientResource.clientId, cursorClientId));
   if (bindings.length !== 1 || bindings[0].resourceId !== resource) {
     return false;
   }
   const [target] = await database
     .select()
-    .from(schema.oauthResource)
-    .where(
-      and(eq(schema.oauthResource.identifier, resource), eq(schema.oauthResource.disabled, false)),
-    )
+    .from(oauthResource)
+    .where(and(eq(oauthResource.identifier, resource), eq(oauthResource.disabled, false)))
     .limit(1);
-  return Boolean(
-    target && previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope)),
-  );
+  return target !== undefined && supportsPreviewOAuthScopes(target.allowedScopes);
 }
 
 /** Explicit deployment operation. Never invoke from request handlers or readiness checks. */
@@ -97,27 +100,27 @@ export async function setupCursorClient(database: Database, resource: string) {
   await database.transaction(async (tx) => {
     const [target] = await tx
       .select()
-      .from(schema.oauthResource)
-      .where(eq(schema.oauthResource.identifier, resource))
+      .from(oauthResource)
+      .where(eq(oauthResource.identifier, resource))
       .limit(1);
     if (
-      !target ||
-      target.disabled ||
-      !previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope))
+      target === undefined ||
+      target.disabled === true ||
+      !supportsPreviewOAuthScopes(target.allowedScopes)
     ) {
       throw new Error("Initialize the OAuth resource before registering Cursor.");
     }
     await tx
-      .insert(schema.oauthClient)
+      .insert(oauthClient)
       .values({
         id: randomUUID(),
         ...cursorClientRegistration(),
         createdAt: new Date(),
         updatedAt: new Date(),
       })
-      .onConflictDoNothing({ target: schema.oauthClient.clientId });
+      .onConflictDoNothing({ target: oauthClient.clientId });
     await tx
-      .insert(schema.oauthClientResource)
+      .insert(oauthClientResource)
       .values({
         clientId: cursorClientId,
         createdAt: new Date(),
@@ -125,7 +128,7 @@ export async function setupCursorClient(database: Database, resource: string) {
         resourceId: resource,
       })
       .onConflictDoNothing({
-        target: [schema.oauthClientResource.clientId, schema.oauthClientResource.resourceId],
+        target: [oauthClientResource.clientId, oauthClientResource.resourceId],
       });
     if (!(await isCursorClientReady(tx, resource))) {
       throw new Error(
