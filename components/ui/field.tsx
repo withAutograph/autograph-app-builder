@@ -144,6 +144,11 @@ function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function hasSeparatorContent(children: React.ReactNode) {
+  return !new Set([undefined, null, false, "", 0]).has(children);
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function FieldSeparator({
   children,
   className,
@@ -154,7 +159,7 @@ function FieldSeparator({
   return (
     <div
       data-slot="field-separator"
-      data-content={!!children}
+      data-content={hasSeparatorContent(children)}
       className={cn(
         "relative -my-2 h-5 text-sm group-data-[variant=outline]/field-group:-mb-2",
         className,
@@ -162,7 +167,7 @@ function FieldSeparator({
       {...props}
     >
       <Separator className="absolute inset-0 top-1/2" />
-      {children && (
+      {hasSeparatorContent(children) && (
         <span
           className="relative mx-auto block w-fit bg-background px-2 text-muted-foreground"
           data-slot="field-separator-content"
@@ -180,32 +185,36 @@ function FieldError({
   children,
   errors,
   ...props
-}: React.ComponentProps<"div"> & {
+}: Omit<React.ComponentProps<"div">, "children"> & {
+  children?: Exclude<React.ReactNode, Promise<unknown>>;
   errors?: ({ message?: string } | undefined)[];
 }) {
   const content = useMemo(() => {
-    if (children) {
+    if (children !== undefined && children !== null && children !== false) {
       return children;
     }
 
-    if (!errors?.length) {
+    if (errors === undefined || errors.length === 0) {
       return null;
     }
 
     const uniqueErrors = [...new Map(errors.map((error) => [error?.message, error])).values()];
 
-    if (uniqueErrors?.length === 1) {
+    if (uniqueErrors.length === 1) {
       return uniqueErrors[0]?.message;
     }
 
     return (
       <ul className="ml-4 flex list-disc flex-col gap-1">
-        {uniqueErrors.map((error, index) => error?.message && <li key={index}>{error.message}</li>)}
+        {uniqueErrors.map((error) => {
+          const message = error?.message;
+          return message !== undefined && message !== "" ? <li key={message}>{message}</li> : null;
+        })}
       </ul>
     );
   }, [children, errors]);
 
-  if (!content) {
+  if (content === null || content === undefined || content === false || content === "") {
     return null;
   }
 

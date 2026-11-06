@@ -5,12 +5,26 @@ import pathModule from "node:path";
 
 const cyclePattern = /^[a-f0-9]{64}$/u;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalCyclePath(path: string) {
   if (!pathModule.isAbsolute(path) || pathModule.resolve(path) !== path) {
     throw new Error("The local Eve cycle binding path was not canonical.");
   }
   return path;
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function isOwnerOnlyDirectory(path: string) {
+  const info = lstatSync(path);
+  const hasUnsafePermissions = (info.mode & 0o077) !== 0;
+  const isCanonicalPath = realpathSync(path) === path;
+  const isOwnedByCurrentUser = info.uid === process.getuid?.();
+  return (
+    isCanonicalPath &&
+    info.isDirectory() &&
+    !info.isSymbolicLink() &&
+    isOwnedByCurrentUser &&
+    !hasUnsafePermissions
+  );
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -20,13 +34,9 @@ export function readLocalEveCycleBinding(path: string) {
     throw new Error("The local Eve cycle binding path was not canonical.");
   }
   const info = lstatSync(path);
-  if (
-    !info.isFile() ||
-    info.isSymbolicLink() ||
-    info.uid !== process.getuid?.() ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (info.mode & 0o077) !== 0
-  ) {
+  const isOwnedByCurrentUser = info.uid === process.getuid?.();
+  const hasUnsafePermissions = (info.mode & 0o077) !== 0;
+  if (!info.isFile() || info.isSymbolicLink() || !isOwnedByCurrentUser || hasUnsafePermissions) {
     throw new Error("The local Eve cycle binding was not owner-only.");
   }
   const generation = readFileSync(path, "utf-8").trim();
@@ -40,15 +50,7 @@ export function readLocalEveCycleBinding(path: string) {
 export async function rotateLocalEveCycleBinding(path: string) {
   canonicalCyclePath(path);
   const parent = pathModule.dirname(path);
-  const parentInfo = lstatSync(parent);
-  if (
-    realpathSync(parent) !== parent ||
-    !parentInfo.isDirectory() ||
-    parentInfo.isSymbolicLink() ||
-    parentInfo.uid !== process.getuid?.() ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (parentInfo.mode & 0o077) !== 0
-  ) {
+  if (!isOwnerOnlyDirectory(parent)) {
     throw new Error("The local Eve cycle binding directory was not owner-only.");
   }
   const generation = randomBytes(32).toString("hex");

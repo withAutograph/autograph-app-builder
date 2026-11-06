@@ -406,7 +406,7 @@ describe("hosted runtime selection handoff across Eve contexts", () => {
           },
           // SAFETY: fixture context includes the session, cancellation signal, and Sandbox spy used by Preview.
           // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: this fixture supplies every context field consumed by the real tool path.
-          previewToolContext(getSandbox) as never,
+          previewToolContext(getSandbox),
         );
         expect(preview).toMatchObject({
           workingPreview: {

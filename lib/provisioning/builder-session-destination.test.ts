@@ -147,9 +147,7 @@ const fixture = async () => {
   });
   const readNativeTarget = vi.fn<
     Parameters<typeof createBuilderSessionDestinationService>[0]["readNativeTarget"]
-  >(
-    () => undefined,
-  );
+  >(() => undefined);
   const service = createBuilderSessionDestinationService({
     assertMember,
     execute,
@@ -337,9 +335,7 @@ it.each(["creating", "unknown", "ready"] as const)(
   "blocks provider dispatch if a legacy %s attempt starts after the initial read",
   async (stage) => {
     const f = await fixture();
-    f.readNativeTarget
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValue({ record: { stage } });
+    f.readNativeTarget.mockResolvedValueOnce(undefined).mockResolvedValue({ record: { stage } });
     await expect(f.service.select({ expected, principal, request, sessionId })).rejects.toThrow(
       "Reconcile",
     );

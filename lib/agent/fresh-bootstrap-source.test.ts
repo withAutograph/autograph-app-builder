@@ -1,23 +1,10 @@
 import type { SandboxSession } from "eve/sandbox";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { PreparedSandboxWorkspace } from "../repository/supported-template";
 import type { SourceReceipt } from "../repository/source-receipt";
 import { freshBootstrapSourceWorkspace } from "./fresh-bootstrap-source";
-
-const mocks = vi.hoisted(() => ({
-  inspectSourceBoundSandboxWorkspace: vi.fn(),
-  readPreparedSandboxSourceManifest: vi.fn(),
-}));
-
-vi.mock("../repository/arrusted-template", () => ({
-  inspectSourceBoundSandboxWorkspace: mocks.inspectSourceBoundSandboxWorkspace,
-}));
-
-vi.mock("../repository/supported-template", () => ({
-  readPreparedSandboxSourceManifest: mocks.readPreparedSandboxSourceManifest,
-}));
 
 const workspace: PreparedSandboxWorkspace = {
   adapter: "arrusted-development-v0",
@@ -50,10 +37,27 @@ const canonicalReceipt = {
 } satisfies SourceReceipt;
 
 const legacyReceipt = {
-  ...canonicalReceipt,
-  provenance: undefined,
+  adapter: workspace.adapter,
+  contractDigest: "e".repeat(64),
+  digest: "f".repeat(64),
+  eligibilityDigest: workspace.eligibilityDigest,
+  releaseEnabled: false,
+  sourceKind: "fresh-template",
+  sourcePath: "/workspace/repository",
+  sourceSha: workspace.sourceSha,
+  sourceTree: workspace.sourceTree,
   version: 3,
-} as unknown as SourceReceipt;
+} satisfies SourceReceipt;
+
+const dependencies = () => ({
+  inspectSourceBoundSandboxWorkspace: vi.fn(async () => {}),
+  readPreparedSandboxSourceManifest: vi.fn(async () => [{
+    mode: "100644",
+    objectId: "2".repeat(40),
+    path: "assets/payload.bin",
+    sha256: "3".repeat(64),
+  }]),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sandboxFixture() {
@@ -73,52 +77,54 @@ function sandboxFixture() {
         })
       : null;
   });
+  const sandbox: SandboxSession = {
+    description: "test sandbox",
+    readBinaryFile,
+    readFile,
+    readTextFile: async () => null,
+    removePath: async () => {},
+    resolvePath: (path) => path,
+    run: async () => ({ exitCode: 0, stderr: "", stdout: "" }),
+    spawn: async () => { throw new Error("Unexpected sandbox process spawn"); },
+    writeBinaryFile: async () => {},
+    writeFile: async () => {},
+    writeTextFile: async () => {},
+  };
   return {
     readBinaryFile,
     readFile,
-    sandbox: { readBinaryFile, readFile } as unknown as SandboxSession,
+    sandbox,
   };
 }
 
 describe("fresh bootstrap source workspace", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- The unavailable snapshot is intentional test input.
-    mocks.inspectSourceBoundSandboxWorkspace.mockResolvedValue(undefined);
-    mocks.readPreparedSandboxSourceManifest.mockResolvedValue([
-      {
-        mode: "100644",
-        objectId: "2".repeat(40),
-        path: "assets/payload.bin",
-        sha256: "3".repeat(64),
-      },
-    ]);
-  });
-
   it("leaves legacy V3 receipts on the host-source path without sandbox access", async () => {
     const { readBinaryFile, sandbox } = sandboxFixture();
+    const deps = dependencies();
 
     await expect(
       freshBootstrapSourceWorkspace({
         receipt: legacyReceipt,
         sandbox,
         workspace,
+        dependencies: deps,
       }),
     ).resolves.toBeUndefined();
 
-    expect(mocks.inspectSourceBoundSandboxWorkspace).not.toHaveBeenCalled();
-    expect(mocks.readPreparedSandboxSourceManifest).not.toHaveBeenCalled();
+    expect(deps.inspectSourceBoundSandboxWorkspace).not.toHaveBeenCalled();
+    expect(deps.readPreparedSandboxSourceManifest).not.toHaveBeenCalled();
     expect(readBinaryFile).not.toHaveBeenCalled();
   });
 
   it("re-verifies V4 canonical state before reading its prepared manifest", async () => {
     const calls: string[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    mocks.inspectSourceBoundSandboxWorkspace.mockImplementation(async () => {
+    const deps = dependencies();
+    deps.inspectSourceBoundSandboxWorkspace.mockImplementation(async () => {
       calls.push("reverify");
     });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    mocks.readPreparedSandboxSourceManifest.mockImplementation(async () => {
+    deps.readPreparedSandboxSourceManifest.mockImplementation(async () => {
       calls.push("manifest");
       return [];
     });
@@ -128,24 +134,27 @@ describe("fresh bootstrap source workspace", () => {
       receipt: canonicalReceipt,
       sandbox,
       workspace,
+      dependencies: deps,
     });
 
     expect(source).toBeDefined();
     expect(calls).toEqual(["reverify", "manifest"]);
-    expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledWith({
+    expect(deps.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledWith({
       expectedWorkspace: workspace,
       receipt: canonicalReceipt,
       sandbox,
     });
-    expect(mocks.readPreparedSandboxSourceManifest).toHaveBeenCalledWith(sandbox, workspace);
+    expect(deps.readPreparedSandboxSourceManifest).toHaveBeenCalledWith(sandbox, workspace);
   });
 
   it("reads repository-relative source paths as binary data", async () => {
     const { readBinaryFile, readFile, sandbox } = sandboxFixture();
+    const deps = dependencies();
     const source = await freshBootstrapSourceWorkspace({
       receipt: canonicalReceipt,
       sandbox,
       workspace,
+      dependencies: deps,
     });
 
     await expect(source?.readSourceFile("assets/payload.bin")).resolves.toEqual(
@@ -164,7 +173,8 @@ describe("fresh bootstrap source workspace", () => {
 
   it("fails closed when initial canonical re-verification fails", async () => {
     const reverifyError = new Error("canonical workspace drifted");
-    mocks.inspectSourceBoundSandboxWorkspace.mockRejectedValue(reverifyError);
+    const deps = dependencies();
+    deps.inspectSourceBoundSandboxWorkspace.mockRejectedValue(reverifyError);
     const { readBinaryFile, sandbox } = sandboxFixture();
 
     await expect(
@@ -172,15 +182,17 @@ describe("fresh bootstrap source workspace", () => {
         receipt: canonicalReceipt,
         sandbox,
         workspace,
+        dependencies: deps,
       }),
     ).rejects.toBe(reverifyError);
-    expect(mocks.readPreparedSandboxSourceManifest).not.toHaveBeenCalled();
+    expect(deps.readPreparedSandboxSourceManifest).not.toHaveBeenCalled();
     expect(readBinaryFile).not.toHaveBeenCalled();
   });
 
   it("fails closed when the prepared manifest cannot be read", async () => {
     const manifestError = new Error("prepared manifest drifted");
-    mocks.readPreparedSandboxSourceManifest.mockRejectedValue(manifestError);
+    const deps = dependencies();
+    deps.readPreparedSandboxSourceManifest.mockRejectedValue(manifestError);
     const { readBinaryFile, sandbox } = sandboxFixture();
 
     await expect(
@@ -188,21 +200,24 @@ describe("fresh bootstrap source workspace", () => {
         receipt: canonicalReceipt,
         sandbox,
         workspace,
+        dependencies: deps,
       }),
     ).rejects.toBe(manifestError);
-    expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledOnce();
+    expect(deps.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledOnce();
     expect(readBinaryFile).not.toHaveBeenCalled();
   });
 
   it("propagates drift discovered by the returned re-verification hook", async () => {
     const { sandbox } = sandboxFixture();
+    const deps = dependencies();
     const source = await freshBootstrapSourceWorkspace({
       receipt: canonicalReceipt,
       sandbox,
       workspace,
+      dependencies: deps,
     });
     const driftError = new Error("canonical workspace changed after capture");
-    mocks.inspectSourceBoundSandboxWorkspace.mockRejectedValueOnce(driftError);
+    deps.inspectSourceBoundSandboxWorkspace.mockRejectedValueOnce(driftError);
 
     await expect(source?.reverify()).rejects.toBe(driftError);
   });

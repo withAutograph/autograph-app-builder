@@ -95,7 +95,7 @@ const approvedRepairHistory = (proposalDigest: string, sessionId: string): Repai
   const matches = existingAppRepairHistory
     .get()
     .filter((entry) => entry.proposalDigest === proposalDigest);
-  const entry = matches[0];
+  const [entry] = matches;
   if (matches.length !== 1 || entry?.sessionId !== sessionId || !settled(entry.approvedBase)) {
     throw new Error(
       "The approved build history is unavailable for this session and repair proposal.",
@@ -133,29 +133,33 @@ export const resumeApprovedAppBuild = async (
     ),
   );
 
+  const resumedWorkflow: Settled = {
+    appSpec: base.appSpec,
+    applyReceipt: base.applyReceipt,
+    artifacts: current.artifacts,
+    dependencyReceipt: base.dependencyReceipt,
+    identityReceipt: base.identityReceipt,
+    phase: "applied" as const,
+    preparedByCallId: base.preparedByCallId,
+    proposal: base.proposal,
+    sourceReceipt: base.sourceReceipt,
+    version: base.version,
+    workspace: base.workspace,
+  };
+  if (checkoutDependencyAttempts.size > 0) {
+    resumedWorkflow.checkoutDependencyAttempts = [...checkoutDependencyAttempts.values()];
+  }
+  if (base.githubSource !== undefined) {
+    resumedWorkflow.githubSource = base.githubSource;
+  }
+  if (publishedGitHubDraftProposalDigest !== undefined) {
+    resumedWorkflow.publishedGitHubDraftProposalDigest = publishedGitHubDraftProposalDigest;
+  }
+
   updateExactWorkflow({
     expected: current,
     operation: "resume the approved build",
-    transition: () => ({
-      appSpec: base.appSpec,
-      applyReceipt: base.applyReceipt,
-      artifacts: current.artifacts,
-      ...(checkoutDependencyAttempts.size === 0
-        ? {}
-        : { checkoutDependencyAttempts: [...checkoutDependencyAttempts.values()] }),
-      dependencyReceipt: base.dependencyReceipt,
-      ...(base.githubSource === undefined ? {} : { githubSource: base.githubSource }),
-      identityReceipt: base.identityReceipt,
-      phase: "applied",
-      preparedByCallId: base.preparedByCallId,
-      proposal: base.proposal,
-      ...(publishedGitHubDraftProposalDigest === undefined
-        ? {}
-        : { publishedGitHubDraftProposalDigest }),
-      sourceReceipt: base.sourceReceipt,
-      version: base.version,
-      workspace: base.workspace,
-    }),
+    transition: () => resumedWorkflow,
   });
   existingAppRepairHistory.update((history) =>
     history.map((record) =>
@@ -282,7 +286,7 @@ const inspectUnapprovedPlan = (
   validateRepairChanges(changes, current);
   // The target planner captures the current preimages for the successor.
   // No approvedBase: the new proposal must obtain its own Build approval.
-  return { approvedBase: undefined, assertCurrent, requestDigest, reuse: false };
+  return { approvedBase: null, assertCurrent, requestDigest, reuse: false };
 };
 
 export const inspectExistingAppRepair = async (input: {

@@ -92,8 +92,8 @@ describe("private public-release consent", () => {
     expect(cancelled.read()).toBeNull();
   });
   it("requires complete authenticated history and rechecks owner after reading", async () => {
-    const assertOwner = vi.fn(async () => {});
-    const readHistory = vi.fn(async (_start, observe: (event: MessageStreamEvent) => void) => {
+    const assertOwner = vi.fn(() => {});
+    const readHistory = vi.fn((_start, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());
       return { complete: false, nativeTailIndex: 2, nextNativeIndex: 2 };
@@ -108,7 +108,7 @@ describe("private public-release consent", () => {
       }),
     ).rejects.toThrow();
     expect(assertOwner).toHaveBeenCalledTimes(1);
-    const complete = async (_start: number, observe: (event: MessageStreamEvent) => void) => {
+    const complete = (_start: number, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());
       return { complete: true, nativeTailIndex: 2, nextNativeIndex: 3 };
@@ -124,7 +124,7 @@ describe("private public-release consent", () => {
     ).toEqual({ approvalId: "request", approvedByCallId: "current-call" });
     await expect(
       readPrivatePublicReleaseApproval({
-        assertOwner: async () => {
+        assertOwner: () => {
           throw new Error("revoked");
         },
         callId: "current-call",

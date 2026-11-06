@@ -17,7 +17,6 @@ import type {
 import { compareOverlayPaths } from "./target-apply";
 import type { OverlayChange } from "./target-apply";
 
-
 const digest = (value: unknown): string =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const objectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;

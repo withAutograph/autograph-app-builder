@@ -1121,7 +1121,6 @@ export const createHostedOperatorControlPlane = async (input: {
         },
       })(context, binding);
 
-
     const reserveRealmIdentityLink = async (
       linkInput: RealmIdentityLinkInput,
       expectedOrganizationRefresh?: {

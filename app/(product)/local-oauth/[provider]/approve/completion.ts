@@ -34,13 +34,16 @@ export async function completeAuthorization(
       redirect_uri: parsed.authorization.redirect_uri,
       scope: parsed.authorization.scope,
       state: parsed.authorization.state,
-      ...(parsed.authorization.code_challenge && parsed.authorization.code_challenge_method
-        ? {
-            code_challenge: parsed.authorization.code_challenge,
-            code_challenge_method: parsed.authorization.code_challenge_method,
-          }
-        : {}),
     });
+    if (
+      parsed.authorization.code_challenge !== undefined &&
+      parsed.authorization.code_challenge !== "" &&
+      parsed.authorization.code_challenge_method !== undefined &&
+      parsed.authorization.code_challenge_method !== ""
+    ) {
+      body.set("code_challenge", parsed.authorization.code_challenge);
+      body.set("code_challenge_method", parsed.authorization.code_challenge_method);
+    }
     const response = await providerEmulationFetch(
       callback,
       {
@@ -53,7 +56,7 @@ export async function completeAuthorization(
       emulation,
     );
     const location = response.headers.get("location");
-    if (!location || response.status < 300 || response.status >= 400) {
+    if (location === null || location === "" || response.status < 300 || response.status >= 400) {
       throw new Error("Emulated OAuth approval failed.");
     }
     const destination = new URL(location);
@@ -64,13 +67,15 @@ export async function completeAuthorization(
       stateCount: destination.searchParams.getAll("state").length,
       stateMatches: destination.searchParams.get("state") === parsed.authorization.state,
     };
-    if (
-      !callbackValidation.origin ||
-      !callbackValidation.path ||
-      callbackValidation.codeCount !== 1 ||
-      callbackValidation.stateCount !== 1 ||
-      !callbackValidation.stateMatches
-    ) {
+    const callbackFailures = [
+      !callbackValidation.origin,
+      !callbackValidation.path,
+      callbackValidation.codeCount !== 1,
+      callbackValidation.stateCount !== 1,
+      !callbackValidation.stateMatches,
+    ];
+    const callbackIsValid = callbackFailures.some(Boolean);
+    if (callbackIsValid) {
       console.error(
         JSON.stringify({
           level: "error",

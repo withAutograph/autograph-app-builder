@@ -15,6 +15,7 @@ import type {
 } from "../integrations/repository-access-continuation";
 import { createRepositoryAccessRuntime } from "./deployment-repository-access-runtime";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
+import { activeBuilderModelId } from "../integrations/active-model";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -34,9 +35,42 @@ const callbackUrl =
 const repository = "withAutograph/app-builder-dogfood";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function sameAuthority(left: typeof authority, right: typeof authority) {
+function sameAuthority(
+  left: RepositoryAccessContinuation["authority"],
+  right: RepositoryAccessContinuation["authority"],
+) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
+
+const matchesActiveContinuation = (
+  candidate: RepositoryAccessContinuation,
+  input: {
+    continuationDigest: string;
+    authority: RepositoryAccessContinuation["authority"];
+    now: Date;
+  },
+) =>
+  candidate.continuationDigest === input.continuationDigest &&
+  sameAuthority(candidate.authority, input.authority) &&
+  candidate.consumedAt === undefined &&
+  candidate.expiresAt > input.now;
+
+const matchesConsumableContinuation = (
+  candidate: RepositoryAccessContinuation,
+  input: Parameters<RepositoryAccessContinuationStore["consume"]>[0],
+) => {
+  const matchesRequest = [
+    candidate.sessionId === input.sessionId,
+    candidate.requestId === input.requestId,
+    candidate.repository.fullName === input.repository.fullName,
+    candidate.selectedInstallationId === input.selectedInstallationId,
+  ].every(Boolean);
+  return (
+    matchesActiveContinuation(candidate, input) &&
+    matchesRequest &&
+    candidate.authorizedAt !== undefined
+  );
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function memoryContinuationStore(): RepositoryAccessContinuationStore & {
@@ -44,39 +78,20 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
 } {
   const records: RepositoryAccessContinuation[] = [];
   return {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async authorize(input) {
-      const record = records.find(
-        (candidate) =>
-          candidate.continuationDigest === input.continuationDigest &&
-          sameAuthority(candidate.authority, input.authority) &&
-          candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
-      );
-      if (!record) {
-        return;
+      await Promise.resolve();
+      const record = records.find((candidate) => matchesActiveContinuation(candidate, input));
+      if (record) {
+        record.authorizedAt ??= input.now;
       }
-      record.authorizedAt ??= input.now;
       return record;
     },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async consume(input) {
-      const record = records.find(
-        (candidate) =>
-          candidate.continuationDigest === input.continuationDigest &&
-          sameAuthority(candidate.authority, input.authority) &&
-          candidate.sessionId === input.sessionId &&
-          candidate.requestId === input.requestId &&
-          candidate.repository.fullName === input.repository.fullName &&
-          candidate.selectedInstallationId === input.selectedInstallationId &&
-          candidate.authorizedAt !== undefined &&
-          candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
-      );
-      if (!record) {
-        return;
+      await Promise.resolve();
+      const record = records.find((candidate) => matchesConsumableContinuation(candidate, input));
+      if (record) {
+        record.consumedAt = input.now;
       }
-      record.consumedAt = input.now;
       return record;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -85,23 +100,19 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async inspect(input) {
-      return records.find(
-        (candidate) =>
-          candidate.continuationDigest === input.continuationDigest &&
-          sameAuthority(candidate.authority, input.authority) &&
-          candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
-      );
+      return records.find((candidate) => matchesActiveContinuation(candidate, input));
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async listAuthorizedForSession(input) {
       return records.filter(
         (candidate) =>
-          sameAuthority(candidate.authority, input.authority) &&
           candidate.sessionId === input.sessionId &&
           candidate.authorizedAt !== undefined &&
-          candidate.consumedAt === undefined &&
-          candidate.expiresAt > input.now,
+          matchesActiveContinuation(candidate, {
+            authority: input.authority,
+            continuationDigest: candidate.continuationDigest,
+            now: input.now,
+          }),
       );
     },
     records,
@@ -213,7 +224,7 @@ describe("deployment repository access authorization", () => {
   it("uses a target proof without reading an installation repository inventory", async () => {
     const legacy = mutableProvider({ repositoryAvailable: () => true });
     const provider = await legacy({ authority, installation });
-    const inspectInstallation = vi.fn(async () => {
+    const inspectInstallation = vi.fn(() => {
       throw new Error("inventory must not be read");
     });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -278,14 +289,19 @@ describe("deployment repository access authorization", () => {
     const providerFactory = mutableProvider({
       repositoryAvailable: () => true,
     });
-    const preparedIntent = {
+    const preparedIntent: BuilderHandoffIntent = {
+      appId: "app-one",
+      appName: "App One",
+      brief: "Build an app",
+      connections: [],
+      modelId: activeBuilderModelId,
       providers: { githubInstallationId: "10" },
       repository: {
         private: true,
         requestedName: "app-builder-dogfood",
         resolvedFullName: repository,
       },
-    } as unknown as BuilderHandoffIntent;
+    };
     const runtime = createRepositoryAccessRuntime({
       authority,
       continuations: runtimeFixture().continuations,
@@ -318,7 +334,7 @@ describe("deployment repository access authorization", () => {
       principal,
     });
     const challengeUrl = started.challenge.url;
-    if (!challengeUrl) {
+    if (challengeUrl === undefined || challengeUrl === "") {
       throw new Error("Expected authorization challenge URL");
     }
     expect(new URL(challengeUrl).searchParams.get("returnTo")).toBe(`/handoff/${continuationId}`);
@@ -419,9 +435,8 @@ describe("deployment repository access authorization", () => {
     expect(fixture.continuationStore.records[0]?.consumedAt).toBeUndefined();
 
     fixture.makeAvailable();
-    await expect(complete()).resolves.toEqual({
-      token: expect.stringMatching(/^[0-9a-f]{64}$/u),
-    });
+    const completed = await complete();
+    expect(completed.token).toMatch(/^[0-9a-f]{64}$/u);
     expect(fixture.continuationStore.records[0]?.consumedAt).toBeInstanceOf(Date);
   });
 
@@ -495,7 +510,7 @@ describe("deployment repository access authorization", () => {
         sessionId: "ses_one",
       }),
     ).resolves.toBe(1);
-    expect(fetchImplementation.mock.calls[0]?.[0]?.toString()).toBe(
+    expect(fetchImplementation.mock.calls[0]?.[0]).toBe(
       `${callbackUrl}?provider=github&status=connected`,
     );
     expect(fetchImplementation.mock.calls[0]?.[1]).toMatchObject({

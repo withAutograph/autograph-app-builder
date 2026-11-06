@@ -44,7 +44,7 @@ export function AppDetailsSection({
           {...(appNameRegistration ?? { value: appName })}
           // Record the native edit in RHF before deriving related fields.
           onChange={(event) => {
-            appNameRegistration?.onChange(event);
+            void appNameRegistration?.onChange(event);
             onAppNameChange(event.target.value);
           }}
           placeholder="support-app"
@@ -62,7 +62,7 @@ export function AppDetailsSection({
             autoComplete="off"
             {...(briefRegistration ?? { value: brief })}
             onChange={(event) => {
-              briefRegistration?.onChange(event);
+              void briefRegistration?.onChange(event);
               onBriefChange(event.target.value);
             }}
             placeholder="Describe the app you want to build…"

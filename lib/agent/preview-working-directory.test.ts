@@ -494,7 +494,7 @@ describe("protected native preview early branch", () => {
           port: 3000,
           workingDirectory: ".",
         },
-        { getSandbox, session: { auth: {}, id: "session-native" } } as never,
+        { getSandbox, session: { auth: {}, id: "session-native" } },
       );
       expect(result).toEqual(receipt);
       expect(getSandbox).not.toHaveBeenCalled();
@@ -528,7 +528,7 @@ describe("protected native preview early branch", () => {
             port: 3000,
             workingDirectory: ".",
           },
-          { getSandbox, session: { auth: {}, id: "session-native" } } as never,
+          { getSandbox, session: { auth: {}, id: "session-native" } },
         ),
       ).rejects.toThrow("resource_mismatch");
       expect(getSandbox).not.toHaveBeenCalled();
@@ -547,7 +547,7 @@ describe("protected native preview early branch", () => {
           port: 3000,
           workingDirectory: ".",
         },
-        { getSandbox, session: { auth: {}, id: "session-native" } } as never,
+        { getSandbox, session: { auth: {}, id: "session-native" } },
       ),
     ).rejects.toThrow("resource_mismatch");
     expect(getSandbox).not.toHaveBeenCalled();

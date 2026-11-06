@@ -25,6 +25,7 @@ import type {
 
 const unavailable = () => new HostedOperatorError("operator_unavailable");
 const denied = () => new HostedOperatorError("authorization_required");
+const transportLogPrefix = "[builder:native-target-transport]";
 const blockedAppMatches = (actual: string, expected: string) =>
   actual === expected || actual === "unknown";
 
@@ -80,7 +81,7 @@ export const createNativeTargetOnboardingClient = (options: {
     } catch {
       signal?.throwIfAborted();
       // Never repeat an uncertain request here. The protected journal owns recovery.
-      console.warn("[builder:native-target-transport]", {
+      console.warn(transportLogPrefix, {
         action: body.action,
         failure: "transport",
       });
@@ -88,7 +89,7 @@ export const createNativeTargetOnboardingClient = (options: {
     }
     signal?.throwIfAborted();
     if (response.status === 401 || response.status === 403) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(transportLogPrefix, {
         action: body.action,
         failure: "authorization",
         status: response.status,
@@ -116,7 +117,7 @@ export const createNativeTargetOnboardingClient = (options: {
       throw unavailable();
     }
     if (!response.ok) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(transportLogPrefix, {
         action: body.action,
         failure: "http",
         status: response.status,
@@ -127,7 +128,7 @@ export const createNativeTargetOnboardingClient = (options: {
     try {
       raw = await response.json();
     } catch {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(transportLogPrefix, {
         action: body.action,
         failure: "invalid_json",
       });
@@ -140,7 +141,7 @@ export const createNativeTargetOnboardingClient = (options: {
       blockedAppMatches(blocked.data.appId, body.input.appId) &&
       blocked.data.code !== undefined
     ) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(transportLogPrefix, {
         action: body.action,
         failure: blocked.data.code,
       });
@@ -148,7 +149,7 @@ export const createNativeTargetOnboardingClient = (options: {
     }
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(transportLogPrefix, {
         action: body.action,
         failure: "invalid_response",
       });
@@ -207,6 +208,23 @@ export const createNativeTargetOnboardingClient = (options: {
       ) {
         throw denied();
       }
+      const responderContext: {
+        authenticator: typeof responder.authenticator;
+        principalId: typeof responder.principalId;
+        principalType: typeof responder.principalType;
+        issuer?: typeof responder.issuer;
+        subject?: typeof responder.subject;
+      } = {
+        authenticator: responder.authenticator,
+        principalId: responder.principalId,
+        principalType: responder.principalType,
+      };
+      if (responder.issuer !== undefined) {
+        responderContext.issuer = responder.issuer;
+      }
+      if (responder.subject !== undefined) {
+        responderContext.subject = responder.subject;
+      }
       await send(
         {
           action: "native-target-approval-candidate",
@@ -215,13 +233,7 @@ export const createNativeTargetOnboardingClient = (options: {
           candidate: {
             callId: ctx.request.callId,
             requestId: ctx.request.requestId,
-            responder: {
-              authenticator: responder.authenticator,
-              principalId: responder.principalId,
-              principalType: responder.principalType,
-              ...(responder.issuer === undefined ? {} : { issuer: responder.issuer }),
-              ...(responder.subject === undefined ? {} : { subject: responder.subject }),
-            },
+            responder: responderContext,
             toolName: ctx.request.toolName,
           },
           input: ctx.request.toolInput,
@@ -255,15 +267,19 @@ export const createNativeTargetOnboardingClient = (options: {
       if (state.appSpec !== undefined && state.appSpec.appId !== input.appId) {
         throw denied();
       }
+      const request: NativeTargetTransportRequest = {
+        ...common(ctx),
+        action: "native-target-plan",
+        input,
+      };
+      if (state.appSpec !== undefined) {
+        request.selectedApp = {
+          appId: state.appSpec.appId,
+          appSpecDigest: state.appSpec.digest,
+        };
+      }
       const output = await send(
-        {
-          ...common(ctx),
-          action: "native-target-plan",
-          input,
-          ...(state.appSpec === undefined
-            ? {}
-            : { selectedApp: { appId: state.appSpec.appId, appSpecDigest: state.appSpec.digest } }),
-        },
+        request,
         nativeTargetTransportResponseSchemas["native-target-plan"],
         ctx.abortSignal,
       );

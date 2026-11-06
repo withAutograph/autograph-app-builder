@@ -99,6 +99,8 @@ const supportedOperations = [
 const draftPublicationOperation = "publish-draft-pull-request" as const;
 const sourceReadOperation = "resolve-existing-source" as const;
 const draftReceiptKind = "draft-pull-request" as const;
+const draftPullRequestOutcome: DraftPullRequestProposal["intendedOutcome"] =
+  "publish-reviewed-change-set-as-draft-pull-request";
 
 const readOwnedDraftPublication = async (input: {
   receipts: GitHubPublicationReceiptStore;
@@ -620,11 +622,13 @@ export function composeGitHubPublicationRuntime(input: {
   const { receipts } = input;
   const { adoptions } = input;
   const readPublishedDeliveryTarget = async (proposalDigest: string) => {
-    const proposal = await proposals.read(proposalDigest);
-    const receipt = await receipts.read(proposalDigest);
+    const [proposal, receipt] = await Promise.all([
+      proposals.read(proposalDigest),
+      receipts.read(proposalDigest),
+    ]);
     if (
-      proposal?.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request" ||
-      receipt?.kind !== "draft-pull-request" ||
+      proposal?.intendedOutcome !== draftPullRequestOutcome ||
+      receipt?.kind !== draftReceiptKind ||
       receipt.status !== "succeeded"
     ) {
       throw new Error("A verified Builder publication is required to read pull request status.");
@@ -864,13 +868,14 @@ export function composeGitHubPublicationRuntime(input: {
     },
     async inspectOpenPullRequestSource(request) {
       const recovery = ownedDraftRecovery(request.recovery);
-      const observed = await adapter.inspectExistingDraft({
+      const inspection = {
         name: request.name,
         number: request.pullRequestNumber,
         owner: request.owner,
         repositoryId: request.repositoryId,
-        ...(recovery === undefined ? {} : { recovery }),
-      });
+      };
+      if (recovery !== undefined) inspection.recovery = recovery;
+      const observed = await adapter.inspectExistingDraft(inspection);
       const matchesSelection = isDeepStrictEqual(
         [
           observed.repositoryId,
@@ -910,67 +915,48 @@ export function composeGitHubPublicationRuntime(input: {
     async inspectAppliedExistingDraftUpdate(request) {
       return await inspectAppliedExistingDraftUpdate({ adapter: draftUpdateAdapter, ...request });
     },
-    ...(input.prEffects === undefined || adapter.prDelivery === undefined
-      ? {}
-      : {
-          async runPublishedPullRequestEffect(request) {
-            const provider = adapter.prDelivery;
-            const store = input.prEffects;
-            if (provider === undefined || store === undefined) {
-              throw new Error("GitHub pull request delivery is unavailable.");
-            }
-            const { installationIdentityDigest, reviewedTarget } =
-              await readPublishedDeliveryTarget(request.proposalDigest);
-            if (!isDeepStrictEqual(reviewedTarget, request.reviewedTarget)) {
-              throw new Error("The approved pull request revision has changed.");
-            }
-            const installation = await adapter.inspectInstallation(draftPublicationOperation);
-            if (installation.digest !== installationIdentityDigest) {
-              throw new Error("The GitHub installation differs from the approved publication.");
-            }
-            const common = {
-              ...reviewedTarget,
-              installationIdentityDigest,
-              publicationDigest: request.proposalDigest,
-            };
-            const intent = createGitHubPrEffectIntent(
-              request.kind === "pr-ready"
-                ? { ...common, kind: request.kind }
-                : { ...common, kind: request.kind, readyAt: request.readyAt },
-            );
-            const execute =
-              request.reconcileOnly === true
-                ? reconcileApprovedGitHubPrEffect
-                : executeApprovedGitHubPrEffect;
-            return await execute({
-              approvedByCallId: request.approvedByCallId,
-              ...(request.abortSignal === undefined ? {} : { abortSignal: request.abortSignal }),
-              intent,
-              provider,
-              store,
-            });
-          },
-        }),
-    async inspectPublishedPullRequest(proposalDigest) {
-      if (adapter.prDelivery === undefined) {
-        throw new Error("GitHub pull request status is unavailable for this session.");
+    async runPublishedPullRequestEffect(request) {
+      const provider = adapter.prDelivery;
+      const store = input.prEffects;
+      if (provider === undefined || store === undefined) {
+        throw new Error("GitHub pull request delivery is unavailable.");
       }
-      const { reviewedTarget } = await readPublishedDeliveryTarget(proposalDigest);
-      const observation = await adapter.prDelivery.inspect(reviewedTarget);
-      return {
-        ...observation,
-        reviewedRevision:
-          observation.headSha === reviewedTarget.headSha &&
-          observation.baseBranch === reviewedTarget.baseBranch,
-        reviewedTarget,
+      const { installationIdentityDigest, reviewedTarget } = await readPublishedDeliveryTarget(
+        request.proposalDigest,
+      );
+      if (!isDeepStrictEqual(reviewedTarget, request.reviewedTarget)) {
+        throw new Error("The approved pull request revision has changed.");
+      }
+      const installation = await adapter.inspectInstallation(draftPublicationOperation);
+      if (installation.digest !== installationIdentityDigest) {
+        throw new Error("The GitHub installation differs from the approved publication.");
+      }
+      const common = {
+        ...reviewedTarget,
+        installationIdentityDigest,
+        publicationDigest: request.proposalDigest,
       };
+      const intent = createGitHubPrEffectIntent(
+        request.kind === "pr-ready"
+          ? { ...common, kind: request.kind }
+          : { ...common, kind: request.kind, readyAt: request.readyAt },
+      );
+      const execute =
+        request.reconcileOnly === true
+          ? reconcileApprovedGitHubPrEffect
+          : executeApprovedGitHubPrEffect;
+      const execution = {
+        approvedByCallId: request.approvedByCallId,
+        intent,
+        provider,
+        store,
+      };
+      if (request.abortSignal !== undefined) execution.abortSignal = request.abortSignal;
+      return await execute(execution);
     },
     async inspectOwnedPublishedDraftRepairSource(request) {
       const proposal = await proposals.read(request.publishedProposalDigest);
-      if (
-        proposal === undefined ||
-        proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
-      ) {
+      if (proposal === undefined || proposal.intendedOutcome !== draftPullRequestOutcome) {
         throw new Error("The original published draft proposal is unavailable in this tenant.");
       }
       assertExactDraftPullRequestProposal(proposal);
@@ -1161,12 +1147,11 @@ export function composeGitHubPublicationRuntime(input: {
         diagnostic.source = baseline.source;
         diagnostic.canonicalPublishedSourceMatched = baseline.canonicalPublishedSourceMatched;
         const publishedHeadSha = baseline.headSha;
-        return {
-          base,
-          draft,
-          ...(publishedHeadSha === undefined ? {} : { publishedHeadSha }),
-          ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
-        };
+        const result = { base, draft };
+        if (publishedHeadSha !== undefined) result.publishedHeadSha = publishedHeadSha;
+        if (publishedReconciliation !== undefined)
+          result.publishedReconciliation = publishedReconciliation;
+        return result;
       } finally {
         reportReconciliationBaseline(diagnostic);
       }
@@ -1176,7 +1161,7 @@ export function composeGitHubPublicationRuntime(input: {
       if (
         proposal === undefined ||
         proposal.digest !== request.expectedProposalDigest ||
-        proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
+        proposal.intendedOutcome !== draftPullRequestOutcome
       ) {
         throw new Error("The exact draft-pull-request proposal is unavailable or changed.");
       }
@@ -1275,7 +1260,7 @@ export function composeGitHubPublicationRuntime(input: {
         title: request.title,
       });
       const sealed = await proposals.save(proposal);
-      if (sealed.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request") {
+      if (sealed.intendedOutcome !== draftPullRequestOutcome) {
         throw new Error("The saved draft proposal has the wrong publication outcome.");
       }
       return sealed;
@@ -1357,12 +1342,14 @@ export function composeGitHubPublicationRuntime(input: {
           adoptedDraft = existing;
         }
       }
-      const repository = await adapter.inspectRepository({
-        operation: draftPublicationOperation,
-        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
-        repositoryId: request.githubSource.repository.repositoryId,
-      });
-      const installation = await adapter.inspectInstallation(draftPublicationOperation);
+      const [repository, installation] = await Promise.all([
+        adapter.inspectRepository({
+          operation: draftPublicationOperation,
+          ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
+          repositoryId: request.githubSource.repository.repositoryId,
+        }),
+        adapter.inspectInstallation(draftPublicationOperation),
+      ]);
       return await sealExistingDraftUpdate({
         adapter: draftUpdateAdapter,
         installation,
@@ -1390,13 +1377,14 @@ export function composeGitHubPublicationRuntime(input: {
     // oxlint-disable-next-line eslint/complexity -- verifies live draft, tenant receipt, and Builder origin before sealing.
     async sealExistingDraftReconciliation(request) {
       const recovery = ownedDraftRecovery(request.recovery);
-      const observed = await draftReconciliationAdapter.inspectExistingDraft({
+      const inspection = {
         name: request.githubSource.repository.name,
         number: request.pullRequestNumber,
         owner: request.githubSource.repository.owner,
         repositoryId: request.githubSource.repository.repositoryId,
-        ...(recovery === undefined ? {} : { recovery }),
-      });
+      };
+      if (recovery !== undefined) inspection.recovery = recovery;
+      const observed = await draftReconciliationAdapter.inspectExistingDraft(inspection);
       if (
         observed.headSha !== request.selectedCheckoutHeadSha ||
         observed.headTree !== request.selectedCheckoutHeadTree ||
@@ -1456,13 +1444,15 @@ export function composeGitHubPublicationRuntime(input: {
           "Builder cannot verify the draft PR's origin marker and tenant-scoped publication or adoption record. Refresh its provenance before reconciling.",
         );
       }
-      const repository = await adapter.inspectRepository({
-        operation: draftPublicationOperation,
-        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
-        repositoryId: request.githubSource.repository.repositoryId,
-      });
-      const installation = await adapter.inspectInstallation(draftPublicationOperation);
-      return await sealExistingDraftReconciliation({
+      const [repository, installation] = await Promise.all([
+        adapter.inspectRepository({
+          operation: draftPublicationOperation,
+          ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
+          repositoryId: request.githubSource.repository.repositoryId,
+        }),
+        adapter.inspectInstallation(draftPublicationOperation),
+      ]);
+      const reconciliation = {
         adapter: draftReconciliationAdapter,
         installation,
         originMarker: observed.verifiedBuilderOrigin.marker,
@@ -1470,12 +1460,13 @@ export function composeGitHubPublicationRuntime(input: {
         pullRequestNumber: request.pullRequestNumber,
         repository,
         review: request.review,
-        ...(recovery === undefined ? {} : { recovery }),
         selectedSourceRef:
           prior === undefined
             ? request.githubSource.resolvedRef
             : `refs/heads/${observed.headBranch}`,
-      });
+      };
+      if (recovery !== undefined) reconciliation.recovery = recovery;
+      return await sealExistingDraftReconciliation(reconciliation);
     },
     async inspectAppliedExistingDraftReconciliation(request) {
       return await inspectAppliedExistingDraftReconciliation({

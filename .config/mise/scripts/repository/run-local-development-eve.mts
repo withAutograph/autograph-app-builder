@@ -1,14 +1,14 @@
-import path from "node:path";
+import nodeProcess from "node:process";
 
-import { runLocalEve } from "../../../../lib/eve/local-eve-launch";
+const { runLocalEve } = await import("../../../../lib/eve/local-eve-launch");
 
-const resume = process.argv.length === 3 && process.argv[2] === "--resume";
-if (process.argv.length !== 2 && !resume) {
+const resume = nodeProcess.argv.length === 3 && nodeProcess.argv[2] === "--resume";
+if (nodeProcess.argv.length !== 2 && !resume) {
   throw new Error("The local development Eve entrypoint accepts only explicit --resume.");
 }
 
-process.exitCode = await runLocalEve({
-  repositoryRoot: path.resolve(import.meta.dirname, "../../../../"),
+nodeProcess.exitCode = await runLocalEve({
+  repositoryRoot: new URL("../../../../", import.meta.url).pathname,
 
   resume,
 });

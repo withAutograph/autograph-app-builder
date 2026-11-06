@@ -29,8 +29,9 @@ const context = {
   abortSignal: new AbortController().signal,
   session: { id: "owner-session" },
 } as Pick<ToolContext, "session" | "abortSignal">;
-const run = (operation: () => void | Promise<void>) =>
-  contextStorage.run(new ContextContainer(), operation);
+const run = async (operation: () => void | Promise<void>): Promise<void> => {
+  await contextStorage.run(new ContextContainer(), operation);
+};
 const fixture = (content = "proposed bytes", extra = true) => {
   const changes = [
     {
@@ -84,8 +85,8 @@ const scope = (state: ReturnType<typeof fixture>, sessionId = context.session.id
 });
 
 describe("current frozen proposal inspection", () => {
-  it("reads exact unapplied bytes and explicit deletion without Sandbox fallback or state changes", () =>
-    run(() => {
+  it("reads exact unapplied bytes and explicit deletion without Sandbox fallback or state changes", async () => {
+    await run(() => {
       const state = fixture();
       const before = JSON.stringify(state);
       expect(inspectCurrentProposalSource(input(state), context)).toMatchObject({
@@ -127,19 +128,21 @@ describe("current frozen proposal inspection", () => {
           context,
         ),
       ).toThrow();
-    }));
-  it("allows inspecting the owner's pending plan without granting or retiring approval", () =>
-    run(() => {
+    });
+  });
+  it("allows inspecting the owner's pending plan without granting or retiring approval", async () => {
+    await run(() => {
       const state = fixture();
       requestPrivateApplyApproval(scope(state), "pending-call");
       const before = readPrivateApplyAuthority();
       expect(inspectCurrentProposalSource(input(state), context).status).toBe("UNAPPLIED");
       expect(readPrivateApplyAuthority()).toEqual(before);
-    }));
+    });
+  });
   it.each(["digest", "app", "phase", "file-hash", "iteration-hash", "owner", "approved"])(
     "rejects %s drift",
-    (kind) =>
-      run(() => {
+    async (kind) => {
+      await run(() => {
         const state = fixture();
         const request = input(state);
         if (kind === "digest") {
@@ -157,7 +160,7 @@ describe("current frozen proposal inspection", () => {
           if (!("iteration" in state.proposal.target)) {
             throw new Error("fixture");
           }
-          const change = state.proposal.target.iteration.changes[0];
+          const [change] = state.proposal.target.iteration.changes;
           if (!change?.after) {
             throw new Error("fixture");
           }
@@ -191,21 +194,22 @@ describe("current frozen proposal inspection", () => {
           request.expectedProposalDigest = state.proposal.digest;
         }
         expect(() => inspectCurrentProposalSource(request, context)).toThrow();
-      }),
+      });
+    },
   );
   it.each([
     "../secret",
     "apps/foreign/file.ts",
     "/workspace/repository/apps/example/file.ts",
     "app//file.ts",
-  ])("rejects unsafe path %s", (path) =>
-    run(() => {
+  ])("rejects unsafe path %s", async (path) => {
+    await run(() => {
       const state = fixture();
       expect(() => inspectCurrentProposalSource(input(state, [path]), context)).toThrow();
-    }),
-  );
-  it("round-trips bounded Unicode pages with exact proposal and file digests", () =>
-    run(() => {
+    });
+  });
+  it("round-trips bounded Unicode pages with exact proposal and file digests", async () => {
+    await run(() => {
       const content = '🙂é"\\\n'.repeat(EVE_NATIVE_RESULT_PAGE_BYTES / 4);
       const state = fixture(content, false);
       let offsetBytes = 0;
@@ -235,7 +239,7 @@ describe("current frozen proposal inspection", () => {
           break;
         }
         expect(result.continuation.offsetBytes).toBeGreaterThan(offsetBytes);
-        offsetBytes = result.continuation.offsetBytes;
+        ({ offsetBytes } = result.continuation);
       } while (pages < 20);
       expect(pages).toBeGreaterThan(1);
       expect(joined).toBe(content);
@@ -250,9 +254,10 @@ describe("current frozen proposal inspection", () => {
           context,
         ),
       ).toThrow();
-    }));
-  it("paginates the exact current path inventory without skipping or duplicating paths", () =>
-    run(() => {
+    });
+  });
+  it("paginates the exact current path inventory without skipping or duplicating paths", async () => {
+    await run(() => {
       const state = fixture();
       if (!("iteration" in state.proposal.target)) {
         throw new Error("fixture");
@@ -291,9 +296,10 @@ describe("current frozen proposal inspection", () => {
         pathIndex = result.nextPathIndex;
       } while (pathIndex < paths.length);
       expect(observed).toEqual(paths.toSorted());
-    }));
-  it("handles empty proposed files and cancellation before exposing bytes", () =>
-    run(() => {
+    });
+  });
+  it("handles empty proposed files and cancellation before exposing bytes", async () => {
+    await run(() => {
       const state = fixture("", false);
       expect(
         inspectCurrentProposalSource(input(state, ["app/[...view]/page.tsx"]), context).files[0]
@@ -304,7 +310,8 @@ describe("current frozen proposal inspection", () => {
       expect(() =>
         inspectCurrentProposalSource(input(state), { ...context, abortSignal: abort.signal }),
       ).toThrow();
-    }));
+    });
+  });
 });
 
 it("routes explicit proposal reads through the real tool without acquiring a Sandbox; default still reads applied bytes", async () => {

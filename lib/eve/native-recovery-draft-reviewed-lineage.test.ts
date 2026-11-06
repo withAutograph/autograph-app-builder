@@ -32,7 +32,7 @@ it("accepts same-slot reviews with equivalent persisted JSON despite key order o
   const f = await freshFixture();
   const duplicate = structuredClone(f.old);
   const reordered = Object.fromEntries(Object.entries(f.reviewed).toReversed());
-  reordered.optionalTransient = undefined;
+  delete reordered.optionalTransient;
   Reflect.set(duplicate.serializedContext, workflowKey, reordered);
   f.input.payload.candidates.push(duplicate);
   expect(recoverDraftReviewedLineage(f.input)).toEqual(f.reviewed);

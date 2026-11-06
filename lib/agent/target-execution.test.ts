@@ -3,11 +3,8 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { APP_BUILDER_WORKFLOW_VERSION } from "./workflow-state";
-import type {
-  PreparedAppCreation,
-  AppBuilderWorkflowState,
-  DependencyPreparationReceipt,
-} from "./workflow-state";
+import type { AppBuilderWorkflowState, DependencyPreparationReceipt } from "./workflow-state";
+import type { TargetProposal } from "../repository/target-planning";
 import {
   assertProposalExecutionBindings,
   plannedProposalForExecution,
@@ -107,7 +104,18 @@ const state = {
     sourceReceiptDigest: "f".repeat(64),
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
-    target: {} as PreparedAppCreation["target"],
+    target: {
+      blockers: [],
+      contract: {
+        appId: "expense-review",
+        appSpec: { path: "apps/expense-review/.config/app-spec.md", sha256: "e".repeat(64) },
+        version: 1,
+      },
+      mutations: [],
+      plan: {
+        product: {},
+      },
+    } satisfies TargetProposal,
     version: 1,
     workspaceDigest: "c".repeat(64),
   },
@@ -139,9 +147,32 @@ const state = {
 describe("target command readiness", () => {
   const cache = {
     contentDigest: "3".repeat(64),
-    manifest: { target: { sha: "f".repeat(40), tree: "0".repeat(40) } },
+    manifest: {
+      closure: {
+        archiveBytes: 1,
+        archivePath: "/opt/app-builder/dependency-cache/node-modules.tar.gz",
+        archiveSha256: "7".repeat(64),
+        package: "@vercel/microfrontends",
+        version: "2.4.0",
+      },
+      platform: "linux/x86_64",
+      runtime: { bun: "1.3.14" },
+      scope: "builder-execution",
+      target: {
+        appContractSha256: "e".repeat(64),
+        appIdentitySha256: "d".repeat(64),
+        bunLockSha256: "c".repeat(64),
+        miseConfigSha256: "b".repeat(64),
+        miseLockSha256: "a".repeat(64),
+        repositoryExecSha256: "9".repeat(64),
+        repositoryPreflightSha256: "8".repeat(64),
+        sha: "f".repeat(40),
+        tree: "0".repeat(40),
+      },
+      version: 1,
+    },
     manifestDigest: "2".repeat(64),
-  } as ObservedDependencyCache;
+  } satisfies ObservedDependencyCache;
 
   it("uses the hosted execution artifact and inspected cache in Vercel Preview", () => {
     const environment = {
@@ -153,7 +184,7 @@ describe("target command readiness", () => {
     expect(resolveTargetExecutionEnvironment({ environment, fixture: false })).toMatchObject({
       backend: { blockers: [], kind: "vercel-preview" },
       cacheInspectable: true,
-      imageDigest: undefined,
+      imageDigest: null,
     });
     expect(
       resolveTargetExecutionEnvironment({
@@ -197,7 +228,7 @@ describe("target command readiness", () => {
     ).toMatchObject({
       backend: { kind: "unsupported-vercel" },
       cacheInspectable: false,
-      imageDigest: undefined,
+      imageDigest: null,
     });
   });
 

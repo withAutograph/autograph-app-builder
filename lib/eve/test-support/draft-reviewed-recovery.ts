@@ -56,10 +56,29 @@ export const { recoverTerminalSession, activateTerminalSession, inspectNativeRec
 const { emitTurnEpilogue, setHarnessEmissionState } = await load("harness/emission.js");
 const serialization = await load("compiled/@workflow/core/serialization.js");
 export const workflowKey = "autograph-app-builder.workflow.v17";
-export const logical = "physical-ancestor";
+const APP_ID = "orchard";
+const APP_PACKAGE = "@fixture/orchard";
+const APP_WORKSPACE = "apps/orchard";
+const APP_SPEC_PATH = ".config/app-specs/orchard.cue";
+const MICROFRONTENDS_CONFIG = "microfrontends.json";
+const ANCESTOR_RUN_ID = "physical-ancestor";
+export const logical = ANCESTOR_RUN_ID;
 export const owner = "physical-source";
 const d = "a".repeat(64);
 const sha = "b".repeat(40);
+const installation = (operation: "resolve-existing-source" | "publish-draft-pull-request") =>
+  createGitHubInstallationIdentity({
+    accountId: "20",
+    accountLogin: "owner",
+    accountType: "Organization",
+    installationId: "10",
+    operation,
+    repositorySelection: "selected",
+    selectedRepositoryIds: ["100"],
+  });
+const unavailable = async (): Promise<never> => {
+  throw new Error("Unexpected provider effect");
+};
 export const fixture = () => {
   const execution = {
     appSpecDigest: d,
@@ -72,35 +91,35 @@ export const fixture = () => {
     sourceTree: sha,
     workspaceDigest: d,
   };
-  const appSpecPath = ".config/app-specs/orchard.cue";
+  const appSpecPath = APP_SPEC_PATH;
   const identity = targetIdentitySchema.parse({
-    appId: "orchard",
+    appId: APP_ID,
     appSpecPath,
     appSpecSourcePath: appSpecPath,
     baseRoutes: ["/orchard"],
     cueSourcePath: appSpecPath,
-    packageName: "@fixture/orchard",
-    projectName: "orchard",
+    packageName: APP_PACKAGE,
+    projectName: APP_ID,
     schemaCuePath: "apps/orchard/schema/index.cue",
     title: "Orchard",
-    workspacePath: "apps/orchard",
+    workspacePath: APP_WORKSPACE,
   });
   const target = targetCreationProposalSchema.parse({
     blockers: [],
-    contract: { appId: "orchard", appSpec: { path: appSpecPath, sha256: d }, version: 1 },
+    contract: { appId: APP_ID, appSpec: { path: appSpecPath, sha256: d }, version: 1 },
     mutations: [],
     plan: {
       product: { appSpec: { path: appSpecPath, sha256: d } },
       source: {
-        packageName: "@fixture/orchard",
+        packageName: APP_PACKAGE,
         runtime: "nextjs",
         schema: { kind: "none" },
-        workspacePath: "apps/orchard",
+        workspacePath: APP_WORKSPACE,
       },
       topology: {
-        configPath: "microfrontends.json",
-        packageName: "@fixture/orchard",
-        projectName: "orchard",
+        configPath: MICROFRONTENDS_CONFIG,
+        packageName: APP_PACKAGE,
+        projectName: APP_ID,
         routes: ["/orchard"],
       },
     },
@@ -126,22 +145,26 @@ export const fixture = () => {
     proposalDigest: d,
     status: "applied",
     targetReceipt: {
-      appId: "orchard",
-      mutations: ["apps/orchard", "microfrontends.json"],
+      appId: APP_ID,
+      mutations: [APP_WORKSPACE, MICROFRONTENDS_CONFIG],
       omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
       recovered: false,
-      topology: { newDigest: d, oldDigest: d, path: "microfrontends.json" },
+      topology: { newDigest: d, oldDigest: d, path: MICROFRONTENDS_CONFIG },
       version: 1,
-      workspacePath: "apps/orchard",
+      workspacePath: APP_WORKSPACE,
     },
     version: 2,
   };
   const validation: TargetValidationReceipt = {
-    appId: "orchard",
-    ...execution,
-    version: 3,
-    digest: d,
-    status: "passed",
+    appId: APP_ID,
+    appSpecDigest: d,
+    appSpecPath,
+    appValidationSha256: d,
+    appliedTreeDigest: d,
+    applyDigest: d,
+    artifactRevision: "revision",
+    attemptDigest: d,
+    changedContentDigest: d,
     commands: [
       {
         command: "mise run --no-deps --skip-tools app:check orchard",
@@ -153,18 +176,22 @@ export const fixture = () => {
         validationRoot: apply.applyRoot,
       },
     ],
-    testShards: ["1/1"],
-    appValidationSha256: d,
-    appSpecPath,
-    dependencyReceiptDigest: d,
-    identityDigest: d,
     dependencyCacheContentDigest: d,
+    dependencyCacheDigest: d,
+    dependencyReceiptDigest: d,
+    digest: d,
+    eligibilityDigest: d,
+    identityDigest: d,
+    imageDigest: d,
     proposalDigest: d,
-    applyDigest: d,
-    appliedTreeDigest: d,
-    changedContentDigest: d,
-    attemptDigest: d,
+    sourceReceiptDigest: d,
+    sourceSha: sha,
+    sourceTree: sha,
+    status: "passed",
+    testShards: ["1/1"],
     validatedByCallId: "validate",
+    version: 3,
+    workspaceDigest: d,
   };
   const receipt = createReviewedChangeSetReceipt(
     deriveNormalizedChangeSet(apply, validation, d, d),
@@ -173,7 +200,7 @@ export const fixture = () => {
   const reviewed: DraftReviewedWorkflow = {
     appSpec: {
       acceptedByCallId: "accept",
-      appId: "orchard",
+      appId: APP_ID,
       artifactPath: "apps/orchard/spec.md",
       artifactRevision: "revision",
       digest: d,
@@ -260,7 +287,7 @@ export const fixture = () => {
   const { reviewReceipt: _review, ...baseline } = reviewed;
   void _review;
   const candidate = {
-    appId: "orchard",
+    appId: APP_ID,
     baseSha: sha,
     baseTree: sha,
     conflicts: [],
@@ -357,16 +384,6 @@ export const freshFixture = async () => {
   delete f.reviewed.githubSource;
   const current = f.currentContext[workflowKey];
   delete current.githubSource;
-  const installation = (operation: "resolve-existing-source" | "publish-draft-pull-request") =>
-    createGitHubInstallationIdentity({
-      accountId: "20",
-      accountLogin: "owner",
-      accountType: "Organization",
-      installationId: "10",
-      operation,
-      repositorySelection: "selected",
-      selectedRepositoryIds: ["100"],
-    });
   const publicationInstallation = installation("publish-draft-pull-request");
   const resolutionInstallation = installation("resolve-existing-source");
   const repository = (installationIdentityDigest: string) =>
@@ -422,9 +439,6 @@ export const freshFixture = async () => {
   const readBack = {
     ...unsigned,
     digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
-  };
-  const unavailable = async (): Promise<never> => {
-    throw new Error("Unexpected provider effect");
   };
   const adapter: GitHubPublicationAdapter = {
     createPrivateFreshHistoryRepository: unavailable,
@@ -538,9 +552,7 @@ export const nativeFixture = async (
         sequence: 2,
         sessionStarted: true,
         stepIndex: 0,
-        ...(options.live === true
-          ? { turnId: options.activeTurn === true ? "active-turn" : "" }
-          : {}),
+        ...(options.live === true && { turnId: options.activeTurn === true ? "active-turn" : "" }),
       },
     },
   };
@@ -629,7 +641,7 @@ export const nativeFixture = async (
     options.priorOwnerReview === true && index < priorEntries.length;
   const steps = await Promise.all(
     entries.map(async (entry, index) => ({
-      runId: priorEntry(index) ? "physical-ancestor" : owner,
+      runId: priorEntry(index) ? ANCESTOR_RUN_ID : owner,
       status: "completed",
       stepId: entry.origin.stepId,
       stepName:
@@ -644,7 +656,7 @@ export const nativeFixture = async (
                 serializedContext: entry.serializedContext,
                 sessionState: createDurableSessionState({ session }),
               },
-              priorEntry(index) ? "physical-ancestor" : owner,
+              priorEntry(index) ? ANCESTOR_RUN_ID : owner,
             ),
           }
         : {
@@ -658,7 +670,7 @@ export const nativeFixture = async (
                 ],
                 closureVars: [],
               },
-              priorEntry(index) ? "physical-ancestor" : owner,
+              priorEntry(index) ? ANCESTOR_RUN_ID : owner,
             ),
           }),
     })),
@@ -678,16 +690,19 @@ export const nativeFixture = async (
     const ordered = pagination?.sortOrder === "desc" ? values.toReversed() : values;
     const offset = pagination?.cursor === undefined ? 0 : Number(pagination.cursor);
     const limit =
-      options.paginateAncestor === true && runId === "physical-ancestor"
+      options.paginateAncestor === true && runId === ANCESTOR_RUN_ID
         ? 1
         : (pagination?.limit ?? ordered.length);
     const data = ordered.slice(offset, offset + limit);
     const next = offset + data.length;
-    return {
+    const result = {
       data,
       hasMore: next < ordered.length,
-      ...(next < ordered.length ? { cursor: String(next) } : {}),
     };
+    if (next < ordered.length) {
+      return { ...result, cursor: String(next) };
+    }
+    return result;
   };
   const world = {
     events: {

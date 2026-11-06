@@ -19,7 +19,12 @@ export function AuthContinuity({
   action?: "sign-in" | "sign-up";
 }) {
   const hasSavedBrief = useSyncExternalStore(
-    () => () => null,
+    (onStoreChange) => {
+      window.addEventListener("storage", onStoreChange);
+      return function unsubscribe(): void {
+        window.removeEventListener("storage", onStoreChange);
+      };
+    },
     () => (sessionStorage.getItem(anonymousBriefStorageKey) ?? "").trim().length > 0,
     () => false,
   );

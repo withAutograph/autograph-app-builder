@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
@@ -12,13 +14,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-
-import { extract } from "tar";
+import { z } from "zod";
 
 const { basename, dirname, isAbsolute, join } = path;
 
 const TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
 const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
+const BUILDER_PROOF_APP_ID = "builder-proof";
 const APP_BUILDER_MISE_PROFILE = `[settings]
 exec_auto_install = false
 not_found_auto_install = false
@@ -27,7 +29,27 @@ task.run_auto_install = false
 [deps]
 disable = ["bun"]
 `;
-const sha256 = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
+const sha256 = (value: Uint8Array): string => {
+  const hash = createHash("sha256");
+  hash.update(value);
+  return hash.digest("hex");
+};
+
+interface BuilderProofIdentity {
+  appId: typeof BUILDER_PROOF_APP_ID;
+  packageName: "@autograph/builder-proof";
+  workspacePath: "apps/builder-proof";
+}
+
+const builderProofIdentitySchema = z.object({
+  appId: z.literal(BUILDER_PROOF_APP_ID),
+  packageName: z.literal("@autograph/builder-proof"),
+  workspacePath: z.literal("apps/builder-proof"),
+});
+
+const extractTar = (cwd: string, file: string): void => {
+  execFileSync("/usr/bin/tar", ["-xf", file, "-C", cwd], { stdio: "inherit" });
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseArguments(args: readonly string[]) {
@@ -48,13 +70,12 @@ function parseArguments(args: readonly string[]) {
   values.delete("--arrusted-root");
   values.delete("--artifact");
   values.delete("--artifact-sha256");
-  if (
+  const requiredValuesMissing =
     miseBin === undefined ||
     arrustedRoot === undefined ||
     artifact === undefined ||
-    artifactSha256 === undefined ||
-    values.size !== 0
-  )
+    artifactSha256 === undefined;
+  if (requiredValuesMissing || values.size !== 0)
     throw new Error(
       "Usage: hosted:artifact-prove -- --arrusted-root <path> --artifact <path> --artifact-sha256 <sha256>",
     );
@@ -92,7 +113,7 @@ if (
 
 const root = mkdtempSync(join(tmpdir(), "hosted-arrusted-proof."));
 try {
-  extract({ cwd: root, file: input.artifact, sync: true });
+  extractTar(root, input.artifact);
   const seed = join(root, ".app-builder-hosted-seed");
   if (existsSync(join(seed, "source-tree.tar.gz")))
     throw new Error("The hosted dependency artifact still embeds source.");
@@ -104,50 +125,41 @@ try {
     ["-C", input.arrustedRoot, "archive", "--format=tar", `--output=${sourceTar}`, TARGET_SHA],
     { stdio: "inherit" },
   );
-  extract({ cwd: repository, file: sourceTar, sync: true });
+  extractTar(repository, sourceTar);
   writeFileSync(
     join(repository, ".config", "mise", "config.app-builder.toml"),
     APP_BUILDER_MISE_PROFILE,
   );
-  extract({
-    cwd: repository,
-    file: join(seed, "dependency-cache", "node-modules.tar.gz"),
-    sync: true,
-  });
-  const run = (args: readonly string[]) =>
-    JSON.parse(
-      execFileSync(
-        input.miseBin,
-        [
-          "--env",
-          "app-builder",
-          "run",
-          "--no-deps",
-          "--skip-tools",
-          "repository:exec",
-          "--",
-          ...args,
-        ],
-        {
-          cwd: repository,
-          encoding: "utf-8",
-          env: {
-            ...process.env,
-            MISE_AUTO_INSTALL: "false",
-            MISE_EXEC_AUTO_INSTALL: "false",
-            MISE_TASK_RUN_AUTO_INSTALL: "false",
-            PATH: `${dirname(input.miseBin)}:${process.env.PATH ?? ""}`,
-          },
+  extractTar(repository, join(seed, "dependency-cache", "node-modules.tar.gz"));
+  const run = (args: readonly string[]): BuilderProofIdentity => {
+    const output = execFileSync(
+      input.miseBin,
+      [
+        "--env",
+        "app-builder",
+        "run",
+        "--no-deps",
+        "--skip-tools",
+        "repository:exec",
+        "--",
+        ...args,
+      ],
+      {
+        cwd: repository,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          MISE_AUTO_INSTALL: "false",
+          MISE_EXEC_AUTO_INSTALL: "false",
+          MISE_TASK_RUN_AUTO_INSTALL: "false",
+          PATH: `${dirname(input.miseBin)}:${process.env.PATH ?? ""}`,
         },
-      ),
-    ) as Record<string, unknown>;
-  const identity = run(["app-identity.ts", "--app", "builder-proof"]);
-  if (
-    identity.appId !== "builder-proof" ||
-    identity.workspacePath !== "apps/builder-proof" ||
-    identity.packageName !== "@autograph/builder-proof"
-  )
-    throw new Error("The hosted dependency artifact returned an unexpected planning result.");
+      },
+    );
+    const parsed: unknown = JSON.parse(output);
+    return builderProofIdentitySchema.parse(parsed);
+  };
+  const identity = run(["app-identity.ts", "--app", BUILDER_PROOF_APP_ID]);
   process.stdout.write(
     `${JSON.stringify({
       appId: identity.appId,

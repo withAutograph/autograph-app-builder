@@ -246,7 +246,7 @@ describe("Vercel integration security", () => {
 
   it("verifies the exact raw Vercel webhook body", () => {
     const body = JSON.stringify({ type: "integration-configuration.removed" });
-    const secret = "client-secret";
+    const secret = randomBytes(32).toString("hex");
     const signature = createHmac("sha1", secret).update(body).digest("hex");
     expect(verifyVercelWebhook({ body, secret, signature })).toBe(true);
     expect(verifyVercelWebhook({ body: `${body} `, secret, signature })).toBe(false);
@@ -278,8 +278,9 @@ describe("Vercel integration security", () => {
           tokenKeyVersion: "v1",
         },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        fetch: async (url) => {
-          if (String(url).endsWith("/v2/oauth/access_token")) {
+        fetch: async (url: string | URL) => {
+          const requestUrl = url instanceof URL ? url.href : url;
+          if (requestUrl.endsWith("/v2/oauth/access_token")) {
             return Response.json({ access_token: "provider-token-sentinel" });
           }
           return Response.json({
@@ -315,11 +316,9 @@ describe("Vercel integration security", () => {
         states: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async consume() {
-            if (consumed) {
-              return;
-            }
+            const returnState = consumed ? undefined : recoveredReturnState;
             consumed = true;
-            return recoveredReturnState;
+            return returnState;
           },
           async create() {},
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

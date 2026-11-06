@@ -31,28 +31,35 @@ function publishResult(result?: EveSessionResult) {
   }
 }
 
-app.ontoolresult = ({ structuredContent }) => {
-  publishResult(structuredContent as EveSessionResult | undefined);
-};
+app.addEventListener("toolresult", ({ structuredContent }) => {
+  const parsedResult = eveSessionResultSchema.safeParse(structuredContent);
+  publishResult(parsedResult.success ? parsedResult.data : undefined);
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function SessionAppContainer() {
   const result = useSyncExternalStore(
     (listener) => {
       resultListeners.add(listener);
-      return () => resultListeners.delete(listener);
+      return () => {
+        resultListeners.delete(listener);
+      };
     },
     () => latestResult,
     () => latestResult,
   );
   const capabilities = app.getHostCapabilities();
-  const automaticRefresh = useRef(createBoundedAuthorizationRefresh());
-  const authorizationRequestKey =
-    result?.inputRequests
-      ?.filter((request) => request.kind === "authorization")
-      .map((request) => request.requestId)
-      .toSorted()
-      .join(":") ?? "";
+  const automaticRefresh = useRef<ReturnType<typeof createBoundedAuthorizationRefresh> | null>(
+    null,
+  );
+  automaticRefresh.current ??= createBoundedAuthorizationRefresh();
+  const authorizationRequestIds: string[] = [];
+  for (const request of result?.inputRequests ?? []) {
+    if (request.kind === "authorization") {
+      authorizationRequestIds.push(request.requestId);
+    }
+  }
+  const authorizationRequestKey = authorizationRequestIds.toSorted().join(":");
 
   const refresh = useCallback(async () => {
     if (!result || !capabilities?.serverTools) {
@@ -67,7 +74,10 @@ function SessionAppContainer() {
       name: "autograph_get",
     });
     if (response.structuredContent) {
-      publishResult(response.structuredContent as EveSessionResult);
+      const parsedResult = eveSessionResultSchema.safeParse(response.structuredContent);
+      if (parsedResult.success) {
+        publishResult(parsedResult.data);
+      }
     }
   }, [capabilities?.serverTools, result]);
 
@@ -76,11 +86,12 @@ function SessionAppContainer() {
   }, [authorizationRequestKey]);
 
   useEffect(() => {
-    if (!authorizationRequestKey || !capabilities?.serverTools) {
-      return;
-    }
     const checkAfterReturn = () => {
-      if (document.visibilityState === "hidden") {
+      if (
+        !authorizationRequestKey ||
+        !capabilities?.serverTools ||
+        document.visibilityState === "hidden"
+      ) {
         return;
       }
       const now = Date.now();
@@ -126,7 +137,10 @@ function SessionAppContainer() {
       );
     }
     if (response.structuredContent) {
-      publishResult(response.structuredContent as EveSessionResult);
+      const parsedResult = eveSessionResultSchema.safeParse(response.structuredContent);
+      if (parsedResult.success) {
+        publishResult(parsedResult.data);
+      }
     }
   }
 

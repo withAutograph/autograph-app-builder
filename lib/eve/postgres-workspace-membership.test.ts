@@ -1,14 +1,17 @@
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
-import type * as databaseSchema from "../db/schema";
+import { hostedWorkspaceMemberships } from "../db/schema";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
   createPostgresOAuthMembershipAuthority,
   createPostgresWorkspaceMembership,
 } from "./postgres-workspace-membership";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type QueryRows = Record<string, unknown>[];
+
+interface Database {
+  select: ReturnType<typeof vi.fn>;
+}
 
 const principal: HostedPrincipal = {
   audience: "https://builder.example.test/mcp",
@@ -23,13 +26,12 @@ function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const limit = vi.fn(async () => rows);
   const where = vi.fn(() => ({ limit }));
-  const joined = { innerJoin: undefined as unknown, where };
+  const joined = { innerJoin: vi.fn(() => ({ innerJoin: vi.fn(() => ({ where })) })), where };
   const innerJoin = vi.fn(() => joined);
-  joined.innerJoin = innerJoin;
   const from = vi.fn(() => joined);
   const select = vi.fn(() => ({ from }));
   return {
-    database: { select } as unknown as Database,
+    database: { select },
     from,
     innerJoin,
     limit,
@@ -100,11 +102,12 @@ describe("PostgreSQL workspace membership", () => {
   });
 
   it("propagates database failures for the request boundary to fail closed", async () => {
-    const database = {
+    // SAFETY: This fixture only exercises the synchronous failure at select().
+    const database: Database = {
       select() {
         throw new Error("database unavailable");
       },
-    } as unknown as Database;
+    };
     await expect(
       createPostgresWorkspaceMembership(database).isMember({
         principal,

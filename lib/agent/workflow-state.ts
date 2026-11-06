@@ -404,34 +404,37 @@ export type AppBuilderWorkflowState =
       freshBootstrapReceipt: FreshBootstrapSuccessReceipt;
     } & ReviewedPhase);
 
+type PublicationWorkflowPhaseName =
+  | "publication_pending"
+  | "publication_failed"
+  | "published_local"
+  | "branch_publication_pending"
+  | "branch_publication_failed"
+  | "published_branch_worktree"
+  | "fresh_bootstrap_pending"
+  | "fresh_bootstrap_failed"
+  | "published_fresh_bootstrap";
+
+const publicationWorkflowPhases: ReadonlySet<string> = new Set([
+  "publication_pending",
+  "publication_failed",
+  "published_local",
+  "branch_publication_pending",
+  "branch_publication_failed",
+  "published_branch_worktree",
+  "fresh_bootstrap_pending",
+  "fresh_bootstrap_failed",
+  "published_fresh_bootstrap",
+]);
+
 export type PublicationWorkflowPhase = Extract<
   AppBuilderWorkflowState,
-  {
-    phase:
-      | "publication_pending"
-      | "publication_failed"
-      | "published_local"
-      | "branch_publication_pending"
-      | "branch_publication_failed"
-      | "published_branch_worktree"
-      | "fresh_bootstrap_pending"
-      | "fresh_bootstrap_failed"
-      | "published_fresh_bootstrap";
-  }
+  { phase: PublicationWorkflowPhaseName }
 >;
 
 export const isPublicationWorkflowPhase = (
   state: AppBuilderWorkflowState,
-): state is PublicationWorkflowPhase =>
-  state.phase === "publication_pending" ||
-  state.phase === "publication_failed" ||
-  state.phase === "published_local" ||
-  state.phase === "branch_publication_pending" ||
-  state.phase === "branch_publication_failed" ||
-  state.phase === "published_branch_worktree" ||
-  state.phase === "fresh_bootstrap_pending" ||
-  state.phase === "fresh_bootstrap_failed" ||
-  state.phase === "published_fresh_bootstrap";
+): state is PublicationWorkflowPhase => publicationWorkflowPhases.has(state.phase);
 
 /**
  * The workflow aggregate is the sole mutation authority. Every operation that
@@ -484,7 +487,10 @@ const draftProposalDestinationMatches = (input: {
   const { binding, githubSource, destinationReview } = input;
   const { proposal } = binding;
   if (binding.githubSourceDigest === undefined) {
-    if (githubSource !== undefined || destinationReview === undefined) {
+    if (githubSource !== undefined) {
+      return false;
+    }
+    if (destinationReview === undefined) {
       return false;
     }
     return (
@@ -502,6 +508,27 @@ const draftProposalDestinationMatches = (input: {
   );
 };
 
+const draftProposalMatchesInput = (
+  proposal: DraftPullRequestProposal,
+  binding: GitHubDraftProposalBinding,
+  input: {
+    expectedProposalDigest: string;
+    reviewDigest: string;
+    changeSetDigest: string;
+    sourceReceiptDigest: string;
+    githubSource?: ImmutableGitHubSourceReceipt;
+    destinationReview?: GitHubDestinationReviewBinding;
+  },
+): boolean => {
+  const digestMatches = proposal.digest === input.expectedProposalDigest;
+  const reviewMatches = proposal.reviewDigest === input.reviewDigest;
+  const changesMatch = proposal.changeSetDigest === input.changeSetDigest;
+  const receiptMatches = binding.sourceReceiptDigest === input.sourceReceiptDigest;
+  const destinationMatches = draftProposalDestinationMatches({ ...input, binding });
+  const proposalMatches = digestMatches && reviewMatches && changesMatch;
+  return proposalMatches && receiptMatches && destinationMatches;
+};
+
 export const assertCurrentGitHubDraftProposal = (input: {
   binding: GitHubDraftProposalBinding | undefined;
   expectedProposalDigest: string;
@@ -516,11 +543,7 @@ export const assertCurrentGitHubDraftProposal = (input: {
   if (
     binding === undefined ||
     proposal === undefined ||
-    proposal.digest !== input.expectedProposalDigest ||
-    proposal.reviewDigest !== input.reviewDigest ||
-    proposal.changeSetDigest !== input.changeSetDigest ||
-    binding.sourceReceiptDigest !== input.sourceReceiptDigest ||
-    !draftProposalDestinationMatches({ ...input, binding })
+    !draftProposalMatchesInput(proposal, binding, input)
   ) {
     throw new Error(
       "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow.",
@@ -529,11 +552,23 @@ export const assertCurrentGitHubDraftProposal = (input: {
   return proposal;
 };
 
+type PublicationJournalPhase =
+  | "reviewed"
+  | "publication_pending"
+  | "publication_failed"
+  | "published_local";
+type PublicationJournalStatus = "pending" | "failed" | "succeeded" | undefined;
+type FreshBootstrapJournalPhase =
+  | "reviewed"
+  | "fresh_bootstrap_pending"
+  | "fresh_bootstrap_failed"
+  | "published_fresh_bootstrap";
+
 export const assertPublicationJournalStatus = (
-  phase: "reviewed" | "publication_pending" | "publication_failed" | "published_local",
-  status: "pending" | "failed" | "succeeded" | undefined,
+  phase: PublicationJournalPhase,
+  status: PublicationJournalStatus,
 ): void => {
-  const allowed: Record<typeof phase, readonly (typeof status)[]> = {
+  const allowed: Record<PublicationJournalPhase, readonly PublicationJournalStatus[]> = {
     publication_failed: [undefined, "failed"],
     publication_pending: [undefined, "pending", "failed", "succeeded"],
     published_local: ["succeeded"],
@@ -547,14 +582,10 @@ export const assertPublicationJournalStatus = (
 };
 
 export const assertFreshBootstrapJournalStatus = (
-  phase:
-    | "reviewed"
-    | "fresh_bootstrap_pending"
-    | "fresh_bootstrap_failed"
-    | "published_fresh_bootstrap",
-  status: "pending" | "failed" | "succeeded" | undefined,
+  phase: FreshBootstrapJournalPhase,
+  status: PublicationJournalStatus,
 ): void => {
-  const allowed: Record<typeof phase, readonly (typeof status)[]> = {
+  const allowed: Record<FreshBootstrapJournalPhase, readonly PublicationJournalStatus[]> = {
     fresh_bootstrap_failed: ["failed", "succeeded"],
     fresh_bootstrap_pending: ["pending", "failed", "succeeded"],
     published_fresh_bootstrap: ["succeeded"],

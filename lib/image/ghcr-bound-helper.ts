@@ -2,9 +2,11 @@ import { spawn } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import { existsSync, lstatSync, readFileSync, readdirSync, readSync, realpathSync } from "node:fs";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import nodePath from "node:path";
 import { pathToFileURL } from "node:url";
-import { promisify } from "node:util";
+import { z } from "zod";
 
 const identityDomain = "autograph-app-builder-ghcr-keyring-v2";
 const registry = "https://ghcr.io";
@@ -13,6 +15,45 @@ const githubOrganization = "withAutograph";
 const maximumCredentialBytes = 4096;
 const maximumGhOutputBytes = 256 * 1024;
 const ghTimeoutMs = 10_000;
+const malformedAuthStatus = "GitHub authentication status was malformed.";
+const writePackagesScope = "write:packages";
+const unexpectedStateContents = "GitHub state root has unexpected contents.";
+const rejectedIdentity = "GitHub keyring identity did not match approval.";
+const ghcrIdentityMismatch = "GHCR provider identity did not match approval.";
+const unsafeGitHubState = "GitHub state root is unsafe.";
+const invalidStateContents = unexpectedStateContents;
+
+interface JsonObject {
+  [key: string]: JsonValue;
+}
+type JsonValue = boolean | JsonObject | null | number | string | JsonValue[];
+
+const jsonStringSchema = z.string();
+
+const isJsonObject = (value: JsonValue): value is JsonObject =>
+  value !== null && !Array.isArray(value) && typeof value === "object";
+
+const parseJsonObject = (payload: string, errorMessage: string): JsonObject => {
+  let parsed: JsonValue;
+  try {
+    const decoded: unknown = JSON.parse(payload);
+    if (
+      decoded === null ||
+      Array.isArray(decoded) ||
+      Object.getPrototypeOf(decoded) !== Object.prototype
+    ) {
+      throw new Error(errorMessage);
+    }
+    // SAFETY: JSON.parse produced a plain object, so its own enumerable values are JSON values.
+    parsed = decoded;
+  } catch {
+    throw new Error(errorMessage);
+  }
+  if (!isJsonObject(parsed)) {
+    throw new Error(errorMessage);
+  }
+  return parsed;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readBoundedInput(fd: number, maximumBytes: number): Buffer {
@@ -61,26 +102,22 @@ export function assertBoundGhcrPayload(
   expectedProvenanceDigest: string,
   expectedIdentityDigest: string,
 ): void {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    throw new Error("GHCR provider returned malformed output.");
+  const record = parseJsonObject(payload, "GHCR provider returned malformed output.");
+  const secretValue = record.Secret;
+  if (Object.keys(record).toSorted().join(",") !== "Secret,ServerURL,Username") {
+    throw new Error(ghcrIdentityMismatch);
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("GHCR provider returned malformed output.");
+  if (record.ServerURL !== registry || record.Username !== expectedUsername) {
+    throw new Error(ghcrIdentityMismatch);
   }
-  const record = parsed as Record<string, unknown>;
-  if (
-    Object.keys(record).toSorted().join(",") !== "Secret,ServerURL,Username" ||
-    record.ServerURL !== registry ||
-    record.Username !== expectedUsername ||
-    typeof record.Secret !== "string" ||
-    !/^[A-Za-z0-9_]{20,4096}$/u.test(record.Secret)
-  ) {
-    throw new Error("GHCR provider identity did not match approval.");
+  const parsedSecret = jsonStringSchema.safeParse(secretValue);
+  if (!parsedSecret.success) {
+    throw new TypeError(ghcrIdentityMismatch);
   }
-  const secret = Buffer.from(record.Secret, "ascii");
+  if (!/^[A-Za-z0-9_]{20,4096}$/u.test(parsedSecret.data)) {
+    throw new Error(ghcrIdentityMismatch);
+  }
+  const secret = Buffer.from(parsedSecret.data, "ascii");
   const observed = Buffer.from(
     ghcrIdentityDigest(expectedUsername, expectedProvenanceDigest, secret),
     "hex",
@@ -104,16 +141,7 @@ export function assertVerifiedGhcrLoginPayload(
   expectedProvenanceDigest: string,
   expectedIdentityDigest: string,
 ): void {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    throw new Error("GitHub keyring verification returned malformed output.");
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("GitHub keyring verification returned malformed output.");
-  }
-  const record = parsed as Record<string, unknown>;
+  const record = parseJsonObject(payload, "GitHub keyring verification returned malformed output.");
   if (
     Object.keys(record).toSorted().join(",") !== "Username,identityDigest,provenanceDigest" ||
     record.Username !== expectedUsername ||
@@ -136,61 +164,62 @@ type GhStatusRecord = Readonly<{
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseGhAuthStatus(payload: string, expectedUsername: string): GhStatusRecord {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    throw new Error("GitHub authentication status was malformed.");
+  const parsed = parseJsonObject(payload, malformedAuthStatus);
+  if (Object.keys(parsed).join(",") !== "hosts") {
+    throw new Error(malformedAuthStatus);
   }
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    Array.isArray(parsed) ||
-    Object.keys(parsed).join(",") !== "hosts"
-  ) {
-    throw new Error("GitHub authentication status was malformed.");
+  const { hosts } = parsed;
+  if (!isJsonObject(hosts) || Object.keys(hosts).join(",") !== githubHost) {
+    throw new Error(malformedAuthStatus);
   }
-  const { hosts } = parsed as { hosts?: unknown };
-  if (
-    typeof hosts !== "object" ||
-    hosts === null ||
-    Array.isArray(hosts) ||
-    Object.keys(hosts).join(",") !== githubHost
-  ) {
-    throw new Error("GitHub authentication status was malformed.");
-  }
-  const records = (hosts as Record<string, unknown>)[githubHost];
+  const records = hosts[githubHost];
   if (!Array.isArray(records) || records.length !== 1) {
     throw new Error("GitHub authentication status was ambiguous.");
   }
-  const [record] = records;
-  if (typeof record !== "object" || record === null || Array.isArray(record)) {
-    throw new Error("GitHub authentication status was malformed.");
+  const record = records.at(0);
+  if (record === undefined || !isJsonObject(record)) {
+    throw new Error(malformedAuthStatus);
   }
-  const value = record as Record<string, unknown>;
+  const value = record;
+  const scopesValue = value.scopes;
   if (
     Object.keys(value).toSorted().join(",") !==
-      "active,gitProtocol,host,login,scopes,state,tokenSource" ||
-    value.active !== true ||
-    value.gitProtocol !== "https" ||
-    value.host !== githubHost ||
+    "active,gitProtocol,host,login,scopes,state,tokenSource"
+  ) {
+    throw new TypeError(rejectedIdentity);
+  }
+  if (value.active !== true || value.gitProtocol !== "https" || value.host !== githubHost) {
+    throw new Error(rejectedIdentity);
+  }
+  if (
     value.login !== expectedUsername ||
     value.state !== "success" ||
-    value.tokenSource !== "keyring" ||
-    typeof value.scopes !== "string"
+    value.tokenSource !== "keyring"
   ) {
-    throw new Error("GitHub keyring identity did not match approval.");
+    throw new Error(rejectedIdentity);
+  }
+  const parsedScopes = jsonStringSchema.safeParse(scopesValue);
+  if (!parsedScopes.success) {
+    throw new TypeError(rejectedIdentity);
   }
   const scopes = new Set(
-    value.scopes
+    parsedScopes.data
       .split(",")
       .map((scope) => scope.trim())
       .filter(Boolean),
   );
-  if (!scopes.has("write:packages")) {
+  if (!scopes.has(writePackagesScope)) {
     throw new Error("GitHub keyring identity lacks package-write authority.");
   }
-  return value as GhStatusRecord;
+  return {
+    active: true,
+    gitProtocol: "https",
+    host: githubHost,
+    login: expectedUsername,
+    scopes: parsedScopes.data,
+    state: "success",
+    tokenSource: "keyring",
+  };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -230,10 +259,11 @@ export function githubConfigDigest(configRoot: string): string {
     !rootStat.isDirectory() ||
     rootStat.isSymbolicLink() ||
     uid === undefined ||
-    rootStat.uid !== uid ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (rootStat.mode & 0o022) !== 0
+    rootStat.uid !== uid
   ) {
+    throw new Error("GitHub configuration root is unsafe.");
+  }
+  if ((rootStat.mode & 0o022) !== 0) {
     throw new Error("GitHub configuration root is unsafe.");
   }
   const records: string[] = [];
@@ -243,7 +273,6 @@ export function githubConfigDigest(configRoot: string): string {
       throw new Error("GitHub configuration file is unsafe.");
     }
     const stat = lstatSync(path);
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== uid || (stat.mode & 0o077) !== 0) {
       throw new Error("GitHub configuration file is unsafe.");
     }
@@ -275,24 +304,24 @@ export function assertGithubStateRoot(stateRoot: string): void {
     !rootStat.isDirectory() ||
     rootStat.isSymbolicLink() ||
     uid === undefined ||
-    rootStat.uid !== uid ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (rootStat.mode & 0o777) !== 0o700
+    rootStat.uid !== uid
   ) {
-    throw new Error("GitHub state root is unsafe.");
+    throw new Error(unsafeGitHubState);
+  }
+  if ((rootStat.mode & 0o777) !== 0o700) {
+    throw new Error(unsafeGitHubState);
   }
 
   const rootEntries = readdirSync(stateRoot, { withFileTypes: true });
   if (rootEntries.length === 0) {
     return;
   }
-  if (
-    rootEntries.length !== 1 ||
-    rootEntries[0]?.name !== "gh" ||
-    !rootEntries[0].isDirectory() ||
-    rootEntries[0].isSymbolicLink()
-  ) {
-    throw new Error("GitHub state root has unexpected contents.");
+  const [rootEntry] = rootEntries;
+  if (rootEntries.length !== 1 || rootEntry?.name !== "gh") {
+    throw new Error(unexpectedStateContents);
+  }
+  if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
+    throw new Error(unexpectedStateContents);
   }
   const ghRoot = nodePath.join(stateRoot, "gh");
   if (realpathSync(ghRoot) !== ghRoot) {
@@ -301,34 +330,30 @@ export function assertGithubStateRoot(stateRoot: string): void {
   const ghStat = lstatSync(ghRoot);
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (ghStat.uid !== uid || (ghStat.mode & 0o022) !== 0) {
-    throw new Error("GitHub state root is unsafe.");
+    throw new Error(unsafeGitHubState);
   }
 
   const ghEntries = readdirSync(ghRoot, { withFileTypes: true });
   if (ghEntries.length === 0) {
     return;
   }
-  if (
-    ghEntries.length !== 1 ||
-    ghEntries[0]?.name !== "device-id" ||
-    !ghEntries[0].isFile() ||
-    ghEntries[0].isSymbolicLink()
-  ) {
-    throw new Error("GitHub state root has unexpected contents.");
+  const [ghEntry] = ghEntries;
+  if (ghEntries.length !== 1 || ghEntry?.name !== "device-id") {
+    throw new Error(invalidStateContents);
+  }
+  if (!ghEntry.isFile() || ghEntry.isSymbolicLink()) {
+    throw new Error(invalidStateContents);
   }
   const deviceId = nodePath.join(ghRoot, "device-id");
   if (realpathSync(deviceId) !== deviceId) {
     throw new Error("GitHub state root contains a symbolic link.");
   }
   const deviceStat = lstatSync(deviceId);
-  if (
-    deviceStat.uid !== uid ||
-    deviceStat.nlink !== 1 ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (deviceStat.mode & 0o022) !== 0 ||
-    deviceStat.size === 0 ||
-    deviceStat.size > 256
-  ) {
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
+  if (deviceStat.uid !== uid || deviceStat.nlink !== 1 || (deviceStat.mode & 0o022) !== 0) {
+    throw new Error(unsafeGitHubState);
+  }
+  if (deviceStat.size === 0 || deviceStat.size > 256) {
     throw new Error("GitHub state root is unsafe.");
   }
 }
@@ -438,8 +463,8 @@ async function runBoundedGh(args: readonly string[]): Promise<Buffer> {
     terminate();
   }, ghTimeoutMs);
   try {
-    const [code] = await once(child, "close");
-    const status = code ?? -1;
+    const closeEvent: [number | null, NodeJS.Signals | null] = await once(child, "close");
+    const status = closeEvent[0] ?? -1;
     if (timedOut || overflow || status !== 0) {
       throw new Error("GitHub credential read-back failed.");
     }
@@ -470,16 +495,23 @@ function parseExactToken(raw: Buffer): Buffer {
   const token = Buffer.from(raw.subarray(0, end));
   // Keep token validation local to the parser.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
-  const validByte = (byte: number) =>
-    (byte >= 0x30 && byte <= 0x39) ||
-    (byte >= 0x41 && byte <= 0x5a) ||
-    byte === 0x5f ||
-    (byte >= 0x61 && byte <= 0x7a);
-  if (
-    token.length < 20 ||
-    token.length > maximumCredentialBytes ||
-    token.some((byte) => !validByte(byte))
-  ) {
+  const validByte = (byte: number) => {
+    if (byte >= 0x30 && byte <= 0x39) {
+      return true;
+    }
+    if (byte >= 0x41 && byte <= 0x5a) {
+      return true;
+    }
+    if (byte === 0x5f) {
+      return true;
+    }
+    return byte >= 0x61 && byte <= 0x7a;
+  };
+  if (token.length < 20 || token.length > maximumCredentialBytes) {
+    token.fill(0);
+    throw new Error("GitHub credential read-back was malformed.");
+  }
+  if (token.some((byte) => !validByte(byte))) {
     token.fill(0);
     throw new Error("GitHub credential read-back was malformed.");
   }
@@ -512,18 +544,19 @@ async function readApprovedKeyringToken(username: string): Promise<Buffer> {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function verifyNamespace(username: string): Promise<void> {
-  const user = await runBoundedGh(["api", "/user", "--jq", ".login"]);
-  const membership = await runBoundedGh([
-    "api",
-    `/user/memberships/orgs/${githubOrganization}`,
-    "--jq",
-    "[.state,.role,.organization.login] | @tsv",
+  const [user, membership] = await Promise.all([
+    runBoundedGh(["api", "/user", "--jq", ".login"]),
+    runBoundedGh([
+      "api",
+      `/user/memberships/orgs/${githubOrganization}`,
+      "--jq",
+      "[.state,.role,.organization.login] | @tsv",
+    ]),
   ]);
   try {
-    if (
-      user.toString("utf-8").trim() !== username ||
-      membership.toString("utf-8").trim() !== `active\tadmin\t${githubOrganization}`
-    ) {
+    const actualUser = user.toString("utf-8").trim();
+    const actualMembership = membership.toString("utf-8").trim();
+    if (actualUser !== username || actualMembership !== `active\tadmin\t${githubOrganization}`) {
       throw new Error("GitHub namespace authority did not match approval.");
     }
   } finally {
@@ -542,7 +575,7 @@ async function writeCredential(username: string, token: Buffer): Promise<void> {
   const suffix = Buffer.from('"}\n', "utf-8");
   const payload = Buffer.concat([prefix, token, suffix]);
   try {
-    await promisify(process.stdout.write).call(process.stdout, payload);
+    await pipeline(Readable.from([payload]), process.stdout, { end: false });
   } finally {
     prefix.fill(0);
     suffix.fill(0);
@@ -566,7 +599,7 @@ async function writeVerifiedLogin(
     "utf-8",
   );
   try {
-    await promisify(process.stdout.write).call(process.stdout, payload);
+    await pipeline(Readable.from([payload]), process.stdout, { end: false });
   } finally {
     payload.fill(0);
   }

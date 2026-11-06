@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
@@ -19,7 +21,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { create as createTar } from "tar";
+import { z } from "zod";
 
 import { deterministicGzip } from "../../../../lib/sandbox/deterministic-gzip.ts";
 
@@ -28,6 +30,10 @@ const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
 const OUTPUT_NAME = "arrusted-d378904a-dependencies.tar.gz";
 const REQUIRED_PACKAGE = "@vercel/microfrontends";
 const REQUIRED_PACKAGE_VERSION = "2.4.0";
+const PACKAGE_JSON = "package.json";
+const NODE_MODULES = "node_modules";
+const OPTIONAL_NATIVE_MARKER = "musl";
+const HOSTED_DEPENDENCY_STAGE = "dependency-stage";
 const EXECUTION_ROOT_PACKAGES = [
   "@tailwindcss/vite",
   "@testing-library/jest-dom",
@@ -57,10 +63,8 @@ const targetDigests = {
   repositoryPreflightSha256: "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
 } as const;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function sha256(value: string | Uint8Array): string {
-  return createHash("sha256").update(value).digest("hex");
-}
+const sha256 = (value: Uint8Array | string): string =>
+  createHash("sha256").update(value).digest("hex");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseArguments(args: readonly string[]) {
@@ -101,8 +105,7 @@ function git(root: string, args: readonly string[], encoding: "utf-8"): string {
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function within(root: string, candidate: string): boolean {
+const within = (root: string, candidate: string): boolean => {
   const relativePath = path.relative(root, candidate);
   return (
     relativePath === "" ||
@@ -110,43 +113,91 @@ function within(root: string, candidate: string): boolean {
       !relativePath.startsWith(`..${path.sep}`) &&
       !relativePath.startsWith(path.sep))
   );
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function packageRoot(
+const packageRoot = (
   installedRoot: string,
   resolutionRoot: string,
   name: string,
-): string | undefined {
+): string | undefined => {
   const candidate = path.join(resolutionRoot, ...name.split("/"));
   if (!existsSync(candidate)) return undefined;
   const resolved = realpathSync(candidate);
   if (!within(installedRoot, resolved))
-    throw new Error(`Dependency ${name} resolves outside node_modules.`);
+    throw new Error(`Dependency ${name} resolves outside ${NODE_MODULES}.`);
   return resolved;
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function packageResolutionRoot(packagePath: string): string {
-  const marker = `${path.sep}node_modules${path.sep}`;
+const packageResolutionRoot = (packagePath: string): string => {
+  const marker = `${path.sep}${NODE_MODULES}${path.sep}`;
   const index = packagePath.lastIndexOf(marker);
   if (index === -1) throw new Error("Dependency is outside a package store.");
   return packagePath.slice(0, index + marker.length - 1);
+};
+
+interface PackageManifest {
+  version: string;
+  dependencies: Record<string, string>;
+  optionalDependencies: Record<string, string>;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function packageVersion(packagePath: string): string {
-  const manifest = JSON.parse(readFileSync(path.join(packagePath, "package.json"), "utf-8")) as {
-    version?: string;
+const packageManifestSchema = z.object({
+  dependencies: z.record(z.string(), z.string()).optional(),
+  optionalDependencies: z.record(z.string(), z.string()).optional(),
+  version: z.string(),
+});
+
+const readPackageManifest = (packagePath: string): PackageManifest => {
+  const parsed: unknown = JSON.parse(readFileSync(path.join(packagePath, PACKAGE_JSON), "utf-8"));
+  const manifest = packageManifestSchema.parse(parsed);
+  return {
+    dependencies: manifest.dependencies ?? {},
+    optionalDependencies: manifest.optionalDependencies ?? {},
+    version: manifest.version,
   };
-  if (typeof manifest.version !== "string")
-    throw new Error("Dependency package version is missing.");
-  return manifest.version;
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function dependencyClosure(root: string): Map<string, string> {
-  const installedRoot = path.join(root, "node_modules");
+const packageVersion = (packagePath: string): string => readPackageManifest(packagePath).version;
+
+const sortedStrings = (values: string[]): string[] => {
+  const sorted: string[] = [];
+  for (const value of values) {
+    const index = sorted.findIndex((candidate) => candidate > value);
+    sorted.splice(index === -1 ? sorted.length : index, 0, value);
+  }
+  return sorted;
+};
+
+const enqueueDependencies = (
+  dependencies: readonly string[],
+  required: boolean,
+  installedRoot: string,
+  childResolutionRoot: string,
+  destination: string,
+  rootVersions: Map<string, string>,
+  pending: { destination: string; name: string; resolutionRoot: string }[],
+): void => {
+  for (const dependency of dependencies) {
+    const dependencyPath = packageRoot(installedRoot, childResolutionRoot, dependency);
+    if (required || !dependency.includes(OPTIONAL_NATIVE_MARKER)) {
+      if (dependencyPath === undefined) throw new Error(`Dependency ${dependency} is missing.`);
+      const dependencyVersion = packageVersion(dependencyPath);
+      const rootVersion = rootVersions.get(dependency);
+      if (rootVersion === undefined) rootVersions.set(dependency, dependencyVersion);
+      pending.push({
+        destination:
+          rootVersion === undefined || rootVersion === dependencyVersion
+            ? dependency
+            : path.join(destination, NODE_MODULES, dependency),
+        name: dependency,
+        resolutionRoot: childResolutionRoot,
+      });
+    }
+  }
+};
+
+const dependencyClosure = (root: string): Map<string, string> => {
+  const installedRoot = path.join(root, NODE_MODULES);
   const pending = EXECUTION_ROOT_PACKAGES.map((name) => ({
     destination: name,
     name,
@@ -154,6 +205,30 @@ function dependencyClosure(root: string): Map<string, string> {
   }));
   const packages = new Map<string, string>();
   const rootVersions = new Map<string, string>();
+  const registerPackage = (name: string, packagePath: string): void => {
+    const manifest = readPackageManifest(packagePath);
+    packages.set(name, packagePath);
+    if (!rootVersions.has(name)) rootVersions.set(name, manifest.version);
+    const childResolutionRoot = packageResolutionRoot(packagePath);
+    enqueueDependencies(
+      sortedStrings(Object.keys(manifest.dependencies)),
+      true,
+      installedRoot,
+      childResolutionRoot,
+      name,
+      rootVersions,
+      pending,
+    );
+    enqueueDependencies(
+      sortedStrings(Object.keys(manifest.optionalDependencies)),
+      false,
+      installedRoot,
+      childResolutionRoot,
+      name,
+      rootVersions,
+      pending,
+    );
+  };
   for (const name of EXECUTION_ROOT_PACKAGES) {
     const packagePath = packageRoot(installedRoot, installedRoot, name);
     if (packagePath === undefined) throw new Error(`Dependency ${name} is missing.`);
@@ -161,61 +236,31 @@ function dependencyClosure(root: string): Map<string, string> {
   }
   while (pending.length > 0) {
     const current = pending.shift();
-    if (current === undefined) continue;
-    const { name, resolutionRoot, destination } = current;
-    const packagePath = packageRoot(installedRoot, resolutionRoot, name);
-    if (packagePath === undefined) throw new Error(`Dependency ${name} is missing.`);
-    const manifest = JSON.parse(readFileSync(path.join(packagePath, "package.json"), "utf-8")) as {
-      version?: string;
-      dependencies?: Record<string, string>;
-      optionalDependencies?: Record<string, string>;
-    };
-    if (typeof manifest.version !== "string")
-      throw new Error("Dependency package version is missing.");
-    if (name === REQUIRED_PACKAGE && manifest.version !== REQUIRED_PACKAGE_VERSION)
-      throw new Error("The required microfrontends version drifted.");
-    const existing = packages.get(destination);
-    if (existing !== undefined) {
-      if (packageVersion(existing) !== manifest.version)
+    if (current !== undefined) {
+      const { name, resolutionRoot, destination } = current;
+      const packagePath = packageRoot(installedRoot, resolutionRoot, name);
+      if (packagePath === undefined) throw new Error(`Dependency ${name} is missing.`);
+      const manifest = readPackageManifest(packagePath);
+      if (name === REQUIRED_PACKAGE && manifest.version !== REQUIRED_PACKAGE_VERSION)
+        throw new Error("The required microfrontends version drifted.");
+      const existing = packages.get(destination);
+      if (existing === undefined) {
+        registerPackage(destination, packagePath);
+      } else if (packageVersion(existing) !== manifest.version) {
         throw new Error(`Dependency destination ${destination} drifted.`);
-      continue;
-    }
-    packages.set(destination, packagePath);
-    if (!rootVersions.has(name)) rootVersions.set(name, manifest.version);
-    const childResolutionRoot = packageResolutionRoot(packagePath);
-    const enqueue = (dependency: string) => {
-      const dependencyPath = packageRoot(installedRoot, childResolutionRoot, dependency);
-      if (dependencyPath === undefined) return false;
-      const dependencyVersion = packageVersion(dependencyPath);
-      const rootVersion = rootVersions.get(dependency);
-      if (rootVersion === undefined) rootVersions.set(dependency, dependencyVersion);
-      const dependencyDestination =
-        rootVersion === undefined || rootVersion === dependencyVersion
-          ? dependency
-          : path.join(destination, "node_modules", dependency);
-      pending.push({
-        destination: dependencyDestination,
-        name: dependency,
-        resolutionRoot: childResolutionRoot,
-      });
-      return true;
-    };
-    for (const dependency of Object.keys(manifest.dependencies ?? {}).toSorted())
-      if (!enqueue(dependency)) throw new Error(`Dependency ${dependency} is missing.`);
-    for (const dependency of Object.keys(manifest.optionalDependencies ?? {}).toSorted()) {
-      if (dependency.includes("musl")) continue;
-      enqueue(dependency);
+      }
     }
   }
-  return new Map([...packages.entries()].toSorted(([left], [right]) => left.localeCompare(right)));
-}
+  const entries: [string, string][] = [...packages.entries()];
+  entries.sort(([left], [right]) => left.localeCompare(right));
+  return new Map(entries);
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function normalizeTree(root: string): void {
+const normalizeTree = (root: string): void => {
   const visit = (entryPath: string): void => {
     const entry = lstatSync(entryPath);
     if (entry.isDirectory()) {
-      for (const name of readdirSync(entryPath).toSorted()) visit(path.join(entryPath, name));
+      for (const name of sortedStrings(readdirSync(entryPath))) visit(path.join(entryPath, name));
       chmodSync(entryPath, 0o755);
     } else if (entry.isSymbolicLink()) {
       const target = realpathSync(entryPath);
@@ -229,27 +274,30 @@ function normalizeTree(root: string): void {
     utimesSync(entryPath, 0, 0);
   };
   visit(root);
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function writeGzipTar(root: string, entries: readonly string[], output: string) {
+const writeGzipTar = (root: string, entries: readonly string[], output: string): void => {
   const uncompressed = `${output}.${process.pid}.tar`;
-  createTar(
-    {
-      cwd: root,
-      file: uncompressed,
-      mtime: new Date(0),
-      portable: true,
-      sync: true,
-    },
-    [...entries],
+  execFileSync(
+    "/usr/bin/tar",
+    [
+      "--format=ustar",
+      "--mtime=@0",
+      "--owner=0",
+      "--group=0",
+      "--numeric-owner",
+      "-cf",
+      uncompressed,
+      ...entries,
+    ],
+    { cwd: root },
   );
   try {
     writeFileSync(output, deterministicGzip(readFileSync(uncompressed)));
   } finally {
     rmSync(uncompressed, { force: true });
   }
-}
+};
 
 const { arrustedRoot, output } = parseArguments(process.argv.slice(2));
 if (process.platform !== "linux" || process.arch !== "x64")
@@ -266,7 +314,7 @@ try {
   const dependencyRoot = path.join(seed, "dependency-cache");
   mkdirSync(dependencyRoot, { recursive: true });
 
-  const dependencyStage = path.join(scratch, "dependency-stage", "node_modules");
+  const dependencyStage = path.join(scratch, HOSTED_DEPENDENCY_STAGE, NODE_MODULES);
   mkdirSync(dependencyStage, { recursive: true });
   const packages = dependencyClosure(arrustedRoot);
   for (const [name, source] of packages) {
@@ -298,9 +346,9 @@ try {
     ["--input-type=module", "--eval", 'await import("@autograph/vite-config")'],
     { cwd: dependencyStage, encoding: "utf-8" },
   );
-  normalizeTree(path.join(scratch, "dependency-stage"));
+  normalizeTree(path.join(scratch, HOSTED_DEPENDENCY_STAGE));
   const dependencyArchive = path.join(dependencyRoot, "node-modules.tar.gz");
-  writeGzipTar(path.join(scratch, "dependency-stage"), ["node_modules"], dependencyArchive);
+  writeGzipTar(path.join(scratch, HOSTED_DEPENDENCY_STAGE), [NODE_MODULES], dependencyArchive);
   const archiveBytes = statSync(dependencyArchive).size;
   const archiveSha256 = sha256(readFileSync(dependencyArchive));
   const dependencyManifest = {

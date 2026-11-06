@@ -138,7 +138,7 @@ describe("durable application review workflow orchestration", () => {
   it("observes Stop during descriptor loading before dispatching a model round", async () => {
     const controller = new AbortController();
     const stopped = new Error("Stopped during descriptor load.");
-    const load = vi.fn<NonNullable<Steps["load"]>>(async () => {
+    const load = vi.fn<NonNullable<Steps["load"]>>(() => {
       controller.abort(stopped);
       return structuredClone(prepared);
     });
@@ -213,7 +213,7 @@ describe("durable application review workflow orchestration", () => {
   it("observes cancellation after a completed round before saving its outcome", async () => {
     const controller = new AbortController();
     const stopped = new Error("Stopped during the round.");
-    const round = vi.fn<Steps["round"]>(async () => {
+    const round = vi.fn<Steps["round"]>(() => {
       controller.abort(stopped);
       return { assessment, continuation: checkpoint(1) };
     });

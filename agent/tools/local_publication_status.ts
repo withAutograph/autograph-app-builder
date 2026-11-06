@@ -31,6 +31,24 @@ const publicationWorkflow = () => {
   return workflow;
 };
 
+const valuesDiffer = (...pairs: [unknown, unknown][]) =>
+  pairs.some(([actual, expected]) => actual !== expected);
+
+const journalMatchesWorkflowReceipts = (
+  workflow: ReturnType<typeof publicationWorkflow>,
+  expectedReviewDigest: string,
+  journal: NonNullable<Awaited<ReturnType<typeof readLocalPublicationJournal>>>,
+) =>
+  valuesDiffer(
+    [expectedReviewDigest, workflow.reviewReceipt.digest],
+    [journal.sourceReceiptDigest, workflow.sourceReceipt.digest],
+    [journal.reviewDigest, workflow.reviewReceipt.digest],
+    [journal.changeSetDigest, workflow.reviewReceipt.changeSetDigest],
+    [journal.baseSha, workflow.sourceReceipt.sourceSha],
+    [journal.sourceTree, workflow.sourceReceipt.sourceTree],
+    [journal.contractDigest, workflow.sourceReceipt.contractDigest],
+  );
+
 const assertJournalMatchesWorkflow = (
   workflow: ReturnType<typeof publicationWorkflow>,
   destinationPath: string,
@@ -40,13 +58,7 @@ const assertJournalMatchesWorkflow = (
   if (
     destinationPath !== workflow.sourceReceipt.sourcePath ||
     destinationPath !== journal.destinationPath ||
-    expectedReviewDigest !== workflow.reviewReceipt.digest ||
-    journal.sourceReceiptDigest !== workflow.sourceReceipt.digest ||
-    journal.reviewDigest !== workflow.reviewReceipt.digest ||
-    journal.changeSetDigest !== workflow.reviewReceipt.changeSetDigest ||
-    journal.baseSha !== workflow.sourceReceipt.sourceSha ||
-    journal.sourceTree !== workflow.sourceReceipt.sourceTree ||
-    journal.contractDigest !== workflow.sourceReceipt.contractDigest
+    journalMatchesWorkflowReceipts(workflow, expectedReviewDigest, journal)
   ) {
     throw new Error(
       "The durable local-publication journal does not belong to the current workflow.",
@@ -95,13 +107,14 @@ export const exactLocalPublicationProposal = async (input: {
     review: workflow.reviewReceipt,
     sourceReceipt: workflow.sourceReceipt,
   });
-  if (
-    proposal.destinationPath !== workflow.sourceReceipt.sourcePath ||
-    proposal.sourceReceiptDigest !== workflow.sourceReceipt.digest ||
-    proposal.baseSha !== workflow.sourceReceipt.sourceSha ||
-    workflow.workspace.sourceTree !== workflow.sourceReceipt.sourceTree ||
-    workflow.workspace.sourceSha !== workflow.sourceReceipt.sourceSha
-  ) {
+  const destinationMatchesSource = proposal.destinationPath === workflow.sourceReceipt.sourcePath;
+  const proposalMatchesSource = valuesDiffer(
+    [proposal.sourceReceiptDigest, workflow.sourceReceipt.digest],
+    [proposal.baseSha, workflow.sourceReceipt.sourceSha],
+    [workflow.workspace.sourceTree, workflow.sourceReceipt.sourceTree],
+    [workflow.workspace.sourceSha, workflow.sourceReceipt.sourceSha],
+  );
+  if (!destinationMatchesSource || proposalMatchesSource) {
     throw new Error("The selected destination is not the exact original source checkout.");
   }
   return proposal;

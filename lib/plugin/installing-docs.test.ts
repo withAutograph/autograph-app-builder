@@ -35,7 +35,7 @@ async function readAuditLog(path: string) {
   try {
     return await readFile(path, "utf-8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return "";
     }
     throw error;
@@ -58,14 +58,12 @@ async function runInstall(script: string, failure: "none" | "checksum" | "releas
   await writeStub(bin, "codex", 'printf "codex %s\\n" "$*" >> "$AUDIT_LOG"');
 
   const execution = execute("/bin/sh", ["-c", script], {
+    AUDIT_LOG: auditLog,
+    GH_VERIFY_EXIT: failure === "release-verifier" ? "1" : "0",
+    NODE_ENV: "test",
+    PATH: `${bin}:/usr/bin:/bin`,
+    SHASUM_EXIT: failure === "checksum" ? "1" : "0",
     cwd: root,
-    env: {
-      AUDIT_LOG: auditLog,
-      GH_VERIFY_EXIT: failure === "release-verifier" ? "1" : "0",
-      NODE_ENV: "test",
-      PATH: `${bin}:/usr/bin:/bin`,
-      SHASUM_EXIT: failure === "checksum" ? "1" : "0",
-    },
   });
   try {
     await (failure === "none" ? execution : expect(execution).rejects.toThrow());

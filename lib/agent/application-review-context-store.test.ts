@@ -72,6 +72,8 @@ const assessment = (value = prepared()): ProductSourceAssessment => ({
   reviewCompleted: true,
   status: "unassessed",
 });
+const key = (current: OperatorArtifactContext, ref: string, index: number) =>
+  JSON.stringify([current.authority, current.target, ref, index]);
 const fixture = () => {
   let owned = true;
   const rows = new Map<string, string>();
@@ -82,8 +84,6 @@ const fixture = () => {
       throw new Error("owner revoked");
     }
   });
-  const key = (current: OperatorArtifactContext, ref: string, index: number) =>
-    JSON.stringify([current.authority, current.target, ref, index]);
   const store: OperatorArtifactStore = {
     async put(current, chunk) {
       await Promise.resolve();
@@ -108,7 +108,6 @@ const fixture = () => {
   return {
     assertCurrentOwner,
     factory,
-    key,
     revoke: () => {
       owned = false;
     },
@@ -118,6 +117,9 @@ const fixture = () => {
   };
 };
 const roots: string[] = [];
+const assertCurrentOwner = async () => {
+  await Promise.resolve();
+};
 afterEach(async () => {
   await Promise.all(
     roots.splice(0).map(async (root) => {
@@ -197,7 +199,7 @@ describe("private prepared application-review context and outcomes", () => {
     await Promise.all(
       [foreignOwner, foreignSession].map(async (foreign) => {
         for (const chunk of f.writes) {
-          f.rows.set(f.key(foreign, ref, chunk.chunkIndex), chunk.content);
+          f.rows.set(key(foreign, ref, chunk.chunkIndex), chunk.content);
         }
         await expect(f.factory(foreign).readContext(ref)).rejects.toThrow();
       }),
@@ -214,7 +216,7 @@ describe("private prepared application-review context and outcomes", () => {
     f.store.put = async (current, chunk) => {
       await Promise.resolve();
       f.writes.push(chunk);
-      f.rows.set(f.key(current, chunk.artifactRef, chunk.chunkIndex), "different-winning-content");
+      f.rows.set(key(current, chunk.artifactRef, chunk.chunkIndex), "different-winning-content");
     };
     await expect(f.factory().publishContext(prepared())).rejects.toThrow();
     expect(f.writes.some((chunk) => chunk.chunkIndex === 0)).toBe(false);
@@ -237,7 +239,7 @@ describe("private prepared application-review context and outcomes", () => {
   it.each(["missing", "tampered"])("rejects a %s private context member", async (kind) => {
     const f = fixture();
     const ref = await f.factory().publishContext(prepared());
-    const row = f.key(context, ref, 1);
+    const row = key(context, ref, 1);
     if (kind === "missing") {
       f.rows.delete(row);
     } else {
@@ -302,9 +304,6 @@ describe("private prepared application-review context and outcomes", () => {
     roots.push(stateRoot);
     const authority = { kind: "local" as const, ownerUid: process.getuid?.() ?? -1, stateRoot };
     const owned: OperatorArtifactContext = { authority, target: context.target };
-    const assertCurrentOwner = async () => {
-      await Promise.resolve();
-    };
     const { store } = await createLocalOperatorArtifactStorage({ assertCurrentOwner, authority });
     const adapter = () =>
       createApplicationReviewContextStore({ assertCurrentOwner, context: owned, store });

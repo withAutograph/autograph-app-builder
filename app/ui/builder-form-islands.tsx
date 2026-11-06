@@ -70,7 +70,9 @@ export function BuilderAppDetails() {
       briefRegistration={builderForm.register("brief")}
       onAppNameChange={(appName) => {
         appNameEditedByUser.current = true;
-        generatedAppName.current = undefined;
+        if (generatedAppName.current !== null) {
+          generatedAppName.current = generatedAppName.current.slice(0, 0);
+        }
         setForm((current) => ({
           ...current,
           appName,
@@ -81,9 +83,10 @@ export function BuilderAppDetails() {
       }}
       onBriefChange={updateBrief}
       onCycleBrief={() => {
-        const currentIndex = briefExamples.indexOf(form.brief as (typeof briefExamples)[number]);
+        const currentIndex = briefExamples.indexOf(form.brief);
         const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % briefExamples.length;
-        updateBrief(briefExamples[nextIndex]);
+        // SAFETY: `nextIndex` is zero when no current brief matches and cycles within the nonempty examples list.
+        updateBrief(briefExamples[nextIndex] ?? briefExamples[0]);
       }}
     />
   );
@@ -105,7 +108,7 @@ export function BuilderDestination() {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function BuilderModel() {
+function builderModel() {
   const { form, integrations, model, modelOptions, zdrOnly, setModel, setZdrOnly, router } =
     useBuilderControllerContext();
   return form.buildDestination === "web" ? (
@@ -132,6 +135,8 @@ export function BuilderModel() {
     />
   ) : null;
 }
+
+export { builderModel as BuilderModel };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderStorage() {
@@ -172,7 +177,11 @@ export function BuilderStorage() {
       onPrivacyChange={(privateRepository) => {
         setForm((current) => ({ ...current, privateRepository }));
       }}
-      onConnect={async () => beginProviderConnection("github")}
+      onConnect={() => {
+        void beginProviderConnection("github").catch(() => {
+          // Provider connection errors are surfaced through the shared controller state.
+        });
+      }}
     />
   );
 }
@@ -204,7 +213,11 @@ export function BuilderDeployment() {
       onTeamChange={(value) => {
         setTeam(value);
       }}
-      onConnect={async () => beginProviderConnection("vercel")}
+      onConnect={() => {
+        void beginProviderConnection("vercel").catch(() => {
+          // Provider connection errors are surfaced through the shared controller state.
+        });
+      }}
     />
   );
 }
@@ -256,11 +269,13 @@ export function BuilderSubmit() {
         className={styles.createButton}
         type="submit"
         disabled={!canSubmit}
-        aria-describedby={submitGuidance ? "create-app-guidance" : undefined}
+        aria-describedby={
+          submitGuidance !== null && submitGuidance.length > 0 ? "create-app-guidance" : null
+        }
       >
         Create App
       </button>
-      {submitGuidance ? (
+      {submitGuidance !== null && submitGuidance.length > 0 ? (
         <p className={styles.submitGuidance} id="create-app-guidance">
           {submitGuidance}
         </p>

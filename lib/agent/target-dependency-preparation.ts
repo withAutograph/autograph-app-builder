@@ -56,8 +56,10 @@ export async function prepareOrReuseDependencies(input: {
     dependencyCacheDigest: "checkout",
     dependencyLayout: {
       kind: "checkout" as const,
+      // SAFETY: Checkout-backed preparation has no additional roots, matching the receipt's empty-tuple invariant.
       roots: [] as [],
       version: 1 as const,
+      // SAFETY: Checkout-backed preparation creates no workspace links, matching the receipt's empty-tuple invariant.
       workspaceLinks: [] as [],
     },
     eligibilityDigest: current.workspace.eligibilityDigest,
@@ -75,17 +77,21 @@ export async function prepareOrReuseDependencies(input: {
     ...unsigned,
     digest: sha256(JSON.stringify(unsigned)),
   };
-  const preparedState: DependencyReadyState = {
+  const preparedStateBase = {
     appSpec: current.appSpec,
     artifacts: current.artifacts,
     dependencyReceipt,
-    ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
     phase: "dependencies_prepared",
     preparedByCallId: current.preparedByCallId,
     sourceReceipt: current.sourceReceipt,
     version: APP_BUILDER_WORKFLOW_VERSION,
     workspace: current.workspace,
   };
+  const preparedStateWithSource = { ...preparedStateBase };
+  if (current.githubSource !== undefined) {
+    preparedStateWithSource.githubSource = current.githubSource;
+  }
+  const preparedState: DependencyReadyState = preparedStateWithSource;
   appBuilderWorkflowState.update(() => preparedState);
   return {
     receipt: dependencyReceipt,

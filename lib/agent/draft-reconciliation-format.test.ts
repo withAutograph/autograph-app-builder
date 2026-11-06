@@ -1,7 +1,7 @@
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, typescript/no-unsafe-type-assertion, typescript/no-unsafe-assignment, eslint/require-await -- Isolated Eve state and sandbox stubs verify formatting cannot retain a stale review. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import formatCandidate from "../../agent/tools/format_github_draft_pr_candidate";
+import formatCandidate from "../../agent/tools/format-github-draft-pr-candidate";
 
 const digest = "a".repeat(64);
 const mocks = vi.hoisted(() => ({

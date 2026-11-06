@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { createReadStream } from "node:fs";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import nodePath from "node:path";
 import { runSequentially } from "../async-sequential";
@@ -12,124 +11,132 @@ import { IMAGE_PLATFORM, IMAGE_REPOSITORY } from "../image/lifecycle";
 import { portableReleaseReceiptSchema } from "../../scripts/portable-proof-artifact";
 import { releaseEndpoint, sha256, TOOL_NAMES } from "../../scripts/portable-release";
 
-const hash = z.string().regex(/^[0-9a-f]{64}$/u);
-const gitObject = z.string().regex(/^[0-9a-f]{40}$/u);
+const hash = z.string().check(z.regex(/^[0-9a-f]{64}$/u));
+const gitObject = z.string().check(z.regex(/^[0-9a-f]{40}$/u));
 const safePath = z
   .string()
-  .min(1)
-  .refine(
-    (value) =>
-      !nodePath.isAbsolute(value) &&
-      !value.includes("\\") &&
-      value.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
-    "Candidate paths must be safe relative paths.",
+  .check(
+    z.refine(
+      (value) =>
+        !nodePath.isAbsolute(value) &&
+        !value.includes("\\") &&
+        value.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
+      "Candidate paths must be safe relative paths.",
+    ),
   );
-const exactImageReference = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*@sha256:[0-9a-f]{64}$/u);
+const exactImageReference = z
+  .string()
+  .check(z.regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*@sha256:[0-9a-f]{64}$/u));
 const imageTag = z
   .string()
-  .regex(/^ghcr[.]io\/withautograph\/autograph-app-builder-sandbox:release-[0-9a-f]{16}$/u);
+  .check(
+    z.regex(/^ghcr[.]io\/withautograph\/autograph-app-builder-sandbox:release-[0-9a-f]{16}$/u),
+  );
 const localImageTag = z
   .string()
-  .regex(/^ghcr[.]io\/withautograph\/autograph-app-builder-sandbox:candidate-[0-9a-f]{16}$/u);
+  .check(
+    z.regex(/^ghcr[.]io\/withautograph\/autograph-app-builder-sandbox:candidate-[0-9a-f]{16}$/u),
+  );
 
-const proofSchema = z
-  .object({
-    browserPreview: z.literal(true),
-    eval: z.union([
-      z.literal("sandbox-reviewed-change-set"),
-      z.literal("sandbox-existing-iteration"),
-    ]),
-    outputSha256: hash,
-    publicationAttempted: z.literal(false),
-    terminalPhase: z.literal("reviewed"),
-  })
-  .strict();
+const proofSchema = z.strictObject({
+  browserPreview: z.literal(true),
+  eval: z.union([
+    z.literal("sandbox-reviewed-change-set"),
+    z.literal("sandbox-existing-iteration"),
+  ]),
+  outputSha256: hash,
+  publicationAttempted: z.literal(false),
+  terminalPhase: z.literal("reviewed"),
+});
+const digestSchema = z.string().check(z.regex(/^sha256:[0-9a-f]{64}$/u));
+const ociDescriptorSchema = z.strictObject({
+  digest: digestSchema,
+  mediaType: z.literal("application/vnd.oci.image.manifest.v1+json"),
+  platform: z.strictObject({
+    architecture: z.literal("arm64"),
+    os: z.literal("linux"),
+  }),
+});
+const ociIndexSchema = z.strictObject({
+  manifests: z.array(z.unknown()),
+  schemaVersion: z.literal(2),
+});
+const ociManifestSchema = z.strictObject({
+  config: z.strictObject({ digest: digestSchema }),
+  layers: z.array(z.unknown()).check(z.minLength(1)),
+  schemaVersion: z.literal(2),
+});
 
-const promotionReceiptUnsignedSchema = z
-  .object({
-    arrusted: z.object({ clean: z.literal(true), commit: gitObject, tree: gitObject }).strict(),
-    bindings: z
-      .object({
-        deployment: z.literal("production"),
-        endpoint: z.literal("deployed"),
-        execution: z.literal("release"),
-        marketplace: z.literal("release"),
-        oauth: z.literal("hosted"),
-      })
-      .strict(),
-    builder: z
-      .object({
-        clean: z.literal(true),
-        commit: gitObject,
-        repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
-        tree: gitObject,
-      })
-      .strict(),
-    deployment: z
-      .object({
-        outputTreeSha256: hash,
-        projectBindingSha256: hash,
-        root: safePath,
-      })
-      .strict(),
-    endpoint: z.string().url().startsWith("https://").endsWith("/mcp"),
-    format: z.literal("autograph-release-promotion-v1"),
-    image: z
-      .object({
-        archive: safePath,
-        archiveSha256: hash,
-        localTag: localImageTag,
-        manifestDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-        publicationTag: imageTag,
-        reference: exactImageReference,
-      })
-      .strict(),
-    package: z
-      .object({
-        archive: safePath,
-        archiveSha256: hash,
-        checksums: safePath,
-        checksumsSha256: hash,
-        marketplaceArchive: safePath,
-        marketplaceArchiveSha256: hash,
-        receipt: safePath,
-        receiptSha256: hash,
-        root: safePath,
-        version: z.string().min(1),
-      })
-      .strict(),
-    platform: z
-      .object({
-        closureSha256: hash,
-        dockerfileSha256: hash,
-        image: z.literal(IMAGE_PLATFORM),
-        sanitizedSourceEntriesSha256: hash,
-        sanitizedSourceEntryCount: z.number().int().positive(),
-      })
-      .strict(),
-    proofs: z
-      .object({
-        create: proofSchema.extend({
-          eval: z.literal("sandbox-reviewed-change-set"),
-        }),
-        iteration: proofSchema.extend({
-          eval: z.literal("sandbox-existing-iteration"),
-        }),
-      })
-      .strict(),
-    tools: z.tuple([
-      z.literal("autograph_start"),
-      z.literal("autograph_get"),
-      z.literal("autograph_send"),
-      z.literal("autograph_respond"),
-      z.literal("autograph_cancel"),
-    ]),
-  })
-  .strict();
+const promotionReceiptUnsignedSchema = z.strictObject({
+  arrusted: z.strictObject({ clean: z.literal(true), commit: gitObject, tree: gitObject }),
+  bindings: z.strictObject({
+    deployment: z.literal("production"),
+    endpoint: z.literal("deployed"),
+    execution: z.literal("release"),
+    marketplace: z.literal("release"),
+    oauth: z.literal("hosted"),
+  }),
+  builder: z.strictObject({
+    clean: z.literal(true),
+    commit: gitObject,
+    repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
+    tree: gitObject,
+  }),
+  deployment: z.strictObject({
+    outputTreeSha256: hash,
+    projectBindingSha256: hash,
+    root: safePath,
+  }),
+  endpoint: z.url().check(z.regex(/^https:\/\/.+\/mcp$/u)),
+  format: z.literal("autograph-release-promotion-v1"),
+  image: z.strictObject({
+    archive: safePath,
+    archiveSha256: hash,
+    localTag: localImageTag,
+    manifestDigest: digestSchema,
+    publicationTag: imageTag,
+    reference: exactImageReference,
+  }),
+  package: z.strictObject({
+    archive: safePath,
+    archiveSha256: hash,
+    checksums: safePath,
+    checksumsSha256: hash,
+    marketplaceArchive: safePath,
+    marketplaceArchiveSha256: hash,
+    receipt: safePath,
+    receiptSha256: hash,
+    root: safePath,
+    version: z.string().check(z.minLength(1)),
+  }),
+  platform: z.strictObject({
+    closureSha256: hash,
+    dockerfileSha256: hash,
+    image: z.literal(IMAGE_PLATFORM),
+    sanitizedSourceEntriesSha256: hash,
+    sanitizedSourceEntryCount: z.number().check(z.int(), z.positive()),
+  }),
+  proofs: z.strictObject({
+    create: proofSchema.extend({
+      eval: z.literal("sandbox-reviewed-change-set"),
+    }),
+    iteration: proofSchema.extend({
+      eval: z.literal("sandbox-existing-iteration"),
+    }),
+  }),
+  tools: z.tuple([
+    z.literal("autograph_start"),
+    z.literal("autograph_get"),
+    z.literal("autograph_send"),
+    z.literal("autograph_respond"),
+    z.literal("autograph_cancel"),
+  ]),
+});
 
-export const promotionReceiptSchema = promotionReceiptUnsignedSchema
-  .extend({ digest: hash })
-  .strict();
+export const promotionReceiptSchema = z.strictObject({
+  ...promotionReceiptUnsignedSchema.shape,
+  digest: hash,
+});
 
 export type PromotionReceipt = z.infer<typeof promotionReceiptSchema>;
 export type PromotionReceiptUnsigned = z.infer<typeof promotionReceiptUnsignedSchema>;
@@ -139,9 +146,7 @@ export { sha256 } from "../../scripts/portable-release";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sha256File(path: string) {
   const digest = createHash("sha256");
-  for await (const chunk of createReadStream(path)) {
-    digest.update(chunk);
-  }
+  digest.update(await readFile(path));
   return digest.digest("hex");
 }
 
@@ -182,15 +187,16 @@ export async function exactCleanGitSource(rootInput: string, label: string) {
   const requested = nodePath.resolve(rootInput);
   const root = await realpath(requested);
   const info = await lstat(root);
-  if (
-    root !== rootInput ||
-    requested !== rootInput ||
-    !info.isDirectory() ||
-    info.isSymbolicLink() ||
-    info.uid !== process.getuid?.() ||
+  const invalidRoot = [
+    root !== rootInput,
+    requested !== rootInput,
+    !info.isDirectory(),
+    info.isSymbolicLink(),
+    info.uid !== process.getuid?.(),
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (info.mode & 0o022) !== 0
-  ) {
+    (info.mode & 0o022) !== 0,
+  ].some(Boolean);
+  if (invalidRoot) {
     throw new Error(
       `${label} root must be canonical, current-user-owned, and not writable by another account.`,
     );
@@ -241,41 +247,16 @@ async function tarEntry(path: string, requested: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectOciCandidateArchive(path: string) {
   const indexBytes = await tarEntry(path, "index.json");
-  const index = JSON.parse(indexBytes.toString("utf-8")) as {
-    schemaVersion?: unknown;
-    manifests?: unknown;
-  };
-  if (index.schemaVersion !== 2 || !Array.isArray(index.manifests)) {
+  const indexResult = ociIndexSchema.safeParse(JSON.parse(indexBytes.toString("utf-8")));
+  if (!indexResult.success) {
     throw new Error("Release OCI archive index was invalid.");
   }
-  const candidates = index.manifests.filter(
-    (
-      entry,
-    ): entry is {
-      digest: string;
-      mediaType: string;
-      platform: { os: string; architecture: string };
-    } =>
-      typeof entry === "object" &&
-      entry !== null &&
-      "digest" in entry &&
-      typeof entry.digest === "string" &&
-      /^sha256:[0-9a-f]{64}$/u.test(entry.digest) &&
-      "mediaType" in entry &&
-      entry.mediaType === "application/vnd.oci.image.manifest.v1+json" &&
-      "platform" in entry &&
-      typeof entry.platform === "object" &&
-      entry.platform !== null &&
-      "os" in entry.platform &&
-      entry.platform.os === "linux" &&
-      "architecture" in entry.platform &&
-      entry.platform.architecture === "arm64",
-  );
-  if (candidates.length !== 1) {
-    throw new Error("Release OCI archive must contain one linux/arm64 image.");
-  }
+  const candidates = indexResult.data.manifests.flatMap((entry) => {
+    const result = ociDescriptorSchema.safeParse(entry);
+    return result.success ? [result.data] : [];
+  });
   const [descriptor] = candidates;
-  if (descriptor === undefined) {
+  if (candidates.length !== 1 || descriptor === undefined) {
     throw new Error("Release OCI archive must contain one linux/arm64 image.");
   }
   const manifestBytes = await tarEntry(
@@ -285,18 +266,8 @@ export async function inspectOciCandidateArchive(path: string) {
   if (`sha256:${sha256(manifestBytes)}` !== descriptor.digest) {
     throw new Error("Release OCI manifest bytes did not match the index.");
   }
-  const manifest = JSON.parse(manifestBytes.toString("utf-8")) as {
-    schemaVersion?: unknown;
-    config?: { digest?: unknown };
-    layers?: unknown;
-  };
-  if (
-    manifest.schemaVersion !== 2 ||
-    typeof manifest.config?.digest !== "string" ||
-    !/^sha256:[0-9a-f]{64}$/u.test(manifest.config.digest) ||
-    !Array.isArray(manifest.layers) ||
-    manifest.layers.length === 0
-  ) {
+  const manifestResult = ociManifestSchema.safeParse(JSON.parse(manifestBytes.toString("utf-8")));
+  if (!manifestResult.success) {
     throw new Error("Release OCI platform manifest was incomplete.");
   }
   return {
@@ -316,7 +287,7 @@ async function treeEntries(root: string, current = root): Promise<string[]> {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (entry.isDirectory()) {
         paths.push(...(await treeEntries(root, entryPath)));
-      } else if (entry.isFile() && !entry.isSymbolicLink()) {
+      } else if (entry.isFile()) {
         paths.push(nodePath.relative(root, entryPath));
       } else {
         throw new Error("Release deployment output contains a non-file entry.");
@@ -334,11 +305,14 @@ export async function immutableTreeDigest(rootInput: string) {
   if (paths.length === 0) {
     throw new Error("Release output tree was empty.");
   }
-  for (const path of paths) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const bytes = await readFile(nodePath.join(root, path));
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const info = await lstat(nodePath.join(root, path));
+  const entries = await Promise.all(
+    paths.map(async (path) => ({
+      bytes: await readFile(nodePath.join(root, path)),
+      info: await lstat(nodePath.join(root, path)),
+      path,
+    })),
+  );
+  for (const { bytes, info, path } of entries) {
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     const mode = (info.mode & 0o777).toString(8).padStart(3, "0");
     digest.update(`${Buffer.byteLength(path)}\0${bytes.byteLength}\0${mode}\0${path}\0`);
@@ -359,24 +333,29 @@ function within(root: string, path: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function exactFile(root: string, path: string, expected: string) {
   const absolute = nodePath.resolve(root, path);
-  if (!within(root, absolute) || nodePath.basename(path) === "") {
+  const outsideRoot = !within(root, absolute);
+  const emptyBasename = nodePath.basename(path) === "";
+  if (outsideRoot || emptyBasename) {
     throw new Error("Release receipt path escaped its candidate root.");
   }
   let cursor = absolute;
+  const components: string[] = [];
   for (;;) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const component = await lstat(cursor);
-    if (component.isSymbolicLink()) {
-      throw new Error(`Release candidate path contained a link: ${path}`);
-    }
-    if (cursor === root) {
-      break;
-    }
+    components.push(cursor);
+    if (cursor === root) break;
     const parent = nodePath.resolve(cursor, "..");
     if (!within(root, parent)) {
       throw new Error("Release candidate path escaped its root.");
     }
     cursor = parent;
+  }
+  const componentInfos = await Promise.all(
+    components.map(async (componentPath) => await lstat(componentPath)),
+  );
+  for (const component of componentInfos) {
+    if (component.isSymbolicLink()) {
+      throw new Error(`Release candidate path contained a link: ${path}`);
+    }
   }
   const info = await lstat(absolute);
   if (!info.isFile() || info.isSymbolicLink()) {
@@ -396,14 +375,15 @@ export async function verifyPromotionCandidate(input: {
 }) {
   const root = await realpath(nodePath.resolve(input.candidateRoot));
   const rootInfo = await lstat(root);
-  if (
-    root !== nodePath.resolve(input.candidateRoot) ||
-    !rootInfo.isDirectory() ||
-    rootInfo.isSymbolicLink() ||
-    rootInfo.uid !== process.getuid?.() ||
+  const invalidRoot = [
+    root !== nodePath.resolve(input.candidateRoot),
+    !rootInfo.isDirectory(),
+    rootInfo.isSymbolicLink(),
+    rootInfo.uid !== process.getuid?.(),
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (rootInfo.mode & 0o022) !== 0
-  ) {
+    (rootInfo.mode & 0o022) !== 0,
+  ].some(Boolean);
+  if (invalidRoot) {
     throw new Error(
       "Release candidate root must be canonical, current-user-owned, and not writable by another account.",
     );
@@ -427,13 +407,14 @@ export async function verifyPromotionCandidate(input: {
   const packageReceipt = portableReleaseReceiptSchema.parse(
     JSON.parse(packageReceiptBytes.toString("utf-8")),
   );
-  if (
+  const packageBindingDrifted =
     packageReceipt.version !== receipt.package.version ||
     packageReceipt.source.sha !== receipt.builder.commit ||
-    packageReceipt.source.tree !== receipt.builder.tree ||
+    packageReceipt.source.tree !== receipt.builder.tree;
+  const packagePublicationDrifted =
     packageReceipt.endpoint !== receipt.endpoint ||
-    JSON.stringify(packageReceipt.tools) !== JSON.stringify(receipt.tools)
-  ) {
+    JSON.stringify(packageReceipt.tools) !== JSON.stringify(receipt.tools);
+  if (packageBindingDrifted || packagePublicationDrifted) {
     throw new Error("Portable package binding did not match promotion.");
   }
   await Promise.all([
@@ -445,19 +426,19 @@ export async function verifyPromotionCandidate(input: {
   const observedImage = await inspectOciCandidateArchive(
     nodePath.join(root, receipt.image.archive),
   );
-  if (
-    observedImage.manifestDigest !== receipt.image.manifestDigest ||
-    observedImage.archiveSha256 !== receipt.image.archiveSha256
-  ) {
+  const imageDigestDrifted = observedImage.manifestDigest !== receipt.image.manifestDigest;
+  const imageArchiveDrifted = observedImage.archiveSha256 !== receipt.image.archiveSha256;
+  if (imageDigestDrifted || imageArchiveDrifted) {
     throw new Error("Release image archive identity drifted.");
   }
   const deploymentRoot = nodePath.join(root, receipt.deployment.root);
-  if (
+  const outputTreeDrifted =
     (await immutableTreeDigest(nodePath.join(deploymentRoot, ".vercel/output"))) !==
-      receipt.deployment.outputTreeSha256 ||
+    receipt.deployment.outputTreeSha256;
+  const projectBindingDrifted =
     sha256(await readFile(nodePath.join(deploymentRoot, ".vercel/project.json"))) !==
-      receipt.deployment.projectBindingSha256
-  ) {
+    receipt.deployment.projectBindingSha256;
+  if (outputTreeDrifted || projectBindingDrifted) {
     throw new Error("Release deployment bytes or binding drifted.");
   }
   return { packageReceipt, receipt, root } as const;

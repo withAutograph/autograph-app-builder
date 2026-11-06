@@ -3,6 +3,54 @@ import postgres from "postgres";
 
 const MAX_STATE_BYTES = 8 * 1024 * 1024;
 
+interface PreviewEmulateSnapshot {
+  store?: {
+    data?: {
+      "vercel:vercel.oauth.pendingCodes"?: {
+        entries?: unknown[];
+      };
+    };
+  };
+}
+
+interface PreviewEmulateJsonObject {
+  store?: unknown;
+  data?: unknown;
+  "vercel:vercel.oauth.pendingCodes"?: unknown;
+  entries?: unknown;
+}
+
+function isPreviewEmulateJsonObject(value: unknown): value is PreviewEmulateJsonObject {
+  return (
+    value !== null && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+
+function parseSnapshot(state: string): PreviewEmulateSnapshot | undefined {
+  try {
+    const root: unknown = JSON.parse(state);
+    if (!isPreviewEmulateJsonObject(root)) return undefined;
+    const { store } = root;
+    if (!isPreviewEmulateJsonObject(store)) return undefined;
+    const { data } = store;
+    if (!isPreviewEmulateJsonObject(data)) return undefined;
+    const { "vercel:vercel.oauth.pendingCodes": pendingCodes } = data;
+    if (!isPreviewEmulateJsonObject(pendingCodes)) return undefined;
+    const { entries } = pendingCodes;
+    return {
+      store: {
+        data: {
+          "vercel:vercel.oauth.pendingCodes": {
+            entries: Array.isArray(entries) ? entries : undefined,
+          },
+        },
+      },
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export interface PreviewEmulateStateStore {
   read: (namespace: string) => Promise<string | undefined>;
   write: (namespace: string, state: string, now: Date) => Promise<void>;
@@ -17,12 +65,7 @@ function validateState(state: string) {
   } catch {
     throw new Error("Preview emulator state is invalid.");
   }
-  if (
-    Buffer.byteLength(state, "utf-8") > MAX_STATE_BYTES ||
-    typeof parsed !== "object" ||
-    parsed === null ||
-    Array.isArray(parsed)
-  ) {
+  if (Buffer.byteLength(state, "utf-8") > MAX_STATE_BYTES || !isPreviewEmulateJsonObject(parsed)) {
     throw new Error("Preview emulator state is invalid.");
   }
   return state;
@@ -30,17 +73,11 @@ function validateState(state: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pendingVercelCodeCount(state: string | undefined) {
-  if (!state) {
+  if (state === undefined || state === "") {
     return 0;
   }
-  try {
-    const snapshot = JSON.parse(state) as {
-      store?: { data?: Record<string, { entries?: unknown[] }> };
-    };
-    return snapshot.store?.data?.["vercel:vercel.oauth.pendingCodes"]?.entries?.length ?? 0;
-  } catch {
-    return 0;
-  }
+  const snapshot = parseSnapshot(state);
+  return snapshot?.store?.data?.["vercel:vercel.oauth.pendingCodes"]?.entries?.length ?? 0;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

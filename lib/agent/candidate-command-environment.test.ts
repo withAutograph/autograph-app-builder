@@ -39,7 +39,7 @@ describe("candidate command environment", () => {
     };
     const spawn = vi.fn<SandboxSession["spawn"]>().mockResolvedValue(process);
     const run = vi.fn<SandboxSession["run"]>();
-    const setNetworkPolicy = vi.fn(async (_policy: SandboxNetworkPolicy) => {});
+    const setNetworkPolicy = vi.fn((_policy: SandboxNetworkPolicy) => {});
     const session = {
       id: "sandbox-id",
       run,

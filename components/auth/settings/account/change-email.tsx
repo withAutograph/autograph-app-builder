@@ -5,6 +5,7 @@ import { useAuth, useChangeEmail, useSession } from "@better-auth-ui/react";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -13,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+
+const emailSchema = z.string();
 
 export interface ChangeEmailProps {
   className?: string;
@@ -31,6 +34,8 @@ export interface ChangeEmailProps {
 export function ChangeEmail({ className }: ChangeEmailProps) {
   const { authClient, basePaths, baseURL, localization, viewPaths } = useAuth();
   const { data: session } = useSession(authClient);
+  const parsedEmail = emailSchema.safeParse(session?.user.email);
+  const currentEmail = parsedEmail.success ? parsedEmail.data : null;
 
   const { mutate: changeEmail, isPending } = useChangeEmail(authClient, {
     onSuccess: () => toast.success(localization.settings.changeEmailSuccess),
@@ -45,9 +50,14 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
     e.preventDefault();
 
     const formData = new FormData(e.currentTarget);
+    const email = formData.get("email");
+    if (email instanceof File || email === null) {
+      return;
+    }
+
     changeEmail({
       callbackURL: getViewURL(baseURL, basePaths.settings, viewPaths.settings.account),
-      newEmail: formData.get("email") as string,
+      newEmail: email,
     });
   }
 
@@ -61,31 +71,32 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
             <Field data-invalid={!!fieldErrors.email}>
               <FieldLabel htmlFor="email">{localization.auth.email}</FieldLabel>
 
-              {session ? (
+              {currentEmail !== null && currentEmail !== "" ? (
                 <Input
-                  key={session?.user.email}
+                  key={currentEmail}
                   id="email"
                   name="email"
                   type="email"
                   autoComplete="email"
-                  defaultValue={session?.user.email}
+                  defaultValue={currentEmail}
                   placeholder={localization.auth.emailPlaceholder}
                   disabled={isPending}
                   required
                   onChange={() => {
                     setFieldErrors((prev) => ({
                       ...prev,
-                      email: undefined,
+                      email: null,
                     }));
                   }}
                   onInvalid={(e) => {
                     e.preventDefault();
                     setFieldErrors((prev) => ({
                       ...prev,
-                      email: (e.target as HTMLInputElement).validationMessage,
+                      email:
+                        e.target instanceof HTMLInputElement ? e.target.validationMessage : null,
                     }));
                   }}
-                  aria-invalid={!!fieldErrors.email}
+                  aria-invalid={fieldErrors.email !== undefined && fieldErrors.email !== ""}
                 />
               ) : (
                 <Skeleton>

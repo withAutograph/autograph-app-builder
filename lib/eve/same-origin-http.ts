@@ -64,6 +64,7 @@ import { reportHostedSubmissionDiagnostic } from "./hosted-submission-diagnostic
 import type { HostedSubmissionDiagnosticSink } from "./hosted-submission-diagnostic";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+const APPLICATION_JSON = "application/json";
 // Native recovery collects retained facts before its existing 30s owner-ready wait.
 const TERMINAL_RECOVERY_TIMEOUT_MS = 120_000;
 const SESSION_READ_TIMEOUT_MS = 30_000;
@@ -74,20 +75,16 @@ const EVE_STREAM_FORMAT = "ndjson";
 const EVE_STREAM_VERSION = "25";
 
 const sameOriginConfigSchema = z
-  .object({
-    baseUrl: z.string().url().startsWith("https://"),
+  .strictObject({
+    baseUrl: z.url().startsWith("https://"),
     timeoutMs: z.number().int().min(1).max(30_000).default(DEFAULT_TIMEOUT_MS),
   })
-  .strict()
   .transform((config, context) => {
     const baseUrl = new URL(config.baseUrl);
-    if (
-      baseUrl.username ||
-      baseUrl.password ||
-      baseUrl.search ||
-      baseUrl.hash ||
-      (baseUrl.pathname !== "/" && baseUrl.pathname !== "")
-    ) {
+    const hasCredentials = baseUrl.username.length > 0 || baseUrl.password.length > 0;
+    const hasSuffix = baseUrl.search.length > 0 || baseUrl.hash.length > 0;
+    const hasNonRootPath = baseUrl.pathname !== "/" && baseUrl.pathname !== "";
+    if (hasCredentials || hasSuffix || hasNonRootPath) {
       context.addIssue({
         code: "custom",
         message: "The canonical Eve API must use a credential-free HTTPS origin.",
@@ -98,43 +95,44 @@ const sameOriginConfigSchema = z
     return { ...config, baseUrl: baseUrl.origin };
   });
 
-const acceptedTurnSchema = z
-  .object({
-    deliveryId: z.string().min(1).max(500).optional(),
-    ok: z.literal(true),
-    recoveryBinding: nativeRecoveryBindingSchema.optional(),
-    sessionId: z.string().min(1).max(500),
-    status: z.literal("accepted"),
-  })
-  .strict();
+const acceptedTurnSchema = z.strictObject({
+  deliveryId: z.string().min(1).max(500).optional(),
+  ok: z.literal(true),
+  recoveryBinding: nativeRecoveryBindingSchema.optional(),
+  sessionId: z.string().min(1).max(500),
+  status: z.literal("accepted"),
+});
 
-const sourceInspectionAcceptedSchema = acceptedTurnSchema
-  .extend({ sourceDiagnostic: z.unknown().optional() })
-  .strict();
+const sourceInspectionAcceptedSchema = z.strictObject({
+  deliveryId: z.string().min(1).max(500).optional(),
+  ok: z.literal(true),
+  recoveryBinding: nativeRecoveryBindingSchema.optional(),
+  sessionId: z.string().min(1).max(500),
+  sourceDiagnostic: z.unknown().optional(),
+  status: z.literal("accepted"),
+});
 
 const cancelResponseSchema = z.discriminatedUnion("status", [
-  z
-    .object({
-      ok: z.literal(true),
-      sessionId: z.string().min(1).max(500),
-      status: z.literal("accepted"),
-    })
-    .strict(),
-  z.object({ ok: z.literal(true), status: z.literal("no_active_turn") }).strict(),
+  z.strictObject({
+    ok: z.literal(true),
+    sessionId: z.string().min(1).max(500),
+    status: z.literal("accepted"),
+  }),
+  z.strictObject({ ok: z.literal(true), status: z.literal("no_active_turn") }),
 ]);
 
-const errorResponseSchema = z.object({ code: z.string().min(1).max(100) }).passthrough();
+const errorResponseSchema = z.looseObject({ code: z.string().min(1).max(100) });
 
-const streamEnvelopeSchema = z
-  .object({ data: z.record(z.string(), z.unknown()), type: z.string().min(1) })
-  .passthrough();
+const streamEnvelopeSchema = z.looseObject({
+  data: z.record(z.string(), z.json()),
+  type: z.string().min(1),
+});
 
 export interface HostedWorkloadIdentity {
   token: () => Promise<string>;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function exactToken(value: string): string {
+const exactToken = (value: string): string => {
   if (
     value.length === 0 ||
     value.length > 8192 ||
@@ -144,28 +142,108 @@ function exactToken(value: string): string {
     throw new Error("Vercel workload identity token is unavailable.");
   }
   return value;
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function endpoint(config: z.infer<typeof sameOriginConfigSchema>, path: string): string {
-  return new URL(path, `${config.baseUrl}/`).href;
-}
+const endpoint = (config: z.infer<typeof sameOriginConfigSchema>, path: string): string =>
+  new URL(path, `${config.baseUrl}/`).href;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function forwardedPrincipal(principalInput: HostedPrincipal, sourceHandoffId?: string) {
+const observeBoundary = (
+  event: MessageStreamEvent,
+  boundary: EveSessionStatus,
+): EveSessionStatus => {
+  if (event.type === "turn.cancelled") {
+    return "cancelled";
+  }
+  if (event.type === "session.waiting") {
+    return "waiting";
+  }
+  if (event.type === "session.completed") {
+    return "completed";
+  }
+  if (event.type === "session.failed") {
+    return "failed";
+  }
+  if (event.type === "step.started" || event.type === "turn.started") {
+    return "working";
+  }
+  return boundary;
+};
+
+const updatePendingRequest = (
+  event: InternalEveEvent,
+  pending: Map<string, PublicInputRequest>,
+): void => {
+  if (event.type === "input.requested" && event.request !== undefined) {
+    pending.set(event.request.requestId, event.request);
+  } else if (event.type === "input.resolved") {
+    for (const requestId of event.requestIds ?? []) {
+      if (
+        event.resolutionKind !== "authorization" ||
+        pending.get(requestId)?.kind === "authorization"
+      ) {
+        pending.delete(requestId);
+      }
+    }
+  }
+};
+
+const cancelWithoutWaiting = async (cancel: () => Promise<void>): Promise<void> => {
+  try {
+    await cancel();
+  } catch {
+    // Provider cleanup is best effort and must not change the reader result.
+  }
+};
+
+const parseMessageStreamEvent = (line: string): MessageStreamEvent => {
+  const value: unknown = JSON.parse(line);
+  const parsed = streamEnvelopeSchema.parse(value);
+  // SAFETY: the stream parser checks the complete versioned Eve event shape at the network boundary.
+  return parsed as MessageStreamEvent;
+};
+
+type StreamFailure = Error | DOMException;
+const isStreamAbort = (error: StreamFailure, signal: AbortSignal | undefined): boolean =>
+  signal?.aborted === true &&
+  (error === signal.reason ||
+    (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name)));
+
+const isTurnTerminal = (event: MessageStreamEvent): boolean =>
+  event.type === "turn.completed" ||
+  event.type === "turn.failed" ||
+  event.type === "turn.cancelled";
+const isSessionBoundaryEvent = (event: MessageStreamEvent): boolean =>
+  event.type === "session.waiting" ||
+  event.type === "session.completed" ||
+  event.type === "session.failed";
+
+const updateCurrentTurn = (
+  event: MessageStreamEvent,
+  turnId: string | undefined,
+  currentTurnId: string | undefined,
+): string | undefined => {
+  if (isSessionBoundaryEvent(event)) {
+    return undefined;
+  }
+  if (isTurnTerminal(event)) {
+    return turnId === undefined || turnId === currentTurnId ? undefined : currentTurnId;
+  }
+  return turnId === undefined || turnId.length === 0 ? currentTurnId : turnId;
+};
+
+const forwardedPrincipal = (principalInput: HostedPrincipal, sourceHandoffId?: string) => {
   const principal = hostedPrincipalSchema.parse(principalInput);
+  const attributes = {
+    "mcp:audience": principal.audience,
+    "mcp:scopes": principal.scopes,
+    "mcp:workspace-id": principal.workspaceId,
+  };
+  if (sourceHandoffId !== undefined) {
+    Object.assign(attributes, { "autograph:source-handoff-id": z.uuid().parse(sourceHandoffId) });
+  }
   return {
     current: {
-      attributes: {
-        "mcp:audience": principal.audience,
-        "mcp:scopes": principal.scopes,
-        "mcp:workspace-id": principal.workspaceId,
-        ...(sourceHandoffId === undefined
-          ? {}
-          : {
-              "autograph:source-handoff-id": z.string().uuid().parse(sourceHandoffId),
-            }),
-      },
+      attributes,
       authenticator: "mcp-oauth-jwks",
       issuer: principal.issuer,
       principalId: principal.ownerUserId,
@@ -173,26 +251,35 @@ function forwardedPrincipal(principalInput: HostedPrincipal, sourceHandoffId?: s
       subject: principal.ownerUserId,
     },
   };
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function workloadHeaders(identity: HostedWorkloadIdentity) {
+const workloadHeaders = async (identity: HostedWorkloadIdentity) => {
   const token = exactToken(await identity.token());
   return {
     Authorization: `Bearer ${token}`,
     [VERCEL_TRUSTED_OIDC_HEADER]: token,
   };
+};
+
+const API_JSON_CONTENT_TYPE = APPLICATION_JSON;
+const EVE_REQUEST_REJECTED = "eve_request_rejected";
+interface EveJsonResponse {
+  ok?: boolean;
+  sessionId?: string;
+  status?: string;
+  deliveryId?: string;
+  code?: string;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function readJson(response: Response): Promise<unknown> {
+const readJson = async (response: Response): Promise<EveJsonResponse> => {
   const contentType = response.headers.get("content-type")?.split(";", 1)[0];
-  if (contentType !== "application/json") {
+  if (contentType !== API_JSON_CONTENT_TYPE) {
     throw new Error("The canonical Eve API returned a non-JSON response.");
   }
   if (response.status >= 400) {
     const parsed = await readJsonStringChecks(response.body, [{ capture: true, pointer: "/code" }]);
-    return { code: parsed.matches[0] ? parsed.values[0] : undefined };
+    const [code] = parsed.values;
+    return code === undefined ? {} : { code };
   }
   const parsed = await readJsonStringChecks(
     response.body,
@@ -204,13 +291,21 @@ async function readJson(response: Response): Promise<unknown> {
     ],
     { allowedRootKeys: ["ok", "sessionId", "status", "deliveryId"] },
   );
-  return {
-    ok: parsed.matches[0],
-    ...(parsed.values[1] === undefined ? {} : { sessionId: parsed.values[1] }),
-    ...(parsed.values[2] === undefined ? {} : { status: parsed.values[2] }),
-    ...(parsed.values[3] === undefined ? {} : { deliveryId: parsed.values[3] }),
-  };
-}
+  const [sessionId, status, deliveryId] = parsed.values.slice(1);
+  const result: EveJsonResponse = { ok: parsed.matches[0] };
+  if (sessionId !== undefined) {
+    result.sessionId = sessionId;
+  }
+  if (status !== undefined) {
+    result.status = status;
+  }
+  if (deliveryId !== undefined) {
+    result.deliveryId = deliveryId;
+  }
+  return result;
+};
+
+type JsonValue = z.infer<typeof z.json>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function postMutation(input: {
@@ -219,7 +314,7 @@ async function postMutation(input: {
   fetchImplementation: typeof fetch;
   path: string;
   principal: HostedPrincipal;
-  body: Record<string, unknown>;
+  body: Record<string, JsonValue>;
   sourceHandoffId?: string;
   startDiagnostic?: {
     operationId: string;
@@ -268,10 +363,10 @@ async function postMutation(input: {
   try {
     // Only this private recovery response carries a structured receipt. The
     // ordinary session response remains on the bounded streaming reader.
-    const body: unknown =
+    const body: EveJsonResponse =
       (input.body.recovery !== undefined || input.body.recoveryPhase === "inspect-source") &&
       response.status === 202
-        ? await response.json()
+        ? acceptedTurnSchema.parse(await response.json())
         : await readJson(response);
     if (response.status >= 400 && response.status < 500) {
       const parsed = errorResponseSchema.safeParse(body);
@@ -279,7 +374,7 @@ async function postMutation(input: {
         throw new SubmissionOutcomeUnknownError();
       }
       throw new SubmissionRejectedBeforeDispatchError(
-        parsed.success ? parsed.data.code : "eve_request_rejected",
+        parsed.success ? parsed.data.code : EVE_REQUEST_REJECTED,
       );
     }
     if (response.status !== 202) {
@@ -332,7 +427,7 @@ async function authenticatedFetch(input: {
   input.readTrace?.enter("fetch");
   return await input.fetchImplementation(endpoint(input.config, input.path), {
     ...input.init,
-    headers: { ...headers, ...input.init?.headers },
+    headers: new Headers({ ...headers, ...Object.fromEntries(new Headers(input.init?.headers)) }),
     redirect: "manual",
     signal:
       input.init?.signal ??
@@ -363,12 +458,13 @@ export async function* streamSameOriginEveEvents(input: {
     input.readSignal ??
     (input.readDeadline === true ? AbortSignal.timeout(SESSION_READ_TIMEOUT_MS) : undefined);
   let response: Response;
+  const fetchInput = { ...input, path, timeout: "unbounded" as const };
+  if (signal !== undefined) {
+    fetchInput.init = { signal };
+  }
   try {
     response = await authenticatedFetch({
-      ...input,
-      path,
-      timeout: "unbounded",
-      ...(signal === undefined ? {} : { init: { signal } }),
+      ...fetchInput,
     });
   } catch (error) {
     if (signal?.aborted === true) {
@@ -430,14 +526,18 @@ export async function* streamSameOriginEveEvents(input: {
   }
   if (startIndex > tail + 1) {
     // oxlint-disable-next-line promise/prefer-await-to-then -- Cancel best effort without waiting for a provider handshake.
-    void response.body.cancel().catch(() => null);
+    void cancelWithoutWaiting(async () => {
+      await response.body?.cancel();
+    });
     throw new Error("Canonical Eve durable tail precedes the saved native cursor.");
   }
   input.onNativeTail?.(tail);
   if (startIndex === tail + 1) {
     // Provider cancellation is best effort; a stalled cancel must not hold the response.
     // oxlint-disable-next-line promise/prefer-await-to-then -- Cleanup must not delay the reader.
-    void response.body.cancel().catch(() => null);
+    void cancelWithoutWaiting(async () => {
+      await response.body?.cancel();
+    });
     return;
   }
 
@@ -455,11 +555,8 @@ export async function* streamSameOriginEveEvents(input: {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Consume sequential native bytes under one pinned tail.
         chunk = await reader.read();
       } catch (error) {
-        if (
-          signal?.aborted === true &&
-          (error === signal.reason ||
-            (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name)))
-        ) {
+        const error = error instanceof Error ? error : new Error(String(error));
+        if (isStreamAbort(error, signal)) {
           throw new HostedSessionReadTimeoutError();
         }
         throw error;
@@ -469,9 +566,7 @@ export async function* streamSameOriginEveEvents(input: {
         buffered += decoder.decode();
         const line = buffered.trim();
         if (line.length > 0 && eventCount <= tail) {
-          const event = streamEnvelopeSchema.parse(
-            JSON.parse(line),
-          ) as unknown as MessageStreamEvent;
+          const event = parseMessageStreamEvent(line);
           eventCount += 1;
           yield event;
           if (signal?.aborted === true) {
@@ -488,9 +583,7 @@ export async function* streamSameOriginEveEvents(input: {
         const line = buffered.slice(0, newline).trim();
         buffered = buffered.slice(newline + 1);
         if (line.length > 0) {
-          const event = streamEnvelopeSchema.parse(
-            JSON.parse(line),
-          ) as unknown as MessageStreamEvent;
+          const event = parseMessageStreamEvent(line);
           eventCount += 1;
           yield event;
           if (signal?.aborted === true) {
@@ -507,7 +600,9 @@ export async function* streamSameOriginEveEvents(input: {
     // The complete durable tail is already installed (or this read failed).
     // Do not let a provider stream's cancellation handshake hold the MCP reply.
     // oxlint-disable-next-line promise/prefer-await-to-then -- This cleanup must not delay the MCP response.
-    void reader.cancel().catch(() => null);
+    void cancelWithoutWaiting(async () => {
+      await reader.cancel();
+    });
     try {
       reader.releaseLock();
     } catch {
@@ -524,12 +619,10 @@ const artifactTools = new Set([
 ]);
 const markdownPrototypePath =
   /^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/(?:app-spec|decisions)\.md$/u;
-const markdownPrototypeInputSchema = z
-  .object({
-    mediaType: z.string().optional(),
-    path: z.string().regex(markdownPrototypePath),
-  })
-  .passthrough();
+const markdownPrototypeInputSchema = z.looseObject({
+  mediaType: z.string().optional(),
+  path: z.string().regex(markdownPrototypePath),
+});
 
 const v2ReadRequestSchema = z.object({
   digest: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -549,6 +642,35 @@ const v2ReadResultSchema = z.object({
   revision: z.string().regex(/^[a-f0-9]{64}$/u),
   totalBytes: z.number().int().positive(),
 });
+
+const isVerifiedArtifactPage = (
+  read: ReturnType<typeof v2ReadRequestSchema.safeParse>,
+  output: ReturnType<typeof v2ReadResultSchema.safeParse>,
+  reference: PublicPrototypeReference | undefined,
+): boolean => {
+  if (!read.success || !output.success || reference === undefined) {
+    return false;
+  }
+  const page = output.data;
+  const sameReference =
+    read.data.path === reference.path &&
+    read.data.digest === reference.digest &&
+    read.data.revision === reference.revision;
+  const pageMatchesReference =
+    page.path === reference.path &&
+    page.digest === reference.digest &&
+    page.revision === reference.revision;
+  const validOffsets =
+    read.data.offsetBytes === page.byteOffset &&
+    page.totalBytes === reference.contentBytes &&
+    page.nextOffsetBytes > page.byteOffset &&
+    page.nextOffsetBytes <= reference.contentBytes;
+  const validContent =
+    page.complete === (page.nextOffsetBytes === reference.contentBytes) &&
+    createHash("sha256").update(page.content).digest("hex") === page.chunkDigest &&
+    Buffer.byteLength(page.content, "utf-8") === page.nextOffsetBytes - page.byteOffset;
+  return sameReference && pageMatchesReference && validOffsets && validContent;
+};
 
 /** A v2 receipt is sufficient for paged history; unresolved or v1 actions require legacy readback. */
 const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactReadbackState) => {
@@ -621,26 +743,7 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
       if (result.toolName === "get_prototype_artifact") {
         const read = v2ReadRequestSchema.safeParse(request.input);
         const output = v2ReadResultSchema.safeParse(result.output);
-        if (
-          !read.success ||
-          !output.success ||
-          reference === undefined ||
-          read.data.path !== reference.path ||
-          read.data.digest !== reference.digest ||
-          read.data.revision !== reference.revision ||
-          read.data.offsetBytes !== output.data.byteOffset ||
-          output.data.path !== reference.path ||
-          output.data.digest !== reference.digest ||
-          output.data.revision !== reference.revision ||
-          output.data.totalBytes !== reference.contentBytes ||
-          output.data.nextOffsetBytes <= output.data.byteOffset ||
-          output.data.nextOffsetBytes > reference.contentBytes ||
-          output.data.complete !== (output.data.nextOffsetBytes === reference.contentBytes) ||
-          createHash("sha256").update(output.data.content).digest("hex") !==
-            output.data.chunkDigest ||
-          Buffer.byteLength(output.data.content, "utf-8") !==
-            output.data.nextOffsetBytes - output.data.byteOffset
-        ) {
+        if (!isVerifiedArtifactPage(read, output, reference)) {
           legacy = true;
         }
         return;
@@ -652,11 +755,11 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
             finalChunk: z.literal(false),
             path: z.string(),
           })
-          .passthrough()
+          .loose()
           .safeParse(request.input);
         const incomplete = z
           .object({ complete: z.literal(false), path: z.string(), version: z.literal(2) })
-          .passthrough()
+          .loose()
           .safeParse(result.output);
         if (chunk.success && incomplete.success && chunk.data.path === incomplete.data.path) {
           incompleteArtifacts.add(chunk.data.path);
@@ -664,10 +767,10 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
         }
       }
       if (result.toolName === "record_ui_preview") {
-        const preview = z.object({ appId: z.string() }).passthrough().safeParse(request.input);
+        const preview = z.looseObject({ appId: z.string() }).safeParse(request.input);
         const incomplete = z
           .object({ complete: z.literal(false), transferId: z.string() })
-          .passthrough()
+          .loose()
           .safeParse(result.output);
         if (preview.success && incomplete.success) {
           incompleteUiPreviews.add(preview.data.appId);
@@ -676,7 +779,7 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
       }
       const output = z
         .object({ complete: z.literal(true), version: z.literal(2) })
-        .passthrough()
+        .loose()
         .safeParse(result.output);
       if (
         !output.success ||
@@ -955,41 +1058,9 @@ export async function observeSameOriginEveStream(
         readTrace.enter("decode");
         installedEventCount += 1;
         readTrace.set("nativeNextIndex", installedEventCount);
-        const turnId =
-          "data" in event && "turnId" in event.data
-            ? (event.data.turnId as string | undefined)
-            : undefined;
-        if (
-          turnId !== undefined &&
-          turnId !== "" &&
-          !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
-        ) {
-          currentTurnId = turnId;
-        }
-        if (
-          ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
-          (turnId === undefined || turnId === currentTurnId)
-        ) {
-          currentTurnId = undefined;
-        }
-        if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
-          currentTurnId = undefined;
-        }
-        if (event.type === "turn.cancelled") {
-          boundary = "cancelled";
-        }
-        if (event.type === "session.waiting") {
-          boundary = "waiting";
-        }
-        if (event.type === "session.completed") {
-          boundary = "completed";
-        }
-        if (event.type === "session.failed") {
-          boundary = "failed";
-        }
-        if (event.type === "step.started" || event.type === "turn.started") {
-          boundary = "working";
-        }
+        const turnId = "data" in event && "turnId" in event.data ? event.data.turnId : undefined;
+        currentTurnId = updateCurrentTurn(event, turnId, currentTurnId);
+        boundary = observeBoundary(event, boundary);
         if (event.type === "approval.settled") {
           pending.delete(event.data.requestId);
         }
@@ -1007,19 +1078,7 @@ export async function observeSameOriginEveStream(
           if (toPublicEvent(indexed) !== null) {
             publicEventCount += 1;
           }
-          if (indexed.type === "input.requested" && indexed.request !== undefined) {
-            pending.set(indexed.request.requestId, indexed.request);
-          }
-          if (indexed.type === "input.resolved") {
-            for (const requestId of indexed.requestIds ?? []) {
-              if (
-                indexed.resolutionKind !== "authorization" ||
-                pending.get(requestId)?.kind === "authorization"
-              ) {
-                pending.delete(requestId);
-              }
-            }
-          }
+          updatePendingRequest(indexed, pending);
           if (
             event.type === "input.requested" &&
             indexed.type === "status" &&
@@ -1738,6 +1797,7 @@ export function createSameOriginEveTransport(input: {
           turnId: guardedTurnId,
         });
       } catch (error) {
+        const error = error instanceof Error ? error : new Error(String(error));
         if (error instanceof HostedCancellationUnsettledError) {
           throw error;
         }
@@ -1862,6 +1922,7 @@ export function createSameOriginEveTransport(input: {
       try {
         return await readSnapshot({ ...common, sessionId: request.adapterSessionId });
       } catch (error) {
+        const error = error instanceof Error ? error : new Error(String(error));
         reportHostedSubmissionDiagnostic({
           adapterSessionId: request.adapterSessionId,
           error,

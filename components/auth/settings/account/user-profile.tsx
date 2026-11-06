@@ -38,44 +38,52 @@ export function UserProfile({ className }: UserProfileProps) {
   });
 
   const [fieldErrors, setFieldErrors] = useState<{
-    name?: string;
+    name?: string | null;
   }>({});
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-  async function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
+  function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
 
     const formData = new FormData(e.currentTarget);
-    const name = formData.get("name") as string;
+    const submittedName = formData.get("name");
+    const name = submittedName instanceof File ? "" : (submittedName ?? "");
 
-    const additionalFieldValues: Record<string, unknown> = {};
+    const additionalFieldValues: Record<string, AdditionalFieldValue | null> = {};
 
-    for (const field of additionalFields ?? []) {
-      if (field.profile === false || field.readOnly) {
-        continue;
-      }
-      const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
+    const fieldsToSubmit = (additionalFields ?? []).filter(
+      (field) => field.profile !== false && field.readOnly !== true,
+    );
+    const parsedFieldValues = fieldsToSubmit.map((field) => {
+      const rawValue = formData.get(field.name);
+      return {
+        field,
+        // SAFETY: The file-valued FormData case is treated as an empty field; configured additional fields are text inputs.
+        value: parseAdditionalFieldValue(field, rawValue instanceof File ? null : rawValue),
+      };
+    });
 
-      if (field.validate) {
-        try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          await field.validate(value);
-        } catch (error) {
-          toast.error(error instanceof Error ? error.message : String(error));
-          return;
-        }
-      }
-
+    for (const { field, value } of parsedFieldValues) {
       // `null` = explicit clear (forward to backend); `undefined` = omitted.
       if (value !== undefined) {
         additionalFieldValues[field.name] = value;
       }
     }
 
-    updateUser({
-      name,
-      ...additionalFieldValues,
-    });
+    void (async () => {
+      try {
+        await Promise.all(
+          parsedFieldValues.map(async ({ field, value }) => {
+            await field.validate?.(value);
+          }),
+        );
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error));
+        return;
+      }
+
+      updateUser({ name, ...additionalFieldValues });
+    })();
   }
 
   return (
@@ -87,10 +95,16 @@ export function UserProfile({ className }: UserProfileProps) {
           <CardContent className="flex flex-col gap-6">
             <ChangeAvatar />
 
-            <Field data-invalid={!!fieldErrors.name}>
+            <Field
+              data-invalid={
+                fieldErrors.name !== null &&
+                fieldErrors.name !== undefined &&
+                fieldErrors.name !== ""
+              }
+            >
               <FieldLabel htmlFor="name">{localization.auth.name}</FieldLabel>
 
-              {session ? (
+              {session !== null && session !== undefined ? (
                 <Input
                   key={session?.user.name}
                   id="name"
@@ -103,18 +117,25 @@ export function UserProfile({ className }: UserProfileProps) {
                   onChange={() => {
                     setFieldErrors((prev) => ({
                       ...prev,
-                      name: undefined,
+                      name: null,
                     }));
                   }}
                   onInvalid={(e) => {
                     e.preventDefault();
 
-                    setFieldErrors((prev) => ({
-                      ...prev,
-                      name: (e.target as HTMLInputElement).validationMessage,
-                    }));
+                    const { target } = e;
+                    if (target instanceof HTMLInputElement) {
+                      setFieldErrors((prev) => ({
+                        ...prev,
+                        name: target.validationMessage,
+                      }));
+                    }
                   }}
-                  aria-invalid={!!fieldErrors.name}
+                  aria-invalid={
+                    fieldErrors.name !== null &&
+                    fieldErrors.name !== undefined &&
+                    fieldErrors.name !== ""
+                  }
                 />
               ) : (
                 <Skeleton>
@@ -130,7 +151,7 @@ export function UserProfile({ className }: UserProfileProps) {
                 return null;
               }
 
-              if (!session) {
+              if (session === null || session === undefined) {
                 if (field.inputType === "hidden") {
                   return null;
                 }
@@ -142,13 +163,22 @@ export function UserProfile({ className }: UserProfileProps) {
                 );
               }
 
-              const value = (session.user as Record<string, unknown>)[field.name];
+              // SAFETY: Configured additional fields are persisted on the session user under their configured names.
+              const value = (
+                session.user as Record<string, AdditionalFieldValue | null | undefined>
+              )[field.name];
 
               // Re-mount when the session value loads so the field's
               // uncontrolled `defaultValue` reflects the latest data.
-              const key = `${field.name}:${
-                value instanceof Date ? value.toISOString() : String(value ?? "")
-              }`;
+              let displayValue = "";
+              if (value instanceof Date) {
+                displayValue = value.toISOString();
+              } else if (value !== null && value !== undefined) {
+                displayValue = String(value);
+              }
+              const key = `${field.name}:${displayValue}`;
+
+              const defaultValue = value ?? null;
 
               return (
                 <AdditionalField
@@ -158,7 +188,7 @@ export function UserProfile({ className }: UserProfileProps) {
                     ...field,
                     // `defaultValue` is sign-up-only; on the profile we
                     // always seed from the session.
-                    defaultValue: value as AdditionalFieldValue | null,
+                    defaultValue,
                   }}
                   isPending={isPending}
                 />

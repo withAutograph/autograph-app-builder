@@ -60,8 +60,9 @@ export async function loadBuilderIntegrationState(
   }
 
   // Keep the state helper local to the integration boundary.
+  const configurationUnavailable = "configuration-unavailable" as const;
   // oxlint-disable-next-line unicorn/consistent-function-scoping
-  const unavailable = (reason: "configuration-unavailable") => ({
+  const unavailable = (reason: typeof configurationUnavailable) => ({
     scopes: [],
     status: "unavailable" as const,
     unavailableReason: reason,
@@ -74,9 +75,9 @@ export async function loadBuilderIntegrationState(
     database = databaseFor(preview.databaseUrl);
   } catch {
     return builderIntegrationStateSchema.parse({
-      github: unavailable("configuration-unavailable"),
+      github: unavailable(configurationUnavailable),
       models: await modelsPromise,
-      vercel: unavailable("configuration-unavailable"),
+      vercel: unavailable(configurationUnavailable),
     });
   }
 
@@ -95,17 +96,20 @@ export async function loadBuilderIntegrationState(
         githubStore.list?.(authority),
         githubStore.read(authority),
       ]);
-      const scopes = mergeHostedGitHubInstallationBindings(githubBindings, legacy)
-        .filter((binding) => binding.active)
-        .map((binding) => ({
-          accountLogin: binding.accountLogin,
-          accountType: binding.accountType,
-          installationId: binding.installationId,
-          status: "connected" as const,
-        }));
+      const scopes: BuilderIntegrationState["github"]["scopes"] = [];
+      for (const binding of mergeHostedGitHubInstallationBindings(githubBindings, legacy)) {
+        if (binding.active) {
+          scopes.push({
+            accountLogin: binding.accountLogin,
+            accountType: binding.accountType,
+            installationId: binding.installationId,
+            status: "connected" as const,
+          });
+        }
+      }
       return { scopes, status: scopes.length ? "connected" : "disconnected" };
     } catch {
-      return unavailable("configuration-unavailable");
+      return unavailable(configurationUnavailable);
     }
   })();
 
@@ -116,18 +120,21 @@ export async function loadBuilderIntegrationState(
         config,
         database,
       }).list(authority);
-      const scopes = bindings
-        .filter((binding) => binding.active)
-        .map((binding) => ({
-          displayName: binding.displayName,
-          installationId: binding.installationId,
-          plan: binding.plan,
-          slug: binding.slug,
-          status: "connected" as const,
-        }));
+      const scopes: BuilderIntegrationState["vercel"]["scopes"] = [];
+      for (const binding of bindings) {
+        if (binding.active) {
+          scopes.push({
+            displayName: binding.displayName,
+            installationId: binding.installationId,
+            plan: binding.plan,
+            slug: binding.slug,
+            status: "connected" as const,
+          });
+        }
+      }
       return { scopes, status: scopes.length ? "connected" : "disconnected" };
     } catch {
-      return unavailable("configuration-unavailable");
+      return unavailable(configurationUnavailable);
     }
   })();
 

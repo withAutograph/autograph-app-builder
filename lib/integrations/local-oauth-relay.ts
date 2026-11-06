@@ -1,15 +1,13 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
-const schema = z
-  .object({
-    configurationId: z.string().min(1),
-    expiresAt: z.number().int().positive(),
-    origin: z.string().url(),
-    state: z.string().min(32).max(512),
-    teamId: z.string().min(1),
-  })
-  .strict();
+const schema = z.strictObject({
+  configurationId: z.string().min(1),
+  expiresAt: z.number().int().positive(),
+  origin: z.url(),
+  state: z.string().min(32).max(512),
+  teamId: z.string().min(1),
+});
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function signLocalVercelRelay(input: z.infer<typeof schema>, secret: string) {
   const payload = Buffer.from(JSON.stringify(schema.parse(input))).toString("base64url");

@@ -23,6 +23,36 @@ export interface UserViewProps {
   };
 }
 
+const UserDetails = ({
+  user,
+  hideSubtitle,
+}: {
+  user: (Partial<User> & { username?: string | null; displayUsername?: string | null }) | undefined;
+  hideSubtitle: boolean;
+}) => {
+  const displayUsername = user?.displayUsername;
+  const name = user?.name;
+  const email = user?.email;
+  const hasDisplayUsername = Boolean(displayUsername);
+  const hasUserName = Boolean(name);
+  let primaryLabel = email;
+  if (hasDisplayUsername) {
+    primaryLabel = displayUsername;
+  } else if (hasUserName) {
+    primaryLabel = name;
+  }
+  const hasName = hasDisplayUsername || hasUserName;
+
+  return (
+    <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+      <span className="truncate font-medium text-foreground">{primaryLabel}</span>
+      {!hideSubtitle && hasName && (
+        <span className="text-muted-foreground truncate text-xs">{email}</span>
+      )}
+    </div>
+  );
+};
+
 /**
  * Render a compact user item with an avatar, a primary label (display username, name, or email), and an optional subtitle (email).
  *
@@ -32,16 +62,15 @@ export interface UserViewProps {
  * @param user - Optional user object to display; when omitted the current session user is used
  * @returns A React element showing the user's avatar with their identifying information
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function UserView({ className, isPending, hideSubtitle = false, user }: UserViewProps) {
+export const UserView = ({ className, isPending, hideSubtitle = false, user }: UserViewProps) => {
   const { authClient } = useAuth<UsernameAuthClient>();
   const { data: session, isPending: sessionPending } = useSession(authClient, {
-    enabled: !user && !isPending,
+    enabled: user === undefined && isPending !== true,
   });
 
   const resolvedUser = user ?? session?.user;
 
-  if ((isPending || sessionPending) && !user) {
+  if ((isPending === true || sessionPending) && user === undefined) {
     return (
       <div className={cn("flex items-center gap-2 min-w-0", className)}>
         <UserAvatar isPending />
@@ -57,17 +86,9 @@ export function UserView({ className, isPending, hideSubtitle = false, user }: U
 
   return (
     <div className={cn("flex items-center gap-2 min-w-0", className)}>
-      <UserAvatar user={resolvedUser as User | undefined} />
+      <UserAvatar user={resolvedUser} />
 
-      <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-        <span className="truncate font-medium text-foreground">
-          {resolvedUser?.displayUsername || resolvedUser?.name || resolvedUser?.email}
-        </span>
-
-        {!hideSubtitle && (resolvedUser?.displayUsername || resolvedUser?.name) && (
-          <span className="text-muted-foreground truncate text-xs">{resolvedUser?.email}</span>
-        )}
-      </div>
+      <UserDetails user={resolvedUser} hideSubtitle={hideSubtitle} />
     </div>
   );
-}
+};

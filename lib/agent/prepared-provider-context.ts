@@ -19,21 +19,32 @@ let providerDatabase: ReturnType<typeof openHostedPostgresDatabase> | undefined;
 type PreparedIntent = BuilderHandoffIntent & {
   providers?: { githubInstallationId?: string; vercelInstallationId?: string };
 };
+interface SessionAuth {
+  current: { attributes: Record<string, string>; issuer: string };
+  initiator: { attributes: Record<string, string>; issuer: string };
+}
+const sourceHandoffIdSchema = z.uuid();
+const handoffSourceAttribute = "autograph:source-handoff-id";
+const issuerSchema = z.url();
+const handoffUnavailableMessage = "Provider authority is unavailable.";
+const authorizationRequiredStatus = "authorization-required" as const;
+const providerUnavailableStatus = "provider-unavailable" as const;
+const retryAction = "retry" as const;
 
 /** Call only after the durable handoff reader has verified the session. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function preparedHandoffReturnPath(sessionAuth: unknown) {
+export function preparedHandoffReturnPath(sessionAuth: SessionAuth) {
   const parsed = z
     .object({
       initiator: z.object({
         attributes: z.object({
-          "autograph:source-handoff-id": z.string().uuid(),
+          [handoffSourceAttribute]: sourceHandoffIdSchema,
         }),
       }),
     })
     .safeParse(sessionAuth);
   return parsed.success
-    ? (`/handoff/${parsed.data.initiator.attributes["autograph:source-handoff-id"]}` as const)
+    ? (`/handoff/${parsed.data.initiator.attributes[handoffSourceAttribute]}` as const)
     : undefined;
 }
 
@@ -56,7 +67,11 @@ export function withPreparedGitHubSelection(
     return input;
   }
   const preparedRepository = preparedGitHubRepository(intent);
-  if (preparedRepository?.toLowerCase() !== input.repository.toLowerCase()) {
+  if (
+    preparedRepository === undefined ||
+    preparedRepository === "" ||
+    preparedRepository.toLowerCase() !== input.repository.toLowerCase()
+  ) {
     return input;
   }
   const selectedInstallationId =
@@ -64,7 +79,9 @@ export function withPreparedGitHubSelection(
     (intent.provisioning?.github.status === "succeeded"
       ? intent.provisioning.github.installationId
       : undefined);
-  return selectedInstallationId ? { ...input, selectedInstallationId } : input;
+  return selectedInstallationId !== undefined && selectedInstallationId !== ""
+    ? { ...input, selectedInstallationId }
+    : input;
 }
 
 interface VercelCredential {
@@ -96,21 +113,38 @@ export type PreparedVercelAccess =
 const unavailable = (): PreparedVercelAccess => ({
   action: "retry",
   retryable: true,
-  status: "provider-unavailable",
+  status: providerUnavailableStatus,
 });
 const reconnect = (): PreparedVercelAccess => ({
   action: "reconnect",
-  status: "authorization-required",
+  status: authorizationRequiredStatus,
 });
 
 type VercelProjectAccessStage = "credential-read" | "provider-fetch" | "provider-json";
+const resourceUnavailable = { action: "review-selection", status: "resource-unavailable" } as const;
+const retryAfterHeader = "retry-after";
+interface PreparedRepositoryProjection {
+  private: boolean;
+  requestedName: string;
+  fullName?: string;
+}
+interface VercelEmulationOptions {
+  apiOrigin?: string;
+  fetch?: (resource: string | URL, init?: RequestInit) => Promise<Response>;
+}
+const projectApiOrigin = "https://api.vercel.com";
+const providerUserAgent = "autograph-app-builder";
+const requireGithubExpected = { expected: "github", pointer: "/link/type" };
+const requireServicesFramework = { expected: "services", pointer: "/framework" };
+const requireServicesRoot = { expected: ".", pointer: "/rootDirectory" };
+const requireOidcEnabled = { expectedLiteral: "true", pointer: "/oidcTokenConfig/enabled" };
 const vercelProjectAccessReasons = {
-  authorizationRequired: "authorization-required",
+  authorizationRequired: authorizationRequiredStatus,
   credentialUnavailable: "credential-unavailable",
   installationMismatch: "installation-mismatch",
   projectResponseMismatch: "project-response-mismatch",
   projectUnavailable: "project-unavailable",
-  providerUnavailable: "provider-unavailable",
+  providerUnavailable: providerUnavailableStatus,
   rateLimited: "rate-limited",
   readFailed: "read-failed",
   scopeMismatch: "scope-mismatch",
@@ -193,11 +227,11 @@ const readVercelProjectAccess = async (input: {
         reason: vercelProjectAccessReasons.scopeMismatch,
         stage: diagnosticStage,
       }));
-      return { action: "review-selection", status: "resource-unavailable" };
+      return resourceUnavailable;
     }
     diagnosticStage = "provider-fetch";
     const url = new URL(
-      `${input.apiOrigin ?? "https://api.vercel.com"}/v9/projects/${encodeURIComponent(input.projectId)}`,
+      `${input.apiOrigin ?? projectApiOrigin}/v9/projects/${encodeURIComponent(input.projectId)}`,
     );
     if (binding.scopeType === "team") {
       url.searchParams.set("teamId", binding.scopeId);
@@ -207,13 +241,13 @@ const readVercelProjectAccess = async (input: {
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
-        "User-Agent": "autograph-app-builder",
+        "User-Agent": providerUserAgent,
       },
       method: "GET",
       redirect: "error",
       signal: AbortSignal.timeout(20_000),
     });
-    if (response.status === 403 && response.headers.has("retry-after")) {
+    if (response.status === 403 && response.headers.has(retryAfterHeader)) {
       recordVercelProjectAccessFailure(() => ({
         httpStatus: response.status,
         reason: vercelProjectAccessReasons.rateLimited,
@@ -227,17 +261,17 @@ const readVercelProjectAccess = async (input: {
       recordVercelProjectAccessFailure(() => ({
         httpStatus: response.status,
         reason: vercelProjectAccessReasons.projectUnavailable,
-        retryAfterPresent: response.headers.has("retry-after"),
+        retryAfterPresent: response.headers.has(retryAfterHeader),
         stage: diagnosticStage,
       }));
       await response.body?.cancel();
-      return { action: "review-selection", status: "resource-unavailable" };
+      return resourceUnavailable;
     }
     if ([401, 403].includes(response.status)) {
       recordVercelProjectAccessFailure(() => ({
         httpStatus: response.status,
         reason: vercelProjectAccessReasons.authorizationRequired,
-        retryAfterPresent: response.headers.has("retry-after"),
+        retryAfterPresent: response.headers.has(retryAfterHeader),
         stage: diagnosticStage,
       }));
       await response.body?.cancel();
@@ -247,14 +281,14 @@ const readVercelProjectAccess = async (input: {
       recordVercelProjectAccessFailure(() => ({
         httpStatus: response.status,
         reason: vercelProjectAccessReasons.providerUnavailable,
-        retryAfterPresent: response.headers.has("retry-after"),
+        retryAfterPresent: response.headers.has(retryAfterHeader),
         stage: diagnosticStage,
       }));
       await response.body?.cancel();
       return unavailable();
     }
     diagnosticStage = "provider-json";
-    const observed = await readJsonStringChecks(response.body, [
+    const checks = [
       { expected: input.projectId, pointer: "/id" },
       { capture: true, pointer: "/name" },
       {
@@ -262,30 +296,28 @@ const readVercelProjectAccess = async (input: {
         optional: input.requireServicesRoot !== true,
         pointer: "/accountId",
       },
-      ...(input.requireServicesRoot === true
-        ? [
-            { expected: "services", pointer: "/framework" },
-            { expected: ".", pointer: "/rootDirectory" },
-          ]
-        : []),
-      ...(input.requireExpectedRepositoryId === undefined
-        ? []
-        : [
-            { expected: "github", pointer: "/link/type" },
-            { expectedDecimal: input.requireExpectedRepositoryId, pointer: "/link/repoId" },
-          ]),
-      ...(input.requirePublicAppConfiguration === true
-        ? [
-            {
-              expected: "prod_deployment_urls_and_all_previews",
-              pointer: "/ssoProtection/deploymentType",
-            },
-            { expectedLiteral: "true" as const, pointer: "/oidcTokenConfig/enabled" },
-            { expected: "team", pointer: "/oidcTokenConfig/issuerMode" },
-          ]
-        : []),
       { capture: true, optional: true, pointer: "/link/productionBranch" },
-    ]);
+    ];
+    if (input.requireServicesRoot === true) {
+      checks.push(requireServicesFramework, requireServicesRoot);
+    }
+    if (input.requireExpectedRepositoryId !== undefined) {
+      checks.push(requireGithubExpected, {
+        expectedDecimal: input.requireExpectedRepositoryId,
+        pointer: "/link/repoId",
+      });
+    }
+    if (input.requirePublicAppConfiguration === true) {
+      checks.push(
+        {
+          expected: "prod_deployment_urls_and_all_previews",
+          pointer: "/ssoProtection/deploymentType",
+        },
+        requireOidcEnabled,
+        { expected: "team", pointer: "/oidcTokenConfig/issuerMode" },
+      );
+    }
+    const observed = await readJsonStringChecks(response.body, checks);
     const [idMatches, hasName, accountMatches] = observed.matches;
     if (observed.matches.some((matches) => !matches)) {
       recordVercelProjectAccessFailure(() => ({
@@ -298,14 +330,16 @@ const readVercelProjectAccess = async (input: {
       }));
       return unavailable();
     }
+    const project = {
+      id: input.projectId,
+      name: observed.values[1] ?? input.projectName ?? input.projectId,
+    } satisfies NonNullable<Extract<PreparedVercelAccess, { status: "ready" }>["project"]>;
+    const productionBranch = observed.values.at(-1);
+    if (productionBranch !== undefined) {
+      project.productionBranch = productionBranch;
+    }
     return {
-      project: {
-        id: input.projectId,
-        name: observed.values[1] ?? input.projectName ?? input.projectId,
-        ...(observed.values.at(-1) === undefined
-          ? {}
-          : { productionBranch: observed.values.at(-1) }),
-      },
+      project,
       scope: {
         id: binding.scopeId,
         installationId: input.installationId,
@@ -374,27 +408,31 @@ export async function readPreparedVercelAccess(input: {
       ? input.intent.provisioning.vercel
       : undefined;
   const installationId = input.intent.providers?.vercelInstallationId ?? project?.installationId;
-  if (!installationId) {
+  if (installationId === undefined || installationId === "") {
     return { status: "not-selected" };
   }
   if (project !== undefined) {
     if (project.installationId !== installationId) {
-      return { action: "review-selection", status: "resource-unavailable" };
+      return resourceUnavailable;
     }
-    return await readVercelProjectAccess({
+    const accessInput: Parameters<typeof readVercelProjectAccess>[0] = {
       authority: input.authority,
       expectedScope: project.scope,
-      requireServicesRoot: input.requireServicesRoot,
-      requirePublicAppConfiguration: input.requirePublicAppConfiguration,
-      requireExpectedRepositoryId: input.requireExpectedRepositoryId,
-
       installationId,
       projectId: project.projectId,
       projectName: project.name,
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-      ...(input.apiOrigin === undefined ? {} : { apiOrigin: input.apiOrigin }),
       readCredential: input.readCredential,
-    });
+      requireExpectedRepositoryId: input.requireExpectedRepositoryId,
+      requirePublicAppConfiguration: input.requirePublicAppConfiguration,
+      requireServicesRoot: input.requireServicesRoot,
+    };
+    if (input.fetch !== undefined) {
+      accessInput.fetch = input.fetch;
+    }
+    if (input.apiOrigin !== undefined) {
+      accessInput.apiOrigin = input.apiOrigin;
+    }
+    return await readVercelProjectAccess(accessInput);
   }
   try {
     const credential = await input.readCredential({
@@ -426,7 +464,7 @@ export async function readPreparedVercelAccess(input: {
     });
     // Classify status before reading provider bodies, which can contain secrets
     // or an HTML outage page. Match the existing provider credential semantics.
-    if (response.status === 403 && response.headers.has("retry-after")) {
+    if (response.status === 403 && response.headers.has(retryAfterHeader)) {
       await response.body?.cancel();
       return unavailable();
     }
@@ -467,68 +505,84 @@ export async function readPreparedVercelAccess(input: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreparedAppContextReader(input: {
-  readHandoff: (sessionAuth: unknown) => Promise<PreparedIntent | undefined>;
+  readHandoff: (sessionAuth: SessionAuth) => Promise<PreparedIntent | undefined>;
   github: (
-    sessionAuth: unknown,
+    sessionAuth: SessionAuth,
     input: RepositoryAccessToolInput,
   ) => Promise<RepositoryAccessResult>;
-  vercel: (sessionAuth: unknown, intent: PreparedIntent) => Promise<PreparedVercelAccess>;
+  vercel: (sessionAuth: SessionAuth, intent: PreparedIntent) => Promise<PreparedVercelAccess>;
 }) {
-  return async (sessionAuth: unknown) => {
+  return async (sessionAuth: SessionAuth) => {
     // The trusted reader establishes tenant ownership before any provider work.
     const intent = await input.readHandoff(sessionAuth);
-    if (!intent) {
+    if (intent === undefined) {
       return { status: "not-prepared" as const };
     }
     const repository = preparedGitHubRepository(intent);
-    const [github, vercel] = await Promise.all([
-      repository
-        ? input
-            .github(sessionAuth, withPreparedGitHubSelection({ repository }, intent))
-            .catch((): RepositoryAccessResult => ({
-              repository: parseRepositoryReference(repository),
-              status: "provider-unavailable",
-            }))
-        : Promise.resolve(),
-      input.vercel(sessionAuth, intent).catch(unavailable),
-    ]);
+    let github: RepositoryAccessResult | undefined;
+    if (repository !== undefined && repository !== "") {
+      try {
+        github = await input.github(
+          sessionAuth,
+          withPreparedGitHubSelection({ repository }, intent),
+        );
+      } catch {
+        github = {
+          repository: parseRepositoryReference(repository),
+          status: providerUnavailableStatus,
+        };
+      }
+    }
+    let vercel: PreparedVercelAccess;
+    try {
+      vercel = await input.vercel(sessionAuth, intent);
+    } catch {
+      vercel = unavailable();
+    }
     const returnTo = preparedHandoffReturnPath(sessionAuth);
     const reconnectUrl = (provider: "github" | "vercel") =>
-      returnTo
+      returnTo !== undefined && returnTo !== ""
         ? new URL(
             `/${provider}/installations?${new URLSearchParams({ returnTo })}`,
             // readHandoff has already verified this originating session.
-            z.object({ initiator: z.object({ issuer: z.string().url() }) }).parse(sessionAuth)
-              .initiator.issuer,
+            z.object({ initiator: z.object({ issuer: issuerSchema }) }).parse(sessionAuth).initiator
+              .issuer,
           ).toString()
         : undefined;
+    const githubAccess: {
+      status: string;
+      scope?: { accountLogin: string; accountType: string; installationId: string };
+      action?: "reconnect" | "retry";
+      reconnectUrl?: string;
+      retryable?: true;
+    } = github === undefined ? { status: "not-prepared" } : { status: github.status };
+    if (github?.status === "ready") {
+      githubAccess.scope = {
+        accountLogin: github.scope.accountLogin,
+        accountType: github.scope.accountType,
+        installationId: github.scope.installationId,
+      };
+    }
+    if (github?.status === authorizationRequiredStatus) {
+      githubAccess.action = "reconnect";
+      githubAccess.reconnectUrl = reconnectUrl("github");
+    }
+    if (github?.status === providerUnavailableStatus) {
+      githubAccess.action = retryAction;
+      githubAccess.retryable = true;
+    }
+    const repositoryProjection: PreparedRepositoryProjection = {
+      private: intent.repository.private,
+      requestedName: intent.repository.requestedName,
+    };
+    if (repository !== undefined && repository !== "") {
+      repositoryProjection.fullName = repository;
+    }
     // Explicit projection: never spread auth, credentials, raw provider payloads,
     // or the provisioning journal into durable model-visible output.
     return {
       access: {
-        github: github
-          ? {
-              status: github.status,
-              ...(github.status === "ready"
-                ? {
-                    scope: {
-                      accountLogin: github.scope.accountLogin,
-                      accountType: github.scope.accountType,
-                      installationId: github.scope.installationId,
-                    },
-                  }
-                : {}),
-              ...(github.status === "authorization-required"
-                ? {
-                    action: "reconnect" as const,
-                    reconnectUrl: reconnectUrl("github"),
-                  }
-                : {}),
-              ...(github.status === "provider-unavailable"
-                ? { action: "retry" as const, retryable: true }
-                : {}),
-            }
-          : { status: "not-prepared" as const },
+        github: githubAccess,
         vercel:
           vercel.status === "authorization-required"
             ? { ...vercel, reconnectUrl: reconnectUrl("vercel") }
@@ -547,11 +601,7 @@ export function createPreparedAppContextReader(input: {
             vercel: intent.provisioning.vercel.status,
           }
         : undefined,
-      repository: {
-        private: intent.repository.private,
-        requestedName: intent.repository.requestedName,
-        ...(repository ? { fullName: repository } : {}),
-      },
+      repository: repositoryProjection,
       resources: {
         github:
           intent.provisioning?.github.status === "succeeded"
@@ -581,7 +631,13 @@ export function createPreparedAppContextReader(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function readPreparedAppContext(sessionAuth: unknown) {
+export async function readPreparedAppContext(sessionAuth: SessionAuth) {
+  const parsedSessionAuth = z
+    .object({
+      current: z.object({ attributes: z.record(z.string(), z.string()), issuer: z.url() }),
+      initiator: z.object({ attributes: z.record(z.string(), z.string()), issuer: z.url() }),
+    })
+    .parse(sessionAuth);
   return await createPreparedAppContextReader({
     async github(auth, value) {
       const { repositoryAccessRuntimeForSession } =
@@ -614,11 +670,9 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
           const environment = providerEmulationEnvironment(process.env);
           const config = readVercelIntegrationEnvironment(environment);
           if (config.issuer !== authority.issuer || config.resource !== authority.audience) {
-            throw new Error("Provider authority is unavailable.");
+            throw new Error(handoffUnavailableMessage);
           }
-          if (providerDatabase === undefined) {
-            providerDatabase = openHostedPostgresDatabase(environment.DATABASE_URL ?? "");
-          }
+          providerDatabase ??= openHostedPostgresDatabase(environment.DATABASE_URL ?? "");
           const database = providerDatabase;
           if (
             !(await createPostgresWorkspaceMembership(database).isMember({
@@ -626,7 +680,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
               workspaceId: authority.workspaceId,
             }))
           ) {
-            throw new Error("Provider authority is unavailable.");
+            throw new Error(handoffUnavailableMessage);
           }
           return await readActiveVercelInstallationToken({
             ...value,
@@ -636,15 +690,15 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
         },
         ...(() => {
           const emulation = readProviderEmulation(process.env);
-          return emulation
-            ? {
-                apiOrigin: emulation.vercelOrigin,
-                fetch: async (resource, init) =>
-                  await providerEmulationFetch(resource as URL, init, emulation),
-              }
-            : {};
+          const options: VercelEmulationOptions = {};
+          if (emulation !== undefined) {
+            options.apiOrigin = emulation.vercelOrigin;
+            options.fetch = async (resource, init) =>
+              await providerEmulationFetch(resource, init, emulation);
+          }
+          return options;
         })(),
       });
     },
-  })(sessionAuth);
+  })(parsedSessionAuth);
 }

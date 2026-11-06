@@ -25,7 +25,7 @@ describe("scoped internal diagnostics", () => {
   it("describes absent web context on an authenticated public MCP session without an access or workspace failure", async () => {
     // SAFETY: prepared_app_context consumes only session.auth; this fixture supplies a valid forwarded envelope.
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fixture provides the context fields consumed by this tool.
-    const result = await preparedContext.execute({}, { session: { auth } } as never);
+    const result = await preparedContext.execute({}, { session: { auth } });
     if (!("note" in result)) {
       throw new Error("Expected a non-streaming diagnostic result");
     }

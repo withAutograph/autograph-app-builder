@@ -4,7 +4,7 @@ import { readProviderEmulation } from "@/lib/integrations/local-provider-emulati
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
-export async function GET(request: Request) {
+async function get(request: Request) {
   let emulation;
   try {
     emulation = readProviderEmulation(process.env);
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   try {
     const code = query.get("code");
     const state = query.get("state");
-    if (!code || !state) {
+    if (code === null || code === "" || state === null || state === "") {
       throw new Error("invalid");
     }
     const relay = verifyLocalVercelRelay(state, emulation.relaySecret, Date.now(), origin);
@@ -33,3 +33,5 @@ export async function GET(request: Request) {
     return new Response("Invalid local OAuth relay", { status: 400 });
   }
 }
+
+export { get as GET };

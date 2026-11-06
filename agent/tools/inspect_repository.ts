@@ -89,20 +89,29 @@ const repositoryFilePage = (input: {
     } else if (index + 1 < pathCount) {
       continuation = { offsetBytes: 0, pathIndex: index + 1 };
     }
-    const file = {
+    const file: RepositoryInspectionFile = {
       content: chunkContent,
       path: requestedPath,
-      ...(offset === 0 && nextOffsetBytes === contentBytes && restartedFromOffsetBytes === undefined
-        ? {}
-        : { offsetBytes: offset }),
-      ...(restartedFromOffsetBytes === undefined ? {} : { restartedFromOffsetBytes }),
     };
-    return {
+    if (
+      offset !== 0 ||
+      nextOffsetBytes !== contentBytes ||
+      restartedFromOffsetBytes !== undefined
+    ) {
+      file.offsetBytes = offset;
+    }
+    if (restartedFromOffsetBytes !== undefined) {
+      file.restartedFromOffsetBytes = restartedFromOffsetBytes;
+    }
+    const result: RepositoryInspectionPage = {
       files: content === null ? prefix.files : [...prefix.files, file],
       missingPaths:
         content === null ? [...prefix.missingPaths, requestedPath] : prefix.missingPaths,
-      ...(continuation === undefined ? {} : { continuation }),
     };
+    if (continuation !== undefined) {
+      result.continuation = continuation;
+    }
+    return result;
   };
   const measure = (output: RepositoryInspectionPage) =>
     serializedNativeActionResultBytes(output, metadata);
@@ -162,16 +171,16 @@ export const readRepositoryInspectionPage = async (input: {
     );
   }
   let page: RepositoryInspectionPage = { files: [], missingPaths: [] };
-  const finish = (continuation?: RepositoryInspectionContinuation) =>
-    fitOutputNativeFrame(
-      {
-        files: page.files,
-        missingPaths: page.missingPaths,
-        ...(continuation === undefined ? {} : { continuation }),
-      },
-      metadata,
-      EVE_NATIVE_RESULT_PAGE_BYTES,
-    );
+  const finish = (continuation?: RepositoryInspectionContinuation) => {
+    const result: RepositoryInspectionPage = {
+      files: page.files,
+      missingPaths: page.missingPaths,
+    };
+    if (continuation !== undefined) {
+      result.continuation = continuation;
+    }
+    return fitOutputNativeFrame(result, metadata, EVE_NATIVE_RESULT_PAGE_BYTES);
+  };
   for (let index = pathIndex; index < paths.length; index += 1) {
     const requestedPath = paths[index];
     if (requestedPath === undefined) {
@@ -212,7 +221,7 @@ const inspectionNamespace = (input: {
   mode?: "repository" | "workspace";
   directoryOffset?: number;
 }) => {
-  const files = input.paths?.length ? input.paths : undefined;
+  const files = input.paths !== undefined && input.paths.length > 0 ? input.paths : undefined;
   const virtualChild = isWorkspaceDescendant(input.path);
   const explicitWorkspaceRoot =
     input.mode === "workspace" && input.path === developmentWorkspacePath;
@@ -354,11 +363,14 @@ export default defineTool({
       await readOverviewPath(index + 1);
     };
     await readOverviewPath(0);
-    return {
+    const result = {
       availablePaths,
       workspacePath: developmentWorkspacePath,
-      ...(missingPaths.length === 0 ? {} : { missingPaths }),
-    };
+    } satisfies { availablePaths: string[]; workspacePath: string; missingPaths?: string[] };
+    if (missingPaths.length > 0) {
+      result.missingPaths = missingPaths;
+    }
+    return result;
   },
   inputSchema: z.object({
     directoryOffset: z

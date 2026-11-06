@@ -8,9 +8,15 @@ const meta = {
   args: {
     available: true,
     connected: true,
-    onConnect: fn(),
-    onProviderChange: fn(),
-    onTeamChange: fn(),
+    onConnect: (...args) => {
+      fn()(...args);
+    },
+    onProviderChange: (...args) => {
+      fn()(...args);
+    },
+    onTeamChange: (...args) => {
+      fn()(...args);
+    },
     selected: null,
     team: "vercel-autograph",
     teamOptions: storyTeamOptions,

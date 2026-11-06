@@ -19,6 +19,10 @@ import { createGitHubOAuthApp, createGitHubTokenOctokit } from "../github/octoki
 const GITHUB_ORIGIN = "https://github.com";
 const STATE_LIFETIME_MS = 10 * 60 * 1000;
 const FAILURE_MESSAGE = "GitHub App installation authorization failed.";
+const INVALID_RESPONSE = "invalid-response";
+const INVALID_TOKEN = "invalid-token";
+const CALLBACK_SHAPE_REASON = "callback-shape";
+const STATE_FORMAT_REASON = "state-format";
 export { GitHubInstallationAuthorizationError } from "./github-app-installation-errors";
 
 export type GitHubInstallationAuthorizationFailureStage =
@@ -54,16 +58,9 @@ export interface GitHubCallbackDiagnostic {
 }
 
 export interface GitHubStateValidationDiagnostic {
-  substage:
-    | "authority-parse"
-    | "callback-parse"
-    | "state-format"
-    | "state-signature"
-    | "state-schema"
-    | "state-authority-digest"
-    | "state-time";
+  substage: string;
   stateDigest?: string;
-  callbackParseReason?: "duplicate-key" | "state-format" | "callback-shape" | "code-format";
+  callbackParseReason?: string;
 }
 
 export type GitHubInstallationValidationSubstage =
@@ -77,19 +74,29 @@ export type GitHubInstallationValidationSubstage =
   | "personal-installation-mismatch"
   | "installation-handoff";
 
-export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
-  if (!(error instanceof GitHubInstallationAuthorizationError)) {
-    return;
+export const githubInstallationAuthorizationDiagnostic = (
+  error: GitHubInstallationAuthorizationError,
+) => {
+  const diagnostic: {
+    stage: GitHubInstallationAuthorizationFailureStage;
+    category?: GitHubOAuthErrorCategory;
+    callback?: GitHubCallbackDiagnostic;
+    stateValidation?: GitHubStateValidationDiagnostic;
+    installationValidation?: GitHubInstallationValidationSubstage;
+  } = { stage: error.stage };
+  if (error.category !== undefined) {
+    diagnostic.category = error.category;
   }
-  return {
-    stage: error.stage,
-    ...(error.category === undefined ? {} : { category: error.category }),
-    ...(error.callback === undefined ? {} : { callback: error.callback }),
-    ...(error.stateValidation === undefined ? {} : { stateValidation: error.stateValidation }),
-    ...(error.installationValidation === undefined
-      ? {}
-      : { installationValidation: error.installationValidation }),
-  };
+  if (error.callback !== undefined) {
+    diagnostic.callback = error.callback;
+  }
+  if (error.stateValidation !== undefined) {
+    diagnostic.stateValidation = error.stateValidation;
+  }
+  if (error.installationValidation !== undefined) {
+    diagnostic.installationValidation = error.installationValidation;
+  }
+  return diagnostic;
 };
 
 type HostedTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
@@ -112,8 +119,8 @@ const configSchema = z
       .min(20)
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
-    issuer: z.string().url().startsWith("https://"),
-    resource: z.string().url().startsWith("https://"),
+    issuer: z.url().startsWith("https://"),
+    resource: z.url().startsWith("https://"),
     stateSecret: z
       .string()
       .min(32)

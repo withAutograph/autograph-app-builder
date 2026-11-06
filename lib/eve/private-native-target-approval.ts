@@ -77,7 +77,7 @@ export const createPrivateNativeTargetApprovalCapture = (input: {
   if (nativeTargetOnboardingPlanDigest(record.plan) !== record.planDigest) {
     throw new Error("Native target approval plan changed.");
   }
-  const capture = createPrivateOperatorApprovalCapture({
+  const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
     ownerUserId: input.owner.authority.ownerUserId,
     request: {
       action: "native-target",
@@ -85,9 +85,14 @@ export const createPrivateNativeTargetApprovalCapture = (input: {
       planDigest: record.planDigest,
       planRef: operationRef,
     },
-    ...(input.callId === undefined ? {} : { callId: input.callId }),
-    ...(input.state === undefined ? {} : { state: input.state }),
-  });
+  };
+  if (input.callId !== undefined) {
+    captureInput.callId = input.callId;
+  }
+  if (input.state !== undefined) {
+    captureInput.state = input.state;
+  }
+  const capture = createPrivateOperatorApprovalCapture(captureInput);
   const retainedEntries = new Map(
     capture.snapshot().entries.map((entry) => [entry.requestId, entry]),
   );
@@ -225,39 +230,50 @@ export const readPrivateNativeTargetApproval = async (input: {
       ? undefined
       : privateNativeTargetApprovalObservationSchema.parse(input.observation.state);
   let capture: ReturnType<typeof createPrivateNativeTargetApprovalCapture> | undefined;
-  const approval = await readPrivateOperatorApproval({
-    owner: input.historyOwner,
-    ...(input.observation === undefined
-      ? {}
-      : {
-          observation: {
-            ...(saved === undefined ? {} : { state: saved.native }),
-            save: async (native: PrivateOperatorApprovalObservation) => {
-              if (capture === undefined) {
-                throw new Error("Native target approval capture is unavailable.");
-              }
-              await input.observation?.save(
-                privateNativeTargetApprovalObservationSchema.parse({
-                  native,
-                  terminals: capture.terminalSnapshot(),
-                  version: 1,
-                }),
-              );
-            },
-          },
-        }),
+  const approvalInput: Parameters<
+    typeof readPrivateOperatorApproval<NativeTargetOnboardingApproval>
+  >[0] = {
+    assertOwner: input.assertOwner,
     capture: (state) => {
-      capture = createPrivateNativeTargetApprovalCapture({
+      const captureInput: Parameters<typeof createPrivateNativeTargetApprovalCapture>[0] = {
         owner: input.owner,
         record: input.record,
-        ...(input.callId === undefined ? {} : { callId: input.callId }),
-        ...(state === undefined ? {} : { state }),
-        ...(saved === undefined ? {} : { terminals: saved.terminals }),
-      });
+      };
+      if (input.callId !== undefined) {
+        captureInput.callId = input.callId;
+      }
+      if (state !== undefined) {
+        captureInput.state = state;
+      }
+      if (saved !== undefined) {
+        captureInput.terminals = saved.terminals;
+      }
+      capture = createPrivateNativeTargetApprovalCapture(captureInput);
       return capture;
     },
+    owner: input.historyOwner,
     readHistory: input.readHistory,
-    assertOwner: input.assertOwner,
-  });
+  };
+  if (input.observation !== undefined) {
+    const observationInput: NonNullable<typeof approvalInput.observation> = {
+      save: async (native: PrivateOperatorApprovalObservation) => {
+        if (capture === undefined) {
+          throw new Error("Native target approval capture is unavailable.");
+        }
+        await input.observation?.save(
+          privateNativeTargetApprovalObservationSchema.parse({
+            native,
+            terminals: capture.terminalSnapshot(),
+            version: 1,
+          }),
+        );
+      },
+    };
+    if (saved !== undefined) {
+      observationInput.state = saved.native;
+    }
+    approvalInput.observation = observationInput;
+  }
+  const approval = await readPrivateOperatorApproval(approvalInput);
   return approval === null ? { status: "pending" } : { proof: approval, status: approval.outcome };
 };

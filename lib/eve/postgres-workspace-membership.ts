@@ -1,12 +1,59 @@
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import type * as databaseSchema from "../db/schema";
+import type { member, organization, user } from "../db/schema";
 import { member, organization, user } from "../db/schema";
 import type { HostedWorkspaceMembership } from "../mcp/request-handler";
 import { hostedPrincipalSchema } from "./hosted-auth";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = PostgresJsDatabase<{
+  user: typeof user;
+  session: typeof session;
+  organization: typeof organization;
+  member: typeof member;
+  personalWorkspace: typeof personalWorkspace;
+  invitation: typeof invitation;
+  account: typeof account;
+  verification: typeof verification;
+  passkey: typeof passkey;
+  passkeyOnboarding: typeof passkeyOnboarding;
+  jwks: typeof jwks;
+  oauthClient: typeof oauthClient;
+  oauthResource: typeof oauthResource;
+  oauthClientResource: typeof oauthClientResource;
+  oauthRefreshToken: typeof oauthRefreshToken;
+  oauthAccessToken: typeof oauthAccessToken;
+  oauthConsent: typeof oauthConsent;
+  oauthClientAssertion: typeof oauthClientAssertion;
+  hostedWorkspaceMemberships: typeof hostedWorkspaceMemberships;
+  agentSessions: typeof agentSessions;
+  agentSessionCheckpointManifests: typeof agentSessionCheckpointManifests;
+  agentSessionCheckpointItems: typeof agentSessionCheckpointItems;
+  agentSessionCheckpointChunks: typeof agentSessionCheckpointChunks;
+  agentOperations: typeof agentOperations;
+  sandboxExecutionLeases: typeof sandboxExecutionLeases;
+  githubPublicationProposals: typeof githubPublicationProposals;
+  githubPublicationJournals: typeof githubPublicationJournals;
+  hostedGitHubInstallations: typeof hostedGitHubInstallations;
+  hostedGitHubInstallationBindings: typeof hostedGitHubInstallationBindings;
+  hostedVercelInstallations: typeof hostedVercelInstallations;
+  hostedGitHubUserCredentials: typeof hostedGitHubUserCredentials;
+  builderProvisioningJournals: typeof builderProvisioningJournals;
+  builderHandoffs: typeof builderHandoffs;
+  builderDrafts: typeof builderDrafts;
+  vercelInstallationAuthorizationStates: typeof vercelInstallationAuthorizationStates;
+  githubInstallationAuthorizationStates: typeof githubInstallationAuthorizationStates;
+  githubRepositoryAccessContinuations: typeof githubRepositoryAccessContinuations;
+  hostedGitHubPublicationProposals: typeof hostedGitHubPublicationProposals;
+  hostedGitHubPublicationJournals: typeof hostedGitHubPublicationJournals;
+  hostedGitHubPrEffectJournals: typeof hostedGitHubPrEffectJournals;
+  hostedGitHubDraftAdoptions: typeof hostedGitHubDraftAdoptions;
+  emulatePreviewState: typeof emulatePreviewState;
+  prototypeArtifactChunks: typeof prototypeArtifactChunks;
+  validationLogChunks: typeof validationLogChunks;
+  validationLogManifests: typeof validationLogManifests;
+  productSourceReviewJournal: typeof productSourceReviewJournal;
+}>;
 
 /**
  * Request-time membership authority. A signed workspace claim selects the

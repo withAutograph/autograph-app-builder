@@ -53,6 +53,8 @@ const principal = {
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
+const invalidProvisioningKind = '{"kind":"not-normal-provisioning"}';
+const lookupAppName = "lookup-app";
 let started = false;
 let client: ReturnType<typeof postgres> | undefined;
 try {
@@ -95,7 +97,7 @@ try {
   assert.ok(lookup, "Real repository lookup must be implemented");
   const now = new Date("2026-11-03T00:00:00Z");
   const input = {
-    appId: "lookup-app",
+    appId: lookupAppName,
     authority: principal,
     githubInstallationId: "101",
     repositoryId: "501",
@@ -114,7 +116,7 @@ try {
       appName: "Lookup App",
       operation: "github",
       providers: { githubInstallationId: "101", vercelInstallationId: "icfg_lookup" },
-      repository: { name: "lookup-app", private: true },
+      repository: { name: lookupAppName, private: true },
       requestId: randomUUID(),
       version: 1,
     });
@@ -128,11 +130,11 @@ try {
             ? { code: "provider_unavailable", retryable: true, status: "failed" }
             : {
                 defaultBranch: "main",
-                fullName: "fixture/lookup-app",
+                fullName: `fixture/${lookupAppName}`,
                 headSha: "a".repeat(40),
                 headTree: "b".repeat(40),
                 installationId: "101",
-                name: "lookup-app",
+                name: lookupAppName,
                 owner: "fixture",
                 repositoryId: "501",
                 scope: { id: "201", login: "fixture", type: "organization" },
@@ -149,7 +151,7 @@ try {
                   sourceTree: "d".repeat(40),
                 },
                 status: "succeeded",
-                url: "https://github.com/fixture/lookup-app",
+                url: `https://github.com/fixture/${lookupAppName}`,
                 visibility: "private",
               },
         status: options.pending === true ? "pending" : "settled",
@@ -177,7 +179,10 @@ try {
     });
     assert.ok(saved);
     if (options.tagged === true) {
-      await openedClient`update builder_provisioning_journals set record = record || '{"kind":"not-normal-provisioning"}'::jsonb where request_id = ${request.requestId}`;
+      await openedClient.unsafe(
+        "update builder_provisioning_journals set record = record || $1::jsonb where request_id = $2",
+        [invalidProvisioningKind, request.requestId],
+      );
     }
     return saved;
   };

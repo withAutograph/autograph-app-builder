@@ -50,6 +50,11 @@ import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import type { PreparedApplicationReviewContext } from "./application-review-context-store";
 import { emptySourceReviewInvocation } from "./product-source-review-batches";
 
+const mockReviewUnavailableReason =
+  "Independent review is unassessed in the credential-free mock profile.";
+const unattachedAssetsOmission =
+  "Only original request text and textual product clarifications are retained; attached assets are not reviewed.";
+
 export interface AppliedSourceObservation {
   source: Pick<ProductSourceReviewInput, "files" | "omissions" | "sourceDigest">;
   currentDigest: () => Promise<string>;
@@ -106,10 +111,7 @@ export const reviewObservedProductSource = async (
   input.abortSignal?.throwIfAborted();
   let assessment: ProductSourceAssessment;
   if (input.mockModel) {
-    assessment = unavailableSourceAssessment(
-      input.reviewInput,
-      "Independent review is unassessed in the credential-free mock profile.",
-    );
+    assessment = unavailableSourceAssessment(input.reviewInput, mockReviewUnavailableReason);
   } else if (input.reviewInput.originalRequest === null) {
     assessment = unavailableSourceAssessment(
       input.reviewInput,
@@ -235,7 +237,11 @@ export const reviewApplicationWithJournal = async (
   if (!completedReviewForInput(recorded, input.reviewInput)) {
     throw new Error("Completed application review could not be retained under the current policy.");
   }
-  return { ...recorded.assessment, ...(invocation === undefined ? {} : { invocation }) };
+  const result = { ...recorded.assessment };
+  if (invocation !== undefined) {
+    result.invocation = invocation;
+  }
+  return result;
 };
 
 /** Shared post-validation assessment; never substitutes for executed product behavior. */
@@ -281,10 +287,7 @@ export const reviewAppliedProductSource = async (input: {
     sourceDigest: input.applyReceipt.postTreeDigest,
   };
   if (hasTestCapability("mock-model")) {
-    return unavailableSourceAssessment(
-      reviewInput,
-      "Independent review is unassessed in the credential-free mock profile.",
-    );
+    return unavailableSourceAssessment(reviewInput, mockReviewUnavailableReason);
   }
   if (request.original === null) {
     return unavailableSourceAssessment(
@@ -302,7 +305,7 @@ export const reviewAppliedProductSource = async (input: {
       ...reviewInput,
       omissions: [
         "Source tools expose observed eligible code and configuration, including relevant unchanged imports. Uninspected dependencies cannot establish absence of functionality.",
-        "Only original request text and textual product clarifications are retained; attached assets are not reviewed.",
+        unattachedAssetsOmission,
       ],
       sourceDigest: observed.treeDigest,
     };
@@ -325,7 +328,7 @@ export const reviewAppliedProductSource = async (input: {
       unexposedReleasePrefixes: marker?.unexposedReleasePrefixes,
     });
     currentInput.omissions.push(...visibility.omissions);
-    const evidence = createApplicationReviewEvidence({
+    const evidenceInput: Parameters<typeof createApplicationReviewEvidence>[0] = {
       abortSignal: input.abortSignal,
       applyRoot: input.applyReceipt.applyRoot,
       changedPaths: input.normalizedChanges.map((change) => change.path),
@@ -333,18 +336,17 @@ export const reviewAppliedProductSource = async (input: {
       reviewInput: currentInput,
       sandbox,
       visiblePaths: visibility.paths,
-      ...(input.appSpec.version === 2
-        ? {
-            appSpecParts: () =>
-              acceptedAppSpecTextParts({
-                accepted: input.appSpec,
-                artifacts: input.artifacts ?? [],
-                sessionAuth: input.sessionAuth,
-                sessionId: input.sessionId ?? "",
-              }),
-          }
-        : {}),
-    });
+    };
+    if (input.appSpec.version === 2) {
+      evidenceInput.appSpecParts = () =>
+        acceptedAppSpecTextParts({
+          accepted: input.appSpec,
+          artifacts: input.artifacts ?? [],
+          sessionAuth: input.sessionAuth,
+          sessionId: input.sessionId ?? "",
+        });
+    }
+    const evidence = createApplicationReviewEvidence(evidenceInput);
     const options: ApplicationSourceReviewOptions = {
       abortSignal: input.abortSignal,
       onInvocation(invocation) {
@@ -507,7 +509,7 @@ export const prepareAppliedProductSourceReview = async (
     }
     reviewInput.omissions.push(
       "Source tools expose observed eligible code and configuration, including relevant unchanged imports. Uninspected dependencies cannot establish absence of functionality.",
-      "Only original request text and textual product clarifications are retained; attached assets are not reviewed.",
+      unattachedAssetsOmission,
       ...visibility.omissions,
     );
     const privateReviewInput = {
@@ -618,7 +620,11 @@ export const finalizeAppliedProductSourceReview = async (
       return unavailable();
     }
     retainScopedProductSourceAssessment(recorded.assessment, currentKey);
-    return { ...recorded.assessment, ...(invocation === undefined ? {} : { invocation }) };
+    const result = { ...recorded.assessment };
+    if (invocation !== undefined) {
+      result.invocation = invocation;
+    }
+    return result;
   } catch {
     input.abortSignal?.throwIfAborted();
     return unavailable();

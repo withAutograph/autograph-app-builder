@@ -14,6 +14,7 @@ export const providerConnectionFailureReasonSchema = z.enum([
 ]);
 
 export type ProviderConnectionFailureReason = z.infer<typeof providerConnectionFailureReasonSchema>;
+type ProviderConnectionFailureReasonInput = z.input<typeof providerConnectionFailureReasonSchema>;
 
 export interface ProviderConnectionNotice {
   provider: "github" | "vercel";
@@ -22,7 +23,7 @@ export interface ProviderConnectionNotice {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parseProviderConnectionFailureReason(input: unknown) {
+export function parseProviderConnectionFailureReason(input: ProviderConnectionFailureReasonInput) {
   const parsed = providerConnectionFailureReasonSchema.safeParse(input);
   return parsed.success ? parsed.data : undefined;
 }

@@ -53,6 +53,7 @@ export function SearchCombobox({
   const [query, setQuery] = useState("");
   const [filtering, setFiltering] = useState(false);
   const [active, setActive] = useState(0);
+  const menuRef = useRef<HTMLDialogElement>(null);
   const displayedQuery = filtering ? query : (selected?.label ?? "");
   const shown = filtering
     ? options.filter((option) =>
@@ -61,7 +62,8 @@ export function SearchCombobox({
     : options;
   useEffect(() => {
     const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const root = rootRef.current;
+      if (root !== null && !event.composedPath().includes(root)) {
         setOpen(false);
       }
     };
@@ -70,6 +72,18 @@ export function SearchCombobox({
       document.removeEventListener("pointerdown", close);
     };
   }, []);
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (menu === null) {
+      return;
+    }
+    if (open && !menu.open) {
+      menu.show();
+    }
+    if (!open && menu.open) {
+      menu.close();
+    }
+  }, [open]);
   const restore = () => {
     setOpen(false);
     setQuery("");
@@ -134,13 +148,15 @@ export function SearchCombobox({
             event.preventDefault();
             setActive((index) => Math.max(index - 1, 0));
           }
-          if (event.key === "Enter" && open && shown[active]) {
+          if (event.key === "Enter" && open && shown[active] !== undefined) {
             event.preventDefault();
             choose(shown[active]);
           }
         }}
       />
-      {selected?.detail ? <span className={styles.comboDetail}>{selected.detail}</span> : null}
+      {selected !== undefined && selected.detail !== undefined && selected.detail !== "" ? (
+        <span className={styles.comboDetail}>{selected.detail}</span>
+      ) : null}
       <button
         type="button"
         aria-label={open ? "Close menu" : "Open menu"}
@@ -150,14 +166,14 @@ export function SearchCombobox({
       >
         <ChevronDown size={16} aria-hidden="true" />
       </button>
-      <div className={styles.comboMenu} role="dialog" hidden={!open}>
+      <dialog ref={menuRef} className={styles.comboMenu} aria-label={`${label} options`}>
         <div id={`${id}-listbox`} role="listbox">
           {shown.map((option, index) => (
             <button
               type="button"
               role="option"
               aria-selected={option.value === value}
-              data-has-icon={optionIcon ? "" : undefined}
+              data-has-icon={optionIcon === undefined ? undefined : ""}
               data-option-value={option.value}
               data-active={index === active || undefined}
               key={option.value}
@@ -168,13 +184,13 @@ export function SearchCombobox({
                 choose(option);
               }}
             >
-              {optionIcon ? (
+              {optionIcon === undefined ? null : (
                 <span className={styles.comboOptionIcon} aria-hidden="true">
                   {optionIcon(option)}
                 </span>
-              ) : null}
+              )}
               <span className={styles.comboOptionLabel}>{option.label}</span>
-              {option.detail ? (
+              {option.detail !== undefined && option.detail !== "" ? (
                 <small data-pill={detailPills || undefined}>{option.detail}</small>
               ) : null}
               {showSelectedCheck && option.value === value ? (
@@ -182,9 +198,9 @@ export function SearchCombobox({
               ) : null}
             </button>
           ))}
-          {shown.length ? null : <p className={styles.noResults}>No results found.</p>}
+          {shown.length === 0 ? <p className={styles.noResults}>No results found.</p> : null}
         </div>
-        {menuFooter ? (
+        {menuFooter === undefined ? null : (
           <button
             className={styles.comboFooter}
             type="button"
@@ -199,8 +215,8 @@ export function SearchCombobox({
             </span>
             <span className={styles.comboOptionLabel}>{menuFooter.label}</span>
           </button>
-        ) : null}
-      </div>
+        )}
+      </dialog>
     </div>
   );
 }

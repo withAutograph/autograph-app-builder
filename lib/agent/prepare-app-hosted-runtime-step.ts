@@ -68,36 +68,38 @@ const reportCaughtPreparationFailure = (
   }
 };
 
-const preparationPlanningAction = (input: HostedRuntimeInput, reason: string) => ({
-  approval: "normal-plan-approval" as const,
-  input: {
+const preparationPlanningAction = (input: HostedRuntimeInput, reason: string) => {
+  const planningInput = {
     appId: input.appId,
     branch: input.branch,
     environment: input.environment,
     operation: "prepare" as const,
     projectId: input.projectId,
-    ...(input.plan.normalActorProgram === undefined
-      ? {}
-      : { normalActorProgram: input.plan.normalActorProgram }),
-    ...(input.plan.authSignupPolicy === undefined
-      ? {}
-      : {
-          authSignupPolicy: {
-            version: input.plan.authSignupPolicy.version,
-            organizationId: input.plan.authSignupPolicy.organizationId,
-            eligibility: input.plan.authSignupPolicy.eligibility,
-            ...(input.plan.authSignupPolicy.allowedEmails === undefined
-              ? {}
-              : { allowedEmails: input.plan.authSignupPolicy.allowedEmails }),
-            membershipRole: input.plan.authSignupPolicy.membershipRole,
-            appRoles: input.plan.authSignupPolicy.appRoles,
-            appPath: input.plan.authSignupPolicy.appPath,
-          },
-        }),
-  },
-  reason,
-  tool: "plan-app-hosted-runtime" as const,
-});
+  } satisfies Record<string, JsonValue>;
+  if (input.plan.authSignupPolicy !== undefined) {
+    const authSignupPolicy = {
+      appPath: input.plan.authSignupPolicy.appPath,
+      appRoles: input.plan.authSignupPolicy.appRoles,
+      eligibility: input.plan.authSignupPolicy.eligibility,
+      membershipRole: input.plan.authSignupPolicy.membershipRole,
+      organizationId: input.plan.authSignupPolicy.organizationId,
+      version: input.plan.authSignupPolicy.version,
+    } satisfies Record<string, JsonValue>;
+    if (input.plan.authSignupPolicy.allowedEmails !== undefined) {
+      authSignupPolicy.allowedEmails = input.plan.authSignupPolicy.allowedEmails;
+    }
+    planningInput.authSignupPolicy = authSignupPolicy;
+  }
+  if (input.plan.normalActorProgram !== undefined) {
+    planningInput.normalActorProgram = input.plan.normalActorProgram;
+  }
+  return {
+    approval: "normal-plan-approval" as const,
+    input: planningInput,
+    reason,
+    tool: "plan-app-hosted-runtime" as const,
+  };
+};
 
 const preparationResult = (
   result: OperatorPublicResult,

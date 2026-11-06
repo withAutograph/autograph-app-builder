@@ -10,6 +10,8 @@ import {
 } from "../eve/local-vercel-oidc";
 
 const MINIMUM_TOKEN_LIFETIME_SECONDS = 300;
+const MISSING_FILE_ERROR_CODE = "ENOENT";
+const LOCAL_ENV_FILE = ".env.local";
 
 export interface LocalOidcStartupInvocation {
   executable: string;
@@ -31,7 +33,7 @@ export class LocalOidcRefreshFailedError extends Error {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: "HOME" | "PATH"): string {
   const value = environment[name];
-  if (typeof value !== "string" || value.length === 0) {
+  if (value === undefined || value.length === 0) {
     throw new Error(`Required ${name} was unavailable.`);
   }
   return value;
@@ -39,7 +41,7 @@ function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: "HOME" |
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return {
+  const result: NodeJS.ProcessEnv = {
     CI: environment.CI ?? "",
     HOME: requiredEnvironmentValue(environment, "HOME"),
     LANG: environment.LANG ?? "C",
@@ -48,11 +50,12 @@ function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     PATH: requiredEnvironmentValue(environment, "PATH"),
     TMPDIR: environment.TMPDIR ?? "/tmp",
     TZ: environment.TZ ?? "",
-    // Vercel CLI resolves its existing login/configuration under its XDG data directory.
-    ...(environment.XDG_DATA_HOME === undefined
-      ? {}
-      : { XDG_DATA_HOME: environment.XDG_DATA_HOME }),
   };
+  // Vercel CLI resolves its existing login/configuration under its XDG data directory.
+  if (environment.XDG_DATA_HOME !== undefined) {
+    result.XDG_DATA_HOME = environment.XDG_DATA_HOME;
+  }
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -98,31 +101,29 @@ function installedOidcNeedsRefresh(input: {
   }
   let environment: string;
   try {
-    environment = readOwnerBoundLocalFile(path.resolve(input.repositoryRoot, ".env.local"), {
+    environment = readOwnerBoundLocalFile(path.resolve(input.repositoryRoot, LOCAL_ENV_FILE), {
       confidential: true,
     });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === MISSING_FILE_ERROR_CODE) {
       return true;
     }
-    const credentialPath = path.resolve(input.repositoryRoot, ".env.local");
+    const credentialPath = path.resolve(input.repositoryRoot, LOCAL_ENV_FILE);
     const stat = lstatSync(credentialPath);
     const ownerId = process.getuid?.();
-    if (
-      stat.isFile() &&
-      !stat.isSymbolicLink() &&
-      stat.nlink === 1 &&
-      ownerId !== undefined &&
-      stat.uid === ownerId &&
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-      (stat.mode & 0o077) !== 0
-    ) {
-      // `vercel link` and `vercel env pull` may create this owner-owned file
-      // with ordinary permissions. Refresh it, then let local:install-oidc
-      // atomically rewrite it owner-only before the token is consumed.
-      return true;
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) {
+      throw error;
     }
-    throw error;
+    if (ownerId === undefined || stat.uid !== ownerId) {
+      throw error;
+    }
+    if ((stat.mode & 0o077) === 0) {
+      throw error;
+    }
+    // `vercel link` and `vercel env pull` may create this owner-owned file
+    // with ordinary permissions. Refresh it, then let local:install-oidc
+    // atomically rewrite it owner-only before the token is consumed.
+    return true;
   }
   const token = parseLocalVercelOidcToken(environment);
   const claims = validateLocalVercelOidcClaims({
@@ -167,7 +168,7 @@ export function ensureLocalDevelopmentOidc(input: {
   environment?: NodeJS.ProcessEnv;
   nowEpochSeconds?: number;
   runCommand?: LocalOidcStartupCommandRunner;
-}): { refreshed: boolean } {
+}) {
   const environment = input.environment ?? process.env;
   assertNoStaticCredential(environment);
 
@@ -202,7 +203,7 @@ export function ensureLocalDevelopmentOidc(input: {
   }
   try {
     runCommand({
-      args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
+      args: ["env", "pull", LOCAL_ENV_FILE, "--environment=development", "--yes"],
       cwd: repositoryRoot,
       environment: childEnvironment,
       executable: input.vercelExecutable,
@@ -219,10 +220,12 @@ export function ensureLocalDevelopmentOidc(input: {
     throw new LocalOidcRefreshFailedError();
   }
 
+  // Sample the clock again only when the caller did not provide a fixed test or startup time.
+  const validationTime = input.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
   validateInstalledOidc({
     expectedProject,
     // A refreshed token can be issued after the pre-pull clock sample.
-    nowEpochSeconds: input.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
+    nowEpochSeconds: validationTime,
     repositoryRoot,
   });
   return { refreshed: true };

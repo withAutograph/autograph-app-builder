@@ -7,27 +7,32 @@ import type { Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { AuthProvider } from "@better-auth-ui/react";
+import { passkeyPlugin } from "@/lib/auth/passkey-plugin";
+
 import { PasskeyButton } from "./passkey-button";
 
-const auth = vi.hoisted(() => ({ navigate: vi.fn(), signIn: vi.fn() }));
-vi.mock("@better-auth-ui/react", () => ({
-  useAuth: () => ({
-    authClient: {},
-    localization: { auth: { continueWith: "Continue with {{provider}}" } },
-    navigate: auth.navigate,
-    redirectTo: "/",
-  }),
-  useAuthPlugin: () => ({ localization: { passkey: "Passkey" } }),
-}));
-vi.mock("@better-auth-ui/react/plugins/passkey", () => ({
-  useAddPasskey: () => ({ mutateAsync: vi.fn() }),
-  usePasskeyAutoFill: vi.fn(),
-  useSignInPasskey: () => ({ mutateAsync: auth.signIn }),
-}));
+const auth = { addPasskey: vi.fn(), navigate: vi.fn(), signIn: vi.fn() };
+const authClient = {
+  passkey: { addPasskey: auth.addPasskey },
+  signIn: { passkey: auth.signIn },
+};
+const passkeyAuthProvider = (view: "signIn" | "signUp") => (
+  <AuthProvider
+    authClient={authClient}
+    Link={({ children }) => <a>{children}</a>}
+    navigate={(options) => {
+      auth.navigate(options);
+    }}
+    plugins={[passkeyPlugin({ autoFill: false })]}
+    redirectTo="/"
+  >
+    <PasskeyButton view={view} />
+  </AuthProvider>
+);
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
-let root: Root | undefined;
+Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+let root: Root | null = null;
 let container: HTMLDivElement;
 afterEach(async () => {
   if (root) {
@@ -36,7 +41,7 @@ afterEach(async () => {
       await Promise.resolve();
     });
   }
-  root = undefined;
+  root = null;
   container?.remove();
   vi.clearAllMocks();
 });
@@ -45,7 +50,10 @@ it.each(["signIn", "signUp"] as const)(
   "keeps %s disabled until its client handler is hydrated",
   async (view) => {
     container = document.createElement("div");
-    container.innerHTML = renderToString(<PasskeyButton view={view} />);
+    container.textContent = "";
+    container.append(
+      document.createRange().createContextualFragment(renderToString(passkeyAuthProvider(view))),
+    );
     document.body.append(container);
     const button = container.querySelector("button");
     if (!button) {
@@ -56,7 +64,7 @@ it.each(["signIn", "signUp"] as const)(
     expect(auth.signIn).not.toHaveBeenCalled();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
-      root = hydrateRoot(container, <PasskeyButton view={view} />);
+      root = hydrateRoot(container, passkeyAuthProvider(view));
     });
     expect(container.querySelector("button")).toBe(button);
     expect(button.disabled).toBe(false);
@@ -66,11 +74,14 @@ it.each(["signIn", "signUp"] as const)(
 it("shows an inline retry after a hydrated verification transport failure", async () => {
   auth.signIn.mockRejectedValueOnce(new TypeError("Failed to fetch"));
   container = document.createElement("div");
-  container.innerHTML = renderToString(<PasskeyButton view="signIn" />);
+  container.textContent = "";
+  container.append(
+    document.createRange().createContextualFragment(renderToString(passkeyAuthProvider("signIn"))),
+  );
   document.body.append(container);
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => {
-    root = hydrateRoot(container, <PasskeyButton view="signIn" />);
+    root = hydrateRoot(container, passkeyAuthProvider("signIn"));
   });
   const button = container.querySelector("button");
   if (!button) {

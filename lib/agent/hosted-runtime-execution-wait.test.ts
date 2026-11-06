@@ -134,17 +134,11 @@ const fixture = () => {
   const abort = new AbortController();
   const context: WorkflowToolContext = {
     abortSignal: abort.signal,
-    agent: async () => {
-      throw new Error("No agent call");
-    },
+    agent: async () => await Promise.reject(new Error("No agent call")),
     agents: {},
-    ask: async () => {
-      throw new Error("No human continuation");
-    },
+    ask: async () => await Promise.reject(new Error("No human continuation")),
     callId: "original-tool-call",
-    getToken: async () => {
-      throw new Error("No provider grant");
-    },
+    getToken: async () => await Promise.reject(new Error("No provider grant")),
     requireAuth: () => {
       throw new Error("No provider grant");
     },
@@ -164,7 +158,7 @@ const fixture = () => {
     planDigest: approved.planDigest,
     sessionId: selection.sessionId,
   };
-  const store = { getSession: async () => session };
+  const store = { getSession: async () => await Promise.resolve(session) };
   const calls: string[] = [];
   let observed: OperatorPublicResult = {
     appId: approved.appId,
@@ -182,11 +176,11 @@ const fixture = () => {
       if (body.action === "execute") {
         throw new TypeError("synthetic lost transport");
       }
-      return Response.json(observed);
+      return await Promise.resolve(Response.json(observed));
     },
     ownerContext,
     sessionId: selection.sessionId,
-    token: async () => "synthetic-private",
+    token: async () => await Promise.resolve("synthetic-private"),
   });
   const contract = {
     createResourceMismatch: () => new HostedOperatorError("resource_mismatch"),
@@ -260,7 +254,7 @@ describe("automatic observation of one approved execution", () => {
           execution: { outcome: { status: "prepared" }, state: "settled" },
           status: "prepared",
         });
-        return;
+        await Promise.resolve();
       },
       snapshot: f.snapshot,
     };
@@ -288,7 +282,9 @@ describe("automatic observation of one approved execution", () => {
       execution: { outcome: { status: "planned" }, state: "settled" },
       status: "pending",
     });
-    const sleepUntil = vi.fn<(deadline: Date) => Promise<void>>(async () => {});
+    const sleepUntil = vi.fn<(deadline: Date) => Promise<void>>(async () => {
+      await Promise.resolve();
+    });
     const generator = continueHostedRuntimeExecutionObservation(f.approved, f.context, prepared, {
       read: f.read,
       sleepUntil,
@@ -327,9 +323,7 @@ describe("automatic observation of one approved execution", () => {
       const f = fixture();
       let sleeps = 0;
       const generator = continueHostedRuntimeOwnerPreparation(f.approved, f.context, f.prepare, {
-        acknowledge: async () => {
-          throw new Error("No identity");
-        },
+        acknowledge: async () => await Promise.reject(new Error("No identity")),
         createHook: () => {
           throw new Error("No identity hook");
         },
@@ -338,23 +332,25 @@ describe("automatic observation of one approved execution", () => {
           sleepUntil: async () => {
             sleeps += 1;
             const status = outcome === "prepared" ? "prepared" : "blocked";
-            f.setObserved({
-              ...f.observed,
-              status,
-              ...(outcome === "prepared" ? {} : { code: outcome }),
-              execution: {
-                outcome: { status, ...(outcome === "prepared" ? {} : { code: outcome }) },
-                state: "settled",
-              },
-            });
-            return;
+            const execution: NonNullable<OperatorPublicResult["execution"]> = {
+              outcome: { status },
+              state: "settled",
+            };
+            const next: OperatorPublicResult = { ...f.observed, status };
+            next.execution = execution;
+            if (outcome !== "prepared") {
+              next.code = outcome;
+              execution.outcome.code = outcome;
+            }
+            f.setObserved(next);
+            await Promise.resolve();
           },
           snapshot: f.snapshot,
         },
-        register: async () => {
-          throw new Error("No identity");
+        register: async () => await Promise.reject(new Error("No identity")),
+        sleepUntil: async () => {
+          await Promise.resolve();
         },
-        sleepUntil: async () => {},
       });
       expect(await generator.next()).toMatchObject({ done: false, value: { status: "pending" } });
       expect(await generator.next()).toMatchObject({
@@ -395,11 +391,7 @@ describe("automatic observation of one approved execution", () => {
     "rejects an unacknowledged Stop when resumed cancellation revision is %s",
     async (resumedCancellationRevision) => {
       const f = fixture();
-      if (resumedCancellationRevision === undefined) {
-        delete f.session.resumedCancellationRevision;
-      } else {
-        f.session.resumedCancellationRevision = resumedCancellationRevision;
-      }
+      f.session.resumedCancellationRevision = resumedCancellationRevision ?? null;
       await expect(f.read(f.approved, f.context, f.snapshot, 1000)).rejects.toMatchObject({
         code: "authorization_required",
       });
@@ -425,16 +417,17 @@ describe("automatic observation of one approved execution", () => {
       now: () => 1000,
       prepareObserved: async () => {
         f.session.cancellationRevision = 4;
-        return {
+        return await Promise.resolve({
           identityInput: null,
           result: { ...f.observed, status: "prepared" },
-        };
+        });
       },
-      readStatus: async () => ({
-        ...f.observed,
-        execution: { outcome: { status: "prepared" }, state: "settled" },
-        status: "prepared",
-      }),
+      readStatus: async () =>
+        await Promise.resolve({
+          ...f.observed,
+          execution: { outcome: { status: "prepared" }, state: "settled" },
+          status: "prepared",
+        }),
     });
     await expect(read(f.approved, f.context, f.snapshot, 1000)).rejects.toMatchObject({
       code: "authorization_required",
@@ -492,12 +485,12 @@ describe("automatic observation of one approved execution", () => {
       },
       isTransportUnknown: isHostedOperatorTransportUnknown,
       now: () => 1000,
-      prepareObserved: async () => {
-        throw new Error("No terminal evidence");
-      },
+      prepareObserved: async () => await Promise.reject(new Error("No terminal evidence")),
       readStatus: async () => {
         reads += 1;
-        throw new HostedOperatorTransportUnknown(new TypeError("lost STATUS transport"));
+        return await Promise.reject(
+          new HostedOperatorTransportUnknown(new TypeError("lost STATUS transport")),
+        );
       },
     });
     expect(await read(f.approved, f.context, f.snapshot, 1000)).toEqual({
@@ -510,12 +503,12 @@ describe("automatic observation of one approved execution", () => {
   it("accepts a legacy terminal STATUS reply and leaves legacy pending evidence unresolved", () => {
     const f = fixture();
     expect(
-      observedHostedRuntimeExecutionIsSettled(f.approved, { ...f.observed, execution: undefined }),
+      observedHostedRuntimeExecutionIsSettled(f.approved, { ...f.observed, execution: null }),
     ).toBe(false);
     expect(
       observedHostedRuntimeExecutionIsSettled(f.approved, {
         ...f.observed,
-        execution: undefined,
+        execution: null,
         status: "prepared",
       }),
     ).toBe(true);
@@ -523,9 +516,9 @@ describe("automatic observation of one approved execution", () => {
   it("returns the original approval-wait snapshot for observation while existing ignored-return callers remain valid", async () => {
     const f = fixture();
     const result = await waitForHostedRuntimeApprovalReceipt(f.approved, f.context, {
-      read: async () => ({ snapshot: f.snapshot, status: "approved" }),
+      read: async () => await Promise.resolve({ snapshot: f.snapshot, status: "approved" }),
       sleepUntil: async () => {
-        throw new Error("No wait");
+        await Promise.reject(new Error("No wait"));
       },
     });
     expect(result.snapshot).toBe(f.snapshot);

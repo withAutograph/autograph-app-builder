@@ -81,32 +81,28 @@ export const attachAvailableAcceptanceDependencies = async (input: {
 }): Promise<void> => {
   for (const root of new Set(input.roots)) {
     input.signal.throwIfAborted();
-    if (root === input.recoveredRoot) {
-      continue;
+    if (root !== input.recoveredRoot) {
+      const existing = await input.sandbox.run({
+        abortSignal: input.signal,
+        command: `test -d ${quote(root)}`,
+        workingDirectory: input.workspaceRoot,
+      });
+      if (existing.exitCode !== 1) {
+        if (existing.exitCode !== 0) {
+          throw new Error(
+            "Builder could not inspect the retained dependency source. The recovered checkout is preserved; inspect sandbox file access before retrying.",
+          );
+        }
+        // The maintained attachment implementation enforces owned paths and rebases workspace links.
+        await attachCheckoutDependencyView({
+          candidateRoot: input.recoveredRoot,
+          checkoutRoot: root,
+          sandbox: input.sandbox,
+          workspaceRoot: input.workspaceRoot,
+        });
+        return;
+      }
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect retained sources in preference order.
-    const existing = await input.sandbox.run({
-      abortSignal: input.signal,
-      command: `test -d ${quote(root)}`,
-      workingDirectory: input.workspaceRoot,
-    });
-    if (existing.exitCode === 1) {
-      continue;
-    }
-    if (existing.exitCode !== 0) {
-      throw new Error(
-        "Builder could not inspect the retained dependency source. The recovered checkout is preserved; inspect sandbox file access before retrying.",
-      );
-    }
-    // The maintained attachment implementation enforces owned paths and rebases workspace links.
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Attach the first existing source only.
-    await attachCheckoutDependencyView({
-      candidateRoot: input.recoveredRoot,
-      checkoutRoot: root,
-      sandbox: input.sandbox,
-      workspaceRoot: input.workspaceRoot,
-    });
-    return;
   }
   // Let the repository-owned describe command reveal any actual missing dependency.
 };
@@ -119,7 +115,8 @@ export const resolveCompatibleAcceptanceRoot = async (input: {
   recover: () => Promise<string>;
   signal?: AbortSignal;
 }): Promise<string> => {
-  for (const root of new Set(input.roots)) {
+  const retainedRoots = new Set(input.roots);
+  for (const root of retainedRoots) {
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Probe retained roots in preference order without changing them.
       if ((await input.describe(root)) === input.releaseId) {

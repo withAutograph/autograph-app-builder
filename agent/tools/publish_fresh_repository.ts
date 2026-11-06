@@ -19,7 +19,7 @@ import {
 } from "@/lib/repository/node-fresh-bootstrap";
 import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
-export default defineTool({
+const publishFreshRepositoryTool = defineTool({
   approval: always(),
   description:
     "After a separate approval, atomically publish the exact reviewed fresh-template result to the approved absent or exact-empty local destination as one parentless SHA-1 Git commit. GitHub publication, remotes, release activation, and arbitrary target mutation remain unavailable.",
@@ -122,4 +122,7 @@ export default defineTool({
     return result.receipt;
   },
   inputSchema: z.strictObject({ publication: freshBootstrapProposalSchema }),
+  name: "publish_fresh_repository",
 });
+
+export default publishFreshRepositoryTool;

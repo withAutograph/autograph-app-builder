@@ -26,7 +26,7 @@ export function BuilderSourceUpload() {
   const [progress, setProgress] = useState("");
   const uploads = useRef(new Map<string, string>());
   const [outcome, dispatch, pending] = useActionState(
-    async (_previous: { error?: string; complete?: boolean } | undefined, file: File) => {
+    async (_previous: { error?: string; complete?: boolean } | null, file: File) => {
       try {
         const uploaded = await uploadApplicationSource({
           file,
@@ -61,7 +61,7 @@ export function BuilderSourceUpload() {
           },
         });
         appNameEditedByUser.current = true;
-        generatedAppName.current = undefined;
+        generatedAppName.current = null;
         setForm((current) => ({
           ...current,
           appName: uploaded.displayName,
@@ -83,7 +83,7 @@ export function BuilderSourceUpload() {
         setSourceUploadPending(false);
       }
     },
-    globalThis.undefined,
+    null,
   );
   return (
     <section aria-label="Continue a local app">
@@ -104,7 +104,7 @@ export function BuilderSourceUpload() {
                 dispatch(file);
               });
             }
-            event.target.value = "";
+            event.target.value = null;
           }}
         />
       </label>
@@ -116,7 +116,7 @@ export function BuilderSourceUpload() {
         <button
           type="button"
           onClick={() => {
-            setForm((current) => ({ ...current, sourceCandidate: undefined }));
+            setForm((current) => ({ ...current, sourceCandidate: null }));
           }}
         >
           Use a new app brief instead

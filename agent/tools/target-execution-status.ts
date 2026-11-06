@@ -11,13 +11,15 @@ export default defineTool({
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "target execution readiness inspection");
     if (
-      current.phase !== "planned" &&
-      current.phase !== "apply_failed" &&
-      current.phase !== "applied" &&
-      current.phase !== "validation_pending" &&
-      current.phase !== "validation_failed" &&
-      current.phase !== "validated" &&
-      current.phase !== "reviewed"
+      ![
+        "planned",
+        "apply_failed",
+        "applied",
+        "validation_pending",
+        "validation_failed",
+        "validated",
+        "reviewed",
+      ].includes(current.phase)
     ) {
       throw new Error(
         "Derive a canonical AppSpec-bound proposal before checking target command readiness.",

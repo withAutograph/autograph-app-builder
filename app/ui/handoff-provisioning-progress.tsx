@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useRef, useState } from "react";
+import { startTransition, useActionState, useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { continueHandoffProvisioning } from "@/app/actions/builder";
@@ -8,9 +8,17 @@ import type { HandoffProvisioningContinuationState } from "@/app/actions/builder
 import { builderProvisionProjectionSchema } from "@/lib/provisioning/contracts-schema";
 import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts-schema";
 
+type ProjectionEventData = MessageEvent<string>;
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function readProjection(value: unknown): BuilderProvisionProjection | undefined {
-  const parsed = builderProvisionProjectionSchema.safeParse(value);
+function readProjection(event: ProjectionEventData): BuilderProvisionProjection | undefined {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(event.data);
+  } catch {
+    return undefined;
+  }
+  const parsed = builderProvisionProjectionSchema.safeParse(decoded);
   return parsed.success && Number.isSafeInteger(parsed.data.revision) ? parsed.data : undefined;
 }
 
@@ -28,11 +36,11 @@ export function HandoffProvisioningProgress({
   initial: BuilderProvisionProjection;
 }) {
   const router = useRouter();
-  const [snapshot, setSnapshot] = useState(initial);
+  const [latestProjection, setLatestProjection] = useState(initial);
   const [connection, setConnection] = useState<"connecting" | "connected" | "reconnecting">(
     "connecting",
   );
-  const [streamAttempt, setStreamAttempt] = useState(0);
+  const [streamAttempt, refreshProjection] = useReducer((attempt: number) => attempt + 1, 0);
   const latestRevision = useRef(initial.revision);
   const settledRefresh = useRef(false);
   const dispatched = useRef(false);
@@ -49,16 +57,9 @@ export function HandoffProvisioningProgress({
         return { status: "error" };
       }
     },
-    undefined,
   );
 
-  useEffect(() => {
-    if (initial.revision <= latestRevision.current) {
-      return;
-    }
-    latestRevision.current = initial.revision;
-    setSnapshot(initial);
-  }, [initial]);
+  const snapshot = latestProjection.revision > initial.revision ? latestProjection : initial;
 
   useEffect(() => {
     if (snapshot.provisioning.status !== "settled" || settledRefresh.current) {
@@ -80,59 +81,66 @@ export function HandoffProvisioningProgress({
 
   useEffect(() => {
     if (typeof EventSource === "undefined" || snapshot.provisioning.status === "settled") {
-      return;
+      return () => {
+        settledRefresh.current = true;
+      };
     }
     let closed = false;
-    let source: EventSource | undefined;
-    const connect = () => {
-      if (closed || latestRevision.current <= 0) {
+    if (latestRevision.current <= 0) {
+      return () => {
+        closed = true;
+      };
+    }
+    const source = new EventSource(
+      `/api/builder/provision/stream?requestId=${encodeURIComponent(
+        snapshot.provisioning.requestId,
+      )}&afterRevision=${latestRevision.current}`,
+    );
+    const receive = (event: ProjectionEventData) => {
+      if (closed) {
         return;
       }
-      source = new EventSource(
-        `/api/builder/provision/stream?requestId=${encodeURIComponent(
-          snapshot.provisioning.requestId,
-        )}&afterRevision=${latestRevision.current}`,
-      );
-      const receive = (event: MessageEvent<string>) => {
-        if (closed) {
+      try {
+        const next = readProjection(event);
+        if (
+          !next ||
+          next.provisioning.requestId !== snapshot.provisioning.requestId ||
+          next.revision <= latestRevision.current
+        ) {
           return;
         }
-        try {
-          const next = readProjection(JSON.parse(event.data));
-          if (
-            !next ||
-            next.provisioning.requestId !== snapshot.provisioning.requestId ||
-            next.revision <= latestRevision.current
-          ) {
-            return;
-          }
-          latestRevision.current = next.revision;
-          setSnapshot(next);
-        } catch {
-          // Malformed stream data never replaces the last authenticated state.
-        }
-      };
-      source.addEventListener("snapshot", receive);
-      source.addEventListener("end", receive);
-      source.addEventListener("open", () => {
-        if (!closed) {
-          setConnection("connected");
-        }
-      });
-      source.addEventListener("error", () => {
-        if (closed) {
-          return;
-        }
-        setConnection("reconnecting");
-        // Keep this EventSource alive: its native reconnect sends the most
-        // recent SSE event id as Last-Event-ID. Replacing it here would lose
-        // that cursor and turn a transient disconnect into a full replay.
-      });
+        latestRevision.current = next.revision;
+        setLatestProjection(next);
+        refreshProjection();
+      } catch {
+        // Malformed stream data never replaces the last authenticated state.
+      }
     };
-    connect();
+    const opened = () => {
+      if (!closed) {
+        setConnection("connected");
+      }
+    };
+    const errored = () => {
+      if (closed) {
+        return;
+      }
+      setConnection("reconnecting");
+      // Keep this EventSource alive: its native reconnect sends the most
+      // recent SSE event id as Last-Event-ID. Replacing it here would lose
+      // that cursor and turn a transient disconnect into a full replay.
+    };
+    source.addEventListener("snapshot", receive);
+    source.addEventListener("end", receive);
+    source.addEventListener("open", opened);
+    source.addEventListener("error", errored);
     return () => {
       closed = true;
-      source?.close();
+      source.removeEventListener("snapshot", receive);
+      source.removeEventListener("end", receive);
+      source.removeEventListener("open", opened);
+      source.removeEventListener("error", errored);
+      source.close();
     };
   }, [snapshot.provisioning.requestId, snapshot.provisioning.status, streamAttempt]);
 
@@ -144,12 +152,11 @@ export function HandoffProvisioningProgress({
     progressMessage = "Provider setup paused. Your handoff is saved.";
   }
   const retry = () => {
-    if (pending) {
-      return;
+    if (!pending) {
+      startTransition(() => {
+        dispatch({ handoffId });
+      });
     }
-    startTransition(() => {
-      dispatch({ handoffId });
-    });
   };
   return (
     <section aria-label="Provisioning progress">
@@ -168,7 +175,7 @@ export function HandoffProvisioningProgress({
           type="button"
           onClick={() => {
             setConnection("connecting");
-            setStreamAttempt((attempt) => attempt + 1);
+            refreshProjection();
           }}
         >
           Reconnect progress

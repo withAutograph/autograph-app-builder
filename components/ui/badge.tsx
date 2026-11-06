@@ -25,14 +25,13 @@ const badgeVariants = cva(
   },
 );
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function Badge({
+const badge = ({
   className,
   variant = "default",
   render,
   ...props
-}: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
-  return useRender({
+}: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) =>
+  useRender({
     defaultTagName: "span",
     props: mergeProps<"span">(
       {
@@ -46,6 +45,5 @@ function Badge({
       variant,
     },
   });
-}
 
-export { Badge, badgeVariants };
+export { badge as Badge };

@@ -115,15 +115,20 @@ vi.mock("../provisioning/hosted-operator-artifact-store", async (importOriginal)
 }));
 vi.mock("../provisioning/hosted-operator-artifact-selection", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  createPostgresOperatorArtifactSelections: () => ({
-    read: mocks.readSelection,
-    readExact: mocks.readExact,
-    ...(mocks.publishedSourceLookupAvailable
-      ? { readPublishedSource: mocks.readPublishedSource }
-      : {}),
-    record: mocks.record,
-    ...(mocks.associationAvailable ? { associatePublishedSource: mocks.associate } : {}),
-  }),
+  createPostgresOperatorArtifactSelections: () => {
+    const selections = {
+      read: mocks.readSelection,
+      readExact: mocks.readExact,
+      record: mocks.record,
+    };
+    if (mocks.publishedSourceLookupAvailable) {
+      Object.assign(selections, { readPublishedSource: mocks.readPublishedSource });
+    }
+    if (mocks.associationAvailable) {
+      Object.assign(selections, { associatePublishedSource: mocks.associate });
+    }
+    return selections;
+  },
 }));
 
 const digest = "a".repeat(64);
@@ -365,15 +370,15 @@ describe("owned compiled artifact workflow hook", () => {
       selection: { publishedSource: historicalSource },
       status: "recorded",
     });
+    const expectedAssociation = { publishedSource: historicalSource };
+    if (completion.compilation.release.status === "published") {
+      Object.assign(expectedAssociation, {
+        approvedSelection: completion.compilation.release.selection,
+      });
+    }
     expect(mocks.associate).toHaveBeenCalledWith(
       completion.compilation.context,
-      expect.objectContaining({
-        approvedSelection:
-          completion.compilation.release.status === "published"
-            ? completion.compilation.release.selection
-            : {},
-        publishedSource: historicalSource,
-      }),
+      expect.objectContaining(expectedAssociation),
     );
     expect(mocks.record).not.toHaveBeenCalled();
     expect(input.sandbox.run).not.toHaveBeenCalled();
@@ -471,15 +476,16 @@ describe("owned compiled artifact workflow hook", () => {
           ? completion.compilation.release.selection.artifactRef
           : "",
     });
+    const expectedSelection = {
+      publishedSource: historicalSource,
+    };
+    if (completion.compilation.release.status === "published") {
+      Object.assign(expectedSelection, completion.compilation.release.selection);
+    }
     expect(mocks.record).toHaveBeenCalledWith(
       completion.compilation.context,
       `draft-reconciliation:${digest}`,
-      {
-        ...(completion.compilation.release.status === "published"
-          ? completion.compilation.release.selection
-          : {}),
-        publishedSource: historicalSource,
-      },
+      expectedSelection,
     );
   });
 

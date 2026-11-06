@@ -109,21 +109,21 @@ const fixture = () => {
   const store = createInMemoryNativeTargetOnboardingStore();
   let receipt: NativeTargetOnboardingApproval | null = null;
   let allowed = true;
-  const authorize = async () => {
+  const authorize = () => {
     if (!allowed) {
       throw new Error("denied");
     }
     return owner;
   };
   const registry = createNativeTargetOnboardingRegistry({
-    assertPlanOrigin: async () => {},
+    assertPlanOrigin: () => {},
     authorize,
     now: () => time,
-    readApproval: async () => receipt,
+    readApproval: () => receipt,
     store,
   });
   const read = async () => {
-    await authorize();
+    authorize();
     return await store.read({ appId: plan.appId, authority });
   };
   const createProject = vi.fn<NativeTargetOnboardingRuntimePorts["createProject"]>(
@@ -141,7 +141,7 @@ const fixture = () => {
     },
   );
   const observeProject = vi.fn<NativeTargetOnboardingRuntimePorts["observeProject"]>(
-    async (_ctx, input) => ({
+    (_ctx, input) => ({
       name: input.candidateName,
       projectId: input.projectId,
       protection: plan.project.protection,
@@ -151,8 +151,8 @@ const fixture = () => {
     }),
   );
   const ports: NativeTargetOnboardingRuntimePorts = {
-    authorizeApprovalResponse: vi.fn(async () => {
-      await authorize();
+    authorizeApprovalResponse: vi.fn(() => {
+      authorize();
     }),
     createProject,
     journal: {
@@ -163,37 +163,35 @@ const fixture = () => {
     },
     now: () => time,
     observeProject,
-    readCapturedRelease: vi.fn<NativeTargetOnboardingRuntimePorts["readCapturedRelease"]>(
-      async () => ({
-        description: {
-          app: { id: plan.appId, routes: [], workspacePath: "apps/invoice-review" },
-          backend: {
-            authorization: "declared-policy",
-            kind: "generated-postgres",
-            release: {
-              artifactHash: `sha256:${"c".repeat(64)}`,
-              directory: ".release",
-              id: "release-1",
-            },
-            roles: [],
-            runtime: { databaseEnvironment: "DATABASE_URL" },
-            schemaReceipt: null,
+    readCapturedRelease: vi.fn<NativeTargetOnboardingRuntimePorts["readCapturedRelease"]>(() => ({
+      description: {
+        app: { id: plan.appId, routes: [], workspacePath: "apps/invoice-review" },
+        backend: {
+          authorization: "declared-policy",
+          kind: "generated-postgres",
+          release: {
+            artifactHash: `sha256:${"c".repeat(64)}`,
+            directory: ".release",
+            id: "release-1",
           },
-          validation: {
-            browser: null,
-            check: { task: "check" },
-            test: { shards: 1, task: "test" },
-          },
-          version: 1,
+          roles: [],
+          runtime: { databaseEnvironment: "DATABASE_URL" },
+          schemaReceipt: null,
         },
-        release: plan.origin.release,
-      }),
-    ),
-    readSettledApproval: vi.fn(async () => {
-      await authorize();
+        validation: {
+          browser: null,
+          check: { task: "check" },
+          test: { shards: 1, task: "test" },
+        },
+        version: 1,
+      },
+      release: plan.origin.release,
+    })),
+    readSettledApproval: vi.fn(() => {
+      authorize();
       return receipt;
     }),
-    resolvePlan: vi.fn(async () => plan),
+    resolvePlan: vi.fn(() => plan),
   };
   const runtime = createNativeTargetOnboardingRuntime(ports);
   const proposal = {
@@ -286,7 +284,7 @@ describe("native target workflow runtime", () => {
     const input = await f.planned();
     const response: ApprovalResponseContext<NativeTargetPreparationRequest> = {
       auth: {
-        getToken: async () => {
+        getToken: () => {
           throw new Error("unused");
         },
         requireAuth: () => {

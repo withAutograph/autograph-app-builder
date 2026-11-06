@@ -22,13 +22,12 @@ const fullRepositoryName = z
   .max(201)
   .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
 
-export const builderHandoffIdSchema = z.string().uuid();
+export const builderHandoffIdSchema = z.uuid();
 export const builderHandoffDestinationSchema = z.enum(["codex", "cursor"]);
 
 export const builderHandoffIntentSchema = z
-  .object({
+  .strictObject({
     appId: builderAppIdSchema,
-    sourceCandidate: sourceCandidateReferenceSchema.optional(),
     appName: z.string().trim().min(1).max(120),
     brief: z.string().trim().min(1).max(32_000),
     connections: z.array(z.string().trim().min(1).max(100)).max(50),
@@ -37,27 +36,24 @@ export const builderHandoffIntentSchema = z
     destination: builderHandoffDestinationSchema.optional(),
     modelId: activeBuilderModelIdSchema,
     providers: z
-      .object({
+      .strictObject({
         githubInstallationId: z
           .string()
           .regex(/^[1-9][0-9]*$/u)
           .optional(),
         vercelInstallationId: z.string().min(1).max(256).optional(),
       })
-      .strict()
       .optional(),
     provisioning: builderProvisionResponseSchema.optional(),
     provisioningRequestDigest: sha256.optional(),
-    provisioningRequestId: z.string().uuid().optional(),
-    repository: z
-      .object({
-        private: z.boolean(),
-        requestedName: repositoryName,
-        resolvedFullName: fullRepositoryName.optional(),
-      })
-      .strict(),
+    provisioningRequestId: z.uuid().optional(),
+    repository: z.strictObject({
+      private: z.boolean(),
+      requestedName: repositoryName,
+      resolvedFullName: fullRepositoryName.optional(),
+    }),
+    sourceCandidate: sourceCandidateReferenceSchema.optional(),
   })
-  .strict()
   .superRefine((intent, context) => {
     if (intent.sourceCandidate !== undefined && intent.sourceCandidate.appId !== intent.appId) {
       context.addIssue({
@@ -99,10 +95,10 @@ export const builderHandoffIntentSchema = z
 export type BuilderHandoffIntent = z.infer<typeof builderHandoffIntentSchema>;
 
 export const builderHandoffRecordSchema = z
-  .object({
+  .strictObject({
     authority: hostedTenantAuthoritySchema,
     createdAt: z.date(),
-    creationRequestId: z.string().uuid(),
+    creationRequestId: z.uuid(),
     expiresAt: z.date(),
     handoffId: builderHandoffIdSchema,
     intent: builderHandoffIntentSchema,
@@ -111,7 +107,6 @@ export const builderHandoffRecordSchema = z
     sessionId: z.string().min(1).max(200).optional(),
     version: z.literal(1),
   })
-  .strict()
   .superRefine((record, context) => {
     if (record.expiresAt <= record.createdAt) {
       context.addIssue({
@@ -141,16 +136,32 @@ export const builderHandoffRecordSchema = z
 
 export type BuilderHandoffRecord = z.infer<typeof builderHandoffRecordSchema>;
 
+type CanonicalValue =
+  | string
+  | number
+  | boolean
+  | null
+  | Date
+  | CanonicalValue[]
+  | { [key: string]: CanonicalValue };
+
+const isCanonicalRecord = (value: CanonicalValue): value is { [key: string]: CanonicalValue } =>
+  value !== null &&
+  !Array.isArray(value) &&
+  !(value instanceof Date) &&
+  Object.getPrototypeOf(value) === Object.prototype;
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function canonical(value: unknown): string {
+function canonical(value: CanonicalValue): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonical).join(",")}]`;
   }
   if (value instanceof Date) {
     return JSON.stringify(value.toISOString());
   }
-  if (value !== null && typeof value === "object") {
-    return `{${Object.entries(value)
+  if (isCanonicalRecord(value)) {
+    return `{${Object.keys(value)
+      .map((key) => [key, value[key]] as const)
       .toSorted(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
       .join(",")}}`;
@@ -168,7 +179,7 @@ export function builderHandoffRequestDigest(input: {
     .update(
       canonical({
         authority: hostedTenantAuthoritySchema.parse(input.authority),
-        creationRequestId: z.string().uuid().parse(input.creationRequestId),
+        creationRequestId: z.uuid().parse(input.creationRequestId),
         intent: builderHandoffIntentSchema.parse(input.intent),
         version: 1,
       }),

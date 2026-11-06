@@ -93,6 +93,92 @@ function writeExactFile(path: string, bytes: Buffer, mode: number): void {
   chmodSync(path, mode);
 }
 
+const isUnsafeGitPath = (type: string | undefined, path: string | undefined): boolean => {
+  if (type !== "blob" || path === undefined) {
+    return true;
+  }
+  if (path.includes("\\") || path.includes("\uFFFD")) {
+    return true;
+  }
+  if (path.split("/").some((part) => part === "" || part === "." || part === "..")) {
+    return true;
+  }
+  return (
+    path === ".git" || path.startsWith(".git/") || path === ".app-builder-source-manifest.json"
+  );
+};
+
+const isUnsafeSymlinkTarget = (
+  target: string,
+  parent: string,
+  destinationRoot: string,
+): boolean => {
+  if (target === "" || target.includes("\0") || target.includes("\uFFFD")) {
+    return true;
+  }
+  if (nodePath.isAbsolute(target)) {
+    return true;
+  }
+  return !containsPath(destinationRoot, nodePath.resolve(parent, target));
+};
+
+const parseGitEntry = (row: string): RegExpExecArray => {
+  const match =
+    /^(?<mode>[0-9]{6}) (?<type>blob|commit) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(row);
+  if (match === null) {
+    throw new Error("Sanitized context contains an unsupported Git entry.");
+  }
+  return match;
+};
+
+const assertSafeGitMode = (mode: string): void => {
+  if (mode !== "100644" && mode !== "100755" && mode !== "120000") {
+    throw new Error("Sanitized context contains an unsupported Git mode.");
+  }
+};
+
+const writeGitEntry = (
+  mode: string,
+  bytes: Buffer,
+  absolute: string,
+  parent: string,
+  destinationRoot: string,
+  path: string,
+): void => {
+  if (mode === "120000") {
+    const target = bytes.toString("utf-8");
+    if (isUnsafeSymlinkTarget(target, parent, destinationRoot)) {
+      throw new Error(`Sanitized context symlink ${path} is unsafe.`);
+    }
+    symlinkSync(target, absolute);
+    return;
+  }
+  const fileMode = mode === "100755" ? 0o755 : 0o644;
+  writeExactFile(absolute, bytes, fileMode);
+};
+
+const materializeGitEntry = (sourceRoot: string, destinationRoot: string, row: string): string => {
+  const match = parseGitEntry(row);
+  const [, mode, type, objectId, path] = match;
+  if (isUnsafeGitPath(type, path)) {
+    throw new Error("Sanitized context contains an unsafe Git path.");
+  }
+  assertSafeGitMode(mode);
+  const absolute = nodePath.resolve(destinationRoot, path);
+  if (!containsPath(destinationRoot, absolute)) {
+    throw new Error("Sanitized context path escapes its root.");
+  }
+  const parent = nodePath.dirname(absolute);
+  mkdirSync(parent, { mode: 0o700, recursive: true });
+  ensureNoLinkPath(parent, `Sanitized context parent for ${path}`);
+  const bytes = execFileSync(fixedGit, ["-C", sourceRoot, "cat-file", "blob", objectId], {
+    env: sanitizedEnvironment(),
+    maxBuffer: 128 * 1024 * 1024,
+  });
+  writeGitEntry(mode, bytes, absolute, parent, destinationRoot, path);
+  return `${mode}\0${objectId}\0${path}`;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function materializeSanitizedGitTree(
   sourceRoot: string,
@@ -123,56 +209,7 @@ export function materializeSanitizedGitTree(
   mkdirSync(destinationRoot, { mode: 0o700 });
   try {
     for (const row of listing.split("\0").filter(Boolean)) {
-      const match =
-        /^(?<mode>[0-9]{6}) (?<type>blob|commit) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
-          row,
-        );
-      if (match === null) {
-        throw new Error("Sanitized context contains an unsupported Git entry.");
-      }
-      const [, mode, type, objectId, path] = match;
-      if (
-        type !== "blob" ||
-        path === undefined ||
-        path.includes("\\") ||
-        path.includes("\uFFFD") ||
-        path.split("/").some((part) => part === "" || part === "." || part === "..") ||
-        path === ".git" ||
-        path.startsWith(".git/") ||
-        path === ".app-builder-source-manifest.json"
-      ) {
-        throw new Error("Sanitized context contains an unsafe Git path.");
-      }
-      if (mode !== "100644" && mode !== "100755" && mode !== "120000") {
-        throw new Error("Sanitized context contains an unsupported Git mode.");
-      }
-      const absolute = nodePath.resolve(destinationRoot, path);
-      if (!containsPath(destinationRoot, absolute)) {
-        throw new Error("Sanitized context path escapes its root.");
-      }
-      const parent = nodePath.dirname(absolute);
-      mkdirSync(parent, { mode: 0o700, recursive: true });
-      ensureNoLinkPath(parent, `Sanitized context parent for ${path}`);
-      const bytes = execFileSync(fixedGit, ["-C", sourceRoot, "cat-file", "blob", objectId], {
-        env: sanitizedEnvironment(),
-        maxBuffer: 128 * 1024 * 1024,
-      });
-      if (mode === "120000") {
-        const target = bytes.toString("utf-8");
-        if (
-          target === "" ||
-          target.includes("\0") ||
-          target.includes("\uFFFD") ||
-          nodePath.isAbsolute(target) ||
-          !containsPath(destinationRoot, nodePath.resolve(parent, target))
-        ) {
-          throw new Error(`Sanitized context symlink ${path} is unsafe.`);
-        }
-        symlinkSync(target, absolute);
-      } else {
-        writeExactFile(absolute, bytes, mode === "100755" ? 0o755 : 0o644);
-      }
-      records.push(`${mode}\0${objectId}\0${path}`);
+      records.push(materializeGitEntry(sourceRoot, destinationRoot, row));
     }
     const entriesDigest = hashArtifact(records.join("\n"));
     const manifest = {

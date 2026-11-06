@@ -15,7 +15,7 @@ export default defineTool({
     if (state.phase !== "reviewed") {
       throw new Error("An exact reviewed change set is required before repository creation.");
     }
-    const sandbox = await ctx.getSandbox();
+    const sandbox = ctx.getSandbox();
     const contentSource = await publicationContentSourceForReviewedWorkflow({
       sandbox,
       state,

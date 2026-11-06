@@ -15,7 +15,6 @@ import {
   configureVercelSessionGitSource,
 } from "./vercel-session-source";
 
-
 const sdk = vi.hoisted(() => ({
   create:
     vi.fn<(options: Parameters<typeof Sandbox.create>[0]) => Promise<Pick<Sandbox, "name">>>(),

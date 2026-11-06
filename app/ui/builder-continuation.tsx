@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -19,6 +18,8 @@ import type { ProviderConnectionNotice } from "@/lib/integrations/provider-conne
 import styles from "./app-builder.module.css";
 import { Builder } from "./builder-form";
 import type { BuilderDraft } from "./builder-types";
+
+const EMPTY_PROVIDER_NOTICES: ProviderConnectionNotice[] = [];
 
 export interface AuthenticatedBuilderProps {
   generatedNameSeed?: string;
@@ -47,7 +48,7 @@ export function BuilderContinuation({
   comingSoonEnabled = false,
   provisioningEnabled = false,
   integrations,
-  providerNotices = [],
+  providerNotices = EMPTY_PROVIDER_NOTICES,
   providerResumeKey,
   initialDurableDraft,
   durableDraftId,
@@ -56,7 +57,6 @@ export function BuilderContinuation({
   saveActiveBuilderDraftAction,
   loadActiveBuilderDraftAction,
 }: AuthenticatedBuilderProps & { children: ReactNode; draftStatus: ReactNode }) {
-  const router = useRouter();
   const [savedBrief, setSavedBrief] = useState("");
   const continuationRequest = useRef<
     | {
@@ -96,23 +96,23 @@ export function BuilderContinuation({
     };
   }, []);
   useEffect(() => {
-    if (!continuation || continuationPending) {
-      return;
-    }
-    if (continuation.status === "error") {
-      return;
-    }
-    if (completedHandoff.current === continuation.handoff.handoffId) {
+    if (
+      continuation === undefined ||
+      continuationPending ||
+      continuation.status === "error" ||
+      completedHandoff.current === continuation.handoff.handoffId
+    ) {
       return;
     }
     completedHandoff.current = continuation.handoff.handoffId;
-    router.replace(`/handoff/${continuation.handoff.handoffId}`);
-  }, [continuation, continuationPending, router]);
-
+    window.location.replace(`/handoff/${continuation.handoff.handoffId}`);
+  }, [continuation, continuationPending]);
   // The request-fresh server draft is authoritative after provider return.
   const resumedDraft = initialDurableDraft;
-  const builderKey = providerResumeKey
-    ? `${providerResumeKey}:${resumedDraft ? "restored" : "missing"}`
+  const hasProviderResumeKey = providerResumeKey !== undefined && providerResumeKey !== "";
+  const draftState = resumedDraft === undefined ? "missing" : "restored";
+  const builderKey = hasProviderResumeKey
+    ? `${providerResumeKey}:${draftState}`
     : savedBrief || "new";
 
   return (
@@ -148,9 +148,6 @@ export function BuilderContinuation({
             };
           }
           const request = continuationRequest.current;
-          if (!request) {
-            return;
-          }
           savedContinuation.current = {
             creationRequestId: request.creationRequestId,
             draftCheckpoint,
@@ -159,11 +156,9 @@ export function BuilderContinuation({
             version: 1,
           };
           const input = savedContinuation.current;
-          if (input) {
-            startTransition(() => {
-              dispatchContinuation(input);
-            });
-          }
+          startTransition(() => {
+            dispatchContinuation(input);
+          });
         }}
       >
         {children}
@@ -180,7 +175,7 @@ export function BuilderContinuation({
             type="button"
             onClick={() => {
               const input = savedContinuation.current;
-              if (input) {
+              if (input !== undefined) {
                 startTransition(() => {
                   dispatchContinuation(input);
                 });

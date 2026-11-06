@@ -77,9 +77,12 @@ export const hostedOperationStateSchema = z.enum([
 
 export const HOSTED_SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 export const HOSTED_SESSION_MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
+const HOSTED_OPERATION_DIGEST_MISMATCH = "Hosted operation cannot settle at this digest.";
+const HOSTED_SESSION_STATE_CHANGED = "Hosted session recovery raced another continuation.";
+const hostedUuidSchema = z.uuid();
 
 export const hostedSessionTimeoutPolicySchema = z
-  .object({
+  .strictObject({
     idleTimeoutMs: z
       .number()
       .int()
@@ -91,11 +94,14 @@ export const hostedSessionTimeoutPolicySchema = z
       .min(60_000)
       .max(7 * 24 * 60 * 60 * 1000),
   })
-  .strict()
-  .refine(
-    ({ idleTimeoutMs, maxLifetimeMs }) => idleTimeoutMs <= maxLifetimeMs,
-    "Hosted session idle timeout cannot exceed its maximum lifetime.",
-  );
+  .check(({ value, issues }) => {
+    if (value.idleTimeoutMs > value.maxLifetimeMs) {
+      issues.push({
+        code: "custom",
+        message: "Hosted session idle timeout cannot exceed its maximum lifetime.",
+      });
+    }
+  });
 
 export type HostedSessionTimeoutPolicy = z.infer<typeof hostedSessionTimeoutPolicySchema>;
 
@@ -105,7 +111,7 @@ export const DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY = hostedSessionTimeoutPolicyS
 });
 
 const legacyHostedSessionRecordSchema = z
-  .object({
+  .strictObject({
     adapterSessionId: z.string().min(1).max(500),
     createdAtEpochMs: z.number().int().nonnegative(),
     principal: hostedPrincipalSchema,
@@ -114,14 +120,14 @@ const legacyHostedSessionRecordSchema = z
     updatedAtEpochMs: z.number().int().nonnegative(),
     version: z.literal(1),
   })
-  .strict()
-  .refine(
-    ({ createdAtEpochMs, updatedAtEpochMs }) => updatedAtEpochMs >= createdAtEpochMs,
-    "Hosted session updates cannot precede creation.",
-  );
+  .check(({ value, issues }) => {
+    if (value.updatedAtEpochMs < value.createdAtEpochMs) {
+      issues.push({ code: "custom", message: "Hosted session updates cannot precede creation." });
+    }
+  });
 
 export const hostedSessionCheckpointSchema = z
-  .object({
+  .strictObject({
     capturedAtEpochMs: z.number().int().nonnegative(),
     events: z.array(publicEveEventSchema).max(512),
     // Private legacy checkpoint bytes remain digest-stable for resume/cancel.
@@ -137,11 +143,14 @@ export const hostedSessionCheckpointSchema = z
     version: z.literal(1),
     workingPreview: publicWorkingPreviewSchema.nullable().optional(),
   })
-  .strict()
-  .refine(
-    (checkpoint) => new TextEncoder().encode(JSON.stringify(checkpoint)).byteLength <= 512 * 1024,
-    "Hosted session checkpoints must be at most 524288 bytes.",
-  );
+  .check(({ value, issues }) => {
+    if (new TextEncoder().encode(JSON.stringify(value)).byteLength > 512 * 1024) {
+      issues.push({
+        code: "custom",
+        message: "Hosted session checkpoints must be at most 524288 bytes.",
+      });
+    }
+  });
 
 export type HostedSessionCheckpoint = z.infer<typeof hostedSessionCheckpointSchema>;
 export type HostedPagedCheckpointMetadata = z.infer<typeof pagedCheckpointMetadataSchema>;
@@ -156,36 +165,53 @@ export interface HostedCheckpointPage {
 export const hostedCheckpointRefSchema = z.strictObject({
   digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   eventCount: z.number().int().nonnegative(),
-  id: z.string().uuid(),
+  id: hostedUuidSchema,
 });
 
-const canonicalRecordValue = (value: unknown): string => {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalRecordValue).join(",")}]`;
+type CanonicalRecordValue =
+  | null
+  | boolean
+  | number
+  | string
+  | undefined
+  | CanonicalRecordValue[]
+  | { [key: string]: CanonicalRecordValue };
+interface HostedSessionCreationIdentity {
+  createdAtEpochMs: number;
+  originAdapterSessionId: string;
+  principal: z.infer<typeof hostedPrincipalSchema>;
+  sessionId: string;
+  sourceHandoffId?: string;
+  version: 1;
+}
+
+const canonicalRecordValue = (recordValue: CanonicalRecordValue): string => {
+  if (Array.isArray(recordValue)) {
+    return `[${recordValue.map(canonicalRecordValue).join(",")}]`;
   }
-  if (value !== null && typeof value === "object") {
-    return `{${Object.entries(value)
+  if (recordValue !== null && !Array.isArray(recordValue)) {
+    return `{${Object.entries(recordValue)
       .toSorted(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalRecordValue(entry)}`)
       .join(",")}}`;
   }
-  return JSON.stringify(value);
+  return JSON.stringify(recordValue);
 };
 
 // JSON storage omits undefined object members and writes undefined array items
 // as null. Hash the same shape that a checkpoint can retain after persistence.
-const canonicalPersistedValue = (value: unknown): string => {
-  if (Array.isArray(value)) {
-    return `[${value.map((entry) => (entry === undefined ? "null" : canonicalPersistedValue(entry))).join(",")}]`;
+const canonicalPersistedValue = (recordValue: CanonicalRecordValue): string => {
+  if (Array.isArray(recordValue)) {
+    return `[${recordValue.map((entry) => (entry === undefined ? "null" : canonicalPersistedValue(entry))).join(",")}]`;
   }
-  if (value !== null && typeof value === "object") {
-    return `{${Object.entries(value)
+  if (recordValue !== null && !Array.isArray(recordValue)) {
+    return `{${Object.entries(recordValue)
       .filter(([, entry]) => entry !== undefined)
       .toSorted(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalPersistedValue(entry)}`)
       .join(",")}}`;
   }
-  return JSON.stringify(value);
+  return JSON.stringify(recordValue);
 };
 
 export const hostedSessionCheckpointDigest = (checkpoint: HostedSessionCheckpoint): string => {
@@ -228,7 +254,7 @@ const reportCheckpointDigestMismatch = (
     checkpointDigest?: string;
     checkpointProgressDigest?: string;
   },
-  context: z.RefinementCtx,
+  addIssue: (issue: z.core.$ZodIssue) => void,
 ) => {
   if (record.checkpoint === undefined) {
     return;
@@ -248,13 +274,13 @@ const reportCheckpointDigestMismatch = (
     }
   }
   if (computedCheckpointDigest !== record.checkpointDigest) {
-    context.addIssue({
+    addIssue({
       code: "custom",
       message: `Hosted session checkpoint digest mismatch: stored ${record.checkpointDigest ?? "missing"}, computed ${computedCheckpointDigest}. Preserve the session and inspect checkpoint writes or source serialization before retrying.`,
     });
   }
   if (computedProgressDigest !== record.checkpointProgressDigest) {
-    context.addIssue({
+    addIssue({
       code: "custom",
       message: `Hosted session checkpoint progress digest mismatch: stored ${record.checkpointProgressDigest ?? "missing"}, computed ${computedProgressDigest}. Preserve the session and inspect checkpoint writes or source serialization before retrying.`,
     });
@@ -262,16 +288,15 @@ const reportCheckpointDigestMismatch = (
 };
 
 export const durableHostedSessionRecordSchema = z
-  .object({
-    cancellationRevision: z.number().int().nonnegative().optional(),
-    // Server-owned proof of an explicit SEND that superseded this cancellation revision.
-    resumedCancellationRevision: z.number().int().nonnegative().optional(),
+  .strictObject({
     adapterGeneration: z.number().int().positive(),
     adapterSessionId: z.string().min(1).max(500),
     appId: z
       .string()
       .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
       .optional(),
+    builderDestination: builderSessionDestinationSchema.optional(),
+    cancellationRevision: z.number().int().nonnegative().optional(),
     checkpoint: hostedSessionCheckpointSchema.optional(),
     checkpointDigest: z
       .string()
@@ -284,96 +309,71 @@ export const durableHostedSessionRecordSchema = z
     checkpointRef: hostedCheckpointRefSchema.optional(),
     createdAtEpochMs: z.number().int().nonnegative(),
     lastProgressAtEpochMs: z.number().int().nonnegative(),
+    nativeRecoveryBinding: nativeRecoveryBindingSchema.optional(),
     originAdapterSessionId: z.string().min(1).max(500),
     parentSessionId: z.string().min(1).max(200).optional(),
     principal: hostedPrincipalSchema,
     // Private Eve authority facts live beside the session record, outside its public checkpoint.
     privateApprovalReceipts: z.array(privateResourceApprovalReceiptSchema).optional(),
-    privateBuildDecision: approvedBuildDecisionSchema.optional(),
     privateAuthoringDecision: preapprovalAuthoringDecisionSchema.optional(),
-    nativeRecoveryBinding: nativeRecoveryBindingSchema.optional(),
+    privateBuildDecision: approvedBuildDecisionSchema.optional(),
     resumability: publicSessionResumabilitySchema,
+    // Server-owned proof of an explicit SEND that superseded this cancellation revision.
+    resumedCancellationRevision: z.number().int().nonnegative().optional(),
     sessionId: z.string().min(1).max(200),
-    sourceHandoffId: z.string().uuid().optional(),
-    builderDestination: builderSessionDestinationSchema.optional(),
-
+    sourceHandoffId: hostedUuidSchema.optional(),
     stage: publicSessionStageSchema,
     status: sessionStatusSchema,
     title: z.string().min(1).max(200),
     updatedAtEpochMs: z.number().int().nonnegative(),
     version: z.literal(2),
   })
-  .strict()
-  .superRefine((record, context) => {
+  .check(({ value: record, issues }) => {
+    const addIssue = (message: string) => issues.push({ code: "custom" as const, message });
     if ((record.resumedCancellationRevision ?? 0) > (record.cancellationRevision ?? 0)) {
-      context.addIssue({
-        code: "custom",
-        message: "Resume proof exceeds the cancellation revision.",
-      });
+      addIssue("Resume proof exceeds the cancellation revision.");
     }
     if (record.checkpoint !== undefined && record.checkpointRef !== undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted session has two active checkpoint formats.",
-      });
+      addIssue("Hosted session has two active checkpoint formats.");
     }
     if (
       record.checkpointRef !== undefined &&
       record.checkpointDigest !== record.checkpointRef.digest
     ) {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted session checkpoint reference digest mismatch.",
-      });
+      addIssue("Hosted session checkpoint reference digest mismatch.");
     }
     if (record.updatedAtEpochMs < record.createdAtEpochMs) {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted session updates cannot precede creation.",
-      });
+      addIssue("Hosted session updates cannot precede creation.");
     }
     if (
       record.lastProgressAtEpochMs < record.createdAtEpochMs ||
       record.lastProgressAtEpochMs > record.updatedAtEpochMs
     ) {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted session progress must be within its durable lifetime.",
-      });
+      addIssue("Hosted session progress must be within its durable lifetime.");
     }
     if (
       (record.checkpoint === undefined && record.checkpointRef === undefined) !==
       (record.checkpointDigest === undefined)
     ) {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted session checkpoints require their exact digest.",
-      });
+      addIssue("Hosted session checkpoints require their exact digest.");
     }
     if (
       (record.checkpoint === undefined && record.checkpointRef === undefined) !==
       (record.checkpointProgressDigest === undefined)
     ) {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted session checkpoints require their progress digest.",
-      });
+      addIssue("Hosted session checkpoints require their progress digest.");
     }
-    reportCheckpointDigestMismatch(record, context);
+    reportCheckpointDigestMismatch(record, (issue) => {
+      issues.push(issue);
+    });
     if (record.checkpoint !== undefined && record.checkpoint.status !== record.status) {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted session checkpoint status mismatch.",
-      });
+      addIssue("Hosted session checkpoint status mismatch.");
     }
     if (
       record.adapterGeneration === 1 &&
       record.adapterSessionId !== record.originAdapterSessionId
     ) {
-      context.addIssue({
-        code: "custom",
-        message: "The first adapter generation must retain its origin binding.",
-      });
+      addIssue("The first adapter generation must retain its origin binding.");
     }
   });
 
@@ -428,8 +428,7 @@ export const toDurableHostedSessionRecord = (
 export const hostedSessionSummary = (input: HostedSessionRecord): PublicSessionSummary => {
   const record = toDurableHostedSessionRecord(input);
   const hasCheckpoint = record.checkpoint !== undefined || record.checkpointRef !== undefined;
-  return publicSessionSummarySchema.parse({
-    ...(record.appId === undefined ? {} : { appId: record.appId }),
+  const summary: z.input<typeof publicSessionSummarySchema> = {
     resumability:
       record.version === 2 && !hasCheckpoint && record.resumability !== "terminal"
         ? "restart_required"
@@ -439,7 +438,9 @@ export const hostedSessionSummary = (input: HostedSessionRecord): PublicSessionS
     status: record.status,
     title: record.title,
     updatedAt: new Date(record.updatedAtEpochMs).toISOString(),
-  });
+  };
+  if (record.appId !== undefined) summary.appId = record.appId;
+  return publicSessionSummarySchema.parse(summary);
 };
 
 export const isHostedSessionExpired = (input: {
@@ -470,27 +471,30 @@ export const hostedSessionCreationDigest = (record: HostedSessionRecord): string
   const parsed = hostedSessionRecordSchema.parse(record);
   return `sha256:${createHash("sha256")
     .update(
-      canonicalRecordValue({
-        createdAtEpochMs: parsed.createdAtEpochMs,
-        originAdapterSessionId:
-          parsed.version === 1 ? parsed.adapterSessionId : parsed.originAdapterSessionId,
-        principal: parsed.principal,
-        sessionId: parsed.sessionId,
-        version: 1,
-        ...(parsed.version === 2 && parsed.sourceHandoffId
-          ? { sourceHandoffId: parsed.sourceHandoffId }
-          : {}),
-      }),
+      canonicalRecordValue(
+        (() => {
+          const creationIdentity: HostedSessionCreationIdentity = {
+            createdAtEpochMs: parsed.createdAtEpochMs,
+            originAdapterSessionId:
+              parsed.version === 1 ? parsed.adapterSessionId : parsed.originAdapterSessionId,
+            principal: parsed.principal,
+            sessionId: parsed.sessionId,
+            version: 1,
+          };
+          if (parsed.version === 2 && parsed.sourceHandoffId !== undefined) {
+            creationIdentity.sourceHandoffId = parsed.sourceHandoffId;
+          }
+          return creationIdentity;
+        })(),
+      ),
     )
     .digest("hex")}`;
 };
 
-const hostedStartAliasSchema = z
-  .object({
-    canonicalClientRequestId: z.string().min(1).max(200),
-    sourceHandoffId: z.string().uuid(),
-  })
-  .strict();
+const hostedStartAliasSchema = z.strictObject({
+  canonicalClientRequestId: z.string().min(1).max(200),
+  sourceHandoffId: hostedUuidSchema,
+});
 
 const reportInvalidStartAlias = (
   record: {
@@ -512,7 +516,7 @@ const reportInvalidStartAlias = (
   }
 };
 
-const hostedOperationCommonShape = {
+const hostedOperationCommonFields = {
   clientRequestId: z.string().min(1).max(200),
   createdAtEpochMs: z.number().int().nonnegative(),
   internalAuthoringContinuation: internalAuthoringContinuationSchema.optional(),
@@ -534,41 +538,33 @@ const hostedOperationCommonShape = {
 
 export const hostedOperationRecordSchema = z
   .discriminatedUnion("state", [
-    z
-      .object({
-        ...hostedOperationCommonShape,
-        sessionId: z.string().min(1).max(200).optional(),
-        state: z.literal("reserved"),
-      })
-      .strict(),
-    z
-      .object({
-        ...hostedOperationCommonShape,
-        safeErrorCode: z.string().min(1).max(100),
-        sessionId: z.string().min(1).max(200).optional(),
-        state: z.literal("submission_unknown"),
-      })
-      .strict(),
-    z
-      .object({
-        ...hostedOperationCommonShape,
-        result: eveSessionResultSchema,
-        sessionId: z.string().min(1).max(200),
-        sessionRecordDigest: z
-          .string()
-          .regex(/^sha256:[a-f0-9]{64}$/u)
-          .optional(),
-        state: z.literal("succeeded"),
-      })
-      .strict(),
-    z
-      .object({
-        ...hostedOperationCommonShape,
-        safeErrorCode: z.string().min(1).max(100),
-        sessionId: z.string().min(1).max(200).optional(),
-        state: z.literal("rejected"),
-      })
-      .strict(),
+    z.strictObject({
+      ...hostedOperationCommonFields,
+      sessionId: z.string().min(1).max(200).optional(),
+      state: z.literal("reserved"),
+    }),
+    z.strictObject({
+      ...hostedOperationCommonFields,
+      safeErrorCode: z.string().min(1).max(100),
+      sessionId: z.string().min(1).max(200).optional(),
+      state: z.literal("submission_unknown"),
+    }),
+    z.strictObject({
+      ...hostedOperationCommonFields,
+      result: eveSessionResultSchema,
+      sessionId: z.string().min(1).max(200),
+      sessionRecordDigest: z
+        .string()
+        .regex(/^sha256:[a-f0-9]{64}$/u)
+        .optional(),
+      state: z.literal("succeeded"),
+    }),
+    z.strictObject({
+      ...hostedOperationCommonFields,
+      safeErrorCode: z.string().min(1).max(100),
+      sessionId: z.string().min(1).max(200).optional(),
+      state: z.literal("rejected"),
+    }),
   ])
   // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Operation parsing checks each durable recovery identity alongside the existing state machine.
   .superRefine((record, context) => {
@@ -831,16 +827,15 @@ export const inheritRecoveryBuildDecision = (
   );
   if (latestDecision === undefined && latestAuthoring === undefined && destination === undefined)
     return child;
-  return durableHostedSessionRecordSchema.parse({
-    ...toDurableHostedSessionRecord(child),
-    ...(latestDecision === undefined
-      ? {}
-      : { privateBuildDecision: recoveredBuildDecision(latestDecision, child) }),
-    ...(latestAuthoring === undefined
-      ? {}
-      : { privateAuthoringDecision: recoveredAuthoringDecision(latestAuthoring, child) }),
-    ...(destination === undefined ? {} : { builderDestination: destination }),
-  });
+  const recovered = { ...toDurableHostedSessionRecord(child) };
+  if (latestDecision !== undefined) {
+    recovered.privateBuildDecision = recoveredBuildDecision(latestDecision, child);
+  }
+  if (latestAuthoring !== undefined) {
+    recovered.privateAuthoringDecision = recoveredAuthoringDecision(latestAuthoring, child);
+  }
+  if (destination !== undefined) recovered.builderDestination = destination;
+  return durableHostedSessionRecordSchema.parse(recovered);
 };
 export const unsettledSendAcknowledgementSchema = z.strictObject({
   cancellationRevisionAtDispatch: z.number().int().nonnegative().nullable(),
@@ -1163,25 +1158,19 @@ export const withoutHostedOperationError = (operation: HostedOperationRecord) =>
 };
 
 export const reserveOperationResultSchema = z.discriminatedUnion("disposition", [
-  z
-    .object({
-      disposition: z.literal("reserved"),
-      operation: hostedOperationRecordSchema,
-    })
-    .strict(),
-  z
-    .object({
-      disposition: z.literal("existing"),
-      operation: hostedOperationRecordSchema,
-    })
-    .strict(),
-  z.object({ disposition: z.literal("conflict") }).strict(),
-  z
-    .object({
-      disposition: z.literal("rejected"),
-      reason: z.literal("session_busy"),
-    })
-    .strict(),
+  z.strictObject({
+    disposition: z.literal("reserved"),
+    operation: hostedOperationRecordSchema,
+  }),
+  z.strictObject({
+    disposition: z.literal("existing"),
+    operation: hostedOperationRecordSchema,
+  }),
+  z.strictObject({ disposition: z.literal("conflict") }),
+  z.strictObject({
+    disposition: z.literal("rejected"),
+    reason: z.literal("session_busy"),
+  }),
 ]);
 
 export type ReserveOperationResult = z.infer<typeof reserveOperationResultSchema>;
@@ -1770,7 +1759,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return structuredClone(updated);
   }
 
-  readUnsettledSendAcknowledgements: HostedEveStore["readUnsettledSendAcknowledgements"] = async (
+  readUnsettledSendAcknowledgements: HostedEveStore["readUnsettledSendAcknowledgements"] = (
     input,
   ) => {
     const principal = hostedPrincipalSchema.parse(input.principal);
@@ -1813,7 +1802,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       );
     const page = operations.slice(0, input.limit);
     const last = page.at(-1);
-    return unsettledSendAcknowledgementPageSchema.parse({
+    const response: z.input<typeof unsettledSendAcknowledgementPageSchema> = {
       acknowledgements: page.map((operation) => ({
         cancellationRevisionAtDispatch:
           this.sendCancellationRevisions.get(
@@ -1821,18 +1810,16 @@ export class InMemoryHostedEveStore implements HostedEveStore {
           ) ?? null,
         operation: structuredClone(operation),
       })),
-      ...(operations.length > page.length && last !== undefined
-        ? {
-            nextCursor: {
-              createdAtEpochMs: last.createdAtEpochMs,
-              operationId: last.operationId,
-            },
-          }
-        : {}),
-    });
+    };
+    if (operations.length > page.length && last !== undefined) {
+      response.nextCursor = {
+        createdAtEpochMs: last.createdAtEpochMs,
+        operationId: last.operationId,
+      };
+    }
+    return unsettledSendAcknowledgementPageSchema.parse(response);
   };
 
-  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous store contract for validation errors.
   async readUnsettledResponseOperations(
     input: Parameters<NonNullable<HostedEveStore["readUnsettledResponseOperations"]>>[0],
   ): Promise<z.infer<typeof unsettledResponsePageSchema>> {
@@ -1874,12 +1861,16 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       );
     const page = operations.slice(0, limit);
     const last = page.at(-1);
-    return unsettledResponsePageSchema.parse({
+    const response: z.input<typeof unsettledResponsePageSchema> = {
       operations: structuredClone(page),
-      ...(operations.length > page.length && last !== undefined
-        ? { nextCursor: { createdAtEpochMs: last.createdAtEpochMs, operationId: last.operationId } }
-        : {}),
-    });
+    };
+    if (operations.length > page.length && last !== undefined) {
+      response.nextCursor = {
+        createdAtEpochMs: last.createdAtEpochMs,
+        operationId: last.operationId,
+      };
+    }
+    return await Promise.resolve(unsettledResponsePageSchema.parse(response));
   }
 
   // oxlint-disable-next-line eslint/complexity -- Settlement now checks the native recovery receipt alongside existing operation guards.
@@ -1889,7 +1880,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     const operationKey = InMemoryHostedEveStore.operationKey(input.principal, input.operationId);
     const pendingOperation = this.operations.get(operationKey);
     if (pendingOperation === undefined || pendingOperation.requestDigest !== input.requestDigest) {
-      throw new Error("Hosted operation cannot settle at this digest.");
+      throw new Error(HOSTED_OPERATION_DIGEST_MISMATCH);
     }
     const [provedResponse, provedSend, provedApproval] = await Promise.all([
       this.provedSessionLimitResponse(pendingOperation, input.sessionLimitResolution),
@@ -1903,7 +1894,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
         [provedResponse, provedSend, provedApproval].some(Boolean),
       )
     ) {
-      throw new Error("Hosted operation cannot settle at this digest.");
+      throw new Error(HOSTED_OPERATION_DIGEST_MISMATCH);
     }
     const result = eveSessionResultSchema.parse(input.result);
     let session =
@@ -1945,16 +1936,17 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (expectedSessionId === undefined || result.sessionId !== expectedSessionId) {
       throw new Error("Hosted operation result session mismatch.");
     }
-    const settled = hostedOperationRecordSchema.parse({
+    const settledInput: z.input<typeof hostedOperationRecordSchema> = {
       ...withoutHostedOperationError(operation),
       result,
       sessionId: result.sessionId,
       state: "succeeded",
-      ...(session === undefined
-        ? {}
-        : { sessionRecordDigest: hostedSessionCreationDigest(session) }),
       updatedAtEpochMs: input.nowEpochMs,
-    });
+    };
+    if (session !== undefined) {
+      settledInput.sessionRecordDigest = hostedSessionCreationDigest(session);
+    }
+    const settled = hostedOperationRecordSchema.parse(settledInput);
     if (session !== undefined) {
       const key = InMemoryHostedEveStore.sessionKey(input.principal, session.sessionId);
       if (this.sessions.has(key)) {
@@ -2313,10 +2305,8 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (durable.status === "cancelled" && !provedResume) {
       return structuredClone(durable);
     }
-    const observed = durableHostedSessionRecordSchema.parse({
+    const observedInput = {
       ...durable,
-      ...(provedResume ? { resumedCancellationRevision: durable.cancellationRevision ?? 0 } : {}),
-      ...(input.appId === undefined ? {} : { appId: input.appId }),
       checkpoint: input.checkpoint,
       checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
       checkpointProgressDigest: hostedSessionCheckpointProgressDigest(input.checkpoint),
@@ -2328,7 +2318,10 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       stage: input.stage,
       status: input.checkpoint.status,
       updatedAtEpochMs: input.nowEpochMs,
-    });
+    };
+    if (provedResume) observedInput.resumedCancellationRevision = durable.cancellationRevision ?? 0;
+    if (input.appId !== undefined && input.appId.length > 0) observedInput.appId = input.appId;
+    const observed = durableHostedSessionRecordSchema.parse(observedInput);
     this.sessions.set(key, structuredClone(observed));
     return structuredClone(observed);
   }
@@ -2356,13 +2349,12 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       durable.adapterGeneration !== input.expectedAdapterGeneration ||
       durable.checkpointDigest !== input.expectedCheckpointDigest
     ) {
-      throw new Error("Hosted session recovery raced another continuation.");
+      throw new Error(HOSTED_SESSION_STATE_CHANGED);
     }
-    const replaced = durableHostedSessionRecordSchema.parse({
+    const replacedInput = {
       ...durable,
       adapterGeneration: durable.adapterGeneration + 1,
       adapterSessionId: input.adapterSessionId,
-      ...(input.appId === undefined ? {} : { appId: input.appId }),
       checkpoint: input.checkpoint,
       checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
       checkpointProgressDigest: hostedSessionCheckpointProgressDigest(input.checkpoint),
@@ -2371,7 +2363,9 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       stage: input.stage,
       status: input.checkpoint.status,
       updatedAtEpochMs: input.nowEpochMs,
-    });
+    };
+    if (input.appId !== undefined) replacedInput.appId = input.appId;
+    const replaced = durableHostedSessionRecordSchema.parse(replacedInput);
     this.sessions.set(key, structuredClone(replaced));
     return structuredClone(replaced);
   }
@@ -2419,7 +2413,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
     );
     if (operation === undefined || operation.requestDigest !== input.requestDigest) {
-      throw new Error("Hosted operation cannot settle at this digest.");
+      throw new Error(HOSTED_OPERATION_DIGEST_MISMATCH);
     }
     const current =
       operation.sessionId === undefined

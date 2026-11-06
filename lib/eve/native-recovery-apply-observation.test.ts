@@ -75,10 +75,10 @@ const fixture = () => {
         candidate(25, "committed-turn-output"),
         { ...candidate(20, "completed-terminal-turn-input"), incoming: { delivery: {} } },
       ],
-      // SAFETY: The empty mutable fixture list accepts only this native event shape.
-      nativeEvents: [] as { type: string; data: { sequence: number } }[],
       // SAFETY: The empty mutable fixture list accepts only typed issue reasons.
       issues: [] as { reason: string }[],
+      // SAFETY: The empty mutable fixture list accepts only this native event shape.
+      nativeEvents: [] as { type: string; data: { sequence: number } }[],
     },
   };
 };
@@ -88,20 +88,22 @@ describe("private apply native observation", () => {
     const input = fixture();
     const before = structuredClone(input);
     const facts = observePrivateApplyRecoveryCandidate(input);
-    expect(facts.flags).toMatchObject({
-      appWorkflowUnchangedSinceInput: true,
-      committedOutputAfterSourceInput: true,
-      grantExplicitNull: true,
-      latestContextMatchesCommittedOutput: true,
-      latestPendingScopeMatchesCurrent: true,
-      latestSnapshotMatchesCommittedOutput: true,
-      logicalIdentityMatches: true,
-      noRecordedContextResetAfterInput: true,
-      phasePlanned: true,
-      preapprovalGrantExplicitNull: true,
-      preapprovalScopeMatchesCurrent: true,
-      privateAuthorityUnchangedSinceInput: true,
-    });
+    for (const [flag, value] of [
+      ["appWorkflowUnchangedSinceInput", true],
+      ["committedOutputAfterSourceInput", true],
+      ["grantExplicitNull", true],
+      ["latestContextMatchesCommittedOutput", true],
+      ["latestPendingScopeMatchesCurrent", true],
+      ["latestSnapshotMatchesCommittedOutput", true],
+      ["logicalIdentityMatches", true],
+      ["noRecordedContextResetAfterInput", true],
+      ["phasePlanned", true],
+      ["preapprovalGrantExplicitNull", true],
+      ["preapprovalScopeMatchesCurrent", true],
+      ["privateAuthorityUnchangedSinceInput", true],
+    ] as const) {
+      expect(facts.flags[flag]).toBe(value);
+    }
     expect(facts.counts.matchingPendingCallCount).toBe(1);
     expect(input).toEqual(before);
     expect(JSON.stringify(facts)).not.toContain(secret);

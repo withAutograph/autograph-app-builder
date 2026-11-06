@@ -35,12 +35,12 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
     useAuthPlugin(passkeyPlugin);
 
   const addPasskey = useAddPasskey(authClient);
-  const pendingRequest = useRef<AddPasskeyParams<PasskeyAuthClient>>(undefined);
+  const pendingRequest = useRef<AddPasskeyParams<PasskeyAuthClient> | null>(null);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       addPasskey.reset();
-      pendingRequest.current = undefined;
+      pendingRequest.current = null;
     }
     onOpenChange(nextOpen);
   };
@@ -57,13 +57,19 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const formData = new FormData(e.target as HTMLFormElement);
-    const name = (formData.get("name") as string)?.trim();
+    const formData = new FormData(e.currentTarget);
+    const nameValue = formData.get("name");
+    const name = nameValue instanceof File ? "" : (nameValue ?? "").trim();
+    const request: AddPasskeyParams<PasskeyAuthClient> = {};
 
-    submitRequest({
-      ...(name ? { name } : {}),
-      ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
-    });
+    if (name) {
+      request.name = name;
+    }
+    if (authenticatorAttachment) {
+      request.authenticatorAttachment = authenticatorAttachment;
+    }
+
+    submitRequest(request);
   };
 
   const needsFreshSession = isSessionNotFreshError(addPasskey.error);
@@ -112,7 +118,7 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
 
               {addPasskey.error && (
                 <FieldError>
-                  {addPasskey.error.error?.message ?? addPasskey.error.message}
+                  {addPasskey.error instanceof Error ? addPasskey.error.message : ""}
                 </FieldError>
               )}
             </Field>

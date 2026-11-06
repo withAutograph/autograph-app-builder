@@ -25,23 +25,29 @@ export default defineTool({
       state.githubDraftProposal.proposal.digest,
     );
     const checks = observation.draft ? "deferred" : observation.checks;
-    return {
+    const result = {
       ...observation,
       checks,
-      ...(runtime.runPublishedPullRequestEffect !== undefined &&
+    };
+    if (
+      runtime.runPublishedPullRequestEffect !== undefined &&
       observation.state === "open" &&
       observation.reviewedRevision
-        ? {
-            approval: {
-              ...observation.reviewedTarget,
-              ...(installation === undefined ? {} : { installationId: installation }),
-              proposalDigest: state.githubDraftProposal.proposal.digest,
-              ...(observation.readyAt === undefined ? {} : { readyAt: observation.readyAt }),
-              sessionId: ctx.session.id,
-            },
-          }
-        : {}),
-    };
+    ) {
+      const approval = {
+        ...observation.reviewedTarget,
+        proposalDigest: state.githubDraftProposal.proposal.digest,
+        sessionId: ctx.session.id,
+      };
+      if (installation !== undefined) {
+        approval.installationId = installation;
+      }
+      if (observation.readyAt !== undefined) {
+        approval.readyAt = observation.readyAt;
+      }
+      result.approval = approval;
+    }
+    return result;
   },
   inputSchema: z.strictObject({}),
 });

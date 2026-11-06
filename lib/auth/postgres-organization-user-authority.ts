@@ -2,8 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { z } from "zod";
 
-import type * as databaseSchema from "../db/schema";
 import type { PreviewOAuthMembershipAuthority } from "./preview-oauth-contract";
 import { OrganizationProvisioningError } from "./preview-user-management";
 import type {
@@ -11,8 +11,18 @@ import type {
   PreviewOrganizationUserAuthority,
 } from "./preview-user-management";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = PostgresJsDatabase;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type PostgresQueryResult = readonly unknown[] | { readonly rows: readonly unknown[] };
+
+const WORKSPACE_SETUP_FAILED = "workspace-setup-failed";
+const WORKSPACE_AMBIGUOUS = "workspace-ambiguous";
+const ACCESS_REVOKED = "access-revoked";
+const organizationRowSchema = z.object({
+  organization_id: z.string(),
+  role: z.string(),
+  workspace_id: z.string(),
+});
 
 interface OrganizationRow {
   organization_id: string;
@@ -21,14 +31,17 @@ interface OrganizationRow {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function resultRows<T>(input: unknown): readonly T[] {
+function resultRows<Row>(input: PostgresQueryResult, rowSchema: z.ZodType<Row>): readonly Row[] {
+  let queryRows: readonly unknown[];
   if (Array.isArray(input)) {
-    return input as T[];
+    queryRows = input;
+  } else if ("rows" in input && Array.isArray(input.rows)) {
+    const { rows } = input;
+    queryRows = rows;
+  } else {
+    throw new Error("PostgreSQL returned an unsupported organization result.");
   }
-  if (typeof input === "object" && input !== null && "rows" in input && Array.isArray(input.rows)) {
-    return input.rows as T[];
-  }
-  throw new Error("PostgreSQL returned an unsupported organization result.");
+  return z.array(rowSchema).parse(queryRows);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -48,7 +61,7 @@ async function activeOrganizations(
      order by "member"."organization_id"
      limit 2
   `);
-  return resultRows<OrganizationRow>(result);
+  return resultRows(result, organizationRowSchema);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -59,7 +72,7 @@ function oneAuthorizedOrganization(
     return undefined;
   }
   if (!new Set(["owner", "admin", "member"]).has(rows[0].role)) {
-    throw new OrganizationProvisioningError("access-revoked");
+    throw new OrganizationProvisioningError(ACCESS_REVOKED);
   }
   return {
     organizationId: rows[0].organization_id,
@@ -112,10 +125,10 @@ export function createPostgresPreviewOrganizationAuthority(
   const generateId = options.generateId ?? randomUUID;
   return {
     async activeWorkspaceForUser({ issuer, audience, ownerUserId }) {
-      if (issuer !== authority.issuer || audience !== authority.audience) {
-        return;
-      }
-      const activeOrganization = await exactActiveOrganization(database, authority, ownerUserId);
+      const activeOrganization =
+        issuer === authority.issuer && audience === authority.audience
+          ? await exactActiveOrganization(database, authority, ownerUserId)
+          : undefined;
       return activeOrganization?.workspaceId;
     },
 
@@ -128,18 +141,21 @@ export function createPostgresPreviewOrganizationAuthority(
            where "id" = ${userId}
            for update
         `);
-        const users = resultRows<{
-          name: string;
-          email: string;
-          email_verified: boolean;
-          banned: boolean | null;
-        }>(userResult);
+        const users = resultRows(
+          userResult,
+          z.object({
+            banned: z.boolean().nullable(),
+            email: z.string(),
+            email_verified: z.boolean(),
+            name: z.string(),
+          }),
+        );
         const [user] = users;
         if (users.length !== 1 || user === undefined) {
-          throw new OrganizationProvisioningError("workspace-setup-failed");
+          throw new OrganizationProvisioningError(WORKSPACE_SETUP_FAILED);
         }
         if (user.banned === true) {
-          throw new OrganizationProvisioningError("access-revoked");
+          throw new OrganizationProvisioningError(ACCESS_REVOKED);
         }
         const accountsResult = await transaction.execute(sql`
           select "provider_id"
@@ -150,7 +166,7 @@ export function createPostgresPreviewOrganizationAuthority(
            limit 2
         `);
         const providerIdentity =
-          resultRows<{ provider_id: string }>(accountsResult).length > 0 &&
+          resultRows(accountsResult, z.object({ provider_id: z.string() })).length > 0 &&
           user.email_verified &&
           user.email.trim().toLowerCase() === user.email;
         let passkeyIdentity = false;
@@ -161,7 +177,7 @@ export function createPostgresPreviewOrganizationAuthority(
              where "user_id" = ${userId}
              limit 1
           `);
-          passkeyIdentity = resultRows<{ id: string }>(passkeysResult).length === 1;
+          passkeyIdentity = resultRows(passkeysResult, z.object({ id: z.string() })).length === 1;
         }
         if (!providerIdentity && !passkeyIdentity) {
           throw new OrganizationProvisioningError("verified-identity-required");
@@ -169,7 +185,7 @@ export function createPostgresPreviewOrganizationAuthority(
 
         const memberships = await activeOrganizations(transaction, authority, userId);
         if (memberships.length > 1) {
-          throw new OrganizationProvisioningError("workspace-ambiguous");
+          throw new OrganizationProvisioningError(WORKSPACE_AMBIGUOUS);
         }
         const existing = oneAuthorizedOrganization(memberships);
         if (existing !== undefined) {
@@ -191,20 +207,23 @@ export function createPostgresPreviewOrganizationAuthority(
            limit 2
            for update of "invitation"
         `);
-        const invitations = resultRows<{
-          id: string;
-          organization_id: string;
-          role: string | null;
-          workspace_id: string;
-        }>(invitationResult);
+        const invitations = resultRows(
+          invitationResult,
+          z.object({
+            id: z.string(),
+            organization_id: z.string(),
+            role: z.string().nullable(),
+            workspace_id: z.string(),
+          }),
+        );
         if (invitations.length > 1) {
-          throw new OrganizationProvisioningError("workspace-ambiguous");
+          throw new OrganizationProvisioningError(WORKSPACE_AMBIGUOUS);
         }
         const [invitation] = invitations;
         if (invitation !== undefined) {
           const role = invitation.role ?? "member";
           if (!new Set(["owner", "admin", "member"]).has(role)) {
-            throw new OrganizationProvisioningError("access-revoked");
+            throw new OrganizationProvisioningError(ACCESS_REVOKED);
           }
           const acceptedResult = await transaction.execute(sql`
             update "invitation"
@@ -213,8 +232,8 @@ export function createPostgresPreviewOrganizationAuthority(
                and "status" = 'pending'
             returning "organization_id"
           `);
-          if (resultRows<{ organization_id: string }>(acceptedResult).length !== 1) {
-            throw new OrganizationProvisioningError("workspace-setup-failed");
+          if (resultRows(acceptedResult, z.object({ organization_id: z.string() })).length !== 1) {
+            throw new OrganizationProvisioningError(WORKSPACE_SETUP_FAILED);
           }
           await transaction.execute(sql`
             insert into "member" (
@@ -232,7 +251,7 @@ export function createPostgresPreviewOrganizationAuthority(
             invited?.organizationId !== invitation.organization_id ||
             invited.workspaceId !== invitation.workspace_id
           ) {
-            throw new OrganizationProvisioningError("workspace-setup-failed");
+            throw new OrganizationProvisioningError(WORKSPACE_SETUP_FAILED);
           }
           return invited;
         }
@@ -243,8 +262,8 @@ export function createPostgresPreviewOrganizationAuthority(
            where "user_id" = ${userId}
            limit 2
         `);
-        if (resultRows<{ organization_id: string }>(mappingResult).length !== 0) {
-          throw new OrganizationProvisioningError("access-revoked");
+        if (resultRows(mappingResult, z.object({ organization_id: z.string() })).length !== 0) {
+          throw new OrganizationProvisioningError(ACCESS_REVOKED);
         }
         let selfServiceSignupEnabled = false;
         try {
@@ -286,7 +305,7 @@ export function createPostgresPreviewOrganizationAuthority(
           created?.organizationId !== organizationId ||
           created.workspaceId !== workspaceId
         ) {
-          throw new OrganizationProvisioningError("workspace-setup-failed");
+          throw new OrganizationProvisioningError(WORKSPACE_SETUP_FAILED);
         }
         return created;
       });

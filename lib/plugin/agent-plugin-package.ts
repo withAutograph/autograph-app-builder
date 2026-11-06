@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { cp, lstat, mkdir, readdir, readFile, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
+import { z } from "zod";
 import { isMap, parseDocument } from "yaml";
 import packageManifest from "../../package.json" with { type: "json" };
 
@@ -18,7 +19,7 @@ const SCHEMA_DIGESTS = {
   "mcp.schema.json": "d9904e6befac63b2bca19c32f3bc6a304173f5ed4f50daf8ce05fafc188c50ad",
   "plugin.schema.json": "fd74dfcbccea4a5b8768d9bc87b9da27449213ca5d464ace724ca48ec4bc074b",
 } as const;
-const PORTABLE_ENTRIES = ["plugin.json", "mcp.json", "skills", "LICENSE"];
+const PORTABLE_ENTRIES = ["plugin.json", "mcp.json", "skills", "LICENSE"] as const;
 const PORTABLE_ENTRY_SET = new Set(PORTABLE_ENTRIES);
 const SKILL_FRONTMATTER_FIELDS = new Set([
   "name",
@@ -34,11 +35,115 @@ const CREDENTIAL_HEADER =
   /(?:^|[-_])(?:authorization|cookie|credential|password|secret|token|api[-_]?key|private[-_]?key)(?:$|[-_])/iu;
 const SECRET_LIKE_HEADER_VALUE =
   /(?:\$\{|\{\{|\}\}|(?:^|\s)(?:bearer|basic)\s|(?:api[-_ ]?key|secret|password|credential|private[-_ ]?key)\s*[:=]|-----BEGIN [A-Z ]+PRIVATE KEY-----|^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$)/iu;
+const MCP_SCHEMA_FILENAME = "mcp.schema.json";
+const PLUGIN_JSON_FILENAME = "plugin.json";
+const MCP_JSON_FILENAME = "mcp.json";
+const MCP_MANIFEST_INVALID = "mcp.json is invalid: ";
+const MANIFEST_PAIR = "plugin.json and mcp.json";
+const INVALID_VALUE_MESSAGE = "must be a string.";
 
-type JsonObject = Record<string, unknown>;
+interface JsonObject {
+  [key: string]: JsonValue;
+}
+type JsonValue = JsonObject | JsonValue[] | string | number | boolean | null;
+type PluginManifest = JsonObject & {
+  $schema: string;
+  name: string;
+  version?: string;
+};
+type McpServer = JsonObject & {
+  type: string;
+  url?: string;
+  headers?: Record<string, string>;
+};
+type McpManifest = JsonObject & {
+  $schema: string;
+  mcpServers: Record<string, McpServer>;
+};
+const parsePluginManifest = (value: JsonObject): PluginManifest => ({
+  ...value,
+  $schema: String(value.$schema),
+  name: String(value.name),
+  version: value.version === undefined ? undefined : String(value.version),
+});
+const parseMcpManifest = (value: JsonObject): McpManifest => {
+  const servers = value.mcpServers;
+  if (servers === null || Array.isArray(servers) || typeof servers !== "object") {
+    throw new TypeError("mcpServers must be an object.");
+  }
+  return {
+    ...value,
+    $schema: String(value.$schema),
+    mcpServers: servers as Record<string, McpServer>,
+  };
+};
+const YAML_MAPPING_ERROR = "frontmatter must be a valid YAML mapping.";
+const skillFrontmatterSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.record(z.string(), z.string())]),
+);
+type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
+const parseSkillFrontmatter = (document: ReturnType<typeof parseDocument>) => {
+  try {
+    return skillFrontmatterSchema.parse(document.toJS({ maxAliasCount: 0 }));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new TypeError(YAML_MAPPING_ERROR, { cause: error });
+    }
+    throw error;
+  }
+};
+const isJsonValue = (value: unknown): value is JsonValue => {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return true;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  if (Array.isArray(value)) {
+    return value.every(isJsonValue);
+  }
+  return (
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype &&
+    Object.values(value).every(isJsonValue)
+  );
+};
+
+const parseJson = (contents: string): JsonValue => {
+  const value: unknown = JSON.parse(contents);
+  if (!isJsonValue(value)) {
+    throw new TypeError("JSON document contains an unsupported value.");
+  }
+  return value;
+};
+
+const parseJsonObject = (contents: string): JsonObject => {
+  const value = parseJson(contents);
+  if (value === null || Array.isArray(value)) {
+    throw new TypeError("JSON document must be an object.");
+  }
+  const object: JsonObject = {};
+  for (const [key, entry] of Object.entries(value)) {
+    Object.defineProperty(object, key, {
+      configurable: true,
+      enumerable: true,
+      value: entry,
+      writable: true,
+    });
+  }
+  return object;
+};
 
 const readJson = async (filePath: string): Promise<JsonObject> =>
-  JSON.parse(await readFile(filePath, "utf-8")) as JsonObject;
+  parseJsonObject(await readFile(filePath, "utf-8"));
+
+const isMissingPath = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return Object.getOwnPropertyDescriptor(error, "code")?.value === "ENOENT";
+};
 
 const isWithin = (root: string, candidate: string) => {
   const candidatePath = path.relative(root, candidate);
@@ -94,7 +199,7 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
         throw new Error(`${path.relative(root, current)} must be a real directory.`);
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      if (!isMissingPath(error)) {
         throw error;
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -108,23 +213,23 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
   try {
     await assertTreeContainsNoLinks(root, output);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    if (!isMissingPath(error)) {
       throw error;
     }
   }
 };
 
-const schemaVersion = (schema: unknown) => {
-  if (typeof schema !== "string") {
-    return;
+const schemaVersion = (schema: string) =>
+  /\/schemas\/(?<version>[^/]+)\/(?:plugin|mcp)\.schema\.json$/u.exec(schema)?.[1];
+
+const requireServerUrl = (value: JsonValue | undefined): string => {
+  if (typeof value === "string") {
+    return value;
   }
-  return /\/schemas\/(?<version>[^/]+)\/(?:plugin|mcp)\.schema\.json$/u.exec(schema)?.[1];
+  throw new TypeError(`${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`);
 };
 
-export const assertAutographMcpEndpoint = (value: unknown, { release }: { release: boolean }) => {
-  if (typeof value !== "string") {
-    throw new TypeError(`${AUTOGRAPH_MCP_SERVER_NAME} must use an absolute MCP URL.`);
-  }
+export const assertAutographMcpEndpoint = (value: string, { release }: { release: boolean }) => {
   let url: URL;
   try {
     url = new URL(value);
@@ -169,25 +274,34 @@ const requireString = ({
   min = 0,
   max,
 }: {
-  value: unknown;
+  value: string;
   field: string;
   skillPath: string;
   pluginRoot: string;
   min?: number;
   max?: number;
 }) => {
-  if (
-    typeof value !== "string" ||
-    value.length < min ||
-    (max !== undefined && value.length > max)
-  ) {
-    throw new Error(
-      `${path.relative(pluginRoot, skillPath)} field ${field} must be a string${
-        min > 0 ? ` with at least ${min} character${min === 1 ? "" : "s"}` : ""
-      }${max === undefined ? "" : ` and at most ${max} characters`}.`,
-    );
+  if (value.length < min || (max !== undefined && value.length > max)) {
+    const minimum = min > 0 ? ` with at least ${min} characters` : "";
+    const maximum = max === undefined ? "" : ` and at most ${max} characters`;
+    const description = `field ${field} must be a string${minimum}${maximum}.`;
+    throw new Error(`${path.relative(pluginRoot, skillPath)} ${description}`);
   }
   return value;
+};
+
+const requireFrontmatterString = (
+  value: SkillFrontmatterValue | undefined,
+  field: string,
+  pluginRoot: string,
+  skillPath: string,
+): string => {
+  if (typeof value === "string") {
+    return value;
+  }
+  throw new Error(
+    `${path.relative(pluginRoot, skillPath)} field ${field} ${INVALID_VALUE_MESSAGE}`,
+  );
 };
 
 const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
@@ -209,7 +323,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
         .join("; ")}`,
     );
   }
-  const frontmatter = document.toJS({ maxAliasCount: 0 }) as Record<string, unknown>;
+  const frontmatter = parseSkillFrontmatter(document);
   const unknownFields = Object.keys(frontmatter).filter(
     (field) => !SKILL_FRONTMATTER_FIELDS.has(field),
   );
@@ -224,7 +338,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
     min: 1,
     pluginRoot,
     skillPath,
-    value: frontmatter.name,
+    value: requireFrontmatterString(frontmatter.name, "name", pluginRoot, skillPath),
   });
   if (!/^(?!.*--)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(name)) {
     throw new Error(`${path.relative(pluginRoot, skillPath)} has an invalid skill name.`);
@@ -238,7 +352,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
     min: 1,
     pluginRoot,
     skillPath,
-    value: frontmatter.description,
+    value: requireFrontmatterString(frontmatter.description, "description", pluginRoot, skillPath),
   });
   if ("license" in frontmatter) {
     requireString({
@@ -246,7 +360,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
       min: 1,
       pluginRoot,
       skillPath,
-      value: frontmatter.license,
+      value: requireFrontmatterString(frontmatter.license, "license", pluginRoot, skillPath),
     });
   }
   if ("compatibility" in frontmatter) {
@@ -256,7 +370,12 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
       min: 1,
       pluginRoot,
       skillPath,
-      value: frontmatter.compatibility,
+      value: requireFrontmatterString(
+        frontmatter.compatibility,
+        "compatibility",
+        pluginRoot,
+        skillPath,
+      ),
     });
   }
   if ("allowed-tools" in frontmatter) {
@@ -265,21 +384,18 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
       min: 1,
       pluginRoot,
       skillPath,
-      value: frontmatter["allowed-tools"],
+      value: requireFrontmatterString(
+        frontmatter["allowed-tools"],
+        "allowed-tools",
+        pluginRoot,
+        skillPath,
+      ),
     });
   }
   if ("metadata" in frontmatter) {
     const { metadata } = frontmatter;
-    if (
-      metadata === null ||
-      typeof metadata !== "object" ||
-      Array.isArray(metadata) ||
-      Object.getPrototypeOf(metadata) !== Object.prototype ||
-      Object.entries(metadata).some(
-        ([key, value]) => typeof key !== "string" || typeof value !== "string",
-      )
-    ) {
-      throw new Error(
+    if (typeof metadata === "string") {
+      throw new TypeError(
         `${path.relative(pluginRoot, skillPath)} field metadata must map string keys to string values.`,
       );
     }
@@ -344,45 +460,62 @@ export const validateAgentPluginPackage = async ({
   if (packageKind === "generated-artifact") {
     await assertCleanGeneratedArtifact(resolvedPluginRoot);
   }
-  await assertRegularFile(resolvedPluginRoot, path.resolve(resolvedPluginRoot, "plugin.json"));
-  await assertRegularFile(resolvedPluginRoot, path.resolve(resolvedPluginRoot, "mcp.json"));
+  await assertRegularFile(
+    resolvedPluginRoot,
+    path.resolve(resolvedPluginRoot, PLUGIN_JSON_FILENAME),
+  );
+  await assertRegularFile(resolvedPluginRoot, path.resolve(resolvedPluginRoot, MCP_JSON_FILENAME));
 
   const schemaRoot = path.resolve(repositoryRoot, "schemas/agent-plugins", SPEC_VERSION);
-  const schemaDocuments: Record<string, JsonObject> = {};
-  for (const [name, digest] of Object.entries(SCHEMA_DIGESTS)) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const bytes = await readFile(path.resolve(schemaRoot, name));
-    const actual = createHash("sha256").update(bytes).digest("hex");
-    if (actual !== digest) {
-      throw new Error(`${name} does not match the pinned Agent Plugins ${SPEC_VERSION} schema.`);
-    }
-    schemaDocuments[name] = JSON.parse(bytes.toString("utf-8")) as JsonObject;
+  const schemaEntries: PinnedSchemaEntry[] = [
+    { digest: SCHEMA_DIGESTS[MCP_SCHEMA_FILENAME], name: MCP_SCHEMA_FILENAME },
+    { digest: SCHEMA_DIGESTS["plugin.schema.json"], name: "plugin.schema.json" },
+  ];
+  const schemaBytes = await Promise.all(
+    schemaEntries.map(async ({ name, digest }) => {
+      const bytes = await readFile(path.resolve(schemaRoot, name));
+      const actual = createHash("sha256").update(bytes).digest("hex");
+      if (actual !== digest) {
+        throw new Error(`${name} does not match the pinned Agent Plugins ${SPEC_VERSION} schema.`);
+      }
+      return { name, schema: parseJsonObject(bytes.toString("utf-8")) };
+    }),
+  );
+  const mcpSchemaDocument = schemaBytes.find(({ name }) => name === MCP_SCHEMA_FILENAME)?.schema;
+  const pluginSchemaDocument = schemaBytes.find(
+    ({ name }) => name === "plugin.schema.json",
+  )?.schema;
+  if (!mcpSchemaDocument || !pluginSchemaDocument) {
+    throw new Error("Pinned Agent Plugins schemas are missing.");
   }
 
-  const plugin = await readJson(path.resolve(resolvedPluginRoot, "plugin.json"));
-  const mcp = await readJson(path.resolve(resolvedPluginRoot, "mcp.json"));
+  const [pluginPayload, mcpPayload] = await Promise.all([
+    readJson(path.resolve(resolvedPluginRoot, PLUGIN_JSON_FILENAME)),
+    readJson(path.resolve(resolvedPluginRoot, MCP_JSON_FILENAME)),
+  ]);
   const ajv = new Ajv2020({ allErrors: true, strict: false });
-  for (const [name, value, schema] of [
-    ["plugin.json", plugin, schemaDocuments["plugin.schema.json"]],
-    ["mcp.json", mcp, schemaDocuments["mcp.schema.json"]],
-  ] as const) {
-    const validate = ajv.compile(schema);
-    if (!validate(value)) {
-      throw new Error(`${name} is invalid: ${ajv.errorsText(validate.errors)}`);
-    }
+  const validatePlugin = ajv.compile(pluginSchemaDocument);
+  if (!validatePlugin(pluginPayload)) {
+    throw new Error(`${PLUGIN_JSON_FILENAME} failed schema validation.`);
   }
+  const validateMcp = ajv.compile(mcpSchemaDocument);
+  if (!validateMcp(mcpPayload)) {
+    throw new Error(`${MCP_MANIFEST_INVALID}schema validation failed.`);
+  }
+  const plugin = parsePluginManifest(pluginPayload);
+  const mcp = parseMcpManifest(mcpPayload);
   if (plugin.$schema !== PLUGIN_SCHEMA || mcp.$schema !== MCP_SCHEMA) {
     throw new Error(`Portable manifests must target Agent Plugins ${SPEC_VERSION}.`);
   }
   if (schemaVersion(plugin.$schema) !== schemaVersion(mcp.$schema)) {
-    throw new Error("plugin.json and mcp.json must target the same Agent Plugins version.");
+    throw new Error(`${MANIFEST_PAIR} must target the same Agent Plugins version.`);
   }
 
   if (plugin.version !== AUTOGRAPH_PACKAGE_VERSION) {
     throw new Error(`plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`);
   }
 
-  const servers = mcp.mcpServers as Record<string, JsonObject>;
+  const servers = mcp.mcpServers;
   if (Object.keys(servers).length !== 1 || !Object.hasOwn(servers, AUTOGRAPH_MCP_SERVER_NAME)) {
     throw new Error(`mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`);
   }
@@ -390,8 +523,9 @@ export const validateAgentPluginPackage = async ({
   if (server.type !== "streamable-http") {
     throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`);
   }
-  assertAutographMcpEndpoint(server.url, { release });
-  const headers = (server.headers ?? {}) as Record<string, string>;
+  const serverUrl = requireServerUrl(server.url);
+  assertAutographMcpEndpoint(serverUrl, { release });
+  const headers = server.headers ?? {};
   validateHeaders(AUTOGRAPH_MCP_SERVER_NAME, headers);
 
   const skillsRoot = path.resolve(resolvedPluginRoot, "skills");
@@ -405,7 +539,7 @@ export const validateAgentPluginPackage = async ({
     await assertTreeContainsNoLinks(resolvedPluginRoot, path.resolve(resolvedPluginRoot, entry));
   });
   return {
-    name: plugin.name as string,
+    name: plugin.name,
     packageKind,
     specification: SPEC_VERSION,
     version: plugin.version,

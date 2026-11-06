@@ -8,46 +8,54 @@ import { SectionShell } from "../../components/create-app/choice-card";
 import autographIcon from "../../assets/autograph-icon.png";
 import styles from "./app-builder.module.css";
 
-export type ConnectionStage = "connect" | "configure" | "customize";
-export interface ConnectionFlow {
+type ConnectionStage = "connect" | "configure" | "customize";
+interface ConnectionFlow {
   name: string;
   stage: ConnectionStage;
 }
 
+const sageIntacctKind = "sage-intacct";
+const sageIntacctName = "Sage Intacct";
 const featuredConnections = [
   ["QuickBooks", "quickbooks"],
   ["Ramp", "ramp"],
   ["NetSuite", "netsuite"],
   ["Xero", "xero"],
-  ["Sage Intacct", "sage-intacct"],
+  [sageIntacctName, sageIntacctKind],
 ] as const;
 
 const allConnectionNames = featuredConnections.map(([name]) => name);
-export const comingSoonConnections = new Set(["Ramp", "NetSuite", "Xero", "Sage Intacct"]);
+const comingSoonConnectionNames = new Set(["Ramp", "NetSuite", "Xero", sageIntacctName]);
+const isComingSoonConnection = (name: string) => comingSoonConnectionNames.has(name);
 
 const connectionKind = new Map<string, string>(featuredConnections);
 
-const connectionDescriptions: Record<string, string> = {
-  NetSuite: "Import vendor data from a NetSuite account",
-  QuickBooks: "Import mapped vendors, bills, and vendor credits",
-  Ramp: "Import authorized transactions and vendor data",
-  "Sage Intacct": "Import vendor data from a Sage Intacct company",
-  Xero: "Import suppliers, invoices, and credit data",
-};
+const connectionDescriptions = new Map([
+  ["NetSuite", "Import vendor data from a NetSuite account"],
+  ["QuickBooks", "Import mapped vendors, bills, and vendor credits"],
+  ["Ramp", "Import authorized transactions and vendor data"],
+  [sageIntacctName, "Import vendor data from a Sage Intacct company"],
+  ["Xero", "Import suppliers, invoices, and credit data"],
+]);
+
+const connectionIcons = new Map<string, typeof SiQuickbooks>([
+  ["quickbooks", SiQuickbooks],
+  [sageIntacctKind, SiSage],
+  ["xero", SiXero],
+]);
+
+const connectionIconKinds = new Set(connectionIcons.keys());
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function connectionDescription(name: string) {
-  return connectionDescriptions[name] ?? `Connect ${name} tools and data to your app`;
+function connectionDescription(name: string): string {
+  return connectionDescriptions.get(name) ?? `Connect ${name} tools and data to your app`;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
-  const icons = {
-    quickbooks: SiQuickbooks,
-    "sage-intacct": SiSage,
-    xero: SiXero,
-  };
-  const Icon = kind ? icons[kind as keyof typeof icons] : undefined;
+  const hasKind = kind !== undefined && kind !== "";
+  // SAFETY: `connectionIcons` is keyed by its own known supported provider kinds; membership is checked before retrieving its icon.
+  const Icon = hasKind && connectionIconKinds.has(kind) ? connectionIcons.get(kind) : undefined;
   const hasBrandAsset = kind === "ramp" || kind === "netsuite";
   return (
     <span className={styles.connectionIcon} data-kind={kind} data-name={name} aria-hidden="true">
@@ -57,8 +65,34 @@ export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) 
   );
 }
 
+const connectionItem = (
+  name: string,
+  onAdd: (name: string) => void,
+  comingSoonEnabled: boolean,
+) => {
+  const comingSoon = isComingSoonConnection(name);
+  if (comingSoon && !comingSoonEnabled) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      key={name}
+      aria-label={comingSoon ? `${name} coming soon` : `Add ${name}`}
+      disabled={comingSoon}
+      onClick={() => {
+        onAdd(name);
+      }}
+    >
+      <ConnectionIcon kind={connectionKind.get(name)} name={name} />
+      {name}
+      {comingSoon ? <span className={styles.comingSoon}>Coming soon</span> : null}
+    </button>
+  );
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function ConnectionsSection({
+function renderConnectionsSection({
   bare = false,
   connected,
   comingSoonEnabled = false,
@@ -84,9 +118,21 @@ export function ConnectionsSection({
   showMore: boolean;
 }) {
   const normalizedSearch = search.trim().toLowerCase();
-  const available = (
-    showMore || normalizedSearch ? allConnectionNames : allConnectionNames.slice(0, 2)
-  ).filter((name) => !normalizedSearch || name.toLowerCase().includes(normalizedSearch));
+  const selectedNames = new Set(selected);
+  const connectedNames = new Set(connected);
+  const connectionItems: React.ReactNode[] = [];
+  const names = showMore || normalizedSearch ? allConnectionNames : allConnectionNames.slice(0, 2);
+  for (const name of names) {
+    if (
+      (!normalizedSearch || name.toLowerCase().includes(normalizedSearch)) &&
+      !selectedNames.has(name)
+    ) {
+      const item = connectionItem(name, onAdd, comingSoonEnabled);
+      if (item) {
+        connectionItems.push(item);
+      }
+    }
+  }
   const controls = (
     <>
       <label className={styles.searchBox}>
@@ -100,7 +146,11 @@ export function ConnectionsSection({
           onChange={(event) => {
             onSearchChange(event.target.value);
           }}
-          onKeyDown={(event) => event.key === "Escape" && onSearchChange("")}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              onSearchChange("");
+            }
+          }}
           placeholder="Search connections…"
         />
         {search ? (
@@ -114,40 +164,16 @@ export function ConnectionsSection({
           </button>
         ) : null}
       </label>
-      <div className={styles.connectionGrid}>
-        {available
-          .filter((name) => !selected.includes(name))
-          .map((name) => {
-            const comingSoon = comingSoonConnections.has(name);
-            if (comingSoon && !comingSoonEnabled) {
-              return null;
-            }
-            return (
-              <button
-                type="button"
-                key={name}
-                aria-label={comingSoon ? `${name} coming soon` : `Add ${name}`}
-                disabled={comingSoon}
-                onClick={() => {
-                  onAdd(name);
-                }}
-              >
-                <ConnectionIcon kind={connectionKind.get(name)} name={name} />
-                {name}
-                {comingSoon ? <span className={styles.comingSoon}>Coming soon</span> : null}
-              </button>
-            );
-          })}
-      </div>
+      <div className={styles.connectionGrid}>{connectionItems}</div>
       {!showMore && !search ? (
         <button className={styles.showAll} type="button" onClick={onShowMore}>
           Show more connections
         </button>
       ) : null}
       {selected.length ? (
-        <div className={styles.connectedList} aria-label="Added connections">
+        <ul className={styles.connectedList} aria-label="Added connections">
           {selected.map((name) => (
-            <article key={name}>
+            <li key={name}>
               <span>
                 <ConnectionIcon kind={connectionKind.get(name)} name={name} />
               </span>
@@ -161,7 +187,7 @@ export function ConnectionsSection({
                   onCustomize(name);
                 }}
               >
-                {connected.includes(name) ? "Customize" : "Connect"}
+                {connectedNames.has(name) ? "Customize" : "Connect"}
               </button>
               <button
                 type="button"
@@ -172,9 +198,9 @@ export function ConnectionsSection({
               >
                 <X size={17} />
               </button>
-            </article>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : null}
     </>
   );
@@ -192,6 +218,10 @@ export function ConnectionsSection({
   );
 }
 
+export const ConnectionsSection = (props: Parameters<typeof renderConnectionsSection>[0]) => (
+  <>{renderConnectionsSection(props)}</>
+);
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ConnectionDrawer({
   flow,
@@ -205,10 +235,10 @@ export function ConnectionDrawer({
   onConnected: () => void;
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
-  const [connectionName, setConnectionName] = useState(
+  const [connectionName, setConnectionName] = useState(() =>
     flow.name.toLowerCase().replaceAll(/[^a-z0-9]+/gu, "-"),
   );
-  const [description, setDescription] = useState(connectionDescription(flow.name));
+  const [description, setDescription] = useState(() => connectionDescription(flow.name));
   const accountLabel = flow.name === "Slack" ? "Slack Workspace" : "Account";
 
   useEffect(() => {
@@ -227,9 +257,14 @@ export function ConnectionDrawer({
 
   if (showSuccess) {
     return (
-      <div className={styles.connectionSuccess} role="dialog" aria-modal="true">
+      <dialog
+        className={styles.connectionSuccess}
+        aria-modal="true"
+        open
+        aria-labelledby="connection-success-title"
+      >
         <div>
-          <h2>Connection successful</h2>
+          <h2 id="connection-success-title">Connection successful</h2>
           <p>You can close this window and return to where you started.</p>
           <span aria-hidden="true">
             <Check size={20} />
@@ -244,17 +279,17 @@ export function ConnectionDrawer({
             Return
           </button>
         </div>
-      </div>
+      </dialog>
     );
   }
 
   return (
     <div className={styles.drawerBackdrop} onMouseDown={onClose}>
-      <div
+      <dialog
         className={styles.connectionDrawer}
-        role="dialog"
         aria-modal="true"
         aria-labelledby="connection-drawer-title"
+        open
         onMouseDown={(event) => {
           event.stopPropagation();
         }}
@@ -387,7 +422,7 @@ export function ConnectionDrawer({
           This connection is prepared locally. External authorization and credentials are not stored
           by this prototype.
         </p>
-      </div>
+      </dialog>
     </div>
   );
 }

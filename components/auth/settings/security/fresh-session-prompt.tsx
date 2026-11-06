@@ -4,6 +4,7 @@ import { isTwoFactorRedirect } from "@better-auth-ui/core/plugins/two-factor";
 import { useAuth, useSession, useSignInEmail } from "@better-auth-ui/react";
 import { useState } from "react";
 import type { SubmitEvent } from "react";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -11,8 +12,14 @@ import { Spinner } from "@/components/ui/spinner";
 import { useSignInContinuation } from "@/lib/auth/use-sign-in-continuation";
 
 export interface FreshSessionPromptProps {
-  onFresh: () => unknown | Promise<unknown>;
+  onFresh: () => void | Promise<void>;
 }
+
+const emailSchema = z.string().min(1);
+const signInErrorMessageSchema = z.object({
+  error: z.object({ message: z.string().optional() }).optional(),
+  message: z.string().optional(),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
@@ -37,12 +44,17 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
 
   const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const email = session.data?.user.email;
-    if (!email) {
+    const parsedEmail = emailSchema.safeParse(session.data?.user.email);
+    if (!parsedEmail.success) {
       return;
     }
-    signIn.mutate({ email, password });
+    signIn.mutate({ email: parsedEmail.data, password });
   };
+
+  const parsedSignInError = signInErrorMessageSchema.safeParse(signIn.error);
+  const signInErrorMessage = parsedSignInError.success
+    ? (parsedSignInError.data.error?.message ?? parsedSignInError.data.message)
+    : undefined;
 
   return (
     <div className="p-4">
@@ -68,9 +80,7 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
                 type="password"
                 required
               />
-              {signIn.error && (
-                <FieldError>{signIn.error.error?.message ?? signIn.error.message}</FieldError>
-              )}
+              {signInErrorMessage !== undefined && <FieldError>{signInErrorMessage}</FieldError>}
             </Field>
             <Button disabled={!password || signIn.isPending} type="submit">
               {signIn.isPending && <Spinner />}

@@ -1,28 +1,85 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { BuilderFormContent } from "./builder-form-content";
+import { BuilderControllerContext } from "./builder-form-context";
+import type { useBuilderController } from "./use-builder-controller";
 
-// These are RSC client references in production. Test the independently
-// renderable server structure without hydrating a draft or auth provider.
-vi.mock("./builder-source-upload", () => ({
-  BuilderSourceUpload: () => <input aria-label="App source artifact" type="file" />,
-}));
+const controller = {
+  addConnection: () => {},
+  appNameEditedByUser: { current: false },
+  autosave: null,
+  beginProviderConnection: () => {},
+  briefExamples: [],
+  builderForm: { register: () => ({ name: "field" }) },
+  canSubmit: true,
+  comingSoonEnabled: false,
+  completeConnection: () => {},
+  connectedConnections: [],
+  connectionFlow: null,
+  deploymentProvider: null,
+  draftSaveError: "",
+  draftSyncNotice: "",
+  form: {
+    appName: "Example app",
+    brief: "Describe the app",
+    buildDestination: "codex",
+    connections: [],
+    privateRepository: true,
+    repository: "example-app",
+  },
+  generatedAppName: { current: null },
+  gitScope: "",
+  gitScopeOptions: [],
+  integrations: {
+    github: { scopes: [], status: "unavailable" },
+    models: { entries: [], status: "unavailable" },
+    vercel: { scopes: [], status: "unavailable" },
+  },
+  interactive: true,
+  model: "",
+  modelOptions: [],
+  preparingSubmission: false,
+  removeConnection: () => {},
+  repositoryEditedByUser: { current: false },
+  repositoryNameFromAppName: (name: string) => name,
+  router: { refresh: () => {} },
+  search: "",
+  setConnectionFlow: () => {},
+  setDeploymentProvider: () => {},
+  setDraftSaveError: () => {},
+  setForm: () => {},
+  setGitScope: () => {},
+  setModel: () => {},
+  setSearch: () => {},
+  setShowMoreConnections: () => {},
+  setSourceUploadPending: () => {},
+  setStorageProvider: () => {},
+  setTeam: () => {},
+  setZdrOnly: () => {},
+  showMoreConnections: false,
+  sourceUploadPending: false,
+  storageProvider: null,
+  submissionPending: false,
+  submit: () => {},
+  submitGuidance: "",
+  team: "",
+  teamOptions: [],
+  updateBrief: () => {},
+  visibleProviderNotices: [],
+  zdrOnly: false,
+} satisfies ReturnType<typeof useBuilderController>;
 
-vi.mock("./builder-form-islands", () => ({
-  BuilderAppDetails: () => <input aria-label="App Name" />,
-  BuilderConnections: () => <button type="button">Add a connection</button>,
-  BuilderDeployment: () => <button type="button">Choose deployment</button>,
-  BuilderDestination: () => <button type="button">Choose destination</button>,
-  BuilderModel: () => null,
-  BuilderProviderNotices: () => null,
-  BuilderStorage: () => <button type="button">Choose storage</button>,
-  BuilderSubmit: () => <button type="submit">Create App</button>,
-}));
+const builderContent = (connectionsEnabled: boolean) =>
+  renderToStaticMarkup(
+    <BuilderControllerContext value={controller}>
+      <BuilderFormContent connectionsEnabled={connectionsEnabled} />
+    </BuilderControllerContext>,
+  );
 
 describe("server-composed builder content", () => {
   it("owns the title and section structure independently of client state", () => {
-    const html = renderToStaticMarkup(<BuilderFormContent connectionsEnabled={false} />);
+    const html = builderContent(false);
     expect(html).toContain("<h1>Build an app</h1>");
     expect(html).toContain("Describe what you want to build");
     for (const section of ["app-details", "build-with", "store-in", "deploy-to"]) {
@@ -34,7 +91,7 @@ describe("server-composed builder content", () => {
   });
 
   it("composes the optional connections section from the server flag", () => {
-    const html = renderToStaticMarkup(<BuilderFormContent connectionsEnabled />);
+    const html = builderContent(true);
     expect(html).toContain('data-create-app-section="connections"');
     expect(html).toContain("Give this app access to tools and data from other services.");
   });

@@ -412,7 +412,7 @@ describe("approved hosted runtime consumers", () => {
         args: ["mise", "run", "app:describe", context.appId],
         cmd: "/usr/bin/env",
         cwd: context.root,
-        signal: undefined,
+        signal: null,
       });
       await runtime.runTask({
         alreadyCompiled,
@@ -420,12 +420,20 @@ describe("approved hosted runtime consumers", () => {
           APP_RUNTIME_ALREADY_COMPILED: "untrusted",
           APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
           APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
-          OPTIONAL_INPUT: undefined,
+          OPTIONAL_INPUT: null,
           PATH: "/sandbox/custom/bin:/usr/bin",
         },
         shard,
         task,
       });
+      const expectedEnvironment = {
+        APP_RUNTIME_STATE_DIR: "/private-state",
+        APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+        PATH: "/sandbox/custom/bin:/usr/bin",
+      };
+      if (alreadyCompiled && task !== "test-e2e") {
+        Object.assign(expectedEnvironment, { APP_RUNTIME_ALREADY_COMPILED: "1" });
+      }
       expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
         expect.objectContaining({
           args: [
@@ -440,20 +448,13 @@ describe("approved hosted runtime consumers", () => {
           cmd: "/usr/bin/env",
           cwd: context.root,
           detached: true,
-          env: {
-            APP_RUNTIME_STATE_DIR: "/private-state",
-            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
-            PATH: "/sandbox/custom/bin:/usr/bin",
-            ...(alreadyCompiled && task !== "test-e2e"
-              ? { APP_RUNTIME_ALREADY_COMPILED: "1" }
-              : {}),
-          },
+          env: expectedEnvironment,
         }),
       );
     },
   );
   it.each([
-    { publicDelivery: false, publicOrigin: undefined },
+    { publicDelivery: false, publicOrigin: null },
     { publicDelivery: false, publicOrigin: "https://apps-preview.example.test" },
     { publicDelivery: true, publicOrigin: "https://public-app.example.test" },
   ])(
@@ -468,12 +469,9 @@ describe("approved hosted runtime consumers", () => {
         SPEND_REVIEW_DATABASE_URL:
           "postgres://spend_runtime:synthetic@ep-fixture.neon.tech/spend?sslmode=verify-full",
       };
-      const bindings = vi.fn().mockResolvedValue({
+      const bindingResult = {
         environment,
-        nativePreview: publicOrigin === undefined || publicDelivery ? undefined : { publicOrigin },
-        ...(publicDelivery
-          ? { publicDelivery: { appEntryPath: "/actual-catalog-route", publicOrigin } }
-          : {}),
+        nativePreview: publicOrigin === null || publicDelivery ? undefined : { publicOrigin },
         operationRef,
         plan: operatorPlan,
         proof: {
@@ -483,7 +481,13 @@ describe("approved hosted runtime consumers", () => {
           releaseId: proof.releaseId,
           tenants: proof.tenants,
         },
-      });
+      };
+      if (publicDelivery) {
+        Object.assign(bindingResult, {
+          publicDelivery: { appEntryPath: "/actual-catalog-route", publicOrigin },
+        });
+      }
+      const bindings = vi.fn().mockResolvedValue(bindingResult);
       const operatorClient = vi.fn().mockResolvedValue({ bindings, sessionId: context.sessionId });
       mocks.getProvider.mockResolvedValue(fixture.provider);
       const runtime = await resolvePreparedRuntimeExecution(
@@ -513,16 +517,19 @@ describe("approved hosted runtime consumers", () => {
         }),
       );
       await runtime?.runTask({
-        environment: publicOrigin === undefined ? undefined : { APP_TEST_BASE_URL: publicOrigin },
+        environment: publicOrigin === null ? undefined : { APP_TEST_BASE_URL: publicOrigin },
         task: "test-e2e",
       });
+      const expectedTaskEnvironment = {
+        APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}`,
+      };
+      if (publicOrigin !== null) {
+        Object.assign(expectedTaskEnvironment, { APP_TEST_BASE_URL: publicOrigin });
+      }
       expect(fixture.provider.runCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           args: ["mise", "run", "app:runtime", "run", context.appId, "test-e2e"],
-          env: {
-            APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}`,
-            ...(publicOrigin === undefined ? {} : { APP_TEST_BASE_URL: publicOrigin }),
-          },
+          env: expectedTaskEnvironment,
         }),
       );
     },
@@ -756,12 +763,13 @@ describe("approved hosted runtime consumers", () => {
       if (failure !== "dispatch") {
         fixture.provider.runCommand.mockResolvedValueOnce(command);
       }
-      await expect(
-        runtime.runTask({
-          task: "test-e2e",
-          ...(failure === "resume" ? { allowDispatch: false, commandId: "retained-command" } : {}),
-        }),
-      ).rejects.toThrow("SDK failure [REDACTED] and [REDACTED]");
+      const taskInput = { task: "test-e2e" as const };
+      if (failure === "resume") {
+        Object.assign(taskInput, { allowDispatch: false, commandId: "retained-command" });
+      }
+      await expect(runtime.runTask(taskInput)).rejects.toThrow(
+        "SDK failure [REDACTED] and [REDACTED]",
+      );
       if (failure === "resume") {
         expect(fixture.provider.runCommand).toHaveBeenCalledTimes(1);
       }

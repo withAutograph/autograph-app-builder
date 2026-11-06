@@ -47,20 +47,16 @@ export function buildAppHandoffUrl(destination: HandoffDestination, handoffId: s
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
+export function buildCursorInstallUrl(mcpUrl: string, ready: boolean): string | undefined {
   if (!ready) {
-    return;
+    return undefined;
   }
   const url = new URL(mcpUrl);
-  if (
-    (url.protocol !== "https:" &&
-      !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) ||
-    url.pathname !== "/mcp" ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
+  const isLocalHttp =
+    url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  const hasAllowedProtocol = url.protocol === "https:" || isLocalHttp;
+  const hasNoCredentialsOrExtras = !url.username && !url.password && !url.search && !url.hash;
+  if (!hasAllowedProtocol || url.pathname !== "/mcp" || !hasNoCredentialsOrExtras) {
     throw new Error("mcp-url-invalid");
   }
   const config = JSON.stringify({

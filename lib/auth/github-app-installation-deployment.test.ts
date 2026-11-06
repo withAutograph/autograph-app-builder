@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createGitHubAppInstallationRouteHandlers } from "./github-app-installation-deployment";
 import { GitHubInstallationAuthorizationError } from "./github-app-installation";
-import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
+import { parseProviderConnectionReturn } from "../integrations/provider-connection-return";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -78,12 +78,12 @@ function handlers(
     installationDigest: "c".repeat(64),
     providerUserDigest: "d".repeat(64),
     repositorySelection: "selected" as const,
-    returnState: { returnTo: "/" as const } as ProviderConnectionReturn,
+    returnState: parseProviderConnectionReturn({ returnTo: "/" }),
     setupAction: "install" as const,
     stateDigest: "b".repeat(64),
     status: "bound" as const,
     version: 1 as const,
-    via: "installation" as "installation" | "existing",
+    via: "installation",
   }));
   const routeInput: Parameters<typeof createGitHubAppInstallationRouteHandlers>[0] = {
     authorityForRequest,
@@ -542,8 +542,9 @@ describe("GitHub App installation routes", () => {
       authorityForRequest: async () => authority,
       authorization: {
         begin: vi.fn(),
+        beginExisting: vi.fn(),
         complete,
-      } as never,
+      },
       onConnected,
       origin: "https://builder.example",
     });
@@ -553,11 +554,9 @@ describe("GitHub App installation routes", () => {
     expect(response.headers.get("location")).toContain(
       "/eve/v1/connections/github-repository-access/callback/",
     );
-    expect(onConnected).toHaveBeenCalledWith({
-      authority,
-      returnState: expect.objectContaining({
-        resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
-      }),
+    expect(onConnected).toHaveBeenCalledWith(expect.objectContaining({ authority }));
+    expect(onConnected.mock.calls[0]?.[0].returnState).toMatchObject({
+      resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
     });
   });
 });

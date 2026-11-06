@@ -7,12 +7,21 @@ import {
 } from "@better-auth-ui/core";
 import { oneTapMutationKeys } from "@better-auth-ui/core/plugins/one-tap";
 import { matchMutation, matchQuery, useQueryClient } from "@tanstack/react-query";
-import type { BetterFetchError } from "better-auth/react";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function ErrorToaster() {
+const betterFetchErrorSchema = z.object({
+  error: z
+    .object({
+      code: z.string().optional(),
+      message: z.string().optional(),
+    })
+    .optional(),
+  message: z.string().optional(),
+});
+
+const errorToaster = () => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -32,12 +41,12 @@ export function ErrorToaster() {
         return;
       }
 
-      const err = error as BetterFetchError;
-      if (err?.error?.code === "EMAIL_NOT_VERIFIED") {
+      const parsedError = betterFetchErrorSchema.safeParse(error);
+      if (parsedError.success && parsedError.data.error?.code === "EMAIL_NOT_VERIFIED") {
         return;
       }
-      if (err?.error) {
-        toast.error(err.error.message);
+      if (parsedError.success && parsedError.data.error !== undefined) {
+        toast.error(parsedError.data.error.message);
       }
     };
 
@@ -62,14 +71,17 @@ export function ErrorToaster() {
         return;
       }
 
-      const err = error as BetterFetchError;
+      const parsedError = betterFetchErrorSchema.safeParse(error);
       if (
-        err.error?.code === "EMAIL_NOT_VERIFIED" &&
+        parsedError.success &&
+        parsedError.data.error?.code === "EMAIL_NOT_VERIFIED" &&
         !matchMutation({ mutationKey: oneTapMutationKeys.prompt }, mutation)
       ) {
         return;
       }
-      toast.error(err.error?.message || err.message);
+      const message = parsedError.success ? parsedError.data.error?.message : undefined;
+      const rootMessage = parsedError.success ? parsedError.data.message : undefined;
+      toast.error(message !== undefined && message.length > 0 ? message : rootMessage);
     };
 
     return () => {
@@ -79,4 +91,6 @@ export function ErrorToaster() {
   }, [queryClient]);
 
   return null;
-}
+};
+
+export { errorToaster as ErrorToaster };

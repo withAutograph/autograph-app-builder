@@ -237,7 +237,7 @@ const fixture = async (
         return { ...record, principal: { ...record.principal, ownerUserId: "foreign" } };
       }
       if (options.priorFault === "missing-receipt") {
-        return { ...record, nativeRecoveryReceipt: undefined };
+        return { ...record, nativeRecoveryReceipt: null };
       }
       if (record.nativeRecoveryReceipt !== undefined) {
         if (options.priorFault === "changed-receipt") {

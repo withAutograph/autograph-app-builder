@@ -13,7 +13,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Loading: Story = { args: { status: "loading" } };
-export const Error: Story = {
+export const FailureState: Story = {
   args: { callbackUrl: "/?mode=authenticated", status: "error" },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

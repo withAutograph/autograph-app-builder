@@ -47,12 +47,28 @@ const GitHubResource = ({ intent, returnTo }: { intent: HandoffIntent; returnTo:
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function HandoffContent({ params }: { params: Promise<{ id: string }> }) {
+export async function HandoffContent({
+  params,
+  dependencies = {
+    headers,
+    load: getBuilderHandoffPageData,
+    redirect,
+  },
+}: {
+  params: Promise<{ id: string }>;
+  dependencies?: {
+    headers: typeof headers;
+    redirect: typeof redirect;
+    load: typeof getBuilderHandoffPageData;
+  };
+}) {
   const { id } = await params;
-  const requestHeaders = await headers();
+  const requestHeaders = await dependencies.headers();
+  const callbackPath = `/handoff/${encodeURIComponent(id)}`;
+  const signInHref = `/auth/sign-in?callbackURL=${encodeURIComponent(callbackPath)}`;
   let data;
   try {
-    data = await getBuilderHandoffPageData({
+    data = await dependencies.load({
       environment: process.env,
       handoffId: id,
       headers: requestHeaders,
@@ -68,20 +84,14 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
               Use the same Autograph account and workspace as the web form. If you are already
               signed into that account, try reloading this page.
             </p>
-            <Link
-              href={`/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`}
-            >
-              Sign in with the same account
-            </Link>
+            <Link href={signInHref}>Sign in with the same account</Link>
           </section>
         </main>
       </div>
     );
   }
   if (!data) {
-    redirect(
-      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`,
-    );
+    dependencies.redirect(signInHref);
   }
   const { intent, ...controls } = data;
   const vercel = intent.provisioning?.vercel;
@@ -93,7 +103,7 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
         <section className={`${styles.readyCard} ${handoffStyles.card}`}>
           <h1>{intent.appName}</h1>
           <p>Your prepared app and existing provider connections are saved with Autograph.</p>
-          <div className={handoffStyles.resources} aria-label="Prepared resources">
+          <div className={handoffStyles.resources} role="group" aria-label="Prepared resources">
             <GitHubResource intent={intent} returnTo={returnTo} />
             {vercel && !(vercel.status === "skipped" && vercel.code === "not_selected") ? (
               <article>
@@ -129,7 +139,9 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
             <summary>Prepared brief</summary>
             <p style={{ whiteSpace: "pre-wrap" }}>{intent.brief}</p>
           </details>
-          {intent.provisioning && data.provisioningRevision ? (
+          {intent.provisioning &&
+          data.provisioningRevision !== undefined &&
+          data.provisioningRevision !== null ? (
             <HandoffProvisioningProgress
               handoffId={data.handoffId}
               initial={{
