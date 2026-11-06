@@ -199,7 +199,7 @@ export const readMicrofrontendsConfig = ({ cwd, environment }) => {
 `,
     );
     write(
-      "packages/platform-microfrontends/src/policy/application-identity.ts",
+      "packages/platform-microfrontends/src/policy/application-identity",
       `export const platformCatalogApplication = (config, appId) => {
   if (config !== "selected catalog" || appId !== "example") process.exit(62);
   return { assetPrefix: "selected-assets" };
@@ -208,7 +208,7 @@ export const readMicrofrontendsConfig = ({ cwd, environment }) => {
     );
   }
   write(
-    "packages/platform-microfrontends/src/hosting/vercel/next-build-output.ts",
+    "packages/platform-microfrontends/src/hosting/vercel/next-build-output",
     `export async function assertNativeNextBuild(appRoot, appId${hasEnvironmentHelper ? ", prefix" : ""}) {
   if (appRoot !== process.cwd() + "/apps/example" || appId !== "example") process.exit(63);
   ${hasEnvironmentHelper ? 'if (prefix !== "/selected-assets") process.exit(64);' : ""}
@@ -1188,10 +1188,33 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
       mkdirSync(path.join(directory, ".config/mise/scripts/repository"), { recursive: true });
       writeFileSync(path.join(directory, ".config/mise/config.toml"), "[tools]\n");
       writeFileSync(path.join(directory, "source-cue"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      // Hosted repository CI provides Node. Use Bun when installed, otherwise
+      // supply only the Bun.file operations needed by this executable fixture.
       writeFileSync(
         path.join(directory, "bun"),
-        '#!/bin/sh\nPATH="$FIXTURE_SOURCE_PATH" exec bun "$@"\n',
+        `#!/bin/sh
+if PATH="$FIXTURE_SOURCE_PATH" command -v bun >/dev/null 2>&1; then
+  PATH="$FIXTURE_SOURCE_PATH" exec bun "$@"
+fi
+preload="$PWD/fixture-bun-file.mjs"
+if [ "$1" = -e ]; then
+  shift
+  exec "$FIXTURE_NODE" --conditions=source --import "$preload" --input-type=module -e "$@"
+fi
+exec "$FIXTURE_NODE" --conditions=source --import "$preload" "$@"
+`,
         { mode: 0o755 },
+      );
+      writeFileSync(
+        path.join(directory, "fixture-bun-file.mjs"),
+        `import { access, readFile } from "node:fs/promises";
+globalThis.Bun = {
+  file: (path) => ({
+    exists: () => access(path).then(() => true, () => false),
+    json: async () => JSON.parse(await readFile(path, "utf8")),
+  }),
+};
+`,
       );
       writeFileSync(
         path.join(directory, "mise"),
@@ -1246,6 +1269,7 @@ exit 134
             ...input.env,
             BETTER_AUTH_SECRET: "",
             FIXTURE_OUTCOME: scenario.outcome,
+            FIXTURE_NODE: process.execPath,
             FIXTURE_SOURCE_PATH: process.env.PATH ?? "",
             PATH: `${directory}:${process.env.PATH ?? ""}`,
           },
@@ -1271,7 +1295,7 @@ exit 134
       });
       expect(run).toHaveBeenCalledOnce();
       expect(run.mock.calls[0]?.[0].command).toContain(command);
-      expect(result.exitCode).toBe(scenario.exitCode);
+      expect(result.exitCode, result.stdout).toBe(scenario.exitCode);
       expect(result.stdout).not.toContain("legacy app:check invoked");
       expect(result.stdout).not.toContain("local-only-fixture");
       if (scenario.exitCode === 0) {
