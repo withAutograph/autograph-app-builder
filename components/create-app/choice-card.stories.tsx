@@ -11,9 +11,7 @@ const meta = {
     checked: false,
     children: "ChatGPT / Codex",
     name: "destination",
-    onChange: (...args) => {
-      fn()(...args);
-    },
+    onChange: fn(),
     value: "codex",
   },
   component: ChoiceCard,

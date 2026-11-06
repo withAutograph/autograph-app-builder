@@ -1,34 +1,27 @@
 // @vitest-environment jsdom
 
-import { act, createElement, StrictMode, useEffect } from "react";
+import { act, StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BuilderDraftOutbox, BuilderDraftOutboxEntry } from "./builder-draft-outbox";
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
-import type {
-  BuilderDraftAutosave,
-  BuilderDraftSaveAcknowledgement,
-  BuilderDraftSaveContext,
-} from "./use-builder-draft-autosave";
+import type { BuilderDraftAutosave } from "./use-builder-draft-autosave";
 
 interface Snapshot {
   brief: string;
 }
 
-type BuilderDraftSave = (
-  context: BuilderDraftSaveContext<Snapshot>,
-) => Promise<BuilderDraftSaveAcknowledgement>;
+let root: Root | undefined;
+let container: HTMLDivElement | undefined;
+let autosave: BuilderDraftAutosave<Snapshot> | undefined;
 
-let root: Root | null = null;
-let container: HTMLDivElement | null = null;
-let autosave: BuilderDraftAutosave<Snapshot> | null = null;
-
-Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function draftAutosaveHook({
+function Harness({
   outbox,
   save,
   onAcknowledged,
@@ -45,20 +38,22 @@ function draftAutosaveHook({
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function render(props: Parameters<typeof draftAutosaveHook>[0], strict = false) {
+async function render(props: Parameters<typeof Harness>[0], strict = false) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  await act(async () => {
-    if (root) {
-      root.render(
-        strict
-          ? createElement(StrictMode, null, createElement(draftAutosaveHook, props))
-          : createElement(draftAutosaveHook, props),
-      );
-    }
-  });
+  await act(async () =>
+    root?.render(
+      strict ? (
+        <StrictMode>
+          <Harness {...props} />
+        </StrictMode>
+      ) : (
+        <Harness {...props} />
+      ),
+    ),
+  );
   if (!autosave) {
     throw new Error("autosave-harness-not-ready");
   }
@@ -69,13 +64,13 @@ afterEach(async () => {
   if (root) {
     await act(async () => {
       root?.unmount();
-      await Promise.resolve(null);
+      await Promise.resolve();
     });
   }
   container?.remove();
-  root = null;
-  container = null;
-  autosave = null;
+  root = undefined;
+  container = undefined;
+  autosave = undefined;
   vi.restoreAllMocks();
 });
 
@@ -84,26 +79,19 @@ describe("useBuilderDraftAutosave", () => {
     const outbox: BuilderDraftOutbox<Snapshot> = {
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      clearIfMutationId: vi.fn(async (_mutationId: string) => true),
-      read: vi.fn<BuilderDraftOutbox<Snapshot>["read"]>(),
-      write: vi.fn<BuilderDraftOutbox<Snapshot>["write"]>(),
+      clearIfMutationId: vi.fn(async () => true),
+      read: vi.fn(),
+      write: vi.fn(),
     };
-    const save: BuilderDraftSave = vi.fn(
-      async ({
-        mutationId,
-        snapshot,
-      }: BuilderDraftSaveContext<Snapshot>): Promise<BuilderDraftSaveAcknowledgement> =>
-        await Promise.resolve({
-          mutationId,
-          revision: snapshot.brief === "first" ? 1 : 2,
-        }),
-    );
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const save = vi.fn(async ({ mutationId, snapshot }) => ({
+      mutationId,
+      revision: snapshot.brief === "first" ? 1 : 2,
+    }));
     const value = await render({
       onAcknowledged: ({ revision }) => {
         if (revision === 1) {
-          queueMicrotask(() => {
-            autosave?.schedule({ brief: "completion-window" });
-          });
+          queueMicrotask(() => autosave?.schedule({ brief: "completion-window" }));
         }
       },
       outbox,
@@ -130,24 +118,17 @@ describe("useBuilderDraftAutosave", () => {
     const outbox: BuilderDraftOutbox<Snapshot> = {
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      clearIfMutationId: vi.fn(async (_mutationId: string) => true),
+      clearIfMutationId: vi.fn(async () => true),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      read: vi.fn<BuilderDraftOutbox<Snapshot>["read"]>(
-        async (): Promise<BuilderDraftOutboxEntry<Snapshot> | undefined> =>
-          await Promise.resolve(entry ?? undefined),
-      ),
-      write: vi.fn<BuilderDraftOutbox<Snapshot>["write"]>(),
+      read: vi.fn(async () => entry),
+      write: vi.fn(),
     };
-    const save: BuilderDraftSave = vi.fn(
-      async ({
-        mutationId,
-      }: BuilderDraftSaveContext<Snapshot>): Promise<BuilderDraftSaveAcknowledgement> =>
-        await Promise.resolve({
-          mutationId,
-          revision: 1,
-          savedAt: "2030-01-01T00:00:00.000Z",
-        }),
-    );
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const save = vi.fn(async ({ mutationId }) => ({
+      mutationId,
+      revision: 1,
+      savedAt: "2030-01-01T00:00:00.000Z",
+    }));
     const value = await render({ outbox, save }, true);
     await act(async () => {
       await value.resumePending();
@@ -162,25 +143,20 @@ describe("useBuilderDraftAutosave", () => {
     const outbox: BuilderDraftOutbox<Snapshot> = {
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      clearIfMutationId: vi.fn(async (_mutationId: string) => true),
-      read: vi.fn<BuilderDraftOutbox<Snapshot>["read"]>(),
-      write: vi.fn<BuilderDraftOutbox<Snapshot>["write"]>(),
+      clearIfMutationId: vi.fn(async () => true),
+      read: vi.fn(),
+      write: vi.fn(),
     };
-    const save: BuilderDraftSave = vi.fn(
-      async ({
+    const save = vi.fn(async ({ mutationId, snapshot }) => {
+      if (snapshot.brief === "older") {
+        await firstSave;
+      }
+      return {
         mutationId,
-        snapshot,
-      }: BuilderDraftSaveContext<Snapshot>): Promise<BuilderDraftSaveAcknowledgement> => {
-        if (snapshot.brief === "older") {
-          await firstSave;
-        }
-        return {
-          mutationId,
-          revision: snapshot.brief === "older" ? 1 : 2,
-          savedAt: "2030-01-01T00:00:00.000Z",
-        };
-      },
-    );
+        revision: snapshot.brief === "older" ? 1 : 2,
+        savedAt: "2030-01-01T00:00:00.000Z",
+      };
+    });
     const value = await render({ outbox, save });
 
     await act(async () => {
@@ -206,50 +182,39 @@ describe("useBuilderDraftAutosave", () => {
   });
 
   it("clears only the exact acknowledged outbox snapshot", async () => {
-    let entry: BuilderDraftOutboxEntry<Snapshot> | null = null;
+    let entry: BuilderDraftOutboxEntry<Snapshot> | undefined;
     const outbox: BuilderDraftOutbox<Snapshot> = {
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      clearIfAcknowledged: vi.fn(
-        async (acknowledgement: { mutationId: string; revision: number }) => {
-          if (entry?.mutationId !== acknowledgement.mutationId) {
-            return await Promise.resolve(false);
-          }
-          entry = null;
-          return await Promise.resolve(true);
-        },
-      ),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      clearIfMutationId: vi.fn(async (mutationId: string) => {
-        if (entry?.mutationId !== mutationId) {
-          return await Promise.resolve(false);
+      clearIfAcknowledged: vi.fn(async (acknowledgement) => {
+        if (entry?.mutationId !== acknowledgement.mutationId) {
+          return false;
         }
-        entry = null;
-        return await Promise.resolve(true);
+        entry = undefined;
+        return true;
       }),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      read: vi.fn<BuilderDraftOutbox<Snapshot>["read"]>(
-        async (): Promise<BuilderDraftOutboxEntry<Snapshot> | undefined> =>
-          await Promise.resolve(entry ?? undefined),
-      ),
+      clearIfMutationId: vi.fn(async (mutationId) => {
+        if (entry?.mutationId !== mutationId) {
+          return false;
+        }
+        entry = undefined;
+        return true;
+      }),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      write: vi.fn(async (next: BuilderDraftOutboxEntry<Snapshot>) => {
+      read: vi.fn(async () => entry),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      write: vi.fn(async (next) => {
         entry = next;
-        await Promise.resolve();
       }),
     };
     const { promise: first, resolve: releaseFirst } = Promise.withResolvers<null>();
-    const save: BuilderDraftSave = vi.fn(
-      async ({
-        mutationId,
-        snapshot,
-      }: BuilderDraftSaveContext<Snapshot>): Promise<BuilderDraftSaveAcknowledgement> => {
-        if (snapshot.brief === "first") {
-          await first;
-        }
-        return { mutationId, revision: snapshot.brief === "first" ? 1 : 2 };
-      },
-    );
+    const save = vi.fn(async ({ mutationId, snapshot }) => {
+      if (snapshot.brief === "first") {
+        await first;
+      }
+      return { mutationId, revision: snapshot.brief === "first" ? 1 : 2 };
+    });
     const value = await render({ outbox, save });
 
     await act(async () => {
@@ -261,35 +226,31 @@ describe("useBuilderDraftAutosave", () => {
     });
 
     expect(outbox.clearIfAcknowledged).toHaveBeenCalledTimes(2);
-    expect(entry).toBeNull();
+    expect(entry).toBeUndefined();
   });
 
   it("discards queued recovery work superseded by a remote revision", async () => {
-    let entry: BuilderDraftOutboxEntry<Snapshot> | null = null;
+    let entry: BuilderDraftOutboxEntry<Snapshot> | undefined;
     const outbox: BuilderDraftOutbox<Snapshot> = {
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      clearIfMutationId: vi.fn(async (mutationId: string) => {
+      clearIfMutationId: vi.fn(async (mutationId) => {
         if (entry?.mutationId !== mutationId) {
-          return await Promise.resolve(false);
+          return false;
         }
-        entry = null;
-        return await Promise.resolve(true);
+        entry = undefined;
+        return true;
       }),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      read: vi.fn<BuilderDraftOutbox<Snapshot>["read"]>(
-        async (): Promise<BuilderDraftOutboxEntry<Snapshot> | undefined> =>
-          await Promise.resolve(entry ?? undefined),
-      ),
+      read: vi.fn(async () => entry),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      write: vi.fn(async (next: BuilderDraftOutboxEntry<Snapshot>) => {
+      write: vi.fn(async (next) => {
         entry = next;
-        await Promise.resolve();
       }),
     };
     const value = await render({
       outbox,
-      save: vi.fn<BuilderDraftSave>(),
+      save: vi.fn(),
     });
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -301,6 +262,6 @@ describe("useBuilderDraftAutosave", () => {
     });
 
     expect(outbox.clearIfMutationId).toHaveBeenCalledTimes(1);
-    expect(entry).toBeNull();
+    expect(entry).toBeUndefined();
   });
 });

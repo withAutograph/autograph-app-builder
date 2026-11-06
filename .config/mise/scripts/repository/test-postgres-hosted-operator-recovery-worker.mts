@@ -238,10 +238,9 @@ const receiptIdentity = (input: { plan: typeof plan }) => ({
 });
 const dependencies: ProtectedHostedOperatorDependencies = {
   async assertAuthorized() {
-    await Promise.resolve();
+    return;
   },
   async authorize(request, selection) {
-    await Promise.resolve();
     if (
       request.headers.get("authorization") !== "Bearer local-fixture" ||
       selection.sessionId !== config.selection.sessionId
@@ -251,12 +250,11 @@ const dependencies: ProtectedHostedOperatorDependencies = {
     return { authority: config.authority, target: config.target };
   },
   async bindings() {
-    await Promise.resolve();
     return {
-      PLATFORM_APP_BOUNDARY: "{}",
-      PLATFORM_JWKS_URL: "https://gateway.fixture.test/_platform/jwks.json",
       PLATFORM_ORIGIN: "https://gateway.fixture.test",
       PLATFORM_PUBLIC_ORIGIN: "https://app.fixture.test",
+      PLATFORM_JWKS_URL: "https://gateway.fixture.test/_platform/jwks.json",
+      PLATFORM_APP_BOUNDARY: "{}",
       SPEND_REVIEW_DATABASE_URL: "postgres://synthetic-only",
     };
   },
@@ -305,11 +303,9 @@ const dependencies: ProtectedHostedOperatorDependencies = {
     return receipt;
   },
   async plan() {
-    await Promise.resolve();
     return plan;
   },
   async readApproval(input) {
-    await Promise.resolve();
     return {
       action: input.action,
       approvalId: "owner-approved-local-fixture",
@@ -353,7 +349,6 @@ const dependencies: ProtectedHostedOperatorDependencies = {
     if (config.failure === "verify-after") {
       process.exit(87);
     }
-    await Promise.resolve();
     return proof;
   },
   withResourceLease,

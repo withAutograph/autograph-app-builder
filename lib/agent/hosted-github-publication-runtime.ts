@@ -1,9 +1,8 @@
 import { createPostgresGitHubPrEffectStore } from "../repository/postgres-github-pr-effect-store";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
-import type { databaseSchema } from "../db/schema";
+import type * as databaseSchema from "../db/schema";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
-import { z } from "zod";
 import {
   exactForwardedSessionAuthority,
   HostedSessionAuthorityError,
@@ -31,8 +30,6 @@ import { composeGitHubPublicationRuntime } from "./github-publication-runtime";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
-type SessionAuth = z.infer<typeof sessionAuthSchema>;
-const sessionAuthSchema = z.strictObject({ current: z.unknown(), initiator: z.unknown() });
 
 export type HostedGitHubPublicationProviderFactory = (input: {
   authority: HostedGitHubTenantAuthority;
@@ -41,13 +38,13 @@ export type HostedGitHubPublicationProviderFactory = (input: {
 
 export interface HostedGitHubPublicationRuntimeResolver {
   resolve: (
-    sessionAuth: SessionAuth,
+    sessionAuth: unknown,
     selection?: { selectedInstallationId: string },
   ) => Promise<GitHubPublicationRuntime>;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function exactGitHubPublicationAuthority(sessionAuth: SessionAuth) {
+function exactGitHubPublicationAuthority(sessionAuth: unknown) {
   try {
     return exactForwardedSessionAuthority(sessionAuth);
   } catch (error) {
@@ -71,7 +68,7 @@ interface PublicationStores {
 }
 
 export interface HostedGitHubPublicationRuntimeResolverDependencies {
-  readPreparedHandoff: (sessionAuth: SessionAuth) => Promise<
+  readPreparedHandoff: (sessionAuth: unknown) => Promise<
     | (BuilderHandoffIntent & {
         providers?: {
           githubInstallationId?: string;
@@ -133,7 +130,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
   providerFactory?: HostedGitHubPublicationProviderFactory;
   dependencies?: Partial<HostedGitHubPublicationRuntimeResolverDependencies>;
 }): HostedGitHubPublicationRuntimeResolver {
-  let databasePromise: Promise<Database> | null = null;
+  let databasePromise: Promise<Database> | undefined;
   const dependencies = { ...defaultDependencies, ...input.dependencies };
 
   // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
@@ -141,13 +138,17 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
     if (input.openDatabase === undefined) {
       throw new Error("Hosted GitHub publication database is unconfigured.");
     }
-    databasePromise ??= Promise.resolve(input.openDatabase());
-    try {
-      return await databasePromise;
-    } catch (error: unknown) {
-      databasePromise = null;
+    // Preserve the shared lazy promise while clearing it after a failed open.
+    // oxlint-disable promise/prefer-await-to-callbacks
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks
+    // Preserve the shared lazy promise while clearing it after a failed open.
+    // oxlint-disable-next-line promise/prefer-await-to-then
+    databasePromise ??= Promise.resolve(input.openDatabase()).catch((error) => {
+      databasePromise = undefined;
       throw error;
-    }
+    });
+    // oxlint-enable promise/prefer-await-to-callbacks
+    return await databasePromise;
   }
 
   return {
@@ -159,11 +160,10 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
         throw new Error("Hosted GitHub publication provider is unconfigured.");
       }
 
-      const parsedSessionAuth = sessionAuthSchema.parse(sessionAuth);
-      const { authority, principal } = exactGitHubPublicationAuthority(parsedSessionAuth);
+      const { authority, principal } = exactGitHubPublicationAuthority(sessionAuth);
       const selectedInstallationId = await selectedPublicationInstallation(
         selection,
-        async () => await dependencies.readPreparedHandoff(parsedSessionAuth),
+        async () => await dependencies.readPreparedHandoff(sessionAuth),
       );
       // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Reject unavailable handoff authority before opening the database pool.
       const pool = await database();
@@ -194,18 +194,17 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
 
       const stores = dependencies.publicationStores(pool, authority);
       const adapter = await input.providerFactory({ authority, installation });
-      const runtime = {
+      return composeGitHubPublicationRuntime({
         adapter,
         adoptions: stores.adoptions ?? createPostgresGitHubDraftAdoptionStore(pool, authority),
         authority,
         enabled: true,
         proposals: stores.proposals,
+        ...(input.prEffectsEnabled === true
+          ? { prEffects: createPostgresGitHubPrEffectStore(pool, authority) }
+          : {}),
         receipts: stores.receipts,
-      } satisfies Parameters<typeof composeGitHubPublicationRuntime>[0];
-      if (input.prEffectsEnabled === true) {
-        runtime.prEffects = createPostgresGitHubPrEffectStore(pool, authority);
-      }
-      return composeGitHubPublicationRuntime(runtime);
+      });
     },
   };
 }

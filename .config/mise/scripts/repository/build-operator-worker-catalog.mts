@@ -72,8 +72,7 @@ await mkdir(output, { mode: 0o700 });
 await mkdir(path.join(output, "bin"), { mode: 0o700 });
 await mkdir(path.join(output, "intermediate"), { mode: 0o700 });
 const binary = (family: string) => path.join(output, "bin", `${family}-linux-x64`);
-const repositoryScriptPrefix = ".config/mise/scripts/repository/";
-const repositoryScript = (name: string) => `${repositoryScriptPrefix}${name}.mjs`;
+const repositoryScript = (name: string) => `.config/mise/scripts/repository/${name}.mjs`;
 await command(arrusted, bun, [
   repositoryScript("build-protected-generated-app-worker"),
   binary("genericInstaller"),

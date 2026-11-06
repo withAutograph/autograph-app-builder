@@ -276,7 +276,7 @@ describe("private native target terminal approval", () => {
       terminals: reader.terminalSnapshot(),
       version: 1,
     };
-    const readHistory = vi.fn((start: number) => {
+    const readHistory = vi.fn(async (start: number) => {
       expect(start).toBe(3);
       return { complete: true, nativeTailIndex: 2, nextNativeIndex: 3 };
     });
@@ -341,8 +341,9 @@ describe("private native target terminal approval", () => {
     "saves partial %s terminal proof and resumes with the original timestamp",
     async (outcome) => {
       let state: PrivateNativeTargetApprovalObservation | undefined;
-      const save = vi.fn((next: PrivateNativeTargetApprovalObservation) => {
+      const save = vi.fn(async (next: PrivateNativeTargetApprovalObservation) => {
         state = structuredClone(next);
+        return;
       });
       const base = {
         assertOwner: async () => {},
@@ -354,7 +355,7 @@ describe("private native target terminal approval", () => {
         readPrivateNativeTargetApproval({
           ...base,
           observation: { save },
-          readHistory: (_start, onEvent) => {
+          readHistory: async (_start, onEvent) => {
             onEvent(requested());
             onEvent(settled(outcome));
             return { complete: false, nativeTailIndex: 2, nextNativeIndex: 2 };
@@ -375,7 +376,7 @@ describe("private native target terminal approval", () => {
       const result = await readPrivateNativeTargetApproval({
         ...base,
         observation: { save, state },
-        readHistory: (start) => {
+        readHistory: async (start) => {
           expect(start).toBe(2);
           return { complete: true, nativeTailIndex: 1, nextNativeIndex: 2 };
         },
@@ -389,8 +390,9 @@ describe("private native target terminal approval", () => {
 
   it("does not pair an old unproved request with a new adapter settlement", async () => {
     let state: PrivateNativeTargetApprovalObservation | undefined;
-    const save = (next: PrivateNativeTargetApprovalObservation) => {
+    const save = async (next: PrivateNativeTargetApprovalObservation) => {
       state = structuredClone(next);
+      return;
     };
     await expect(
       readPrivateNativeTargetApproval({
@@ -398,7 +400,7 @@ describe("private native target terminal approval", () => {
         historyOwner,
         observation: { save },
         owner,
-        readHistory: (_start, onEvent) => {
+        readHistory: async (_start, onEvent) => {
           onEvent(requested());
           return { complete: false, nativeTailIndex: 2, nextNativeIndex: 1 };
         },
@@ -416,7 +418,7 @@ describe("private native target terminal approval", () => {
         historyOwner: replacement,
         observation: { save, state },
         owner: { ...owner, adapterGeneration: 2, adapterSessionId: replacement.adapterSessionId },
-        readHistory: (start, onEvent) => {
+        readHistory: async (start, onEvent) => {
           expect(start).toBe(0);
           onEvent(settled());
           return { complete: true, nativeTailIndex: 0, nextNativeIndex: 1 };

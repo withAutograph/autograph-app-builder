@@ -53,19 +53,14 @@ export default defineTool({
       state.reviewReceipt.digest !== candidate.originalReviewDigest ||
       candidate.review.digest !== input.expectedReviewDigest
     ) {
-      const prerequisiteDiagnostic = {
-        candidate,
-        expectedReviewDigest: input.expectedReviewDigest,
-        state,
-      };
-      if (githubSource !== undefined) {
-        Object.assign(prerequisiteDiagnostic, {
-          resolvedSourceDigest: githubSource.digest,
-        });
-      }
       throw new Error(
         draftPrerequisiteMessage(
-          draftSealPrerequisiteDiagnostic(prerequisiteDiagnostic),
+          draftSealPrerequisiteDiagnostic({
+            candidate,
+            expectedReviewDigest: input.expectedReviewDigest,
+            state,
+            ...(githubSource === undefined ? {} : { resolvedSourceDigest: githubSource.digest }),
+          }),
           "The selected app or resolved merge changed. Validate the candidate and review both current diffs before sealing.",
         ),
       );
@@ -101,12 +96,12 @@ export default defineTool({
       githubSource,
       pullRequestNumber: candidate.pullRequestNumber,
       recovery: draftInspectionRecoveryForSession({
+        ctx,
         appId: state.appSpec.appId,
         appSpecDigest: state.appSpec.digest,
-        ctx,
-        priorPublishedProposalDigest,
-        pullRequestNumber: candidate.pullRequestNumber,
         root: candidate.root,
+        pullRequestNumber: candidate.pullRequestNumber,
+        priorPublishedProposalDigest,
       }),
       review: candidate.review,
       selectedCheckoutHeadSha: candidate.headSha,
@@ -126,7 +121,7 @@ export default defineTool({
     });
     // This metadata becomes durable at the ensuing always()-approval checkpoint, before any Git write.
     // It records no approval grant; reconcile still validates its actual approved call and exact receipt.
-    const completion = {
+    retainDraftReconciliationCompletion({
       appId: state.appSpec.appId,
       appReview: {
         appSpecDigest: state.reviewReceipt.appSpecDigest,
@@ -139,14 +134,13 @@ export default defineTool({
       proposal,
       review: candidate.review,
       root: candidate.root,
-    };
-    if (candidate.publishedOrigin !== undefined) {
-      Object.assign(completion, { publishedOrigin: candidate.publishedOrigin });
-    }
-    if (candidate.publicationScope !== undefined) {
-      Object.assign(completion, { publicationScope: candidate.publicationScope });
-    }
-    retainDraftReconciliationCompletion(completion);
+      ...(candidate.publishedOrigin === undefined
+        ? {}
+        : { publishedOrigin: candidate.publishedOrigin }),
+      ...(candidate.publicationScope === undefined
+        ? {}
+        : { publicationScope: candidate.publicationScope }),
+    });
     return { ...proposal, approvalReceipt: approvalReceiptForExistingDraftUpdate(proposal) };
   },
   inputSchema: z.strictObject({ expectedReviewDigest: digest }),

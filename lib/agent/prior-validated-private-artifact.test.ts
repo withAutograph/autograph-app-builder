@@ -37,12 +37,6 @@ const sourceFile = {
   path: "apps/example/app/page.tsx",
 };
 
-const result = (observed: readonly OverlayFile[] = [sourceFile]) => ({
-  exitCode: 0,
-  stderr: "",
-  stdout: observed.map(({ mode, digest, path }) => `${mode}\t${digest}\t${path}\n`).join(""),
-});
-
 const seed = (
   approval: "denied" | "pending" | "not-requested" = "denied",
   files: readonly OverlayFile[] = [sourceFile],
@@ -149,13 +143,19 @@ const seed = (
       );
     }
   }
-  const run = vi.fn(() => result(postTree));
+  const result = (observed: readonly OverlayFile[] = postTree) => ({
+    exitCode: 0,
+    stderr: "",
+    stdout: observed.map(({ mode, digest, path }) => `${mode}\t${digest}\t${path}\n`).join(""),
+  });
+  const run = vi.fn(async () => result());
   const sandbox = { id: workspace.workspaceId, run } as unknown as SandboxSession;
   return {
     current,
     currentScope,
     input: { appId, sandbox, sessionId, state: current },
     prior,
+    result,
     run,
   };
 };
@@ -220,11 +220,11 @@ it.each([
     await own(async () => {
       const f = seed();
       const selected = await priorValidatedPrivateArtifact(f.input);
-      f.run.mockImplementationOnce(() => {
+      f.run.mockImplementationOnce(async () => {
         if (drift === "authority") {
           requestPrivateApplyApproval(f.currentScope, "new-pending");
         }
-        return result(observed);
+        return f.result(observed);
       });
       await expect(selected.verifyCurrent()).rejects.toThrow("cannot be verified");
     }),
@@ -248,11 +248,11 @@ it("accepts mode-only changes on both workspace bins and rechecks only paths and
     const f = seed("denied", [sourceFile, ...bins]);
     const retained = [readPrivateApplyAuthority(), existingAppRepairHistory.get()];
     f.run.mockResolvedValue(
-      result([sourceFile, ...bins.map((file) => ({ ...file, mode: "777" }))]),
+      f.result([sourceFile, ...bins.map((file) => ({ ...file, mode: "777" }))]),
     );
     const selected = await priorValidatedPrivateArtifact(f.input);
     f.run.mockResolvedValue(
-      result([sourceFile, ...bins.map((file) => ({ ...file, mode: "644" }))]),
+      f.result([sourceFile, ...bins.map((file) => ({ ...file, mode: "644" }))]),
     );
     await expect(selected.verifyCurrent()).resolves.toBeUndefined();
     expect(f.run).toHaveBeenCalledTimes(2);

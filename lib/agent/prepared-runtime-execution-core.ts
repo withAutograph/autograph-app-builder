@@ -366,7 +366,11 @@ export const restorePreparedRuntimeExecution = async (input: {
         );
       }
     };
-  const execution: PreparedRuntimeExecution = {
+  return {
+    browserTestEntryPath,
+    ...((input.browserTestBaseUrl ?? input.normalActors?.origin) === undefined
+      ? {}
+      : { browserTestBaseUrl: input.browserTestBaseUrl ?? input.normalActors?.origin }),
     environmentPath,
     installationProof: {
       ...proof,
@@ -411,35 +415,40 @@ export const restorePreparedRuntimeExecution = async (input: {
         ) {
           throw new Error("A saved browser command cannot be resumed with a new test selection.");
         }
-        const taskEnvironment = {
-          ...Object.fromEntries(
-            Object.entries(environment ?? {}).filter(
-              (entry): entry is [string, string] =>
-                entry[1] !== undefined && entry[0] !== "APP_RUNTIME_ALREADY_COMPILED",
-            ),
-          ),
-          APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
-          ...completedCompilationEnvironment(task, alreadyCompiled),
-        };
-        if (task === "test-e2e" && normalActors) {
-          taskEnvironment.APP_TEST_BASE_URL = normalActors.origin;
-          taskEnvironment.APP_TEST_IDENTITIES_FILE = normalActors.identitiesPath;
-        }
-        const args = ["mise", "run", "app:runtime", "run", input.appId, task];
-        if (shard !== undefined && shard !== "") {
-          args.push(shard);
-        }
-        if (browserSelection !== undefined) {
-          args.push(...browserTestSelectionArguments(browserSelection));
-        }
         const command = await resolveTaskCommand(
           { allowDispatch, commandCheckpoint, commandId },
           {
-            args,
+            args: [
+              "mise",
+              "run",
+              "app:runtime",
+              "run",
+              input.appId,
+              task,
+              ...(shard !== undefined && shard !== "" ? [shard] : []),
+              ...(browserSelection === undefined
+                ? []
+                : browserTestSelectionArguments(browserSelection)),
+            ],
             cmd: "/usr/bin/env",
             cwd: input.root,
             detached: true,
-            env: taskEnvironment,
+            env: {
+              ...Object.fromEntries(
+                Object.entries(environment ?? {}).filter(
+                  (entry): entry is [string, string] =>
+                    entry[1] !== undefined && entry[0] !== "APP_RUNTIME_ALREADY_COMPILED",
+                ),
+              ),
+              APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
+              ...completedCompilationEnvironment(task, alreadyCompiled),
+              ...(task === "test-e2e" && normalActors
+                ? {
+                    APP_TEST_BASE_URL: normalActors.origin,
+                    APP_TEST_IDENTITIES_FILE: normalActors.identitiesPath,
+                  }
+                : {}),
+            },
             signal: signal ?? input.signal,
           },
         );
@@ -492,12 +501,4 @@ export const restorePreparedRuntimeExecution = async (input: {
     ),
     stateDirectory: input.binding.stateDirectory,
   };
-  if (browserTestEntryPath !== undefined) {
-    execution.browserTestEntryPath = browserTestEntryPath;
-  }
-  const browserTestBaseUrl = input.browserTestBaseUrl ?? input.normalActors?.origin;
-  if (browserTestBaseUrl !== undefined) {
-    execution.browserTestBaseUrl = browserTestBaseUrl;
-  }
-  return execution;
 };

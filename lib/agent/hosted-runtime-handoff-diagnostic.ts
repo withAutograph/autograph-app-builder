@@ -132,36 +132,32 @@ export const reportHostedRuntimeHandoffDiagnostic = (
       case "owner_selection_read": {
         const state = referenceState.safeParse(input.referenceState);
         if (state.success) {
-          const diagnostic: Extract<
-            HostedRuntimeHandoffDiagnostic,
-            { stage: "owner_selection_read" }
-          > & { event: string } = {
-            event,
-            referenceState: state.data,
-            stage: "owner_selection_read",
-          };
-          if (input.selectionPresent !== undefined) {
-            diagnostic.selectionPresent = diagnosticBoolean.parse(input.selectionPresent);
-          }
-          console.info(JSON.stringify(diagnostic));
+          console.info(
+            JSON.stringify({
+              event,
+              referenceState: state.data,
+              stage: "owner_selection_read",
+              ...(input.selectionPresent === undefined
+                ? {}
+                : { selectionPresent: diagnosticBoolean.parse(input.selectionPresent) }),
+            }),
+          );
         }
         break;
       }
       case "native_preview_candidate": {
-        const diagnostic: Extract<
-          HostedRuntimeHandoffDiagnostic,
-          { stage: "native_preview_candidate" }
-        > & { event: string } = {
-          acceptedAppIdPresent: diagnosticBoolean.parse(input.acceptedAppIdPresent),
-          event,
-          inputAppIdPresent: diagnosticBoolean.parse(input.inputAppIdPresent),
-          lookupAttempted: diagnosticBoolean.parse(input.lookupAttempted),
-          stage: "native_preview_candidate",
-        };
-        if (input.appIdMatches !== undefined) {
-          diagnostic.appIdMatches = diagnosticBoolean.parse(input.appIdMatches);
-        }
-        console.info(JSON.stringify(diagnostic));
+        console.info(
+          JSON.stringify({
+            acceptedAppIdPresent: diagnosticBoolean.parse(input.acceptedAppIdPresent),
+            event,
+            inputAppIdPresent: diagnosticBoolean.parse(input.inputAppIdPresent),
+            lookupAttempted: diagnosticBoolean.parse(input.lookupAttempted),
+            stage: "native_preview_candidate",
+            ...(input.appIdMatches === undefined
+              ? {}
+              : { appIdMatches: diagnosticBoolean.parse(input.appIdMatches) }),
+          }),
+        );
         break;
       }
       default: {

@@ -66,32 +66,19 @@ const hooks = vi.hoisted(() => {
     },
     release: { status: "not-required" },
   };
-  const dependencies = {
-    applied: vi.fn(),
+  return {
+    sandbox: vi.fn(),
     assertApproval: vi.fn(),
     assertOwner: vi.fn<() => Promise<void>>(),
-    candidate: {
-      appId: "spend-review",
-      githubSourceDigest: digest,
-      originalReviewDigest: digest,
-      proposal,
-      publishedReconciliation: null,
-      review: reconciliationReview,
-      root: "/workspace/resolved",
-      validation: {
-        compilation,
-        resolvedTree: "tree",
-      },
-      workspaceRoot: "/workspace",
-    },
+    applied: vi.fn(),
     // SAFETY: The closed test fixture supplies only trusted completion metadata consumed by this tool.
     completions: [] as DraftReconciliationCompletion[],
     content: vi.fn(),
     inspect: vi.fn(),
-    publish: vi.fn(),
-    reconcile: vi.fn(),
     record: vi.fn(),
-    sandbox: vi.fn(),
+    publish: vi.fn(),
+    update: vi.fn(),
+    reconcile: vi.fn(),
     state: {
       appBackendKind: "static",
       appSpec: { appId: "spend-review", digest: "c".repeat(64) },
@@ -103,9 +90,21 @@ const hooks = vi.hoisted(() => {
       reviewReceipt: review,
       sourceReceipt: { sourceKind: "existing-repository" },
     },
-    update: vi.fn(),
+    candidate: {
+      appId: "spend-review",
+      githubSourceDigest: digest,
+      originalReviewDigest: digest,
+      proposal,
+      publishedReconciliation: undefined,
+      review: reconciliationReview,
+      root: "/workspace/resolved",
+      validation: {
+        compilation,
+        resolvedTree: "tree",
+      },
+      workspaceRoot: "/workspace",
+    },
   };
-  return dependencies;
 });
 
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
@@ -207,7 +206,7 @@ const completionFixture = (): DraftReconciliationCompletion => ({
 });
 
 const recoveryCompletionFixture = (): DraftReconciliationCompletion => {
-  const [completion] = hooks.completions;
+  const completion = hooks.completions[0];
   if (completion === undefined) {
     throw new Error("Expected original retained completion");
   }
@@ -229,7 +228,7 @@ describe("publication records actual source for its compiled app release", () =>
     hooks.state = structuredClone(originalState);
     hooks.completions = [completionFixture()];
     hooks.inspect.mockResolvedValue({ resolvedTree: "tree", unresolvedConflicts: [] });
-    hooks.candidate.publishedReconciliation = null;
+    hooks.candidate.publishedReconciliation = undefined;
   });
 
   for (const entry of tools) {
@@ -245,7 +244,7 @@ describe("publication records actual source for its compiled app release", () =>
         entry.publish.mockResolvedValue(publication);
         // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
-        const result = await entry.tool.execute(input, ctx);
+        const result = await entry.tool.execute(input, ctx as never);
         expect(result).toMatchObject({ ...publication, appSourceRecording: { status } });
         expect(hooks.record).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -282,7 +281,7 @@ describe("publication records actual source for its compiled app release", () =>
       hooks.record.mockRejectedValue(new Error("private artifact detail"));
       // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
-      const result = await entry.tool.execute(input, ctx);
+      const result = await entry.tool.execute(input, ctx as never);
       expect(result).toMatchObject({
         ...publication,
         appSourceRecording: { recoveryRequired: true, status: "unavailable" },
@@ -337,7 +336,7 @@ describe("publication records actual source for its compiled app release", () =>
       if (!("status" in found) || found.status !== "publication-recovery") {
         throw new Error("Expected retained recovery discovery");
       }
-      const [recovery] = found.recoveries;
+      const recovery = found.recoveries[0];
       if (recovery === undefined) {
         throw new Error("Expected original retained completion");
       }
@@ -433,8 +432,9 @@ describe("publication records actual source for its compiled app release", () =>
     expect(hooks.sandbox).not.toHaveBeenCalled();
   });
   it("returns selection-changed if the accepted specification moves during discovery", async () => {
-    hooks.assertOwner.mockImplementation(() => {
+    hooks.assertOwner.mockImplementation(async () => {
       hooks.state.appSpec.digest = "f".repeat(64);
+      return;
     });
     // SAFETY: A controlled in-flight state change simulates the existing current-owner asynchronous boundary.
     await expect(
@@ -450,7 +450,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("uses normal approved read-only reconciliation to associate a current equivalent capture without Git writes", async () => {
-    const [completion] = hooks.completions;
+    const completion = hooks.completions[0];
     hooks.applied.mockResolvedValue({
       applied: true,
       observation: { headSha: "verified-existing-head", repositoryId: "repository" },
@@ -524,7 +524,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("recovers an accepted write/readback failure after the candidate is lost, with zero further Git writes", async () => {
-    const [completion] = hooks.completions;
+    const completion = hooks.completions[0];
     hooks.reconcile.mockRejectedValueOnce(
       new Error("GitHub accepted update; readback unavailable"),
     );
@@ -549,7 +549,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("recovers an original publication after a new candidate changes without inspecting it", async () => {
-    const [original] = hooks.completions;
+    const original = hooks.completions[0];
     hooks.candidate = {
       ...hooks.candidate,
       proposal: { ...hooks.candidate.proposal, digest: "new-proposal" },

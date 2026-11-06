@@ -104,8 +104,24 @@ export const observePrivateApplyDenials = (input: {
         }
       }
     }
+    if (conflict || requests.size !== 1 || results.length !== 1) {
+      continue;
+    }
     const [requestId, requestEventId] = [...requests.entries()][0] ?? [];
     const terminal = requestId === undefined ? undefined : outcomes.get(requestId);
+    if (
+      requestId === undefined ||
+      requestEventId === undefined ||
+      results[0]?.requestId !== requestId ||
+      terminal?.size !== 1 ||
+      !terminal.has(results[0].status)
+    ) {
+      continue;
+    }
+    const settled = settlements.get(requestId);
+    if (settled !== undefined && (settled.size !== 1 || !settled.has("cancelled"))) {
+      continue;
+    }
     const resolutionEvents = [...events.values()].flatMap((event) =>
       event.type === "input.resolved" &&
       event.data.resolutions.some((item) => item.requestId === requestId)
@@ -115,34 +131,21 @@ export const observePrivateApplyDenials = (input: {
     const positions = [...events.keys()];
     const requestPosition = positions.indexOf(requestEventId);
     const resultPosition = positions.indexOf(results[0].eventId);
-    const valid =
-      !conflict &&
-      requests.size === 1 &&
-      results.length === 1 &&
-      !(
-        requestId === undefined ||
-        requestEventId === undefined ||
-        results[0]?.requestId !== requestId ||
-        terminal?.size !== 1 ||
-        !terminal.has(results[0].status)
-      ) &&
-      (() => {
-        const settled = settlements.get(requestId);
-        return settled === undefined || (settled.size === 1 && settled.has("cancelled"));
-      })() &&
-      !resolutionEvents.some(
+    if (
+      resolutionEvents.some(
         (id) => positions.indexOf(id) <= requestPosition || positions.indexOf(id) >= resultPosition,
-      );
-    if (valid) {
-      const unsigned = {
-        callId,
-        eventIds: [requestEventId, ...resolutionEvents, results[0].eventId],
-        outcome: `${results[0].status}-not-run` as const,
-        requestId,
-        sessionId: input.sessionId,
-      };
-      result.push({ ...unsigned, evidenceDigest: digest(JSON.stringify(unsigned)) });
+      )
+    ) {
+      continue;
     }
+    const unsigned = {
+      callId,
+      eventIds: [requestEventId, ...resolutionEvents, results[0].eventId],
+      outcome: `${results[0].status}-not-run` as const,
+      requestId,
+      sessionId: input.sessionId,
+    };
+    result.push({ ...unsigned, evidenceDigest: digest(JSON.stringify(unsigned)) });
   }
   return result;
 };

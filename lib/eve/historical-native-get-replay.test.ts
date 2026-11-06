@@ -281,11 +281,10 @@ describe("GET recovery of historical native approval", () => {
           };
         },
       );
-      const getSession = vi.fn(() => current);
+      const getSession = vi.fn(async () => current);
       const observeSessionPaged = vi.fn<NonNullable<HostedEveStore["observeSessionPaged"]>>(
         async (input) => {
-          const { checkpointDigest } = current;
-          expect(input.expectedCheckpointDigest).toBe(checkpointDigest);
+          expect(input.expectedCheckpointDigest).toBe(current.checkpointDigest);
           if (input.replayBinding !== undefined) {
             expect(input.replayBinding.adapterSessionId).toBe("adapter_1");
           }
@@ -295,24 +294,23 @@ describe("GET recovery of historical native approval", () => {
             eventCount += 1;
           }
           expect(eventCount).toBe(0);
-          ({ metadata } = input);
+          metadata = input.metadata;
           revision += 1;
           const next = `sha256:${revision.toString(16).padStart(64, "0")}`;
-          const nextRecord = {
+          current = durableHostedSessionRecordSchema.parse({
             ...current,
+            ...(input.verifiedReplayReceipts === undefined
+              ? {}
+              : { privateApprovalReceipts: input.verifiedReplayReceipts }),
             checkpointDigest: next,
             checkpointRef: { ...current.checkpointRef, digest: next },
             updatedAtEpochMs: input.nowEpochMs,
-          };
-          if (input.verifiedReplayReceipts !== undefined) {
-            Object.assign(nextRecord, { privateApprovalReceipts: input.verifiedReplayReceipts });
-          }
-          current = durableHostedSessionRecordSchema.parse(nextRecord);
+          });
           return current;
         },
       );
       const readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(
-        (input) => ({
+        async (input) => ({
           checkpointDigest: input.checkpointRef.digest,
           cursor: 0,
           events: [],
@@ -325,15 +323,15 @@ describe("GET recovery of historical native approval", () => {
         listSessions: base.listSessions.bind(base),
         observeSessionPaged,
         readCheckpointPage,
-        readUnsettledResponseOperations: vi.fn(() => ({
+        readUnsettledResponseOperations: vi.fn(async () => ({
           operations: [
             scenario === "unrelated"
               ? { ...operation, requestDigest: `sha256:${"9".repeat(64)}` }
               : operation,
           ],
         })),
-        reserveOperation: vi.fn(() => ({ disposition: "existing" as const, operation })),
-        settleSucceeded: vi.fn<HostedEveStore["settleSucceeded"]>((input) =>
+        reserveOperation: vi.fn(async () => ({ disposition: "existing" as const, operation })),
+        settleSucceeded: vi.fn<HostedEveStore["settleSucceeded"]>(async (input) =>
           hostedOperationRecordSchema.parse({
             ...withoutHostedOperationError(operation),
             result: input.result,

@@ -34,16 +34,10 @@ export const readContinuityApprovalWithRecovery = async (
       return result;
     } catch (error) {
       signal.throwIfAborted();
-      const retryProgressPersisted =
-        error instanceof HostedSessionReadTimeoutError && error.progressPersisted;
-      const retryProgressAdvanced =
-        error instanceof HostedOperatorError &&
-        ["operator_unavailable", "operation_in_progress"].includes(error.code) &&
-        error.recoveryProgressAdvanced === true;
-      if (retryProgressPersisted || retryProgressAdvanced) {
-        continue;
-      }
       if (error instanceof HostedSessionReadTimeoutError) {
+        if (error.progressPersisted) {
+          continue;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- Defer this failed sequential read through the workflow retry boundary.
         return await deferApprovalRead("approval_history_incomplete", "native_history");
       }
@@ -51,6 +45,9 @@ export const readContinuityApprovalWithRecovery = async (
         error instanceof HostedOperatorError &&
         ["operator_unavailable", "operation_in_progress"].includes(error.code)
       ) {
+        if (error.recoveryProgressAdvanced === true) {
+          continue;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- Defer this failed sequential read through the workflow retry boundary.
         return await deferApprovalRead(error.code, error.recoveryStage);
       }

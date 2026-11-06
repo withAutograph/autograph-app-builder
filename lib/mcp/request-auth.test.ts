@@ -126,7 +126,7 @@ describe("hosted MCP request authentication", () => {
         expirationTime: number;
         issuedAt: number;
         notBefore: number;
-        kid: null;
+        kid: undefined;
       }>,
     ]
   >([
@@ -143,7 +143,7 @@ describe("hosted MCP request authentication", () => {
     ],
     ["future issued-at", { issuedAt: 2_000_000_001 }],
     ["future not-before", { notBefore: 2_000_000_001 }],
-    ["missing key id", { kid: null }],
+    ["missing key id", { kid: undefined }],
   ])("rejects %s", async (_name, override) => {
     const { privateKey, publicKey } = await generateKeyPair("ES256");
     const jwk = { ...(await exportJWK(publicKey)), alg: "ES256", kid: "key-1" };
@@ -154,14 +154,14 @@ describe("hosted MCP request authentication", () => {
     });
     const now = 2_000_000_000;
     const omitKid = Object.hasOwn(override, "kid");
-    const protectedHeader = omitKid
-      ? { alg: "ES256" as const }
-      : { alg: "ES256" as const, kid: "key-1" };
     const signer = new SignJWT({
       scope: "autograph:session",
       workspace_id: "workspace-one",
     })
-      .setProtectedHeader(protectedHeader)
+      .setProtectedHeader({
+        alg: "ES256",
+        ...(omitKid ? {} : { kid: "key-1" }),
+      })
       .setIssuer(config.issuer)
       .setAudience(override.audience ?? config.audience)
       .setSubject("user-one")

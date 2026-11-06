@@ -21,7 +21,7 @@ const expectTheme = async (
   page: Page,
   theme: "light" | "dark",
   storedTheme?: "system" | "light" | "dark",
-) => {
+) {
   await expect(html(page)).toHaveClass(new RegExp(`(^|\\s)${theme}(\\s|$)`, "u"));
   await expect(html(page)).toHaveCSS("color-scheme", theme);
   if (storedTheme) {

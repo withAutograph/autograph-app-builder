@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/filename-case -- Preserve the registered Eve tool name and public workflow identity. */
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";

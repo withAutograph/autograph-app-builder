@@ -125,19 +125,19 @@ export const sourceReviewContextStoreForSession = async (input: {
     }
     await assertCurrentOwner();
   };
-  const store =
-    localAuthority === undefined
-      ? createPostgresOperatorArtifactStore({
-          assertCurrentOwner: assertArtifactOwner,
-          database: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
-        })
-      : await (async () => {
-          const localStorage = await createLocalOperatorArtifactStorage({
-            assertCurrentOwner: assertArtifactOwner,
-            authority: localAuthority,
-          });
-          return localStorage.store;
-        })();
+  let store;
+  if (localAuthority === undefined) {
+    store = createPostgresOperatorArtifactStore({
+      assertCurrentOwner: assertArtifactOwner,
+      database: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
+    });
+  } else {
+    const local = await createLocalOperatorArtifactStorage({
+      assertCurrentOwner: assertArtifactOwner,
+      authority: localAuthority,
+    });
+    store = local.store;
+  }
   return createApplicationReviewContextStore({
     abortSignal: input.abortSignal,
     assertCurrentOwner,

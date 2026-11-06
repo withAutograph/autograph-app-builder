@@ -33,22 +33,14 @@ export default defineTool({
         ctx.abortSignal,
       );
     } catch (error) {
-      const result = {
-        authenticatedBehavior: "unassessed",
-        code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
-        status: "blocked",
+      return {
         ...("intentId" in input ? { intentId: input.intentId } : {}),
         ...("exportId" in input ? { exportId: input.exportId } : {}),
         ...("appId" in input ? { appId: input.appId } : {}),
-      } satisfies {
-        intentId?: string;
-        exportId?: string;
-        appId?: string;
-        authenticatedBehavior: "unassessed";
-        code: string;
-        status: "blocked";
+        authenticatedBehavior: "unassessed" as const,
+        code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+        status: "blocked" as const,
       };
-      return result;
     }
   },
   inputSchema: z.union([

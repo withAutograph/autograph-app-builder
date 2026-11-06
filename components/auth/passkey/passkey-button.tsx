@@ -10,7 +10,6 @@ import {
 } from "@better-auth-ui/react/plugins/passkey";
 import { Fingerprint } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -26,7 +25,9 @@ export interface PasskeyButtonProps {
   view?: AuthView;
 }
 
-const onboardingResponseSchema = z.object({ context: z.string().optional() });
+interface OnboardingResponse {
+  context?: unknown;
+}
 
 const passkeyResponseTimeoutMs = 3000;
 
@@ -136,24 +137,21 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         }),
         preferredPasskeyAuthenticatorAttachment(),
       ]);
-      const body = onboardingResponseSchema.parse(await response.json());
+      const body = (await response.json()) as OnboardingResponse;
       if (isPasskeyOnboardingAlreadyAuthenticated(body)) {
         navigate({ replace: true, to: resolvedRedirectTo });
         return;
       }
-      if (!response.ok || body.context === undefined) {
+      if (!response.ok || typeof body.context !== "string") {
         throw new Error("Passkey registration is unavailable.");
       }
 
-      const addPasskeyOptions = {
+      const result = await addPasskey.mutateAsync({
         context: body.context,
         createSession: true,
         name: "Primary passkey",
-      };
-      if (authenticatorAttachment !== undefined && authenticatorAttachment !== null) {
-        Object.assign(addPasskeyOptions, { authenticatorAttachment });
-      }
-      const result = await addPasskey.mutateAsync(addPasskeyOptions);
+        ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
+      });
       if (isPasskeyOnboardingAlreadyAuthenticated(result)) {
         navigate({ replace: true, to: resolvedRedirectTo });
         return;
@@ -164,11 +162,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       }
       navigate({ to: resolvedRedirectTo });
     } catch (error) {
-      if (
-        authenticatedRedirectTo !== undefined &&
-        authenticatedRedirectTo !== "" &&
-        isPasskeyOnboardingAlreadyAuthenticated(error)
-      ) {
+      if (authenticatedRedirectTo && isPasskeyOnboardingAlreadyAuthenticated(error)) {
         navigate({ replace: true, to: authenticatedRedirectTo });
         return;
       }
@@ -196,13 +190,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
           failed &&
             "border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive",
         )}
-        onClick={() => {
-          if (view === "signUp") {
-            void createPasskey();
-          } else {
-            void continueWithPasskey();
-          }
-        }}
+        onClick={view === "signUp" ? createPasskey : continueWithPasskey}
       >
         {pending ? <Spinner /> : <Fingerprint />}
         {failed

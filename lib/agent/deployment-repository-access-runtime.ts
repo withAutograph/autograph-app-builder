@@ -5,7 +5,6 @@ import {
 } from "eve/connections";
 import type { ConnectionPrincipal, InteractiveAuthorizationDefinition } from "eve/connections";
 import type { SandboxSession } from "eve/sandbox";
-import { z } from "zod";
 
 import { readGitHubAppInstallationEnvironment } from "../auth/github-app-installation";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
@@ -152,22 +151,12 @@ type GitHubRepositorySourceProvider = GitHubRepositoryAccessProvider &
 function repositorySourceProvider(
   value: GitHubRepositoryAccessProvider,
 ): value is GitHubRepositorySourceProvider {
+  const candidate = value as Partial<GitHubRepositorySourceProvider>;
   return (
-    "inspectRepository" in value &&
-    typeof value.inspectRepository === "function" &&
-    "acquireRepositoryReadCredential" in value &&
-    typeof value.acquireRepositoryReadCredential === "function"
+    typeof candidate.inspectRepository === "function" &&
+    typeof candidate.acquireRepositoryReadCredential === "function"
   );
 }
-
-const GITHUB_PROVIDER_UNAVAILABLE = "provider-unavailable";
-const GITHUB_AUTHORIZATION_REQUIRED = "authorization-required";
-type SessionAuth = Parameters<typeof exactForwardedSessionAuthority>[0];
-const GITHUB_PROVIDER_UNAVAILABLE_MESSAGE = "GitHub could not confirm repository access.";
-const octokitFailureSchema = z.object({
-  response: z.object({ headers: z.record(z.string(), z.string()).optional() }).optional(),
-  status: z.number().optional(),
-});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createRepositoryAccessRuntime(input: {
@@ -196,8 +185,9 @@ export function createRepositoryAccessRuntime(input: {
     const selected = withPreparedGitHubSelection(repositoryInput, input.preparedIntent);
     const deniedInstallations = new Set<string>();
     let unavailable = false;
-    const classifyInput: Parameters<typeof classifyGitHubRepositoryAccessWithTargetProof>[0] = {
+    const result = await classifyGitHubRepositoryAccessWithTargetProof({
       authority: input.authority,
+      ...selected,
       installations: input.installations,
       async providerFactory(request) {
         let provider: GitHubRepositoryAccessProvider;
@@ -207,7 +197,23 @@ export function createRepositoryAccessRuntime(input: {
           unavailable = true;
           throw error;
         }
-        const wrappedProvider: GitHubRepositoryAccessProvider = {
+        return {
+          ...(provider.inspectTargetAccess === undefined
+            ? {}
+            : {
+                async inspectTargetAccess(
+                  value: Parameters<
+                    NonNullable<GitHubRepositoryAccessProvider["inspectTargetAccess"]>
+                  >[0],
+                ) {
+                  try {
+                    return await provider.inspectTargetAccess?.(value);
+                  } catch (error) {
+                    unavailable = true;
+                    throw error;
+                  }
+                },
+              }),
           async inspectInstallation(value) {
             try {
               return await provider.inspectInstallation(value);
@@ -215,16 +221,15 @@ export function createRepositoryAccessRuntime(input: {
               // Octokit's installation lookup preserves HTTP status. A revoked
               // installation is not an outage; rate limits and invalid app
               // credentials must not ask the user to reconnect their account.
-              // SAFETY: The Octokit error object carries optional HTTP status and response headers.
-              const parsedFailure = octokitFailureSchema.safeParse(error);
-              const status = parsedFailure.success ? parsedFailure.data.status : undefined;
-              const headers = parsedFailure.success
-                ? parsedFailure.data.response?.headers
-                : undefined;
+              const failure = error as {
+                status?: number;
+                response?: { headers?: Record<string, string> };
+              } | null;
+              const headers = failure?.response?.headers;
               const rateLimited =
                 headers?.["retry-after"] !== undefined ||
                 headers?.["x-ratelimit-remaining"] === "0";
-              if (!rateLimited && (status === 403 || status === 404)) {
+              if (!rateLimited && (failure?.status === 403 || failure?.status === 404)) {
                 deniedInstallations.add(request.installation.installationId);
               } else {
                 unavailable = true;
@@ -241,34 +246,14 @@ export function createRepositoryAccessRuntime(input: {
             }
           },
         };
-        if (provider.inspectTargetAccess !== undefined) {
-          wrappedProvider.inspectTargetAccess = async (value) => {
-            try {
-              return await provider.inspectTargetAccess?.(value);
-            } catch (error) {
-              unavailable = true;
-              throw error;
-            }
-          };
-        }
-        return wrappedProvider;
       },
-      repository: selected.repository,
-    };
-    if (selected.selectedInstallationId !== undefined && selected.selectedInstallationId !== "") {
-      classifyInput.selectedInstallationId = selected.selectedInstallationId;
-    }
-    const result = await classifyGitHubRepositoryAccessWithTargetProof(classifyInput);
-    if (
-      result.status === GITHUB_PROVIDER_UNAVAILABLE &&
-      deniedInstallations.size > 0 &&
-      !unavailable
-    ) {
+    });
+    if (result.status === "provider-unavailable" && deniedInstallations.size > 0 && !unavailable) {
       return {
         action: "update",
         repository: result.repository,
         scopes: [],
-        status: GITHUB_AUTHORIZATION_REQUIRED,
+        status: "authorization-required",
       };
     }
     return result;
@@ -344,19 +329,22 @@ export function createRepositoryAccessRuntime(input: {
           }
           const access = await classify(value);
           if (access.status !== "ready") {
-            throw failed("repository_access_missing", GITHUB_PROVIDER_UNAVAILABLE_MESSAGE, true);
+            throw failed(
+              "repository_access_missing",
+              `GitHub is connected, but ${value.repository} is not included.`,
+              true,
+            );
           }
-          const consumeInput: Parameters<typeof input.continuations.consume>[0] = {
+          const continuation = await input.continuations.consume({
             authority: input.authority,
             continuationId: resume?.continuationId ?? "",
             repository: value.repository,
             requestId: value.requestId,
             sessionId: value.sessionId,
-          };
-          if (value.selectedInstallationId !== undefined && value.selectedInstallationId !== "") {
-            consumeInput.selectedInstallationId = value.selectedInstallationId;
-          }
-          const continuation = await input.continuations.consume(consumeInput);
+            ...(value.selectedInstallationId
+              ? { selectedInstallationId: value.selectedInstallationId }
+              : {}),
+          });
           if (!continuation) {
             throw failed(
               "continuation_invalid",
@@ -372,7 +360,7 @@ export function createRepositoryAccessRuntime(input: {
           if (access.status === "ready") {
             return { token: access.accessDigest };
           }
-          if (access.status === GITHUB_PROVIDER_UNAVAILABLE) {
+          if (access.status === "provider-unavailable") {
             throw failed(
               "provider_unavailable",
               "GitHub could not confirm access to this repository.",
@@ -396,20 +384,23 @@ export function createRepositoryAccessRuntime(input: {
               "Choose which connected GitHub account Autograph should use.",
             );
           }
-          if (access.status === GITHUB_PROVIDER_UNAVAILABLE) {
-            throw failed("provider_unavailable", GITHUB_PROVIDER_UNAVAILABLE_MESSAGE, true);
+          if (access.status === "provider-unavailable") {
+            throw failed(
+              "provider_unavailable",
+              "GitHub could not confirm repository access.",
+              true,
+            );
           }
-          const createInput: Parameters<typeof input.continuations.create>[0] = {
+          const continuation = await input.continuations.create({
             authority: input.authority,
-            callbackUrl,
             repository: value.repository,
             requestId: value.requestId,
             sessionId: value.sessionId,
-          };
-          if (value.selectedInstallationId !== undefined && value.selectedInstallationId !== "") {
-            createInput.selectedInstallationId = value.selectedInstallationId;
-          }
-          const continuation = await input.continuations.create(createInput);
+            ...(value.selectedInstallationId
+              ? { selectedInstallationId: value.selectedInstallationId }
+              : {}),
+            callbackUrl,
+          });
           const authorizeUrl = new URL("/github/installations", input.origin);
           authorizeUrl.searchParams.set("returnTo", input.returnTo ?? "/");
           authorizeUrl.searchParams.set("resume", continuation.continuationId);
@@ -514,17 +505,15 @@ export function createRepositoryAccessRuntime(input: {
       const sandboxSource = {
         token: credential.token,
         url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-      } satisfies { token: string; url: string; revision?: string };
-      if (cloneRevision !== undefined) {
-        Object.assign(sandboxSource, { revision: cloneRevision });
-      }
+        ...(cloneRevision === undefined ? {} : { revision: cloneRevision }),
+      };
       configureVercelSessionGitSource({
         sessionId: value.sessionId,
         source: sandboxSource,
       });
       // Source intent may arrive after eager execution-lease acquisition created
       // the VM. Recover that same VM only when no existing checkout is present.
-      const sandbox = "run" in value.sandbox ? value.sandbox : await value.sandbox();
+      const sandbox = typeof value.sandbox === "function" ? await value.sandbox() : value.sandbox;
       const snapshot = await readSandboxGitHubSourceSnapshot(
         sandbox,
         {
@@ -603,45 +592,47 @@ export function createRepositoryAccessRuntime(input: {
         sourceTree: sourceReceipt.sourceTree,
         workspaceDigest: cloned.workspaceDigest,
       });
-      const result = {
+      return {
         accessReceipt,
+        ...(appBaseline === undefined ? {} : { appBaseline }),
         githubSource,
         sourceReceipt,
         workspace,
       };
-      if (appBaseline !== undefined) return { ...result, appBaseline };
-      return result;
     },
     async resumeAuthorizedForSession(value) {
       const candidates = await input.continuations.authorizedForSession({
         authority: input.authority,
         sessionId: value.sessionId,
       });
-      const results = await Promise.all(
-        candidates.map(async (candidate) => {
-          const classifyInput: Parameters<typeof classify>[0] = {
-            repository: candidate.record.repository.fullName,
-          };
-          if (
-            candidate.record.selectedInstallationId !== undefined &&
-            candidate.record.selectedInstallationId !== ""
-          ) {
-            classifyInput.selectedInstallationId = candidate.record.selectedInstallationId;
-          }
-          const access = await classify(classifyInput);
-          if (access.status !== "ready") return false;
-          const callback = new URL(candidate.callbackUrl);
-          callback.searchParams.set("provider", "github");
-          callback.searchParams.set("status", "connected");
-          const response = await (value.fetchImplementation ?? fetch)(callback, {
-            headers: { Accept: "application/json" },
-            method: "GET",
-            redirect: "manual",
-          });
-          return response.status >= 200 && response.status < 400;
-        }),
-      );
-      return results.filter(Boolean).length;
+      let resumed = 0;
+      for (const candidate of candidates) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const access = await classify({
+          repository: candidate.record.repository.fullName,
+          ...(candidate.record.selectedInstallationId
+            ? {
+                selectedInstallationId: candidate.record.selectedInstallationId,
+              }
+            : {}),
+        });
+        if (access.status !== "ready") {
+          continue;
+        }
+        const callback = new URL(candidate.callbackUrl);
+        callback.searchParams.set("provider", "github");
+        callback.searchParams.set("status", "connected");
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const response = await (value.fetchImplementation ?? fetch)(callback, {
+          headers: { Accept: "application/json" },
+          method: "GET",
+          redirect: "manual",
+        });
+        if (response.status >= 200 && response.status < 400) {
+          resumed += 1;
+        }
+      }
+      return resumed;
     },
   };
 }
@@ -656,9 +647,7 @@ let runtimeInput:
   | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function repositoryAccessRuntimeForSession(
-  sessionAuth: Parameters<typeof exactForwardedSessionAuthority>[0],
-) {
+export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
   const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
   const { readPreparedHandoffContext } = await import("./handoff-context");
   const preparedIntent = await readPreparedHandoffContext(sessionAuth);
@@ -666,25 +655,34 @@ export async function repositoryAccessRuntimeForSession(
     const environment = providerEmulationEnvironment(process.env);
     const installation = readGitHubAppInstallationEnvironment(environment);
     const emulation = readProviderEmulation(environment);
-    const nextRuntimeInput: NonNullable<typeof runtimeInput> = {
+    runtimeInput = {
       credentials: parseGitHubAppHttpProviderCredentials({
         appId: installation.appId,
         privateKey: environment.GITHUB_APP_PRIVATE_KEY,
       }),
       database: openHostedPostgresDatabase(environment.DATABASE_URL ?? ""),
       origin: new URL(installation.issuer).origin,
+      ...(emulation
+        ? {
+            providerFetch: async (resource, init) => {
+              let resourceUrl: string;
+              if (typeof resource === "string") {
+                resourceUrl = resource;
+              } else if (resource instanceof URL) {
+                resourceUrl = resource.href;
+              } else {
+                resourceUrl = resource.url;
+              }
+              const url = new URL(resourceUrl);
+              return await providerEmulationFetch(
+                `${emulation.githubOrigin}${url.pathname}${url.search}`,
+                init,
+                emulation,
+              );
+            },
+          }
+        : {}),
     };
-    if (emulation !== undefined) {
-      nextRuntimeInput.providerFetch = async (resource: RequestInfo | URL, init?: RequestInit) => {
-        const url = resource instanceof Request ? new URL(resource.url) : new URL(resource);
-        return await providerEmulationFetch(
-          `${emulation.githubOrigin}${url.pathname}${url.search}`,
-          init,
-          emulation,
-        );
-      };
-    }
-    runtimeInput = nextRuntimeInput;
   }
   const input = runtimeInput;
   const membership = createPostgresWorkspaceMembership(input.database);
@@ -699,26 +697,22 @@ export async function repositoryAccessRuntimeForSession(
     );
   }
   const installations = createPostgresHostedGitHubInstallationStore(input.database);
-  const continuationOptions: Parameters<typeof createRepositoryAccessContinuationService>[0] = {
-    store: createPostgresRepositoryAccessContinuationStore(runtimeInput.database),
-  };
-  const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-  if (
-    process.env.VERCEL_ENV === "production" &&
-    productionUrl !== undefined &&
-    productionUrl !== ""
-  ) {
-    continuationOptions.callbackOrigin = `https://${productionUrl}`;
-  }
-  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
-  if (bypassSecret !== undefined && bypassSecret !== "") {
-    continuationOptions.protectionBypassSecret = bypassSecret;
-  }
-  const runtimeOptions: Parameters<typeof createRepositoryAccessRuntime>[0] = {
+  return createRepositoryAccessRuntime({
     authority,
-    continuations: createRepositoryAccessContinuationService(continuationOptions),
+    continuations: createRepositoryAccessContinuationService({
+      ...(process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? { callbackOrigin: `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` }
+        : {}),
+      ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+        ? { protectionBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim() }
+        : {}),
+      store: createPostgresRepositoryAccessContinuationStore(runtimeInput.database),
+    }),
     installations,
     origin: input.origin,
+    ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+      ? { protectionBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim() }
+      : {}),
     preparedIntent,
     providerFactory: ({ installation }) =>
       createGitHubAppHttpProvider({
@@ -728,29 +722,20 @@ export async function repositoryAccessRuntimeForSession(
         },
         fetch: input.providerFetch,
       }),
-  };
-  if (bypassSecret !== undefined && bypassSecret !== "") {
-    runtimeOptions.protectionBypassSecret = bypassSecret;
-  }
-  const returnTo =
-    preparedIntent === undefined ? undefined : preparedHandoffReturnPath(sessionAuth);
-  if (returnTo !== undefined && returnTo !== "") runtimeOptions.returnTo = returnTo;
-  return createRepositoryAccessRuntime(runtimeOptions);
+    returnTo: preparedIntent ? preparedHandoffReturnPath(sessionAuth) : undefined,
+  });
 }
 
 /** Internal Check-access seam for the hosted session service. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function resumeAuthorizedRepositoryAccessForSession(input: {
-  sessionAuth: SessionAuth;
+  sessionAuth: unknown;
   sessionId: string;
   fetchImplementation?: typeof fetch;
 }) {
   const runtime = await repositoryAccessRuntimeForSession(input.sessionAuth);
-  const resumeInput: Parameters<typeof runtime.resumeAuthorizedForSession>[0] = {
+  return await runtime.resumeAuthorizedForSession({
     sessionId: input.sessionId,
-  };
-  if (input.fetchImplementation !== undefined) {
-    resumeInput.fetchImplementation = input.fetchImplementation;
-  }
-  return await runtime.resumeAuthorizedForSession(resumeInput);
+    ...(input.fetchImplementation ? { fetchImplementation: input.fetchImplementation } : {}),
+  });
 }

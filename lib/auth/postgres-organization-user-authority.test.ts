@@ -20,28 +20,23 @@ const organization = {
   workspace_id: "workspace_one",
 };
 
-type DatabaseFixture = Parameters<typeof createPostgresPreviewOrganizationAuthority>[0];
-type QueryRow = Record<string, string | boolean | undefined>;
-type QueryResult = readonly QueryRow[];
-interface FixtureTransaction {
-  execute: () => Promise<QueryResult>;
-}
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function createDatabase(results: QueryResult[]) {
+function createDatabase(results: unknown[]) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  const execute = vi.fn(async (): Promise<QueryResult> => {
+  const execute = vi.fn(async () => {
     if (results.length === 0) {
       throw new Error("Unexpected database query.");
     }
     return results.shift();
   });
-  const transaction = vi.fn(async <T>(operation: (database: FixtureTransaction) => Promise<T>) => {
-    const operationResult = await operation({ execute });
-    return operationResult;
-  });
+  // Drizzle's transaction fixture intentionally models its callback API.
+  // oxlint-disable-next-line promise/prefer-await-to-callbacks, eslint/require-await -- preserve callback and Promise-returning test contract
+  const transaction = vi.fn(async (callback: (database: { execute: typeof execute }) => unknown) =>
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks
+    callback({ execute }),
+  );
   return {
-    database: { execute, transaction } satisfies DatabaseFixture,
+    database: { execute, transaction } as never,
     execute,
     transaction,
   };

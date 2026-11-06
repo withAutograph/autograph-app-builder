@@ -75,12 +75,13 @@ const databaseUrlSchema = (endpointKind: "pooled" | "direct") =>
 
 const hostedDatabaseUrlSchema = databaseUrlSchema("pooled");
 const migrationDatabaseUrlSchema = databaseUrlSchema("direct");
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parseHostedDatabaseUrl(input: string): string {
-  return hostedDatabaseUrlSchema.parse(input);
+export function parseHostedDatabaseUrl(value: unknown): string {
+  return hostedDatabaseUrlSchema.parse(value);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parseMigrationDatabaseUrl(input: string): string {
-  return migrationDatabaseUrlSchema.parse(input);
+export function parseMigrationDatabaseUrl(value: unknown): string {
+  return migrationDatabaseUrlSchema.parse(value);
 }

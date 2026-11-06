@@ -8,50 +8,45 @@ import type { RepositoryReference } from "./repository-access";
 
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 const VERCEL_PROTECTION_BYPASS_QUERY = "x-vercel-protection-bypass";
-const continuationIdSchema = z.uuid();
+const continuationIdSchema = z.string().uuid();
 const opaqueRuntimeId = z.string().min(1).max(255);
 
-const continuationIdentitySchema = z.object({
-  authority: hostedTenantAuthoritySchema,
-  continuationDigest: z.string(),
-  now: z.date(),
-});
-
-const isAny = (values: boolean[]) => values.some(Boolean);
-const isEvery = (values: boolean[]) => values.every(Boolean);
-const absentAuthorization = (): string | undefined => undefined;
-const absentInspection = ():
-  | { repository: RepositoryReference; selectedInstallationId?: string }
-  | undefined => undefined;
-
-export const repositoryAccessContinuationSchema = z.object({
-  authority: hostedTenantAuthoritySchema,
-  authorizedAt: z.date().optional(),
-  callbackUrl: z.url().max(4096),
-  consumedAt: z.date().optional(),
-  continuationDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-  createdAt: z.date(),
-  expiresAt: z.date(),
-  repository: z.object({
-    fullName: z.string().min(3).max(201),
-    name: z.string().min(1).max(100),
-    owner: z.string().min(1).max(100),
-  }),
-  requestId: opaqueRuntimeId,
-  selectedInstallationId: decimal.optional(),
-  sessionId: opaqueRuntimeId,
-});
+export const repositoryAccessContinuationSchema = z
+  .object({
+    authority: hostedTenantAuthoritySchema,
+    authorizedAt: z.date().optional(),
+    callbackUrl: z.string().url().max(4096),
+    consumedAt: z.date().optional(),
+    continuationDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    createdAt: z.date(),
+    expiresAt: z.date(),
+    repository: z
+      .object({
+        fullName: z.string().min(3).max(201),
+        name: z.string().min(1).max(100),
+        owner: z.string().min(1).max(100),
+      })
+      .strict(),
+    requestId: opaqueRuntimeId,
+    selectedInstallationId: decimal.optional(),
+    sessionId: opaqueRuntimeId,
+  })
+  .strict();
 
 export type RepositoryAccessContinuation = z.infer<typeof repositoryAccessContinuationSchema>;
 
 export interface RepositoryAccessContinuationStore {
   create: (record: RepositoryAccessContinuation) => Promise<void>;
-  inspect: (
-    input: z.infer<typeof continuationIdentitySchema>,
-  ) => Promise<RepositoryAccessContinuation | undefined>;
-  authorize: (
-    input: z.infer<typeof continuationIdentitySchema>,
-  ) => Promise<RepositoryAccessContinuation | undefined>;
+  inspect: (input: {
+    continuationDigest: string;
+    authority: z.infer<typeof hostedTenantAuthoritySchema>;
+    now: Date;
+  }) => Promise<RepositoryAccessContinuation | undefined>;
+  authorize: (input: {
+    continuationDigest: string;
+    authority: z.infer<typeof hostedTenantAuthoritySchema>;
+    now: Date;
+  }) => Promise<RepositoryAccessContinuation | undefined>;
   consume: (input: {
     continuationDigest: string;
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
@@ -81,28 +76,25 @@ function exactEveAuthorizationCallback(input: {
   const callback = new URL(input.callbackUrl);
   const issuer = new URL(input.issuer);
   const loopback = new Set(["127.0.0.1", "localhost", "[::1]"]);
-  const allowedOrigin = isAny([
-    callback.origin === issuer.origin,
-    input.callbackOrigin !== undefined && callback.origin === input.callbackOrigin,
-    callback.protocol === "http:" && loopback.has(callback.hostname),
-  ]);
+  const allowedOrigin =
+    callback.origin === issuer.origin ||
+    callback.origin === input.callbackOrigin ||
+    (callback.protocol === "http:" && loopback.has(callback.hostname));
   const bypass = callback.searchParams.getAll(VERCEL_PROTECTION_BYPASS_QUERY);
   const allowedQuery =
     callback.search === "" ||
-    isEvery([
-      input.protectionBypassSecret !== undefined,
-      bypass.length === 1,
-      bypass[0] === input.protectionBypassSecret,
-      [...callback.searchParams.keys()].length === 1,
-    ]);
-  const invalidCallback = isAny([
-    callback.username !== "",
-    callback.password !== "",
-    callback.hash !== "",
-    !allowedQuery,
-    !/^\/eve\/v1\/connections\/[^/]+\/callback\/[^/]+\/[^/]+$/u.test(callback.pathname),
-  ]);
-  if (!allowedOrigin || invalidCallback) {
+    (input.protectionBypassSecret !== undefined &&
+      bypass.length === 1 &&
+      bypass[0] === input.protectionBypassSecret &&
+      [...callback.searchParams.keys()].length === 1);
+  if (
+    !allowedOrigin ||
+    callback.username ||
+    callback.password ||
+    callback.hash ||
+    !allowedQuery ||
+    !/^\/eve\/v1\/connections\/[^/]+\/callback\/[^/]+\/[^/]+$/u.test(callback.pathname)
+  ) {
     throw new Error("repository-access-callback-invalid");
   }
   return callback;
@@ -136,10 +128,10 @@ export function createRepositoryAccessContinuationService(input: {
         now: now(),
       });
       if (!record) {
-        return absentAuthorization();
+        return;
       }
       const callback = new URL(record.callbackUrl);
-      if (input.protectionBypassSecret !== undefined && input.protectionBypassSecret !== "") {
+      if (input.protectionBypassSecret) {
         callback.searchParams.set(VERCEL_PROTECTION_BYPASS_QUERY, input.protectionBypassSecret);
       }
       callback.searchParams.set("provider", "github");
@@ -164,7 +156,7 @@ export function createRepositoryAccessContinuationService(input: {
           issuer: authority.issuer,
           protectionBypassSecret: input.protectionBypassSecret,
         });
-        if (input.protectionBypassSecret !== undefined && input.protectionBypassSecret !== "") {
+        if (input.protectionBypassSecret) {
           callback.searchParams.set(VERCEL_PROTECTION_BYPASS_QUERY, input.protectionBypassSecret);
         }
         return {
@@ -184,18 +176,19 @@ export function createRepositoryAccessContinuationService(input: {
       selectedInstallationId?: string;
     }) {
       const continuationId = continuationIdSchema.parse(value.continuationId);
-      const consumeInput: Parameters<RepositoryAccessContinuationStore["consume"]>[0] = {
+      return await input.store.consume({
         authority: hostedTenantAuthoritySchema.parse(value.authority),
         continuationDigest: continuationDigest(continuationId),
         now: now(),
         repository: parseRepositoryReference(value.repository),
         requestId: opaqueRuntimeId.parse(value.requestId),
+        ...(value.selectedInstallationId
+          ? {
+              selectedInstallationId: decimal.parse(value.selectedInstallationId),
+            }
+          : {}),
         sessionId: opaqueRuntimeId.parse(value.sessionId),
-      };
-      if (value.selectedInstallationId !== undefined && value.selectedInstallationId !== "") {
-        consumeInput.selectedInstallationId = decimal.parse(value.selectedInstallationId);
-      }
-      return await input.store.consume(consumeInput);
+      });
     },
 
     async create(value: {
@@ -218,7 +211,7 @@ export function createRepositoryAccessContinuationService(input: {
       const continuationId = continuationIdSchema.parse(createId());
       const createdAt = now();
       const expiresAt = new Date(createdAt.getTime() + lifetimeMs);
-      const recordInput = {
+      const record = repositoryAccessContinuationSchema.parse({
         authority,
         callbackUrl: callback.toString(),
         continuationDigest: continuationDigest(continuationId),
@@ -226,12 +219,13 @@ export function createRepositoryAccessContinuationService(input: {
         expiresAt,
         repository,
         requestId: value.requestId,
+        ...(value.selectedInstallationId
+          ? {
+              selectedInstallationId: decimal.parse(value.selectedInstallationId),
+            }
+          : {}),
         sessionId: value.sessionId,
-      };
-      if (value.selectedInstallationId !== undefined && value.selectedInstallationId !== "") {
-        recordInput.selectedInstallationId = decimal.parse(value.selectedInstallationId);
-      }
-      const record = repositoryAccessContinuationSchema.parse(recordInput);
+      });
       await input.store.create(record);
       return { continuationId, expiresAt };
     },
@@ -247,15 +241,14 @@ export function createRepositoryAccessContinuationService(input: {
         now: now(),
       });
       if (!record) {
-        return absentInspection();
+        return;
       }
-      const result = {
+      return {
         repository: record.repository,
+        ...(record.selectedInstallationId
+          ? { selectedInstallationId: record.selectedInstallationId }
+          : {}),
       };
-      if (record.selectedInstallationId !== undefined && record.selectedInstallationId !== "") {
-        return { ...result, selectedInstallationId: record.selectedInstallationId };
-      }
-      return result;
     },
   };
 }

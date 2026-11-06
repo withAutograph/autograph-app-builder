@@ -13,7 +13,8 @@ export interface ProviderChoice<Provider extends string> {
   provider: Provider;
 }
 
-const providerChoiceSection = <Provider extends string>({
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function ProviderChoiceSection<Provider extends string>({
   bare = false,
   children,
   className,
@@ -41,7 +42,7 @@ const providerChoiceSection = <Provider extends string>({
   section: CreateAppSectionId;
   title: string;
   unavailableClassName?: string;
-}) => {
+}) {
   const controls = (
     <>
       <div className={gridClassName} role="group" aria-label={label}>
@@ -77,6 +78,4 @@ const providerChoiceSection = <Provider extends string>({
       {controls}
     </SectionShell>
   );
-};
-
-export { providerChoiceSection as ProviderChoiceSection };
+}

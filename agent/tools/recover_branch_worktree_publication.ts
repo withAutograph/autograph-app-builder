@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/filename-case, github/filenames-match-regex -- Preserve the registered Eve tool name and public workflow identity. */
 import { always } from "eve/tools/approval";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
@@ -40,14 +39,12 @@ export default defineTool({
     const result = await recoverBranchWorktreePublication({
       expectedJournalDigest,
       proposal: expectedProposal,
-      readOverlayFile: async (path) => {
-        const sandbox = await ctx.getSandbox();
-        return await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` });
-      },
-      readOverlayFileStream: async (path) => {
-        const sandbox = await ctx.getSandbox();
-        return await sandbox.readFile({ path: `${relativeRoot}/${path}` });
-      },
+      readOverlayFile: async (path) =>
+        ctx
+          .getSandbox()
+          .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
+      readOverlayFileStream: async (path) =>
+        ctx.getSandbox().then((sandbox) => sandbox.readFile({ path: `${relativeRoot}/${path}` })),
       recoveredByCallId: ctx.callId,
       review: workflow.reviewReceipt,
       sourceReceipt: workflow.sourceReceipt,

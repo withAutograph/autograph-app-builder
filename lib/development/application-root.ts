@@ -10,9 +10,6 @@ import {
 } from "./application-dependencies";
 import { runSequentially } from "../async-sequential";
 
-const isErrnoException = (error: unknown): error is NodeJS.ErrnoException =>
-  error instanceof Error && "code" in error;
-
 /**
  * A development snapshot records an immutable baseline commit/tree/fingerprint
  * but intentionally has a mutable filesystem.  `eve-application` is the
@@ -34,15 +31,13 @@ async function makeDevelopmentWorkAreaWritable(
   }
   if (info.isDirectory()) {
     await chmod(path, 0o700);
-    const entries = await readdir(path);
-    await Promise.all(
-      entries.map(async (entry) => {
-        if (preserveRuntime && (entry === ".eve" || entry === "node_modules")) {
-          return;
-        }
-        await makeDevelopmentWorkAreaWritable(nodePath.join(path, entry), preserveRuntime);
-      }),
-    );
+    for (const entry of await readdir(path)) {
+      if (preserveRuntime && (entry === ".eve" || entry === "node_modules")) {
+        continue;
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      await makeDevelopmentWorkAreaWritable(nodePath.join(path, entry), preserveRuntime);
+    }
     return;
   }
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -75,7 +70,7 @@ export async function createDevelopmentApplication(input: {
       await lstat(nodePath.join(application.root, ".eve"));
       throw new Error("A development Eve application inherited stale state.");
     } catch (error) {
-      if (!isErrnoException(error) || error.code !== "ENOENT") {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
     }
@@ -154,7 +149,7 @@ export async function refreshDevelopmentApplication(input: {
       await lstat(nodePath.join(snapshot.root, ".eve"));
       throw new Error("A live development checkout cannot supply Eve state.");
     } catch (error) {
-      if (!isErrnoException(error) || error.code !== "ENOENT") {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
     }

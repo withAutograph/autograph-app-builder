@@ -4,7 +4,7 @@ import { readProviderEmulation } from "@/lib/integrations/local-provider-emulati
 import { completeAuthorization } from "../completion";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function get(
+export async function GET(
   _request: Request,
   context: { params: Promise<{ provider: string; approval: string }> },
 ) {
@@ -18,10 +18,7 @@ async function get(
     if (verified.provider !== provider || verified.origin !== emulation.canonicalOrigin) {
       throw new Error("Invalid approval binding.");
     }
-    return await completeAuthorization(
-      { params: Promise.resolve({ provider }) },
-      verified.authorization,
-    );
+    return completeAuthorization({ params: Promise.resolve({ provider }) }, verified.authorization);
   } catch (error) {
     console.error(
       JSON.stringify({
@@ -36,5 +33,3 @@ async function get(
     });
   }
 }
-
-export { get as GET };

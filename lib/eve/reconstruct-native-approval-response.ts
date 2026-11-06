@@ -15,12 +15,6 @@ import {
 } from "./resource-approval-response";
 import type { PrivateInputState } from "./session-limit-input";
 
-const PREPARE_APP_NATIVE_TARGET = "prepare-app-native-target";
-const TOOL_APPROVAL = "tool-approval";
-const APPROVED = "approved";
-const DENIED = "denied";
-const CANCELLED = "cancelled";
-
 /**
  * Reconstruct one unknown response only from fully settled owner-bound native batches.
  * The exact request digest is the final authority; no subsets or response dispatches
@@ -60,7 +54,7 @@ export const reconstructNativeApprovalResponse = (input: {
   }
   const receipts = persisted.flatMap((receipt) => (receipt.success ? [receipt.data] : []));
   const isTarget = (receipt: PrivateResourceApprovalReceipt) => {
-    if (receipt.toolName !== PREPARE_APP_NATIVE_TARGET) {
+    if (receipt.toolName !== "prepare-app-native-target") {
       return false;
     }
     return [
@@ -76,23 +70,21 @@ export const reconstructNativeApprovalResponse = (input: {
   // Any still-pending native request without a clearly different target is ambiguous.
   for (const batch of input.state.pending) {
     for (const request of batch.requests) {
-      const isNativeApproval =
-        request.kind === TOOL_APPROVAL && request.toolName === PREPARE_APP_NATIVE_TARGET;
-      if (isNativeApproval) {
-        const pending = capture.pendingRequests.filter(
-          (entry) => entry.requestId === request.requestId,
-        );
-        const [pendingRequest] = pending;
-        if (pending.length !== 1 || pendingRequest?.toolName !== PREPARE_APP_NATIVE_TARGET) {
-          return undefined;
-        }
-        if (
-          pendingRequest.toolInput.appId === input.target.appId &&
-          pendingRequest.toolInput.operationRef === input.target.operationRef &&
-          pendingRequest.toolInput.planDigest === input.target.planDigest
-        ) {
-          return undefined;
-        }
+      if (request.kind !== "tool-approval" || request.toolName !== "prepare-app-native-target") {
+        continue;
+      }
+      const pending = capture.pendingRequests.filter(
+        (entry) => entry.requestId === request.requestId,
+      );
+      if (pending.length !== 1 || pending[0]?.toolName !== "prepare-app-native-target") {
+        return undefined;
+      }
+      if (
+        pending[0].toolInput.appId === input.target.appId &&
+        pending[0].toolInput.operationRef === input.target.operationRef &&
+        pending[0].toolInput.planDigest === input.target.planDigest
+      ) {
+        return undefined;
       }
     }
   }
@@ -100,25 +92,28 @@ export const reconstructNativeApprovalResponse = (input: {
   const selected: typeof input.state.resolved = [];
   for (const resolved of input.state.resolved) {
     const native = resolved.batch.requests.filter(
-      (request) => request.kind === TOOL_APPROVAL && request.toolName === PREPARE_APP_NATIVE_TARGET,
+      (request) =>
+        request.kind === "tool-approval" && request.toolName === "prepare-app-native-target",
     );
-    if (native.length > 0) {
-      const captured = native.map((request) =>
-        capture.receipts.filter((receipt) => receipt.requestId === request.requestId),
-      );
-      if (captured.some((matches) => matches.length !== 1)) {
-        return undefined;
-      }
-      const targetCount = captured.filter(
-        (matches) => matches[0] !== undefined && isTarget(matches[0]),
-      ).length;
-      if (targetCount > 0) {
-        if (targetCount !== resolved.batch.requests.length) {
-          return undefined;
-        }
-        selected.push(resolved);
-      }
+    if (native.length === 0) {
+      continue;
     }
+    const captured = native.map((request) =>
+      capture.receipts.filter((receipt) => receipt.requestId === request.requestId),
+    );
+    if (captured.some((matches) => matches.length !== 1)) {
+      return undefined;
+    }
+    const targetCount = captured.filter(
+      (matches) => matches[0] !== undefined && isTarget(matches[0]),
+    ).length;
+    if (targetCount === 0) {
+      continue;
+    }
+    if (targetCount !== resolved.batch.requests.length) {
+      return undefined;
+    }
+    selected.push(resolved);
   }
   if (selected.length === 0) {
     return undefined;
@@ -127,12 +122,9 @@ export const reconstructNativeApprovalResponse = (input: {
     (a, b) => a.batch.sequence - b.batch.sequence || a.batch.stepIndex - b.batch.stepIndex,
   );
   for (let index = 1; index < ordered.length; index += 1) {
-    const prior = ordered[index - 1];
+    const previous = ordered[index - 1]?.batch;
     const current = ordered[index]?.batch;
-    if (
-      prior?.batch.sequence === current?.sequence &&
-      prior?.batch.stepIndex === current?.stepIndex
-    ) {
+    if (previous?.sequence === current?.sequence && previous?.stepIndex === current?.stepIndex) {
       return undefined;
     }
   }
@@ -150,7 +142,7 @@ export const reconstructNativeApprovalResponse = (input: {
       const resolution = item.resolutions.filter((entry) => entry.requestId === request.requestId);
       const matched = capture.receipts.filter((entry) => entry.requestId === request.requestId);
       const saved = receipts.filter((entry) => entry.requestId === request.requestId);
-      const [terminal] = matched;
+      const terminal = matched[0];
       if (terminal === undefined || resolution[0] === undefined) {
         return undefined;
       }
@@ -161,16 +153,16 @@ export const reconstructNativeApprovalResponse = (input: {
         isTarget(terminal),
         isDeepStrictEqual(terminal, saved[0]),
         terminal.responderPrincipalId === input.ownerUserId,
-        resolution[0].kind === TOOL_APPROVAL,
-        [APPROVED, DENIED].includes(resolution[0].outcome),
-        terminal.outcome === (resolution[0].outcome === APPROVED ? APPROVED : CANCELLED),
+        resolution[0].kind === "tool-approval",
+        ["approved", "denied"].includes(resolution[0].outcome),
+        terminal.outcome === (resolution[0].outcome === "approved" ? "approved" : "cancelled"),
       ];
       if (!matches.every(Boolean)) {
         return undefined;
       }
       responses.push({
         requestId: request.requestId,
-        response: { kind: terminal.outcome === APPROVED ? "approve" : "deny" },
+        response: { kind: terminal.outcome === "approved" ? "approve" : "deny" },
       });
     }
   }

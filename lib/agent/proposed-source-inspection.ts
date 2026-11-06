@@ -132,17 +132,15 @@ const appendProposalPathListing = (output: Output, paths: Set<string>, pathIndex
   while (index < available.length) {
     const path = available[index];
     if (path === undefined) {
-      index = available.length;
-    } else {
-      output.availablePaths.push(path);
-      output.nextPathIndex = index + 1;
-      if (fits()) {
-        index += 1;
-      } else {
-        output.availablePaths.pop();
-        break;
-      }
+      break;
     }
+    output.availablePaths.push(path);
+    output.nextPathIndex = index + 1;
+    if (!fits()) {
+      output.availablePaths.pop();
+      break;
+    }
+    index += 1;
   }
   if (index < available.length && output.availablePaths.length === 0) {
     throw new Error("The proposal path cannot fit within the source inspection envelope.");
@@ -162,76 +160,6 @@ const requestedProposalPath = (requested: string, prefix: string) => {
   }
   return requested.startsWith(prefix) ? requested : `${prefix}${requested}`;
 };
-const appendProposalFile = (
-  output: Output,
-  change: Changes[number],
-  path: string,
-  input: ProposedSourceInspectionInput,
-) => {
-  if (change.after === undefined) {
-    if (input.expectedDigest !== undefined || (input.offsetBytes ?? 0) > 0) {
-      throw denied();
-    }
-    output.files.push({
-      beforeDigest: change.before?.digest,
-      mode: change.before?.mode,
-      operation: "delete",
-      path,
-    });
-    return false;
-  }
-  const { content, digest: fileDigest, mode } = change.after;
-  if (
-    input.contentPath !== undefined &&
-    input.expectedDigest !== undefined &&
-    input.expectedDigest !== fileDigest
-  ) {
-    throw denied();
-  }
-  const offsetBytes = input.contentPath === undefined ? 0 : (input.offsetBytes ?? 0);
-  if (content === "" && offsetBytes === 0) {
-    output.files.push({
-      content,
-      digest: fileDigest,
-      mode,
-      offsetBytes,
-      operation: "upsert",
-      path,
-    });
-    return false;
-  }
-  const chunk = largestUtf8PayloadChunk({
-    content,
-    makePayload: (part, next) => {
-      const payload: Output = {
-        ...output,
-        files: [
-          ...output.files,
-          { content: part, digest: fileDigest, mode, offsetBytes, operation: "upsert", path },
-        ],
-      };
-      if (next < Buffer.byteLength(content)) {
-        payload.continuation = { digest: fileDigest, offsetBytes: next, path };
-      }
-      return event(payload);
-    },
-    maxBytes: EVE_NATIVE_RESULT_PAGE_BYTES,
-    offsetBytes,
-  });
-  output.files.push({
-    content: chunk.content,
-    digest: fileDigest,
-    mode,
-    offsetBytes,
-    operation: "upsert",
-    path,
-  });
-  if (chunk.nextOffsetBytes < Buffer.byteLength(content)) {
-    output.continuation = { digest: fileDigest, offsetBytes: chunk.nextOffsetBytes, path };
-    return true;
-  }
-  return false;
-};
 const appendProposalFiles = (
   output: Output,
   changeByPath: Map<string, Changes[number]>,
@@ -245,7 +173,66 @@ const appendProposalFiles = (
     if (change === undefined) {
       output.missingPaths ??= [];
       output.missingPaths.push(path);
-    } else if (appendProposalFile(output, change, path, input)) {
+      continue;
+    }
+    if (change.after === undefined) {
+      if (input.expectedDigest !== undefined || (input.offsetBytes ?? 0) > 0) {
+        throw denied();
+      }
+      output.files.push({
+        beforeDigest: change.before?.digest,
+        mode: change.before?.mode,
+        operation: "delete",
+        path,
+      });
+      continue;
+    }
+    const { content, digest: fileDigest, mode } = change.after;
+    if (
+      input.contentPath !== undefined &&
+      input.expectedDigest !== undefined &&
+      input.expectedDigest !== fileDigest
+    ) {
+      throw denied();
+    }
+    const offsetBytes = input.contentPath === undefined ? 0 : (input.offsetBytes ?? 0);
+    if (content === "" && offsetBytes === 0) {
+      output.files.push({
+        content,
+        digest: fileDigest,
+        mode,
+        offsetBytes,
+        operation: "upsert",
+        path,
+      });
+      continue;
+    }
+    const chunk = largestUtf8PayloadChunk({
+      content,
+      makePayload: (part, next) =>
+        event({
+          ...output,
+          files: [
+            ...output.files,
+            { content: part, digest: fileDigest, mode, offsetBytes, operation: "upsert", path },
+          ],
+          ...(next < Buffer.byteLength(content)
+            ? { continuation: { digest: fileDigest, offsetBytes: next, path } }
+            : {}),
+        }),
+      maxBytes: EVE_NATIVE_RESULT_PAGE_BYTES,
+      offsetBytes,
+    });
+    output.files.push({
+      content: chunk.content,
+      digest: fileDigest,
+      mode,
+      offsetBytes,
+      operation: "upsert",
+      path,
+    });
+    if (chunk.nextOffsetBytes < Buffer.byteLength(content)) {
+      output.continuation = { digest: fileDigest, offsetBytes: chunk.nextOffsetBytes, path };
       break;
     }
   }

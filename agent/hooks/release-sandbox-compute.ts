@@ -26,7 +26,12 @@ import {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function release(
   ctx: HookContext,
-  reason: `${"turn" | "session"}-${"completed" | "cancelled" | "failed"}`,
+  reason:
+    | "turn-completed"
+    | "turn-cancelled"
+    | "turn-failed"
+    | "session-completed"
+    | "session-failed",
 ) {
   const environment = process.env;
   const hosted = isHostedSandboxExecutionEnabled(environment);
@@ -82,19 +87,19 @@ async function release(
 export default defineHook({
   events: {
     async "session.completed"(_event, ctx) {
-      await release(ctx, "session-completed");
+      return release(ctx, "session-completed");
     },
     async "session.failed"(_event, ctx) {
-      await release(ctx, "session-failed");
+      return release(ctx, "session-failed");
     },
     async "turn.cancelled"(_event, ctx) {
-      await release(ctx, "turn-cancelled");
+      return release(ctx, "turn-cancelled");
     },
     async "turn.completed"(_event, ctx) {
-      await release(ctx, "turn-completed");
+      return release(ctx, "turn-completed");
     },
     async "turn.failed"(_event, ctx) {
-      await release(ctx, "turn-failed");
+      return release(ctx, "turn-failed");
     },
     async "turn.started"(_event, ctx) {
       const environment = process.env;
@@ -122,7 +127,7 @@ export default defineHook({
         restoreSelectedGitHubSandboxSource({
           accessReceipt: repositoryAccessReceiptState.get(),
           githubSource,
-          runtime: async () => await repositoryAccessRuntimeForSession(ctx.session.auth),
+          runtime: async () => repositoryAccessRuntimeForSession(ctx.session.auth),
           sessionId: ctx.session.id,
         });
       }

@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/filename-case, github/filenames-match-regex -- Preserve the registered Eve tool name and public workflow identity. */
 import { applicationSourceImportState } from "@/lib/agent/application-source-import-state";
 import { emitCurrentBuildWorkflowProjection } from "@/lib/agent/approved-build-continuation-runtime";
 import { defineTool } from "eve/tools";
@@ -32,36 +31,20 @@ import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 const acceptanceResult = (appSpec: AcceptedAppSpec, reused: boolean) => {
   const state = appBuilderWorkflowState.get();
   const upgrade = "proposal" in state ? state.proposal.target?.frameworkUpgrade : undefined;
-  const result = {
+  return {
     ...appSpec,
+    ...(upgrade === undefined
+      ? {}
+      : {
+          frameworkUpgradePlan: {
+            scope: upgrade.scope,
+            sharedPaths: ["package.json", "bun.lock"],
+            versions: upgrade.versions,
+          },
+        }),
     productAcceptance: productAcceptanceObligations(appSpec),
     reused,
   };
-  if (upgrade !== undefined) {
-    return {
-      ...result,
-      frameworkUpgradePlan: {
-        scope: upgrade.scope,
-        sharedPaths: ["package.json", "bun.lock"],
-        versions: upgrade.versions,
-      },
-    };
-  }
-  return result;
-};
-
-const matchesArtifactConstraints = (
-  artifact: { digest: string; revision: string },
-  expectedDigest?: string,
-  expectedRevision?: string,
-) => {
-  if (expectedDigest !== undefined && artifact.digest !== expectedDigest) {
-    return false;
-  }
-  if (expectedRevision !== undefined && artifact.revision !== expectedRevision) {
-    return false;
-  }
-  return true;
 };
 
 /**
@@ -85,33 +68,27 @@ const planAcceptedAppSpec = async (
     updateExactWorkflow({
       expected: current,
       operation: "framework upgrade planning",
-      transition: () => {
-        const next = {
-          appSpec: { ...current.appSpec, frameworkUpgrade: "latest" },
-          artifacts: current.artifacts,
-          phase: "app_spec_accepted",
-          preparedByCallId: current.preparedByCallId,
-          sourceReceipt: current.sourceReceipt,
-          version: APP_BUILDER_WORKFLOW_VERSION,
-          workspace: current.workspace,
-        };
-        if (current.githubSource !== undefined) {
-          return { ...next, githubSource: current.githubSource };
-        }
-        return next;
-      },
+      transition: () => ({
+        appSpec: { ...current.appSpec, frameworkUpgrade: "latest" },
+        artifacts: current.artifacts,
+        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+        phase: "app_spec_accepted",
+        preparedByCallId: current.preparedByCallId,
+        sourceReceipt: current.sourceReceipt,
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        workspace: current.workspace,
+      }),
     });
     latest = appBuilderWorkflowState.get();
   }
-  const acceptedUpgrade = "appSpec" in latest ? latest.appSpec.frameworkUpgrade : undefined;
-  const requestedUpgrade = frameworkUpgrade ?? acceptedUpgrade;
   await continueAcceptedAppSpec({
     phase: latest.phase,
     plan: async () => {
       await prepareAppCreation(
         {
           existingAppChanges,
-          frameworkUpgrade: requestedUpgrade,
+          frameworkUpgrade:
+            frameworkUpgrade ?? ("appSpec" in latest ? latest.appSpec.frameworkUpgrade : undefined),
         },
         ctx,
       );
@@ -153,7 +130,8 @@ export default defineTool({
       (candidate) =>
         candidate.path === path &&
         candidate.sessionId === ctx.session.id &&
-        matchesArtifactConstraints(candidate, expectedArtifactDigest, expectedArtifactRevision),
+        (expectedArtifactDigest === undefined || candidate.digest === expectedArtifactDigest) &&
+        (expectedArtifactRevision === undefined || candidate.revision === expectedArtifactRevision),
     );
     if (artifact === undefined) {
       throw new Error("Create a product design before creating its implementation plan.");
@@ -185,10 +163,12 @@ export default defineTool({
       });
       const inspection = await inspectCanonicalAppSpec({
         artifact,
-        readChunk: async (chunkIndex) => {
-          const request = { chunkIndex, path: artifact.path, transferDigest: artifact.digest };
-          return await store.get(request);
-        },
+        readChunk: async (chunkIndex) =>
+          await store.get({
+            chunkIndex,
+            path: artifact.path,
+            transferDigest: artifact.digest,
+          }),
       });
       ({ digest, walkthrough } = inspection);
     } else {
@@ -201,24 +181,14 @@ export default defineTool({
     }
     const accepted: AcceptedAppSpec = {
       acceptedByCallId: ctx.callId,
+      ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
       appId,
       artifactPath: artifact.path,
       artifactRevision: artifact.revision,
+      ...(content === undefined ? { version: 2, walkthrough } : { content }),
       digest,
-      version: 2,
+      ...(current.phase === "ui_accepted" ? { uiRevision: current.uiPreview.revision } : {}),
     };
-    if (frameworkUpgrade !== undefined) {
-      accepted.frameworkUpgrade = frameworkUpgrade;
-    }
-    if (content !== undefined) {
-      delete accepted.version;
-      accepted.content = content;
-    } else if (walkthrough !== undefined) {
-      accepted.walkthrough = walkthrough;
-    }
-    if (current.phase === "ui_accepted") {
-      accepted.uiRevision = current.uiPreview.revision;
-    }
     if (
       "appSpec" in current &&
       current.appSpec.digest === accepted.digest &&
@@ -231,21 +201,16 @@ export default defineTool({
     updateExactWorkflow({
       expected: current,
       operation: "AppSpec acceptance",
-      transition: () => {
-        const next = {
-          appSpec: accepted,
-          artifacts: current.artifacts,
-          phase: "app_spec_accepted",
-          preparedByCallId: current.preparedByCallId,
-          sourceReceipt: current.sourceReceipt,
-          version: APP_BUILDER_WORKFLOW_VERSION,
-          workspace: current.workspace,
-        };
-        if (current.githubSource !== undefined) {
-          return { ...next, githubSource: current.githubSource };
-        }
-        return next;
-      },
+      transition: () => ({
+        appSpec: accepted,
+        artifacts: current.artifacts,
+        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+        phase: "app_spec_accepted",
+        preparedByCallId: current.preparedByCallId,
+        sourceReceipt: current.sourceReceipt,
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        workspace: current.workspace,
+      }),
     });
     await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade);
     await emitCurrentBuildWorkflowProjection(ctx);

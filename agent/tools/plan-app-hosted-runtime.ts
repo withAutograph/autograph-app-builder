@@ -41,26 +41,23 @@ export default defineTool({
         return ctx.session.id;
       }
     };
-    const blocked = (code: HostedOperatorError["code"], selection?: OperatorSelection) => {
-      const result = {
-        appId: input.appId,
-        authenticatedBehavior: "unassessed",
-        code,
-        status: "blocked",
-      };
-      if (code === "export_customer_selection_required") {
-        Object.assign(result, {
-          nextAction: "Name the organization to export. No export was planned or data extracted.",
-        });
-      }
-      if (selection !== undefined) {
-        Object.assign(result, { approvedPreviewTarget: selection });
-      }
-      return withBuilderDestinationGuidance(
-        withAppPublicationGuidance(result),
+    const blocked = (code: HostedOperatorError["code"], selection?: OperatorSelection) =>
+      withBuilderDestinationGuidance(
+        withAppPublicationGuidance({
+          appId: input.appId,
+          authenticatedBehavior: "unassessed" as const,
+          code,
+          status: "blocked" as const,
+          ...(code === "export_customer_selection_required"
+            ? {
+                nextAction:
+                  "Name the organization to export. No export was planned or data extracted.",
+              }
+            : {}),
+          ...(selection === undefined ? {} : { approvedPreviewTarget: selection }),
+        }),
         destinationSessionId(code),
       );
-    };
     try {
       operator = await hostedOperatorClientForSession(
         ctx.session.auth,
@@ -135,17 +132,17 @@ export default defineTool({
         const selected = await runnableSelectedApp({
           appId: input.appId,
           resolveRoot: async ({ appId, root }) =>
-            await resolveAcceptanceRuntimeRoot({ appId, ctx, fallbackRoot: root, sandbox, state }),
+            await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
           state,
         });
         continuityStage = "tool_sandbox_identity";
         const runtime = {
           root: selected.root,
           sandboxId: getBuilderSandboxId(sandbox),
+          ...(input.browserSelection === undefined
+            ? {}
+            : { browserSelection: input.browserSelection }),
         };
-        if (input.browserSelection !== undefined) {
-          Object.assign(runtime, { browserSelection: input.browserSelection });
-        }
         continuityStage = "tool_plan_request";
         return await operator.planContinuity(
           selection,
@@ -173,21 +170,21 @@ export default defineTool({
           ctx.abortSignal,
         );
       }
-      const request = {
-        action: "plan" as const,
-        operation,
-        selection,
-      };
-      if (input.authSignupPolicy !== undefined) {
-        Object.assign(request, { authSignupPolicy: input.authSignupPolicy });
-      }
-      if (input.normalActorProgram !== undefined) {
-        Object.assign(request, { normalActorProgram: input.normalActorProgram });
-      }
-      if (input.releaseIntent !== undefined) {
-        Object.assign(request, { releaseIntent: input.releaseIntent });
-      }
-      const result = await operator.request(request, ctx.abortSignal);
+      const result = await operator.request(
+        {
+          action: "plan",
+          ...(input.authSignupPolicy === undefined
+            ? {}
+            : { authSignupPolicy: input.authSignupPolicy }),
+          ...(input.normalActorProgram === undefined
+            ? {}
+            : { normalActorProgram: input.normalActorProgram }),
+          operation,
+          ...(input.releaseIntent === undefined ? {} : { releaseIntent: input.releaseIntent }),
+          selection,
+        },
+        ctx.abortSignal,
+      );
       return withBuilderDestinationGuidance(
         withAppPublicationGuidance(result),
         destinationSessionId(result.code),

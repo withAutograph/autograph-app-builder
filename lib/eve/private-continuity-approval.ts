@@ -87,43 +87,29 @@ export const createPrivateContinuityApprovalCapture = (input: {
   if (!isDeepStrictEqual(input.plan.authority, { audience, issuer, ownerUserId, workspaceId })) {
     throw new Error("Private approval owner differs from its frozen plan.");
   }
-  const captureOptions = {
+  const capture = createPrivateOperatorApprovalCapture({
     ownerUserId: input.principal.ownerUserId,
     request: input.request,
-  } satisfies {
-    ownerUserId: string;
-    request: HostedContinuityRequest;
-    callId?: string;
-    state?: PrivateOperatorApprovalCapture;
-  };
-  if (input.callId !== undefined) {
-    captureOptions.callId = input.callId;
-  }
-  if (input.state !== undefined) {
-    captureOptions.state = input.state;
-  }
-  const capture = createPrivateOperatorApprovalCapture(captureOptions);
+    ...(input.callId === undefined ? {} : { callId: input.callId }),
+    ...(input.state === undefined ? {} : { state: input.state }),
+  });
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
         for (const requested of event.data.requests) {
+          if (
+            requested.kind !== "tool-approval" ||
+            requested.action.toolName !== "run-app-continuity-tests"
+          ) {
+            continue;
+          }
           const parsed = continuityApprovalToolInputSchema.safeParse(requested.action.input);
-          const isMatchingRequest =
-            requested.kind === "tool-approval" &&
-            requested.action.toolName === "run-app-continuity-tests" &&
-            parsed.success &&
-            (() => {
-              try {
-                verifySavedContinuityIntent(parsed.data, {
-                  plan: input.plan,
-                  request: input.request,
-                });
-                return true;
-              } catch {
-                return false;
-              }
-            })();
-          if (!isMatchingRequest || !parsed.success) {
+          if (!parsed.success) {
+            continue;
+          }
+          try {
+            verifySavedContinuityIntent(parsed.data, { plan: input.plan, request: input.request });
+          } catch {
             continue;
           }
           capture.acceptRequest(requested.requestId, requested.action.callId);

@@ -1,4 +1,3 @@
-/* oxlint-disable github/filenames-match-regex -- Preserve the registered Eve tool name and public workflow identity. */
 import { publishedDraftRepairCompletions } from "@/lib/agent/draft-reconciliation-state";
 import { updatePublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
 import { defineTool } from "eve/tools";

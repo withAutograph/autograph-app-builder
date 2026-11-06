@@ -21,10 +21,10 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { SubmitEvent } from "react";
+import type { SetStateAction, SubmitEvent } from "react";
 
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
-import { builderDraftFormSchema, builderDraftPageDataSchema } from "@/lib/builder-drafts/contracts";
+import { builderDraftFormSchema } from "@/lib/builder-drafts/contracts";
 import type {
   BuilderDraftPageData,
   BuilderDraftRecord,
@@ -36,6 +36,8 @@ import type { ProviderConnectionNotice } from "../../lib/integrations/provider-c
 import { createBuilderDraftOutbox } from "./builder-draft-outbox";
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 
+import { comingSoonConnections } from "./builder-connections";
+import type { ConnectionFlow } from "./builder-connections";
 import {
   appNameFromBrief,
   defaultBrief,
@@ -45,64 +47,6 @@ import {
 } from "./builder-defaults";
 
 const preferredModelId = activeBuilderModelId;
-
-const initialScopeValue = (
-  resumed: boolean,
-  draftValue: string | undefined,
-  firstOption: string | undefined,
-) => {
-  if (resumed) {
-    return firstOption ?? "";
-  }
-  return draftValue ?? firstOption ?? "";
-};
-
-const canApplyServerDraft = (
-  signal: AbortSignal,
-  remote: BuilderDraftPageData | undefined,
-  activeDraftId: string,
-  localDraftId: string,
-  pendingActionCount: number,
-  mutationVersion: number,
-  expectedMutationVersion: number,
-) => {
-  if (signal.aborted || remote === undefined) {
-    return false;
-  }
-  if (activeDraftId !== localDraftId || pendingActionCount !== 0) {
-    return false;
-  }
-  return mutationVersion === expectedMutationVersion;
-};
-
-const preferredFocusId = (
-  interactive: boolean,
-  resumedVercelConnection: boolean,
-  resumedGitHubConnection: boolean,
-  initialDraft: BuilderDraft | undefined,
-): "git-scope" | "vercel-team" | null => {
-  if (!interactive) {
-    return null;
-  }
-  if (resumedVercelConnection || initialDraft?.focusOrigin === "vercel") {
-    return "vercel-team";
-  }
-  if (resumedGitHubConnection || initialDraft) {
-    return "git-scope";
-  }
-  return null;
-};
-
-const hasValidAppId = (appName: string, hasSourceCandidate: boolean) => {
-  try {
-    if (!hasSourceCandidate) {
-      deriveBuilderAppId(appName);
-    }
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function subscribeToClientSnapshot() {
@@ -156,12 +100,13 @@ export function useBuilderController({
     label: scope.accountLogin,
     value: scope.installationId,
   }));
-  const allModelOptions: { detail: string; label: string; value: string }[] = [];
-  for (const model of integrations.models.entries) {
-    if (model.id === preferredModelId) {
-      allModelOptions.push({ detail: model.id, label: model.name, value: model.id });
-    }
-  }
+  const allModelOptions = integrations.models.entries
+    .filter((model) => model.id === preferredModelId)
+    .map((model) => ({
+      detail: model.id,
+      label: model.name,
+      value: model.id,
+    }));
   const defaultModel = allModelOptions[0]?.value ?? "";
   const effectiveInitialBrief = initialBrief.trim() ? initialBrief : defaultBrief;
   const initialAppName =
@@ -185,11 +130,10 @@ export function useBuilderController({
     mode: "onChange",
     resolver: zodResolver(builderDraftFormSchema),
   });
-  const watchedForm = useWatch({
+  const form = useWatch({
     control: builderForm.control,
     defaultValue: initialForm,
-  });
-  const form: BuilderForm = { ...initialForm, ...watchedForm };
+  }) as BuilderForm;
   // RHF remains the form owner. This ref is only its synchronous mutation
   // mirror for action boundaries: a provider click can immediately follow an
   // input event while React is still publishing useWatch's render update.
@@ -197,31 +141,22 @@ export function useBuilderController({
   // value during that narrow window.
   const formSnapshot = useRef<BuilderForm>(initialForm);
   const localFormMutationVersion = useRef(0);
-  const draftReadInFlight = useRef<{
-    action: () => Promise<BuilderDraftPageData | undefined>;
-    draftId: string;
-    localMutationVersion: number;
-    promise: Promise<BuilderDraftPageData | undefined>;
-  } | null>(null);
+  const draftReadInFlight = useRef<
+    | {
+        action: () => Promise<BuilderDraftPageData | undefined>;
+        draftId: string;
+        localMutationVersion: number;
+        promise: Promise<BuilderDraftPageData | undefined>;
+      }
+    | undefined
+  >(globalThis.undefined);
   const setForm = useCallback(
-    (update: (current: BuilderForm) => BuilderForm) => {
+    (update: SetStateAction<BuilderForm>) => {
       localFormMutationVersion.current += 1;
       const { current } = formSnapshot;
-      const next = update(current);
+      const next = typeof update === "function" ? update(current) : update;
       formSnapshot.current = next;
-      const fields = [
-        "appName",
-        "brief",
-        "buildDestination",
-        "connections",
-        "githubInstallationId",
-        "modelId",
-        "privateRepository",
-        "repository",
-        "sourceCandidate",
-        "vercelInstallationId",
-      ] as const satisfies readonly (keyof BuilderForm)[];
-      for (const field of fields) {
+      for (const field of Object.keys(next) as (keyof BuilderForm)[]) {
         // RHF publishes each setValue to useWatch independently. Replaying an
         // unchanged field from an older composite snapshot can otherwise
         // arrive after a later input event and overwrite it (for example, a
@@ -243,7 +178,7 @@ export function useBuilderController({
   // marker while RHF already holds a user-entered name; that acknowledgement
   // must not turn the next brief edit into an instruction to replace it.
   const generatedAppName = useRef<string | undefined>(
-    initialDraft?.appNameEditedByUser === true ? undefined : initialForm.appName,
+    initialDraft?.appNameEditedByUser ? undefined : initialForm.appName,
   );
   const repositoryEditedByUser = useRef(initialDraft?.repositoryEditedByUser ?? false);
   const [initialActiveDraftId] = useState(() => resumeKey ?? durableDraftId ?? crypto.randomUUID());
@@ -254,11 +189,15 @@ export function useBuilderController({
   const resumedGitHubConnection = providerNotices.some(
     (notice) => notice.provider === "github" && notice.status === "connected",
   );
-  const [team, setTeam] = useState(() =>
-    initialScopeValue(resumedVercelConnection, initialDraft?.team, teamOptions[0]?.value),
+  const [team, setTeam] = useState(
+    resumedVercelConnection
+      ? (teamOptions[0]?.value ?? "")
+      : (initialDraft?.team ?? teamOptions[0]?.value ?? ""),
   );
-  const [gitScope, setGitScope] = useState(() =>
-    initialScopeValue(resumedGitHubConnection, initialDraft?.gitScope, gitScopeOptions[0]?.value),
+  const [gitScope, setGitScope] = useState(
+    resumedGitHubConnection
+      ? (gitScopeOptions[0]?.value ?? "")
+      : (initialDraft?.gitScope ?? gitScopeOptions[0]?.value ?? ""),
   );
   const [model, setModel] = useState(defaultModel);
   const [zdrOnly, setZdrOnly] = useState(initialDraft?.zdrOnly ?? false);
@@ -266,10 +205,7 @@ export function useBuilderController({
     initialDraft?.showMoreConnections ?? false,
   );
   const [search, setSearch] = useState(initialDraft?.search ?? "");
-  const [connectionFlow, setConnectionFlow] = useState<{
-    name: string;
-    stage: "connect" | "configure" | "customize";
-  } | null>(null);
+  const [connectionFlow, setConnectionFlow] = useState<ConnectionFlow | null>(null);
   const clientHydrated = useSyncExternalStore(
     subscribeToClientSnapshot,
     () => true,
@@ -333,13 +269,14 @@ export function useBuilderController({
           mutationId: input.clientMutationId,
           saved: await saveActiveBuilderDraftAction(input),
         };
-      } catch {
+      } catch (error) {
         return {
-          error: "builder-draft-save-failed",
+          error: error instanceof Error ? error.message : "builder-draft-save-failed",
           mutationId: input.clientMutationId,
         };
       }
     },
+    undefined,
   );
   const serverSaveWaiters = useRef(
     new Map<
@@ -389,7 +326,7 @@ export function useBuilderController({
       startTransition(() => {
         dispatchServerSave(input);
       });
-      return await acknowledgement.promise;
+      return acknowledgement.promise;
     },
     [dispatchServerSave],
   );
@@ -423,21 +360,21 @@ export function useBuilderController({
       try {
         let saved: { draftId: string; revision: number; updatedAt: string };
         if (keepalive) {
-          const response = await fetch("/api/builder/draft", {
+          saved = await fetch("/api/builder/draft", {
             body: JSON.stringify(input),
             headers: { "Content-Type": "application/json" },
             keepalive: true,
             method: "POST",
+          }).then(async (response) => {
+            if (!response.ok) {
+              throw new Error("builder-draft-save-failed");
+            }
+            return (await response.json()) as {
+              draftId: string;
+              revision: number;
+              updatedAt: string;
+            };
           });
-          if (!response.ok) {
-            throw new Error("builder-draft-save-failed");
-          }
-          const payload: unknown = await response.json();
-          const parsed = builderDraftPageDataSchema.safeParse(payload);
-          if (!parsed.success) {
-            throw new Error("builder-draft-save-invalid");
-          }
-          saved = parsed.data;
         } else if (saveActiveBuilderDraftAction) {
           saved = await requestServerSave(input);
         } else {
@@ -448,7 +385,7 @@ export function useBuilderController({
         draftUpdatedAt.current = saved.updatedAt;
         // Remove only the anonymous brief this mounted session has claimed,
         // and only after durable acknowledgement. Never erase a newer tab's brief.
-        if (initialBrief.length > 0) {
+        if (initialBrief) {
           try {
             if (sessionStorage.getItem("autograph-app-brief") === initialBrief) {
               sessionStorage.removeItem("autograph-app-brief");
@@ -546,7 +483,7 @@ export function useBuilderController({
       expectedLocalMutationVersion?: number,
       signal?: AbortSignal,
     ) => {
-      if (signal?.aborted === true) {
+      if (signal?.aborted) {
         return;
       }
       // A polling request can begin before a user edit and return a server
@@ -562,7 +499,7 @@ export function useBuilderController({
         return;
       }
       await discardSupersededByRemoteRevision(remote.revision);
-      if (signal?.aborted === true) {
+      if (signal?.aborted) {
         return;
       }
       // A newer server snapshot or save acknowledgement can settle while
@@ -621,20 +558,29 @@ export function useBuilderController({
       )
     : allModelOptions;
   const [sourceUploadPending, setSourceUploadPending] = useState(false);
-  const validAppId = hasValidAppId(form.appName, form.sourceCandidate !== undefined);
-  let canUseDestination = form.appName.trim().length === 0 || validAppId;
-  if (canUseDestination && form.buildDestination === "web") {
-    canUseDestination = integrations.models.status === "ready" && model.length > 0;
+  let validAppId = false;
+  try {
+    if (form.sourceCandidate === undefined) {
+      deriveBuilderAppId(form.appName);
+    }
+    validAppId = true;
+  } catch {
+    // Invalid app names simply keep submission disabled.
   }
-  const canSubmit = Boolean(!sourceUploadPending && form.brief.trim() && canUseDestination);
+  const canSubmit = Boolean(
+    !sourceUploadPending &&
+    form.brief.trim() &&
+    (!form.appName.trim() || validAppId) &&
+    (form.buildDestination !== "web" || (integrations.models.status === "ready" && model)),
+  );
   let submitGuidance: string | undefined;
-  if (form.appName.trim().length > 0 && !validAppId) {
+  if (form.appName.trim() && !validAppId) {
     submitGuidance = "Use an app name that can form a lowercase, URL-safe app ID.";
   } else if (!form.brief.trim()) {
     submitGuidance = "Add an app brief to continue.";
   } else if (
     form.buildDestination === "web" &&
-    (integrations.models.status !== "ready" || model.length === 0)
+    (integrations.models.status !== "ready" || !model)
   ) {
     submitGuidance = "Choose an available model to continue.";
   }
@@ -669,7 +615,7 @@ export function useBuilderController({
     });
   };
   const addConnection = (name: string) => {
-    if (["Ramp", "NetSuite", "Xero", "Sage Intacct"].includes(name)) {
+    if (comingSoonConnections.has(name)) {
       return;
     }
     setForm((current) => ({
@@ -696,16 +642,24 @@ export function useBuilderController({
     setConnectionFlow(null);
   };
   useEffect(() => {
-    const id = preferredFocusId(
-      interactive,
-      resumedVercelConnection,
-      resumedGitHubConnection,
-      initialDraft,
-    );
+    if (!interactive) {
+      return;
+    }
+    let id: "git-scope" | "vercel-team" | undefined;
+    if (resumedVercelConnection) {
+      id = "vercel-team";
+    } else if (resumedGitHubConnection) {
+      id = "git-scope";
+    } else if (initialDraft?.focusOrigin === "vercel") {
+      id = "vercel-team";
+    } else if (initialDraft) {
+      id = "git-scope";
+    }
+    if (!id) {
+      return;
+    }
     const frame = window.requestAnimationFrame(() => {
-      if (id) {
-        document.querySelector<HTMLElement>(`#${id}`)?.focus();
-      }
+      document.querySelector<HTMLElement>(`#${id}`)?.focus();
     });
     return () => {
       window.cancelAnimationFrame(frame);
@@ -718,9 +672,8 @@ export function useBuilderController({
     // oxlint-disable promise/prefer-await-to-callbacks
     // oxlint-disable promise/prefer-await-to-then
     // oxlint-disable-next-line promise/prefer-await-to-then
-    const recover = async () => {
-      try {
-        const entry = await restorePending();
+    void restorePending()
+      .then((entry) => {
         if (disposed || !entry) {
           return;
         }
@@ -734,11 +687,7 @@ export function useBuilderController({
         }
         // A recovery outbox is only useful when it is newer than the server
         // snapshot rendered for this visit. Server revisions remain canonical.
-        if (
-          draftUpdatedAt.current !== undefined &&
-          draftUpdatedAt.current.length > 0 &&
-          entry.createdAt <= Date.parse(draftUpdatedAt.current)
-        ) {
+        if (draftUpdatedAt.current && entry.createdAt <= Date.parse(draftUpdatedAt.current)) {
           void discardPendingDraft();
           return;
         }
@@ -762,14 +711,14 @@ export function useBuilderController({
         if (!disposed) {
           void resumePending();
         }
-      } finally {
-        // Complete the recovery indicator for both success and failure.
+      })
+      // Complete the recovery indicator for both success and failure.
+      // oxlint-disable-next-line promise/prefer-await-to-then
+      .finally(() => {
         if (!disposed) {
           setDraftRecoveryComplete(true);
         }
-      }
-    };
-    void recover();
+      });
     // oxlint-enable promise/prefer-await-to-callbacks
     // oxlint-enable promise/prefer-await-to-then
     return () => {
@@ -820,19 +769,15 @@ export function useBuilderController({
           remote = await flight.promise;
         } finally {
           if (draftReadInFlight.current === flight) {
-            draftReadInFlight.current = null;
+            draftReadInFlight.current = undefined;
           }
         }
         if (
-          !canApplyServerDraft(
-            controller.signal,
-            remote,
-            activeDraftId.current,
-            localDraftId,
-            pendingActionExpectedRevisions.current.size,
-            localFormMutationVersion.current,
-            flight.localMutationVersion,
-          )
+          controller.signal.aborted ||
+          !remote ||
+          activeDraftId.current !== localDraftId ||
+          pendingActionExpectedRevisions.current.size > 0 ||
+          localFormMutationVersion.current !== flight.localMutationVersion
         ) {
           return;
         }
@@ -862,7 +807,7 @@ export function useBuilderController({
       }
     };
     const timer = setInterval(() => {
-      void checkForServerDraft();
+      checkForServerDraft();
     }, 10_000);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -877,11 +822,7 @@ export function useBuilderController({
     if (durableDraftRevision <= draftRevision.current) {
       return;
     }
-    if (
-      initialDraft === undefined ||
-      durableDraftId.length === 0 ||
-      durableDraftUpdatedAt.length === 0
-    ) {
+    if (!initialDraft || !durableDraftId || !durableDraftUpdatedAt) {
       return;
     }
     const actionMutationVersion = localActionMutationVersions.current.get(durableDraftRevision);
@@ -904,7 +845,7 @@ export function useBuilderController({
     if (actionMutationVersion !== undefined) {
       localActionMutationVersions.current.delete(durableDraftRevision);
     }
-    void applyAuthoritativeDraft({
+    applyAuthoritativeDraft({
       draftId: durableDraftId,
       record: { draft: initialDraft, version: 1 },
       revision: durableDraftRevision,
@@ -918,53 +859,34 @@ export function useBuilderController({
     initialDraft,
   ]);
   useEffect(() => {
-    const timer =
-      draftSyncNotice.length > 0
-        ? window.setTimeout(() => {
-            setDraftSyncNotice("");
-          }, 4000)
-        : null;
+    if (!draftSyncNotice) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setDraftSyncNotice("");
+    }, 4000);
     return () => {
-      if (timer !== null) {
-        window.clearTimeout(timer);
-      }
+      window.clearTimeout(timer);
     };
   }, [draftSyncNotice]);
   useEffect(() => {
-    const fingerprint = JSON.stringify({ ...draftSnapshot(), form });
+    const snapshot = draftSnapshot();
+    const fingerprint = JSON.stringify(snapshot);
     if (autosaveSnapshotFingerprint.current === undefined) {
       // Establish the hydrated server/form state as the baseline. The first
       // deliberate edit (including a non-RHF builder control) will differ.
       autosaveSnapshotFingerprint.current = fingerprint;
-      if (initialBrief.length > 0 && initialDraft === undefined) {
-        queueMicrotask(() => {
-          void scheduleAutosave({ ...draftSnapshot(), form });
-        });
+      if (initialBrief && !initialDraft) {
+        scheduleAutosave(snapshot);
       }
       return;
     }
-    if (autosaveSnapshotFingerprint.current !== fingerprint) {
-      autosaveSnapshotFingerprint.current = fingerprint;
-      queueMicrotask(() => {
-        void scheduleAutosave({ ...draftSnapshot(), form });
-      });
+    if (autosaveSnapshotFingerprint.current === fingerprint) {
+      return;
     }
-  }, [
-    draftSnapshot,
-    form.appName,
-    form.brief,
-    form.repository,
-    form.privateRepository,
-    form.buildDestination,
-    form.connections,
-    form.modelId,
-    form.sourceCandidate,
-    form.githubInstallationId,
-    form.vercelInstallationId,
-    initialBrief,
-    initialDraft,
-    scheduleAutosave,
-  ]);
+    autosaveSnapshotFingerprint.current = fingerprint;
+    scheduleAutosave(snapshot);
+  }, [draftSnapshot, form, initialBrief, initialDraft, scheduleAutosave]);
   const beginProviderConnection = async (provider: ProviderField) => {
     focusOrigin.current = provider;
     const draft = draftSnapshot(provider);
@@ -1012,7 +934,7 @@ export function useBuilderController({
         repository: currentForm.repository.trim() || repositoryNameFromAppName(appName),
         vercelInstallationId: deploymentProvider === "vercel" && team ? team : undefined,
       };
-      setForm(() => submissionForm);
+      setForm(submissionForm);
       autosave.schedule({ ...draftSnapshot(), form: submissionForm });
       await autosave.flush();
       if (await autosave.restorePending()) {

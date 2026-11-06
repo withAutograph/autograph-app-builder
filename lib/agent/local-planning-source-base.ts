@@ -83,22 +83,17 @@ export const localPlanningSourceBase = (
       }
     }
   }
-  interface LocalPlanningSourceBaseResult {
-    sourceSha: string;
-    workspaceDigest: string;
-    workspaceId: string;
-    sourceOverlay?: { sourceSha: string; workspaceDigest: string };
-  }
-  const result: LocalPlanningSourceBaseResult = {
+  return {
     sourceSha: base.sourceSha,
     workspaceDigest: base.workspaceDigest,
     workspaceId: current.workspace.workspaceId,
+    ...(transported.workspaceDigest === base.workspaceDigest
+      ? {}
+      : {
+          sourceOverlay: {
+            sourceSha: transported.sourceSha,
+            workspaceDigest: transported.workspaceDigest,
+          },
+        }),
   };
-  if (transported.workspaceDigest !== base.workspaceDigest) {
-    result.sourceOverlay = {
-      sourceSha: transported.sourceSha,
-      workspaceDigest: transported.workspaceDigest,
-    };
-  }
-  return result;
 };

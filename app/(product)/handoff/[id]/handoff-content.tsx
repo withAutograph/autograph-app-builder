@@ -47,28 +47,12 @@ const GitHubResource = ({ intent, returnTo }: { intent: HandoffIntent; returnTo:
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function HandoffContent({
-  params,
-  dependencies = {
-    headers,
-    load: getBuilderHandoffPageData,
-    redirect,
-  },
-}: {
-  params: Promise<{ id: string }>;
-  dependencies?: {
-    headers: typeof headers;
-    redirect: typeof redirect;
-    load: typeof getBuilderHandoffPageData;
-  };
-}) {
+export async function HandoffContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const requestHeaders = await dependencies.headers();
-  const callbackPath = `/handoff/${encodeURIComponent(id)}`;
-  const signInHref = `/auth/sign-in?callbackURL=${encodeURIComponent(callbackPath)}`;
+  const requestHeaders = await headers();
   let data;
   try {
-    data = await dependencies.load({
+    data = await getBuilderHandoffPageData({
       environment: process.env,
       handoffId: id,
       headers: requestHeaders,
@@ -84,14 +68,20 @@ export async function HandoffContent({
               Use the same Autograph account and workspace as the web form. If you are already
               signed into that account, try reloading this page.
             </p>
-            <Link href={signInHref}>Sign in with the same account</Link>
+            <Link
+              href={`/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`}
+            >
+              Sign in with the same account
+            </Link>
           </section>
         </main>
       </div>
     );
   }
   if (!data) {
-    dependencies.redirect(signInHref);
+    redirect(
+      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`,
+    );
   }
   const { intent, ...controls } = data;
   const vercel = intent.provisioning?.vercel;
@@ -103,7 +93,7 @@ export async function HandoffContent({
         <section className={`${styles.readyCard} ${handoffStyles.card}`}>
           <h1>{intent.appName}</h1>
           <p>Your prepared app and existing provider connections are saved with Autograph.</p>
-          <div className={handoffStyles.resources} role="group" aria-label="Prepared resources">
+          <div className={handoffStyles.resources} aria-label="Prepared resources">
             <GitHubResource intent={intent} returnTo={returnTo} />
             {vercel && !(vercel.status === "skipped" && vercel.code === "not_selected") ? (
               <article>
@@ -139,9 +129,7 @@ export async function HandoffContent({
             <summary>Prepared brief</summary>
             <p style={{ whiteSpace: "pre-wrap" }}>{intent.brief}</p>
           </details>
-          {intent.provisioning &&
-          data.provisioningRevision !== undefined &&
-          data.provisioningRevision !== null ? (
+          {intent.provisioning && data.provisioningRevision ? (
             <HandoffProvisioningProgress
               handoffId={data.handoffId}
               initial={{

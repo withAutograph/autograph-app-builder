@@ -146,7 +146,7 @@ describe("native target private resource approval capture", () => {
     expect(capture.snapshot().pendingRequests).toHaveLength(1);
     const resumed = createPrivateHostedApprovalCapture(owner.publicSessionId, capture.snapshot());
     resumed.observe(settled());
-    const [receipt] = resumed.values();
+    const receipt = resumed.values()[0];
     if (receipt === undefined) {
       throw new Error("Expected the native approval receipt.");
     }

@@ -19,6 +19,7 @@ const sha256 = /^[0-9a-f]{64}$/u;
 const gitObject = /^[0-9a-f]{40}$/u;
 
 type Environment = Readonly<Record<string, string | undefined>>;
+
 export type LocalEveInvocation = Readonly<{
   command: string;
   args: readonly string[];
@@ -27,14 +28,14 @@ export type LocalEveInvocation = Readonly<{
 }>;
 
 type ForwardedSignal = "SIGINT" | "SIGTERM";
-type Listener = () => void;
+
 type SignalTarget = Readonly<{
-  once: (signal: ForwardedSignal, listener: Listener) => void;
-  off: (signal: ForwardedSignal, listener: Listener) => void;
+  once: (signal: ForwardedSignal, listener: () => void) => unknown;
+  off: (signal: ForwardedSignal, listener: () => void) => unknown;
 }>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function required(environment: Environment, name: string): string {
+function required(environment: Environment, name: string) {
   const value = environment[name];
   if (value === undefined || value.length === 0) {
     throw new Error(`Local Eve ${name} binding was unavailable.`);
@@ -43,7 +44,7 @@ function required(environment: Environment, name: string): string {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function ownerDirectory(path: string, label: string, ownerOnly = false): string {
+function ownerDirectory(path: string, label: string, ownerOnly = false) {
   if (
     !nodePath.isAbsolute(path) ||
     nodePath.resolve(path) !== path ||
@@ -52,18 +53,13 @@ function ownerDirectory(path: string, label: string, ownerOnly = false): string 
     throw new Error(`${label} was not an absolute canonical directory.`);
   }
   const info = lstatSync(path);
-  const isUnsafeType = info.isSymbolicLink() || !info.isDirectory();
-  const processUid = process.getuid?.();
-  const isWrongOwner = processUid === undefined || info.uid !== processUid;
-  const mode = info.mode.toString(8).slice(-3).padStart(3, "0");
-  const validPermissionDigits = new Set(["0", "4", "5", "6"]);
-  const groupPermissionsAreSafe = validPermissionDigits.has(mode[1]);
-  const otherPermissionsAreSafe = validPermissionDigits.has(mode[2]);
-  const ownerOnlyPermissionsAreUnsafe = ownerOnly && mode !== "700";
-  const sharedPermissionsAreUnsafe =
-    !ownerOnly && (!groupPermissionsAreSafe || !otherPermissionsAreSafe);
-  const hasUnsafePermissions = ownerOnlyPermissionsAreUnsafe || sharedPermissionsAreUnsafe;
-  if (isUnsafeType || isWrongOwner || hasUnsafePermissions) {
+  if (
+    info.isSymbolicLink() ||
+    !info.isDirectory() ||
+    info.uid !== process.getuid?.() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
+    (info.mode & (ownerOnly ? 0o777 : 0o022)) !== (ownerOnly ? 0o700 : 0)
+  ) {
     throw new Error(`${label} was not owner-bound.`);
   }
   return path;
@@ -155,31 +151,26 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactBinding(environment: Environment) {
-  const expectedBindings = [
-    [environment.APP_BUILDER_EXECUTION_MODE, "development"],
-    [environment.APP_BUILDER_EXECUTION_BUNDLE, "local-development"],
-    [environment.APP_BUILDER_SANDBOX_PROVIDER, "vercel"],
-    [environment.APP_BUILDER_LOCAL_ADAPTER, "1"],
-    [environment.APP_BUILDER_LOCAL_PUBLICATION, "0"],
-    [environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION, "0"],
-    [environment.APP_BUILDER_GITHUB_PUBLICATION_ENABLED, "0"],
-    [environment.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED, "0"],
-    [environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION, "0"],
-    [environment.APP_BUILDER_LOCAL_AUTH_EMULATION, "0"],
-    [environment.EVE_HOSTED_ADAPTER, "0"],
-    [environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS, "0"],
-  ];
-  const forbiddenBindings = [
-    environment.APP_BUILDER_SANDBOX_IMAGE,
-    environment.MSB_HOME,
-    environment.MSB_PATH,
-    environment.MSB_LIBKRUNFW_PATH,
-    environment.VERCEL_TOKEN,
-    environment.AI_GATEWAY_API_KEY,
-  ];
-  const hasUnexpectedBinding = expectedBindings.some(([actual, expected]) => actual !== expected);
-  const hasForbiddenBinding = forbiddenBindings.some((value) => value !== undefined);
-  if (hasUnexpectedBinding || hasForbiddenBinding) {
+  if (
+    environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
+    environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development" ||
+    environment.APP_BUILDER_SANDBOX_PROVIDER !== "vercel" ||
+    environment.APP_BUILDER_LOCAL_ADAPTER !== "1" ||
+    environment.APP_BUILDER_LOCAL_PUBLICATION !== "0" ||
+    environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "0" ||
+    environment.APP_BUILDER_GITHUB_PUBLICATION_ENABLED !== "0" ||
+    environment.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED !== "0" ||
+    environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "0" ||
+    environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "0" ||
+    environment.EVE_HOSTED_ADAPTER !== "0" ||
+    environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS !== "0" ||
+    environment.APP_BUILDER_SANDBOX_IMAGE !== undefined ||
+    environment.MSB_HOME !== undefined ||
+    environment.MSB_PATH !== undefined ||
+    environment.MSB_LIBKRUNFW_PATH !== undefined ||
+    environment.VERCEL_TOKEN !== undefined ||
+    environment.AI_GATEWAY_API_KEY !== undefined
+  ) {
     throw new Error("Local Eve execution authority was not closed.");
   }
   const port = required(environment, "APP_BUILDER_EVE_PORT");
@@ -196,9 +187,12 @@ function exactBinding(environment: Environment) {
   const sourceTree = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_TREE");
   const fingerprint = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT");
   const dependencyKey = required(environment, "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY");
-  const hasInvalidGitIdentity = !gitObject.test(sourceSha) || !gitObject.test(sourceTree);
-  const hasInvalidDigest = !sha256.test(fingerprint) || !sha256.test(dependencyKey);
-  if (hasInvalidGitIdentity || hasInvalidDigest) {
+  if (
+    !gitObject.test(sourceSha) ||
+    !gitObject.test(sourceTree) ||
+    !sha256.test(fingerprint) ||
+    !sha256.test(dependencyKey)
+  ) {
     throw new Error("Local Eve development identity was invalid.");
   }
   return { dependencyKey, fingerprint, port, sourceSha, sourceTree };
@@ -231,50 +225,6 @@ export function createLocalEveInvocation(input: {
   const binding = exactBinding(input.environment);
   const cycleFile = required(input.environment, "APP_BUILDER_LOCAL_EVE_CYCLE_FILE");
   readLocalEveCycleBinding(cycleFile);
-  const environment: NodeJS.ProcessEnv = {
-    APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
-    APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: binding.dependencyKey,
-    APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: binding.fingerprint,
-    APP_BUILDER_DEVELOPMENT_SOURCE_SHA: binding.sourceSha,
-    APP_BUILDER_DEVELOPMENT_SOURCE_TREE: binding.sourceTree,
-    APP_BUILDER_DEV_RUNS_ROOT: roots.runsRoot,
-    APP_BUILDER_DEV_RUNTIME_HOME: roots.runtimeHome,
-    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-    APP_BUILDER_EXECUTION_MODE: "development",
-    APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
-    APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
-    APP_BUILDER_HOSTED_ARTIFACT_PROOF: "0",
-    APP_BUILDER_LOCAL_ADAPTER: "1",
-    APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
-    APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
-    APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
-    APP_BUILDER_LOCAL_PUBLICATION: "0",
-    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
-    EVE_AGENT_HOST: `http://127.0.0.1:${binding.port}`,
-    EVE_HOSTED_ADAPTER: "0",
-    HOME: roots.runtimeHome,
-    LANG: "C",
-    LC_ALL: "C",
-    NODE_ENV: "production",
-    PATH: `${nodePath.dirname(input.pinnedNode)}:/usr/bin:/bin`,
-    PWD: roots.applicationRoot,
-    REPOSITORY_LOCAL_ROOTS: roots.sourceRoot,
-    REPOSITORY_WORKSPACE_ROOT: roots.destinationRoot,
-    TMPDIR: "/tmp",
-    TZ: "UTC",
-    VERCEL_OIDC_TOKEN: input.oidcToken,
-    VERCEL_PROJECT_ID: input.vercelProject.projectId,
-    VERCEL_TEAM_ID: input.vercelProject.orgId,
-    WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${binding.port}`,
-    WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
-    WORKFLOW_LOCAL_DATA_DIR: roots.workflowData,
-    WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
-    WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
-    XDG_DATA_HOME: nodePath.join(roots.runtimeHome, "data"),
-  };
-  if (limits !== undefined) {
-    environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS = JSON.stringify(limits);
-  }
   return {
     args: [
       input.eveCli,
@@ -289,7 +239,51 @@ export function createLocalEveInvocation(input: {
     ],
     command: input.pinnedNode,
     cwd: roots.applicationRoot,
-    environment,
+    environment: {
+      APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
+      APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: binding.dependencyKey,
+      APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: binding.fingerprint,
+      APP_BUILDER_DEVELOPMENT_SOURCE_SHA: binding.sourceSha,
+      APP_BUILDER_DEVELOPMENT_SOURCE_TREE: binding.sourceTree,
+      APP_BUILDER_DEV_RUNTIME_HOME: roots.runtimeHome,
+      APP_BUILDER_DEV_RUNS_ROOT: roots.runsRoot,
+
+      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_EXECUTION_MODE: "development",
+      APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
+      APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
+      APP_BUILDER_HOSTED_ARTIFACT_PROOF: "0",
+      APP_BUILDER_LOCAL_ADAPTER: "1",
+      APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
+      APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
+      APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
+      APP_BUILDER_LOCAL_PUBLICATION: "0",
+      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+      EVE_AGENT_HOST: `http://127.0.0.1:${binding.port}`,
+      EVE_HOSTED_ADAPTER: "0",
+      HOME: roots.runtimeHome,
+      XDG_DATA_HOME: nodePath.join(roots.runtimeHome, "data"),
+      LANG: "C",
+      LC_ALL: "C",
+      NODE_ENV: "production",
+      PATH: `${nodePath.dirname(input.pinnedNode)}:/usr/bin:/bin`,
+      PWD: roots.applicationRoot,
+      REPOSITORY_LOCAL_ROOTS: roots.sourceRoot,
+      REPOSITORY_WORKSPACE_ROOT: roots.destinationRoot,
+      TMPDIR: "/tmp",
+      TZ: "UTC",
+      ...(limits === undefined
+        ? {}
+        : { APP_BUILDER_PRIVATE_COMPUTE_LIMITS: JSON.stringify(limits) }),
+      VERCEL_OIDC_TOKEN: input.oidcToken,
+      VERCEL_PROJECT_ID: input.vercelProject.projectId,
+      VERCEL_TEAM_ID: input.vercelProject.orgId,
+      WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${binding.port}`,
+      WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+      WORKFLOW_LOCAL_DATA_DIR: roots.workflowData,
+      WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
+      WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
+    },
   };
 }
 
@@ -319,18 +313,14 @@ export async function waitForForwardedEveChild(
   child: ChildProcess,
   signalTarget: SignalTarget = process,
 ) {
-  const forwardInterrupt = (): void => {
-    child.kill("SIGINT");
-  };
-  const forwardTerminate = (): void => {
-    child.kill("SIGTERM");
-  };
+  const forwardInterrupt = () => child.kill("SIGINT");
+  const forwardTerminate = () => child.kill("SIGTERM");
   signalTarget.once("SIGINT", forwardInterrupt);
   signalTarget.once("SIGTERM", forwardTerminate);
 
   try {
-    await once(child, "exit");
-    return child.exitCode ?? (child.signalCode === null ? 0 : 1);
+    const [code, signal] = await once(child, "exit");
+    return code ?? (signal ? 1 : 0);
   } finally {
     signalTarget.off("SIGINT", forwardInterrupt);
     signalTarget.off("SIGTERM", forwardTerminate);
@@ -361,29 +351,26 @@ export async function runLocalEve(input: {
     project,
     token,
   });
-  const invocationInput: Parameters<typeof createLocalEveInvocation>[0] = {
+  const invocation = createLocalEveInvocation({
     environment,
     eveCli: resolveInstalledEveCli(repositoryRoot),
     oidcToken,
     pinnedNode: process.execPath,
     repositoryRoot,
+    resume: input.resume,
     vercelProject: project,
-  };
-  if (input.resume !== undefined) {
-    invocationInput.resume = input.resume;
-  }
-  const privateComputeLimits = environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS;
-  if (privateComputeLimits !== undefined) {
-    invocationInput.privateComputeLimits = privateComputeLimitsSchema.parse(
-      JSON.parse(privateComputeLimits),
-    );
-  }
-  const invocation = createLocalEveInvocation(invocationInput);
+    ...(environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS === undefined
+      ? {}
+      : {
+          privateComputeLimits: privateComputeLimitsSchema.parse(
+            JSON.parse(environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS),
+          ),
+        }),
+  });
   const child: ChildProcess = spawn(invocation.command, [...invocation.args], {
     cwd: invocation.cwd,
     env: { ...invocation.environment },
     stdio: "inherit",
   });
-  const exitCode: number = await waitForForwardedEveChild(child);
-  return exitCode;
+  return await waitForForwardedEveChild(child);
 }

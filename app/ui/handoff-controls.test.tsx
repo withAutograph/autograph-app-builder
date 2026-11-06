@@ -5,7 +5,6 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { z } from "zod";
 
 import {
   buildAppHandoffPrompt,
@@ -15,8 +14,12 @@ import {
 import { HandoffControls } from "./handoff-controls";
 import type { HandoffControlData } from "./handoff-controls";
 
-const navigation = { refresh: vi.fn(), replace: vi.fn() };
-const renewal = { action: vi.fn() };
+const navigation = vi.hoisted(() => ({ refresh: vi.fn(), replace: vi.fn() }));
+const renewal = vi.hoisted(() => ({ action: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock("@/app/actions/handoff-renewal", () => ({
+  renewBuilderHandoff: renewal.action,
+}));
 
 const id = "123e4567-e89b-42d3-a456-426614174001";
 const renewedId = "123e4567-e89b-42d3-a456-426614174002";
@@ -29,14 +32,9 @@ const initial: HandoffControlData = {
   status: "prepared",
   version: 1,
 };
-
-const renewalInputSchema = z.object({
-  creationRequestId: z.string().optional(),
-  handoffId: z.string().optional(),
-});
-
-Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
-let root: Root | null = null;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
+let root: Root | undefined;
 let container: HTMLDivElement;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function render(data = initial) {
@@ -76,7 +74,7 @@ afterEach(async () => {
       await Promise.resolve();
     });
   }
-  root = null;
+  root = undefined;
   container?.remove();
   sessionStorage.clear();
   vi.restoreAllMocks();
@@ -95,10 +93,10 @@ describe("destination adapters", () => {
       const match = /autograph_start with (?<payload>\{[^\n]+\})\./u.exec(prompt);
       const serializedPayload = match?.groups?.payload;
       expect(serializedPayload).toBeDefined();
-      if (serializedPayload === undefined || serializedPayload.length === 0) {
+      if (!serializedPayload) {
         throw new Error("Handoff prompt payload not found");
       }
-      const payload: unknown = JSON.parse(serializedPayload);
+      const payload = JSON.parse(serializedPayload);
       expect(payload).toEqual({
         clientRequestId: `web-handoff:${id}`,
         handoffId: id,
@@ -114,7 +112,7 @@ describe("destination adapters", () => {
     expect(buildCursorInstallUrl(initial.mcpUrl, false)).toBeUndefined();
     const installUrl = buildCursorInstallUrl(initial.mcpUrl, true);
     expect(installUrl).toBeDefined();
-    if (installUrl === undefined || installUrl.length === 0) {
+    if (!installUrl) {
       throw new Error("Cursor install URL not found");
     }
     const url = new URL(installUrl);
@@ -122,7 +120,7 @@ describe("destination adapters", () => {
     expect(url.pathname).toBe("/mcp/install");
     const config = url.searchParams.get("config");
     expect(config).toBeDefined();
-    if (config === null || config.length === 0) {
+    if (!config) {
       throw new Error("Cursor install config not found");
     }
     expect(JSON.parse(atob(config))).toEqual({
@@ -157,9 +155,7 @@ describe("durable handoff controls", () => {
       const open = vi.spyOn(window, "open").mockReturnValue(null);
       const data = persisted;
       container = document.createElement("div");
-      const markup = renderToString(<HandoffControls initial={data} />);
-      const parsed = new DOMParser().parseFromString(markup, "text/html");
-      container.append(...parsed.body.childNodes);
+      container.innerHTML = renderToString(<HandoffControls initial={data} />);
       document.body.append(container);
       const actionLabel = status === "expired" ? "Renew handoff" : "Open in Codex";
       const button = [...container.querySelectorAll("button")].find(
@@ -304,18 +300,11 @@ describe("durable handoff controls", () => {
     await render(data);
     await click("Renew handoff");
     expect(renewal.action).toHaveBeenCalledTimes(2);
-    const renewalRequests = renewal.action.mock.calls.flatMap(([, actionInput]) => {
-      const parsed = renewalInputSchema.safeParse(actionInput);
-      return parsed.success ? [parsed.data] : [];
-    });
-    const [firstRequest, retryRequest] = renewalRequests;
-    if (firstRequest === undefined || retryRequest === undefined) {
-      throw new Error("Renewal request arguments were not recorded");
-    }
-    expect(firstRequest).toMatchObject({ handoffId: id });
-    expect(firstRequest.creationRequestId).toBe(retryRequest.creationRequestId);
-    const requestUrls = request.mock.calls.map(([url]) => JSON.stringify(url) ?? "");
-    expect(requestUrls.every((url) => !url.includes("provision"))).toBe(true);
+    const first = renewal.action.mock.calls[0]?.[1] as { creationRequestId?: string };
+    const retry = renewal.action.mock.calls[1]?.[1] as { creationRequestId?: string };
+    expect(first).toMatchObject({ handoffId: id });
+    expect(first.creationRequestId).toBe(retry.creationRequestId);
+    expect(request.mock.calls.every(([url]) => !String(url).includes("provision"))).toBe(true);
     expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${renewedId}`);
     expect(open).not.toHaveBeenCalled();
   });

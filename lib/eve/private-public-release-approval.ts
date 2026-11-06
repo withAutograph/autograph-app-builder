@@ -27,7 +27,7 @@ export const createPrivatePublicReleaseApprovalCapture = (input: {
     plan: input.plan,
     planDigest: publicReleasePlanDigest(input.plan),
   });
-  const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
+  const capture = createPrivateOperatorApprovalCapture({
     callId: input.callId,
     ownerUserId: input.plan.authority.ownerUserId,
     request: {
@@ -36,11 +36,8 @@ export const createPrivatePublicReleaseApprovalCapture = (input: {
       planDigest: expected.planDigest,
       planRef: expected.operationRef,
     },
-  };
-  if (input.state !== undefined) {
-    captureInput.state = input.state;
-  }
-  const capture = createPrivateOperatorApprovalCapture(captureInput);
+    ...(input.state === undefined ? {} : { state: input.state }),
+  });
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
@@ -88,24 +85,16 @@ export const readPrivatePublicReleaseApproval = async (input: {
   ) {
     throw new Error("Public release approval owner changed");
   }
-  const capture = (state: PrivateOperatorApprovalCapture | undefined) => {
-    const captureInput: Parameters<typeof createPrivatePublicReleaseApprovalCapture>[0] = {
-      callId: input.callId,
-      plan: input.plan,
-    };
-    if (state !== undefined) {
-      captureInput.state = state;
-    }
-    return createPrivatePublicReleaseApprovalCapture(captureInput);
-  };
-  const approvalInput: Parameters<typeof readPrivateOperatorApproval>[0] = {
-    assertOwner: input.assertOwner,
-    capture,
+  return await readPrivateOperatorApproval({
     owner: input.owner,
+    ...(input.observation === undefined ? {} : { observation: input.observation }),
+    capture: (state) =>
+      createPrivatePublicReleaseApprovalCapture({
+        callId: input.callId,
+        plan: input.plan,
+        ...(state === undefined ? {} : { state }),
+      }),
     readHistory: input.readHistory,
-  };
-  if (input.observation !== undefined) {
-    approvalInput.observation = input.observation;
-  }
-  return await readPrivateOperatorApproval(approvalInput);
+    assertOwner: input.assertOwner,
+  });
 };

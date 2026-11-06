@@ -32,13 +32,12 @@ async function hasAuthenticatedVisitor() {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function redirectAuthenticatedVisitor({
+async function RedirectAuthenticatedVisitor({
   searchParams,
 }: {
   searchParams: Promise<AuthPageSearchParams>;
 }) {
-  const isAuthenticated = await hasAuthenticatedVisitor();
-  if (!isAuthenticated) {
+  if (!(await hasAuthenticatedVisitor())) {
     return null;
   }
 
@@ -47,7 +46,7 @@ async function redirectAuthenticatedVisitor({
   const search = serializeAuthPageSearchParams(query);
   const signInRedirectTo = resolvePasskeyRedirectTo(DEFAULT_AUTH_REDIRECT_TO, search, origin);
 
-  return redirect(signInRedirectTo);
+  redirect(signInRedirectTo);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -74,7 +73,9 @@ export default function SignUpPage({
       <Suspense fallback={<AuthLoadingShell title="Create your Autograph account" />}>
         <SignUpSurface searchParams={searchParams} />
       </Suspense>
-      <Suspense fallback={null}>{redirectAuthenticatedVisitor({ searchParams })}</Suspense>
+      <Suspense fallback={null}>
+        <RedirectAuthenticatedVisitor searchParams={searchParams} />
+      </Suspense>
     </>
   );
 }

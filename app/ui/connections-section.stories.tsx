@@ -6,21 +6,11 @@ import { ConnectionsSection } from "./builder-connections";
 const meta = {
   args: {
     connected: [],
-    onAdd: (...args) => {
-      fn()(...args);
-    },
-    onCustomize: (...args) => {
-      fn()(...args);
-    },
-    onRemove: (...args) => {
-      fn()(...args);
-    },
-    onSearchChange: (...args) => {
-      fn()(...args);
-    },
-    onShowMore: (...args) => {
-      fn()(...args);
-    },
+    onAdd: fn(),
+    onCustomize: fn(),
+    onRemove: fn(),
+    onSearchChange: fn(),
+    onShowMore: fn(),
     search: "",
     selected: [],
     showMore: false,

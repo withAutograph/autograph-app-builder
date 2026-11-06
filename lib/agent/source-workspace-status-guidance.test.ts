@@ -352,7 +352,7 @@ describe("source and workspace status guidance", () => {
     const baselineFiles = [
       { mode: "100644", objectId: "a".repeat(40), path: "app.txt", sha256: sha256("original") },
     ];
-    const selected = { ...workflowState("app_spec_accepted"), githubSource: null };
+    const selected = { ...workflowState("app_spec_accepted"), githubSource: undefined };
     selected.workspace = {
       ...workspace,
       eligibilityDigest: "e".repeat(64),
@@ -366,19 +366,17 @@ describe("source and workspace status guidance", () => {
     ]);
     const sandbox = {
       id: observed.workspaceId,
-      readTextFile: async ({ path }: { path: string }) =>
-        await Promise.resolve(files.get(path) ?? null),
-      run: async () =>
-        await Promise.resolve({
-          exitCode: 0,
-          stderr: "",
-          stdout: JSON.stringify({
-            realRepository: "/workspace/repository",
-            realWorkspace: "/workspace",
-            repositoryInput: "/workspace/repository",
-            workspaceRoot: "/workspace",
-          }),
+      readTextFile: async ({ path }: { path: string }) => files.get(path) ?? null,
+      run: async () => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: JSON.stringify({
+          realRepository: "/workspace/repository",
+          realWorkspace: "/workspace",
+          repositoryInput: "/workspace/repository",
+          workspaceRoot: "/workspace",
         }),
+      }),
     };
     getWorkflowState.mockReturnValue(selected);
     const capability = vi.spyOn(testCapabilities, "hasTestCapability").mockReturnValue(false);

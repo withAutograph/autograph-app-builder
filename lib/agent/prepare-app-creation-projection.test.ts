@@ -42,13 +42,13 @@ const ports = vi.hoisted(() => ({
 }));
 const repairSandbox = { id: "workspace", readBinaryFile: ports.readBinary, run: ports.run };
 vi.mock("./refresh-planning-source", () => ({
-  refreshPlanningSource: () => repairSandbox,
+  refreshPlanningSource: async () => repairSandbox,
 }));
 vi.mock("./approved-build-continuation-runtime", () => ({
   emitCurrentBuildWorkflowProjection: ports.emitProjection,
 }));
 vi.mock("./target-dependency-preparation", () => ({
-  prepareOrReuseDependencies: () => ({
+  prepareOrReuseDependencies: async () => ({
     sandbox: repairSandbox,
     state: appBuilderWorkflowState.get(),
   }),
@@ -100,8 +100,10 @@ const profile = () =>
     vcpus: 8,
     version: 1,
   });
-const fixture = (phase: "planned" | "identity_resolved", compute = profile()) => {
-  const value = {
+const fixture = (phase: "planned" | "identity_resolved", compute = profile()) =>
+  // SAFETY: The real producer consumes these immutable state fields; unrelated receipt internals are opaque test sentinels and no provider or filesystem port is available.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only the explicit consumed receipt fields are modeled; unavailable execution ports cannot perform effects.
+  ({
     appSpec: {
       acceptedByCallId: "accepted",
       appId: "example",
@@ -125,15 +127,10 @@ const fixture = (phase: "planned" | "identity_resolved", compute = profile()) =>
       workspaceId: "workspace",
       workspacePath: "/workspace/repository",
     },
-  };
-  if (phase === "planned") {
-    Object.assign(value, {
-      proposal: { digest: "frozen-proposal", target: { privateCompute: compute } },
-    });
-  }
-  // SAFETY: The real producer consumes these immutable state fields; unrelated receipt internals are opaque test sentinels and no provider or filesystem port is available.
-  return value as unknown as AppBuilderWorkflowState;
-};
+    ...(phase === "planned"
+      ? { proposal: { digest: "frozen-proposal", target: { privateCompute: compute } } }
+      : {}),
+  }) as unknown as AppBuilderWorkflowState;
 // SAFETY: Planning I/O is mocked above; only the call and session identifiers are consumed by this producer test.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Context uses only these identifiers while execution ports are isolated.
 const context = { callId: "plan", session: { auth: {}, id: "session" } } as unknown as Parameters<
@@ -248,7 +245,7 @@ const hostedRecoveryContext = {
   callId: "hosted-recovery",
   // SAFETY: Recovery may inspect this Sandbox's identity only. The command and file spies assert no source I/O.
   getSandbox: vi.fn(
-    () => repairSandbox as unknown as Awaited<ReturnType<typeof context.getSandbox>>,
+    async () => repairSandbox as unknown as Awaited<ReturnType<typeof context.getSandbox>>,
   ),
 };
 
@@ -264,18 +261,16 @@ const prepareRecoveryFixture = async (
   const base = {
     ...applied,
     phase,
+    ...(phase === "validation_failed" ? { validationFailure: { reason: "command-failed" } } : {}),
+    ...(phase === "reviewed"
+      ? {
+          githubDraftProposal: { proposal: { digest: "sealed-draft" } },
+          reviewReceipt: {},
+          validationReceipt: {},
+        }
+      : {}),
     publishedGitHubDraftProposalDigest,
   } as AppBuilderWorkflowState;
-  if (phase === "validation_failed") {
-    Object.assign(base, { validationFailure: { reason: "command-failed" } });
-  }
-  if (phase === "reviewed") {
-    Object.assign(base, {
-      githubDraftProposal: { proposal: { digest: "sealed-draft" } },
-      reviewReceipt: {},
-      validationReceipt: {},
-    });
-  }
   appBuilderWorkflowState.update(() => base);
   approveRepairFixture(base);
   await prepareAppCreation({ existingAppChanges: repairFiles }, context);
@@ -784,13 +779,13 @@ describe("unapproved existing-app plan amendment", () => {
       appBuilderWorkflowState.update(() => current);
       await expect(
         inspectExistingAppRepair({
-          changes: repairFiles,
-          ctx: context,
           current,
+          changes: repairFiles,
           // SAFETY: The fake Sandbox has only the consumed ID and read-only observation ports.
           sandbox: { ...repairSandbox, id: "foreign" } as unknown as Parameters<
             typeof inspectExistingAppRepair
           >[0]["sandbox"],
+          ctx: context,
         }),
       ).rejects.toThrow("authority or workspace changed");
     });
@@ -840,15 +835,15 @@ it("does not classify foreign-session repair history as an unapplied plan", asyn
     appBuilderWorkflowState.update(() => current);
     existingAppRepairHistory.update(() => [
       {
+        requestDigest: "prior-request",
+        proposalDigest: current.proposal.digest,
+        sessionId: "foreign-session",
+        previousWorkflow: current,
         // SAFETY: appliedRepairFixture constructs exactly the applied phase and its immutable receipt fields.
         approvedBase: appliedRepairFixture() as Extract<
           AppBuilderWorkflowState,
           { phase: "applied" }
         >,
-        previousWorkflow: current,
-        proposalDigest: current.proposal.digest,
-        requestDigest: "prior-request",
-        sessionId: "foreign-session",
       },
     ]);
     await expect(prepareAppCreation({ existingAppChanges: repairFiles }, context)).rejects.toThrow(

@@ -1,8 +1,8 @@
 import { setImmediate } from "node:timers/promises";
 
 import { createEmulateHandler } from "@emulators/adapter-next";
-import { githubPlugin } from "@emulators/github";
-import { vercelPlugin } from "@emulators/vercel";
+import * as github from "@emulators/github";
+import * as vercel from "@emulators/vercel";
 
 import { providerEmulationSeed } from "./provider-emulation-seed";
 import { readPreviewProviderEmulation } from "./local-provider-emulation";
@@ -18,7 +18,7 @@ let active: { namespace: string; handler: Handler } | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function required(value: string | undefined, name: string) {
-  if (value === undefined || value === "") {
+  if (!value) {
     throw new Error(`${name} is required for Preview emulation.`);
   }
   return value;
@@ -49,7 +49,7 @@ export function createPreviewEmulateHandler(input: {
   let persistenceRevision = 0;
   const emulateHandler = createEmulateHandler({
     persistence: {
-      load: async () => await persistence.load(),
+      load: persistence.load,
       async save(state) {
         persistenceRevision += 1;
         pendingPersistence = persistence.save(state);
@@ -58,20 +58,22 @@ export function createPreviewEmulateHandler(input: {
     },
     services: {
       github: {
-        emulator: githubPlugin,
-        seed: seed.github,
+        emulator: github,
+        seed: seed.github as unknown as Record<string, unknown>,
       },
       vercel: {
-        emulator: vercelPlugin,
-        seed: seed.vercel,
+        emulator: vercel,
+        seed: seed.vercel as unknown as Record<string, unknown>,
       },
     },
   });
-  const durableMethod =
-    (method: keyof Handler) =>
+  const durableHandler = {} as Handler;
+  const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+  const createDurableHandler =
+    (method: (typeof methods)[number]) =>
     async (
-      request: Parameters<Handler[keyof Handler]>[0],
-      context: Parameters<Handler[keyof Handler]>[1],
+      request: Parameters<Handler[(typeof methods)[number]]>[0],
+      context: Parameters<Handler[(typeof methods)[number]]>[1],
     ) => {
       const response = await emulateHandler[method](request, context);
       // adapter-next queues persistence after producing the response. Await its
@@ -88,25 +90,17 @@ export function createPreviewEmulateHandler(input: {
       }
       return response;
     };
-  const durableHandlers: Handler = {
-    DELETE: durableMethod("DELETE"),
-    GET: durableMethod("GET"),
-    PATCH: durableMethod("PATCH"),
-    POST: durableMethod("POST"),
-    PUT: durableMethod("PUT"),
-  };
-  return durableHandlers;
+  for (const method of methods) {
+    durableHandler[method] = createDurableHandler(method);
+  }
+  return durableHandler;
 }
 
-const supportedMethods = new Set<string>(["GET", "POST", "PUT", "PATCH", "DELETE"]);
-
-const isSupportedMethod = (method: string): method is keyof Handler => supportedMethods.has(method);
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function handler(environment: NodeJS.ProcessEnv): Handler | undefined {
+function handler(environment: NodeJS.ProcessEnv) {
   const emulation = readPreviewProviderEmulation(environment);
   if (!emulation) {
-    return undefined;
+    return;
   }
   if (active?.namespace === emulation.namespace) {
     return active.handler;
@@ -133,11 +127,12 @@ export async function invokePreviewEmulateRequest(request: Request) {
     return new Response("Not found", { status: 404 });
   }
   const path = url.pathname.slice(prefix.length).split("/").filter(Boolean);
-  const { method } = request;
-  if (!isSupportedMethod(method)) {
+  const method = request.method as keyof Handler;
+  const selectedMethod = selected[method];
+  if (typeof selectedMethod !== "function") {
     return new Response("Method not allowed", { status: 405 });
   }
-  return await selected[method](request, { params: Promise.resolve({ path }) });
+  return await selectedMethod(request, { params: Promise.resolve({ path }) });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

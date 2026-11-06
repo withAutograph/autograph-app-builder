@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import { activeBuilderModelId } from "../integrations/active-model";
 import {
@@ -20,7 +19,6 @@ import { createBuilderHandoffRouteHandler } from "../handoff/deployment";
 import { createBuilderHandoffService } from "../handoff/service";
 import type { BuilderHandoffStore } from "../handoff/service";
 import type { BuilderHandoffRecord } from "../handoff/contracts";
-import type { HostedMcpAuthConfig } from "./request-auth";
 import { InMemoryHostedEveStore } from "../eve/hosted-store";
 import type { HostedEveTransport } from "../eve/hosted-service";
 import { createMcpRequestHandler } from "./request-handler";
@@ -31,47 +29,39 @@ import {
   sessionEnvelope,
 } from "./handoff-provider-test-harness";
 
-const callStartResponseSchema = z.object({
-  result: z.object({
-    isError: z.boolean().optional(),
-    structuredContent: z.object({ sessionId: z.string() }),
-  }),
-});
-const createHandoffResponseSchema = z.object({ handoffId: z.string() });
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function handoffStore(): BuilderHandoffStore {
   const records = new Map<string, BuilderHandoffRecord>();
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const read: BuilderHandoffStore["read"] = async ({ authority, handoffId }) => {
     const record = records.get(handoffId);
-    if (!record) return null;
-    const matches = [
-      record.authority.audience === authority.audience,
-      record.authority.issuer === authority.issuer,
-      record.authority.ownerUserId === authority.ownerUserId,
-      record.authority.workspaceId === authority.workspaceId,
-    ].every(Boolean);
-    return matches ? record : null;
+    return record &&
+      Object.entries(authority).every(
+        ([key, value]) => record.authority[key as keyof typeof authority] === value,
+      )
+      ? record
+      : undefined;
   };
   return {
     async bindSession(input) {
       const record = await read(input);
-      const validRecord =
-        record?.requestDigest === input.requestDigest &&
-        input.now < (record?.expiresAt ?? input.now);
       if (
-        validRecord &&
-        record !== null &&
-        (record.sessionId === undefined || record.sessionId.length === 0)
+        !record ||
+        record.requestDigest !== input.requestDigest ||
+        input.now >= record.expiresAt
       ) {
-        records.set(record.handoffId, {
-          ...record,
-          redeemedAt: input.now,
-          sessionId: input.sessionId,
-        });
+        return;
       }
-      return validRecord ? record : null;
+      if (record.sessionId) {
+        return record;
+      }
+      const bound = {
+        ...record,
+        redeemedAt: input.now,
+        sessionId: input.sessionId,
+      };
+      records.set(record.handoffId, bound);
+      return bound;
     },
     read,
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -117,14 +107,16 @@ async function callStart(
   );
   expect(response.status).toBe(200);
   const text = await response.text();
-  const parsedBody: unknown = JSON.parse(
+  const result = JSON.parse(
     text
       .split("\n")
       .find((line) => line.startsWith("data: "))
       ?.slice(6) ?? text,
   );
-  const result = callStartResponseSchema.parse(parsedBody);
-  return result.result;
+  return result.result as {
+    isError?: boolean;
+    structuredContent: { sessionId: string };
+  };
 }
 
 describe("web session to real OAuth to hosted MCP handoff", () => {
@@ -163,17 +155,13 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       const journalRead = vi.fn(
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async (value: { authority: typeof authority; requestId: string }) => {
-          const requestedAuthority = value.authority;
-          if (value.requestId !== provisioningRequestId) {
-            return null;
-          }
           if (
-            requestedAuthority.audience !== authority.audience ||
-            requestedAuthority.issuer !== authority.issuer ||
-            requestedAuthority.ownerUserId !== authority.ownerUserId ||
-            requestedAuthority.workspaceId !== authority.workspaceId
+            value.requestId !== provisioningRequestId ||
+            Object.entries(authority).some(
+              ([key, expected]) => value.authority[key as keyof typeof authority] !== expected,
+            )
           ) {
-            return null;
+            return;
           }
           return structuredClone(journalRow);
         },
@@ -183,12 +171,12 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
           const session = await auth.auth.api.getSession({
             headers: request.headers,
           });
-          if (session === null) {
-            return null;
+          if (!session) {
+            return;
           }
           const workspaces = auth.membershipState.activeWorkspaces;
           if (workspaces.length !== 1) {
-            return null;
+            return;
           }
           return {
             audience: resource,
@@ -225,7 +213,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         }),
       );
       expect(create.status).toBe(200);
-      const { handoffId } = createHandoffResponseSchema.parse(await create.json());
+      const { handoffId } = (await create.json()) as { handoffId: string };
       expect(journalRead).toHaveBeenCalledWith({
         authority,
         requestId: provisioningRequestId,
@@ -270,16 +258,15 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       });
       const store = new InMemoryHostedEveStore();
       const config = {
-        algorithm: "ES256",
+        algorithm: "ES256" as const,
         audience: resource,
         issuer,
         jwksUrl: `${issuer}/jwks`,
         resourceUrl: resource,
-      } satisfies HostedMcpAuthConfig;
+      };
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const jwksFetch = vi.fn<typeof fetch>(async (url, init) => {
-        const requestUrl = url instanceof URL ? url.href : url;
-        expect(requestUrl).toBe(config.jwksUrl);
+        expect(String(url)).toBe(config.jwksUrl);
         return await auth.customFetchImpl(url, init);
       });
       const handler = createMcpRequestHandler({
@@ -386,7 +373,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       expect(start).toHaveBeenCalledTimes(1);
       const strangerCredentials = {
         email: "other-owner@example.test",
-        password: randomUUID(),
+        password: "other-owner-test-password",
       };
       await auth.auth.api.signUpEmail({
         body: { ...strangerCredentials, name: "Other owner" },
@@ -413,12 +400,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         sourceHandoffId: handoffId,
       });
       const persisted = await store.getSession(principal, result.structuredContent.sessionId);
-      if (
-        !persisted ||
-        persisted.version !== 2 ||
-        persisted.sourceHandoffId === undefined ||
-        persisted.sourceHandoffId.length === 0
-      ) {
+      if (!persisted || persisted.version !== 2 || !persisted.sourceHandoffId) {
         throw new Error("Durable prepared session missing.");
       }
       const restartedAuth = sessionEnvelope(persisted.principal, persisted.sourceHandoffId);

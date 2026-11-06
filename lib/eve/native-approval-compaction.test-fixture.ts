@@ -8,7 +8,7 @@ import { compactMessages } from "../../node_modules/eve/dist/src/harness/compact
 
 export const model = () =>
   new MockLanguageModelV4({
-    doGenerate: () => ({
+    doGenerate: async () => ({
       content: [{ text: "Retained product instructions and completed history.", type: "text" }],
       finishReason: { raw: "stop", unified: "stop" },
       usage: {
@@ -64,7 +64,7 @@ export const execute = async (
   apply: (
     input: { proposalDigest: string },
     options: { abortSignal?: AbortSignal },
-  ) => Promise<{ state: string }> = vi.fn(async () => await Promise.resolve({ state: "applied" })),
+  ) => Promise<{ state: string }> = vi.fn(async () => ({ state: "applied" })),
 ) => {
   const agent = new ToolLoopAgent({
     model: model(),

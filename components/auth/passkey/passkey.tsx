@@ -30,7 +30,7 @@ export function Passkey({ passkey }: PasskeyProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
 
-  const passkeyName = (passkey.name?.length ?? 0) > 0 ? passkey.name : passkeyLocalization.passkey;
+  const passkeyName = passkey.name || passkeyLocalization.passkey;
 
   return (
     <Item>

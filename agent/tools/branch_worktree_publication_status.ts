@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/filename-case, github/filenames-match-regex -- Preserve the registered Eve tool name and public workflow identity. */
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -36,7 +35,7 @@ export const exactBranchWorktreePublicationProposal = async (input: {
   if (workflow.reviewReceipt.digest !== input.expectedReviewDigest) {
     throw new Error("The reviewed change-set receipt changed before publication.");
   }
-  return await deriveBranchWorktreePublicationProposal({
+  return deriveBranchWorktreePublicationProposal({
     review: workflow.reviewReceipt,
     sourceReceipt: workflow.sourceReceipt,
   });
@@ -50,9 +49,9 @@ export default defineTool({
     if (workflow.reviewReceipt.digest !== input.expectedReviewDigest) {
       throw new Error("The reviewed receipt changed before publication status.");
     }
-    const proposal = await (async () => {
+    const proposal = await (() => {
       if (workflow.phase === "reviewed") {
-        return await exactBranchWorktreePublicationProposal(input);
+        return exactBranchWorktreePublicationProposal(input);
       }
       if (workflow.phase === "branch_publication_pending") {
         return workflow.branchPublicationProposal;

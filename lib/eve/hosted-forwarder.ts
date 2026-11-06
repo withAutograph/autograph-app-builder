@@ -3,25 +3,27 @@ import { z } from "zod";
 
 import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
 
-const hostedForwarderConfigSchema = z.strictObject({
-  projectName: z
-    .string()
-    .min(1)
-    .max(100)
-    .refine((value) => !/[*:]/u.test(value)),
-  teamSlug: z
-    .string()
-    .min(1)
-    .max(100)
-    .refine((value) => !/[*:]/u.test(value)),
-});
+const hostedForwarderConfigSchema = z
+  .object({
+    projectName: z
+      .string()
+      .min(1)
+      .max(100)
+      .refine((value) => !/[*:]/u.test(value)),
+    teamSlug: z
+      .string()
+      .min(1)
+      .max(100)
+      .refine((value) => !/[*:]/u.test(value)),
+  })
+  .strict();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readHostedForwarderSubject(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): string | undefined {
   if (environment.EVE_HOSTED_ADAPTER !== "1") {
-    return undefined;
+    return;
   }
   const deploymentEnvironment = readHostedDeploymentEnvironment(environment);
   const config = hostedForwarderConfigSchema.parse({

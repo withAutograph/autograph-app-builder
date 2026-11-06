@@ -65,7 +65,7 @@ export default defineTool({
       appBaselineState.get()?.receipt,
     );
     const sandbox = await ctx.getSandbox();
-    const contentSource = publicationContentSourceForReviewedWorkflow({
+    const contentSource = await publicationContentSourceForReviewedWorkflow({
       sandbox,
       state,
     });

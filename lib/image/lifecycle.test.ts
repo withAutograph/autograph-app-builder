@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import {
   chmodSync,
   closeSync,
-  constants as fsConstants,
   existsSync,
   lstatSync,
   linkSync,
@@ -24,7 +23,6 @@ import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { runSequentially } from "../async-sequential";
-import { z } from "zod";
 
 import {
   assertGithubStateRoot,
@@ -81,41 +79,6 @@ import {
 const builderCommit = "1".repeat(40);
 const builderTree = "2".repeat(40);
 const dockerfileSha256 = "3".repeat(64);
-const testTempRoot = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-image-tests-")));
-chmodSync(testTempRoot, 0o700);
-const safeTestPath = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
-  .filter((directory) => {
-    try {
-      return lstatSync(directory).mode % (fsConstants.S_IWOTH * 2) < fsConstants.S_IWOTH;
-    } catch {
-      return false;
-    }
-  })
-  .join(nodePath.delimiter);
-const privateTempPath = (...segments: string[]) => nodePath.join(testTempRoot, ...segments);
-const imageInvocationSchema = z.object({
-  argv: z.array(z.string()),
-  credentialDigest: z.string(),
-  environment: z.record(z.string(), z.string()),
-});
-const fixtureSecret = () => ["github", "pat", "exact", "private", "package", "token"].join("_");
-const isGithubHostFixture = (value: unknown): value is GithubHostFixture => {
-  if (typeof value !== "object" || value === null || !("hosts" in value)) return false;
-  const hosts: unknown = value.hosts;
-  if (typeof hosts !== "object" || hosts === null || !("github.com" in hosts)) return false;
-  return Array.isArray(hosts["github.com"]);
-};
-interface GithubHostFixture {
-  hosts: { "github.com": Record<string, string | boolean>[] };
-}
-const addUnexpectedHostField = (value: GithubHostFixture) => ({
-  ...value,
-  hosts: {
-    ...value.hosts,
-    "github.com": value.hosts["github.com"].map((record) => ({ ...record, extra: true })),
-  },
-});
-
 const targetFiles = Object.fromEntries(
   [
     ".config/mise/config.toml",
@@ -140,10 +103,10 @@ const targetFiles = Object.fromEntries(
 const provenance = () =>
   createExactImageProvenance({
     arrustedIgnored: "",
-    arrustedRoot: nodePath.join(tmpdir(), "exact-arrusted"),
+    arrustedRoot: "/tmp/exact-arrusted",
     arrustedStatus: "",
     builderIgnored: "",
-    builderRoot: nodePath.join(tmpdir(), "exact-builder"),
+    builderRoot: "/tmp/exact-builder",
     builderStatus: "",
     dockerfileSha256,
     expectedBuilderCommit: builderCommit,
@@ -153,7 +116,7 @@ const provenance = () =>
     observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
     observedBuilderCommit: builderCommit,
     observedBuilderTree: builderTree,
-    stateRoot: nodePath.join(tmpdir(), "exact-image-state"),
+    stateRoot: "/tmp/exact-image-state",
     targetFiles,
   });
 
@@ -279,10 +242,7 @@ if (helper.status !== 0) {
   process.stderr.write("credential helper failed\\n");
   process.exit(51);
 }
-const credential: unknown = JSON.parse(helper.stdout);
-if (typeof credential !== "object" || credential === null || !("Secret" in credential) || typeof credential.Secret !== "string") {
-  throw new Error("credential helper returned invalid JSON");
-}
+const credential = JSON.parse(helper.stdout);
 const credentialDigest = createHash("sha256")
   .update(credential.Secret)
   .digest("hex");
@@ -315,10 +275,11 @@ process.stdout.write("preloaded\\n");
 // These helpers intentionally expose callback-based setup for synchronous and
 // asynchronous test scopes.
 // oxlint-disable promise/prefer-await-to-callbacks
-const withFakeGhEnvironment = (
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function withFakeGhEnvironment(
   fixture: ReturnType<typeof installFakeGhBoundary>,
   callback: () => void,
-): boolean => {
+) {
   const values = {
     APP_BUILDER_GH_CONFIG_DIR: fixture.config,
     APP_BUILDER_IMAGE_BUILDX_BIN: realpathSync(nodePath.join(fixture.bin, "docker-buildx")),
@@ -327,15 +288,13 @@ const withFakeGhEnvironment = (
     APP_BUILDER_IMAGE_MSB_BIN: realpathSync(nodePath.join(fixture.bin, "msb")),
     APP_BUILDER_IMAGE_NODE_BIN: realpathSync(process.execPath),
   };
-  const previous = new Map<string, string | undefined>(
-    Object.keys(values).map((key) => [key, process.env[key]]),
-  );
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   try {
     Object.assign(process.env, values);
     callback();
-    return true;
+    return;
   } finally {
-    for (const [key, value] of previous) {
+    for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
         Reflect.deleteProperty(process.env, key);
       } else {
@@ -343,12 +302,13 @@ const withFakeGhEnvironment = (
       }
     }
   }
-};
+}
 
-const withFakeGhEnvironmentAsync = async (
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function withFakeGhEnvironmentAsync(
   fixture: ReturnType<typeof installFakeGhBoundary>,
-  callback: () => Promise<boolean>,
-): Promise<boolean> => {
+  callback: () => Promise<void>,
+): Promise<void> {
   const values = {
     APP_BUILDER_GH_CONFIG_DIR: fixture.config,
     APP_BUILDER_IMAGE_BUILDX_BIN: realpathSync(nodePath.join(fixture.bin, "docker-buildx")),
@@ -357,14 +317,13 @@ const withFakeGhEnvironmentAsync = async (
     APP_BUILDER_IMAGE_MSB_BIN: realpathSync(nodePath.join(fixture.bin, "msb")),
     APP_BUILDER_IMAGE_NODE_BIN: realpathSync(process.execPath),
   };
-  const previous = new Map<string, string | undefined>(
-    Object.keys(values).map((key) => [key, process.env[key]]),
-  );
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   try {
     Object.assign(process.env, values);
-    return await callback();
+    await callback();
+    return;
   } finally {
-    for (const [key, value] of previous) {
+    for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
         Reflect.deleteProperty(process.env, key);
       } else {
@@ -372,33 +331,23 @@ const withFakeGhEnvironmentAsync = async (
       }
     }
   }
-};
+}
 // oxlint-enable promise/prefer-await-to-callbacks
 
-const seedFakeGhState = (fixture: ReturnType<typeof installFakeGhBoundary>): string => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function seedFakeGhState(fixture: ReturnType<typeof installFakeGhBoundary>): string {
   mkdirSync(nodePath.join(fixture.state, "gh"), { mode: 0o700 });
   writeFileSync(nodePath.join(fixture.state, "gh", "device-id"), "fixture-device-id\n", {
     mode: 0o600,
   });
   return githubStateDigest(fixture.state);
-};
-
-type PreloadResult = Readonly<{ reference: string; status: "preloaded"; metadata?: object }>;
-
-type ImageInvocation = Readonly<{
-  argv: string[];
-  environment: Record<string, string>;
-  credentialDigest: string;
-}>;
-
-const parseImageInvocation = (serialized: string): ImageInvocation =>
-  imageInvocationSchema.parse(JSON.parse(serialized));
+}
 
 type FixtureReceipt = Readonly<{
   version: 1;
   kind: string;
   provenance: ReturnType<typeof createExactImageProvenance>;
-  result: PreloadResult;
+  result: unknown;
   digest: string;
 }>;
 
@@ -408,9 +357,9 @@ function writeFixtureReceipt(
   filename: string,
   kind: string,
   exact: ReturnType<typeof createExactImageProvenance>,
-  parsedResult: PreloadResult,
+  result: unknown,
 ): FixtureReceipt {
-  const unsigned = { kind, provenance: exact, result: parsedResult, version: 1 as const };
+  const unsigned = { kind, provenance: exact, result, version: 1 as const };
   const receipt = {
     ...unsigned,
     digest: hashArtifact(JSON.stringify(unsigned)),
@@ -439,15 +388,25 @@ function stateArtifactText(root: string): string {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function installPreloadFixture(variant: string) {
-  const root = realpathSync(mkdtempSync(privateTempPath(`app-builder-preload-${variant}-`)));
+function installPreloadFixture(
+  variant:
+    | "current"
+    | "missing"
+    | "stale"
+    | "provenance-mismatch"
+    | "identity-mismatch"
+    | "state-drift",
+) {
+  const root = realpathSync(
+    mkdtempSync(nodePath.join(tmpdir(), `app-builder-preload-${variant}-`)),
+  );
   const providerRoot = nodePath.join(root, "provider");
   const stateRoot = nodePath.join(root, "state");
   const arrustedRoot = nodePath.join(root, "arrusted");
   mkdirSync(providerRoot, { mode: 0o700 });
   mkdirSync(stateRoot, { mode: 0o700 });
   mkdirSync(arrustedRoot, { mode: 0o700 });
-  const sentinel = ["github", "pat", "preload", "behavioral", "sentinel"].join("_");
+  const sentinel = "github_pat_preload_behavioral_sentinel";
   const fixture = installFakeGhBoundary(
     providerRoot,
     sentinel,
@@ -497,10 +456,10 @@ function installPreloadFixture(variant: string) {
         authenticationBoundary: binding,
         authenticationBoundaryDigest: hashArtifact(JSON.stringify(binding)),
         authenticationProvider: "gh@2.98.0-keyring",
-        identityDigest: variant === "mismatch" ? "0".repeat(64) : approvedIdentityDigest,
+        identityDigest: variant === "identity-mismatch" ? "0".repeat(64) : approvedIdentityDigest,
         keyringReadbackTransport: "github-cli-keyring",
         operatorApprovalTransport: "one-time-stdin",
-        provenanceDigest: variant === "mismatch" ? "0".repeat(64) : exact.digest,
+        provenanceDigest: variant === "provenance-mismatch" ? "0".repeat(64) : exact.digest,
         providerMutation: "none",
         registry: "ghcr.io",
         schema: "ghcr-login-v3",
@@ -526,7 +485,7 @@ function installPreloadFixture(variant: string) {
       }
       writeFixtureReceipt(stateRoot, "push-receipt.json", "image-push", exact, {
         ghcrLoginReceiptDigest:
-          variant === "mismatch" ? "8".repeat(64) : (login?.digest ?? "6".repeat(64)),
+          variant === "identity-mismatch" ? "8".repeat(64) : (login?.digest ?? "6".repeat(64)),
         localImageReceiptDigest: "7".repeat(64),
         status: "pushed",
         tag: exact.image.tag,
@@ -547,11 +506,8 @@ function installPreloadFixture(variant: string) {
 
 describe("image lifecycle", () => {
   it("binds the pinned GitHub CLI, keyring configuration, and image consumers", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-ghcr-helper-")));
-    const fixture = installFakeGhBoundary(
-      root,
-      ["github", "pat", "exact", "private", "package", "token"].join("_"),
-    );
+    const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-ghcr-helper-")));
+    const fixture = installFakeGhBoundary(root, "github_pat_exact_private_package_token");
     try {
       withFakeGhEnvironment(fixture, () => {
         const oldHome = process.env.HOME;
@@ -563,7 +519,7 @@ describe("image lifecycle", () => {
             APP_BUILDER_GH_STATE_DIR: fixture.state,
             APP_BUILDER_IMAGE_GH_BIN: fixture.gh,
             DOCKER_CONFIG: root,
-            PATH: safeTestPath,
+            PATH: `${root}:/usr/bin:/bin`,
           });
           const binding = currentGhcrCredentialBinding(root);
           expect(binding).toMatchObject({
@@ -601,7 +557,7 @@ describe("image lifecycle", () => {
             });
           }).not.toThrow();
           const provenanceDigest = "c".repeat(64);
-          const approved = Buffer.from(fixtureSecret());
+          const approved = Buffer.from("github_pat_exact_private_package_token");
           const stateDigest = seedFakeGhState(fixture);
           const helperResult = spawnSync(
             nodePath.join(root, "docker-credential-ghcr-bound"),
@@ -644,11 +600,10 @@ describe("image lifecycle", () => {
   });
 
   it("keeps GitHub CLI mutable state out of the Builder checkout", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-gh-state-boundary-")));
-    const fixture = installFakeGhBoundary(
-      root,
-      ["github", "pat", "exact", "private", "package", "token"].join("_"),
+    const root = realpathSync(
+      mkdtempSync(nodePath.join(tmpdir(), "app-builder-gh-state-boundary-")),
     );
+    const fixture = installFakeGhBoundary(root, "github_pat_exact_private_package_token");
     const builder = nodePath.join(root, "builder");
     mkdirSync(builder, { mode: 0o700 });
     execFileSync("/usr/bin/git", ["init", "--quiet", builder]);
@@ -661,7 +616,7 @@ describe("image lifecycle", () => {
     );
     const provenanceDigest = "9".repeat(64);
     const stateDigest = seedFakeGhState(fixture);
-    const approved = Buffer.from(fixtureSecret());
+    const approved = Buffer.from("github_pat_exact_private_package_token");
     const identity = {
       digest: ghcrIdentityDigest("withAutograph", provenanceDigest, approved),
       provenanceDigest,
@@ -715,11 +670,8 @@ describe("image lifecycle", () => {
   });
 
   it("rejects unsafe, linked, and drifted GitHub CLI state", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-gh-state-safety-")));
-    const fixture = installFakeGhBoundary(
-      root,
-      ["github", "pat", "exact", "private", "package", "token"].join("_"),
-    );
+    const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-gh-state-safety-")));
+    const fixture = installFakeGhBoundary(root, "github_pat_exact_private_package_token");
     try {
       withFakeGhEnvironment(fixture, () => {
         assertGithubStateRoot(fixture.state);
@@ -765,24 +717,19 @@ describe("image lifecycle", () => {
     expect(() => parseGhAuthStatus(valid.replace('"https"', '"ssh"'), "withAutograph")).toThrow(
       "did not match",
     );
-    // SAFETY: The fixture JSON is the constant immediately above and defines the expected host record structure.
-    const parsed: unknown = JSON.parse(valid);
-    if (!isGithubHostFixture(parsed)) throw new Error("Invalid GitHub host fixture.");
-    const extraRecord = addUnexpectedHostField(parsed);
-    expect(() =>
-      parseGhAuthStatus(JSON.stringify(addUnexpectedHostField(extraRecord)), "withAutograph"),
-    ).toThrow("did not match");
+    const extraRecord = JSON.parse(valid);
+    extraRecord.hosts["github.com"][0].extra = true;
+    expect(() => parseGhAuthStatus(JSON.stringify(extraRecord), "withAutograph")).toThrow(
+      "did not match",
+    );
     expect(() => {
       assertGhcrUsername("owner/token");
     }).toThrow("malformed");
   });
 
   it("rejects plaintext GitHub credentials from the bound keyring configuration", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-gh-config-")));
-    const fixture = installFakeGhBoundary(
-      root,
-      ["github", "pat", "exact", "private", "package", "token"].join("_"),
-    );
+    const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-gh-config-")));
+    const fixture = installFakeGhBoundary(root, "github_pat_exact_private_package_token");
     try {
       expect(githubConfigDigest(fixture.config)).toHaveLength(64);
       writeFileSync(
@@ -797,7 +744,7 @@ describe("image lifecycle", () => {
   });
 
   it("binds the stdin token to the exact helper credential without recording it", () => {
-    const token = Buffer.from(["github", "pat", "exact", "private", "package", "token"].join("_"));
+    const token = Buffer.from("github_pat_exact_private_package_token");
     const credential = JSON.stringify({
       Secret: token.toString("utf-8"),
       ServerURL: "https://ghcr.io",
@@ -834,7 +781,7 @@ describe("image lifecycle", () => {
   });
 
   it("rejects credential input beyond the closed bound", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-ghcr-input-")));
+    const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-ghcr-input-")));
     const path = nodePath.join(root, "oversized-input");
     writeFileSync(path, "x".repeat(4097), { mode: 0o600 });
     const descriptor = openSync(path, "r");
@@ -847,8 +794,10 @@ describe("image lifecycle", () => {
   });
 
   it("checks keyring drift inside Docker's actual get helper without ambient credentials", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-ghcr-bound-helper-")));
-    const approved = ["github", "pat", "exact", "private", "package", "token"].join("_");
+    const root = realpathSync(
+      mkdtempSync(nodePath.join(tmpdir(), "app-builder-ghcr-bound-helper-")),
+    );
+    const approved = "github_pat_exact_private_package_token";
     const fixture = installFakeGhBoundary(root, approved);
     const stateDigest = seedFakeGhState(fixture);
     const provenanceDigest = "b".repeat(64);
@@ -912,8 +861,8 @@ describe("image lifecycle", () => {
   });
 
   it("emits no credential when GitHub state changes during token read-back", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-ghcr-state-race-")));
-    const approved = ["github", "pat", "exact", "private", "package", "token"].join("_");
+    const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-ghcr-state-race-")));
+    const approved = "github_pat_exact_private_package_token";
     const fixture = installFakeGhBoundary(root, approved, true);
     const stateDigest = seedFakeGhState(fixture);
     const provenanceDigest = "7".repeat(64);
@@ -957,8 +906,10 @@ describe("image lifecycle", () => {
   });
 
   it("keeps the helper and provider descendants in one externally killable process group", async () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-ghcr-process-group-")));
-    const fixture = installFakeGhBoundary(root, fixtureSecret());
+    const root = realpathSync(
+      mkdtempSync(nodePath.join(tmpdir(), "app-builder-ghcr-process-group-")),
+    );
+    const fixture = installFakeGhBoundary(root, "github_pat_exact_private_package_token");
     const descendant = nodePath.join(root, "descendant.pid");
     writeFileSync(
       fixture.gh,
@@ -970,7 +921,7 @@ wait
       { mode: 0o700 },
     );
     const provenanceDigest = "d".repeat(64);
-    const token = Buffer.from(fixtureSecret());
+    const token = Buffer.from("github_pat_exact_private_package_token");
     const stateDigest = githubStateDigest(fixture.state);
     const environment: NodeJS.ProcessEnv = {
       APP_BUILDER_GHCR_IDENTITY_DIGEST: ghcrIdentityDigest(
@@ -1068,7 +1019,14 @@ wait
       const invocations = readFileSync(scenario.fixture.msbLog, "utf-8")
         .trim()
         .split("\n")
-        .map((line) => parseImageInvocation(line));
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              argv: string[];
+              environment: Record<string, string>;
+              credentialDigest: string;
+            },
+        );
       expect(invocations).toHaveLength(1);
       const invocation = invocations.at(0);
       if (invocation === undefined) {
@@ -1105,7 +1063,7 @@ wait
         APP_BUILDER_GH_STATE_DIR: scenario.fixture.state,
         DOCKER_CONFIG: scenario.stateRoot,
         NODE_ENV: "production",
-        PATH: safeTestPath,
+        PATH: `${scenario.stateRoot}:/usr/bin:/bin`,
       });
       expect(invocation.credentialDigest).toBe(hashArtifact(scenario.sentinel));
       expect(readFileSync(scenario.fixture.msbLog, "utf-8")).not.toContain(scenario.sentinel);
@@ -1118,7 +1076,8 @@ wait
   it.each([
     ["missing", "ENOENT"],
     ["stale", "digest is invalid"],
-    ["mismatch", "current credential boundary"],
+    ["provenance-mismatch", "current credential boundary"],
+    ["identity-mismatch", "current GHCR login identity"],
     ["state-drift", "current credential boundary"],
   ] as const)(
     "rejects a %s login receipt before invoking the credential provider",
@@ -1168,13 +1127,13 @@ wait
 
   it("constructs exact standalone build, inspection, preload, and proof commands", () => {
     const exact = provenance();
-    expect(imageBuildCommand(exact, privateTempPath("sanitized-arrusted"))).toEqual({
+    expect(imageBuildCommand(exact, "/tmp/sanitized-arrusted")).toEqual({
       args: [
         "build",
         "--platform",
         "linux/arm64",
         "--build-context",
-        `arrusted-target=${nodePath.join(tmpdir(), "sanitized-arrusted")}`,
+        "arrusted-target=/tmp/sanitized-arrusted",
         "--build-arg",
         `APP_BUILDER_REVISION=${builderCommit}`,
         "--file",
@@ -1182,7 +1141,7 @@ wait
         "--tag",
         exact.image.tag,
         "--load",
-        nodePath.join(tmpdir(), "exact-builder"),
+        "/tmp/exact-builder",
       ],
       program: "docker-buildx",
     });
@@ -1210,7 +1169,7 @@ wait
       args: ["list", "--depth", "Infinity", "--json"],
       program: "pnpm",
     });
-    expect(sandboxProofCommand(reference, nodePath.join(tmpdir(), "exact-arrusted"))).toEqual({
+    expect(sandboxProofCommand(reference, "/tmp/exact-arrusted")).toEqual({
       args: [
         "--import",
         "tsx",
@@ -1220,7 +1179,7 @@ wait
         "--gate-a-image",
         reference,
         "--gate-a-source-root",
-        nodePath.join(tmpdir(), "exact-arrusted"),
+        "/tmp/exact-arrusted",
         "sandbox-identity-planning",
         "--strict",
         "--skip-report",
@@ -1254,7 +1213,9 @@ wait
       args: ["version"],
       program: "docker-buildx",
     });
-    const fixtureRoot = realpathSync(mkdtempSync(privateTempPath("app-builder-msb-invocation-")));
+    const fixtureRoot = realpathSync(
+      mkdtempSync(nodePath.join(tmpdir(), "app-builder-msb-invocation-")),
+    );
     const fixture = installFakeGhBoundary(fixtureRoot, "approved");
     withFakeGhEnvironment(fixture, () => {
       expect(imageToolInvocation("msb", ["--version"])).toEqual({
@@ -1265,10 +1226,10 @@ wait
       const invoked = spawnSync(invocation.program, [...invocation.args], {
         encoding: "utf-8",
         env: {
-          HOME: testTempRoot,
+          HOME: tmpdir(),
           LANG: "C",
           NODE_ENV: "production",
-          PATH: safeTestPath,
+          PATH: "/usr/bin:/bin",
         },
       });
       expect(invoked.status).toBe(0);
@@ -1299,10 +1260,10 @@ wait
     expect(() =>
       createExactImageProvenance({
         arrustedIgnored: "",
-        arrustedRoot: nodePath.join(tmpdir(), "exact-arrusted"),
+        arrustedRoot: "/tmp/exact-arrusted",
         arrustedStatus: "",
         builderIgnored: "",
-        builderRoot: nodePath.join(tmpdir(), "exact-builder"),
+        builderRoot: "/tmp/exact-builder",
         builderStatus: "",
         dockerfileSha256,
         expectedBuilderCommit: "0".repeat(40),
@@ -1312,17 +1273,17 @@ wait
         observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
         observedBuilderCommit: builderCommit,
         observedBuilderTree: builderTree,
-        stateRoot: nodePath.join(tmpdir(), "exact-image-state"),
+        stateRoot: "/tmp/exact-image-state",
         targetFiles,
       }),
     ).toThrow("Builder commit changed");
     expect(() =>
       createExactImageProvenance({
         arrustedIgnored: "",
-        arrustedRoot: nodePath.join(tmpdir(), "exact-arrusted"),
+        arrustedRoot: "/tmp/exact-arrusted",
         arrustedStatus: "",
         builderIgnored: "",
-        builderRoot: nodePath.join(tmpdir(), "exact-builder"),
+        builderRoot: "/tmp/exact-builder",
         builderStatus: "?? drift",
         dockerfileSha256,
         expectedBuilderCommit: builderCommit,
@@ -1332,17 +1293,17 @@ wait
         observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
         observedBuilderCommit: builderCommit,
         observedBuilderTree: builderTree,
-        stateRoot: nodePath.join(tmpdir(), "exact-image-state"),
+        stateRoot: "/tmp/exact-image-state",
         targetFiles,
       }),
     ).toThrow("dirty paths");
     expect(() =>
       createExactImageProvenance({
         arrustedIgnored: "",
-        arrustedRoot: nodePath.join(tmpdir(), "exact-arrusted"),
+        arrustedRoot: "/tmp/exact-arrusted",
         arrustedStatus: "",
         builderIgnored: "node_modules/eve/index.js",
-        builderRoot: nodePath.join(tmpdir(), "exact-builder"),
+        builderRoot: "/tmp/exact-builder",
         builderStatus: "",
         dockerfileSha256,
         expectedBuilderCommit: builderCommit,
@@ -1352,7 +1313,7 @@ wait
         observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
         observedBuilderCommit: builderCommit,
         observedBuilderTree: builderTree,
-        stateRoot: nodePath.join(tmpdir(), "exact-image-state"),
+        stateRoot: "/tmp/exact-image-state",
         targetFiles,
       }),
     ).toThrow("ignored-file inventory");
@@ -1360,7 +1321,7 @@ wait
       assertStandaloneGitMetadata(false, "Builder");
     }).toThrow("standalone checkout");
     expect(() => {
-      assertCanonicalRoot(privateTempPath("link"), privateTempPath("real"), "Source");
+      assertCanonicalRoot("/tmp/link", "/private/tmp/real", "Source");
     }).toThrow("no-link path");
     expect(() => {
       assertProofRuntimeIgnoredInventory("!! node_modules/");
@@ -1371,7 +1332,7 @@ wait
   });
 
   it("binds proof-runtime file bytes and refuses escaping symlinks", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("proof-runtime-")));
+    const root = mkdtempSync(nodePath.join(tmpdir(), "app-builder-proof-runtime-"));
     const nodeModules = nodePath.join(root, "node_modules");
     mkdirSync(nodePath.join(nodeModules, "package"), { recursive: true });
     const file = nodePath.join(nodeModules, "package", "index.js");
@@ -1385,22 +1346,21 @@ wait
   });
 
   it("materializes only tracked Git objects and excludes credential-bearing metadata", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("sanitized-git-")));
-    const source = realpathSync(nodePath.join(root, "source"));
+    const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-sanitized-git-")));
+    const source = nodePath.join(root, "source");
     const destination = nodePath.join(root, "sanitized");
     mkdirSync(source, { mode: 0o700 });
-    const git = "/usr/bin/git";
-    execFileSync(git, ["init", "--quiet", source]);
-    execFileSync(git, ["-C", source, "config", "user.name", "Fixture"]);
-    execFileSync(git, ["-C", source, "config", "user.email", "fixture@example.com"]);
-    execFileSync(git, ["-C", source, "config", "credential.helper", "super-secret-helper"]);
+    execFileSync("git", ["init", "--quiet", source]);
+    execFileSync("git", ["-C", source, "config", "user.name", "Fixture"]);
+    execFileSync("git", ["-C", source, "config", "user.email", "fixture@example.com"]);
+    execFileSync("git", ["-C", source, "config", "credential.helper", "super-secret-helper"]);
     writeFileSync(nodePath.join(source, "tracked.txt"), "tracked bytes\n");
     mkdirSync(nodePath.join(source, "nested", "deeper"), { recursive: true });
     writeFileSync(nodePath.join(source, "nested", "deeper", "payload.txt"), "nested bytes\n");
     writeFileSync(nodePath.join(source, "nested", "run.sh"), "#!/bin/sh\nexit 0\n");
     chmodSync(nodePath.join(source, "nested", "run.sh"), 0o755);
-    execFileSync(git, ["-C", source, "add", "tracked.txt", "nested"]);
-    execFileSync(git, [
+    execFileSync("git", ["-C", source, "add", "tracked.txt", "nested"]);
+    execFileSync("git", [
       "-C",
       source,
       "-c",
@@ -1410,17 +1370,17 @@ wait
       "-m",
       "fixture",
     ]);
-    const commit = execFileSync(git, ["-C", source, "rev-parse", "HEAD"], {
+    const commit = execFileSync("git", ["-C", source, "rev-parse", "HEAD"], {
       encoding: "utf-8",
     }).trim();
-    const tree = execFileSync(git, ["-C", source, "rev-parse", "HEAD^{tree}"], {
+    const tree = execFileSync("git", ["-C", source, "rev-parse", "HEAD^{tree}"], {
       encoding: "utf-8",
     }).trim();
     const context = materializeSanitizedGitTree(source, destination, commit, tree);
     const orderedPaths = ["nested/deeper/payload.txt", "nested/run.sh", "tracked.txt"] as const;
     const modes = ["100644", "100755", "100644"] as const;
     const expectedRecords = orderedPaths.map((path, index) => {
-      const objectId = execFileSync(git, ["-C", source, "hash-object", "--", path], {
+      const objectId = execFileSync("git", ["-C", source, "hash-object", "--", path], {
         encoding: "utf-8",
       }).trim();
       return `${modes[index]}\0${objectId}\0${path}`;
@@ -1459,7 +1419,7 @@ wait
   });
 
   it("serializes concurrent lifecycle operations for one state root", async () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-lifecycle-lock-")));
+    const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-lifecycle-lock-")));
     const { promise: entered, resolve: enter } = Promise.withResolvers<null>();
     const { promise: held, resolve: release } = Promise.withResolvers<null>();
     let dispatches = 0;
@@ -1482,7 +1442,9 @@ wait
   });
 
   it("reconciles exact owned receipt and context temporaries", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-lifecycle-reconcile-")));
+    const root = realpathSync(
+      mkdtempSync(nodePath.join(tmpdir(), "app-builder-lifecycle-reconcile-")),
+    );
     const receipt = nodePath.join(root, `build-receipt.json.tmp-123-${randomUUID()}`);
     writeFileSync(receipt, "partial", { mode: 0o600 });
     const context = nodePath.join(root, `arrusted-context.tmp-123-${randomUUID()}`);
@@ -1500,7 +1462,7 @@ wait
   });
 
   it("isolates and removes Buildx state on success and command failure", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-buildx-runtime-")));
+    const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-buildx-runtime-")));
     let first = "";
     expect(
       withBuildxRuntime(root, ({ BUILDX_CONFIG }) => {
@@ -1525,7 +1487,7 @@ wait
   });
 
   it("recovers a SIGKILL-released lock and exact interrupted temp receipt", async () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-lifecycle-crash-")));
+    const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-lifecycle-crash-")));
     const moduleUrl = pathToFileURL(
       nodePath.join(process.cwd(), "lib/image/node-lifecycle.ts"),
     ).href;
@@ -1533,22 +1495,15 @@ wait
     const child = spawn(
       process.execPath,
       ["--experimental-strip-types", "--input-type=module", "--eval", code],
-      { env: { ...process.env, PATH: safeTestPath }, stdio: ["ignore", "pipe", "inherit"] },
+      { stdio: ["ignore", "pipe", "inherit"] },
     );
-    const outputPromise = (async () => {
-      const result = await child.stdout[Symbol.asyncIterator]().next();
-      if (result.done === true || !(result.value instanceof Buffer)) {
-        throw new Error("Lifecycle crash fixture returned invalid output.");
-      }
-      return result.value;
-    })();
-    const timeoutPromise = (async () => {
-      await delay(3000);
-      throw new Error("Timed out waiting for lifecycle crash fixture.");
-    })();
-    const outputChunk = await Promise.race([outputPromise, timeoutPromise]);
-    const [interruptedPath] = outputChunk.toString().split("\n");
-    if (interruptedPath === undefined) throw new Error("Missing interrupted receipt path.");
+    const output = await Promise.race([
+      once(child.stdout, "data").then(([chunk]) => chunk.toString()),
+      delay(3000).then(() => {
+        throw new Error("Timed out waiting for lifecycle crash fixture.");
+      }),
+    ]);
+    const [interruptedPath] = output.split("\n");
     child.kill("SIGKILL");
     await once(child, "exit");
     expect(readFileSync(interruptedPath)).toHaveLength(0);
@@ -1560,7 +1515,7 @@ wait
   });
 
   it("refuses unsafe temp artifacts instead of cleaning through links", () => {
-    const root = realpathSync(mkdtempSync(privateTempPath("app-builder-lifecycle-temp-")));
+    const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-lifecycle-temp-")));
     const outside = nodePath.join(root, "outside");
     writeFileSync(outside, "keep");
     symlinkSync(outside, nodePath.join(root, `source-receipt.json.tmp-1-${randomUUID()}`));
@@ -1573,7 +1528,7 @@ wait
 
   it("refuses linked interrupted Buildx state instead of recovering it", () => {
     for (const fixture of ["root-symlink", "nested-symlink", "hardlink"] as const) {
-      const root = realpathSync(mkdtempSync(privateTempPath("app-builder-buildx-unsafe-")));
+      const root = realpathSync(mkdtempSync(nodePath.join(tmpdir(), "app-builder-buildx-unsafe-")));
       const outside = nodePath.join(root, "outside");
       writeFileSync(outside, "keep");
       const runtime = nodePath.join(root, `buildx-runtime.tmp-123-${randomUUID()}`);

@@ -10,23 +10,27 @@ export const hostedIdentifierSchema = z
  * Closed projection produced only after an adapter has verified the token's
  * signature, expiry, not-before time, and issuer key material.
  */
-export const verifiedHostedClaimsSchema = z.object({
-  audience: z.string().min(1).max(300),
-  issuer: z.url(),
-  scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
-  subject: hostedIdentifierSchema,
-  workspaceId: hostedIdentifierSchema,
-});
+export const verifiedHostedClaimsSchema = z
+  .object({
+    audience: z.string().min(1).max(300),
+    issuer: z.string().url(),
+    scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
+    subject: hostedIdentifierSchema,
+    workspaceId: hostedIdentifierSchema,
+  })
+  .strict();
 
 export type VerifiedHostedClaims = z.infer<typeof verifiedHostedClaimsSchema>;
 
-export const hostedPrincipalSchema = z.object({
-  audience: z.string().min(1).max(300),
-  issuer: z.url(),
-  ownerUserId: hostedIdentifierSchema,
-  scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
-  workspaceId: hostedIdentifierSchema,
-});
+export const hostedPrincipalSchema = z
+  .object({
+    audience: z.string().min(1).max(300),
+    issuer: z.string().url(),
+    ownerUserId: hostedIdentifierSchema,
+    scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
+    workspaceId: hostedIdentifierSchema,
+  })
+  .strict();
 
 export type HostedPrincipal = z.infer<typeof hostedPrincipalSchema>;
 
@@ -41,7 +45,7 @@ export const hostedEveOperationScopes = {
 export type HostedEveOperation = keyof typeof hostedEveOperationScopes;
 
 export class HostedAuthorizationError extends Error {
-  readonly code: string;
+  readonly code: "invalid_claims" | "issuer_mismatch" | "audience_mismatch" | "insufficient_scope";
 
   constructor(code: HostedAuthorizationError["code"]) {
     super("The hosted Eve request is not authorized.");
@@ -70,8 +74,7 @@ export function authorizeHostedPrincipal(input: {
     throw new HostedAuthorizationError("audience_mismatch");
   }
   const scopes = [...new Set(claims.scopes)].toSorted();
-  const grantedScopes = new Set(scopes);
-  if (input.requiredScopes.some((scope) => !grantedScopes.has(scope))) {
+  if (input.requiredScopes.some((scope) => !scopes.includes(scope))) {
     throw new HostedAuthorizationError("insufficient_scope");
   }
 
@@ -99,7 +102,7 @@ export function requireHostedOperationScope(
   principal: HostedPrincipal,
   operation: HostedEveOperation,
 ): void {
-  if (!new Set(principal.scopes).has(hostedEveOperationScopes[operation])) {
+  if (!principal.scopes.includes(hostedEveOperationScopes[operation])) {
     throw new HostedAuthorizationError("insufficient_scope");
   }
 }

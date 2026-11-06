@@ -1,6 +1,7 @@
 import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
+import type * as databaseSchema from "../db/schema";
 import { githubRepositoryAccessContinuations } from "../db/schema";
 import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
 import { repositoryAccessContinuationSchema } from "./repository-access-continuation";
@@ -9,17 +10,7 @@ import type {
   RepositoryAccessContinuationStore,
 } from "./repository-access-continuation";
 
-type Database = PostgresJsDatabase<{
-  githubRepositoryAccessContinuations: typeof githubRepositoryAccessContinuations;
-}>;
-type ContinuationRecordInput = Omit<
-  RepositoryAccessContinuation,
-  "authorizedAt" | "consumedAt" | "selectedInstallationId"
-> & {
-  authorizedAt?: Date;
-  consumedAt?: Date;
-  selectedInstallationId?: string;
-};
+type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 const columns = {
   audience: githubRepositoryAccessContinuations.audience,
@@ -53,38 +44,28 @@ function tenant(authority: HostedGitHubTenantAuthority) {
 function record(
   row: typeof githubRepositoryAccessContinuations.$inferSelect,
 ): RepositoryAccessContinuation {
-  const value = {
+  return repositoryAccessContinuationSchema.parse({
     authority: {
       audience: row.audience,
       issuer: row.issuer,
       ownerUserId: row.ownerUserId,
       workspaceId: row.workspaceId,
     },
+    ...(row.authorizedAt ? { authorizedAt: row.authorizedAt } : {}),
     callbackUrl: row.callbackUrl,
     continuationDigest: row.continuationDigest,
+    ...(row.consumedAt ? { consumedAt: row.consumedAt } : {}),
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
     repository: {
-      fullName: `${row.repositoryOwner}/${row.repositoryName}`,
+      fullName: `${String(row.repositoryOwner)}/${String(row.repositoryName)}`,
       name: row.repositoryName,
       owner: row.repositoryOwner,
     },
     requestId: row.requestId,
+    ...(row.selectedInstallationId ? { selectedInstallationId: row.selectedInstallationId } : {}),
     sessionId: row.sessionId,
-  };
-
-  const recordValue: ContinuationRecordInput = value;
-  if (row.authorizedAt !== null) {
-    recordValue.authorizedAt = row.authorizedAt;
-  }
-  if (row.consumedAt !== null) {
-    recordValue.consumedAt = row.consumedAt;
-  }
-  if (row.selectedInstallationId !== null) {
-    recordValue.selectedInstallationId = row.selectedInstallationId;
-  }
-
-  return repositoryAccessContinuationSchema.parse(value);
+  });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -106,7 +87,7 @@ export function createPostgresRepositoryAccessContinuationStore(
           ),
         )
         .returning(columns);
-      return rows[0] === undefined ? undefined : record(rows[0]);
+      return rows[0] ? record(rows[0]) : undefined;
     },
 
     async consume(value) {
@@ -133,7 +114,7 @@ export function createPostgresRepositoryAccessContinuationStore(
           ),
         )
         .returning(columns);
-      return rows[0] === undefined ? undefined : record(rows[0]);
+      return rows[0] ? record(rows[0]) : undefined;
     },
 
     async create(value) {
@@ -166,7 +147,7 @@ export function createPostgresRepositoryAccessContinuationStore(
           ),
         )
         .limit(1);
-      return rows[0] === undefined ? undefined : record(rows[0]);
+      return rows[0] ? record(rows[0]) : undefined;
     },
 
     async listAuthorizedForSession(value) {

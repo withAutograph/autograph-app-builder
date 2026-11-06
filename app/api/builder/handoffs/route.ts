@@ -1,6 +1,4 @@
 import { getBuilderHandoffDeploymentHandler } from "@/lib/handoff/deployment";
 
-const handlePost = async (request: Request) =>
-  await getBuilderHandoffDeploymentHandler(process.env)(request);
-
-export { handlePost as POST };
+export const POST = async (request: Request) =>
+  getBuilderHandoffDeploymentHandler(process.env)(request);

@@ -3,6 +3,7 @@ import type { SessionData } from "@better-auth-ui/core";
 import type { Preview } from "@storybook/nextjs-vite";
 import { expect } from "storybook/test";
 
+import appStyles from "../app/ui/app-builder.module.css";
 import { AppShell } from "../components/app-shell";
 import { AuthRouteProvider } from "../components/providers";
 import type { authClient } from "../lib/auth-client";
@@ -13,12 +14,6 @@ import "./preview.css";
 const CREATE_APP_STORY_PREFIX = "Create App/";
 const CREATE_APP_COMPONENT_STORY_PREFIX = "Components/Create App/";
 const CONNECTION_DRAWER_STORY = "Components/Connections/Connection Drawer";
-
-const isSessionData = (value: unknown): value is NonNullable<SessionData<typeof authClient>> => {
-  if (typeof value !== "object" || value === null) return false;
-
-  return Object.hasOwn(value, "session") && Object.hasOwn(value, "user");
-};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function usesCreateAppShell(title: string) {
@@ -35,12 +30,10 @@ storybookQueryClient.setQueryDefaults(authQueryKeys.session, {
 });
 
 const preview: Preview = {
-  afterEach: async ({ canvasElement, title }) => {
+  afterEach: ({ canvasElement, title }) => {
     if (!usesCreateAppShell(title)) return;
 
-    await expect(
-      canvasElement.querySelector("[data-create-app-story-environment]"),
-    ).toBeInTheDocument();
+    expect(canvasElement.querySelector("[data-create-app-story-environment]")).toBeInTheDocument();
   },
   decorators: [
     (Story, context) => (
@@ -51,7 +44,7 @@ const preview: Preview = {
           passkeysEnabled={false}
         >
           {usesCreateAppShell(context.title) ? (
-            <div className="appShell" data-create-app-story-environment>
+            <div className={appStyles.appShell} data-create-app-story-environment>
               <Story />
             </div>
           ) : (
@@ -66,7 +59,7 @@ const preview: Preview = {
     async ({ parameters }) => {
       storybookQueryClient.setQueryData(
         authQueryKeys.session,
-        isSessionData(parameters.authSession) ? parameters.authSession : null,
+        (parameters.authSession ?? null) as SessionData<typeof authClient>,
       );
 
       return {};

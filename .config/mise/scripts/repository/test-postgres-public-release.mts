@@ -41,8 +41,6 @@ if (!address.success) {
   throw new Error("Local fixture port unavailable");
 }
 const { port } = address.data;
-const acceptedEnvIdField = "acceptedEnvId";
-const observedEnvId = "env-observed";
 const closed = once(listener, "close");
 listener.close();
 await closed;
@@ -112,13 +110,13 @@ try {
   assert.equal(await store.compareAndSet(initial, initial.record), undefined);
   const accepted = await store.compareAndSet(pending, {
     ...pending.record,
-    bindings: { APP_DATABASE_URL: { [acceptedEnvIdField]: observedEnvId, state: "pending" } },
+    bindings: { APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "pending" } },
   });
   assert.ok(accepted);
   await assert.rejects(
     store.compareAndSet(accepted, {
       ...accepted.record,
-      bindings: { APP_DATABASE_URL: { [acceptedEnvIdField]: "foreign-env", state: "pending" } },
+      bindings: { APP_DATABASE_URL: { acceptedEnvId: "foreign-env", state: "pending" } },
     }),
   );
   await assert.rejects(
@@ -129,13 +127,13 @@ try {
   );
   const verified = await store.compareAndSet(accepted, {
     ...accepted.record,
-    bindings: { APP_DATABASE_URL: { [acceptedEnvIdField]: observedEnvId, state: "applied" } },
+    bindings: { APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "applied" } },
   });
   assert.ok(verified);
   await assert.rejects(
     store.compareAndSet(verified, {
       ...verified.record,
-      bindings: { APP_DATABASE_URL: { [acceptedEnvIdField]: observedEnvId, state: "pending" } },
+      bindings: { APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "pending" } },
     }),
   );
   const otherRef = randomUUID();
@@ -143,10 +141,7 @@ try {
   assert.equal(await store.read(authority, otherRef), undefined);
   const restarted = createPostgresPublicReleaseStore(drizzle(writer, { schema }));
   const restartedOperation = await restarted.read(authority, initial.operationRef);
-  assert.equal(
-    restartedOperation?.record.bindings.APP_DATABASE_URL[acceptedEnvIdField],
-    observedEnvId,
-  );
+  assert.equal(restartedOperation?.record.bindings.APP_DATABASE_URL.acceptedEnvId, "env-observed");
   console.log(
     "Public release PostgreSQL proof passed: restricted writer, restart readback, stale CAS, immutable target/row receipt, foreign owner and record-kind isolation.",
   );

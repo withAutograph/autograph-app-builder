@@ -1,7 +1,7 @@
 "use client";
 
-import { redirect } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { resolveAuthCallbackURL } from "@/lib/auth/preview-auth-ui";
@@ -14,6 +14,7 @@ const getLocationSearch = () => window.location.search;
 const getServerLocationSearch = () => "";
 
 export default function SettingUpPage() {
+  const router = useRouter();
   const session = authClient.useSession();
   const callbackSearch = useSyncExternalStore(
     subscribeToLocation,
@@ -21,9 +22,11 @@ export default function SettingUpPage() {
     getServerLocationSearch,
   );
 
-  if (session.data?.user) {
-    redirect(resolveAuthCallbackURL("/", callbackSearch));
-  }
+  useEffect(() => {
+    if (session.data?.user) {
+      router.replace(resolveAuthCallbackURL("/", callbackSearch));
+    }
+  }, [callbackSearch, router, session.data?.user]);
 
   if (session.error || (!session.isPending && !session.data?.user)) {
     return (

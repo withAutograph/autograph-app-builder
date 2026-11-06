@@ -119,27 +119,27 @@ const request = {
   sessionId,
 };
 const fixture = () => ({
-  adapterGeneration: 1,
+  clientRequestId: request.clientRequestId,
+  sessionId,
+  ownerUserId: principal.ownerUserId,
   adapterSessionId: "adapter_1",
+  adapterGeneration: 1,
+  checkpointDigest: `sha256:${"f".repeat(64)}`,
+  requestDigest: digest({ kind: "respond", request, sessionId }),
+  target: {
+    appId: toolInput.appId,
+    operationRef: toolInput.operationRef,
+    planDigest: toolInput.planDigest,
+  },
+  // SAFETY: The fixture uses the same validated resolved-batch shape as the capture contract.
+  state: { pending: [], resolved: structuredClone(batches), version: 1 } as PrivateInputState,
   capture: {
     pendingRequests: [],
     receipts: structuredClone(receipts),
     sessionId,
     version: 1 as const,
   },
-  checkpointDigest: `sha256:${"f".repeat(64)}`,
-  clientRequestId: request.clientRequestId,
-  ownerUserId: principal.ownerUserId,
   receipts: structuredClone(receipts),
-  requestDigest: digest({ kind: "respond", request, sessionId }),
-  sessionId,
-  // SAFETY: The fixture uses the same validated resolved-batch shape as the capture contract.
-  state: { pending: [], resolved: structuredClone(batches), version: 1 } as PrivateInputState,
-  target: {
-    appId: toolInput.appId,
-    operationRef: toolInput.operationRef,
-    planDigest: toolInput.planDigest,
-  },
 });
 
 describe("reconstruct native approval response", () => {

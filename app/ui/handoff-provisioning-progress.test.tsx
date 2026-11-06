@@ -1,26 +1,27 @@
 // @vitest-environment jsdom
 
-import { act, createElement } from "react";
+import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
 import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts";
 import { HandoffProvisioningProgress } from "./handoff-provisioning-progress";
 
-const navigation = {
-  back() {},
-  bfcacheId: "test",
-  forward() {},
-  prefetch() {},
-  push() {},
-  refresh: vi.fn(),
-  replace() {},
-};
+const navigation = vi.hoisted(() => ({ refresh: vi.fn() }));
+const actions = vi.hoisted(() => ({
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
+  continue: vi.fn(async () => ({ status: "updated" as const })),
+}));
+
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock("@/app/actions/builder", () => ({
+  continueHandoffProvisioning: actions.continue,
+}));
 
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function projection(
   revision: number,
@@ -42,7 +43,7 @@ function projection(
 }
 
 class TestEventSource {
-  static readonly instances: TestEventSource[] = [];
+  static instances: TestEventSource[] = [];
   readonly listeners = new Map<string, Set<(event: MessageEvent<string>) => void>>();
   readonly url: string;
   closed = false;
@@ -62,7 +63,7 @@ class TestEventSource {
     this.closed = true;
   }
 
-  emit(name: string, value: BuilderProvisionProjection | null = null) {
+  emit(name: "snapshot" | "end" | "open" | "error", value?: unknown) {
     const event = new MessageEvent("message", { data: JSON.stringify(value) });
     for (const listener of this.listeners.get(name) ?? []) {
       listener(event);
@@ -79,16 +80,17 @@ class TestEventSource {
 
 const streamAt = (index: number): TestEventSource => {
   const stream = TestEventSource.instances[index];
-  if (stream === undefined) {
+  if (!stream) {
     throw new Error(`Expected EventSource instance at index ${index}`);
   }
   return stream;
 };
 
-Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
-let root: Root | null = null;
-let container: HTMLDivElement | null = null;
+let root: Root | undefined;
+let container: HTMLDivElement | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function render(initial = projection(1)) {
@@ -97,13 +99,7 @@ async function render(initial = projection(1)) {
   root = createRoot(container);
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
   await act(async () => {
-    root?.render(
-      createElement(
-        AppRouterContext.Provider,
-        { value: navigation },
-        <HandoffProvisioningProgress handoffId={handoffId} initial={initial} />,
-      ),
-    );
+    root?.render(<HandoffProvisioningProgress handoffId={handoffId} initial={initial} />);
   });
 }
 
@@ -115,17 +111,18 @@ afterEach(async () => {
     });
   }
   container?.remove();
-  root = null;
-  container = null;
-  TestEventSource.instances.length = 0;
+  root = undefined;
+  container = undefined;
+  TestEventSource.instances = [];
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
 describe("HandoffProvisioningProgress", () => {
-  it("keeps a failed continuation inline with a retry for the same handoff", async () => {
+  it("keeps transport rejection inline and retries the same handoff successfully", async () => {
     vi.stubGlobal("EventSource", TestEventSource);
+    actions.continue.mockRejectedValueOnce(new Error("connection interrupted"));
     await render();
     expect(container?.textContent).toContain("Provider setup paused. Your handoff is saved.");
     const retry = [...(container?.querySelectorAll("button") ?? [])].find(
@@ -134,8 +131,10 @@ describe("HandoffProvisioningProgress", () => {
     expect(retry).toBeDefined();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     await act(async () => retry?.click());
-    expect(container?.textContent).toContain("Provider setup paused. Your handoff is saved.");
-    expect(container?.textContent).toContain("Retry provider setup");
+    expect(actions.continue).toHaveBeenCalledTimes(2);
+    expect(actions.continue).toHaveBeenLastCalledWith({ status: "error" }, { handoffId });
+    expect(container?.textContent).not.toContain("Provider setup paused");
+    expect(container?.textContent).not.toContain("Retry provider setup");
     expect(TestEventSource.instances).toHaveLength(1);
   });
 
@@ -143,6 +142,7 @@ describe("HandoffProvisioningProgress", () => {
     vi.stubGlobal("EventSource", TestEventSource);
     await render();
 
+    expect(actions.continue).toHaveBeenCalledWith(undefined, { handoffId });
     const stream = streamAt(0);
     expect(stream.url).toBe(
       `/api/builder/provision/stream?requestId=${encodeURIComponent(requestId)}&afterRevision=1`,
@@ -217,7 +217,7 @@ describe("HandoffProvisioningProgress", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     await act(async () => root?.unmount());
     expect(stream.closed).toBe(true);
-    root = null;
+    root = undefined;
   });
 
   it("explicitly reconnects from the last accepted revision without retrying provider work", async () => {
@@ -238,6 +238,7 @@ describe("HandoffProvisioningProgress", () => {
     expect(TestEventSource.instances).toHaveLength(2);
     const newStream = streamAt(1);
     expect(newStream.url).toContain("afterRevision=7");
+    expect(actions.continue).toHaveBeenCalledOnce();
 
     // Queued events from the closed connection must not settle the new stream.
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract

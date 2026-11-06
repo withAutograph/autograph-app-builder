@@ -1,5 +1,4 @@
 import { EventEmitter } from "node:events";
-import { spawn } from "node:child_process";
 import {
   chmodSync,
   mkdirSync,
@@ -10,6 +9,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+import type { ChildProcess } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 import {
@@ -50,7 +51,7 @@ function fixture() {
   }
   const cycleFile = path.join(stateRoot, "eve-cycle");
   writeFileSync(cycleFile, "c".repeat(64), { mode: 0o600 });
-  const environment = {
+  const environment: Record<string, string> = {
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
     APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: "d".repeat(64),
     APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: "c".repeat(64),
@@ -88,18 +89,19 @@ describe("closed local Eve launch", () => {
     // Node's signal-target contract requires EventEmitter's once/off API.
     // oxlint-disable-next-line unicorn/prefer-event-target
     const signals = new EventEmitter();
-    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"]);
-    const kill = child.kill.bind(child);
+    // ChildProcess is an EventEmitter in Node, not an EventTarget.
+    // oxlint-disable-next-line unicorn/prefer-event-target
+    const child = new EventEmitter() as ChildProcess;
     const forwarded: NodeJS.Signals[] = [];
     Object.defineProperties(child, {
       exitCode: { value: null, writable: true },
       signalCode: { value: null, writable: true },
     });
     child.kill = (signal?: NodeJS.Signals | number) => {
-      if (signal === "SIGTERM" || signal === "SIGINT") {
+      if (typeof signal === "string") {
         forwarded.push(signal);
       }
-      return kill(signal);
+      return true;
     };
 
     const stopped = waitForForwardedEveChild(child, signals);
@@ -107,14 +109,13 @@ describe("closed local Eve launch", () => {
     expect(forwarded).toEqual(["SIGTERM"]);
 
     let settled = false;
-    const markSettled = async () => {
-      await stopped;
+    void stopped.then(() => {
       settled = true;
-    };
-    void markSettled();
+    });
     await Promise.resolve();
     expect(settled).toBe(false);
 
+    child.emit("exit", 0, null);
     await expect(stopped).resolves.toBe(0);
     expect(signals.listenerCount("SIGINT")).toBe(0);
     expect(signals.listenerCount("SIGTERM")).toBe(0);
@@ -297,8 +298,44 @@ it("the real child launch can retain private planning artifacts without a hosted
     target: { appId: "supplier-spend", sessionId: "saved-local-session" },
   };
   const artifacts = await createLocalOperatorArtifactStorage({
-    assertCurrentOwner: (current) => {
+    assertCurrentOwner: async (current) => {
       expect(current).toEqual(context);
+      return;
+    },
+    authority,
+  });
+  const artifactRef = `_protected-operator/artifacts/source-review-context/supplier-spend/${"a".repeat(64)}`;
+  await artifacts.store.put(context, {
+    artifactRef,
+    chunkIndex: 0,
+    content: "private reviewed app plan",
+  });
+  expect(await artifacts.store.read(context, artifactRef, 0)).toBe("private reviewed app plan");
+});
+
+it("the real child launch can retain private planning artifacts without a hosted operator", async () => {
+  const f = fixture();
+  const invocation = createLocalEveInvocation({
+    environment: f.environment,
+    eveCli: "/owned/eve-cli.mjs",
+    oidcToken: "synthetic-project-oidc",
+    pinnedNode: process.execPath,
+    repositoryRoot: f.repositoryRoot,
+    vercelProject: { orgId: "team", projectId: "project" },
+  });
+  const authority = await readLocalOperatorArtifactAuthority(invocation.environment);
+  expect(authority).toBeDefined();
+  if (authority === undefined) {
+    throw new Error("missing local planning authority");
+  }
+  const context = {
+    authority,
+    target: { appId: "supplier-spend", sessionId: "saved-local-session" },
+  };
+  const artifacts = await createLocalOperatorArtifactStorage({
+    assertCurrentOwner: async (current) => {
+      expect(current).toEqual(context);
+      return;
     },
     authority,
   });

@@ -9,27 +9,33 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedIdentifierSchema, hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 
-const forwardedAttributesSchema = z.strictObject({
-  "autograph:source-handoff-id": z.uuid().optional(),
-  "eve:forwarded-by": hostedIdentifierSchema.optional(),
-  "mcp:audience": z.url().startsWith("https://"),
-  "mcp:scopes": z.array(z.string().min(1).max(100)).min(1).max(50),
-  "mcp:workspace-id": z.string().min(1).max(200),
-});
+const forwardedAttributesSchema = z
+  .object({
+    "autograph:source-handoff-id": z.string().uuid().optional(),
+    "eve:forwarded-by": hostedIdentifierSchema.optional(),
+    "mcp:audience": z.string().url().startsWith("https://"),
+    "mcp:scopes": z.array(z.string().min(1).max(100)).min(1).max(50),
+    "mcp:workspace-id": z.string().min(1).max(200),
+  })
+  .strict();
 
-const forwardedHostedAuthSchema = z.strictObject({
-  attributes: forwardedAttributesSchema,
-  authenticator: z.literal("mcp-oauth-jwks"),
-  issuer: z.url().startsWith("https://"),
-  principalId: z.string().min(1).max(200),
-  principalType: z.literal("user"),
-  subject: z.string().min(1).max(200),
-});
+const forwardedHostedAuthSchema = z
+  .object({
+    attributes: forwardedAttributesSchema,
+    authenticator: z.literal("mcp-oauth-jwks"),
+    issuer: z.string().url().startsWith("https://"),
+    principalId: z.string().min(1).max(200),
+    principalType: z.literal("user"),
+    subject: z.string().min(1).max(200),
+  })
+  .strict();
 
-const forwardedSessionAuthSchema = z.strictObject({
-  current: forwardedHostedAuthSchema,
-  initiator: forwardedHostedAuthSchema,
-});
+const forwardedSessionAuthSchema = z
+  .object({
+    current: forwardedHostedAuthSchema,
+    initiator: forwardedHostedAuthSchema,
+  })
+  .strict();
 
 export interface RealmContinuationSessionAuthorityOptions {
   realmContinuation: {
@@ -39,20 +45,6 @@ export interface RealmContinuationSessionAuthorityOptions {
 }
 
 export type HostedSessionTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
-type ForwardedSessionAuth = z.infer<typeof forwardedSessionAuthSchema>;
-type SessionAuthInput =
-  | ForwardedSessionAuth
-  | z.input<typeof forwardedSessionAuthSchema>
-  | null
-  | undefined;
-const sessionAuthKindSchema = z.object({
-  current: z
-    .object({
-      authenticator: z.string().optional(),
-      principalType: z.string().optional(),
-    })
-    .optional(),
-});
 
 export class HostedSessionAuthorityError extends Error {
   readonly code: "invalid" | "subject" | "mismatch";
@@ -72,9 +64,12 @@ export class HostedSessionAuthorityError extends Error {
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactForwardedSessionAuthority(
-  sessionAuth: SessionAuthInput,
+  sessionAuth: unknown,
   continuationOptions?: RealmContinuationSessionAuthorityOptions,
-) {
+): {
+  authority: HostedSessionTenantAuthority;
+  principal: HostedPrincipal;
+} {
   let delegation;
   try {
     if (continuationOptions !== undefined) {
@@ -131,18 +126,15 @@ export function exactForwardedSessionAuthority(
     throw new HostedSessionAuthorityError("invalid");
   }
   const authority = authorityResult.data;
-  return { authority, principal: currentPrincipal.data } satisfies {
-    authority: HostedSessionTenantAuthority;
-    principal: HostedPrincipal;
-  };
+  return { authority, principal: currentPrincipal.data };
 }
 
 /** A prepared app belongs to the initiating session, not a later message. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sourceHandoffIdForSessionAuth(
-  sessionAuth: SessionAuthInput,
+  sessionAuth: unknown,
   continuationOptions?: RealmContinuationSessionAuthorityOptions,
-): string | undefined {
+) {
   try {
     if (continuationOptions !== undefined) {
       const delegation = readVerifiedRealmContinuationAuthority(
@@ -161,13 +153,13 @@ export function sourceHandoffIdForSessionAuth(
   if (!parsed.success) {
     // Local sessions have no prepared hosted context. A malformed hosted
     // envelope must not silently become an unbound session.
-    const current = sessionAuthKindSchema.safeParse(sessionAuth).success
-      ? sessionAuthKindSchema.parse(sessionAuth).current
-      : undefined;
+    const current = (
+      sessionAuth as { current?: { authenticator?: string; principalType?: string } } | null
+    )?.current;
     if (current?.authenticator === "mcp-oauth-jwks" || current?.principalType === "service") {
       throw new HostedSessionAuthorityError("invalid");
     }
-    return undefined;
+    return;
   }
   exactForwardedSessionAuthority(sessionAuth);
   const current = parsed.data.current.attributes["autograph:source-handoff-id"];

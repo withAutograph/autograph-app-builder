@@ -19,32 +19,8 @@ import {
 import type { InternalEveEvent } from "./public-events";
 
 const hostedSnapshotSchema = z
-  .strictObject({
-    events: z.array(
-      z.strictObject({
-        callId: z.string().optional(),
-        code: z.string().optional(),
-        frameworkSessionLimit: z.boolean().optional(),
-        identityInvitation: z
-          .strictObject({
-            callId: z.string(),
-            expiresAt: z.string(),
-            url: z.string(),
-          })
-          .optional(),
-        index: z.number(),
-        label: z.string().optional(),
-        message: z.string().optional(),
-        request: z.unknown().optional(),
-        requestIds: z.array(z.string()).optional(),
-        resolutionKind: z.literal("authorization").optional(),
-        state: z.string().optional(),
-        status: sessionStatusSchema.optional(),
-        text: z.string().optional(),
-        turnId: z.string().optional(),
-        type: z.string(),
-      }),
-    ),
+  .object({
+    events: z.array(z.unknown()),
     nativeDeliveryState: nativeDeliveryStateSchema.optional(),
     privateInputState: privateInputStateSchema.optional(),
     prototype: publicPrototypeSchema.optional(),
@@ -54,45 +30,24 @@ const hostedSnapshotSchema = z
   })
   .strict();
 
-export type HostedEngineSnapshot = z.output<typeof hostedSnapshotSchema>;
+export type HostedEngineSnapshot = z.infer<typeof hostedSnapshotSchema>;
 
-type HostedProjectionResult = Pick<EveSessionResult, "cursor" | "events" | "sessionId" | "status"> &
-  Partial<Pick<EveSessionResult, "inputRequests" | "prototype" | "uiPreview" | "workingPreview">>;
-
-const internalEventSchema = z
-  .strictObject({
-    callId: z.string().optional(),
-    code: z.string().optional(),
-    frameworkSessionLimit: z.boolean().optional(),
-    identityInvitation: z
-      .strictObject({
-        callId: z.string(),
-        expiresAt: z.string(),
-        url: z.string(),
-      })
-      .optional(),
-    index: z.number(),
-    label: z.string().optional(),
-    message: z.string().optional(),
-    request: z.unknown().optional(),
-    requestIds: z.array(z.string()).optional(),
-    resolutionKind: z.literal("authorization").optional(),
-    state: z.string().optional(),
-    status: sessionStatusSchema.optional(),
-    text: z.string().optional(),
-    turnId: z.string().optional(),
-    type: z.string(),
-  })
-  .pipe(z.custom<InternalEveEvent>());
+// eslint-disable-next-line eslint/func-style -- Keep the filtering iterator lazy for snapshot projection.
+function* internalEvents(candidates: readonly unknown[]): Generator<InternalEveEvent> {
+  for (const candidate of candidates) {
+    if (candidate !== null && typeof candidate === "object") {
+      yield candidate as InternalEveEvent;
+    }
+  }
+}
 
 const publicEventFromCandidate = (
-  candidate: HostedEngineSnapshot["events"][number],
+  candidate: unknown,
 ): z.infer<typeof publicEveEventSchema> | undefined => {
-  const parsedCandidate = internalEventSchema.safeParse(candidate);
-  if (!parsedCandidate.success) {
+  if (candidate === null || typeof candidate !== "object") {
     return undefined;
   }
-  const projected = toPublicEvent(parsedCandidate.data);
+  const projected = toPublicEvent(candidate as InternalEveEvent);
   if (projected === null) {
     return undefined;
   }
@@ -103,7 +58,7 @@ const publicEventFromCandidate = (
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function projectHostedSnapshot(
   sessionId: string,
-  snapshotInput: HostedEngineSnapshot,
+  snapshotInput: unknown,
   cursor = 0,
   limit = 100,
 ): EveSessionResult {
@@ -119,21 +74,22 @@ export function projectHostedSnapshot(
       publicEventCount += 1;
     }
   }
-  const inputRequests = outstandingInternalEveRequests(snapshot.events);
-  const result: HostedProjectionResult = {
+  const inputRequests = outstandingInternalEveRequests(internalEvents(snapshot.events));
+  return eveSessionResultSchema.parse({
     cursor: Math.min(cursor + events.length, publicEventCount),
     events,
     sessionId,
     status: snapshot.status,
-  };
-  if (inputRequests.length > 0) result.inputRequests = inputRequests;
-  if (snapshot.prototype !== undefined) result.prototype = snapshot.prototype;
-  if (snapshot.uiPreview !== undefined) result.uiPreview = snapshot.uiPreview;
-  if (snapshot.workingPreview !== undefined) {
-    result.workingPreview =
-      snapshot.status === "cancelled" || snapshot.status === "failed"
-        ? null
-        : currentWorkingPreview(snapshot.workingPreview);
-  }
-  return eveSessionResultSchema.parse(result);
+    ...(inputRequests.length === 0 ? {} : { inputRequests }),
+    ...(snapshot.prototype === undefined ? {} : { prototype: snapshot.prototype }),
+    ...(snapshot.uiPreview === undefined ? {} : { uiPreview: snapshot.uiPreview }),
+    ...(snapshot.workingPreview === undefined
+      ? {}
+      : {
+          workingPreview:
+            snapshot.status === "cancelled" || snapshot.status === "failed"
+              ? null
+              : currentWorkingPreview(snapshot.workingPreview),
+        }),
+  });
 }

@@ -68,33 +68,36 @@ async function readBoundedJson(request: Request) {
     offset += chunk.byteLength;
   }
   try {
-    const parsedJson: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
-    return z.json().parse(parsedJson);
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
   } catch {
     throw new BuilderHandoffRequestError();
   }
 }
 
-export const builderHandoffCreateRequestSchema = z.strictObject({
-  appName: z.string().trim().min(1).max(120),
-  brief: z.string().trim().min(1).max(32_000),
-  connections: z.array(z.string().trim().min(1).max(100)).max(50),
-  creationRequestId: z.uuid(),
-  destination: builderHandoffDestinationSchema.optional(),
-  modelId: activeBuilderModelIdSchema,
-  provisioningRequestId: z.uuid().optional(),
-  repository: z.strictObject({
-    name: z
-      .string()
-      .trim()
-      .min(1)
-      .max(100)
-      .regex(/^[A-Za-z0-9._-]+$/u),
-    private: z.boolean(),
-  }),
-  sourceCandidate: sourceCandidateReferenceSchema.optional(),
-  version: z.literal(1),
-});
+export const builderHandoffCreateRequestSchema = z
+  .object({
+    appName: z.string().trim().min(1).max(120),
+    brief: z.string().trim().min(1).max(32_000),
+    connections: z.array(z.string().trim().min(1).max(100)).max(50),
+    creationRequestId: z.string().uuid(),
+    destination: builderHandoffDestinationSchema.optional(),
+    modelId: activeBuilderModelIdSchema,
+    provisioningRequestId: z.string().uuid().optional(),
+    repository: z
+      .object({
+        name: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .regex(/^[A-Za-z0-9._-]+$/u),
+        private: z.boolean(),
+      })
+      .strict(),
+    sourceCandidate: sourceCandidateReferenceSchema.optional(),
+    version: z.literal(1),
+  })
+  .strict();
 
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 type HandoffService = ReturnType<typeof createBuilderHandoffService>;
@@ -132,8 +135,7 @@ export function createBuilderHandoffRouteHandler(input: {
       }
       const contentLength = request.headers.get("content-length");
       if (
-        contentLength !== null &&
-        contentLength !== "" &&
+        contentLength &&
         (!/^\d+$/u.test(contentLength) || Number(contentLength) > maximumRequestBytes)
       ) {
         return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
@@ -146,52 +148,46 @@ export function createBuilderHandoffRouteHandler(input: {
         );
       }
       const body = builderHandoffCreateRequestSchema.parse(await readBoundedJson(request));
-      let provision: Awaited<ReturnType<BuilderProvisionJournalStore["read"]>>;
-      if (body.provisioningRequestId !== undefined) {
-        provision = await input.journal.read({
-          authority,
-          requestId: body.provisioningRequestId,
-        });
-      }
-      if (body.provisioningRequestId !== undefined && !provision) {
+      const provision = body.provisioningRequestId
+        ? await input.journal.read({
+            authority,
+            requestId: body.provisioningRequestId,
+          })
+        : undefined;
+      if (body.provisioningRequestId && !provision) {
         return Response.json({ error: "handoff_unavailable" }, { headers: noStore, status: 404 });
       }
       const github = provision?.record.response.github;
       const appName = provision?.record.request.appName ?? body.appName;
       const repository = provision?.record.request.repository ?? body.repository;
-      const intent: BuilderHandoffIntent = {
-        appId:
-          provision?.record.response.appId ??
-          body.sourceCandidate?.appId ??
-          deriveBuilderAppId(appName),
-        appName,
-        brief: body.brief,
-        connections: body.connections,
-        modelId: body.modelId,
-        repository: {
-          private: repository.private,
-          requestedName: repository.name,
-        },
-      };
-      if (body.destination !== undefined) {
-        intent.destination = body.destination;
-      }
-      if (body.sourceCandidate !== undefined) {
-        intent.sourceCandidate = body.sourceCandidate;
-      }
-      if (github?.status === "succeeded") {
-        intent.repository.resolvedFullName = github.fullName;
-      }
-      if (provision !== undefined) {
-        intent.providers = provision.record.request.providers;
-        intent.provisioning = provision.record.response;
-        intent.provisioningRequestDigest = provision.requestDigest;
-        intent.provisioningRequestId = provision.requestId;
-      }
       const created = await input.handoffs.create({
         authority,
         creationRequestId: body.creationRequestId,
-        intent,
+        intent: {
+          ...(body.destination === undefined ? {} : { destination: body.destination }),
+          appId:
+            provision?.record.response.appId ??
+            body.sourceCandidate?.appId ??
+            deriveBuilderAppId(appName),
+          ...(body.sourceCandidate === undefined ? {} : { sourceCandidate: body.sourceCandidate }),
+          appName,
+          brief: body.brief,
+          connections: body.connections,
+          modelId: body.modelId,
+          repository: {
+            private: repository.private,
+            requestedName: repository.name,
+            ...(github?.status === "succeeded" ? { resolvedFullName: github.fullName } : {}),
+          },
+          ...(provision === undefined
+            ? {}
+            : {
+                providers: provision.record.request.providers,
+                provisioning: provision.record.response,
+                provisioningRequestDigest: provision.requestDigest,
+                provisioningRequestId: provision.requestId,
+              }),
+        },
       });
       return Response.json(
         {
@@ -213,14 +209,8 @@ export function createBuilderHandoffRouteHandler(input: {
   };
 }
 
-type HandoffRouteError =
-  | BuilderHandoffUnavailableError
-  | BuilderHandoffConflictError
-  | BuilderHandoffRequestError
-  | z.ZodError;
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function handoffErrorResponse(error: HandoffRouteError) {
+function handoffErrorResponse(error: unknown) {
   if (error instanceof BuilderHandoffUnavailableError) {
     return Response.json({ error: "handoff_unavailable" }, { headers: noStore, status: 404 });
   }
@@ -244,15 +234,7 @@ export function createBuilderHandoffStatusRouteHandler(input: {
         ? Response.json(data, { headers: noStore })
         : Response.json({ error: "authentication_required" }, { headers: noStore, status: 401 });
     } catch (error) {
-      if (
-        error instanceof BuilderHandoffUnavailableError ||
-        error instanceof BuilderHandoffConflictError ||
-        error instanceof BuilderHandoffRequestError ||
-        error instanceof z.ZodError
-      ) {
-        return handoffErrorResponse(error);
-      }
-      return handoffErrorResponse(new BuilderHandoffUnavailableError());
+      return handoffErrorResponse(error);
     }
   };
 }
@@ -276,8 +258,7 @@ export function createBuilderHandoffRenewRouteHandler(input: {
       }
       const contentLength = request.headers.get("content-length");
       if (
-        contentLength !== null &&
-        contentLength !== "" &&
+        contentLength &&
         (!/^\d+$/u.test(contentLength) || Number(contentLength) > maximumRequestBytes)
       ) {
         throw new BuilderHandoffRequestError();
@@ -290,7 +271,8 @@ export function createBuilderHandoffRenewRouteHandler(input: {
         );
       }
       const body = z
-        .strictObject({ creationRequestId: z.uuid() })
+        .object({ creationRequestId: z.string().uuid() })
+        .strict()
         .parse(await readBoundedJson(request));
       const renewed = await input.handoffs.renew({
         authority,
@@ -306,15 +288,7 @@ export function createBuilderHandoffRenewRouteHandler(input: {
         { headers: noStore },
       );
     } catch (error) {
-      if (
-        error instanceof BuilderHandoffUnavailableError ||
-        error instanceof BuilderHandoffConflictError ||
-        error instanceof BuilderHandoffRequestError ||
-        error instanceof z.ZodError
-      ) {
-        return handoffErrorResponse(error);
-      }
-      return handoffErrorResponse(new BuilderHandoffUnavailableError());
+      return handoffErrorResponse(error);
     }
   };
 }
@@ -369,15 +343,14 @@ export async function getBuilderHandoffPageData(input: {
     authority,
     handoffId: input.handoffId,
   });
-  let currentProvisioning: Awaited<ReturnType<BuilderProvisionJournalStore["read"]>>;
-  if (record.intent.provisioningRequestId !== undefined) {
-    currentProvisioning = await createPostgresBuilderProvisionJournalStore(context.database).read({
-      authority,
-      requestId: record.intent.provisioningRequestId,
-    });
-  }
+  const currentProvisioning = record.intent.provisioningRequestId
+    ? await createPostgresBuilderProvisionJournalStore(context.database).read({
+        authority,
+        requestId: record.intent.provisioningRequestId,
+      })
+    : undefined;
   const { isCursorClientReady } = await import("../auth/cursor-client");
-  const pageData: BuilderHandoffPageData = {
+  return {
     cursorInstallReady: await isCursorClientReady(context.database, context.preview.resource),
     destination: record.intent.destination ?? "codex",
     expiresAt: record.expiresAt.toISOString(),
@@ -388,11 +361,8 @@ export async function getBuilderHandoffPageData(input: {
     mcpUrl: context.preview.resource,
     status,
     version: 1,
+    ...(currentProvisioning ? { provisioningRevision: currentProvisioning.revision } : {}),
   };
-  if (currentProvisioning !== undefined) {
-    pageData.provisioningRevision = currentProvisioning.revision;
-  }
-  return pageData;
 }
 
 /**
@@ -439,15 +409,7 @@ export function getBuilderHandoffRenewDeploymentHandler(environment: Environment
         origin: new URL(context.preview.issuer).origin,
       })(request, handoffId);
     } catch (error) {
-      if (
-        error instanceof BuilderHandoffUnavailableError ||
-        error instanceof BuilderHandoffConflictError ||
-        error instanceof BuilderHandoffRequestError ||
-        error instanceof z.ZodError
-      ) {
-        return handoffErrorResponse(error);
-      }
-      return handoffErrorResponse(new BuilderHandoffUnavailableError());
+      return handoffErrorResponse(error);
     }
   };
 }

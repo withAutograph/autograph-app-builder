@@ -26,7 +26,6 @@ import {
   retainDraftReconciliationCompletion,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
-import type { DraftReconciliationCompletion } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { recordPublishedReconciliationForSession } from "@/lib/agent/published-app-source";
 import { assertReconciliationCompletionOwnerForSession } from "@/lib/agent/compiled-operator-artifacts";
@@ -66,7 +65,7 @@ export default defineTool({
 
     const workflow = appBuilderWorkflowState.get();
     const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
-    let completion: DraftReconciliationCompletion | undefined = draftReconciliationCompletions
+    let completion = draftReconciliationCompletions
       .get()
       .find((entry) => entry.proposal.digest === input.expectedProposalDigest);
     const sealedBeforeApproval = completion?.preparation === "sealed-before-approval";
@@ -89,7 +88,7 @@ export default defineTool({
       ) {
         return missingCompletion();
       }
-      const legacyCompletion: DraftReconciliationCompletion = {
+      completion = {
         appId: state.appSpec.appId,
         appReview: {
           appSpecDigest: state.reviewReceipt.appSpecDigest,
@@ -102,14 +101,13 @@ export default defineTool({
         proposal: candidate.proposal,
         review: candidate.review,
         root: candidate.root,
+        ...(candidate.publishedOrigin === undefined
+          ? {}
+          : { publishedOrigin: candidate.publishedOrigin }),
+        ...(candidate.publicationScope === undefined
+          ? {}
+          : { publicationScope: candidate.publicationScope }),
       };
-      if (candidate.publishedOrigin !== undefined) {
-        Object.assign(legacyCompletion, { publishedOrigin: candidate.publishedOrigin });
-      }
-      if (candidate.publicationScope !== undefined) {
-        Object.assign(legacyCompletion, { publicationScope: candidate.publicationScope });
-      }
-      completion = legacyCompletion;
     }
     const { proposal, review } = completion;
     assertApprovalReceipt({
@@ -150,14 +148,13 @@ export default defineTool({
       publication: Parameters<typeof recordPublishedReconciliationForSession>[0]["publication"],
     ) => {
       try {
-        const recordingInput = {
+        const recording = await recordPublishedReconciliationForSession({
           ...session,
           publication,
-        };
-        if (input.recordCurrentEquivalentRelease === true) {
-          Object.assign(recordingInput, { recordCurrentEquivalentRelease: true as const });
-        }
-        const recording = await recordPublishedReconciliationForSession(recordingInput);
+          ...(input.recordCurrentEquivalentRelease === true
+            ? { recordCurrentEquivalentRelease: true as const }
+            : {}),
+        });
         if (recording.status === "selection-changed") {
           return {
             ...publication,

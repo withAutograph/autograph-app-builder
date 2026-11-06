@@ -3,37 +3,44 @@ import type { McpOptions } from "@better-auth/mcp";
 import { z } from "zod";
 
 const previewOAuthConfigSchema = z
-  .strictObject({
-    issuer: z.url(),
-    resource: z.url(),
+  .object({
+    issuer: z.string().url(),
+    resource: z.string().url(),
   })
+  .strict()
   .superRefine((config, context) => {
     const issuer = new URL(config.issuer);
     const resource = new URL(config.resource);
-    const issuerUsesHttps = issuer.protocol === "https:";
-    const issuerUsesLocalHttp = issuer.protocol === "http:" && issuer.hostname === "localhost";
-    const issuerUsesAllowedProtocol = issuerUsesHttps || issuerUsesLocalHttp;
-    if (!issuerUsesAllowedProtocol) {
+    if (
+      issuer.protocol !== "https:" &&
+      !(issuer.protocol === "http:" && issuer.hostname === "localhost")
+    ) {
       context.addIssue({
         code: "custom",
         message: "Preview OAuth requires HTTPS or HTTP localhost.",
         path: ["issuer"],
       });
     }
-    const issuerHasNoCredentials = !issuer.username && !issuer.password;
-    const issuerHasNoSuffix = !issuer.search && !issuer.hash;
-    const issuerHasNoCredentialsOrSuffix = issuerHasNoCredentials && issuerHasNoSuffix;
-    if (!issuerHasNoCredentialsOrSuffix || issuer.pathname !== "/api/auth") {
+    if (
+      issuer.username ||
+      issuer.password ||
+      issuer.search ||
+      issuer.hash ||
+      issuer.pathname !== "/api/auth"
+    ) {
       context.addIssue({
         code: "custom",
         message: "Preview OAuth issuer must be the exact /api/auth URL.",
         path: ["issuer"],
       });
     }
-    const resourceHasNoCredentials = !resource.username && !resource.password;
-    const resourceHasNoSuffix = !resource.search && !resource.hash;
-    const resourceHasNoCredentialsOrSuffix = resourceHasNoCredentials && resourceHasNoSuffix;
-    if (!resourceHasNoCredentialsOrSuffix || resource.pathname !== "/mcp") {
+    if (
+      resource.username ||
+      resource.password ||
+      resource.search ||
+      resource.hash ||
+      resource.pathname !== "/mcp"
+    ) {
       context.addIssue({
         code: "custom",
         message: "Preview OAuth resource must be the exact /mcp URL.",
@@ -107,21 +114,19 @@ export function buildPreviewMcpOAuthOptions(input: {
     clientRegistrationRequirePKCE: true,
     consentPage: "/auth/consent",
     customAccessTokenClaims: async ({ user, referenceId, resources }) => {
-      const hasSingleConfiguredResource = resources?.length === 1;
-      const hasConfiguredResource = resources?.[0] === config.resource;
-      const hasValidResource = hasSingleConfiguredResource && hasConfiguredResource;
-      const hasUser = user !== null && user !== undefined;
-      const hasReferenceId = referenceId !== undefined;
-      if (!hasUser || !hasReferenceId || !hasValidResource) {
-        throw new Error("Preview OAuth membership is not active.");
-      }
-      const isMember = await input.membership.isActiveMember({
-        audience: config.resource,
-        issuer: config.issuer,
-        ownerUserId: user.id,
-        workspaceId: referenceId,
-      });
-      if (!isMember) {
+      if (
+        user === null ||
+        user === undefined ||
+        referenceId === undefined ||
+        resources?.length !== 1 ||
+        resources[0] !== config.resource ||
+        !(await input.membership.isActiveMember({
+          audience: config.resource,
+          issuer: config.issuer,
+          ownerUserId: user.id,
+          workspaceId: referenceId,
+        }))
+      ) {
         throw new Error("Preview OAuth membership is not active.");
       }
       return {
@@ -195,17 +200,11 @@ export function buildPreviewCimdOptions(input: {
       } catch {
         throw new Error("Preview CIMD resources must be JSON documents.");
       }
-      const cimdDocumentSchema = z.object({
-        client_name: z.string().optional(),
-        keys: z.array(z.json()).optional(),
-        redirect_uris: z.array(z.url()).optional(),
-        token_endpoint_auth_method: z.string().optional(),
-      });
-      const parsedDocument = cimdDocumentSchema.safeParse(document);
-      if (!parsedDocument.success) {
+      if (typeof document !== "object" || document === null) {
         throw new Error("Preview CIMD resources must be JSON objects.");
       }
-      const record = parsedDocument.data;
+
+      const record = document as Record<string, unknown>;
       const looksLikeClientMetadata =
         "client_name" in record ||
         "redirect_uris" in record ||

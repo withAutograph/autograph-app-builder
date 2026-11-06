@@ -1,4 +1,5 @@
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { mkdtemp, readFile, writeFile, chmod, stat, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -44,7 +45,7 @@ describe("owned private browser authority", () => {
         withPrivatePreviewBrowserAccess({
           appId: "example",
           assertCurrent: () => {},
-          operation: async () => await Promise.resolve("unused"),
+          operation: async () => "unused",
           preview: current,
           root: "/workspace/repository",
           sandbox: { run, writeTextFile },
@@ -63,19 +64,16 @@ describe("owned private browser authority", () => {
     // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Translate only the exact test-owned runtime prefix into the isolated directory.
     const translate = (value: string) => value.replaceAll("/tmp/autograph-app-runtime", directory);
     const commands: string[] = [];
-    const run: Parameters<typeof withPrivatePreviewBrowserAccess>[0]["sandbox"]["run"] = (
+    const run: Parameters<typeof withPrivatePreviewBrowserAccess>[0]["sandbox"]["run"] = async (
       input,
     ) => {
       commands.push(input.command);
-      const stdout = execFileSync(
-        process.execPath,
-        [
-          "-e",
-          `require('node:child_process').execFileSync('/bin/sh',['-c',${JSON.stringify(translate(input.command))}],{stdio:'inherit',env:{...process.env,PATH:${JSON.stringify(path.dirname(process.execPath))}+':/usr/bin:/bin'}})`,
-        ],
-        { encoding: "utf-8" },
-      );
-      return { exitCode: 0, stderr: "", stdout };
+      // oxlint-disable-next-line typescript/strict-void-return -- Node's callback execFile is adapted by promisify to its result.
+      const result = await promisify(execFile)(process.execPath, [
+        "-e",
+        `require('node:child_process').execFileSync('/bin/sh',['-c',${JSON.stringify(translate(input.command))}],{stdio:'inherit',env:{...process.env,PATH:${JSON.stringify(path.dirname(process.execPath))}+':/usr/bin:/bin'}})`,
+      ]);
+      return { ...result, exitCode: 0 };
     };
     const writeTextFile: NonNullable<
       Parameters<typeof withPrivatePreviewBrowserAccess>[0]["sandbox"]["writeTextFile"]
@@ -122,12 +120,13 @@ describe("owned private browser authority", () => {
       const run = vi
         .fn<Parameters<typeof withPrivatePreviewBrowserAccess>[0]["sandbox"]["run"]>()
         .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
-      const writeTextFile = vi.fn(() => {
+      const writeTextFile = vi.fn(async () => {
         if (kind === "cancelled") {
           controller.abort();
         } else {
           current = false;
         }
+        return;
       });
       const operation = vi.fn();
       await expect(

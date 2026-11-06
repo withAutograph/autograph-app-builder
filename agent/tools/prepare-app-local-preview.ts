@@ -26,8 +26,6 @@ type LocalPreviewEnvironment = Record<string, string> & {
   APP_RUNTIME_STATE_DIR: string;
 };
 
-const generatedPostgresBackend = "generated-postgres";
-
 export const localPreviewSetupCommand = (appId: string): string =>
   `MISE_TASK_RUN_AUTO_INSTALL=true MISE_AUTO_INSTALL=true mise run --no-deps app:runtime prepare ${appIdSchema.parse(appId)} local`;
 
@@ -37,26 +35,25 @@ export const appDeclaresLocalSetup = async (input: {
   sandbox: Pick<SandboxSession, "run">;
 }): Promise<boolean> => {
   const description = await describeSelectedApp(input);
-  return description.backend.kind === generatedPostgresBackend;
+  return description.backend.kind === "generated-postgres";
 };
 
 export const localPreviewExecutionCommand = localPreviewSetupCommand;
 
-const redactedValue = "REDACTED";
 const safeOutput = (value: string): string =>
   value
     .replaceAll(/\p{Cc}/gu, (character) =>
       character === "\n" || character === "\t" ? character : "",
     )
     .replaceAll(/\b(?:https?|postgres(?:ql)?):\/\/[^\s"'<>]+/giu, "[URL REDACTED]")
-    .replaceAll(/Bearer\s+[^\s,;]+/giu, `Bearer [${redactedValue}]`)
+    .replaceAll(/Bearer\s+[^\s,;]+/giu, "Bearer [REDACTED]")
     .replaceAll(
       /\b(?:authorization|cookie|password|passwd|secret|token|api[-_]?key)\s*[:=]\s*[^\s,;]+/giu,
       "[CREDENTIAL REDACTED]",
     )
     .replaceAll(
       /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu,
-      `[${redactedValue}]`,
+      "[REDACTED]",
     )
     .slice(-6000)
     .trim();
@@ -101,8 +98,8 @@ export const prepareAppLocalPreview = async (input: {
       signal: input.signal,
     });
     const roles =
-      description.backend.kind === generatedPostgresBackend ? description.backend.roles : [];
-    if (description.backend.kind === generatedPostgresBackend) {
+      description.backend.kind === "generated-postgres" ? description.backend.roles : [];
+    if (description.backend.kind === "generated-postgres") {
       command = `${sourceDeclaredToolchainActivationCommand()}\n${command}`;
     }
     const env: LocalPreviewEnvironment = {
@@ -122,16 +119,13 @@ export const prepareAppLocalPreview = async (input: {
         .regex(/^(?:http:\/\/localhost:3000|https:\/\/[a-z0-9-]+\.vercel\.run)$/u)
         .parse(input.expectedPreviousAuthOrigin);
     }
-    const options = {
-      command,
-      env,
-      workingDirectory: input.root,
-    } satisfies Parameters<typeof runSandboxCommandWithExcerpt>[0]["options"];
-    if (input.signal !== undefined) {
-      Object.assign(options, { abortSignal: input.signal });
-    }
     const result = await runSandboxCommandWithExcerpt({
-      options,
+      options: {
+        command,
+        env,
+        workingDirectory: input.root,
+        ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+      },
       sandbox: input.sandbox,
       sanitize: safeOutput,
     });
@@ -142,7 +136,7 @@ export const prepareAppLocalPreview = async (input: {
         command,
         exitCode: result.exitCode,
         problem:
-          description.backend.kind === generatedPostgresBackend &&
+          description.backend.kind === "generated-postgres" &&
           roles.length === 0 &&
           `${stderr}\n${stdout}`.includes("Authenticated runtime requires schema-declared roles")
             ? "The selected app's authenticated runtime rejected its checked schema release because it declares no application roles. Repair this app's CUE authorization roles and model/operation grants from the accepted access requirements through the ordinary implementation repair flow, then regenerate its checked release and retry validation. Use the compiler's canonical role IDs. AppSpec prose or role strings in application code do not declare database authorization; do not inject APP_RUNTIME_ROLES or grant a default role to bypass the missing policy."
@@ -199,7 +193,7 @@ export default defineTool({
     const selected = await runnableSelectedApp({
       appId: input.appId,
       resolveRoot: async ({ appId, root }) =>
-        await resolveAcceptanceRuntimeRoot({ appId, ctx, fallbackRoot: root, sandbox, state }),
+        await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
       state,
     });
     const { root } = selected;

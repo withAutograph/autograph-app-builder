@@ -242,13 +242,13 @@ const dispatch = async (
     }
     const request: Parameters<NonNullable<HostedEveTransport["sendAccepted"]>>[0] = {
       adapterSessionId: session.adapterSessionId,
+      ...(session.nativeRecoveryBinding === undefined
+        ? {}
+        : { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }),
       message,
       operationId: candidate.operationId,
       principal: session.principal,
     };
-    if (session.nativeRecoveryBinding !== undefined) {
-      request.logicalSessionId = session.nativeRecoveryBinding.logicalSessionId;
-    }
     if (session.sourceHandoffId !== undefined) {
       request.sourceHandoffId = session.sourceHandoffId;
     }

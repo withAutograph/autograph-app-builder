@@ -120,7 +120,7 @@ const fixture = () => {
   };
   const responseCtx: ApprovalResponseContext<NativeTargetPreparationRequest> = {
     auth: {
-      getToken: () => {
+      getToken: async () => {
         throw new Error("unused");
       },
       requireAuth: () => {
@@ -143,7 +143,7 @@ const fixture = () => {
     options?: RequestInit;
     body: ReturnType<typeof nativeTargetTransportRequestSchema.parse>;
   }[] = [];
-  const request = vi.fn<typeof fetch>((url, options) => {
+  const request = vi.fn<typeof fetch>(async (url, options) => {
     const serialized = z.string().parse(options?.body);
     sent.push({
       body: nativeTargetTransportRequestSchema.parse(JSON.parse(serialized)),
@@ -159,7 +159,7 @@ const fixture = () => {
     endpoint: "https://operator.example",
     fetch: request,
     ownerContext: owner,
-    token: () => "synthetic-oidc",
+    token: async () => "synthetic-oidc",
   });
   const proof = {
     callId: "original-approved-call",
@@ -355,7 +355,7 @@ describe("native target protected client", () => {
         createNativeTargetOnboardingClient({
           endpoint,
           ownerContext: f.owner,
-          token: () => "synthetic",
+          token: async () => "synthetic",
         }),
       ).toThrow();
     }

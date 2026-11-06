@@ -41,7 +41,7 @@ const fixture = async () => {
     ownerRunId: publicId,
   });
   vi.spyOn(ClientSession.prototype, "snapshot").mockImplementation(
-    function snapshot(this: ClientSession) {
+    async function snapshot(this: ClientSession) {
       return {
         events: [
           {

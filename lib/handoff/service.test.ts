@@ -33,17 +33,18 @@ function memoryStore(): BuilderHandoffStore {
       : undefined;
   };
   return {
-    bindSession: async (input) => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async bindSession(input) {
       const record = readOwned(input);
       if (
         !record ||
         record.requestDigest !== input.requestDigest ||
         input.now >= record.expiresAt
       ) {
-        return await Promise.resolve(readOwned(input));
+        return;
       }
       if (record.sessionId !== undefined) {
-        return await Promise.resolve(record);
+        return record;
       }
       const updated = {
         ...record,
@@ -52,23 +53,28 @@ function memoryStore(): BuilderHandoffStore {
       };
       byId.set(record.handoffId, updated);
       byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
-      return await Promise.resolve(updated);
+      return updated;
     },
-    read: async (input) => await Promise.resolve(readOwned(input)),
-    renewExpired: async (input) => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async read(input) {
+      return readOwned(input);
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async renewExpired(input) {
       const record = readOwned(input);
       if (!record || record.requestDigest !== input.requestDigest) {
-        return await Promise.resolve(record && { disposition: "existing", record });
+        return;
       }
       if (record.sessionId !== undefined || record.expiresAt > input.now) {
-        return await Promise.resolve({ disposition: "existing", record });
+        return { disposition: "existing", record };
       }
       const updated = { ...record, expiresAt: input.expiresAt };
       byId.set(record.handoffId, updated);
       byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
-      return await Promise.resolve({ disposition: "renewed", record: updated });
+      return { disposition: "renewed", record: updated };
     },
-    reserve(record) {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async reserve(record) {
       const key = JSON.stringify([record.authority, record.creationRequestId]);
       const existing = byRequest.get(key);
       if (existing) {
@@ -367,19 +373,8 @@ describe("opaque App Builder handoffs", () => {
         };
       }
       vi.spyOn(store, "read").mockResolvedValue(forged);
-      const reads: ((input: {
-        authority: typeof authority;
-        handoffId: string;
-      }) =>
-        | Promise<Awaited<ReturnType<typeof service.read>>>
-        | Promise<Awaited<ReturnType<typeof service.status>>>
-        | Promise<Awaited<ReturnType<typeof service.resolve>>>)[] = [
-        async (input) => await service.read(input),
-        async (input) => await service.status(input),
-        async (input) => await service.resolve(input),
-      ];
       await Promise.all(
-        reads.map(async (read) => {
+        [service.read, service.status, service.resolve].map(async (read) => {
           await expect(read(lookup)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
         }),
       );

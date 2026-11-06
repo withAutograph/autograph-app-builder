@@ -4,7 +4,5 @@ import { getBuilderDraftDeploymentHandler } from "@/lib/builder-drafts/deploymen
  * The page-hide transport for the browser autosave outbox. The handler shares
  * its validation and tenant authority with the Server Action used while active.
  */
-const handlePost = async (request: Request) =>
-  await getBuilderDraftDeploymentHandler(process.env)(request);
-
-export const POST = handlePost;
+export const POST = async (request: Request) =>
+  getBuilderDraftDeploymentHandler(process.env)(request);

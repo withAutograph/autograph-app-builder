@@ -53,9 +53,7 @@ const authorizationCoordinatesSchema = z.object({
   name: z.string().min(1),
   turnId: z.string().min(1),
 });
-const authorizationRequestId = (
-  data: z.input<typeof authorizationCoordinatesSchema>,
-): string | undefined => {
+const authorizationRequestId = (data: unknown): string | undefined => {
   const coordinates = authorizationCoordinatesSchema.safeParse(data);
   if (!coordinates.success) {
     return undefined;
@@ -67,23 +65,20 @@ const authorizationRequestId = (
   );
 };
 
-const PREVIEW_START_TOOL = "start_app_preview";
-const DATA_MODEL_LABEL = "Preparing the app's data model";
-const APP_VALIDATION_LABEL = "Validating the app changes";
-const HOSTED_RUNTIME_TOOL = "prepare-app-hosted-runtime";
+const progressStates = new Set(["started", "completed", "failed"]);
 const visibleOperations = new Map([
   ["apply_app_creation", "Building the app in its private workspace"],
-  ["compile-app-schema-release", DATA_MODEL_LABEL],
+  ["compile-app-schema-release", "Preparing the app's data model"],
   ["install-app-integrations", "Installing the app's requested integrations"],
   ["prepare-app-local-preview", "Preparing the app's local preview dependencies"],
-  [HOSTED_RUNTIME_TOOL, "Setting up your app’s data"],
+  ["prepare-app-hosted-runtime", "Setting up your app’s data"],
   ["cleanup-app-hosted-runtime", "Removing the app's Preview resources"],
   ["export-app-hosted-data", "Exporting approved app data privately"],
   ["run-app-continuity-tests", "Checking that the app stays connected after restart"],
   ["run-app-browser-tests", "Running the app's browser tests"],
-  [PREVIEW_START_TOOL, "Starting the app preview"],
-  ["validate_app_creation", APP_VALIDATION_LABEL],
-  ["validate-app-creation", APP_VALIDATION_LABEL],
+  ["start_app_preview", "Starting the app preview"],
+  ["validate_app_creation", "Validating the app changes"],
+  ["validate-app-creation", "Validating the app changes"],
   ["validate_github_draft_pr_reconciliation", "Checking changes proposed for the draft PR"],
   ["reconcile_github_draft_pr", "Updating the draft pull request"],
 ]);
@@ -96,68 +91,55 @@ const visibleOperationLabels = new Set([
   "Checking the app's workflow",
   "Preparing local app data",
 ]);
-const PREPARING_DATA_MODEL = DATA_MODEL_LABEL;
-const ASSISTANT_MESSAGE = "assistant.message";
-const INPUT_REQUESTED = "input.requested";
-const INPUT_RESOLVED = "input.resolved";
-const AUTHORIZATION_REQUIRED = "authorization.required";
-const AUTHORIZATION_COMPLETED = "authorization.completed";
-const PROTOTYPE_MEDIA_TYPE = "text/html" as const;
 
-const draftValidationCommandSchema = z.string();
-const draftValidationCommandLabel = (
-  value: z.input<typeof draftValidationCommandSchema>,
-): string | undefined => {
-  const parsedValue = draftValidationCommandSchema.safeParse(value);
-  if (!parsedValue.success) {
+const draftValidationCommandLabel = (value: unknown): string | undefined => {
+  if (typeof value !== "string") {
     return undefined;
   }
-  const command: string = parsedValue.data;
-  if (/^mise exec (?:--no-deps )?-- bun install --frozen-lockfile$/u.test(command)) {
+  if (/^mise exec (?:--no-deps )?-- bun install --frozen-lockfile$/u.test(value)) {
     return "Preparing the app's dependencies";
   }
-  if (/^mise run (?:--no-deps )?app:compile [a-z][a-z0-9-]*$/u.test(command)) {
-    return PREPARING_DATA_MODEL;
+  if (/^mise run (?:--no-deps )?app:compile [a-z][a-z0-9-]*$/u.test(value)) {
+    return "Preparing the app's data model";
   }
   if (
     /^mise run (?:--no-deps )?--skip-tools schema:release -- compile --app [a-z][a-z0-9-]*$/u.test(
-      command,
+      value,
     )
   ) {
-    return PREPARING_DATA_MODEL;
+    return "Preparing the app's data model";
   }
-  if (/^mise run (?:--no-deps )?--skip-tools app:check [a-z][a-z0-9-]*$/u.test(command)) {
+  if (/^mise run (?:--no-deps )?--skip-tools app:check [a-z][a-z0-9-]*$/u.test(value)) {
     return "Checking the app's data model";
   }
   if (
     /^mise run (?:--no-deps )?--skip-tools app:test [a-z][a-z0-9-]* [1-9][0-9]*\/[1-9][0-9]*$/u.test(
-      command,
+      value,
     )
   ) {
     return "Running app tests";
   }
-  if (/^mise run (?:--no-deps )?--skip-tools \/\/apps\/[a-z][a-z0-9-]*:test-e2e$/u.test(command)) {
+  if (/^mise run (?:--no-deps )?--skip-tools \/\/apps\/[a-z][a-z0-9-]*:test-e2e$/u.test(value)) {
     return "Checking the app's workflow";
   }
   const local =
     /mise run (?:--no-deps )?(?:app:local -- |app:runtime prepare )(?<appId>[a-z][a-z0-9-]*)(?: setup| local)/u.exec(
-      command,
+      value,
     );
   return local?.groups?.appId === undefined ? undefined : "Preparing local app data";
 };
 
-const recordStringField = (
-  value: z.input<z.ZodRecord<z.ZodString, z.ZodString>>,
-  key: string,
-): string | undefined => {
-  const parsedValue = z.record(z.string(), z.string()).safeParse(value);
-  return parsedValue.success ? parsedValue.data[key] : undefined;
+const recordStringField = (value: unknown, key: string): string | undefined => {
+  if (typeof value !== "object" || value === null || !(key in value)) {
+    return undefined;
+  }
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" ? field : undefined;
 };
 
-const draftValidationLabelInputSchema = z.record(z.string(), z.string());
 const draftValidationLabel = (
   toolName: string,
-  value: z.input<typeof draftValidationLabelInputSchema>,
+  value: unknown,
   requested: boolean,
 ): string | undefined => {
   if (toolName !== "validate_github_draft_pr_reconciliation") {
@@ -172,15 +154,18 @@ export const pendingBuilderOperation = (events: Iterable<PublicEveEvent>): strin
   for (const event of events) {
     if (event.type === "status" && ["cancelled", "completed", "failed"].includes(event.status)) {
       pending.clear();
-    } else if (event.type === "progress" && visibleOperationLabels.has(event.label)) {
-      if (event.state === "started") {
-        pending.add(event.label);
-      } else if (event.state === "failed") {
-        // A failed tool result may omit its command. The generic failure closes the active command.
-        pending.clear();
-      } else {
-        pending.delete(event.label);
-      }
+      continue;
+    }
+    if (event.type !== "progress" || !visibleOperationLabels.has(event.label)) {
+      continue;
+    }
+    if (event.state === "started") {
+      pending.add(event.label);
+    } else if (event.state === "failed") {
+      // A failed tool result may omit its command. The generic failure closes the active command.
+      pending.clear();
+    } else {
+      pending.delete(event.label);
     }
   }
   return [...pending].at(-1) ?? "the current Builder step";
@@ -226,7 +211,9 @@ const publicBuilderFailure = (failure: { code: string; message: string }, operat
     validate_github_draft_pr_reconciliation: "draft pull request checks",
   } as const satisfies Record<string, string>;
   const name =
-    Object.entries(operationLabels).find(([key]) => key === operation)?.[1] ?? "this Builder step";
+    operation !== undefined && Object.hasOwn(operationLabels, operation)
+      ? operationLabels[operation as keyof typeof operationLabels]
+      : "this Builder step";
   const size =
     /Chunk size (?<actual>\d+) exceeds maximum allowed size of (?<maximum>\d+) bytes/u.exec(
       failure.message,
@@ -255,15 +242,16 @@ const prototypePathPattern = /^prototype\/(?<appId>[a-z][a-z0-9]*(?:-[a-z0-9]+)*
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");
 const prototypeRequestSchema = z
-  .strictObject({
+  .object({
     baseRevision: lowercaseSha256Schema.optional(),
     chunkIndex: z.number().int().nonnegative().optional(),
     content: z.string().min(1),
     expectedDigest: lowercaseSha256Schema.optional(),
     finalChunk: z.boolean().optional(),
-    mediaType: z.literal(PROTOTYPE_MEDIA_TYPE),
+    mediaType: z.literal("text/html"),
     path: z.string().regex(prototypePathPattern),
   })
+  .strict()
   .superRefine((input, context) => {
     if (input.chunkIndex === undefined && input.expectedDigest !== undefined) {
       context.addIssue({ code: "custom", message: "Missing chunk index.", path: ["chunkIndex"] });
@@ -283,20 +271,22 @@ const prototypeRequestSchema = z
       });
     }
   });
-const prototypeResultSchema = z.strictObject({
-  appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  complete: z.boolean().optional(),
-  digest: lowercaseSha256Schema,
-  invalidated: z.boolean().optional(),
-  mediaType: z.literal(PROTOTYPE_MEDIA_TYPE),
-  nextChunkIndex: z.number().int().nonnegative().optional(),
-  path: z.string().regex(prototypePathPattern),
-  recordedByCallId: z.string().min(1),
-  reused: z.boolean(),
-  revision: lowercaseSha256Schema,
-  sessionId: z.string().min(1),
-  size: z.number().int().min(1),
-});
+const prototypeResultSchema = z
+  .object({
+    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    complete: z.boolean().optional(),
+    digest: lowercaseSha256Schema,
+    invalidated: z.boolean().optional(),
+    mediaType: z.literal("text/html"),
+    nextChunkIndex: z.number().int().nonnegative().optional(),
+    path: z.string().regex(prototypePathPattern),
+    recordedByCallId: z.string().min(1),
+    reused: z.boolean(),
+    revision: lowercaseSha256Schema,
+    sessionId: z.string().min(1),
+    size: z.number().int().min(1),
+  })
+  .strict();
 
 const prototypeReferenceResultSchema = z
   .object({
@@ -305,219 +295,14 @@ const prototypeReferenceResultSchema = z
     complete: z.literal(true),
     contentBytes: z.number().int().positive(),
     digest: lowercaseSha256Schema,
-    mediaType: z.literal(PROTOTYPE_MEDIA_TYPE),
+    mediaType: z.literal("text/html"),
     path: z.string().regex(prototypePathPattern),
     recordedByCallId: z.string().min(1),
     revision: lowercaseSha256Schema,
     sessionId: z.string().min(1),
     version: z.literal(2),
   })
-  .loose();
-
-interface ReferenceEvent {
-  type: string;
-  data: unknown;
-}
-const referenceEventSchema = z.object({ data: z.unknown(), type: z.string() }).loose();
-const referenceActionsSchema = z.object({ actions: z.array(z.unknown()) }).loose();
-const referenceActionSchema = z
-  .object({
-    callId: z.string(),
-    input: z.unknown(),
-    kind: z.string(),
-    toolName: z.string(),
-  })
-  .loose();
-const referenceReceiptSchema = z
-  .object({
-    result: z
-      .object({
-        callId: z.string(),
-        isError: z.boolean().optional(),
-        kind: z.literal("tool-result"),
-        output: z.unknown(),
-        toolName: z.enum(["record_prototype_artifact", "record_ui_preview"]),
-      })
-      .loose(),
-    status: z.literal("completed"),
-  })
-  .loose();
-
-const appendReferenceRequest = (
-  candidateAction: z.infer<typeof referenceActionSchema>,
-  requested: Map<string, z.infer<typeof prototypeRequestSchema>>,
-  requestedUiPreview: Map<string, string>,
-): void => {
-  if (candidateAction.kind !== "tool-call") {
-    return;
-  }
-  const { callId, input, toolName } = candidateAction;
-  if (toolName === "record_prototype_artifact") {
-    requestedUiPreview.delete(callId);
-    const request = prototypeRequestSchema.safeParse(input);
-    if (request.success) {
-      requested.set(callId, request.data);
-    } else {
-      requested.delete(callId);
-    }
-    return;
-  }
-  requested.delete(callId);
-  if (toolName === "record_ui_preview") {
-    const preview = z
-      .object({ appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u) })
-      .loose()
-      .safeParse(input);
-    if (preview.success) {
-      requestedUiPreview.set(callId, preview.data.appId);
-    } else {
-      requestedUiPreview.delete(callId);
-    }
-  } else {
-    requestedUiPreview.delete(callId);
-  }
-};
-
-const referencePreviewMatches = (
-  value: {
-    appId: string;
-    path: string;
-    sessionId: string;
-    recordedByCallId: string;
-    digest: string;
-    artifactDigest: string;
-    artifactRevision: string;
-    mediaType: PROTOTYPE_MEDIA_TYPE;
-  },
-  appId: string,
-  sessionId: string,
-  callId: string,
-): boolean => {
-  if (value.appId !== appId || value.path !== `prototype/${appId}/index.html`) {
-    return false;
-  }
-  if (value.sessionId !== sessionId || value.recordedByCallId !== callId) {
-    return false;
-  }
-  if (value.digest !== value.artifactDigest) {
-    return false;
-  }
-  return (
-    value.artifactRevision ===
-    sha256(JSON.stringify({ digest: value.digest, mediaType: value.mediaType, path: value.path }))
-  );
-};
-
-const referenceRequestMatches = (
-  value: z.infer<typeof prototypeReferenceResultSchema>,
-  request: z.infer<typeof prototypeRequestSchema>,
-  sessionId: string,
-  callId: string,
-): boolean => {
-  const appId = prototypePathPattern.exec(request.path)?.groups?.appId;
-  const revision = sha256(
-    JSON.stringify({ digest: value.digest, mediaType: value.mediaType, path: value.path }),
-  );
-  if (value.sessionId !== sessionId || value.recordedByCallId !== callId || value.appId !== appId) {
-    return false;
-  }
-  if (
-    value.path !== request.path ||
-    value.mediaType !== request.mediaType ||
-    value.revision !== revision
-  ) {
-    return false;
-  }
-  if (request.expectedDigest !== undefined && value.digest !== request.expectedDigest) {
-    return false;
-  }
-  if (
-    request.chunkIndex !== undefined &&
-    (request.finalChunk !== true || value.chunkCount !== request.chunkIndex + 1)
-  ) {
-    return false;
-  }
-  return (
-    request.chunkIndex !== undefined ||
-    (value.digest === sha256(request.content) &&
-      value.contentBytes === Buffer.byteLength(request.content, "utf-8"))
-  );
-};
-
-const projectReferencePreviewReceipt = (
-  receipt: z.infer<typeof referenceReceiptSchema>["result"],
-  appId: string | undefined,
-  sessionId: string,
-): PublicPrototypeReference | undefined => {
-  if (appId === undefined || receipt.isError === true) {
-    return undefined;
-  }
-  const output = z
-    .object({
-      appId: z.string(),
-      artifactDigest: lowercaseSha256Schema,
-      artifactRevision: lowercaseSha256Schema,
-      chunkCount: z.number().int().positive(),
-      complete: z.literal(true),
-      contentBytes: z.number().int().positive(),
-      digest: lowercaseSha256Schema,
-      mediaType: z.literal(PROTOTYPE_MEDIA_TYPE),
-      path: z.string().regex(prototypePathPattern),
-      recordedByCallId: z.string(),
-      sessionId: z.string(),
-      version: z.literal(2),
-    })
-    .loose()
-    .safeParse(receipt.output);
-  if (!output.success || !referencePreviewMatches(output.data, appId, sessionId, receipt.callId)) {
-    return undefined;
-  }
-  const value = output.data;
-  const projected = publicPrototypeReferenceSchema.safeParse({
-    appId,
-    chunkCount: value.chunkCount,
-    contentBytes: value.contentBytes,
-    digest: value.digest,
-    mediaType: value.mediaType,
-    path: value.path,
-    recordedByCallId: value.recordedByCallId,
-    revision: value.artifactRevision,
-    sessionId: value.sessionId,
-    version: 2,
-  });
-  return projected.success ? projected.data : undefined;
-};
-
-const projectReferenceArtifactReceipt = (
-  receipt: z.infer<typeof referenceReceiptSchema>["result"],
-  request: z.infer<typeof prototypeRequestSchema> | undefined,
-  sessionId: string,
-): PublicPrototypeReference | undefined => {
-  if (request === undefined || receipt.isError === true) {
-    return undefined;
-  }
-  const output = prototypeReferenceResultSchema.safeParse(receipt.output);
-  if (
-    !output.success ||
-    !referenceRequestMatches(output.data, request, sessionId, receipt.callId)
-  ) {
-    return undefined;
-  }
-  const value = output.data;
-  const projected = publicPrototypeReferenceSchema.safeParse({
-    appId: value.appId,
-    chunkCount: value.chunkCount,
-    contentBytes: value.contentBytes,
-    digest: value.digest,
-    mediaType: value.mediaType,
-    path: value.path,
-    recordedByCallId: value.recordedByCallId,
-    revision: value.revision,
-    sessionId: value.sessionId,
-    version: 2,
-  });
-  return projected.success ? projected.data : undefined;
-};
+  .passthrough();
 
 export const installedPrototypeReferenceStateSchema = z.strictObject({
   latest: publicPrototypeReferenceSchema.optional(),
@@ -554,7 +339,7 @@ export const installedPrototypeProjectorStateSchema = z.strictObject({
       z.strictObject({
         chunks: z.array(z.string()),
         digest: lowercaseSha256Schema,
-        mediaType: z.literal(PROTOTYPE_MEDIA_TYPE),
+        mediaType: z.literal("text/html"),
         nextOffsetBytes: z.number().int().nonnegative(),
         path: z.string(),
         revision: lowercaseSha256Schema,
@@ -597,65 +382,194 @@ export const createInstalledPrototypeReferenceReducer = (input: {
   const requestedUiPreview = new Map<string, string>(state?.requestedUiPreview);
   let latest: PublicPrototypeReference | undefined = state?.latest;
   return {
-    accept(candidate: ReferenceEvent) {
-      const event = referenceEventSchema.safeParse(candidate);
+    accept(candidate: unknown) {
+      const event = z
+        .object({ data: z.unknown(), type: z.string() })
+        .passthrough()
+        .safeParse(candidate);
       if (!event.success) {
         return;
       }
       if (event.data.type === "actions.requested") {
-        acceptReferenceActions(event.data.data, requested, requestedUiPreview);
+        const actions = z
+          .object({ actions: z.array(z.unknown()) })
+          .passthrough()
+          .safeParse(event.data.data);
+        if (!actions.success) {
+          return;
+        }
+        for (const candidateAction of actions.data.actions) {
+          const action = z
+            .object({
+              callId: z.string(),
+              input: z.unknown(),
+              kind: z.string(),
+              toolName: z.string(),
+            })
+            .passthrough()
+            .safeParse(candidateAction);
+          if (!action.success || action.data.kind !== "tool-call") {
+            continue;
+          }
+          if (action.data.toolName !== "record_prototype_artifact") {
+            requested.delete(action.data.callId);
+            if (action.data.toolName === "record_ui_preview") {
+              const preview = z
+                .object({ appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u) })
+                .passthrough()
+                .safeParse(action.data.input);
+              if (preview.success) {
+                requestedUiPreview.set(action.data.callId, preview.data.appId);
+              }
+            } else {
+              requestedUiPreview.delete(action.data.callId);
+            }
+            continue;
+          }
+          requestedUiPreview.delete(action.data.callId);
+          const parsed = prototypeRequestSchema.safeParse(action.data.input);
+          if (parsed.success) {
+            requested.set(action.data.callId, parsed.data);
+          }
+        }
         return;
       }
       if (event.data.type !== "action.result") {
         return;
       }
-      const parsedReceipt = referenceReceiptSchema.safeParse(event.data.data);
-      if (!parsedReceipt.success) {
+      const resultEvent = z
+        .object({
+          result: z
+            .object({
+              callId: z.string(),
+              isError: z.boolean().optional(),
+              kind: z.literal("tool-result"),
+              output: z.unknown(),
+              toolName: z.enum(["record_prototype_artifact", "record_ui_preview"]),
+            })
+            .passthrough(),
+          status: z.literal("completed"),
+        })
+        .passthrough()
+        .safeParse(event.data.data);
+      if (!resultEvent.success) {
         return;
       }
-      const receipt = parsedReceipt.data.result;
+      const receipt = resultEvent.data.result;
       if (receipt.toolName === "record_ui_preview") {
         const appId = requestedUiPreview.get(receipt.callId);
         requestedUiPreview.delete(receipt.callId);
-        latest = projectReferencePreviewReceipt(receipt, appId, input.sessionId) ?? latest;
+        if (appId === undefined || receipt.isError === true) {
+          return;
+        }
+        const output = z
+          .object({
+            appId: z.string(),
+            artifactDigest: lowercaseSha256Schema,
+            artifactRevision: lowercaseSha256Schema,
+            chunkCount: z.number().int().positive(),
+            complete: z.literal(true),
+            contentBytes: z.number().int().positive(),
+            digest: lowercaseSha256Schema,
+            mediaType: z.literal("text/html"),
+            path: z.string().regex(prototypePathPattern),
+            recordedByCallId: z.string(),
+            sessionId: z.string(),
+            version: z.literal(2),
+          })
+          .passthrough()
+          .safeParse(receipt.output);
+        if (!output.success) {
+          return;
+        }
+        const value = output.data;
+        if (
+          value.appId !== appId ||
+          value.path !== `prototype/${appId}/index.html` ||
+          value.sessionId !== input.sessionId ||
+          value.recordedByCallId !== receipt.callId ||
+          value.digest !== value.artifactDigest ||
+          value.artifactRevision !==
+            sha256(
+              JSON.stringify({
+                digest: value.digest,
+                mediaType: value.mediaType,
+                path: value.path,
+              }),
+            )
+        ) {
+          return;
+        }
+        const projected = publicPrototypeReferenceSchema.safeParse({
+          appId,
+          chunkCount: value.chunkCount,
+          contentBytes: value.contentBytes,
+          digest: value.digest,
+          mediaType: value.mediaType,
+          path: value.path,
+          recordedByCallId: value.recordedByCallId,
+          revision: value.artifactRevision,
+          sessionId: value.sessionId,
+          version: 2,
+        });
+        if (projected.success) {
+          latest = projected.data;
+        }
         return;
       }
       const request = requested.get(receipt.callId);
       requested.delete(receipt.callId);
-      latest = projectReferenceArtifactReceipt(receipt, request, input.sessionId) ?? latest;
+      if (request === undefined || receipt.isError === true) {
+        return;
+      }
+      const output = prototypeReferenceResultSchema.safeParse(receipt.output);
+      if (!output.success) {
+        return;
+      }
+      const value = output.data;
+      const revision = sha256(
+        JSON.stringify({ digest: value.digest, mediaType: value.mediaType, path: value.path }),
+      );
+      if (
+        value.sessionId !== input.sessionId ||
+        value.recordedByCallId !== receipt.callId ||
+        value.appId !== prototypePathPattern.exec(request.path)?.groups?.appId ||
+        value.path !== request.path ||
+        value.mediaType !== request.mediaType ||
+        value.revision !== revision ||
+        (request.expectedDigest !== undefined && value.digest !== request.expectedDigest) ||
+        (request.chunkIndex !== undefined &&
+          (request.finalChunk !== true || value.chunkCount !== request.chunkIndex + 1)) ||
+        (request.chunkIndex === undefined &&
+          (value.digest !== sha256(request.content) ||
+            value.contentBytes !== Buffer.byteLength(request.content, "utf-8")))
+      ) {
+        return;
+      }
+      const projected = publicPrototypeReferenceSchema.safeParse({
+        appId: value.appId,
+        chunkCount: value.chunkCount,
+        contentBytes: value.contentBytes,
+        digest: value.digest,
+        mediaType: value.mediaType,
+        path: value.path,
+        recordedByCallId: value.recordedByCallId,
+        revision: value.revision,
+        sessionId: value.sessionId,
+        version: 2,
+      });
+      if (projected.success) {
+        latest = projected.data;
+      }
     },
     checkpoint: (): InstalledPrototypeReferenceState =>
-      installedPrototypeReferenceStateSchema.parse(
-        (() => {
-          const checkpoint: InstalledPrototypeReferenceState = {
-            requested: [...requested],
-            requestedUiPreview: [...requestedUiPreview],
-          };
-          if (latest !== undefined) {
-            checkpoint.latest = latest;
-          }
-          return checkpoint;
-        })(),
-      ),
+      installedPrototypeReferenceStateSchema.parse({
+        requested: [...requested],
+        requestedUiPreview: [...requestedUiPreview],
+        ...(latest === undefined ? {} : { latest }),
+      }),
     snapshot: () => latest,
   };
-};
-
-const acceptReferenceActions = (
-  data: unknown,
-  requested: Map<string, z.infer<typeof prototypeRequestSchema>>,
-  requestedUiPreview: Map<string, string>,
-): void => {
-  const actions = referenceActionsSchema.safeParse(data);
-  if (!actions.success) {
-    return;
-  }
-  for (const candidate of actions.data.actions) {
-    const parsed = referenceActionSchema.safeParse(candidate);
-    if (parsed.success) {
-      appendReferenceRequest(parsed.data, requested, requestedUiPreview);
-    }
-  }
 };
 const uiPreviewResultSchema = z
   .object({
@@ -672,479 +586,7 @@ const uiPreviewResultSchema = z
     routes: z.array(z.string().startsWith("/")).min(1),
     totalBytes: z.number().int().positive().optional(),
   })
-  .loose();
-
-const prototypeArtifactOutputSchema = z.object({
-  byteOffset: z.number().int().nonnegative().optional(),
-  chunkDigest: lowercaseSha256Schema.optional(),
-  complete: z.boolean().optional(),
-  content: z.string().min(1),
-  digest: lowercaseSha256Schema,
-  mediaType: z.literal(PROTOTYPE_MEDIA_TYPE),
-  nextOffsetBytes: z.number().int().nonnegative().optional(),
-  path: z.string().regex(prototypePathPattern),
-  revision: lowercaseSha256Schema,
-  totalBytes: z.number().int().positive().optional(),
-});
-
-type ArtifactReadRequest = z.infer<
-  typeof installedPrototypeProjectorStateSchema
->["artifactReadRequests"][number][1];
-type PrototypeArtifactOutput = z.infer<typeof prototypeArtifactOutputSchema>;
-const artifactReadMatches = (
-  input: ArtifactReadRequest,
-  output: PrototypeArtifactOutput,
-): boolean =>
-  input.path === output.path &&
-  input.digest === output.digest &&
-  (input.revision === undefined || input.revision === output.revision);
-const artifactChunkMatches = (
-  input: ArtifactReadRequest,
-  output: PrototypeArtifactOutput,
-  byteOffset: number,
-  nextOffsetBytes: number,
-  chunkDigest: string,
-): boolean =>
-  input.offsetBytes === byteOffset &&
-  sha256(output.content) === chunkDigest &&
-  Buffer.byteLength(output.content, "utf-8") === nextOffsetBytes - byteOffset;
-const readChunkContinues = (
-  prior: PrototypeReadChunks,
-  input: ArtifactReadRequest,
-  output: PrototypeArtifactOutput,
-  byteOffset: number,
-  totalBytes: number,
-): boolean =>
-  [
-    prior.nextOffsetBytes === byteOffset,
-    prior.totalBytes === totalBytes,
-    prior.digest === output.digest,
-    prior.revision === output.revision,
-    input.revision === prior.revision,
-  ].every(Boolean);
-const assembledPreviewMatches = (
-  content: string,
-  assembled: PrototypeReadChunks,
-  expected: { path: string; digest: string; revision: string } | undefined,
-): boolean =>
-  sha256(content) === assembled.digest &&
-  (expected === undefined ||
-    [
-      expected.path === assembled.path,
-      expected.digest === assembled.digest,
-      expected.revision === assembled.revision,
-    ].every(Boolean));
-type PrototypeResult = z.infer<typeof prototypeResultSchema>;
-type PrototypeRequest = z.infer<typeof prototypeRequestSchema>;
-type PrototypeTransferInput = PrototypeRequest & { chunkIndex: number; expectedDigest: string };
-const completeChunkMatches = (
-  input: PrototypeRequest,
-  output: PrototypeResult,
-  appId: string | undefined,
-  callId: string,
-  chunkDigest: string,
-): boolean =>
-  [
-    input.expectedDigest === chunkDigest,
-    output.complete === true,
-    output.digest === chunkDigest,
-    output.appId === appId,
-    output.path === input.path,
-    output.mediaType === input.mediaType,
-    output.size === Buffer.byteLength(input.content, "utf-8"),
-    output.recordedByCallId === callId,
-  ].every(Boolean);
-const recordedChunkMatches = (
-  output: PrototypeResult,
-  input: PrototypeTransferInput,
-  appId: string | undefined,
-  callId: string,
-  revision: string,
-  receivedBytes: number,
-): boolean =>
-  [
-    output.revision === revision,
-    output.appId === appId,
-    output.path === input.path,
-    output.mediaType === input.mediaType,
-    output.size === receivedBytes,
-    output.recordedByCallId === callId,
-  ].every(Boolean);
-const continuedChunkMatches = (
-  output: PrototypeResult,
-  input: PrototypeRequest,
-  appId: string | undefined,
-  callId: string,
-  digest: string,
-  receivedBytes: number,
-): boolean =>
-  [
-    output.appId === appId,
-    output.path === input.path,
-    output.mediaType === input.mediaType,
-    output.digest === digest,
-    output.size === receivedBytes,
-    output.recordedByCallId === callId,
-  ].every(Boolean);
-
-const observeActionsRequested = (
-  actions: readonly unknown[],
-  requested: Map<string, PrototypeRequest>,
-  artifactReadRequests: Map<string, ArtifactReadRequest>,
-): void => {
-  for (const action of actions) {
-    if (
-      typeof action !== "object" ||
-      action === null ||
-      !("kind" in action) ||
-      action.kind !== "tool-call"
-    ) {
-      continue;
-    }
-    const parsedAction = z
-      .object({ callId: z.string(), input: z.unknown(), toolName: z.string() })
-      .safeParse(action);
-    if (!parsedAction.success) {
-      continue;
-    }
-    const { callId, input, toolName } = parsedAction.data;
-    if (toolName === "record_prototype_artifact") {
-      const parsed = prototypeRequestSchema.safeParse(input);
-      if (parsed.success) {
-        requested.set(callId, parsed.data);
-      } else {
-        requested.delete(callId);
-      }
-    } else {
-      requested.delete(callId);
-    }
-    if (toolName === "get_prototype_artifact") {
-      const parsed = artifactReadRequestSchema.safeParse(input);
-      if (parsed.success) {
-        artifactReadRequests.set(callId, parsed.data);
-      } else {
-        artifactReadRequests.delete(callId);
-      }
-    } else {
-      artifactReadRequests.delete(callId);
-    }
-  }
-};
-
-const artifactReadRequestSchema = z.object({
-  digest: lowercaseSha256Schema,
-  offsetBytes: z.number().int().nonnegative().optional(),
-  path: z.string().regex(prototypePathPattern),
-  revision: lowercaseSha256Schema.optional(),
-});
-
-const observeUiPreview = (
-  value: unknown,
-  setLatest: (preview: PublicPrototype) => void,
-  setExpected: (preview: { path: string; digest: string; revision: string }) => void,
-): void => {
-  const preview = uiPreviewResultSchema.safeParse(value);
-  if (!preview.success || preview.data.complete === false) {
-    return;
-  }
-  const { content } = preview.data;
-  if (content !== undefined) {
-    if (sha256(content) !== preview.data.digest) {
-      return;
-    }
-    setLatest(
-      publicPrototypeSchema.parse({
-        content,
-        digest: preview.data.digest,
-        mediaType: PROTOTYPE_MEDIA_TYPE,
-        path: `prototype/${preview.data.appId}/index.html`,
-        revision: preview.data.artifactRevision ?? preview.data.digest,
-      }),
-    );
-    return;
-  }
-  if (
-    preview.data.requiresChunkedRead &&
-    preview.data.artifactDigest &&
-    preview.data.artifactRevision
-  ) {
-    setExpected({
-      digest: preview.data.artifactDigest,
-      path: `prototype/${preview.data.appId}/index.html`,
-      revision: preview.data.artifactRevision,
-    });
-  }
-};
-
-const observeArtifactRead = (
-  callId: string,
-  value: unknown,
-  input: ArtifactReadRequest | undefined,
-  chunks: Map<string, PrototypeReadChunks>,
-  expected: { path: string; digest: string; revision: string } | undefined,
-  setLatest: (preview: PublicPrototype) => void,
-): void => {
-  const output = prototypeArtifactOutputSchema.safeParse(value);
-  if (input === undefined || !output.success || !artifactReadMatches(input, output.data)) {
-    return;
-  }
-  const artifact = output.data;
-  if (artifact.byteOffset === undefined) {
-    if (sha256(artifact.content) === artifact.digest) {
-      setLatest(publicPrototypeSchema.parse({ ...artifact, mediaType: PROTOTYPE_MEDIA_TYPE }));
-    }
-    return;
-  }
-  const { byteOffset, nextOffsetBytes, totalBytes, chunkDigest } = artifact;
-  if (
-    nextOffsetBytes === undefined ||
-    totalBytes === undefined ||
-    chunkDigest === undefined ||
-    !artifactChunkMatches(input, artifact, byteOffset, nextOffsetBytes, chunkDigest)
-  ) {
-    chunks.delete(artifact.path);
-    return;
-  }
-  const prior = chunks.get(artifact.path);
-  if (byteOffset === 0 && input.revision !== undefined) {
-    chunks.set(artifact.path, {
-      chunks: [artifact.content],
-      digest: artifact.digest,
-      mediaType: PROTOTYPE_MEDIA_TYPE,
-      nextOffsetBytes,
-      path: artifact.path,
-      revision: artifact.revision,
-      totalBytes,
-    });
-  } else if (
-    byteOffset !== 0 &&
-    prior !== undefined &&
-    readChunkContinues(prior, input, artifact, byteOffset, totalBytes)
-  ) {
-    chunks.set(artifact.path, {
-      ...prior,
-      chunks: [...prior.chunks, artifact.content],
-      nextOffsetBytes,
-    });
-  } else {
-    chunks.delete(artifact.path);
-    return;
-  }
-  const assembled = chunks.get(artifact.path);
-  if (artifact.complete === true && assembled?.nextOffsetBytes === totalBytes) {
-    const content = assembled.chunks.join("");
-    if (assembledPreviewMatches(content, assembled, expected)) {
-      setLatest(
-        publicPrototypeSchema.parse({
-          content,
-          digest: assembled.digest,
-          mediaType: PROTOTYPE_MEDIA_TYPE,
-          path: assembled.path,
-          revision: assembled.revision,
-        }),
-      );
-    }
-    chunks.delete(artifact.path);
-  }
-};
-
-const observePrototypeReceipt = (
-  callId: string,
-  value: unknown,
-  input: PrototypeRequest | undefined,
-  transfers: Map<string, PrototypeTransfer>,
-  setLatest: (preview: PublicPrototype) => void,
-): void => {
-  const output = prototypeResultSchema.safeParse(value);
-  if (input === undefined || !output.success) {
-    return;
-  }
-  const result = output.data;
-  const appId = prototypePathPattern.exec(input.path)?.groups?.appId;
-  if (input.chunkIndex !== undefined && input.expectedDigest !== undefined) {
-    observePrototypeChunk(callId, input, result, appId, transfers, setLatest);
-    return;
-  }
-  const digest = sha256(input.content);
-  const revision = sha256(JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }));
-  const size = Buffer.byteLength(input.content, "utf-8");
-  if (
-    ![
-      result.appId === appId,
-      result.path === input.path,
-      result.mediaType === input.mediaType,
-      result.digest === digest,
-      result.revision === revision,
-      result.size === size,
-      result.recordedByCallId === callId,
-    ].every(Boolean)
-  ) {
-    return;
-  }
-  setLatest(
-    publicPrototypeSchema.parse({
-      content: input.content,
-      digest,
-      mediaType: input.mediaType,
-      path: input.path,
-      revision,
-    }),
-  );
-};
-
-const observePrototypeChunk = (
-  callId: string,
-  input: PrototypeRequest,
-  output: PrototypeResult,
-  appId: string | undefined,
-  transfers: Map<string, PrototypeTransfer>,
-  setLatest: (preview: PublicPrototype) => void,
-): void => {
-  const prior = transfers.get(input.path);
-  const chunkDigest = sha256(input.content);
-  const fail = (): void => {
-    transfers.delete(input.path);
-  };
-  if (input.chunkIndex === 0) {
-    if (completeChunkMatches(input, output, appId, callId, chunkDigest)) {
-      const revision = sha256(
-        JSON.stringify({ digest: chunkDigest, mediaType: input.mediaType, path: input.path }),
-      );
-      if (output.revision === revision) {
-        transfers.delete(input.path);
-        setLatest(
-          publicPrototypeSchema.parse({
-            content: input.content,
-            digest: chunkDigest,
-            mediaType: input.mediaType,
-            path: input.path,
-            revision,
-          }),
-        );
-      }
-      return;
-    }
-    const rollingDigest = sha256(chunkDigest);
-    const receivedBytes = Buffer.byteLength(input.content, "utf-8");
-    if (
-      output.digest !== rollingDigest ||
-      output.nextChunkIndex !== 1 ||
-      output.complete !== false
-    ) {
-      fail();
-      return;
-    }
-    const transferInput: PrototypeTransferInput = {
-      ...input,
-      chunkIndex: 0,
-      expectedDigest: input.expectedDigest,
-    };
-    const transfer = {
-      chunks: [input.content],
-      expectedDigest: input.expectedDigest,
-      lastCallId: callId,
-      lastChunkDigest: chunkDigest,
-      lastChunkIndex: 0,
-      nextChunkIndex: 1,
-      receivedBytes,
-      rollingDigest,
-    };
-    const revision = sha256(
-      JSON.stringify({
-        digest: rollingDigest,
-        mediaType: input.mediaType,
-        path: input.path,
-        transfer,
-      }),
-    );
-    if (!recordedChunkMatches(output, transferInput, appId, callId, revision, receivedBytes)) {
-      fail();
-      return;
-    }
-    transfers.set(input.path, { ...transfer, revision });
-    return;
-  }
-  if (prior === undefined || prior.expectedDigest !== input.expectedDigest) {
-    fail();
-    return;
-  }
-  if (
-    input.chunkIndex === prior.lastChunkIndex &&
-    callId === prior.lastCallId &&
-    chunkDigest === prior.lastChunkDigest
-  ) {
-    return;
-  }
-  if (
-    input.chunkIndex !== prior.nextChunkIndex ||
-    input.baseRevision !== prior.revision ||
-    output.nextChunkIndex !== input.chunkIndex + 1
-  ) {
-    fail();
-    return;
-  }
-  const chunks = [...prior.chunks, input.content];
-  const receivedBytes = prior.receivedBytes + Buffer.byteLength(input.content, "utf-8");
-  const rollingDigest = sha256(`${prior.rollingDigest}${chunkDigest}`);
-  const complete = input.finalChunk === true;
-  const transferInput: PrototypeTransferInput = {
-    ...input,
-    chunkIndex: input.chunkIndex,
-    expectedDigest: input.expectedDigest,
-  };
-  const resultingDigest = complete ? input.expectedDigest : rollingDigest;
-  if (
-    !continuedChunkMatches(output, input, appId, callId, resultingDigest, receivedBytes) ||
-    output.complete !== complete
-  ) {
-    fail();
-    return;
-  }
-  const assembled = complete ? chunks.join("") : null;
-  const digest = assembled === null ? rollingDigest : sha256(assembled);
-  if (complete && digest !== input.expectedDigest) {
-    fail();
-    return;
-  }
-  const transfer = {
-    chunks,
-    expectedDigest: input.expectedDigest,
-    lastCallId: callId,
-    lastChunkDigest: chunkDigest,
-    lastChunkIndex: input.chunkIndex,
-    nextChunkIndex: input.chunkIndex + 1,
-    receivedBytes,
-    rollingDigest,
-  };
-  const revision = complete
-    ? sha256(JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }))
-    : sha256(
-        JSON.stringify({
-          digest: rollingDigest,
-          mediaType: input.mediaType,
-          path: input.path,
-          transfer,
-        }),
-      );
-  if (output.revision !== revision) {
-    fail();
-    return;
-  }
-  if (assembled === null) {
-    transfers.set(input.path, { ...transfer, revision });
-  } else {
-    transfers.delete(input.path);
-    setLatest(
-      publicPrototypeSchema.parse({
-        content: assembled,
-        digest,
-        mediaType: input.mediaType,
-        path: input.path,
-        revision,
-      }),
-    );
-  }
-};
+  .passthrough();
 
 /**
  * Recovers only a successfully recorded HTML prototype from Eve's durable
@@ -1157,27 +599,6 @@ export interface InstalledPrototypeProjector {
   checkpoint: () => InstalledPrototypeProjectorState;
 }
 
-interface PrototypeTransfer {
-  expectedDigest: string;
-  chunks: string[];
-  nextChunkIndex: number;
-  revision: string;
-  lastChunkIndex: number;
-  lastChunkDigest: string;
-  lastCallId: string;
-  receivedBytes: number;
-  rollingDigest: string;
-}
-interface PrototypeReadChunks {
-  chunks: string[];
-  nextOffsetBytes: number;
-  totalBytes: number;
-  mediaType: PROTOTYPE_MEDIA_TYPE;
-  path: string;
-  digest: string;
-  revision: string;
-}
-
 export const createInstalledPrototypeProjector = (
   seed?: InstalledPrototypeProjectorState,
 ): InstalledPrototypeProjector => {
@@ -1187,18 +608,70 @@ export const createInstalledPrototypeProjector = (
     string,
     { path: string; digest: string; revision?: string; offsetBytes?: number }
   >(state?.artifactReadRequests);
-  const readChunks = new Map<string, PrototypeReadChunks>(state?.readChunks);
+  const readChunks = new Map<
+    string,
+    {
+      chunks: string[];
+      nextOffsetBytes: number;
+      totalBytes: number;
+      mediaType: "text/html";
+      path: string;
+      digest: string;
+      revision: string;
+    }
+  >(state?.readChunks);
   let expectedChunkedPreview: { path: string; digest: string; revision: string } | undefined =
     state?.expectedChunkedPreview;
-  const transfers = new Map<string, PrototypeTransfer>(state?.transfers);
+  const transfers = new Map<
+    string,
+    {
+      expectedDigest: string;
+      chunks: string[];
+      nextChunkIndex: number;
+      revision: string;
+      lastChunkIndex: number;
+      lastChunkDigest: string;
+      lastCallId: string;
+      receivedBytes: number;
+      rollingDigest: string;
+    }
+  >(state?.transfers);
   let latest: PublicPrototype | undefined = state?.latest;
-  const setLatest = (preview: PublicPrototype): void => {
-    latest = preview;
-  };
 
   const observe = (event: MessageStreamEvent): void => {
     if (event.type === "actions.requested") {
-      observeActionsRequested(event.data.actions, requested, artifactReadRequests);
+      for (const action of event.data.actions) {
+        if (action.kind !== "tool-call") {
+          continue;
+        }
+        if (action.toolName === "record_prototype_artifact") {
+          const parsed = prototypeRequestSchema.safeParse(action.input);
+          if (parsed.success) {
+            requested.set(action.callId, parsed.data);
+          } else {
+            requested.delete(action.callId);
+          }
+        } else {
+          requested.delete(action.callId);
+        }
+        if (action.toolName === "get_prototype_artifact") {
+          const read = z
+            .object({
+              digest: lowercaseSha256Schema,
+              offsetBytes: z.number().int().nonnegative().optional(),
+              path: z.string().regex(prototypePathPattern),
+              revision: lowercaseSha256Schema.optional(),
+            })
+            .safeParse(action.input);
+          if (read.success) {
+            artifactReadRequests.set(action.callId, read.data);
+          } else {
+            artifactReadRequests.delete(action.callId);
+          }
+        } else {
+          artifactReadRequests.delete(action.callId);
+        }
+      }
       return;
     }
 
@@ -1211,48 +684,355 @@ export const createInstalledPrototypeProjector = (
       return;
     }
 
-    const { callId, output, toolName } = event.data.result;
-    if (toolName === "record_ui_preview") {
-      observeUiPreview(output, setLatest, (value) => {
-        expectedChunkedPreview = value;
-      });
+    if (event.data.result.toolName === "record_ui_preview") {
+      const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
+      if (!preview.success || preview.data.complete === false) {
+        return;
+      }
+      if (preview.data.content !== undefined) {
+        if (sha256(preview.data.content) !== preview.data.digest) {
+          return;
+        }
+        latest = publicPrototypeSchema.parse({
+          content: preview.data.content,
+          digest: preview.data.digest,
+          mediaType: "text/html",
+          path: `prototype/${preview.data.appId}/index.html`,
+          revision: preview.data.artifactRevision ?? preview.data.digest,
+        });
+      } else if (
+        preview.data.requiresChunkedRead === true &&
+        preview.data.artifactDigest !== undefined &&
+        preview.data.artifactRevision !== undefined
+      ) {
+        expectedChunkedPreview = {
+          digest: preview.data.artifactDigest,
+          path: `prototype/${preview.data.appId}/index.html`,
+          revision: preview.data.artifactRevision,
+        };
+      }
       return;
     }
-    if (toolName === "get_prototype_artifact") {
-      observeArtifactRead(
-        callId,
-        output,
-        artifactReadRequests.get(callId),
-        readChunks,
-        expectedChunkedPreview,
-        setLatest,
-      );
+    if (event.data.result.toolName === "get_prototype_artifact") {
+      const { callId } = event.data.result;
+      const input = artifactReadRequests.get(callId);
+      const output = z
+        .object({
+          byteOffset: z.number().int().nonnegative().optional(),
+          chunkDigest: lowercaseSha256Schema.optional(),
+          complete: z.boolean().optional(),
+          content: z.string().min(1),
+          digest: lowercaseSha256Schema,
+          mediaType: z.literal("text/html"),
+          nextOffsetBytes: z.number().int().nonnegative().optional(),
+          path: z.string().regex(prototypePathPattern),
+          revision: lowercaseSha256Schema,
+          totalBytes: z.number().int().positive().optional(),
+        })
+        .safeParse(event.data.result.output);
+      if (
+        input === undefined ||
+        !output.success ||
+        input.path !== output.data.path ||
+        input.digest !== output.data.digest ||
+        (input.revision !== undefined && input.revision !== output.data.revision)
+      ) {
+        return;
+      }
+      if (output.data.byteOffset === undefined) {
+        if (sha256(output.data.content) !== output.data.digest) {
+          return;
+        }
+        latest = publicPrototypeSchema.parse({ ...output.data, mediaType: "text/html" });
+        return;
+      }
+      const { byteOffset, nextOffsetBytes, totalBytes, chunkDigest } = output.data;
+      if (
+        nextOffsetBytes === undefined ||
+        totalBytes === undefined ||
+        chunkDigest === undefined ||
+        input.offsetBytes !== byteOffset ||
+        sha256(output.data.content) !== chunkDigest ||
+        Buffer.byteLength(output.data.content, "utf-8") !== nextOffsetBytes - byteOffset
+      ) {
+        readChunks.delete(output.data.path);
+        return;
+      }
+      const prior = readChunks.get(output.data.path);
+      if (byteOffset === 0) {
+        if (input.revision === undefined) {
+          readChunks.delete(output.data.path);
+          return;
+        }
+        readChunks.set(output.data.path, {
+          chunks: [output.data.content],
+          digest: output.data.digest,
+          mediaType: "text/html",
+          nextOffsetBytes,
+          path: output.data.path,
+          revision: output.data.revision,
+          totalBytes,
+        });
+      } else if (
+        prior !== undefined &&
+        prior.nextOffsetBytes === byteOffset &&
+        prior.totalBytes === totalBytes &&
+        prior.digest === output.data.digest &&
+        prior.revision === output.data.revision &&
+        input.revision === prior.revision
+      ) {
+        readChunks.set(output.data.path, {
+          ...prior,
+          chunks: [...prior.chunks, output.data.content],
+          nextOffsetBytes,
+        });
+      } else {
+        readChunks.delete(output.data.path);
+        return;
+      }
+      const assembled = readChunks.get(output.data.path);
+      if (output.data.complete === true && assembled?.nextOffsetBytes === totalBytes) {
+        const content = assembled.chunks.join("");
+        if (
+          sha256(content) === assembled.digest &&
+          (expectedChunkedPreview === undefined ||
+            (expectedChunkedPreview.path === assembled.path &&
+              expectedChunkedPreview.digest === assembled.digest &&
+              expectedChunkedPreview.revision === assembled.revision))
+        ) {
+          latest = publicPrototypeSchema.parse({
+            content,
+            digest: assembled.digest,
+            mediaType: "text/html",
+            path: assembled.path,
+            revision: assembled.revision,
+          });
+        }
+        readChunks.delete(output.data.path);
+      }
       return;
     }
-    if (toolName === "record_prototype_artifact") {
-      observePrototypeReceipt(callId, output, requested.get(callId), transfers, setLatest);
+    if (event.data.result.toolName !== "record_prototype_artifact") {
+      return;
     }
+
+    const { callId } = event.data.result;
+    const input = requested.get(callId);
+    const output = prototypeResultSchema.safeParse(event.data.result.output);
+    if (input === undefined || !output.success) {
+      return;
+    }
+
+    const appId = prototypePathPattern.exec(input.path)?.groups?.appId;
+    if (input.chunkIndex !== undefined && input.expectedDigest !== undefined) {
+      const prior = transfers.get(input.path);
+      const chunkDigest = sha256(input.content);
+      if (input.chunkIndex === 0) {
+        if (
+          input.expectedDigest === chunkDigest &&
+          output.data.complete === true &&
+          output.data.digest === chunkDigest &&
+          output.data.appId === appId &&
+          output.data.path === input.path &&
+          output.data.mediaType === input.mediaType &&
+          output.data.size === Buffer.byteLength(input.content, "utf-8") &&
+          output.data.recordedByCallId === callId
+        ) {
+          const revision = sha256(
+            JSON.stringify({ digest: chunkDigest, mediaType: input.mediaType, path: input.path }),
+          );
+          if (output.data.revision === revision) {
+            transfers.delete(input.path);
+            latest = publicPrototypeSchema.parse({
+              content: input.content,
+              digest: chunkDigest,
+              mediaType: input.mediaType,
+              path: input.path,
+              revision,
+            });
+          }
+          return;
+        }
+        const rollingDigest = sha256(chunkDigest);
+        const receivedBytes = Buffer.byteLength(input.content, "utf-8");
+        if (
+          output.data.digest !== rollingDigest ||
+          output.data.nextChunkIndex !== 1 ||
+          output.data.complete !== false
+        ) {
+          transfers.delete(input.path);
+          return;
+        }
+        const transfer = {
+          chunks: [input.content],
+          expectedDigest: input.expectedDigest,
+          lastCallId: callId,
+          lastChunkDigest: chunkDigest,
+          lastChunkIndex: 0,
+          nextChunkIndex: 1,
+          receivedBytes,
+          rollingDigest,
+        };
+        const revision = sha256(
+          JSON.stringify({
+            digest: rollingDigest,
+            mediaType: input.mediaType,
+            path: input.path,
+            transfer,
+          }),
+        );
+        if (
+          output.data.revision !== revision ||
+          output.data.appId !== appId ||
+          output.data.path !== input.path ||
+          output.data.mediaType !== input.mediaType ||
+          output.data.size !== receivedBytes ||
+          output.data.recordedByCallId !== callId
+        ) {
+          transfers.delete(input.path);
+          return;
+        }
+        transfers.set(input.path, {
+          chunks: [input.content],
+          expectedDigest: input.expectedDigest,
+          lastCallId: callId,
+          lastChunkDigest: chunkDigest,
+          lastChunkIndex: 0,
+          nextChunkIndex: 1,
+          receivedBytes,
+          revision,
+          rollingDigest,
+        });
+        return;
+      }
+      if (prior === undefined || prior.expectedDigest !== input.expectedDigest) {
+        transfers.delete(input.path);
+        return;
+      }
+      if (
+        input.chunkIndex === prior.lastChunkIndex &&
+        callId === prior.lastCallId &&
+        chunkDigest === prior.lastChunkDigest
+      ) {
+        return;
+      }
+      if (
+        input.chunkIndex !== prior.nextChunkIndex ||
+        input.baseRevision !== prior.revision ||
+        output.data.nextChunkIndex !== input.chunkIndex + 1
+      ) {
+        transfers.delete(input.path);
+        return;
+      }
+      const chunks = [...prior.chunks, input.content];
+      const receivedBytes = prior.receivedBytes + Buffer.byteLength(input.content, "utf-8");
+      const rollingDigest = sha256(`${prior.rollingDigest}${chunkDigest}`);
+      if (
+        output.data.appId !== appId ||
+        output.data.path !== input.path ||
+        output.data.mediaType !== input.mediaType ||
+        output.data.digest !== (input.finalChunk === true ? input.expectedDigest : rollingDigest) ||
+        output.data.size !== receivedBytes ||
+        output.data.recordedByCallId !== callId
+      ) {
+        transfers.delete(input.path);
+        return;
+      }
+      const complete = input.finalChunk === true;
+      if (output.data.complete !== complete) {
+        transfers.delete(input.path);
+        return;
+      }
+      const assembled = complete ? chunks.join("") : null;
+      const digest = assembled === null ? rollingDigest : sha256(assembled);
+      if (complete && digest !== input.expectedDigest) {
+        transfers.delete(input.path);
+        return;
+      }
+      const revision = complete
+        ? sha256(JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }))
+        : sha256(
+            JSON.stringify({
+              digest: rollingDigest,
+              mediaType: input.mediaType,
+              path: input.path,
+              transfer: {
+                chunks,
+                expectedDigest: input.expectedDigest,
+                lastCallId: callId,
+                lastChunkDigest: chunkDigest,
+                lastChunkIndex: input.chunkIndex,
+                nextChunkIndex: input.chunkIndex + 1,
+                receivedBytes,
+                rollingDigest,
+              },
+            }),
+          );
+      if (output.data.revision !== revision) {
+        transfers.delete(input.path);
+        return;
+      }
+      if (assembled === null) {
+        transfers.set(input.path, {
+          chunks,
+          expectedDigest: input.expectedDigest,
+          lastCallId: callId,
+          lastChunkDigest: chunkDigest,
+          lastChunkIndex: input.chunkIndex,
+          nextChunkIndex: input.chunkIndex + 1,
+          receivedBytes,
+          revision,
+          rollingDigest,
+        });
+      } else {
+        transfers.delete(input.path);
+        latest = publicPrototypeSchema.parse({
+          content: assembled,
+          digest,
+          mediaType: input.mediaType,
+          path: input.path,
+          revision,
+        });
+      }
+      return;
+    }
+
+    const digest = sha256(input.content);
+    const revision = sha256(
+      JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }),
+    );
+    const size = Buffer.byteLength(input.content, "utf-8");
+    if (
+      output.data.appId !== appId ||
+      output.data.path !== input.path ||
+      output.data.mediaType !== input.mediaType ||
+      output.data.digest !== digest ||
+      output.data.revision !== revision ||
+      output.data.size !== size ||
+      output.data.recordedByCallId !== callId
+    ) {
+      return;
+    }
+
+    latest = publicPrototypeSchema.parse({
+      content: input.content,
+      digest,
+      mediaType: input.mediaType,
+      path: input.path,
+      revision,
+    });
   };
 
   return {
     checkpoint: () =>
-      installedPrototypeProjectorStateSchema.parse(
-        (() => {
-          const checkpoint: InstalledPrototypeProjectorState = {
-            artifactReadRequests: [...artifactReadRequests],
-            readChunks: [...readChunks],
-            requested: [...requested],
-            transfers: [...transfers],
-          };
-          if (expectedChunkedPreview !== undefined) {
-            checkpoint.expectedChunkedPreview = expectedChunkedPreview;
-          }
-          if (latest !== undefined) {
-            checkpoint.latest = latest;
-          }
-          return checkpoint;
-        })(),
-      ),
+      installedPrototypeProjectorStateSchema.parse({
+        artifactReadRequests: [...artifactReadRequests],
+        readChunks: [...readChunks],
+        requested: [...requested],
+        transfers: [...transfers],
+        ...(expectedChunkedPreview === undefined ? {} : { expectedChunkedPreview }),
+        ...(latest === undefined ? {} : { latest }),
+      }),
     current: () => latest,
     observe,
   };
@@ -1284,12 +1064,12 @@ export const latestInstalledUiPreview = (
       continue;
     }
     const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
-    const previewContent = preview.success ? preview.data.content : undefined;
     if (
       !preview.success ||
       preview.data.complete === false ||
-      (previewContent !== undefined && sha256(previewContent) !== preview.data.digest) ||
-      (previewContent === undefined && preview.data.requiresChunkedRead !== true)
+      (preview.data.content !== undefined &&
+        sha256(preview.data.content) !== preview.data.digest) ||
+      (preview.data.content === undefined && preview.data.requiresChunkedRead !== true)
     ) {
       continue;
     }
@@ -1309,9 +1089,7 @@ export const currentWorkingPreview = (
   receipt: PublicWorkingPreview | null | undefined,
   nowMs = Date.now(),
 ): PublicWorkingPreview | null | undefined =>
-  receipt !== null && receipt !== undefined && Date.parse(receipt.expiresAt) <= nowMs
-    ? null
-    : receipt;
+  receipt && Date.parse(receipt.expiresAt) <= nowMs ? null : receipt;
 
 /** Only the shared runtime's successful launch receipt can attest to a working app. */
 export const latestInstalledWorkingPreview = (
@@ -1330,7 +1108,7 @@ export const latestInstalledWorkingPreview = (
     if (event.type === "actions.requested") {
       if (
         event.data.actions.some(
-          (action) => action.kind === "tool-call" && action.toolName === PREVIEW_START_TOOL,
+          (action) => action.kind === "tool-call" && action.toolName === "start_app_preview",
         )
       ) {
         latest = null;
@@ -1340,7 +1118,7 @@ export const latestInstalledWorkingPreview = (
     if (
       event.type !== "action.result" ||
       event.data.result.kind !== "tool-result" ||
-      event.data.result.toolName !== PREVIEW_START_TOOL
+      event.data.result.toolName !== "start_app_preview"
     ) {
       continue;
     }
@@ -1374,17 +1152,12 @@ export const createInstalledPreviewMetadataReducer = () => {
       }
     },
     snapshot() {
-      const snapshot: {
-        uiPreview?: PublicUiPreview;
-        workingPreview?: PublicWorkingPreview | null;
-      } = {};
-      if (uiPreview !== undefined) {
-        snapshot.uiPreview = uiPreview;
-      }
-      if (workingPreview !== undefined) {
-        snapshot.workingPreview = currentWorkingPreview(workingPreview);
-      }
-      return snapshot;
+      return {
+        ...(uiPreview === undefined ? {} : { uiPreview }),
+        ...(workingPreview === undefined
+          ? {}
+          : { workingPreview: currentWorkingPreview(workingPreview) }),
+      };
     },
   };
 };
@@ -1422,17 +1195,9 @@ const inputRequest = (request: {
   ) {
     return undefined;
   }
-  const knownApprovalTitle = (name: string | undefined): string | undefined => {
-    if (name === undefined) {
-      return undefined;
-    }
-    return Object.hasOwn(approvalTitles, name)
-      ? approvalTitles[name as keyof typeof approvalTitles]
-      : undefined;
-  };
   const title =
-    request.kind === "tool-approval"
-      ? (knownApprovalTitle(toolName) ?? request.prompt)
+    request.kind === "tool-approval" && toolName !== undefined && toolName in approvalTitles
+      ? approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
   let description: string | undefined;
   if (request.kind === "tool-approval" && toolName === "apply_app_creation") {
@@ -1465,29 +1230,27 @@ const inputRequest = (request: {
   ) {
     return undefined;
   }
-  const projected: PublicInputRequest = {
+  return {
     allowFreeform: request.allowFreeform ?? false,
     kind: request.kind === "tool-approval" ? "approval" : "question",
     requestId: request.requestId,
+    ...(description === undefined ? {} : { description }),
+    ...(request.options === undefined
+      ? {}
+      : { options: request.options.map(({ id, label }) => ({ id, label })) }),
     title,
   };
-  if (description !== undefined) {
-    projected.description = description;
-  }
-  if (request.options !== undefined) {
-    projected.options = request.options.map(({ id, label }) => ({ id, label }));
-  }
-  return projected;
 };
 
-const hostedIdentityInvitationSchema = z.object({
-  authIdentityLink: z.url().startsWith("https://"),
-});
-type HostedIdentityInvitation = z.infer<typeof hostedIdentityInvitationSchema>;
-
 /** Only the ordinary invitation is public; the rest of a suspended tool result stays private. */
-const hostedIdentityInvitation = (invitation: HostedIdentityInvitation): string | undefined => {
-  const url = new URL(invitation.authIdentityLink);
+const hostedIdentityInvitation = (value: unknown): string | undefined => {
+  const invitation = z
+    .object({ authIdentityLink: z.url().startsWith("https://") })
+    .safeParse(value);
+  if (!invitation.success) {
+    return undefined;
+  }
+  const url = new URL(invitation.data.authIdentityLink);
   if (url.username !== "" || url.password !== "" || /[\r\n<>]/u.test(url.href)) {
     return undefined;
   }
@@ -1509,7 +1272,7 @@ export const projectInstalledEveEvent = (
               index,
               text: event.data.message,
               turnId: event.data.turnId,
-              type: ASSISTANT_MESSAGE,
+              type: "assistant.message",
             },
           ];
     }
@@ -1558,11 +1321,10 @@ export const projectInstalledEveEvent = (
       ) {
         return [];
       }
-      const invitationInput = hostedIdentityInvitationSchema.safeParse(result.output);
-      if (!invitationInput.success) {
+      const text = hostedIdentityInvitation(result.output);
+      if (text === undefined) {
         return [];
       }
-      const text = hostedIdentityInvitation(invitationInput.data);
       const invitation = publicIdentityInvitationSchema.safeParse({
         callId: result.callId,
         expiresAt: recordStringField(result.output, "authIdentityLinkExpiresAt"),
@@ -1574,7 +1336,7 @@ export const projectInstalledEveEvent = (
           text,
           // Keep a yielded invitation distinct from the later model reply, stable on replay.
           turnId: `${turnId}:identity-invitation:${result.callId}:${sequence}`,
-          type: ASSISTANT_MESSAGE,
+          type: "assistant.message",
         },
         ...(invitation.success
           ? [{ identityInvitation: invitation.data, index, type: "auth_identity_invitation" }]
@@ -1620,7 +1382,7 @@ export const projectInstalledEveEvent = (
           ]
         : progress;
     }
-    case INPUT_REQUESTED: {
+    case "input.requested": {
       const projectedRequests = event.data.requests.map(inputRequest);
       return projectedRequests.some((request) => request === undefined)
         ? [
@@ -1633,19 +1395,19 @@ export const projectInstalledEveEvent = (
             { index, status: "failed", type: "status" },
           ]
         : projectedRequests.map((request, requestIndex) => {
-            const projected: InternalEveEvent = { index, request, type: INPUT_REQUESTED };
+            const projected: InternalEveEvent = { index, request, type: "input.requested" };
             if (isFrameworkSessionLimitInput(event.data.requests[requestIndex])) {
               projected.frameworkSessionLimit = true;
             }
             return projected;
           });
     }
-    case INPUT_RESOLVED: {
+    case "input.resolved": {
       return [
         {
           index,
           requestIds: event.data.resolutions.map(({ requestId }) => requestId),
-          type: INPUT_RESOLVED,
+          type: "input.resolved",
         },
       ];
     }
@@ -1654,17 +1416,17 @@ export const projectInstalledEveEvent = (
         {
           index,
           requestIds: [event.data.requestId],
-          type: INPUT_RESOLVED,
+          type: "input.resolved",
         },
       ];
     }
-    case AUTHORIZATION_REQUIRED: {
+    case "authorization.required": {
       const requestId = authorizationRequestId(event.data);
       if (requestId === undefined) {
         return [];
       }
       const { authorization } = event.data;
-      const authorizationRecord = z.record(z.string(), z.string()).safeParse(authorization);
+      const authorizationRecord = z.record(z.string(), z.unknown()).safeParse(authorization);
       const repositoryAccess = githubRepositoryAccessSchema.safeParse(
         authorizationRecord.success ? authorizationRecord.data.repositoryAccess : undefined,
       );
@@ -1711,11 +1473,11 @@ export const projectInstalledEveEvent = (
                 }),
             allowFreeform: false,
           },
-          type: INPUT_REQUESTED,
+          type: "input.requested",
         },
       ];
     }
-    case AUTHORIZATION_COMPLETED: {
+    case "authorization.completed": {
       const requestId = authorizationRequestId(event.data);
       const outcome = z
         .enum(["authorized", "declined", "failed", "timed-out"])
@@ -1727,7 +1489,7 @@ export const projectInstalledEveEvent = (
               index,
               requestIds: [requestId],
               resolutionKind: "authorization",
-              type: INPUT_RESOLVED,
+              type: "input.resolved",
             },
           ];
     }
@@ -1767,7 +1529,7 @@ export const outstandingInstalledEveRequests = (
 ): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
-    if (event.type === AUTHORIZATION_REQUIRED || event.type === AUTHORIZATION_COMPLETED) {
+    if (event.type === "authorization.required" || event.type === "authorization.completed") {
       for (const projected of projectInstalledEveEvent(event, 0)) {
         if (projected.request !== undefined) {
           outstanding.set(projected.request.requestId, projected.request);
@@ -1779,7 +1541,7 @@ export const outstandingInstalledEveRequests = (
         }
       }
     }
-    if (event.type === INPUT_REQUESTED) {
+    if (event.type === "input.requested") {
       const projected = event.data.requests.map(inputRequest);
       if (projected.some((request) => request === undefined)) {
         return [];
@@ -1791,7 +1553,7 @@ export const outstandingInstalledEveRequests = (
         }
       }
     }
-    if (event.type === INPUT_RESOLVED) {
+    if (event.type === "input.resolved") {
       for (const resolution of event.data.resolutions) {
         outstanding.delete(resolution.requestId);
       }
@@ -1808,10 +1570,10 @@ export const outstandingInternalEveRequests = (
 ): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
-    if (event.type === INPUT_REQUESTED && event.request !== undefined) {
+    if (event.type === "input.requested" && event.request !== undefined) {
       outstanding.set(event.request.requestId, event.request);
     }
-    if (event.type === INPUT_RESOLVED) {
+    if (event.type === "input.resolved") {
       for (const requestId of event.requestIds ?? []) {
         if (
           event.resolutionKind !== "authorization" ||
@@ -1831,7 +1593,7 @@ export const deriveInstalledEveStatus = (
   const outstanding = new Map<string, PublicInputRequest["kind"]>();
   let boundary: EveSessionStatus = "working";
   for (const event of events) {
-    if (event.type === INPUT_REQUESTED) {
+    if (event.type === "input.requested") {
       const projected = event.data.requests.map(inputRequest);
       if (projected.some((request) => request === undefined)) {
         return "failed";
@@ -1842,7 +1604,7 @@ export const deriveInstalledEveStatus = (
         }
       }
     }
-    if (event.type === INPUT_RESOLVED) {
+    if (event.type === "input.resolved") {
       for (const resolution of event.data.resolutions) {
         outstanding.delete(resolution.requestId);
       }
@@ -1850,7 +1612,7 @@ export const deriveInstalledEveStatus = (
     if (event.type === "approval.settled") {
       outstanding.delete(event.data.requestId);
     }
-    if (event.type === AUTHORIZATION_REQUIRED || event.type === AUTHORIZATION_COMPLETED) {
+    if (event.type === "authorization.required" || event.type === "authorization.completed") {
       for (const projected of projectInstalledEveEvent(event, 0)) {
         if (projected.request !== undefined) {
           outstanding.set(projected.request.requestId, projected.request.kind);
@@ -1897,12 +1659,12 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         : null;
     }
     case "auth_identity_invitation_resolved": {
-      return event.callId !== undefined && event.callId !== ""
+      return event.callId
         ? { callId: event.callId, index: event.index, type: "auth_identity_invitation_resolved" }
         : null;
     }
-    case ASSISTANT_MESSAGE: {
-      return event.turnId !== undefined && event.turnId !== "" && event.text !== undefined
+    case "assistant.message": {
+      return event.turnId && event.text !== undefined
         ? {
             index: event.index,
             text: event.text,
@@ -1912,41 +1674,33 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         : null;
     }
     case "progress": {
-      const state = z.enum(["started", "completed", "failed"]).safeParse(event.state);
-      if (event.label === undefined || event.label === "" || !state.success) {
-        return null;
-      }
-      const projected: Extract<PublicEveEvent, { type: "progress" }> = {
-        index: event.index,
-        label: event.label,
-        state: state.data,
-        type: "progress",
-      };
-      if (event.turnId !== undefined) {
-        projected.turnId = event.turnId;
-      }
-      return projected;
+      return event.label && event.state && progressStates.has(event.state)
+        ? {
+            index: event.index,
+            label: event.label,
+            state: event.state as "started" | "completed" | "failed",
+            ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
+            type: "progress",
+          }
+        : null;
     }
-    case INPUT_REQUESTED: {
+    case "input.requested": {
       return event.request && event.frameworkSessionLimit !== true
         ? { index: event.index, request: event.request, type: "input_required" }
         : null;
     }
     case "status": {
-      return event.status === undefined
-        ? null
-        : { index: event.index, status: event.status, type: "status" };
+      return event.status ? { index: event.index, status: event.status, type: "status" } : null;
     }
     case "error.public": {
-      if (
-        event.code === undefined ||
-        event.code === "" ||
-        event.message === undefined ||
-        event.message === ""
-      ) {
-        return null;
-      }
-      return { code: event.code, index: event.index, message: event.message, type: "error" };
+      return event.code && event.message
+        ? {
+            code: event.code,
+            index: event.index,
+            message: event.message,
+            type: "error",
+          }
+        : null;
     }
     default: {
       return null;
@@ -1958,20 +1712,19 @@ export const projectInstalledEveEvents = (
   events: readonly MessageStreamEvent[],
 ): PublicEveEvent[] => {
   let operation: string | undefined;
-  const result: PublicEveEvent[] = [];
-  for (const source of events) {
-    if (source.type === "actions.requested") {
-      const requested = source.data.actions.filter((action) => action.kind === "tool-call");
-      operation = requested.at(-1)?.toolName ?? operation;
-    }
-    for (const internal of projectInstalledEveEvent(source, 0, operation)) {
-      const projected = toPublicEvent(internal);
-      if (projected !== null) {
-        result.push({ ...projected, index: result.length });
+  return events
+    .flatMap((event) => {
+      if (event.type === "actions.requested") {
+        const requested = event.data.actions.filter((action) => action.kind === "tool-call");
+        operation = requested.at(-1)?.toolName ?? operation;
       }
-    }
-  }
-  return result;
+      return projectInstalledEveEvent(event, 0, operation);
+    })
+    .flatMap((event) => {
+      const projected = toPublicEvent(event);
+      return projected === null ? [] : [projected];
+    })
+    .map((event, index) => ({ ...event, index }));
 };
 
 /** Allowlist an internal event. Unknown, reasoning, and raw tool events are dropped. */

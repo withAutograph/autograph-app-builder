@@ -68,7 +68,7 @@ export function createPinnedPreviewLookup(addresses: readonly LookupAddress[]): 
   return (hostname, options, callback) => {
     const eligible = addressesForOptions(pinnedAddresses, options);
     if (eligible.length === 0) {
-      callback(lookupError(hostname), options.all === true ? [] : "");
+      callback(lookupError(hostname), options.all ? [] : "");
       return;
     }
     if (options.all === true) {
@@ -132,11 +132,7 @@ export function createPreviewCimdTransport(
     }
 
     const callerSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
-    const timeoutSignalFactory = dependencies.timeoutSignal;
-    const timeoutSignal =
-      timeoutSignalFactory === undefined
-        ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-        : timeoutSignalFactory(REQUEST_TIMEOUT_MS);
+    const timeoutSignal = (dependencies.timeoutSignal ?? AbortSignal.timeout)(REQUEST_TIMEOUT_MS);
     const signal = callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal;
     const addresses = await awaitWithAbort(
       dependencies.resolveHostname(url.hostname, {
@@ -171,7 +167,7 @@ export function createPreviewCimdTransport(
         const body =
           webRequest.method === "HEAD" || BODY_FORBIDDEN_RESPONSE_STATUSES.has(status)
             ? null
-            : Readable.toWeb(response).pipeThrough(new TransformStream<Uint8Array, Uint8Array>());
+            : (Readable.toWeb(response) as unknown as BodyInit);
         resolve(
           new Response(body, {
             headers: responseHeaders(response.headers),

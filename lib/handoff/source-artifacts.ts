@@ -23,17 +23,6 @@ export {
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 type Reference = z.infer<typeof sourceCandidateReferenceSchema>;
 const sha = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
-const predicate = (k: SourceArtifactChunkKey) =>
-  and(
-    eq(prototypeArtifactChunks.issuer, k.authority.issuer),
-    eq(prototypeArtifactChunks.audience, k.authority.audience),
-    eq(prototypeArtifactChunks.workspaceId, k.authority.workspaceId),
-    eq(prototypeArtifactChunks.ownerUserId, k.authority.ownerUserId),
-    eq(prototypeArtifactChunks.sessionId, `source-upload:v1:${k.uploadId}`),
-    eq(prototypeArtifactChunks.path, k.path),
-    eq(prototypeArtifactChunks.transferDigest, k.transferDigest),
-    eq(prototypeArtifactChunks.chunkIndex, k.chunkIndex),
-  );
 type Header = z.infer<typeof sourceUploadHeaderSchema>;
 export interface SourceArtifactChunkKey {
   authority: Authority;
@@ -212,6 +201,17 @@ export const createImmutableSourceArtifactStore = (storage: SourceArtifactChunkS
 };
 
 export const createSourceArtifactStore = (db: PostgresJsDatabase<typeof schema>) => {
+  const predicate = (k: SourceArtifactChunkKey) =>
+    and(
+      eq(prototypeArtifactChunks.issuer, k.authority.issuer),
+      eq(prototypeArtifactChunks.audience, k.authority.audience),
+      eq(prototypeArtifactChunks.workspaceId, k.authority.workspaceId),
+      eq(prototypeArtifactChunks.ownerUserId, k.authority.ownerUserId),
+      eq(prototypeArtifactChunks.sessionId, `source-upload:v1:${k.uploadId}`),
+      eq(prototypeArtifactChunks.path, k.path),
+      eq(prototypeArtifactChunks.transferDigest, k.transferDigest),
+      eq(prototypeArtifactChunks.chunkIndex, k.chunkIndex),
+    );
   const get = async (k: SourceArtifactChunkKey) => {
     const [row] = await db
       .select({

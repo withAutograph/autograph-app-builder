@@ -22,7 +22,7 @@ export default defineTool({
     const prepared = await prepareOrReuseDependencies({
       callId: ctx.callId,
       current,
-      getSandbox: async () => await ctx.getSandbox(),
+      getSandbox: async () => ctx.getSandbox(),
     });
     return { ...prepared.receipt, reused: prepared.reused };
   },

@@ -20,37 +20,23 @@ const input: ProductSourceReviewInput = {
 const file = 'export const save = (x) => localStorage.setItem("x", x);';
 const evidence: ApplicationReviewEvidence = {
   changedPaths: ["app/save.ts"],
-  readRedactionTexts: async () => {
-    await Promise.resolve();
-    return [input.originalRequest ?? "", input.appSpec];
-  },
-  readRequirements: async () => {
-    await Promise.resolve();
-    return { text: input.originalRequest ?? "" };
-  },
-  readSource: async () => {
-    await Promise.resolve();
-    return {
-      content: file,
-      digest: "a",
-      endColumn: file.length + 1,
-      endLine: 1,
-      path: "app/save.ts",
-      startColumn: 1,
-      startLine: 1,
-      totalLines: 1,
-    };
-  },
+  readRedactionTexts: async () => [input.originalRequest ?? "", input.appSpec],
+  readRequirements: async () => ({ text: input.originalRequest ?? "" }),
+  readSource: async () => ({
+    content: file,
+    digest: "a",
+    endColumn: file.length + 1,
+    endLine: 1,
+    path: "app/save.ts",
+    startColumn: 1,
+    startLine: 1,
+    totalLines: 1,
+  }),
   requirements: [{ id: "original", kind: "original", order: 0 }],
   sourceFiles: [{ digest: "a", mode: "644", path: "app/save.ts" }],
-  verifyRequirementQuote: async ({ quote }) => {
-    await Promise.resolve();
-    return (input.originalRequest ?? "").includes(quote);
-  },
-  verifySourceCitation: async ({ path, startLine, endLine, excerpt }) => {
-    await Promise.resolve();
-    return path === "app/save.ts" && startLine === 1 && endLine === 1 && excerpt === file;
-  },
+  verifyRequirementQuote: async ({ quote }) => (input.originalRequest ?? "").includes(quote),
+  verifySourceCitation: async ({ path, startLine, endLine, excerpt }) =>
+    path === "app/save.ts" && startLine === 1 && endLine === 1 && excerpt === file,
 };
 const finding = {
   citations: [{ endLine: 1, excerpt: file, path: "app/save.ts", startLine: 1 }],
@@ -223,7 +209,6 @@ describe("durable application reviewer fallback", () => {
     const failedEvidence = {
       ...evidence,
       readSource: async () => {
-        await Promise.resolve();
         throw new Error("unavailable");
       },
     };
@@ -299,7 +284,6 @@ describe("durable application reviewer fallback", () => {
     const inaccessible: ApplicationReviewEvidence = {
       ...evidence,
       readSource: async () => {
-        await Promise.resolve();
         throw new Error("unavailable");
       },
     };

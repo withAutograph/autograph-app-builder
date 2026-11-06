@@ -8,7 +8,7 @@ import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { observeNormalizedChangeSet } from "./change-set-status";
+import { observeNormalizedChangeSet } from "./change_set_status";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -30,7 +30,6 @@ const changeSetAcceptanceRuntime: ChangeSetAcceptanceRuntime = {
   prepareSourceReview: prepareAppliedProductSourceReview,
   reviewSource: reviewAppliedProductSource,
 };
-type ObservedAcceptance = Awaited<ReturnType<typeof observeNormalizedChangeSet>>;
 /** Internal ports preserve mandatory final source review without public injection. */
 export const createChangeSetAcceptanceTool = (
   runtime: ChangeSetAcceptanceRuntime = changeSetAcceptanceRuntime,
@@ -43,11 +42,10 @@ export const createChangeSetAcceptanceTool = (
       if (state.phase !== "validated" && state.phase !== "reviewed") {
         throw new Error("Run the repository validation before reviewing its changes.");
       }
-      const acceptance: ObservedAcceptance = await runtime.observeChangeSet({
+      const { changeSet, observed } = await runtime.observeChangeSet({
         sandbox: await ctx.getSandbox(),
         state,
       });
-      const { changeSet, observed } = acceptance;
       const reviewInput = {
         abortSignal: ctx.abortSignal,
         appSpec: state.appSpec,
@@ -115,40 +113,35 @@ export const createChangeSetAcceptanceTool = (
         }
       }
       const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
-      const nextState: typeof state = {
-        appSpec: state.appSpec,
-        applyReceipt: state.applyReceipt,
-        artifacts: state.artifacts,
-        dependencyReceipt: state.dependencyReceipt,
-        identityReceipt: state.identityReceipt,
-        phase: "reviewed" as const,
-        preparedByCallId: state.preparedByCallId,
-        proposal: state.proposal,
-        reviewReceipt: receipt,
-        sourceReceipt: state.sourceReceipt,
-        validationReceipt: state.validationReceipt,
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        workspace: state.workspace,
-      };
-      if (state.appBackendKind !== undefined) {
-        nextState.appBackendKind = state.appBackendKind;
-      }
-      if (state.publishedGitHubDraftProposalDigest !== undefined) {
-        nextState.publishedGitHubDraftProposalDigest = state.publishedGitHubDraftProposalDigest;
-      }
-      if (state.githubSource !== undefined) {
-        nextState.githubSource = state.githubSource;
-      }
-      if (state.githubDestinationReview !== undefined) {
-        nextState.githubDestinationReview = state.githubDestinationReview;
-      }
-      if (state.githubDestinationReviewRead !== undefined) {
-        nextState.githubDestinationReviewRead = state.githubDestinationReviewRead;
-      }
       updateExactWorkflow({
         expected: state,
         operation: "destination change-set acceptance",
-        transition: () => nextState,
+        transition: () => ({
+          appSpec: state.appSpec,
+          ...(state.appBackendKind === undefined ? {} : { appBackendKind: state.appBackendKind }),
+          applyReceipt: state.applyReceipt,
+          artifacts: state.artifacts,
+          ...(state.publishedGitHubDraftProposalDigest === undefined
+            ? {}
+            : { publishedGitHubDraftProposalDigest: state.publishedGitHubDraftProposalDigest }),
+          dependencyReceipt: state.dependencyReceipt,
+          ...(state.githubSource === undefined ? {} : { githubSource: state.githubSource }),
+          ...(state.githubDestinationReview === undefined
+            ? {}
+            : { githubDestinationReview: state.githubDestinationReview }),
+          ...(state.githubDestinationReviewRead === undefined
+            ? {}
+            : { githubDestinationReviewRead: state.githubDestinationReviewRead }),
+          identityReceipt: state.identityReceipt,
+          phase: "reviewed",
+          preparedByCallId: state.preparedByCallId,
+          proposal: state.proposal,
+          reviewReceipt: receipt,
+          sourceReceipt: state.sourceReceipt,
+          validationReceipt: state.validationReceipt,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace: state.workspace,
+        }),
       });
       return checkedNativeToolResult(
         reviewedChangeSetSummary({

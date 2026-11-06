@@ -62,32 +62,9 @@ const rejectedToolError = (error: HostedRejectedOperationError, operation: McpOp
   };
 };
 
-type ToolError =
-  | Error
-  | string
-  | number
-  | boolean
-  | bigint
-  | symbol
-  | null
-  | undefined
-  | McpProviderUnavailableError
-  | McpToolAuthenticationRequiredError
-  | AdapterNotConfiguredError
-  | BuilderHandoffUnavailableError
-  | HostedSessionNotFoundError
-  | HostedAuthorizationError
-  | HostedIdempotencyConflictError
-  | HostedSubmissionUnknownError
-  | HostedRejectedOperationError
-  | HostedSessionBusyError
-  | HostedSessionRecoveryUnavailableError
-  | LocalSessionRecoveryUnavailableError
-  | HostedCancellationUnsettledError;
-
-const safeUnexpectedCause = (cause: unknown): string => {
+const safeUnexpectedCause = (error: unknown): string => {
   const messages: string[] = [];
-  let current = cause;
+  let current = error;
   for (let depth = 0; depth < 3; depth += 1) {
     if (current instanceof Error) {
       if (current.message.trim().length > 0) {
@@ -140,23 +117,16 @@ export function toolResult<const Result extends EveSessionListResult | EveSessio
     result.status === "input_required" &&
     (result.inputRequests?.length ?? 0) > 0;
 
-  const response = {
+  return {
     content: [{ text, type: "text" as const }],
     structuredContent: result,
-  } satisfies {
-    content: [{ text: string; type: "text" }];
-    structuredContent: Result;
-    _meta?: { ui: { resourceUri: string } };
+    ...(needsInteractiveSessionUi ? { _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } } } : {}),
   };
-  if (needsInteractiveSessionUi) {
-    response._meta = { ui: { resourceUri: SESSION_RESOURCE_URI } };
-  }
-  return response;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function safeToolError(
-  error: ToolError,
+  error: unknown,
   sessionId = "",
   operation: McpOperation = "autograph_get",
 ) {
@@ -188,7 +158,6 @@ export function safeToolError(
   const busy = error instanceof HostedSessionBusyError;
   const recoveryUnavailable = error instanceof HostedSessionRecoveryUnavailableError;
   const localRecoveryUnavailable = error instanceof LocalSessionRecoveryUnavailableError;
-  const { code: localRecoveryCode } = localSessionRecoveryError;
   const cancellationUnsettled = error instanceof HostedCancellationUnsettledError;
   let code = "internal_error";
   let message: string;
@@ -222,7 +191,7 @@ export function safeToolError(
     code = "already_continuing";
     message = "This app is already continuing in another place. Try again shortly.";
   } else if (localRecoveryUnavailable) {
-    code = localRecoveryCode;
+    code = localSessionRecoveryError.code;
     message =
       "Builder couldn’t recover this local session. Keep the original session open and contact your administrator before trying again.";
   } else if (recoveryUnavailable) {
@@ -230,10 +199,7 @@ export function safeToolError(
     message =
       "Builder can’t continue from the last saved point. Start again from the latest result.";
   } else if (rejected) {
-    const rejectedResult = rejectedToolError(error, operation);
-    const { code: rejectedCode, message: rejectedMessage } = rejectedResult;
-    code = rejectedCode;
-    message = rejectedMessage;
+    ({ code, message } = rejectedToolError(error, operation));
   } else {
     message = genericUnexpectedMessage(safeUnexpectedCause(error));
   }
@@ -248,17 +214,9 @@ export function safeToolError(
     sessionId,
     status: "failed",
   };
-  const response = {
+  return {
     ...toolResult(result, message),
+    ...(authenticationRequired ? { _meta: { "mcp/www_authenticate": [error.challenge] } } : {}),
     isError: true,
-  } satisfies {
-    content: [{ text: string; type: "text" }];
-    structuredContent: EveSessionResult;
-    isError: true;
-    _meta?: { "mcp/www_authenticate": [string] };
   };
-  if (error instanceof McpToolAuthenticationRequiredError) {
-    response._meta = { "mcp/www_authenticate": [error.challenge] };
-  }
-  return response;
 }

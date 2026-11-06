@@ -12,9 +12,7 @@ import {
   assertApprovalReceipt,
   publicApprovalDescription,
 } from "./approval-receipt";
-import { GITHUB_PUBLICATION_VERSION } from "@/lib/repository/github-publication";
 import type { ImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
-import type { ExistingDraftUpdateProposal } from "@/lib/repository/github-draft-update";
 
 const receipt = {
   baseRef: "refs/heads/main",
@@ -44,28 +42,16 @@ describe("approval receipt", () => {
       ).toBeUndefined();
     },
   );
-  const githubSource: ImmutableGitHubSourceReceipt = {
+  const githubSource = {
     digest: "f".repeat(64),
-    installationIdentityDigest: "e".repeat(64),
     repository: {
-      defaultBranch: "main",
-      digest: "d".repeat(64),
-      headSha: receipt.baseSha,
-      headTree: "c".repeat(40),
-      installationIdentityDigest: "e".repeat(64),
       name: "arrusted-development",
       owner: "withAutograph",
-      releaseGate: { configured: true, name: "REPOSITORY_RELEASE_ENABLED" },
       repositoryId: receipt.repositoryId,
-      version: GITHUB_PUBLICATION_VERSION,
-      visibility: "private",
     },
-    resolvedByCallId: "github-source-call",
     resolvedRef: receipt.baseRef,
     resolvedSha: receipt.baseSha,
-    resolvedTree: "c".repeat(40),
-    version: GITHUB_PUBLICATION_VERSION,
-  };
+  } as ImmutableGitHubSourceReceipt;
   it("accepts one closed canonical receipt and its exact target", () => {
     expect(approvalReceiptSchema.parse(receipt)).toEqual(receipt);
     expect(approvalTarget(receipt)).toEqual({
@@ -91,28 +77,13 @@ describe("approval receipt", () => {
   });
 
   it("requires separate approval for an existing draft PR and its exact branch head", () => {
-    const proposal: ExistingDraftUpdateProposal = {
-      approvedPaths: [],
-      baseBranch: "main",
+    const proposal = {
       branchName: "app-builder/review-original",
-      changeSetDigest: "c".repeat(64),
-      changedContentDigest: "d".repeat(64),
-      digest: "f".repeat(64),
       expectedHeadSha: "c".repeat(40),
-      expectedHeadTree: "d".repeat(40),
-      idempotencyKey: "review-original-update",
-      installationIdentityDigest: "e".repeat(64),
-      intendedOutcome: "update-existing-draft-pull-request",
       name: "arrusted-development",
-      originMarker: "builder-origin",
       owner: "withAutograph",
-      priorPublicationDigest: "a".repeat(64),
-      pullRequestId: "pr-123",
-      pullRequestNumber: 123,
       repositoryId: receipt.repositoryId,
-      reviewDigest: "b".repeat(64),
-      version: 1,
-    };
+    } as Parameters<typeof approvalTargetFromExistingDraftUpdate>[0];
     const target = approvalTargetFromExistingDraftUpdate(proposal);
     const updateReceipt = {
       ...receipt,
@@ -303,6 +274,7 @@ describe("approval receipt", () => {
   it("requires a closed local subject before requesting approval", () => {
     expect(
       approvalRequestDecision({
+        githubSource: undefined,
         phase: "appspec",
         subjectDigest: "1".repeat(64),
         toolInput: {

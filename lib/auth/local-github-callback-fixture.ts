@@ -24,17 +24,18 @@ const fixtures = {
 export type LocalGitHubCallbackFixture = keyof typeof fixtures;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function cookieValue(request: Request, name: string): string | undefined {
+function cookieValue(request: Request, name: string) {
   const cookie = request.headers.get("cookie");
-  if (cookie !== null && cookie.length > 0) {
-    for (const part of cookie.split(";")) {
-      const [key, ...value] = part.trim().split("=");
-      if (key === name) {
-        return decodeURIComponent(value.join("="));
-      }
+  if (!cookie) {
+    return;
+  }
+
+  for (const part of cookie.split(";")) {
+    const [key, ...value] = part.trim().split("=");
+    if (key === name) {
+      return decodeURIComponent(value.join("="));
     }
   }
-  return undefined;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -52,16 +53,11 @@ export function applyLocalGitHubCallbackFixture(request: Request, environment: N
   }
 
   const fixture = cookieValue(request, localGitHubCallbackFixtureCookie);
-  if (fixture === undefined || fixture === "") {
+  if (!fixture || !(fixture in fixtures)) {
     return { applied: false, request };
   }
 
-  const [, entries] = Object.entries(fixtures).find(([key]) => key === fixture) ?? [];
-  if (entries === undefined) {
-    return { applied: false, request };
-  }
-
-  for (const [key, value] of entries) {
+  for (const [key, value] of fixtures[fixture as LocalGitHubCallbackFixture]) {
     url.searchParams.append(key, value);
   }
 

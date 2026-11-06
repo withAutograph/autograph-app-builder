@@ -10,50 +10,25 @@ import {
   EMULATED_VERCEL_TEAM_ID,
 } from "@/lib/integrations/provider-emulation-seed";
 
-const singleQueryValue = (value: string | string[] | undefined) =>
-  Array.isArray(value) ? undefined : value;
-
-const hasConnectionState = (state: string | undefined) =>
-  state !== undefined && state !== null && state.length > 0;
-
-const connectionDetails = (provider: string, githubRepository: string) =>
-  provider === "github"
-    ? [
-        { label: "Organization", value: "Autograph Local" },
-        { label: "Repository", value: githubRepository },
-      ]
-    : [
-        { label: "Team", value: "Autograph Local" },
-        {
-          label: "Team slug",
-          value: process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
-        },
-        {
-          label: "Configuration",
-          value: process.env.EMULATE_VERCEL_CONFIGURATION_ID ?? EMULATED_VERCEL_CONFIGURATION_ID,
-        },
-      ];
-
 interface Props {
   params: Promise<{ provider: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 /** Development-only consent surface; real provider installation pages remain external. */
-const LocalConnectionBridgeContent = async ({ params, searchParams }: Props) => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
   const [{ provider }, query] = await Promise.all([params, searchParams]);
-  const parsedProvider = provider === "vercel" || provider === "github" ? provider : undefined;
-  const state = singleQueryValue(query.state);
   let emulation;
   try {
     emulation = readProviderEmulation(process.env);
   } catch {
     notFound();
   }
-  if (emulation === null || parsedProvider === undefined || !hasConnectionState(state)) {
+  if (!emulation || !["vercel", "github"].includes(provider) || typeof query.state !== "string") {
     notFound();
   }
-  const typedProvider: EmulatedProvider = parsedProvider;
+  const typedProvider = provider as EmulatedProvider;
   const resumeKey = parseProviderResumeKey(query.resume);
   const authorizing = provider === "github" && query.phase === "authorize";
   const providerName = provider === "vercel" ? "Vercel" : "GitHub";
@@ -63,7 +38,23 @@ const LocalConnectionBridgeContent = async ({ params, searchParams }: Props) => 
     : `Connect emulated ${providerName}`;
   const environment =
     emulation.mode === "preview" ? ("Preview deployment" as const) : ("Local development" as const);
-  const details = connectionDetails(provider, emulation.githubRepository);
+  const details =
+    provider === "github"
+      ? [
+          { label: "Organization", value: "Autograph Local" },
+          { label: "Repository", value: emulation.githubRepository },
+        ]
+      : [
+          { label: "Team", value: "Autograph Local" },
+          {
+            label: "Team slug",
+            value: process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
+          },
+          {
+            label: "Configuration",
+            value: process.env.EMULATE_VERCEL_CONFIGURATION_ID ?? EMULATED_VERCEL_CONFIGURATION_ID,
+          },
+        ];
   const forwarded = authorizing
     ? ["client_id", "redirect_uri", "code_challenge", "code_challenge_method"]
     : [];
@@ -82,22 +73,16 @@ const LocalConnectionBridgeContent = async ({ params, searchParams }: Props) => 
           : "Access is limited to the Vercel team and integration configuration shown above."
       }
       actionLabel={actionLabel}
-      backHref={
-        resumeKey !== null && resumeKey !== undefined && resumeKey.length > 0
-          ? `/?resume=${encodeURIComponent(resumeKey)}`
-          : "/"
-      }
+      backHref={resumeKey ? `/?resume=${encodeURIComponent(resumeKey)}` : "/"}
       action={
         <form method="post" action={`/local-connections/${provider}/complete`}>
-          <input type="hidden" name="state" value={state} />
+          <input type="hidden" name="state" value={query.state} />
           {authorizing ? <input type="hidden" name="phase" value="authorize" /> : null}
-          {forwarded.map((name) => {
-            const value = singleQueryValue(query[name]);
-            if (value === undefined || value === null || value.length === 0) {
-              return null;
-            }
-            return <input key={name} type="hidden" name={name} value={value} />;
-          })}
+          {forwarded.map((name) =>
+            typeof query[name] === "string" ? (
+              <input key={name} type="hidden" name={name} value={query[name]} />
+            ) : null,
+          )}
           <button className={emulationApprovalStyles.button} type="submit">
             {actionLabel}
           </button>
@@ -105,7 +90,7 @@ const LocalConnectionBridgeContent = async ({ params, searchParams }: Props) => 
       }
     />
   );
-};
+}
 
 export default function LocalConnectionBridge(props: Props) {
   return (

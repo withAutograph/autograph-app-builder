@@ -13,7 +13,6 @@ import {
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
-import type { SourceWorkflowState } from "@/lib/agent/source-state";
 import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
 import {
   recoverSavedWorkflowGitHubBinding,
@@ -32,113 +31,6 @@ import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-gi
 import sourceStatus from "./source_status";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 
-const resolveDevelopmentSource = async (
-  development: boolean,
-  current: ReturnType<typeof appBuilderWorkflowState.get>,
-  ctx: Parameters<NonNullable<Parameters<typeof defineTool>[0]["execute"]>>[1],
-): Promise<void> => {
-  if (!development || !("appSpec" in current) || current.githubSource !== undefined) {
-    return;
-  }
-  const reconciled = await refreshLocalPlanningSource(ctx);
-  if (reconciled === undefined) {
-    return;
-  }
-  const refreshed = appBuilderWorkflowState.get();
-  if (!("workspace" in refreshed)) {
-    throw new Error("The reconciled local app workspace is unavailable.");
-  }
-};
-
-const selectSource = async (
-  development: boolean,
-  ctx: Parameters<NonNullable<Parameters<typeof defineTool>[0]["execute"]>>[1],
-): Promise<Exclude<SourceWorkflowState, { phase: "empty" }>> => {
-  if (sourceWorkflowState.get().phase === "empty" && development) {
-    await sourceStatus.execute({}, ctx);
-  }
-  const source = sourceWorkflowState.get();
-  if (source.phase === "empty") {
-    throw new Error(
-      "Select the app source first: source_status for a new app or resolve_github_source for an existing GitHub app.",
-    );
-  }
-  return source;
-};
-
-const prepareWorkspace = async (
-  source: Awaited<ReturnType<typeof selectSource>>,
-  development: boolean,
-  githubSource: ReturnType<typeof selectedGitHubSourceForSandboxRestore>,
-  sandbox: Awaited<ReturnType<typeof getSourceBoundSandbox>>,
-  callId: string,
-): Promise<Awaited<ReturnType<typeof prepareDevelopmentSandboxWorkspace>>> => {
-  const {
-    sourcePath: path,
-    sourceSha: expectedSha,
-    eligibilityDigest: expectedEligibilityDigest,
-  } = source.receipt;
-  if (development) {
-    return await prepareDevelopmentSandboxWorkspace(
-      path,
-      sandbox,
-      callId,
-      source.receipt.sourceKind === "existing-repository" ? "planning" : "full",
-    );
-  }
-  if (githubSource !== undefined) {
-    return await inspectGitHubSourceSandboxWorkspace({ githubSource, sandbox });
-  }
-  if (source.receipt.version === SOURCE_RECEIPT_VERSION) {
-    const observed = await readPreparedSandboxWorkspaceRecord(sandbox);
-    if (observed === undefined) {
-      throw new Error("The canonical Arrusted workspace is missing.");
-    }
-    return observed;
-  }
-  return await prepareSupportedSandboxWorkspace(
-    path,
-    expectedSha,
-    expectedEligibilityDigest,
-    sandbox,
-    callId,
-    false,
-    source.receipt.sourceKind === "existing-repository" ? "planning" : "full",
-  );
-};
-
-const recoverWorkflowBinding = (
-  recoveryInput: Parameters<typeof recoverSavedWorkflowGitHubBinding>[0],
-  sandbox: Awaited<ReturnType<typeof getSourceBoundSandbox>>,
-): ReturnType<typeof recoverSavedWorkflowGitHubBinding> =>
-  recoverSavedWorkflowGitHubBinding({
-    ...recoveryInput,
-    providerWorkspaceId: getBuilderSandboxId(sandbox),
-  });
-
-const assertWorkspaceOwnership = (
-  development: boolean,
-  current: ReturnType<typeof appBuilderWorkflowState.get>,
-  githubSource: ReturnType<typeof selectedGitHubSourceForSandboxRestore>,
-  source: Awaited<ReturnType<typeof selectSource>>,
-  currentWorkspace: ReturnType<typeof workflowWorkspace>,
-  sandbox: Awaited<ReturnType<typeof getSourceBoundSandbox>>,
-): void => {
-  if (development) {
-    return;
-  }
-  if (current.phase !== "empty" && current.githubSource?.digest !== githubSource?.digest) {
-    throwSavedBindingGuard(current, source, "prepare-workspace");
-  }
-  if (
-    githubSource === undefined &&
-    currentWorkspace !== undefined &&
-    currentWorkspace.workspaceId !== getBuilderSandboxId(sandbox)
-  ) {
-    throw new Error("This app build already owns a different workspace.");
-  }
-};
-
 export default defineTool({
   description:
     "Prepare the current writable repository checkout for product work. This is automatic and records the provider-created checkout without treating normal source or layout changes as failures.",
@@ -147,8 +39,25 @@ export default defineTool({
       const development = canAutoSelectDevelopmentSource();
       let current = appBuilderWorkflowState.get();
       assertUpstreamMutationAllowed(current, "workspace preparation");
-      await resolveDevelopmentSource(development, current, ctx);
-      const source = await selectSource(development, ctx);
+      if (sourceWorkflowState.get().phase === "empty" && development) {
+        await sourceStatus.execute({}, ctx);
+      }
+      if (development && "appSpec" in current && current.githubSource === undefined) {
+        const reconciled = await refreshLocalPlanningSource(ctx);
+        if (reconciled !== undefined) {
+          const refreshed = appBuilderWorkflowState.get();
+          if (!("workspace" in refreshed)) {
+            throw new Error("The reconciled local app workspace is unavailable.");
+          }
+          return refreshed.workspace;
+        }
+      }
+      const source = sourceWorkflowState.get();
+      if (source.phase === "empty") {
+        throw new Error(
+          "Select the app source first: source_status for a new app or resolve_github_source for an existing GitHub app.",
+        );
+      }
       const githubSource = selectedGitHubSourceForSandboxRestore({
         sourceState: source.githubSource,
         workflowState: current.phase === "empty" ? undefined : current.githubSource,
@@ -168,54 +77,98 @@ export default defineTool({
         recoverSavedWorkflowGitHubBinding(recoveryInput);
       }
       const sandbox = await getSourceBoundSandbox(ctx);
-      const recovered = development ? undefined : recoverWorkflowBinding(recoveryInput, sandbox);
-      if (recovered?.recovered === true) {
-        updateExactWorkflow({
-          expected: current,
-          operation: "recover saved GitHub source binding",
-          transition: () => recovered.workflow,
+      if (!development) {
+        const recovered = recoverSavedWorkflowGitHubBinding({
+          ...recoveryInput,
+          providerWorkspaceId: getBuilderSandboxId(sandbox),
         });
-        current = recovered.workflow;
+        if (recovered.recovered) {
+          updateExactWorkflow({
+            expected: current,
+            operation: "recover saved GitHub source binding",
+            transition: () => recovered.workflow,
+          });
+          current = recovered.workflow;
+        }
+      }
+      let canonicalWorkspace;
+      if (!development && source.receipt.version === SOURCE_RECEIPT_VERSION) {
+        canonicalWorkspace = await (async () => {
+          const observed = await readPreparedSandboxWorkspaceRecord(sandbox);
+          if (observed === undefined) {
+            throw new Error("The canonical Arrusted workspace is missing.");
+          }
+          return observed;
+        })();
+      }
+      let githubWorkspace;
+      if (!development && githubSource !== undefined) {
+        githubWorkspace = await inspectGitHubSourceSandboxWorkspace({
+          githubSource,
+          sandbox,
+        });
       }
       const currentReceipt = source.receipt;
+      const {
+        sourcePath: path,
+        sourceSha: expectedSha,
+        eligibilityDigest: expectedEligibilityDigest,
+      } = currentReceipt;
       const currentWorkspace = workflowWorkspace(current);
-      assertWorkspaceOwnership(
-        development,
-        current,
-        githubSource,
-        source,
-        currentWorkspace,
-        sandbox,
-      );
-      const workspace = await prepareWorkspace(
-        source,
-        development,
-        githubSource,
-        sandbox,
-        ctx.callId,
-      );
-      const preparedState = {
-        artifacts: [],
-        phase: "prepared",
-        preparedByCallId: ctx.callId,
-        sourceReceipt: currentReceipt,
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        workspace,
-      } satisfies {
-        artifacts: [];
-        phase: "prepared";
-        preparedByCallId: string;
-        sourceReceipt: typeof currentReceipt;
-        version: typeof APP_BUILDER_WORKFLOW_VERSION;
-        workspace: typeof workspace;
-      };
-      if (githubSource !== undefined) {
-        Object.assign(preparedState, { githubSource });
+      if (
+        !development &&
+        current.phase !== "empty" &&
+        current.githubSource?.digest !== githubSource?.digest
+      ) {
+        throwSavedBindingGuard(current, source, "prepare-workspace");
+      }
+      if (
+        !development &&
+        githubSource === undefined &&
+        currentWorkspace !== undefined &&
+        currentWorkspace.workspaceId !== getBuilderSandboxId(sandbox)
+      ) {
+        throw new Error("This app build already owns a different workspace.");
+      }
+      let workspace;
+      if (development) {
+        workspace = await prepareDevelopmentSandboxWorkspace(
+          path,
+          sandbox,
+          ctx.callId,
+          source.receipt.sourceKind === "existing-repository" ? "planning" : "full",
+        );
+      } else if (githubWorkspace !== undefined) {
+        workspace = githubWorkspace;
+      } else if (currentReceipt.version === SOURCE_RECEIPT_VERSION) {
+        if (canonicalWorkspace === undefined) {
+          throw new Error("The canonical Arrusted workspace is missing.");
+        }
+        workspace = canonicalWorkspace;
+      } else {
+        workspace = await prepareSupportedSandboxWorkspace(
+          path,
+          expectedSha,
+          expectedEligibilityDigest,
+          sandbox,
+          ctx.callId,
+          false,
+          source.receipt.sourceKind === "existing-repository" ? "planning" : "full",
+        );
       }
       updateExactWorkflow({
         expected: current,
         operation: "workspace preparation",
-        transition: (latest) => workspacePreparationTransition(latest, () => preparedState),
+        transition: (latest) =>
+          workspacePreparationTransition(latest, () => ({
+            artifacts: [],
+            ...(githubSource === undefined ? {} : { githubSource }),
+            phase: "prepared",
+            preparedByCallId: ctx.callId,
+            sourceReceipt: currentReceipt,
+            version: APP_BUILDER_WORKFLOW_VERSION,
+            workspace,
+          })),
       });
       return workspace;
     } catch (error) {

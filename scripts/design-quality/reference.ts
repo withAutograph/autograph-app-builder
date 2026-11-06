@@ -205,9 +205,11 @@ const primitiveKinds = (type: ts.Type): PublicProp["primitiveKinds"] => {
   for (const member of members) {
     if (member.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) {
       kinds.add("string");
-    } else if (member.flags & (ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral)) {
+    }
+    else if (member.flags & (ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral)) {
       kinds.add("number");
-    } else if (member.flags & ts.TypeFlags.BooleanLike) {
+    }
+    else if (member.flags & ts.TypeFlags.BooleanLike) {
       kinds.add("boolean");
     } else {
       return undefined;

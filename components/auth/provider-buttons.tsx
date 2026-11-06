@@ -38,7 +38,7 @@ export function ProviderButtons({ socialLayout = "auto", view = "signIn" }: Prov
 
   const resolvedSocialLayout = useMemo(() => {
     if (socialLayout === "auto") {
-      if ((socialProviders?.length ?? 0) >= 4) {
+      if (socialProviders?.length && socialProviders.length >= 4) {
         return "horizontal";
       }
 

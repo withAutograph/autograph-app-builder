@@ -3,7 +3,6 @@ import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import type { SandboxProviderSessionContext } from "eve/sandbox/provider";
 import path from "node:path";
-import { z } from "zod";
 
 import {
   acquireCanonicalArrustedTemplate,
@@ -38,13 +37,13 @@ function parseQuotedEnvironmentValue(source: string, name: string): string {
   if (matches.length !== 1 || match === undefined)
     throw new Error(`The Development environment is missing ${name}.`);
   const encoded = match.slice(name.length + 1);
-  let value: string;
+  let value: unknown;
   try {
-    value = encoded.startsWith('"') ? z.string().parse(JSON.parse(encoded)) : encoded;
+    value = encoded.startsWith('"') ? JSON.parse(encoded) : encoded;
   } catch {
     throw new Error(`The Development environment contains invalid ${name}.`);
   }
-  if (value.length === 0 || value.length > 32_768)
+  if (typeof value !== "string" || value.length === 0 || value.length > 32_768)
     throw new Error(`The Development environment contains invalid ${name}.`);
   return value;
 }

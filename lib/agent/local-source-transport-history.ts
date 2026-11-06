@@ -22,8 +22,6 @@ import {
 import type { SourceReceipt } from "../repository/source-receipt";
 import type { LocalPlanningSourceReceipt } from "./local-planning-source-state";
 
-const COMPLETED_STATUS = "completed";
-
 interface ReconciledTransportProvenance {
   appId: string;
   currentWorkspace: PreparedSandboxWorkspace;
@@ -73,7 +71,7 @@ const matchesFrozenReconciliation = (
       events.some(
         (candidate) =>
           candidate.type === "action.result" &&
-          candidate.data.status === COMPLETED_STATUS &&
+          candidate.data.status === "completed" &&
           candidate.data.error === undefined &&
           candidate.data.result.kind === "tool-result" &&
           candidate.data.result.toolName === "prepare_workspace" &&
@@ -133,7 +131,7 @@ const completedReconciliationIndex = (
   const event = events[index];
   if (
     event?.type !== "action.result" ||
-    event.data.status !== COMPLETED_STATUS ||
+    event.data.status !== "completed" ||
     event.data.error !== undefined ||
     event.data.result.kind !== "tool-result" ||
     event.data.result.isError === true
@@ -161,7 +159,7 @@ export const completedLocalSourceTransport = (
   const index = events.findLastIndex(
     (candidate) =>
       candidate.type === "action.result" &&
-      candidate.data.status === COMPLETED_STATUS &&
+      candidate.data.status === "completed" &&
       candidate.data.error === undefined &&
       candidate.data.result.kind === "tool-result" &&
       candidate.data.result.toolName === "prepare_workspace" &&

@@ -7,18 +7,9 @@ import type { ValidationLogReference, ValidationLogStore } from "../repository/v
 import { sanitizeValidationDiagnosticText } from "../repository/validation-output-sanitize";
 import type { TargetValidationFailureReceipt } from "../repository/target-validation";
 
-const BUN = "bun";
-const INSTALL = "install";
-const LOCKFILE_FLAG = "--frozen-lockfile";
-const NO_OUTPUT = " output.";
-const DEPENDENCY_INSTALL = "dependency-install";
-const DEPENDENCY_PROBE = "dependency-probe";
-const AVAILABLE = "available";
-const UNAVAILABLE = "unavailable";
-
 export interface DependencyAttemptResult {
   attemptDigest: string;
-  command: "dependency-probe" | typeof DEPENDENCY_INSTALL;
+  command: "dependency-probe" | "dependency-install";
   executionCommand: string;
   /** Exact Sandbox command hash when the displayed install recipe runs inside the mode-preserving wrapper. */
   dispatchedCommandDigest?: string;
@@ -173,18 +164,15 @@ const dependencyDispatch = (
   command: DependencyAttemptResult["command"],
   executionCommand: string,
 ) => {
-  if (command === DEPENDENCY_PROBE) {
+  if (command === "dependency-probe") {
     return { provenance: {}, sandboxCommand: executionCommand };
   }
-  if (
-    executionCommand !== `${BUN} ${INSTALL}` &&
-    executionCommand !== `${BUN} ${INSTALL} ${LOCKFILE_FLAG}`
-  ) {
+  if (executionCommand !== "bun install" && executionCommand !== "bun install --frozen-lockfile") {
     throw new Error("The checkout dependency install recipe is unsupported.");
   }
   const sandboxCommand = workspaceBinInstallCommand(
     root,
-    executionCommand === `${BUN} ${INSTALL} ${LOCKFILE_FLAG}`,
+    executionCommand === "bun install --frozen-lockfile",
   );
   return {
     provenance: {
@@ -257,30 +245,29 @@ const dependencyAttempt = async (
     command,
     completion: execution.completion,
     durability:
-      out.durability === AVAILABLE && err.durability === AVAILABLE ? AVAILABLE : UNAVAILABLE,
+      out.durability === "available" && err.durability === "available"
+        ? "available"
+        : "unavailable",
     excerpt: combined.slice(0, 2400),
     executionCommand,
+    ...provenance,
     exitCode: execution.exitCode,
     logs,
     truncated: out.omitted || err.omitted || combined.length > 2400,
+    ...(recoveryOfValidationFailure === undefined ? {} : { recoveryOfValidationFailure }),
   };
-  if (provenance.dispatchedCommandDigest !== undefined) {
-    attempt.dispatchedCommandDigest = provenance.dispatchedCommandDigest;
-  }
-  if (recoveryOfValidationFailure !== undefined) {
-    attempt.recoveryOfValidationFailure = recoveryOfValidationFailure;
-  }
   // Persist references before any failure is surfaced to the workflow.
   await input.onAttempt?.(attempt);
   if (
     attempt.completion === "interrupted" ||
-    (command === DEPENDENCY_INSTALL && attempt.exitCode !== 0)
+    (command === "dependency-install" && attempt.exitCode !== 0)
   ) {
     const cause =
       attempt.excerpt ||
-      sanitizeValidationDiagnosticText(
-        execution.failure?.message ?? `No diagnostic${NO_OUTPUT}`,
-      ).slice(0, 2400);
+      sanitizeValidationDiagnosticText(execution.failure?.message ?? "No diagnostic output.").slice(
+        0,
+        2400,
+      );
     const status =
       attempt.completion === "interrupted"
         ? "was interrupted"
@@ -336,7 +323,7 @@ export const repairCheckoutDependenciesAfterValidationFailure = async (
   }
   const alreadyRepaired = input.attempts.some((attempt) => {
     if (
-      attempt.command !== DEPENDENCY_INSTALL ||
+      attempt.command !== "dependency-install" ||
       attempt.completion !== "complete" ||
       attempt.exitCode !== 0
     ) {
@@ -355,7 +342,7 @@ export const repairCheckoutDependenciesAfterValidationFailure = async (
   await input.prepareInstall();
   input.signal?.throwIfAborted();
   input.assertCurrent();
-  await dependencyAttempt(input, DEPENDENCY_INSTALL, `${BUN} ${INSTALL}`, failure);
+  await dependencyAttempt(input, "dependency-install", "bun install", failure);
   input.signal?.throwIfAborted();
   input.assertCurrent();
 };
@@ -373,7 +360,7 @@ export const ensureCheckoutDependencies = async (
     throw new Error("The required repository executable name is invalid.");
   }
   if (input.reconcileWorkspace === true) {
-    const install = await dependencyAttempt(input, DEPENDENCY_INSTALL, `${BUN} ${INSTALL}`);
+    const install = await dependencyAttempt(input, "dependency-install", "bun install");
     input.signal?.throwIfAborted();
     input.assertCurrent?.();
     return { attempts: [install], status: "installed" };
@@ -390,7 +377,7 @@ export const ensureCheckoutDependencies = async (
     return { attempts, status: "reused" };
   }
   attempts.push(
-    await dependencyAttempt(input, DEPENDENCY_INSTALL, `${BUN} ${INSTALL} ${LOCKFILE_FLAG}`),
+    await dependencyAttempt(input, "dependency-install", "bun install --frozen-lockfile"),
   );
   return { attempts, status: "installed" };
 };

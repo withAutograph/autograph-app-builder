@@ -212,7 +212,7 @@ const participantPlan = hostedOperatorPlanSchema.parse({
   effects: [
     { description: "Connect the approved account", id: "normal-accounts", kind: "normal-accounts" },
   ],
-  gatewayBindings: null,
+  gatewayBindings: undefined,
   normalActorProgram: {
     actors: [
       {

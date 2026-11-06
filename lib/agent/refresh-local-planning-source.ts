@@ -79,7 +79,12 @@ export const refreshLocalPlanningSource = async (
       return undefined;
     }
     // Native transport history identifies the retained overlay only when reconciliation is needed.
-    const transportRequest = {
+    const completedTransport = await readCompletedLocalSourceTransport({
+      sessionId: ctx.session.id,
+      ...(ctx.session.ownerRunId === undefined ? {} : { ownerRunId: ctx.session.ownerRunId }),
+      ...(ctx.session.ownerAnchorRunId === undefined
+        ? {}
+        : { ownerAnchorRunId: ctx.session.ownerAnchorRunId }),
       expected: {
         reconciliation: {
           appId: current.appSpec.appId,
@@ -91,16 +96,8 @@ export const refreshLocalPlanningSource = async (
         workspaceId: current.workspace.workspaceId,
         workspacePath: current.workspace.workspacePath,
       },
-      sessionId: ctx.session.id,
       signal: ctx.abortSignal,
-    };
-    if (ctx.session.ownerAnchorRunId !== undefined) {
-      transportRequest.ownerAnchorRunId = ctx.session.ownerAnchorRunId;
-    }
-    if (ctx.session.ownerRunId !== undefined) {
-      transportRequest.ownerRunId = ctx.session.ownerRunId;
-    }
-    const completedTransport = await readCompletedLocalSourceTransport(transportRequest);
+    });
     const baseline = localPlanningSourceBase(current, completedTransport);
     const assertCurrent = () => {
       ctx.abortSignal?.throwIfAborted();
@@ -113,60 +110,55 @@ export const refreshLocalPlanningSource = async (
     assertCurrent();
     const sandbox = await getSourceBoundSandbox(ctx);
     assertCurrent();
-    const reconcileInput = {
-      appId: current.appSpec.appId,
+    const reconciled = await reconcileLocalPlanningSource({
       assertCurrent,
-      callId: ctx.callId,
-      capture: observed.capture,
-      originalSourceSha: baseline.sourceSha,
-      originalWorkspaceDigest: baseline.workspaceDigest,
-      receipt: observed.receipt,
       sandbox,
       sessionId: ctx.session.id,
+      appId: current.appSpec.appId,
+      callId: ctx.callId,
+      originalSourceSha: baseline.sourceSha,
+      originalWorkspaceDigest: baseline.workspaceDigest,
       workspaceId: baseline.workspaceId,
-    };
-    if (completedTransport?.requiresCurrentManifestReadback) {
-      reconcileInput.verifyCurrentManifest = current.workspace;
-    }
-    if (baseline.sourceOverlay !== undefined) {
-      reconcileInput.sourceOverlay = baseline.sourceOverlay;
-    }
-    const reconciled = await reconcileLocalPlanningSource(reconcileInput);
+      ...(completedTransport?.requiresCurrentManifestReadback
+        ? { verifyCurrentManifest: current.workspace }
+        : {}),
+      ...(baseline.sourceOverlay === undefined ? {} : { sourceOverlay: baseline.sourceOverlay }),
+      receipt: observed.receipt,
+      capture: observed.capture,
+    });
     assertCurrent();
     const record: LocalPlanningSourceReceipt = {
-      acceptedAppSpecDigest: current.appSpec.digest,
       appId: current.appSpec.appId,
-      checkpointRef: reconciled.checkpointRef,
-      previousSourceReceiptDigest: current.sourceReceipt.digest,
-      previousWorkspaceDigest: baseline.workspaceDigest,
-      privateSourceCommit: reconciled.sourceSha,
-      reconciledByCallId: ctx.callId,
-      sourceReceiptDigest: observed.receipt.digest,
-      sourceSnapshotTree: reconciled.sourceSnapshotTree,
-      workspaceDigest: reconciled.workspace.workspaceDigest,
       workspaceId: reconciled.workspace.workspaceId,
+      sourceReceiptDigest: observed.receipt.digest,
+      previousSourceReceiptDigest: current.sourceReceipt.digest,
+      workspaceDigest: reconciled.workspace.workspaceDigest,
+      previousWorkspaceDigest: baseline.workspaceDigest,
+      sourceSnapshotTree: reconciled.sourceSnapshotTree,
+      privateSourceCommit: reconciled.sourceSha,
+      checkpointRef: reconciled.checkpointRef,
+      ...("restoredOriginalBase" in reconciled && reconciled.restoredOriginalBase !== undefined
+        ? {
+            restoredOriginalBase: z
+              .strictObject({
+                originalSourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
+                sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
+                sourceTree: z.string().regex(/^[a-f0-9]{40}$/u),
+              })
+              .parse(reconciled.restoredOriginalBase),
+          }
+        : {}),
+      ...(baseline.sourceOverlay === undefined
+        ? {}
+        : { recognizedSourceOverlay: baseline.sourceOverlay }),
+      ...("applyReceipt" in current ? { previousApplyDigest: current.applyReceipt.digest } : {}),
+      ...("proposal" in current ? { previousProposalDigest: current.proposal.digest } : {}),
+      acceptedAppSpecDigest: current.appSpec.digest,
+      reconciledByCallId: ctx.callId,
     };
-    if ("restoredOriginalBase" in reconciled && reconciled.restoredOriginalBase !== undefined) {
-      record.restoredOriginalBase = z
-        .strictObject({
-          originalSourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
-          sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
-          sourceTree: z.string().regex(/^[a-f0-9]{40}$/u),
-        })
-        .parse(reconciled.restoredOriginalBase);
-    }
-    if (baseline.sourceOverlay !== undefined) {
-      record.recognizedSourceOverlay = baseline.sourceOverlay;
-    }
-    if ("applyReceipt" in current) {
-      record.previousApplyDigest = current.applyReceipt.digest;
-    }
-    if ("proposal" in current) {
-      record.previousProposalDigest = current.proposal.digest;
-    }
     appBuilderWorkflowState.update((latest) => {
       assertExactWorkflowState(latest, current, "record the reconciled local planning input");
-      const nextState = {
+      return {
         appSpec: current.appSpec,
         artifacts: current.artifacts,
         phase: "app_spec_accepted",
@@ -174,11 +166,10 @@ export const refreshLocalPlanningSource = async (
         sourceReceipt: observed.receipt,
         version: APP_BUILDER_WORKFLOW_VERSION,
         workspace: reconciled.workspace,
+        ...(current.checkoutDependencyAttempts === undefined
+          ? {}
+          : { checkoutDependencyAttempts: current.checkoutDependencyAttempts }),
       };
-      if (current.checkoutDependencyAttempts !== undefined) {
-        nextState.checkoutDependencyAttempts = current.checkoutDependencyAttempts;
-      }
-      return nextState;
     });
     sourceWorkflowState.update(() => ({
       phase: "reviewed",

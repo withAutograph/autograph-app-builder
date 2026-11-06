@@ -2,46 +2,12 @@ import { sha256, TOOL_NAMES } from "../../scripts/portable-release";
 
 export type ReleaseEvaluation = "sandbox-reviewed-change-set" | "sandbox-existing-iteration";
 
-interface ReviewedTerminal {
-  browserPreview: true;
-  publicationAttempted: false;
-  terminalPhase: "reviewed";
-}
-
-const isReviewedTerminal = (value: unknown): value is ReviewedTerminal => {
-  if (value === null || typeof value !== "object") {
-    return false;
-  }
-  if (!("terminalPhase" in value) || value.terminalPhase !== "reviewed") {
-    return false;
-  }
-  if (!("publicationAttempted" in value) || value.publicationAttempted !== false) {
-    return false;
-  }
-  return "browserPreview" in value && value.browserPreview === true;
-};
-
-const parseReviewedTerminal = (value: string): ReviewedTerminal | null => {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (isReviewedTerminal(parsed)) {
-      return {
-        browserPreview: true,
-        publicationAttempted: false,
-        terminalPhase: "reviewed",
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-export const assertExactToolDiscovery = (tools: readonly string[]) => {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function assertExactToolDiscovery(tools: readonly string[]) {
   if (JSON.stringify(tools) !== JSON.stringify(TOOL_NAMES)) {
     throw new Error("Fresh portable clients did not discover five public tools.");
   }
-};
+}
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseReviewedProof<const Evaluation extends ReleaseEvaluation>(
@@ -49,10 +15,18 @@ export function parseReviewedProof<const Evaluation extends ReleaseEvaluation>(
   evaluation: Evaluation,
 ) {
   const terminal = [...output.matchAll(/\{[^\n]+\}/gu)]
-    .map(([value]) => parseReviewedTerminal(value))
+    .map(([value]) => {
+      try {
+        return JSON.parse(value) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    })
     .findLast(
       (value) =>
-        value?.terminalPhase === "reviewed" && !value.publicationAttempted && value.browserPreview,
+        value?.terminalPhase === "reviewed" &&
+        value.publicationAttempted === false &&
+        value.browserPreview === true,
     );
   if (terminal === undefined) {
     throw new Error(`${evaluation} did not produce the reviewed proof receipt.`);

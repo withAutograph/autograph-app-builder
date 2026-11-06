@@ -1,7 +1,7 @@
 "use client";
 
 import { authMutationKeys, getProviderId, getProviderName } from "@better-auth-ui/core";
-import type { AuthSocialProvider, AuthView } from "@better-auth-ui/core";
+import type { AuthSocialProvider, AuthView, OAuthPopupAuthClient } from "@better-auth-ui/core";
 import {
   renderProviderIcon,
   useAuth,
@@ -43,7 +43,9 @@ export function ProviderButton({
   const { authClient, localization, navigate, redirectTo, socialSignInMode } = useAuth();
 
   const { mutate: signInSocial, isPending: signInSocialPending } = useSignInSocial(authClient);
-  const { mutate: signInPopup, isPending: signInPopupPending } = useSignInOAuthPopup(authClient);
+  const { mutate: signInPopup, isPending: signInPopupPending } = useSignInOAuthPopup(
+    authClient as OAuthPopupAuthClient,
+  );
 
   const providerId = getProviderId(provider);
   const providerIcon = renderProviderIcon(provider);

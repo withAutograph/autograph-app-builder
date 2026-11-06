@@ -24,8 +24,6 @@ interface VercelInstallationTokenKeyVersionInput {
 }
 
 const tokenKeyVersionSchema = z.string().regex(/^[A-Za-z0-9._-]{1,32}$/u);
-const activeKeyVersionMessage = "The active token key version cannot also be a previous key.";
-const membershipInactiveError = "membership-inactive";
 const previousTokenKeySchema = z.strictObject({
   key: z.instanceof(Buffer).refine((value) => value.length === 32),
   version: tokenKeyVersionSchema,
@@ -51,35 +49,32 @@ const tokenKeyringSchema = z
     tokenKeyVersion: tokenKeyVersionSchema,
   })
   .superRefine((config, context) => {
-    if (
-      config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion) === true
-    ) {
+    if (config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion)) {
       context.addIssue({
         code: "custom",
-        message: activeKeyVersionMessage,
+        message: "The active token key version cannot also be a previous key.",
         path: ["previousTokenKeys"],
       });
     }
   });
 
 const configSchema = z
-  .strictObject({
+  .object({
     clientId: z.string().min(1).max(512),
     clientSecret: z.string().min(1).max(512),
-    issuer: z.url(),
+    issuer: z.string().url(),
     previousTokenKeys: previousTokenKeysSchema.optional(),
-    resource: z.url(),
+    resource: z.string().url(),
     slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/u),
     tokenKey: z.instanceof(Buffer).refine((value) => value.length === 32),
     tokenKeyVersion: tokenKeyVersionSchema,
   })
+  .strict()
   .superRefine((config, context) => {
-    if (
-      config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion) === true
-    ) {
+    if (config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion)) {
       context.addIssue({
         code: "custom",
-        message: activeKeyVersionMessage,
+        message: "The active token key version cannot also be a previous key.",
         path: ["previousTokenKeys"],
       });
     }
@@ -340,24 +335,33 @@ export function decryptVersionedVercelInstallationToken(input: {
   throw lastError;
 }
 
-const tokenResponseSchema = z.looseObject({ access_token: z.string().min(1).max(8192) });
-const teamSchema = z.looseObject({
-  billing: z.looseObject({ plan: z.string().min(1) }).optional(),
-  id: z.string().min(1),
-  name: z.string().min(1),
-  slug: z.string().min(1),
-});
+const tokenResponseSchema = z.object({ access_token: z.string().min(1).max(8192) }).passthrough();
+const teamSchema = z
+  .object({
+    billing: z
+      .object({ plan: z.string().min(1) })
+      .passthrough()
+      .optional(),
+    id: z.string().min(1),
+    name: z.string().min(1),
+    slug: z.string().min(1),
+  })
+  .passthrough();
 const teamResponseSchema = z.union([
   teamSchema,
-  z.looseObject({ team: teamSchema }).transform(({ team }) => team),
+  z.object({ team: teamSchema }).transform(({ team }) => team),
 ]);
-const userSchema = z.looseObject({
-  user: z.looseObject({
-    id: z.string().min(1),
-    name: z.string().min(1).optional(),
-    username: z.string().min(1),
-  }),
-});
+const userSchema = z
+  .object({
+    user: z
+      .object({
+        id: z.string().min(1),
+        name: z.string().min(1).optional(),
+        username: z.string().min(1),
+      })
+      .passthrough(),
+  })
+  .passthrough();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelInstallationAuthorization(input: {
@@ -383,7 +387,7 @@ export function createVercelInstallationAuthorization(input: {
     ) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error(membershipInactiveError);
+        throw new Error("membership-inactive");
       }
       const state = nonce();
       const issuedAt = now();
@@ -399,11 +403,7 @@ export function createVercelInstallationAuthorization(input: {
         ? new URL("/local-connections/vercel", config.issuer)
         : new URL(`/integrations/${config.slug}/new`, "https://vercel.com");
       url.searchParams.set("state", state);
-      if (
-        input.emulation !== undefined &&
-        returnState.resumeKey !== undefined &&
-        returnState.resumeKey !== ""
-      ) {
+      if (input.emulation && returnState.resumeKey) {
         url.searchParams.set("resume", returnState.resumeKey);
       }
       return url.toString();
@@ -419,9 +419,9 @@ export function createVercelInstallationAuthorization(input: {
         .min(1)
         .max(256)
         .parse(url.searchParams.get("configurationId"));
-      const teamId = url.searchParams.get("teamId") ?? undefined;
+      const teamId = url.searchParams.get("teamId") || undefined;
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error(membershipInactiveError);
+        throw new Error("membership-inactive");
       }
       const returnState = await input.states.consume({
         authority,
@@ -466,15 +466,9 @@ export function createVercelInstallationAuthorization(input: {
           },
         );
         if (!tokenResponse.ok) {
-          let tokenErrorBody;
-          try {
-            tokenErrorBody = z.unknown().parse(await tokenResponse.json());
-          } catch {
-            tokenErrorBody = {};
-          }
           const errorPayload = z
-            .looseObject({ error: z.string().max(64).optional() })
-            .safeParse(tokenErrorBody);
+            .object({ error: z.string().max(64).optional() })
+            .safeParse(await tokenResponse.json().catch(() => ({})));
           const errorCode = errorPayload.success ? errorPayload.data.error : undefined;
           throw new Error(
             `token-exchange-failed:${tokenResponse.status}:${errorCode ?? "unknown"}`,
@@ -487,7 +481,7 @@ export function createVercelInstallationAuthorization(input: {
         Authorization: `Bearer ${token}`,
       };
       let binding: Omit<VercelInstallationBinding, "active" | "updatedAt">;
-      if (teamId !== undefined && teamId !== "") {
+      if (teamId) {
         const response = await request(
           `${input.emulation?.vercelOrigin ?? "https://api.vercel.com"}/v2/teams/${encodeURIComponent(teamId)}`,
           {
@@ -529,7 +523,7 @@ export function createVercelInstallationAuthorization(input: {
         };
       }
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error(membershipInactiveError);
+        throw new Error("membership-inactive");
       }
       const persistedBinding = await input.installations.bind({
         authority,
@@ -548,11 +542,7 @@ export function verifyVercelWebhook(input: {
   signature: string | null;
   secret: string;
 }) {
-  if (
-    input.signature === null ||
-    input.signature === "" ||
-    !/^[a-f0-9]{40}$/iu.test(input.signature)
-  ) {
+  if (!input.signature || !/^[a-f0-9]{40}$/iu.test(input.signature)) {
     return false;
   }
   const expected = createHmac("sha1", input.secret).update(input.body).digest();

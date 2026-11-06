@@ -1,3 +1,5 @@
+import { pathToFileURL } from "node:url";
+
 import {
   buildImage,
   inspectLocalImage,
@@ -22,33 +24,15 @@ export type ImageLifecycleAction =
   | "prepare-proof-runtime"
   | "prove";
 
-interface ParsedLifecycleArguments {
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function parseLifecycleArguments(
+  action: ImageLifecycleAction,
+  args: readonly string[],
+): Readonly<{
   approval: LifecycleApproval;
   image?: string;
   username?: string;
-}
-
-type ImageLifecycleTaskResult = Awaited<ReturnType<typeof buildImage>>;
-
-const imageLifecycleActions = new Set<string>([
-  "verify-sources",
-  "build",
-  "inspect-local",
-  "login",
-  "push",
-  "inspect-remote",
-  "preload",
-  "prepare-proof-runtime",
-  "prove",
-]);
-
-const isImageLifecycleAction = (value: string | undefined): value is ImageLifecycleAction =>
-  value !== undefined && imageLifecycleActions.has(value);
-
-export const parseLifecycleArguments = (
-  action: ImageLifecycleAction,
-  args: readonly string[],
-): Readonly<ParsedLifecycleArguments> => {
+}> {
   const entries = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
     const flag = args[index];
@@ -76,17 +60,18 @@ export const parseLifecycleArguments = (
   const username = action === "login" ? required("--username") : undefined;
   if (entries.size !== 0)
     throw new Error(`Unknown image lifecycle arguments: ${[...entries.keys()].join(", ")}.`);
-  const parsed: ParsedLifecycleArguments = { approval };
-  if (image !== undefined) parsed.image = image;
-  if (username !== undefined) parsed.username = username;
-  return parsed;
-};
+  return {
+    approval,
+    ...(image === undefined ? {} : { image }),
+    ...(username === undefined ? {} : { username }),
+  };
+}
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function runImageLifecycleTask(
   action: ImageLifecycleAction,
   args: readonly string[],
-): Promise<ImageLifecycleTaskResult> {
+): Promise<unknown> {
   const { approval, image, username } = parseLifecycleArguments(action, args);
   if (action === "verify-sources") return await verifyImageSources(approval);
   if (action === "build") return await buildImage(approval);
@@ -105,4 +90,27 @@ export async function runImageLifecycleTask(
   if (action === "prepare-proof-runtime") return await prepareProofRuntime(approval);
   if (image === undefined) throw new Error("Missing required image lifecycle argument --image.");
   return await proveSandboxImage(approval, image);
+}
+
+const [, entrypoint] = process.argv;
+if (entrypoint !== undefined && import.meta.url === pathToFileURL(entrypoint).href) {
+  const action = process.argv[2] as ImageLifecycleAction | undefined;
+  if (
+    action === undefined ||
+    ![
+      "verify-sources",
+      "build",
+      "inspect-local",
+      "login",
+      "push",
+      "inspect-remote",
+      "preload",
+      "prepare-proof-runtime",
+      "prove",
+    ].includes(action)
+  )
+    throw new Error(
+      "Usage: image-lifecycle.ts <verify-sources|build|inspect-local|login|push|inspect-remote|preload|prepare-proof-runtime|prove> <exact arguments>",
+    );
+  console.log(JSON.stringify(await runImageLifecycleTask(action, process.argv.slice(3)), null, 2));
 }

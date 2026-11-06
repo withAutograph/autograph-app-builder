@@ -43,12 +43,12 @@ const ctx = {
   session: { auth: {}, id: "logical", turn: { id: "turn" } },
 } as unknown as ToolContext;
 const input = (path: string) => ({
-  directoryOffset: null,
-  mode: null,
-  offsetBytes: null,
+  directoryOffset: undefined,
+  mode: undefined,
+  offsetBytes: undefined,
   path,
-  pathIndex: null,
-  paths: null,
+  pathIndex: undefined,
+  paths: undefined,
 });
 beforeEach(() => {
   vi.clearAllMocks();

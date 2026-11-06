@@ -45,7 +45,7 @@ export const MixedRequests: Story = {
 export const HostToolsUnavailable: Story = { args: { canCallTools: false } };
 export const Submitted: Story = {
   args: {
-    result: { ...mixedResult, inputRequests: null, status: "working" },
+    result: { ...mixedResult, inputRequests: undefined, status: "working" },
   },
 };
 export const GitHubConnection: Story = {

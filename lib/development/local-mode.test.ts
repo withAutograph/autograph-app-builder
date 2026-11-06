@@ -10,7 +10,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import type { Dirent } from "node:fs";
+import { tmpdir } from "node:os";
 import pathModule from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,7 +27,6 @@ import {
 } from "./local-mode";
 
 const { join } = pathModule;
-const testRoot = join(process.cwd(), ".artifacts", "local-mode-test");
 const roots: string[] = [];
 
 afterEach(async () => {
@@ -35,28 +34,17 @@ afterEach(async () => {
   // Keep filesystem fixtures scoped to this local-mode test.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const makeWritable = async (path: string) => {
-    try {
-      await chmod(path, 0o700);
-    } catch {
-      // The fixture may already have been removed.
-    }
-    let entries: Dirent[] = [];
-    try {
-      entries = await readdir(path, { withFileTypes: true });
-    } catch {
-      // The fixture may already have been removed.
-    }
-    await runSequentially(entries, async (entry) => {
-      if (entry.isDirectory()) {
-        await makeWritable(join(path, entry.name));
-      } else if (!entry.isSymbolicLink()) {
-        try {
-          await chmod(join(path, entry.name), 0o600);
-        } catch {
-          // Best effort: inaccessible fixture files are removed afterward.
+    await chmod(path, 0o700).catch(() => {});
+    await runSequentially(
+      await readdir(path, { withFileTypes: true }).catch(() => []),
+      async (entry) => {
+        if (entry.isDirectory()) {
+          await makeWritable(join(path, entry.name));
+        } else if (!entry.isSymbolicLink()) {
+          await chmod(join(path, entry.name), 0o600).catch(() => {});
         }
-      }
-    });
+      },
+    );
   };
   await Promise.all(roots.map(makeWritable));
   await Promise.all(
@@ -68,9 +56,7 @@ afterEach(async () => {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function fixture() {
-  await mkdir(testRoot, { mode: 0o700, recursive: true });
-  await chmod(testRoot, 0o700);
-  const root = await realpath(await mkdtemp(join(testRoot, "app-builder-dev-source-")));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-source-")));
   roots.push(root);
   await mkdir(join(root, ".config/mise"), { recursive: true });
   await writeFile(join(root, ".config/mise/config.toml"), '[tools]\nbun = "1.3.14"\n');
@@ -108,35 +94,35 @@ async function fixture() {
 describe("development source snapshots", () => {
   it("accepts an explicit endpoint-only launch without changing the plugin-install default", () => {
     expect(
-      parseDevelopmentArguments(["--arrusted-root", "/arrusted"]).installPlugin,
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]).installPlugin,
     ).toBeUndefined();
     expect(
-      parseDevelopmentArguments(["--arrusted-root", "/arrusted", "--install-plugin", "false"])
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "false"])
         .installPlugin,
     ).toBe(false);
     expect(
-      parseDevelopmentArguments(["--arrusted-root", "/arrusted", "--install-plugin", "true"])
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "true"])
         .installPlugin,
     ).toBe(true);
     expect(() =>
-      parseDevelopmentArguments(["--arrusted-root", "/arrusted", "--install-plugin", "yes"]),
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "yes"]),
     ).toThrow(/--install-plugin/u);
   });
 
   it("accepts an explicit endpoint-only launch without changing the plugin-install default", () => {
     expect(
-      parseDevelopmentArguments(["--arrusted-root", "/arrusted"]).installPlugin,
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]).installPlugin,
     ).toBeUndefined();
     expect(
-      parseDevelopmentArguments(["--arrusted-root", "/arrusted", "--install-plugin", "false"])
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "false"])
         .installPlugin,
     ).toBe(false);
     expect(
-      parseDevelopmentArguments(["--arrusted-root", "/arrusted", "--install-plugin", "true"])
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "true"])
         .installPlugin,
     ).toBe(true);
     expect(() =>
-      parseDevelopmentArguments(["--arrusted-root", "/arrusted", "--install-plugin", "yes"]),
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "yes"]),
     ).toThrow(/--install-plugin/u);
   });
 
@@ -159,7 +145,7 @@ describe("development source snapshots", () => {
     git(submodule, "add", ".gitignore", "tracked.txt");
     await writeFile(join(submodule, "tracked.txt"), "dirty");
     await writeFile(join(submodule, "ignored.txt"), "ignored");
-    const runRoot = await realpath(await mkdtemp(join(testRoot, "app-builder-dev-submodule-")));
+    const runRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-submodule-")));
     roots.push(runRoot);
     await chmod(runRoot, 0o700);
     const snapshot = await createDevelopmentSnapshot({
@@ -186,7 +172,7 @@ describe("development source snapshots", () => {
     await writeFile(join(source, "ignored-secret.env"), "private synthetic value");
     await mkdir(join(source, "node_modules"));
     await writeFile(join(source, "node_modules/ignored.js"), "not source");
-    const runRoot = await realpath(await mkdtemp(join(testRoot, "app-builder-ignored-tracked-")));
+    const runRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-ignored-tracked-")));
     roots.push(runRoot);
     await chmod(runRoot, 0o700);
     const snapshot = await createDevelopmentSnapshot({ runRoot, sourceRoot: source });
@@ -210,7 +196,7 @@ describe("development source snapshots", () => {
     const source = await fixture();
     await writeFile(join(source, "README.md"), "dirty\n");
     await writeFile(join(source, "new-file.ts"), "export const fresh = true;\n");
-    const runRoot = await realpath(await mkdtemp(join(testRoot, "app-builder-dev-run-")));
+    const runRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-run-")));
     roots.push(runRoot);
     await chmod(runRoot, 0o700);
 
@@ -240,8 +226,8 @@ describe("development source snapshots", () => {
 
   it("refreshes the reviewed snapshot after a live Arrusted edit", async () => {
     const source = await fixture();
-    const firstRunRoot = await realpath(await mkdtemp(join(testRoot, "app-builder-dev-refresh-")));
-    const secondRunRoot = await realpath(await mkdtemp(join(testRoot, "app-builder-dev-refresh-")));
+    const firstRunRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-")));
+    const secondRunRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-refresh-")));
     roots.push(firstRunRoot, secondRunRoot);
     await chmod(firstRunRoot, 0o700);
     await chmod(secondRunRoot, 0o700);
@@ -263,7 +249,7 @@ describe("development source snapshots", () => {
 
   it("rejects a tracked file whose parent was replaced by an escaping symlink", async () => {
     const source = await fixture();
-    const outside = await realpath(await mkdtemp(join(testRoot, "app-builder-dev-outside-")));
+    const outside = await realpath(await mkdtemp(join(tmpdir(), "app-builder-dev-outside-")));
     roots.push(outside);
     await mkdir(join(source, "tracked"));
     await writeFile(join(source, "tracked/secret.txt"), "inside\n");
@@ -352,12 +338,12 @@ describe("development dependency key", () => {
 
 describe("development CLI", () => {
   it("keeps the default bundler and passes an explicit supported selection to Next", () => {
-    const defaults = parseDevelopmentArguments(["--arrusted-root", "/arrusted"]);
+    const defaults = parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]);
     expect(developmentNextBundlerArguments(defaults)).toEqual([]);
     for (const nextBundler of ["turbopack", "webpack"] as const) {
       const selected = parseDevelopmentArguments([
         "--arrusted-root",
-        "/arrusted",
+        "/tmp/arrusted",
         "--next-bundler",
         nextBundler,
       ]);
@@ -365,7 +351,7 @@ describe("development CLI", () => {
       expect(developmentNextBundlerArguments(selected)).toEqual([`--${nextBundler}`]);
     }
     expect(() =>
-      parseDevelopmentArguments(["--arrusted-root", "/arrusted", "--next-bundler", "unknown"]),
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--next-bundler", "unknown"]),
     ).toThrow("--next-bundler must be turbopack or webpack.");
   });
   it("requires one explicit Arrusted checkout and rejects release-shaped inputs", () => {
@@ -373,13 +359,13 @@ describe("development CLI", () => {
     expect(() =>
       parseDevelopmentArguments([
         "--arrusted-root",
-        "/arrusted",
+        "/tmp/arrusted",
         "--endpoint",
         "https://example.com",
       ]),
     ).toThrow(/unsupported/u);
-    expect(parseDevelopmentArguments(["--arrusted-root", "/arrusted"])).toMatchObject({
-      arrustedRoot: "/arrusted",
+    expect(parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"])).toMatchObject({
+      arrustedRoot: "/tmp/arrusted",
       evePort: 2000,
       nextPort: 3000,
     });
@@ -387,19 +373,21 @@ describe("development CLI", () => {
 });
 
 it("opts into emulated web without changing default development", () => {
-  expect(parseDevelopmentArguments(["--arrusted-root", "/arrusted"]).emulatedWeb).toBeUndefined();
+  expect(
+    parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]).emulatedWeb,
+  ).toBeUndefined();
   expect(
     parseDevelopmentArguments([
       "--arrusted-root",
-      "/arrusted",
+      "/tmp/arrusted",
       "--emulated-web",
       "true",
       "--web-ca",
-      "/ca.pem",
+      "/tmp/ca.pem",
     ]),
-  ).toMatchObject({ emulatedWeb: true, webCa: "/ca.pem" });
+  ).toMatchObject({ emulatedWeb: true, webCa: "/tmp/ca.pem" });
   expect(() =>
-    parseDevelopmentArguments(["--arrusted-root", "/arrusted", "--emulated-web", "yes"]),
+    parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--emulated-web", "yes"]),
   ).toThrow("true or false");
 });
 
@@ -407,7 +395,7 @@ it("selects an existing hosted MCP resource through the native connector", () =>
   expect(
     parseDevelopmentArguments([
       "--arrusted-root",
-      "/arrusted",
+      "/tmp/arrusted",
       "--hosted-session-resource",
       "https://builder.example.test/mcp",
     ]).hostedSessionResource,
@@ -420,7 +408,7 @@ it("selects an existing hosted MCP resource through the native connector", () =>
     expect(() =>
       parseDevelopmentArguments([
         "--arrusted-root",
-        "/arrusted",
+        "/tmp/arrusted",
         "--hosted-session-resource",
         value,
       ]),
@@ -432,7 +420,7 @@ it("selects an existing native client by an explicit absolute path", () => {
   expect(
     parseDevelopmentArguments([
       "--arrusted-root",
-      "/arrusted",
+      "/tmp/arrusted",
       "--hosted-session-resource",
       "https://builder.example.test/mcp",
       "--hosted-session-codex-bin",
@@ -442,7 +430,7 @@ it("selects an existing native client by an explicit absolute path", () => {
   expect(() =>
     parseDevelopmentArguments([
       "--arrusted-root",
-      "/arrusted",
+      "/tmp/arrusted",
       "--hosted-session-codex-bin",
       "relative-codex",
     ]),
