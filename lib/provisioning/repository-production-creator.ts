@@ -12,6 +12,11 @@ import type { RepositoryProductionEffectContext } from "./repository-production-
 type Json = z.infer<ReturnType<typeof z.json>>;
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const linkedCreatorSchema = z.strictObject({
+  sourceInvitationId: z.uuid(),
+  sourceScopeDigest: digest,
+  actorId: id,
+});
 const frameSchema = z.strictObject({
   version: z.literal(1),
   kind: z.literal("repository-production-creator-link-v1"),
@@ -22,6 +27,8 @@ const frameSchema = z.strictObject({
   roles: z.array(id),
   returnUrl: z.url(),
   expiresAt: z.iso.datetime({ offset: true }),
+  realmDigest: digest.optional(),
+  linkedCreator: linkedCreatorSchema.optional(),
   renewal: z
     .strictObject({ requestId: z.uuid(), expiresAt: z.iso.datetime({ offset: true }) })
     .optional(),
@@ -41,6 +48,7 @@ const invitationSchema = z.object({
   status: z.enum(["pending", "verified", "accepted", "cancelled"]),
   verifiedActorId: id.nullable(),
   verifiedSessionId: id.nullable(),
+  linkedFromInvitationId: z.uuid().nullable().optional(),
   deliveryStatus: z.enum(["ready", "sending", "sent", "unknown"]),
 });
 type Invitation = z.infer<typeof invitationSchema>;
@@ -55,6 +63,10 @@ export type RepositoryProductionManagedCreator =
 
 export interface RepositoryProductionCreatorDependencies {
   builderOrigin: string;
+  /** Identifies the Auth resource and issuer; excludes app membership and delivery metadata. */
+  realmDigest: (scope: RepositoryProductionScope) => string;
+  /** Completed setup journals for the same authenticated Builder owner, paged without a total cap. */
+  linkedCreatorCandidates: (row: RepositoryProductionRow) => AsyncIterable<RepositoryProductionRow>;
   /** Canonical authenticated Builder owner. Email is delivery information, never identity proof. */
   readOwner: (row: RepositoryProductionRow) => Promise<{ email: string }>;
   readCurrent: (scope: RepositoryProductionScope) => Promise<RepositoryProductionRow | undefined>;
@@ -156,10 +168,21 @@ export const createRepositoryProductionCreator = (
     url.searchParams.set("invitationId", frame.invitationId);
     return url.toString();
   };
-  const isVerified = (value: Invitation) =>
-    (value.status === "verified" || value.status === "accepted") &&
-    value.verifiedActorId !== null &&
-    value.verifiedSessionId !== null;
+  const isVerified = (value: Invitation, frame: CreatorFrame) => {
+    if (
+      (value.status !== "verified" && value.status !== "accepted") ||
+      value.verifiedActorId === null
+    ) {
+      return false;
+    }
+    if (frame.linkedCreator === undefined) {
+      return value.verifiedSessionId !== null;
+    }
+    return (
+      value.linkedFromInvitationId === frame.linkedCreator.sourceInvitationId &&
+      value.verifiedActorId === frame.linkedCreator.actorId
+    );
+  };
   const current = async (context: RepositoryProductionEffectContext) => {
     await context.assertCurrent();
     const row = await deps.readCurrent(context.row.record.scope);
@@ -168,6 +191,33 @@ export const createRepositoryProductionCreator = (
     }
     await deps.assertAuthorized(row);
     return row;
+  };
+  const linkedCreator = async (row: RepositoryProductionRow) => {
+    const authority = repositoryProductionDigest(row.record.scope.authority);
+    const realm = deps.realmDigest(row.record.scope);
+    for await (const candidate of deps.linkedCreatorCandidates(row)) {
+      if (
+        candidate.record.scope.appId === row.record.scope.appId ||
+        repositoryProductionDigest(candidate.record.scope.authority) !== authority ||
+        candidate.record.effects["creator-access"].state !== "applied"
+      ) {
+        continue;
+      }
+      const frame = frameFor(candidate);
+      if (frame?.realmDigest !== realm) {
+        continue;
+      }
+      const invitation = await read(candidate, frame);
+      if (invitation?.status === "accepted" && isVerified(invitation, frame)) {
+        return linkedCreatorSchema.parse({
+          sourceInvitationId: invitation.id,
+          sourceScopeDigest: invitation.scopeDigest,
+          actorId: invitation.verifiedActorId,
+        });
+      }
+    }
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- No verified identity exists for this exact owner and Auth realm.
+    return undefined;
   };
   const invoke = async (
     context: RepositoryProductionEffectContext,
@@ -221,6 +271,18 @@ export const createRepositoryProductionCreator = (
     if (invitation.status !== "pending") {
       return;
     }
+    if (frame.linkedCreator !== undefined) {
+      await invoke(context, frame, "link-creator", {
+        action: "link-creator",
+        invitationId: frame.invitationId,
+        ...frame.linkedCreator,
+      });
+      invitation = await read(await current(context), frame);
+      if (invitation === undefined || !isVerified(invitation, frame)) {
+        throw new Error("repository_production_creator_link_unconfirmed");
+      }
+      return;
+    }
     const renewal = frame.renewal;
     if (
       renewal !== undefined &&
@@ -257,6 +319,7 @@ export const createRepositoryProductionCreator = (
       let frame = frameFor(row);
       if (frame === undefined) {
         const owner = await deps.readOwner(row);
+        const linked = await linkedCreator(row);
         frame = frameSchema.parse({
           version: 1,
           kind: "repository-production-creator-link-v1",
@@ -267,6 +330,8 @@ export const createRepositoryProductionCreator = (
           roles: [...new Set(row.record.intent.creatorRoles)].toSorted(),
           returnUrl: returnUrl(row.record.intent.sessionId),
           expiresAt: expiresAt(),
+          realmDigest: deps.realmDigest(row.record.scope),
+          ...(linked === undefined ? {} : { linkedCreator: linked }),
         });
         await context.assertCurrent();
         await context.checkpoint(frame);
@@ -281,7 +346,7 @@ export const createRepositoryProductionCreator = (
         throw new Error("repository_production_creator_setup_missing");
       }
       const invitation = await read(row, frame);
-      if (invitation !== undefined && isVerified(invitation)) {
+      if (invitation !== undefined && isVerified(invitation, frame)) {
         return;
       }
       if (invitation?.status === "cancelled") {
@@ -307,7 +372,7 @@ export const createRepositoryProductionCreator = (
         return { state: "required" };
       }
       const value = await read(row, frame);
-      if (value !== undefined && isVerified(value) && value.verifiedActorId !== null) {
+      if (value !== undefined && isVerified(value, frame) && value.verifiedActorId !== null) {
         return {
           kind: "managed-invitation",
           invitationId: frame.invitationId,
@@ -324,7 +389,7 @@ export const createRepositoryProductionCreator = (
         return { status: "setting_up" as const };
       }
       const value = await read(row, frame);
-      if (value !== undefined && isVerified(value)) {
+      if (value !== undefined && isVerified(value, frame)) {
         return {
           status:
             row.record.effects["creator-access"].state === "applied"
@@ -353,7 +418,7 @@ export const createRepositoryProductionCreator = (
         return "not-owned";
       }
       const value = await read(row, frame);
-      if (value === undefined || !isVerified(value)) {
+      if (value === undefined || !isVerified(value, frame)) {
         return "pending";
       }
       const result = await deps.resume(row, frame.sessionId);

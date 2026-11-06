@@ -54,6 +54,15 @@ Its callback resumes that saved setup through the same app lease. Accepted
 links survive ordinary app revisions without creating another account or
 requesting another sign-in.
 
+The same creator can set up another app without signing in again. Builder reads
+completed creator journals for the exact authenticated owner and workspace,
+matches the Auth resource and origin, then confirms the accepted source identity
+through protected Auth. The new app records its own invitation and the verified
+source link before granting access. Auth rechecks the existing verified account;
+the original sign-in session may expire without discarding that durable identity.
+A different owner, workspace or Auth realm uses the normal sign-in flow. Reuse
+does not restore a removed app membership or grant access to the original app.
+
 Interrupted creation reads the original invitation before retrying. Status
 reads never send email. An explicit renewal retains the invitation and records
 its new expiry and request identity before the protected write; repeating that

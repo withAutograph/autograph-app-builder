@@ -4,7 +4,7 @@
 /* oxlint-disable unicorn/no-await-expression-member -- These owner-scoped async reads are immediately projected; no mutable state is reused across awaits. */
 /* oxlint-disable eslint/no-use-before-define, sonarjs/no-wildcard-import -- Lazy mutually composed callbacks share one request-scoped owner, journal and Drizzle schema. */
 import { isDeepStrictEqual } from "node:util";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { z } from "zod";
@@ -48,6 +48,7 @@ import {
   repositoryProductionScopeSchema,
   repositoryProductionRecordSchema,
   repositoryProductionOperationRef,
+  repositoryProductionDigest,
 } from "./repository-production-contract";
 import type {
   RepositoryProductionScope,
@@ -469,6 +470,56 @@ export const createRepositoryProductionNativeHandler =
         );
       const creator = createRepositoryProductionCreator({
         builderOrigin,
+        realmDigest: (scope) => {
+          const configuredRealm = realm(scope);
+          return repositoryProductionDigest({
+            publicOrigin: configuredRealm.publicOrigin,
+            project: configuredRealm.project,
+            authResourceId: configuredRealm.authResourceId,
+            resource: configuredRealm.resource,
+          });
+        },
+        async *linkedCreatorCandidates(row) {
+          const { authority } = row.record.scope;
+          let cursor: string | undefined;
+          for (;;) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- The next page depends on this page's final journal key.
+            const candidates = await database
+              .select()
+              .from(schema.builderProvisioningJournals)
+              .where(
+                and(
+                  eq(schema.builderProvisioningJournals.issuer, authority.issuer),
+                  eq(schema.builderProvisioningJournals.audience, authority.audience),
+                  eq(schema.builderProvisioningJournals.workspaceId, authority.workspaceId),
+                  eq(schema.builderProvisioningJournals.ownerUserId, authority.ownerUserId),
+                  sql`${schema.builderProvisioningJournals.record}->>'kind' = 'repository-production-setup-v1'`,
+                  sql`${schema.builderProvisioningJournals.record}->'effects'->'creator-access'->>'state' = 'applied'`,
+                  cursor === undefined
+                    ? undefined
+                    : gt(schema.builderProvisioningJournals.requestId, cursor),
+                ),
+              )
+              .orderBy(schema.builderProvisioningJournals.requestId)
+              .limit(100);
+            if (candidates.length === 0) {
+              return;
+            }
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Read each bounded page before advancing its cursor.
+            const saved = await Promise.all(
+              candidates.map(async (candidate) => {
+                const record = repositoryProductionRecordSchema.parse(candidate.record);
+                return await store.read(record.scope);
+              }),
+            );
+            for (const candidate of saved) {
+              if (candidate !== undefined) {
+                yield candidate;
+              }
+            }
+            cursor = candidates.at(-1)?.requestId;
+          }
+        },
         readCurrent: store.read,
         readOwner: async (row) => {
           await (await current(row.record.scope)).assertCurrentOwner();
