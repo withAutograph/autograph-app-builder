@@ -54,7 +54,7 @@ const invitationSchema = z.object({
   deliveryAttemptId: z.string().nullable(),
 });
 type Invitation = z.infer<typeof invitationSchema>;
-const harness = (roleless = false) => {
+const harness = (roleless = false, generated = false) => {
   const rows = new Map<string, AppAccessOperationRow>();
   const invites = new Map<string, Invitation>();
   const people = new Map<string, { id: string; name: string; email: string; roles: string[] }>();
@@ -66,6 +66,9 @@ const harness = (roleless = false) => {
   let loseAfterCancel = false;
   let deliveryState: "sent" | "unknown" | "sending" = "sent";
   let renewCount = 0;
+  let admissionActive = false;
+  let loseAfterGrant = false;
+  const admissionInspections: boolean[] = [];
   const setup = {
     operationRef: repositoryProductionOperationRef(scope),
     revision: 1,
@@ -74,7 +77,15 @@ const harness = (roleless = false) => {
         sessionId: "session",
         sourceSha: "a".repeat(40),
         creatorRoles: roleless ? [] : ["reader", "editor"],
-        storage: { kind: "none" },
+        storage: generated
+          ? {
+              kind: "postgres",
+              releaseId: "release",
+              artifactRef: "artifact",
+              manifestSha256: "b".repeat(64),
+              databaseEnvironment: "APP_DATABASE_URL",
+            }
+          : { kind: "none" },
       }),
       lease: { leaseId: randomUUID(), fenceGeneration: 1 },
     },
@@ -244,11 +255,34 @@ const harness = (roleless = false) => {
           result,
         };
       },
-      mutateAppAccess: async () => {
-        throw new Error("frontend must not use generated storage");
+      mutateAppAccess: async (_context, access) => {
+        if (!generated) {
+          throw new Error("frontend must not use generated storage");
+        }
+        if (access.roles.length === 0) {
+          admissionActive = access.active;
+        }
+        writeAccess(access);
+        if (loseAfterGrant && access.active) {
+          loseAfterGrant = false;
+          throw new Error("lost grant response");
+        }
       },
-      inspectAppAccess: async () => {
-        throw new Error("frontend must not use generated storage");
+      inspectAppAccess: async (_context, access) => {
+        if (!generated) {
+          throw new Error("frontend must not use generated storage");
+        }
+        const roles = new Set(people.get(access.actorId)?.roles);
+        let matches: boolean;
+        if (access.roles.length === 0) {
+          admissionInspections.push(access.active);
+          matches = admissionActive === access.active;
+        } else {
+          matches = access.active
+            ? access.roles.every((role) => roles.has(role))
+            : access.roles.every((role) => !roles.has(role));
+        }
+        return matches ? { state: "applied", receipt: {} } : { state: "not-applied" };
       },
     }),
   };
@@ -262,6 +296,14 @@ const harness = (roleless = false) => {
     cancellations,
     accessWrites,
     invitation,
+    admissionInspections,
+    admissionActive: () => admissionActive,
+    setAdmission: () => {
+      admissionActive = true;
+    },
+    loseGrant: () => {
+      loseAfterGrant = true;
+    },
     renewCount: () => renewCount,
     loseRevoke: () => {
       loseAfterRevoke = true;
@@ -370,6 +412,44 @@ describe("native app access recovery", () => {
     });
     expect(h.people.has("guest")).toBe(false);
     expect(h.accessWrites).toEqual([{ actorId: "guest", roles: [], active: false }]);
+  });
+
+  it("closes generated app admission before adding named roles and reconciles its closure after a lost grant reply", async () => {
+    const h = harness(false, true);
+    h.people.set("guest", { id: "guest", name: "Guest", email: "guest@example.test", roles: [] });
+    h.setAdmission();
+    h.loseGrant();
+    const command = {
+      action: "change-role" as const,
+      memberId: "guest",
+      roles: ["reader"],
+      clientRequestId: randomUUID(),
+    };
+    await expect(h.service.execute(owner, command)).rejects.toMatchObject({
+      code: "app_access_unknown",
+    });
+    expect(h.admissionActive()).toBe(false);
+    expect(h.people.get("guest")?.roles).toEqual(["reader"]);
+    await h.service.execute(owner, command);
+    expect(h.accessWrites).toEqual([
+      { actorId: "guest", roles: [], active: false },
+      { actorId: "guest", roles: ["reader"], active: true },
+    ]);
+    expect(h.admissionInspections).toContain(false);
+  });
+
+  it("does not revoke and regrant unchanged role-less generated app admission", async () => {
+    const h = harness(true, true);
+    h.people.set("guest", { id: "guest", name: "Guest", email: "guest@example.test", roles: [] });
+    h.setAdmission();
+    await h.service.execute(owner, {
+      action: "change-role",
+      memberId: "guest",
+      roles: [],
+      clientRequestId: randomUUID(),
+    });
+    expect(h.admissionActive()).toBe(true);
+    expect(h.accessWrites).toEqual([{ actorId: "guest", roles: [], active: true }]);
   });
 
   it("cancels outstanding same-app invitations before removing a member, and permits a new later invitation", async () => {

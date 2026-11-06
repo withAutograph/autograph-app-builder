@@ -46,6 +46,22 @@ const invitationSchema = z.object({
   deliveryStatus: z.enum(["ready", "sending", "sent", "unknown"]).optional(),
   deliveryAttemptId: z.string().nullable().optional(),
 });
+const memberPreimageSchema = z.object({
+  kind: z.literal("access-member-preimage"),
+  id: z.string(),
+  email: z.email(),
+  roles: z.array(z.string()),
+});
+const readMemberPreimage = (effect: AppAccessEffectContext, memberId: string) => {
+  for (const frame of effect.readCheckpoints()) {
+    const parsed = memberPreimageSchema.safeParse(frame);
+    if (parsed.success && parsed.data.id === memberId) {
+      return parsed.data;
+    }
+  }
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- No saved member snapshot exists before the first execution.
+  return undefined;
+};
 const operationId = (requestId: string, step: string) => {
   const hex = createHash("sha256").update(`${requestId}:${step}`).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
@@ -245,20 +261,7 @@ export const createRepositoryProductionManagement = (
     command: Extract<AppAccessCommand, { action: "change-role" | "remove" }>,
     effect: AppAccessEffectContext,
   ) => {
-    const preimageSchema = z.object({
-      kind: z.literal("access-member-preimage"),
-      id: z.string(),
-      email: z.email(),
-      roles: z.array(z.string()),
-    });
-    let preimage: z.infer<typeof preimageSchema> | undefined;
-    for (const frame of effect.readCheckpoints()) {
-      const parsed = preimageSchema.safeParse(frame);
-      if (parsed.success && parsed.data.id === command.memberId) {
-        preimage = parsed.data;
-        break;
-      }
-    }
+    const preimage = readMemberPreimage(effect, command.memberId);
     const people = preimage === undefined ? await members(scope, effect) : [];
     const member = preimage ?? people.find((person) => person.id === command.memberId);
     if (member === undefined) {
@@ -276,6 +279,12 @@ export const createRepositoryProductionManagement = (
       await cancelMemberInvitations(scope, member, effect);
     }
     const desired = command.action === "remove" ? [] : command.roles;
+    if (member.roles.length === 0 && desired.length > 0) {
+      const setup = await deps.readSetup(scope);
+      if (setup?.record.intent.storage.kind === "postgres") {
+        await setAccess(scope, member.id, [], false, effect, "revoke-roleless");
+      }
+    }
     const selected = new Set(desired);
     const removed = member.roles.filter((role) => !selected.has(role));
     if (removed.length > 0 || command.action === "remove") {
@@ -330,6 +339,16 @@ export const createRepositoryProductionManagement = (
       !command.roles.every((role) => assigned.has(role))
     ) {
       return "absent" as const;
+    }
+    const preimage = readMemberPreimage(effect, member.id);
+    if (preimage?.roles.length === 0 && command.roles.length > 0) {
+      const setup = await deps.readSetup(scope);
+      if (setup?.record.intent.storage.kind === "postgres") {
+        const admission = await accessState(scope, member.id, [], false, effect);
+        if (admission !== "applied") {
+          return admission;
+        }
+      }
     }
     const available = await deps.roles(scope);
     const selected = new Set(command.roles);
