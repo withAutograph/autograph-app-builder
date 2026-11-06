@@ -11,10 +11,8 @@ import {
   githubPermissionsFor,
 } from "./github-publication";
 import type {
-  DraftPublicationReadBack,
   DraftPullRequestProposal,
   FreshRepositoryProposal,
-  GitHubMutationAcknowledgement,
   GitHubOperation,
   GitHubPublicationAdapter,
   GitHubSourceResolutionAdapter,

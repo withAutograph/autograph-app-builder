@@ -516,12 +516,10 @@ describe("planning from the current checkout", () => {
             files.delete(file);
           }
         }
-        return;
       },
       run,
       writeTextFile: async ({ path, content }: { path: string; content: string }) => {
         files.set(`/workspace/${path}`, content);
-        return;
       },
     } as unknown as SandboxSession;
     const plan = async () =>

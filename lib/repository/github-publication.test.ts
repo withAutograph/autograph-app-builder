@@ -32,7 +32,6 @@ import type {
   FreshRepositoryReadBack,
   GitHubInstallationIdentity,
   GitHubMutationAcknowledgement,
-  GitHubMutationReceipt,
   GitHubOperation,
   GitHubPublicationAdapter,
   GitHubDraftPullRequestContent,

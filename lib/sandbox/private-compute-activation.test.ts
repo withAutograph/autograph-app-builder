@@ -55,7 +55,6 @@ const fixture = () => {
         throw new Error("Lost provider reply");
       }
       vcpus = input.resources?.vcpus ?? vcpus;
-      return;
     },
     get vcpus() {
       return vcpus;
@@ -73,7 +72,6 @@ const fixture = () => {
     },
     writeActivation: async (value: PrivateComputeActivation) => {
       record = value;
-      return;
     },
   };
   const input = {

@@ -30,7 +30,7 @@ import type {
 } from "./github-draft-reconciliation";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" });
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const sourceSha = "1".repeat(40);
