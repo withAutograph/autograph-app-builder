@@ -6,7 +6,9 @@ through the normal identity flow. Builder resumes automatically after verified
 identity returns. An existing linked identity does not require another sign-in.
 The creator never supplies a database name, connection string or provider key.
 
-The page reads and updates `/api/builder/sessions/<sessionId>/access`. The server
+The page reads `/api/builder/sessions/<sessionId>/access`. Authenticated writes
+use the typed `continueBuilderAppAccess` Server Action with `useActionState`;
+it calls the same owner-resolving deployment service in process. The server
 resolves the owner, app, destination and organization from the authenticated
 saved session. Public commands name an invitation or member from that app;
 browser-provided identity or organization authority is never accepted. App

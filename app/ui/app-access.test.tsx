@@ -6,7 +6,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { appAccessCommandSchema } from "@/lib/app-access/contracts";
 import type { AppAccessSnapshot } from "@/lib/app-access/contracts";
+import type { AppAccessActionInput, AppAccessActionState } from "@/lib/app-access/action";
 import { AppAccessPage, AppAccessView } from "./app-access";
+
+const continuation =
+  vi.fn<
+    (
+      previous: AppAccessActionState | undefined,
+      input: AppAccessActionInput,
+    ) => Promise<AppAccessActionState>
+  >();
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const snapshot: AppAccessSnapshot = {
@@ -65,11 +74,12 @@ afterEach(async () => {
   });
   document.body.replaceChildren();
   vi.unstubAllGlobals();
+  continuation.mockReset();
 });
 
 describe("Builder app access", () => {
   it("offers one ordinary app sign-in and account recovery without a completion checkbox", async () => {
-    const onAction = vi.fn();
+    const onAction = vi.fn<() => void>();
     const container = await render(
       <AppAccessView
         data={{
@@ -97,7 +107,7 @@ describe("Builder app access", () => {
   });
 
   it("renews an expired sign-in through Builder without opening the stale link", async () => {
-    const onAction = vi.fn();
+    const onAction = vi.fn<() => void>();
     const container = await render(
       <AppAccessView
         data={{
@@ -118,7 +128,7 @@ describe("Builder app access", () => {
   });
 
   it("manages invitation and member actions by their app-scoped identifiers", async () => {
-    const onAction = vi.fn();
+    const onAction = vi.fn<() => void>();
     const container = await render(
       <AppAccessView data={snapshot} disabled={false} onAction={onAction} />,
     );
@@ -133,7 +143,7 @@ describe("Builder app access", () => {
   });
 
   it("shows uncertain email delivery without automatically resending", async () => {
-    const onAction = vi.fn();
+    const onAction = vi.fn<() => void>();
     const data = {
       ...snapshot,
       invitations: snapshot.invitations.map((invitation) => ({
@@ -151,7 +161,7 @@ describe("Builder app access", () => {
   });
 
   it("submits the entered email and selected app role without browser-supplied organization authority", async () => {
-    const onAction = vi.fn();
+    const onAction = vi.fn<() => void>();
     const container = await render(
       <AppAccessView data={snapshot} disabled={false} onAction={onAction} />,
     );
@@ -190,16 +200,16 @@ describe("Builder app access", () => {
     const requests: unknown[] = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        await Promise.resolve();
-        if (init?.method === "POST") {
-          requests.push(JSON.parse(z.string().parse(init.body)));
-          return Response.json(snapshot);
-        }
-        return Response.json({ ...snapshot, pendingCommand });
-      }),
+      vi.fn(() => Promise.resolve(Response.json({ ...snapshot, pendingCommand }))),
     );
-    const container = await render(<AppAccessPage sessionId={snapshot.sessionId} />);
+    continuation.mockImplementation(async (_previous, input) => {
+      await Promise.resolve();
+      requests.push(z.object({ command: appAccessCommandSchema }).parse(input).command);
+      return { status: "ready", snapshot };
+    });
+    const container = await render(
+      <AppAccessPage sessionId={snapshot.sessionId} continueAction={continuation} />,
+    );
     expect(container.textContent).toContain("Checking the previous request");
     await click(container, "Retry the same update");
     expect(requests).toEqual([pendingCommand]);
@@ -210,19 +220,20 @@ describe("Builder app access", () => {
     let attempts = 0;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        await Promise.resolve();
-        if (init?.method === "POST") {
-          requests.push(appAccessCommandSchema.parse(JSON.parse(z.string().parse(init.body))));
-          attempts += 1;
-          if (attempts === 1) {
-            throw new TypeError("Connection interrupted");
-          }
-        }
-        return Response.json(snapshot);
-      }),
+      vi.fn(() => Promise.resolve(Response.json(snapshot))),
     );
-    const container = await render(<AppAccessPage sessionId={snapshot.sessionId} />);
+    continuation.mockImplementation(async (_previous, input) => {
+      await Promise.resolve();
+      requests.push(z.object({ command: appAccessCommandSchema }).parse(input).command);
+      attempts += 1;
+      if (attempts === 1) {
+        throw new TypeError("Connection interrupted");
+      }
+      return { status: "ready", snapshot };
+    });
+    const container = await render(
+      <AppAccessPage sessionId={snapshot.sessionId} continueAction={continuation} />,
+    );
     await click(container, "Resend invitation");
     const cancel = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Cancel invitation",
@@ -255,12 +266,39 @@ describe("Builder app access", () => {
         );
       }),
     );
-    const container = await render(<AppAccessPage sessionId={snapshot.sessionId} />);
+    const container = await render(
+      <AppAccessPage sessionId={snapshot.sessionId} continueAction={continuation} />,
+    );
     await click(container, "Show more people");
     expect(calls[1]).toContain("cursor=page-two");
     expect(container.textContent).toContain("Creator");
     expect(container.textContent).toContain("Guest");
     expect(container.textContent).not.toContain("Show more people");
+  });
+
+  it("disables duplicate controls while the Server Action is pending and renders its completed state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(Response.json(snapshot))),
+    );
+    const completion = Promise.withResolvers<AppAccessActionState>();
+    continuation.mockReturnValue(completion.promise);
+    const container = await render(
+      <AppAccessPage sessionId={snapshot.sessionId} continueAction={continuation} />,
+    );
+    await click(container, "Resend invitation");
+    expect(container.querySelector("main")?.getAttribute("aria-busy")).toBe("true");
+    const cancel = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Cancel invitation",
+    );
+    expect(cancel?.disabled).toBe(true);
+    await act(async () => {
+      completion.resolve({ status: "ready", snapshot });
+      await completion.promise;
+    });
+    expect(container.querySelector("main")?.getAttribute("aria-busy")).toBe("false");
+    expect(container.textContent).toContain("App access updated.");
+    expect(continuation).toHaveBeenCalledTimes(1);
   });
 
   it("does not prompt a linked creator to sign in again or require business roles for role-less apps", async () => {
@@ -272,7 +310,7 @@ describe("Builder app access", () => {
           members: [{ id: "creator", name: "Creator", email: "creator@example.com", roles: [] }],
         }}
         disabled={false}
-        onAction={vi.fn()}
+        onAction={vi.fn<() => void>()}
       />,
     );
     expect(container.textContent).toContain("Your access is ready.");

@@ -1,7 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  startTransition,
+  useActionState,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
+import type { AppAccessActionInput, AppAccessActionState } from "@/lib/app-access/action";
 import {
   appAccessApiPath,
   appAccessFailureSchema,
@@ -16,7 +25,30 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type ActionHandler = (intent: AppAccessIntent) => Promise<void>;
+type ActionHandler = (intent: AppAccessIntent) => void;
+
+type ContinueAction = (
+  previous: AppAccessActionState | undefined,
+  input: AppAccessActionInput,
+) => Promise<AppAccessActionState>;
+
+const submitAppAccess = async (
+  action: ContinueAction,
+  previous: AppAccessActionState | undefined,
+  input: AppAccessActionInput,
+): Promise<AppAccessActionState> => {
+  try {
+    return await action(previous, input);
+  } catch {
+    // A lost Server Action response cannot establish whether the server changed access.
+    return {
+      status: "error",
+      code: "app_access_unknown",
+      uncertain: true,
+      message: "Builder couldn’t confirm this update. Retry to check the same request.",
+    };
+  }
+};
 
 const invitationStatus = (
   invitation: AppAccessSnapshot["invitations"][number],
@@ -112,7 +144,7 @@ const MemberAccess = ({
                 variant="outline"
                 disabled={disabled || !changed || roles.length === 0}
                 onClick={() => {
-                  void onAction({ action: "change-role", memberId: member.id, roles });
+                  onAction({ action: "change-role", memberId: member.id, roles });
                 }}
               >
                 Save roles
@@ -122,7 +154,7 @@ const MemberAccess = ({
               variant="outline"
               disabled={disabled}
               onClick={() => {
-                void onAction({ action: "remove", memberId: member.id });
+                onAction({ action: "remove", memberId: member.id });
               }}
             >
               Remove app access
@@ -157,7 +189,7 @@ const InviteForm = ({
       className="space-y-4 rounded-lg border p-4"
       onSubmit={(event) => {
         event.preventDefault();
-        void onAction({ action: "invite", email: email.trim(), roles: selected });
+        onAction({ action: "invite", email: email.trim(), roles: selected });
       }}
     >
       <div className="space-y-2">
@@ -238,7 +270,7 @@ const CreatorAccess = ({
               <Button
                 disabled={disabled}
                 onClick={() => {
-                  void onAction({ action: "renew-sign-in" });
+                  onAction({ action: "renew-sign-in" });
                 }}
               >
                 Get a new sign-in link
@@ -272,7 +304,7 @@ const CreatorAccess = ({
             <Button
               disabled={disabled}
               onClick={() => {
-                void onAction({ action: "retry-setup" });
+                onAction({ action: "retry-setup" });
               }}
             >
               Retry setup
@@ -347,7 +379,7 @@ export const AppAccessView = ({
                         variant="outline"
                         disabled={disabled}
                         onClick={() => {
-                          void onAction({ action: "resend", invitationId: invitation.id });
+                          onAction({ action: "resend", invitationId: invitation.id });
                         }}
                       >
                         Resend invitation
@@ -356,7 +388,7 @@ export const AppAccessView = ({
                         variant="outline"
                         disabled={disabled}
                         onClick={() => {
-                          void onAction({ action: "cancel", invitationId: invitation.id });
+                          onAction({ action: "cancel", invitationId: invitation.id });
                         }}
                       >
                         Cancel invitation
@@ -373,10 +405,22 @@ export const AppAccessView = ({
   );
 };
 
-export const AppAccessPage = ({ sessionId }: { sessionId: string }) => {
+export const AppAccessPage = ({
+  sessionId,
+  continueAction,
+}: {
+  sessionId: string;
+  continueAction: ContinueAction;
+}) => {
   const [data, setData] = useState<AppAccessSnapshot>();
   const [notice, setNotice] = useState("");
-  const [pending, setPending] = useState(false);
+  const runAction = useCallback(
+    (previous: AppAccessActionState | undefined, input: AppAccessActionInput) =>
+      submitAppAccess(continueAction, previous, input),
+    [continueAction],
+  );
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires the initial state argument; absence means no action has completed.
+  const [result, dispatch, pending] = useActionState(runAction, undefined);
   const [retry, setRetry] = useState<AppAccessAction>();
   const [loadingMore, setLoadingMore] = useState(false);
   const active = useRef(false);
@@ -474,56 +518,54 @@ export const AppAccessPage = ({ sessionId }: { sessionId: string }) => {
     };
   }, [data?.creator.status, refresh]);
 
-  const submit = async (action: AppAccessAction) => {
+  useEffect(() => {
+    if (result === undefined) {
+      return;
+    }
+    active.current = false;
+    if (result.status === "ready") {
+      setData(result.snapshot);
+      operation.current = result.snapshot.pendingCommand ?? null;
+      setRetry(result.snapshot.pendingCommand);
+      setNotice(
+        result.snapshot.pendingCommand === undefined
+          ? "App access updated."
+          : "Checking the previous request. Your app and access are saved.",
+      );
+    } else {
+      if (!result.uncertain) {
+        operation.current = null;
+        // oxlint-disable-next-line react-doctor/no-adjust-state-on-prop-change -- A confirmed server rejection releases this pending operation, not prop-derived state.
+        setRetry(undefined);
+      }
+      setNotice(result.message);
+      if (result.code === "authentication_required") {
+        window.location.assign(
+          `/auth/sign-in?callbackURL=${encodeURIComponent(appAccessPath(sessionId))}`,
+        );
+      }
+    }
+  }, [result, sessionId]);
+
+  const submit = (action: AppAccessAction) => {
     if (active.current) {
       return;
     }
     active.current = true;
     epoch.current += 1;
-    setPending(true);
     setNotice("");
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(action),
-      });
-      if (!response.ok && response.status < 500 && response.status !== 409) {
-        setRetry(undefined);
-        operation.current = null;
-      } else {
-        // Retain the same operation if transport/readback is uncertain.
-        setRetry(action);
-        operation.current = action;
-      }
-      const next = await readResponse(response);
-      setData(next);
-      operation.current = next.pendingCommand ?? null;
-      setRetry(next.pendingCommand);
-      setNotice(
-        next.pendingCommand === undefined
-          ? "App access updated."
-          : "Checking the previous request. Your app and access are saved.",
-      );
-    } catch (error) {
-      setNotice(
-        error instanceof Error
-          ? error.message
-          : "Builder couldn’t confirm this update. Retry to check the same request.",
-      );
-    } finally {
-      active.current = false;
-      setPending(false);
-    }
+    startTransition(() => {
+      dispatch({ sessionId, command: action });
+    });
   };
-  const onAction: ActionHandler = async (intent) => {
+  const onAction: ActionHandler = (intent) => {
     if (retry !== undefined || active.current) {
       return;
     }
     const action = { ...intent, clientRequestId: crypto.randomUUID() };
     setRetry(action);
     operation.current = action;
-    await submit(action);
+    submit(action);
   };
 
   const loadMore = async () => {
@@ -581,7 +623,7 @@ export const AppAccessPage = ({ sessionId }: { sessionId: string }) => {
         <Button
           disabled={pending}
           onClick={() => {
-            void submit(retry);
+            submit(retry);
           }}
         >
           Retry the same update
