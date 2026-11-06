@@ -51,6 +51,10 @@ source change, keep the current workspace without loading native transport
 history. When reconciling changed source, use the owned transport evidence
 needed to preserve the app's edits and bind the actual workspace.
 
+Ordinary build validation skips authenticated browser preparation and browser
+tasks. Builder can opt into a declared app browser task with `runBrowserTests`
+when that task serves the app’s testing needs.
+
 Private preview and browser checks can use the retained validated artifact
 while a draft remains unapplied. Keep the selected app, owner, workspace and
 artifact identity bound to that action. When identifying retained source for a

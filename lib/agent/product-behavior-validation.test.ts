@@ -204,7 +204,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     });
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      await validateAppCreation.execute({ implementationFiles: [] }, {
+      await validateAppCreation.execute({ implementationFiles: [], runBrowserTests: true }, {
         callId: "validate_phases",
         getSandbox: () => Promise.resolve({ id: "private-sandbox" }),
         session: { auth: { credential: "private-credential" }, id: "private-session" },
@@ -317,7 +317,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         await expect(
-          validateAppCreation.execute({ implementationFiles: [] }, {
+          validateAppCreation.execute({ implementationFiles: [], runBrowserTests: true }, {
             callId: "validate_failure",
             getSandbox: () => Promise.resolve({ id: "private-sandbox" }),
             session: { auth: {}, id: "private-session" },
@@ -487,6 +487,27 @@ describe("behavior evidence invalidation during validation repair", () => {
       }),
     );
   });
+  it("leaves a declared browser task unassessed during ordinary build validation", async () => {
+    mocks.state.current = { ...workflow("validated"), phase: "applied" };
+    mocks.describe.mockResolvedValue({
+      backend: { kind: "generated-postgres" },
+      validation: { browser: { task: "test-e2e" } },
+    });
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+      callId: "validate_build",
+      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+      session: { auth: {}, id: "session" },
+    } as never);
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(mocks.runtime).not.toHaveBeenCalled();
+    expect(mocks.browser).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      backendValidation: { status: "unassessed" },
+      status: "validated",
+      technicalStatus: "passed",
+    });
+  });
+
   it("captures technical validation before a protected runtime error blocks browser behavior", async () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
     mocks.describe.mockResolvedValue({
@@ -499,11 +520,14 @@ describe("behavior evidence invalidation during validation repair", () => {
         : Promise.reject(new Error("auth_identity_required")),
     );
     mocks.runtime.mockRejectedValue(new Error("auth_identity_required"));
-    const result = await validateAppCreation.execute({ implementationFiles: [] }, {
-      callId: "validate_before_auth",
-      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
-      session: { auth: {}, id: "session" },
-    } as never);
+    const result = await validateAppCreation.execute(
+      { implementationFiles: [], runBrowserTests: true },
+      {
+        callId: "validate_before_auth",
+        getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+        session: { auth: {}, id: "session" },
+      } as never,
+    );
     expect(mocks.execute).toHaveBeenCalledOnce();
     expect(mocks.prepare.mock.calls[0]?.[0]).not.toHaveProperty("execution");
     expect(mocks.publish).toHaveBeenCalledOnce();
@@ -642,11 +666,14 @@ describe("behavior evidence invalidation during validation repair", () => {
         validation: { browser: { task: "test-e2e" } },
       });
       mocks.browser.mockResolvedValue({ problem: "Assignment revoked", status });
-      const result = await validateAppCreation.execute({ implementationFiles: [] }, {
-        callId: "validate",
-        getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
-        session: { auth: {}, id: "session" },
-      } as never);
+      const result = await validateAppCreation.execute(
+        { implementationFiles: [], runBrowserTests: true },
+        {
+          callId: "validate",
+          getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+          session: { auth: {}, id: "session" },
+        } as never,
+      );
       expect(mocks.prepare).toHaveBeenCalledOnce();
       expect(mocks.prepare.mock.calls[0]?.[0]).not.toHaveProperty("execution");
       expect(mocks.runtime).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "session" }));

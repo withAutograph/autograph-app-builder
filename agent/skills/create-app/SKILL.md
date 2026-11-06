@@ -276,6 +276,8 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    each returned cursor when a repair excerpt is truncated. Inspect the current
    changes with `change_set_status`; final acceptance below records their review.
    Review is neither publication nor proof of working user interactions.
+   Leave `runBrowserTests` unset for ordinary delivery. Set it only when the
+   app calls for its declared authenticated browser task.
    Reuse current executed behavioral evidence for the scenarios it actually
    covers; run additional scenarios only for missing coverage or changed behavior.
    A new tool invocation or business phase alone is not a reason to repeat an

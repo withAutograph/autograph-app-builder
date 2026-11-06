@@ -181,7 +181,7 @@ export const createAppValidationTool = (
 ) =>
   defineTool({
     description:
-      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. For persistent apps, run any declared authenticated browser task after that preparation succeeds and report its result separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
+      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. Set runBrowserTests only when authenticated browser testing is wanted for this app. Report those results separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
     // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep the workflow phase, cancellation and original failure receipt branches explicit.
     async execute(input, ctx) {
       const current = appBuilderWorkflowState.get();
@@ -193,7 +193,11 @@ export const createAppValidationTool = (
         currentDraftCandidateSource(current, candidate) !== undefined
       ) {
         return await validateDraftReconciliation(
-          { additionalCheckTasks: [], incremental: false, runBrowserTests: false },
+          {
+            additionalCheckTasks: [],
+            incremental: false,
+            runBrowserTests: input.runBrowserTests === true,
+          },
           ctx,
         );
       }
@@ -514,8 +518,9 @@ export const createAppValidationTool = (
         };
       }
       validationPhase(ctx.callId, "validating_persistent_backend");
+      const browserDescription = input.runBrowserTests === true ? description : undefined;
       const preparedBackend = await prepareBackendValidationRuntime(
-        description,
+        browserDescription,
         () => ({
           appId: current.appSpec.appId,
           root: current.applyReceipt.applyRoot,
@@ -532,7 +537,7 @@ export const createAppValidationTool = (
       // A rejected protected reference never falls back to repository-local browser execution.
       const backendValidation =
         preparedBackend.failure ??
-        (await executionPorts.validateBackend(description, {
+        (await executionPorts.validateBackend(browserDescription, {
           appId: current.appSpec.appId,
           root: current.applyReceipt.applyRoot,
           runtime,
@@ -596,6 +601,7 @@ export const createAppValidationTool = (
     },
     inputSchema: z.object({
       implementationFiles: implementationFilesSchema.default([]),
+      runBrowserTests: z.boolean().optional(),
     }),
   });
 
