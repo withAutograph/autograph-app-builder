@@ -172,6 +172,74 @@ export const createRepositoryProductionManagement = (
     checkpoint: () => Promise.resolve(),
     readCheckpoints: () => [],
   });
+  const cancelMemberInvitations = async (
+    scope: RepositoryProductionScope,
+    member: { id: string; email: string },
+    effect: AppAccessEffectContext,
+  ) => {
+    const cancellationSchema = z.object({
+      kind: z.literal("access-member-invitation-cancellations"),
+      memberId: z.string(),
+      invitations: z.array(z.object({ id: z.string(), scopeDigest: z.string() })),
+    });
+    let captured: z.infer<typeof cancellationSchema> | undefined;
+    for (const frame of effect.readCheckpoints()) {
+      const parsed = cancellationSchema.safeParse(frame);
+      if (parsed.success && parsed.data.memberId === member.id) {
+        captured = parsed.data;
+        break;
+      }
+    }
+    if (captured === undefined) {
+      const existing = z
+        .array(invitationSchema)
+        .parse(await auth(scope, { action: "list" }, true, effect, "remove-invitations"));
+      captured = {
+        kind: "access-member-invitation-cancellations",
+        memberId: member.id,
+        invitations: [],
+      };
+      for (const item of existing) {
+        const sameApp = item.appId === scope.appId && item.organizationId === scope.organizationId;
+        const samePerson =
+          item.email.toLowerCase() === member.email.toLowerCase() ||
+          item.verifiedActorId === member.id;
+        const pending = item.status === "pending" || item.status === "verified";
+        if (
+          sameApp &&
+          samePerson &&
+          pending &&
+          item.id !== repositoryProductionOperationRef(scope)
+        ) {
+          captured.invitations.push({ id: item.id, scopeDigest: item.scopeDigest });
+        }
+      }
+      await effect.checkpoint(captured);
+    }
+    // Each cancellation is reconciled before advancing; these mutations share the held app lease.
+    /* oxlint-disable eslint/no-await-in-loop */
+    for (const item of captured.invitations) {
+      const found = await invitation(scope, item.id, effect);
+      if (found === undefined || found.status === "cancelled" || found.status === "accepted") {
+        continue;
+      }
+      if (found.scopeDigest !== item.scopeDigest) {
+        throw new AppAccessError("app_access_denied");
+      }
+      await auth(
+        scope,
+        { action: "cancel", invitationId: item.id, scopeDigest: item.scopeDigest },
+        false,
+        effect,
+        `remove-invitation:${item.id}`,
+      );
+      const confirmed = await invitation(scope, item.id, effect);
+      if (confirmed !== undefined && confirmed.status !== "cancelled") {
+        throw new AppAccessError("app_access_unknown");
+      }
+    }
+    /* oxlint-enable eslint/no-await-in-loop */
+  };
   const updateMember = async (
     scope: RepositoryProductionScope,
     command: Extract<AppAccessCommand, { action: "change-role" | "remove" }>,
@@ -180,6 +248,7 @@ export const createRepositoryProductionManagement = (
     const preimageSchema = z.object({
       kind: z.literal("access-member-preimage"),
       id: z.string(),
+      email: z.email(),
       roles: z.array(z.string()),
     });
     let preimage: z.infer<typeof preimageSchema> | undefined;
@@ -199,8 +268,12 @@ export const createRepositoryProductionManagement = (
       await effect.checkpoint({
         kind: "access-member-preimage",
         id: member.id,
+        email: member.email,
         roles: member.roles,
       });
+    }
+    if (command.action === "remove") {
+      await cancelMemberInvitations(scope, member, effect);
     }
     const desired = command.action === "remove" ? [] : command.roles;
     const selected = new Set(desired);

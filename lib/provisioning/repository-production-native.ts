@@ -17,6 +17,8 @@ import { readVercelTokenKeyringEnvironment } from "../integrations/vercel-instal
 import { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
 import { createRepositoryProductionManagement } from "../app-access/native-management";
 import { createPostgresAppAccessOperationStore } from "../app-access/postgres-store";
+import { AppAccessError } from "../app-access/errors";
+import type { AppAccessCommand } from "../app-access/contracts";
 import { readRepositoryProductionApproval } from "../eve/private-repository-production-approval";
 import { readHostedOperatorOwnerReaderConfiguration } from "./hosted-operator-owner-context";
 import {
@@ -71,6 +73,29 @@ const defined = <T>(value: T | undefined): T => {
     throw new Error("repository_production_state_unavailable");
   }
   return value;
+};
+
+/** Fresh People writes wait only for real in-flight schema or creator-grant effects. */
+export const assertNoConflictingProductionSetup = (input: {
+  row: RepositoryProductionRow | undefined;
+  command?: AppAccessCommand;
+  pendingCommandIds: readonly string[];
+}) => {
+  const effects = input.row?.record.effects;
+  if (
+    effects?.["creator-access"].state !== "pending" &&
+    effects?.["install-schema"].state !== "pending"
+  ) {
+    return;
+  }
+  const command = input.command;
+  if (command?.action === "retry-setup" || command?.action === "renew-sign-in") {
+    return;
+  }
+  if (command !== undefined && input.pendingCommandIds.includes(command.clientRequestId)) {
+    return;
+  }
+  throw new AppAccessError("app_access_unknown");
 };
 
 /** Setup locks authorize the requested approved revision before its journal intent is advanced. */
@@ -432,11 +457,10 @@ export const createRepositoryProductionNativeHandler =
                   .array(z.object({ id: z.string() }))
                   .parse(await authRequest(context, { action: "list-members" }, true)),
               execute: async (context, command) => {
-                await managementFor(
-                  () => context.assertCurrent(),
-                  command.clientRequestId,
-                  true,
-                ).execute((await current(scope)).owner, command);
+                await managementFor(() => context.assertCurrent(), command, true).execute(
+                  (await current(scope)).owner,
+                  command,
+                );
               },
             }),
           },
@@ -493,7 +517,11 @@ export const createRepositoryProductionNativeHandler =
           return await setup(row.record.scope).prepare(row.record.scope, row.record.intent);
         },
       });
-      const managementFor = (held?: () => Promise<void>, commandId?: string, roleUpdate = false) =>
+      const managementFor = (
+        held?: () => Promise<void>,
+        command?: AppAccessCommand,
+        roleUpdate = false,
+      ) =>
         createRepositoryProductionManagement({
           builderOrigin,
           journal: accessJournal,
@@ -571,13 +599,17 @@ export const createRepositoryProductionNativeHandler =
               throw new Error("repository_production_scope_denied");
             }
             if (mutating && !roleUpdate) {
-              assertNoConflictingCreatorRoleUpdate({
+              const state = {
                 row: await store.read(scope),
-                commandId,
+                commandId: command?.clientRequestId,
                 pendingCommandIds: (await accessJournal.pending(scope)).map(
                   (item) => item.record.command.clientRequestId,
                 ),
-              });
+              };
+              assertNoConflictingProductionSetup({ ...state, command });
+              if (command?.action !== "retry-setup" && command?.action !== "renew-sign-in") {
+                assertNoConflictingCreatorRoleUpdate(state);
+              }
             }
           },
           retrySetup: async (scope, effect) => {
@@ -734,7 +766,7 @@ export const createRepositoryProductionNativeHandler =
               await setup(found.scope).prepare(found.scope, row.record.intent);
               return await management.read(owner);
             }
-            return await managementFor(undefined, command.clientRequestId).execute(owner, command);
+            return await managementFor(undefined, command).execute(owner, command);
           },
           completeInvitation: async (id) => {
             const result = await creator.complete(id);

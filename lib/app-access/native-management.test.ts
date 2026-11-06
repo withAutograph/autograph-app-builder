@@ -59,9 +59,11 @@ const harness = (roleless = false) => {
   const invites = new Map<string, Invitation>();
   const people = new Map<string, { id: string; name: string; email: string; roles: string[] }>();
   const sends: string[] = [];
+  const cancellations: string[] = [];
   const accessWrites: { actorId: string; roles: string[]; active: boolean }[] = [];
   let loseAfterRevoke = false;
   let loseAfterSend = false;
+  let loseAfterCancel = false;
   let deliveryState: "sent" | "unknown" | "sending" = "sent";
   let renewCount = 0;
   const setup = {
@@ -209,6 +211,14 @@ const harness = (roleless = false) => {
           found.deliveryStatus = "ready";
           found.deliveryAttemptId = null;
         }
+        if (request.action === "cancel" && found !== undefined) {
+          cancellations.push(found.id);
+          found.status = "cancelled";
+          if (loseAfterCancel) {
+            loseAfterCancel = false;
+            throw new Error("lost cancellation response");
+          }
+        }
         if (request.action === "send" && found !== undefined && found.deliveryStatus === "ready") {
           sends.push(context.row.operationRef);
           found.deliveryAttemptId = context.row.operationRef;
@@ -249,11 +259,15 @@ const harness = (roleless = false) => {
     invites,
     people,
     sends,
+    cancellations,
     accessWrites,
     invitation,
     renewCount: () => renewCount,
     loseRevoke: () => {
       loseAfterRevoke = true;
+    },
+    loseCancel: () => {
+      loseAfterCancel = true;
     },
     loseSend: (state: "sent" | "unknown" | "sending") => {
       loseAfterSend = true;
@@ -338,6 +352,7 @@ describe("native app access recovery", () => {
     expect(h.rows.get(command.clientRequestId)?.record.workerCheckpoints).toContainEqual({
       kind: "access-member-preimage",
       id: "guest",
+      email: "guest@example.test",
       roles: ["reader"],
     });
     await h.service.execute(owner, command);
@@ -355,6 +370,81 @@ describe("native app access recovery", () => {
     });
     expect(h.people.has("guest")).toBe(false);
     expect(h.accessWrites).toEqual([{ actorId: "guest", roles: [], active: false }]);
+  });
+
+  it("cancels outstanding same-app invitations before removing a member, and permits a new later invitation", async () => {
+    const h = harness();
+    h.people.set("guest", {
+      id: "guest",
+      name: "Guest",
+      email: "guest@example.test",
+      roles: ["reader"],
+    });
+    const oldInvite = {
+      action: "invite" as const,
+      clientRequestId: randomUUID(),
+      email: "guest@example.test",
+      roles: ["reader"],
+    };
+    await h.service.execute(owner, oldInvite);
+    const verified = h.invites.get(oldInvite.clientRequestId);
+    if (!verified) {
+      throw new Error("missing invitation");
+    }
+    verified.status = "verified";
+    verified.verifiedActorId = "guest";
+    const duplicate = h.invitation();
+    h.invites.set(duplicate.id, duplicate);
+    const unrelated = { ...h.invitation(), email: "someone-else@example.test" };
+    h.invites.set(unrelated.id, unrelated);
+    await h.service.execute(owner, {
+      action: "remove",
+      memberId: "guest",
+      clientRequestId: randomUUID(),
+    });
+    expect(h.people.has("guest")).toBe(false);
+    expect(verified.status).toBe("cancelled");
+    expect(duplicate.status).toBe("cancelled");
+    expect(unrelated.status).toBe("pending");
+    await expect(h.service.completeInvitation(oldInvite.clientRequestId)).rejects.toMatchObject({
+      code: "app_access_denied",
+    });
+    const newInvite = { ...oldInvite, clientRequestId: randomUUID() };
+    await h.service.execute(owner, newInvite);
+    expect(h.invites.get(newInvite.clientRequestId)?.status).toBe("pending");
+  });
+
+  it("reuses the captured cancellation list after a lost response and never leaves an old invitation active", async () => {
+    const h = harness();
+    h.people.set("guest", {
+      id: "guest",
+      name: "Guest",
+      email: "guest@example.test",
+      roles: ["reader"],
+    });
+    const first = h.invitation();
+    const second = h.invitation();
+    h.invites.set(first.id, first);
+    h.invites.set(second.id, second);
+    h.loseCancel();
+    const command = { action: "remove" as const, memberId: "guest", clientRequestId: randomUUID() };
+    await expect(h.service.execute(owner, command)).rejects.toMatchObject({
+      code: "app_access_unknown",
+    });
+    expect(h.people.has("guest")).toBe(true);
+    expect(h.rows.get(command.clientRequestId)?.record.workerCheckpoints).toContainEqual({
+      kind: "access-member-invitation-cancellations",
+      memberId: "guest",
+      invitations: [
+        { id: first.id, scopeDigest: first.scopeDigest },
+        { id: second.id, scopeDigest: second.scopeDigest },
+      ],
+    });
+    await h.service.execute(owner, command);
+    expect(first.status).toBe("cancelled");
+    expect(second.status).toBe("cancelled");
+    expect(h.cancellations).toEqual([first.id, second.id]);
+    expect(h.people.has("guest")).toBe(false);
   });
 
   it("hides and protects the creator enrollment from ordinary People actions", async () => {

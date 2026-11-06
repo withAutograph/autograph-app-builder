@@ -1,7 +1,10 @@
 /* oxlint-disable eslint/require-await -- In-memory ports retain asynchronous setup and lease contracts. */
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { createRepositoryProductionIntentBoundSetup } from "./repository-production-native";
+import {
+  createRepositoryProductionIntentBoundSetup,
+  assertNoConflictingProductionSetup,
+} from "./repository-production-native";
 import {
   initialRepositoryProductionRecord,
   repositoryProductionOperationRef,
@@ -75,6 +78,7 @@ const fixture = () => {
     record: initial,
   };
   const applied: string[] = [];
+  let creatorActive = true;
   const acquired: RepositoryProductionIntent[] = [];
   const assertAuthorized: RepositoryProductionSetupPorts["assertAuthorized"] = async (
     target,
@@ -102,15 +106,16 @@ const fixture = () => {
     reservePrivateState: async () => {
       throw new Error("must reuse original credentials");
     },
-    readCreatorIdentity: async () => {
-      throw new Error("must reuse linked creator");
-    },
+    readCreatorIdentity: async () => ({ state: "verified", actorId: "creator" }),
     reconcileCreatorRoles: async () => {
       applied.push("roles");
       return "applied";
     },
     apply: async (context) => {
       applied.push(context.effect);
+      if (context.effect === "creator-access") {
+        creatorActive = true;
+      }
     },
     reconcile: async (context) => ({ state: "applied", receipt: { effect: context.effect } }),
   };
@@ -144,6 +149,22 @@ const fixture = () => {
     assertAuthorized,
     resource: structuredClone(initial.resource),
     credentials: structuredClone(initial.privateState),
+    markPending: (effect: "creator-access" | "install-schema") => {
+      row = {
+        ...row,
+        record: {
+          ...row.record,
+          effects: {
+            ...row.record.effects,
+            [effect]: { state: "pending", attemptId: randomUUID() },
+          },
+        },
+      };
+    },
+    creatorActive: () => creatorActive,
+    removeCreator: () => {
+      creatorActive = false;
+    },
   };
 };
 
@@ -170,4 +191,60 @@ describe("Production setup approval and lease composition", () => {
     expect(f.applied).toEqual([]);
     expect(f.row().record.intent).toEqual(oldIntent);
   });
+
+  it("reconciles an interrupted creator grant before permitting removal and does not regrant on later setup", async () => {
+    const f = fixture();
+    await f.setup.prepare(scope, revised);
+    f.markPending("creator-access");
+    const command = {
+      action: "remove" as const,
+      memberId: "creator",
+      clientRequestId: randomUUID(),
+    };
+    expect(() => {
+      assertNoConflictingProductionSetup({ row: f.row(), command, pendingCommandIds: [] });
+    }).toThrow();
+    expect(f.creatorActive()).toBe(true);
+    await f.setup.prepare(scope, revised);
+    expect(() => {
+      assertNoConflictingProductionSetup({ row: f.row(), command, pendingCommandIds: [] });
+    }).not.toThrow();
+    f.removeCreator();
+    await f.setup.prepare(scope, revised);
+    expect(f.creatorActive()).toBe(false);
+    expect(f.applied).not.toContain("creator-access");
+  });
+
+  it.each(["creator-access", "install-schema"] as const)(
+    "allows recovery and an existing journaled command while %s is pending",
+    async (effect) => {
+      const f = fixture();
+      await f.setup.prepare(scope, revised);
+      f.markPending(effect);
+      for (const action of ["retry-setup", "renew-sign-in"] as const) {
+        expect(() => {
+          assertNoConflictingProductionSetup({
+            row: f.row(),
+            command: { action, clientRequestId: randomUUID() },
+            pendingCommandIds: [],
+          });
+        }).not.toThrow();
+      }
+      const command = {
+        action: "remove" as const,
+        memberId: "guest",
+        clientRequestId: randomUUID(),
+      };
+      expect(() => {
+        assertNoConflictingProductionSetup({
+          row: f.row(),
+          command,
+          pendingCommandIds: [command.clientRequestId],
+        });
+      }).not.toThrow();
+      expect(() => {
+        assertNoConflictingProductionSetup({ row: f.row(), command, pendingCommandIds: [] });
+      }).toThrow();
+    },
+  );
 });

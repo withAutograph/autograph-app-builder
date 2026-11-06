@@ -24,6 +24,14 @@ The server returns an unresolved command when the owner reopens the saved app.
 Uncertain email delivery is shown as “Delivery unconfirmed”; only an explicit
 Resend action authorizes another email.
 
+Removing a person first cancels outstanding invitations for that person in the
+same app, then revokes app access. A saved cancellation list survives interrupted
+removal; an older invitation cannot silently restore access. A new invitation
+sent after completed removal is allowed. Fresh People changes wait while an
+actual schema installation or creator grant is unresolved, so setup recovery
+cannot undo a newer removal. Status, setup retry, sign-in renewal and previously
+journaled recovery remain available.
+
 An expired identity link stays visible with a path to obtain a new link in
 Builder. Account recovery is offered through the configured app identity flow.
 Returning from sign-in refreshes status automatically; there is no completion
