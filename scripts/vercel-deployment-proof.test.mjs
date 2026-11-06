@@ -88,6 +88,7 @@ require("node:fs").appendFileSync(process.env.FIXTURE_ROOT+"/waits.jsonl",proces
         GITHUB_REPOSITORY: "example/builder",
         EXPECTED_SHA: sha,
         EXPECTED_ENVIRONMENT: "Production",
+        EXPECTED_VERCEL_PROJECT: "autograph-app-builder",
       },
     });
     const readLines = (name) => {
@@ -157,7 +158,12 @@ test("historical success beneath current inactive or error is never accepted", (
 });
 test("other source and environment records cannot supply proof", () => {
   const observed = runProof(
-    [deployment(1), deployment(2, "Preview"), deployment(3, "Production", "b".repeat(40))],
+    [
+      deployment(1),
+      deployment(2, "Preview"),
+      deployment(3, "Production", "b".repeat(40)),
+      deployment(4, "Production – other-project"),
+    ],
     { 1: [status(1, "failure")] },
   );
   assert.notEqual(observed.result.status, 0);
@@ -175,4 +181,17 @@ test("pending deployment can become successful on a subsequent observation", () 
     true,
   );
   assert.equal(JSON.parse(observed.proof).sha, sha);
+});
+
+test("accepts the exact project-qualified Production deployment", () => {
+  const observed = runProof(
+    [
+      deployment(1, "Production – autograph-app-builder"),
+      deployment(2, "Production – other-project"),
+    ],
+    { 1: [status(1, "success")] },
+  );
+  assert.equal(observed.result.status, 0, observed.result.stderr);
+  assert.equal(JSON.parse(observed.proof).sha, sha);
+  assert.equal(JSON.parse(observed.proof).environment, "Production");
 });
