@@ -8,8 +8,8 @@ workflow; a manually completed Arrusted patch is not evidence of that capability
 
 The intended complete-app journey has four business phases:
 
-1. **Initial version and approval.** Turn the product brief into a usable visual
-   prototype and implementation plan, then present **Build this app?** through
+1. **Initial version and approval.** Turn the product brief into an implementation plan. Use a visual prototype
+   when it helps refine the design. Present **Build this app?** through
    the existing approval card. Infer safe defaults and ask only material product
    questions.
 2. **Build.** Implement the approved app, including its authenticated backend and
@@ -20,12 +20,12 @@ The intended complete-app journey has four business phases:
    requested lint separately and report its findings as advisory. Use focused
    checks during implementation and one final local acceptance pass when the
    behavior is ready.
-3. **Independent review.** Assess the implementation against the original brief,
-   product clarifications and accepted plan. Keep technical checks, independent
+3. **Review the change set.** Record the source to be published against the
+   accepted plan. Keep technical checks, independent
    source judgments and executed product behavior distinct. Reuse current
    evidence when its inputs match. Technical validation returns deferred source
-   evidence; final `accept_change_set` performs independent assessment before
-   presenting a reviewed result or requesting publication. A source repair requires current
+   evidence. Request an independent assessment at `accept_change_set` only when
+   it serves the app. A source repair requires current
    validation and final acceptance before presenting the repaired result as
    reviewed. A review interruption alone does not require another technical run.
 4. **Deliver.** Complete the requested deployment and submission through supported

@@ -68,7 +68,8 @@ and reviewed publication receipts alongside authentication, cross-user session
 isolation, credential secrecy, and approval before building the full app or
 causing an outward effect. The
 first normal prompt MUST be the product-facing **Build this app?** decision
-after the Browser prototype and implementation plan are ready. Request it through
+after the implementation plan is ready. A prototype and browser walkthrough
+are available for design feedback. They do not block this approval. Request it through
 the build tool approval card, not a separate chat confirmation. That approval
 covers editing and validating only the private App Builder checkout. Repository
 writes, pushes, draft PRs, deployments, provisioning, and releases require a
@@ -450,7 +451,7 @@ custom controls, or newly invented components. When the catalog lacks a useful
 element, adapt the design with available components or offer a product-level
 alternative. Route and fixture wiring may compose existing components, not
 implement replacements. Follow `design-app` for the component-backed Browser
-preview, then record the design and prepare the plan silently. The first normal
+preview when it serves the brief. Record the design and prepare the plan silently. The first normal
 prompt remains **Build this app?**, not a separate UI-finalization decision.
 
 An enabled control promises a working interaction. Follow `design-app`'s

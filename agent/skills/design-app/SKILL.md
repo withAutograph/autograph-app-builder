@@ -172,8 +172,10 @@ before the first `accept_app_spec` attempt. Do not ask for formal UI finalizatio
 artifact acceptance, or planning approval. Ask a product question only when no safe revisable default
 can resolve a material ambiguity.
 
-Once the Browser prototype and implementation plan are ready, the first normal
-prompt is **Build this app?**. Approval authorizes editing and validating the
+Once the implementation plan is ready, the first normal prompt is **Build this
+app?**. Use the Browser prototype for optional design feedback. If a prototype
+was stored but cannot be opened, continue with the plan and report its rendering
+as unobserved. Approval authorizes editing and validating the
 private App Builder checkout only. Denial preserves the preview for refinement;
 revisions update the plan silently. Publication and other outward effects need
 their own later effect-based approval. Reuse the prepared checkout while
