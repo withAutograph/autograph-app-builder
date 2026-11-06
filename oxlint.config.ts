@@ -2533,12 +2533,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
     },
   },
   {
-    files: ["**/evals/support/self-reproduction-runtime.ts"],
-    rules: {
-      "typescript/no-unnecessary-type-arguments": "off",
-    },
-  },
-  {
     files: [
       "**/app/\\(product\\)/page.tsx",
       "**/app/actions/builder.test.ts",
