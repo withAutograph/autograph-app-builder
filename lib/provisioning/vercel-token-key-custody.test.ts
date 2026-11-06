@@ -226,33 +226,44 @@ describe("closed custody state machine", () => {
     expect(f.secretPort.create).not.toHaveBeenCalled();
     expect(f.store.compareAndSet).not.toHaveBeenCalled();
   });
-  it.each(["preview", "production"] as const)("persists attempted before one %s Secret write, verifies HMAC and reconciles duplicate delivery", async (environment) => {
-    const f = fixture(environment);
-    const receipt = await f.run(operationRef);
-    expect(receipt).toMatchObject({
-      possession: "verified",
-      providerRowId: "secret-row",
-      receivingDeploymentId: "receiver",
-    });
-    expect(f.row().record.phase).toBe("possession-verified");
-    expect(f.row().record.nonceConsumedAt).toBeDefined();
-    expect(await f.run(operationRef)).toEqual(receipt);
-    expect(f.secretPort.create).toHaveBeenCalledTimes(1);
-    expect(f.requestPossession).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(f.row())).not.toContain(Buffer.alloc(32, 7).toString("base64"));
-    expect(f.store.reserve).not.toHaveBeenCalled();
-  });
+  it.each(["preview", "production"] as const)(
+    "persists attempted before one %s Secret write, verifies HMAC and reconciles duplicate delivery",
+    async (environment) => {
+      const f = fixture(environment);
+      const receipt = await f.run(operationRef);
+      expect(receipt).toMatchObject({
+        possession: "verified",
+        providerRowId: "secret-row",
+        receivingDeploymentId: "receiver",
+      });
+      expect(f.row().record.phase).toBe("possession-verified");
+      expect(f.row().record.nonceConsumedAt).toBeDefined();
+      expect(await f.run(operationRef)).toEqual(receipt);
+      expect(f.secretPort.create).toHaveBeenCalledTimes(1);
+      expect(f.requestPossession).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(f.row())).not.toContain(Buffer.alloc(32, 7).toString("base64"));
+      expect(f.store.reserve).not.toHaveBeenCalled();
+    },
+  );
   it("keeps Preview approvals, slot locks and saved Secret metadata separate from Production", async () => {
     const preview = fixture();
     const production = fixture("production");
-    expect(custodyPlanSchema.safeParse({ ...preview.plan, destination: production.plan.destination }).success).toBe(false);
+    expect(
+      custodyPlanSchema.safeParse({ ...preview.plan, destination: production.plan.destination })
+        .success,
+    ).toBe(false);
     expect(custodySlotLockKey(preview.plan)).not.toBe(custodySlotLockKey(production.plan));
-    production.edit((record) => { record.setupGrant = preview.grant; });
+    production.edit((record) => {
+      record.setupGrant = preview.grant;
+    });
     await expect(production.run(operationRef)).rejects.toThrow();
     expect(production.secretPort.create).not.toHaveBeenCalled();
     await preview.run(operationRef);
     const row = preview.row().record;
-    expect(custodyRecordSchema.safeParse({ ...row, secret: { ...row.secret, target: ["production"] } }).success).toBe(false);
+    expect(
+      custodyRecordSchema.safeParse({ ...row, secret: { ...row.secret, target: ["production"] } })
+        .success,
+    ).toBe(false);
   });
   it("retains unknown attempted state after timeout and never retries even with one absent read", async () => {
     const f = fixture();
@@ -457,174 +468,181 @@ describe("private enrollment and HTTP boundary", () => {
     expect((await createCustodySourceHandler({})(request.clone())).status).toBe(503);
     expect((await createCustodyPossessionHandler({})(request.clone())).status).toBe(503);
   });
-  it.each(["preview", "production"] as const)("composes the actual Source handler for the exact %s recipient without full runtime setup", async (targetEnvironment) => {
-    const f = fixture(targetEnvironment);
-    vi.spyOn(Date, "now").mockImplementation(f.now);
-    const sourceWorkload = {
-      audience: "https://vercel.com/team",
-      environment: "production" as const,
-      issuer: "https://oidc.vercel.com/team",
-      ownerId: "team",
-      projectId: "builder",
-      subject: "source-subject",
-    };
-    const setup = {
-      capturedOwner: {
-        adapterGeneration: 1,
-        adapterSessionId: "adapter",
-        authority: actor,
-        kind: "direct" as const,
-        principal: { ...actor, scopes: ["autograph:get"] },
-        sessionId: "session",
-      },
-      grantRef: "grant",
-      operationRef,
-      recipient: {
-        origin: "https://operator.example",
-        workload: {
-          ...sourceWorkload,
-          environment: targetEnvironment,
-          projectId: "operator",
-          subject: "recipient-subject",
+  it.each(["preview", "production"] as const)(
+    "composes the actual Source handler for the exact %s recipient without full runtime setup",
+    async (targetEnvironment) => {
+      const f = fixture(targetEnvironment);
+      vi.spyOn(Date, "now").mockImplementation(f.now);
+      const sourceWorkload = {
+        audience: "https://vercel.com/team",
+        environment: "production" as const,
+        issuer: "https://oidc.vercel.com/team",
+        ownerId: "team",
+        projectId: "builder",
+        subject: "source-subject",
+      };
+      const setup = {
+        capturedOwner: {
+          adapterGeneration: 1,
+          adapterSessionId: "adapter",
+          authority: actor,
+          kind: "direct" as const,
+          principal: { ...actor, scopes: ["autograph:get"] },
+          sessionId: "session",
         },
-      },
-      source: { origin: "https://builder.example", workload: sourceWorkload },
-      version: 1 as const,
-    };
-    const tokenReader = vi
-      .spyOn(installationModule, "readActiveVercelInstallationToken")
-      .mockResolvedValue({
-        binding: {
-          active: true,
-          displayName: "fixture",
-          installationId: "installation",
-          plan: "fixture",
-          scopeId: "team",
-          scopeType: "team",
-          slug: "fixture",
-          updatedAt: new Date(f.now()),
+        grantRef: "grant",
+        operationRef,
+        recipient: {
+          origin: "https://operator.example",
+          workload: {
+            ...sourceWorkload,
+            environment: targetEnvironment,
+            projectId: "operator",
+            subject: "recipient-subject",
+          },
         },
-        token: "fixture-token",
-      });
-    vi.spyOn(leaseModule, "createPostgresPhysicalResourceLease").mockReturnValue(f.lease);
-    vi.spyOn(secretModule, "createCustodySecretPort").mockImplementation((input) => ({
-      ...f.secretPort,
-      create: async (key, assertFence) => {
-        await input.readInstallationToken();
-        return await f.secretPort.create(key, assertFence);
-      },
-    }));
-    // No receiver yet: the actual handler must finish the key checkpoint and return metadata.
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- The receiver mock represents the absence of a refreshed deployment.
-    f.secretPort.observeReceiver.mockResolvedValueOnce(undefined);
-    const environment = {
-      DATABASE_URL: "postgresql://fixture:fixture@fixture-pooler.neon.tech/db?sslmode=require",
-      VERCEL_INTEGRATION_TOKEN_KEY: Buffer.alloc(32, 7).toString("base64"),
-      VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "v1",
-    };
-    const local = vi.fn(async () => {});
-    const owner = vi.fn(async () => {});
-    const handler = createCustodySourceHandler(environment, {
-      assertLocal: local,
-      currentOwner: owner,
-      readSetup: async () => setup,
-      store: f.store,
-      verifyCaller: async () => {},
-    });
-    const request = new Request("https://builder.example/api/hosted-operator/key-custody", {
-      body: JSON.stringify({ operationRef }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    const response = await handler(request.clone());
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ operationRef, phase: "secret-confirmed" });
-    expect(tokenReader).toHaveBeenCalledWith(
-      expect.objectContaining({
-        authority: actor,
-        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest matcher intentionally checks only the narrow keyring version.
-        config: expect.objectContaining({ tokenKeyVersion: "v1" }),
-        installationId: "installation",
-      }),
-    );
-    expect(local).toHaveBeenCalledWith(environment, setup, "source", "source");
-    expect(owner).toHaveBeenCalled();
-    setup.recipient.workload.environment = targetEnvironment === "production" ? "preview" : "production";
-    expect((await handler(request.clone())).status).toBe(503);
-    expect(tokenReader).toHaveBeenCalledTimes(1);
-    setup.recipient.workload.environment = targetEnvironment;
-    owner.mockRejectedValueOnce(new CustodyUnavailableError());
-    expect((await handler(request.clone())).status).toBe(503);
-    expect(tokenReader).toHaveBeenCalledTimes(1);
-  });
-  it.each(["preview", "production"] as const)("rechecks the pending selector before returning the %s possession proof", async (targetEnvironment) => {
-    const f = fixture(targetEnvironment);
-    vi.spyOn(Date, "now").mockImplementation(f.now);
-    const sourceWorkload = {
-      audience: "https://vercel.com/team",
-      environment: "production" as const,
-      issuer: "https://oidc.vercel.com/team",
-      ownerId: "team",
-      projectId: "builder",
-      subject: "source-subject",
-    };
-    const setup = {
-      capturedOwner: {
-        adapterGeneration: 1,
-        adapterSessionId: "adapter",
-        authority: actor,
-        kind: "direct" as const,
-        principal: { ...actor, scopes: ["autograph:get"] },
-        sessionId: "session",
-      },
-      grantRef: "grant",
-      operationRef,
-      recipient: {
-        origin: "https://operator.example",
-        workload: {
-          ...sourceWorkload,
-          environment: targetEnvironment,
-          projectId: "operator",
-          subject: "recipient-subject",
+        source: { origin: "https://builder.example", workload: sourceWorkload },
+        version: 1 as const,
+      };
+      const tokenReader = vi
+        .spyOn(installationModule, "readActiveVercelInstallationToken")
+        .mockResolvedValue({
+          binding: {
+            active: true,
+            displayName: "fixture",
+            installationId: "installation",
+            plan: "fixture",
+            scopeId: "team",
+            scopeType: "team",
+            slug: "fixture",
+            updatedAt: new Date(f.now()),
+          },
+          token: "fixture-token",
+        });
+      vi.spyOn(leaseModule, "createPostgresPhysicalResourceLease").mockReturnValue(f.lease);
+      vi.spyOn(secretModule, "createCustodySecretPort").mockImplementation((input) => ({
+        ...f.secretPort,
+        create: async (key, assertFence) => {
+          await input.readInstallationToken();
+          return await f.secretPort.create(key, assertFence);
         },
-      },
-      source: { origin: "https://builder.example", workload: sourceWorkload },
-      version: 1 as const,
-    };
-    const local = vi.fn(async () => {});
-    const owner = vi.fn(async () => {});
-    const handler = createCustodyPossessionHandler(
-      {
+      }));
+      // No receiver yet: the actual handler must finish the key checkpoint and return metadata.
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- The receiver mock represents the absence of a refreshed deployment.
+      f.secretPort.observeReceiver.mockResolvedValueOnce(undefined);
+      const environment = {
         DATABASE_URL: "postgresql://fixture:fixture@fixture-pooler.neon.tech/db?sslmode=require",
         VERCEL_INTEGRATION_TOKEN_KEY: Buffer.alloc(32, 7).toString("base64"),
         VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "v1",
-      },
-      {
+      };
+      const local = vi.fn(async () => {});
+      const owner = vi.fn(async () => {});
+      const handler = createCustodySourceHandler(environment, {
         assertLocal: local,
         currentOwner: owner,
         readSetup: async () => setup,
         store: f.store,
         verifyCaller: async () => {},
-      },
-    );
-    const request = (body: { operationRef: string; nonce?: string }) =>
-      new Request("https://receiver.example/v1/key-custody/possession", {
-        body: JSON.stringify(body),
+      });
+      const request = new Request("https://builder.example/api/hosted-operator/key-custody", {
+        body: JSON.stringify({ operationRef }),
         headers: { "content-type": "application/json" },
         method: "POST",
       });
-    expect((await handler(request({ nonce: "caller-selected", operationRef }))).status).toBe(503);
-    expect(owner).not.toHaveBeenCalled();
-    f.requestPossession.mockImplementationOnce(async () => {
-      const response = await handler(request({ operationRef }));
+      const response = await handler(request.clone());
       expect(response.status).toBe(200);
-      expect(local).toHaveBeenCalledWith(expect.anything(), setup, "recipient", "receiver");
-      return z.object({ proof: z.string() }).parse(await response.json()).proof;
-    });
-    expect(await f.run(operationRef)).toMatchObject({ possession: "verified" });
-    expect((await handler(request({ operationRef }))).status).toBe(503);
-    expect(owner.mock.calls.length).toBeGreaterThanOrEqual(2);
-  });
+      expect(await response.json()).toEqual({ operationRef, phase: "secret-confirmed" });
+      expect(tokenReader).toHaveBeenCalledWith(
+        expect.objectContaining({
+          authority: actor,
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest matcher intentionally checks only the narrow keyring version.
+          config: expect.objectContaining({ tokenKeyVersion: "v1" }),
+          installationId: "installation",
+        }),
+      );
+      expect(local).toHaveBeenCalledWith(environment, setup, "source", "source");
+      expect(owner).toHaveBeenCalled();
+      setup.recipient.workload.environment =
+        targetEnvironment === "production" ? "preview" : "production";
+      expect((await handler(request.clone())).status).toBe(503);
+      expect(tokenReader).toHaveBeenCalledTimes(1);
+      setup.recipient.workload.environment = targetEnvironment;
+      owner.mockRejectedValueOnce(new CustodyUnavailableError());
+      expect((await handler(request.clone())).status).toBe(503);
+      expect(tokenReader).toHaveBeenCalledTimes(1);
+    },
+  );
+  it.each(["preview", "production"] as const)(
+    "rechecks the pending selector before returning the %s possession proof",
+    async (targetEnvironment) => {
+      const f = fixture(targetEnvironment);
+      vi.spyOn(Date, "now").mockImplementation(f.now);
+      const sourceWorkload = {
+        audience: "https://vercel.com/team",
+        environment: "production" as const,
+        issuer: "https://oidc.vercel.com/team",
+        ownerId: "team",
+        projectId: "builder",
+        subject: "source-subject",
+      };
+      const setup = {
+        capturedOwner: {
+          adapterGeneration: 1,
+          adapterSessionId: "adapter",
+          authority: actor,
+          kind: "direct" as const,
+          principal: { ...actor, scopes: ["autograph:get"] },
+          sessionId: "session",
+        },
+        grantRef: "grant",
+        operationRef,
+        recipient: {
+          origin: "https://operator.example",
+          workload: {
+            ...sourceWorkload,
+            environment: targetEnvironment,
+            projectId: "operator",
+            subject: "recipient-subject",
+          },
+        },
+        source: { origin: "https://builder.example", workload: sourceWorkload },
+        version: 1 as const,
+      };
+      const local = vi.fn(async () => {});
+      const owner = vi.fn(async () => {});
+      const handler = createCustodyPossessionHandler(
+        {
+          DATABASE_URL: "postgresql://fixture:fixture@fixture-pooler.neon.tech/db?sslmode=require",
+          VERCEL_INTEGRATION_TOKEN_KEY: Buffer.alloc(32, 7).toString("base64"),
+          VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "v1",
+        },
+        {
+          assertLocal: local,
+          currentOwner: owner,
+          readSetup: async () => setup,
+          store: f.store,
+          verifyCaller: async () => {},
+        },
+      );
+      const request = (body: { operationRef: string; nonce?: string }) =>
+        new Request("https://receiver.example/v1/key-custody/possession", {
+          body: JSON.stringify(body),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        });
+      expect((await handler(request({ nonce: "caller-selected", operationRef }))).status).toBe(503);
+      expect(owner).not.toHaveBeenCalled();
+      f.requestPossession.mockImplementationOnce(async () => {
+        const response = await handler(request({ operationRef }));
+        expect(response.status).toBe(200);
+        expect(local).toHaveBeenCalledWith(expect.anything(), setup, "recipient", "receiver");
+        return z.object({ proof: z.string() }).parse(await response.json()).proof;
+      });
+      expect(await f.run(operationRef)).toMatchObject({ possession: "verified" });
+      expect((await handler(request({ operationRef }))).status).toBe(503);
+      expect(owner.mock.calls.length).toBeGreaterThanOrEqual(2);
+    },
+  );
   it("never reads previous keys and requires active v1", () => {
     const environment = {
       VERCEL_INTEGRATION_TOKEN_KEY: Buffer.alloc(32, 7).toString("base64"),
@@ -731,41 +749,53 @@ describe("fixed Vercel Secret wire port", () => {
       port,
     };
   };
-  it.each(["preview", "production"] as const)("uses sensitive create-only %s storage and observes the exact receiver", async (environment) => {
-    const f = portFixture(environment);
-    expect(await f.port.inspect()).toBeUndefined();
-    const fence = vi.fn(async () => {});
-    const metadata = await f.port.create(Buffer.alloc(32, 7), fence);
-    expect(metadata.type).toBe("sensitive");
-    expect(await f.port.inspect(metadata)).toEqual(metadata);
-    const post = f.calls.find((call) => call.init?.method === "POST");
-    if (post === undefined) {
-      throw new Error("Missing expected create request.");
-    }
-    expect(post.url.searchParams.get("upsert")).toBe("false");
-    expect(post.url.searchParams.get("teamId")).toBe("team");
-    expect(JSON.parse(z.string().parse(post.init?.body))).toMatchObject({
-      gitBranch: null,
-      key: "VERCEL_INTEGRATION_TOKEN_KEY",
-      target: [environment],
-      type: "sensitive",
-    });
-    expect(f.calls.filter((call) => call.url.pathname.endsWith("/env/row"))).toHaveLength(0);
-    expect(f.calls.filter((call) => call.url.searchParams.has("decrypt"))).toHaveLength(0);
-    expect(await f.port.observeReceiver(new Date(f.f.now()).toISOString())).toEqual({
-      deploymentId: "receiver",
-      origin: "https://receiver.example",
-    });
-    f.downgrade();
-    await expect(f.port.inspect(metadata)).rejects.toThrow("reconciliation");
-  });
+  it.each(["preview", "production"] as const)(
+    "uses sensitive create-only %s storage and observes the exact receiver",
+    async (environment) => {
+      const f = portFixture(environment);
+      expect(await f.port.inspect()).toBeUndefined();
+      const fence = vi.fn(async () => {});
+      const metadata = await f.port.create(Buffer.alloc(32, 7), fence);
+      expect(metadata.type).toBe("sensitive");
+      expect(await f.port.inspect(metadata)).toEqual(metadata);
+      const post = f.calls.find((call) => call.init?.method === "POST");
+      if (post === undefined) {
+        throw new Error("Missing expected create request.");
+      }
+      expect(post.url.searchParams.get("upsert")).toBe("false");
+      expect(post.url.searchParams.get("teamId")).toBe("team");
+      expect(JSON.parse(z.string().parse(post.init?.body))).toMatchObject({
+        gitBranch: null,
+        key: "VERCEL_INTEGRATION_TOKEN_KEY",
+        target: [environment],
+        type: "sensitive",
+      });
+      expect(f.calls.filter((call) => call.url.pathname.endsWith("/env/row"))).toHaveLength(0);
+      expect(f.calls.filter((call) => call.url.searchParams.has("decrypt"))).toHaveLength(0);
+      expect(await f.port.observeReceiver(new Date(f.f.now()).toISOString())).toEqual({
+        deploymentId: "receiver",
+        origin: "https://receiver.example",
+      });
+      f.downgrade();
+      await expect(f.port.inspect(metadata)).rejects.toThrow("reconciliation");
+    },
+  );
   it("refuses a Preview deployment as the receiving Production deployment", async () => {
     const f = portFixture("production");
-    f.fetcher.mockResolvedValueOnce(Response.json({
-      createdAt: f.f.now() + 1, id: "receiver", ownerId: "team", projectId: "operator",
-      readyState: "READY", target: null, url: "receiver.example",
-    }));
-    await expect(f.port.observeReceiver(new Date(f.f.now()).toISOString(), "receiver")).rejects.toThrow("unavailable");
+    f.fetcher.mockResolvedValueOnce(
+      Response.json({
+        createdAt: f.f.now() + 1,
+        id: "receiver",
+        ownerId: "team",
+        projectId: "operator",
+        readyState: "READY",
+        target: null,
+        url: "receiver.example",
+      }),
+    );
+    await expect(
+      f.port.observeReceiver(new Date(f.f.now()).toISOString(), "receiver"),
+    ).rejects.toThrow("unavailable");
   });
   it("treats HTTP 200 partial failures and reflected provider body as unknown safe outcomes", async () => {
     const f = portFixture();

@@ -8,7 +8,10 @@ import {
   custodyRecordSchema,
 } from "./vercel-token-key-custody";
 import type { CustodyJournalRow } from "./vercel-token-key-custody";
-import { custodySetupConfigurationSchema } from "./vercel-token-key-custody-deployment";
+import {
+  custodySetupConfigurationSchema,
+  readCustodySetupConfiguration,
+} from "./vercel-token-key-custody-deployment";
 import type { createCustodySourceHandler } from "./vercel-token-key-custody-deployment";
 import {
   createCustodyOwnerInvocationHandler,
@@ -130,16 +133,21 @@ const formRequest = (
     },
     method: "POST",
   });
-const fixture = (configuration = setup) => {
+const fixture = (
+  configuration = setup,
+  profiles?: Readonly<Record<string, string | undefined>>,
+) => {
   const readBrowserActor = vi.fn(async (): Promise<CustodyBrowserActor | undefined> => ({
     sessionId: "browser-session",
     userId: "owner",
   }));
   const assertOriginalOwner = vi.fn(async () => {});
   const read = vi.fn(async (): Promise<CustodyJournalRow | undefined> => ({ record, revision: 1 }));
-  const effect = vi.fn(async () => Response.json({ operationRef, phase: "secret-confirmed" }));
+  const effect = vi.fn(async () =>
+    Response.json({ operationRef: configuration.operationRef, phase: "secret-confirmed" }),
+  );
   const sourceRequest = vi.fn(async (request: Request) => {
-    expect(await request.json()).toEqual({ operationRef });
+    expect(await request.json()).toEqual({ operationRef: configuration.operationRef });
   });
   const createSourceHandler: typeof createCustodySourceHandler = vi.fn(
     (
@@ -161,7 +169,8 @@ const fixture = (configuration = setup) => {
       createSourceHandler,
       now: () => now,
       readBrowserActor,
-      readSetup: async () => configuration,
+      readSetup: async (selector) =>
+        profiles === undefined ? configuration : readCustodySetupConfiguration(profiles, selector),
       store: { read },
     },
   );
@@ -392,7 +401,8 @@ describe("closed owner key custody invocation", () => {
     expect(factory).not.toHaveBeenCalled();
   });
   it.each([
-    new Request(`${address}?operationRef=${operationRef}`),
+    new Request(`${address}?operationRef=${operationRef}&operationRef=${operationRef}`),
+    new Request(`${address}?operationRef=${operationRef}&approval=true`),
     new Request(address, { headers: { authorization: "Bearer CALLER_TOKEN" } }),
     new Request(address, { method: "PUT" }),
   ])("rejects alternate addresses, bearer ingress and unsupported methods", async (request) => {
@@ -411,5 +421,56 @@ describe("closed owner key custody invocation", () => {
     expect(review.status).toBe(200);
     expect(continued.status).toBe(200);
     expect(effect).toHaveBeenCalledTimes(1);
+  });
+  it("retains the Production selector through owner review, sign-in, POST and reload", async () => {
+    const productionRef = "22222222-2222-4222-8222-222222222222";
+    const productionSetup = custodySetupConfigurationSchema.parse({
+      ...setup,
+      operationRef: productionRef,
+      recipient: {
+        ...setup.recipient,
+        workload: { ...setup.recipient.workload, environment: "production" },
+      },
+    });
+    const productionPlan = custodyPlanSchema.parse({
+      ...plan,
+      action: "transfer-active-vercel-token-key-to-operator-production",
+      operationRef: productionRef,
+      destination: { ...plan.destination, environment: "production" },
+    });
+    const productionGrant = {
+      ...setupGrant,
+      operationRef: productionRef,
+      approvedPlanDigest: custodyPlanDigest(productionPlan),
+    };
+    const productionRecord = custodyRecordSchema.parse({
+      ...record,
+      plan: productionPlan,
+      planDigest: custodyPlanDigest(productionPlan),
+      setupGrant: productionGrant,
+      grantDigest: custodyGrantDigest(productionGrant),
+    });
+    const profiles = {
+      PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION: JSON.stringify(setup),
+      PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_PRODUCTION_CONFIGURATION: JSON.stringify(productionSetup),
+    };
+    const f = fixture(productionSetup, profiles);
+    f.read.mockResolvedValue({ record: productionRecord, revision: 1 });
+    const selectedPath = `${custodyOwnerInvocationPath}?operationRef=${productionRef}`;
+    const selectedRequest = () => new Request(`${setup.source.origin}${selectedPath}`);
+    const review = await f.handler(selectedRequest());
+    expect(review.status).toBe(200);
+    expect(await review.text()).toContain(`name="operationRef" value="${productionRef}"`);
+    expect(f.effect).not.toHaveBeenCalled();
+    const continued = await f.handler(formRequest(`operationRef=${productionRef}`));
+    expect(continued.status).toBe(200);
+    expect(await continued.text()).toContain(`href="${selectedPath}"`);
+    expect(f.effect).toHaveBeenCalledTimes(1);
+    f.readBrowserActor.mockImplementation(async () => {});
+    const redirect = await f.handler(selectedRequest());
+    expect(redirect.status).toBe(303);
+    expect(redirect.headers.get("location")).toBe(
+      `${setup.source.origin}/auth/sign-in?redirectTo=${encodeURIComponent(selectedPath)}`,
+    );
   });
 });

@@ -45,7 +45,8 @@ const listSchema = z.object({
 const relevantTo = (
   row: z.infer<typeof listSchema>["envs"][number],
   environment: CustodyPlan["destination"]["environment"],
-) => row.target === undefined ||
+) =>
+  row.target === undefined ||
   (Array.isArray(row.target) ? row.target.includes(environment) : row.target === environment);
 const isConfig = (row: z.infer<typeof providerRow>) =>
   row.visibility === "config" ||
@@ -130,7 +131,11 @@ export const createCustodySecretPort = (input: {
     }
   };
   const safeRow = (row: z.infer<typeof providerRow>) => {
-    if (!isSecret(row) || row.target.length !== 1 || row.target[0] !== plan.destination.environment) {
+    if (
+      !isSecret(row) ||
+      row.target.length !== 1 ||
+      row.target[0] !== plan.destination.environment
+    ) {
       throw new CustodyReconciliationRequiredError();
     }
     return custodySecretMetadataSchema.parse({
@@ -186,7 +191,9 @@ export const createCustodySecretPort = (input: {
       if (versionValue !== "v1") {
         throw new CustodyUnavailableError();
       }
-      const keys = rows.filter((row) => row.key === custodySecretKey && relevantTo(row, plan.destination.environment));
+      const keys = rows.filter(
+        (row) => row.key === custodySecretKey && relevantTo(row, plan.destination.environment),
+      );
       if (keys.length === 0) {
         // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absence shares the metadata-returning function contract.
         return undefined;

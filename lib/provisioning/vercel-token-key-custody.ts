@@ -49,7 +49,8 @@ export const custodyPlanSchema = z
     (plan) =>
       plan.source.teamId === plan.destination.teamId &&
       plan.source.projectId !== plan.destination.projectId &&
-      plan.action === `transfer-active-vercel-token-key-to-operator-${plan.destination.environment}`,
+      plan.action ===
+        `transfer-active-vercel-token-key-to-operator-${plan.destination.environment}`,
   );
 export type CustodyPlan = z.infer<typeof custodyPlanSchema>;
 export const trustedCustodySetupGrantSchema = z.strictObject({

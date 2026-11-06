@@ -67,13 +67,38 @@ export const custodySetupConfigurationSchema = z
     }
   });
 export type CustodySetupConfiguration = z.infer<typeof custodySetupConfigurationSchema>;
+/** The legacy slot stays Preview-only; Production is an independently approved profile. */
 export const readCustodySetupConfiguration = (
   environment: Readonly<Record<string, string | undefined>>,
+  operationRef?: string,
 ) => {
   try {
-    return custodySetupConfigurationSchema.parse(
-      JSON.parse(environment.PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION ?? ""),
+    const profiles = [
+      ["preview", environment.PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION],
+      ["production", environment.PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_PRODUCTION_CONFIGURATION],
+    ] as const;
+    const configured = profiles.flatMap(([recipientEnvironment, raw]) => {
+      if (raw === undefined) {
+        return [];
+      }
+      const config = custodySetupConfigurationSchema.parse(JSON.parse(raw));
+      if (config.recipient.workload.environment !== recipientEnvironment) {
+        throw new CustodyUnavailableError();
+      }
+      return [config];
+    });
+    if (new Set(configured.map((config) => config.operationRef)).size !== configured.length) {
+      throw new CustodyUnavailableError();
+    }
+    const selected = configured.find((config) =>
+      operationRef === undefined
+        ? config.recipient.workload.environment === "preview"
+        : config.operationRef === z.uuid().parse(operationRef),
     );
+    if (selected === undefined) {
+      throw new CustodyUnavailableError();
+    }
+    return selected;
   } catch {
     throw new CustodyUnavailableError();
   }
@@ -140,7 +165,7 @@ export const assertLocalDeployment = async (
   );
 };
 interface CustodyCompositionDependencies {
-  readSetup?: () => Promise<CustodySetupConfiguration>;
+  readSetup?: (operationRef?: string) => Promise<CustodySetupConfiguration>;
   store?: CustodyJournalStore;
   assertLocal?: typeof assertLocalDeployment;
   verifyCaller?: (request: Request, config: CustodySetupConfiguration) => Promise<void>;
@@ -150,14 +175,15 @@ interface CustodyCompositionDependencies {
 const openComposition = async (
   environment: Readonly<Record<string, string | undefined>>,
   dependencies: CustodyCompositionDependencies,
+  operationRef: string,
 ) => {
   const readSetup =
     dependencies.readSetup ??
     (async () => {
       await Promise.resolve();
-      return readCustodySetupConfiguration(environment);
+      return readCustodySetupConfiguration(environment, operationRef);
     });
-  const config = custodySetupConfigurationSchema.parse(await readSetup());
+  const config = custodySetupConfigurationSchema.parse(await readSetup(operationRef));
   const databaseUrl = parseHostedDatabaseUrl(environment.DATABASE_URL);
   const client = postgres(databaseUrl, hostedRuntimePostgresOptions);
   const database = drizzle(client, { schema: databaseSchema });
@@ -166,7 +192,7 @@ const openComposition = async (
   const store = dependencies.store ?? createPostgresVercelTokenKeyCustodyStore(database);
   const owner = createHostedOperatorConsentOwner(config.source.workload, environment);
   const currentSetup = async () => {
-    const current = custodySetupConfigurationSchema.parse(await readSetup());
+    const current = custodySetupConfigurationSchema.parse(await readSetup(operationRef));
     if (!isDeepStrictEqual(current, config)) {
       throw new CustodyUnavailableError();
     }
@@ -251,11 +277,13 @@ export const createCustodySourceHandler =
   // oxlint-disable-next-line eslint/complexity -- The private boundary validates and rechecks each saved possession prerequisite before key use.
   async (request: Request) => {
     let close: (() => Promise<void>) | undefined;
-    let failureStage: CustodySourceFailureStage = "configuration";
+    let failureStage: CustodySourceFailureStage = "selector";
     try {
+      const { operationRef } = await parseSelector(request);
+      failureStage = "configuration";
       const config = custodySetupConfigurationSchema.parse(
-        await (dependencies.readSetup?.() ??
-          Promise.resolve(readCustodySetupConfiguration(environment))),
+        await (dependencies.readSetup?.(operationRef) ??
+          Promise.resolve(readCustodySetupConfiguration(environment, operationRef))),
       );
       failureStage = "caller_workload";
       // oxlint-disable-next-line unicorn/prefer-ternary -- The configured verifier and test port accept different signatures.
@@ -264,13 +292,11 @@ export const createCustodySourceHandler =
       } else {
         await dependencies.verifyCaller(request, config);
       }
-      failureStage = "selector";
-      const { operationRef } = await parseSelector(request);
       if (operationRef !== config.operationRef) {
         throw new CustodyUnavailableError();
       }
       failureStage = "store_composition";
-      const composition = await openComposition(environment, dependencies);
+      const composition = await openComposition(environment, dependencies, operationRef);
       ({ close } = composition);
       failureStage = "grant";
       const { plan, grant } = await composition.currentSetup();
@@ -398,9 +424,10 @@ export const createCustodyPossessionHandler =
   async (request: Request) => {
     let close: (() => Promise<void>) | undefined;
     try {
+      const { operationRef } = await parseSelector(request);
       const config = custodySetupConfigurationSchema.parse(
-        await (dependencies.readSetup?.() ??
-          Promise.resolve(readCustodySetupConfiguration(environment))),
+        await (dependencies.readSetup?.(operationRef) ??
+          Promise.resolve(readCustodySetupConfiguration(environment, operationRef))),
       );
       // oxlint-disable-next-line unicorn/prefer-ternary -- The configured verifier and test port accept different signatures.
       if (dependencies.verifyCaller === undefined) {
@@ -408,11 +435,10 @@ export const createCustodyPossessionHandler =
       } else {
         await dependencies.verifyCaller(request, config);
       }
-      const { operationRef } = await parseSelector(request);
       if (operationRef !== config.operationRef) {
         throw new CustodyUnavailableError();
       }
-      const composition = await openComposition(environment, dependencies);
+      const composition = await openComposition(environment, dependencies, operationRef);
       ({ close } = composition);
       const { plan, grant } = await composition.currentSetup();
       const before = await composition.store.read({

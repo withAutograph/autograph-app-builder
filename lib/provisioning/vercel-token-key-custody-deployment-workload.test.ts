@@ -7,6 +7,8 @@ import {
   assertLocalDeployment,
   custodySetupConfigurationSchema,
   createCustodySourceHandler,
+  createCustodyPossessionHandler,
+  readCustodySetupConfiguration,
 } from "./vercel-token-key-custody-deployment";
 
 const policy = {
@@ -246,4 +248,99 @@ describe("local custody deployment identity", () => {
     ]);
     expect(JSON.stringify(failureLog.mock.calls)).not.toContain("private-owner-token-canary");
   });
+});
+
+const productionConfig = custodySetupConfigurationSchema.parse({
+  ...config,
+  operationRef: "22222222-2222-4222-8222-222222222222",
+  recipient: {
+    origin: "https://production-operator.example",
+    workload: {
+      ...config.recipient.workload,
+      environment: "production",
+      projectId: "prj_production_operator",
+      subject: "owner:team_fixture:project:production-operator:environment:production",
+    },
+  },
+});
+const custodyProfiles = {
+  PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION: JSON.stringify(config),
+  PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_PRODUCTION_CONFIGURATION: JSON.stringify(productionConfig),
+};
+
+describe("independent custody configuration profiles", () => {
+  it("keeps the legacy Preview default and selects Production only by its saved operation", () => {
+    expect(readCustodySetupConfiguration(custodyProfiles)).toEqual(config);
+    expect(readCustodySetupConfiguration(custodyProfiles, config.operationRef)).toEqual(config);
+    expect(readCustodySetupConfiguration(custodyProfiles, productionConfig.operationRef)).toEqual(
+      productionConfig,
+    );
+    const productionOnly = {
+      PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_PRODUCTION_CONFIGURATION:
+        custodyProfiles.PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_PRODUCTION_CONFIGURATION,
+    };
+    expect(() => readCustodySetupConfiguration(productionOnly)).toThrow("unavailable");
+    expect(readCustodySetupConfiguration(productionOnly, productionConfig.operationRef)).toEqual(
+      productionConfig,
+    );
+  });
+
+  it.each([
+    {
+      ...custodyProfiles,
+      PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION: JSON.stringify(productionConfig),
+    },
+    {
+      ...custodyProfiles,
+      PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_PRODUCTION_CONFIGURATION: JSON.stringify(config),
+    },
+    {
+      ...custodyProfiles,
+      PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_PRODUCTION_CONFIGURATION: JSON.stringify({
+        ...productionConfig,
+        operationRef: config.operationRef,
+      }),
+    },
+  ])("rejects environment substitution and ambiguous saved selectors", (profiles) => {
+    expect(() => readCustodySetupConfiguration(profiles, config.operationRef)).toThrow(
+      "unavailable",
+    );
+    expect(() => readCustodySetupConfiguration(profiles, productionConfig.operationRef)).toThrow(
+      "unavailable",
+    );
+  });
+
+  it.each([createCustodySourceHandler, createCustodyPossessionHandler])(
+    "dispatches both private endpoints to exactly the selected workload before effects",
+    async (factory) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const seen: string[] = [];
+      const handler = factory(custodyProfiles, {
+        verifyCaller: async (_request, selected) => {
+          await Promise.resolve();
+          seen.push(selected.recipient.workload.projectId);
+          throw new Error("Stop before any database or provider effects.");
+        },
+      });
+      for (const operationRef of [
+        config.operationRef,
+        productionConfig.operationRef,
+        "33333333-3333-4333-8333-333333333333",
+      ]) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Each selected operation is an independent serialized ingress assertion.
+        const response = await handler(
+          new Request("https://builder.example/api/hosted-operator/key-custody", {
+            body: JSON.stringify({ operationRef }),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          }),
+        );
+        expect(response.status).toBe(503);
+      }
+      expect(seen).toEqual([
+        config.recipient.workload.projectId,
+        productionConfig.recipient.workload.projectId,
+      ]);
+    },
+  );
 });

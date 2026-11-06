@@ -24,7 +24,11 @@ const authority = {
 const now = new Date("2026-10-10T12:00:00Z");
 const operationRef = "11111111-1111-4111-8111-111111111111";
 const leaseId = "22222222-2222-4222-8222-222222222222";
-const recordFor = (actor: CanonicalSourceActor = authority, operation = operationRef, environment: "preview" | "production" = "preview") => {
+const recordFor = (
+  actor: CanonicalSourceActor = authority,
+  operation = operationRef,
+  environment: "preview" | "production" = "preview",
+) => {
   const plan = custodyPlanSchema.parse({
     action: `transfer-active-vercel-token-key-to-operator-${environment}`,
     actorAuthorityDigest: custodyActorDigest(actor),
@@ -149,20 +153,30 @@ describe("Postgres key custody journal", () => {
       "vercel-token-key-custody-v1",
     ]);
   });
-  it.each(["preview", "production"] as const)("finds foreign actor %s slot claims with fixed scope and both key names", async (environment) => {
-    const foreign = recordFor(
-      { ...authority, ownerUserId: "other" },
-      "33333333-3333-4333-8333-333333333333",
-      environment,
-    );
-    const { queries, store } = fixture([rawRow(foreign)]);
-    expect(await store.findSlotClaims({ plan: recordFor(authority, operationRef, environment).plan })).toHaveLength(1);
-    const query = new PgDialect().sqlToQuery(queries[0]);
-    expect(query.params).toEqual(["vercel-token-key-custody-v1", "team", "operator", environment]);
-    expect(query.sql).toContain("'null'::jsonb");
-    expect(query.sql).toContain("VERCEL_INTEGRATION_TOKEN_KEY_VERSION");
-    expect(query.sql).not.toContain('"owner_user_id"');
-  });
+  it.each(["preview", "production"] as const)(
+    "finds foreign actor %s slot claims with fixed scope and both key names",
+    async (environment) => {
+      const foreign = recordFor(
+        { ...authority, ownerUserId: "other" },
+        "33333333-3333-4333-8333-333333333333",
+        environment,
+      );
+      const { queries, store } = fixture([rawRow(foreign)]);
+      expect(
+        await store.findSlotClaims({ plan: recordFor(authority, operationRef, environment).plan }),
+      ).toHaveLength(1);
+      const query = new PgDialect().sqlToQuery(queries[0]);
+      expect(query.params).toEqual([
+        "vercel-token-key-custody-v1",
+        "team",
+        "operator",
+        environment,
+      ]);
+      expect(query.sql).toContain("'null'::jsonb");
+      expect(query.sql).toContain("VERCEL_INTEGRATION_TOKEN_KEY_VERSION");
+      expect(query.sql).not.toContain('"owner_user_id"');
+    },
+  );
   it("releases only a safely retired untouched reservation from global slot claims", async () => {
     const safeRetirement = custodyRecordSchema.parse({
       ...recordFor({ ...authority, ownerUserId: "other" }),

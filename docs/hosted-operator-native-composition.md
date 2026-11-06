@@ -472,11 +472,20 @@ verifies its own exact enrolled deployment. Receiver verifies its explicitly
 approved Preview or Production workload and its own exact persisted receiving
 deployment before reading the key.
 
-`PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION` is nonsecret, deployment-owned
-setup: version 1, one `operationRef` and `grantRef`, the captured canonical
-`capturedOwner` context, and fixed `source` and `recipient` HTTPS origins and
-workload policies. Source is Production and the recipient is the plan's explicit
-Preview or Production environment, in the same team and separate projects. The
+`PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION` remains the nonsecret,
+deployment-owned Preview recipient profile.
+`PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_PRODUCTION_CONFIGURATION` is a separate,
+explicit Production recipient profile. Each contains version 1, one
+`operationRef` and `grantRef`, the captured canonical `capturedOwner` context,
+and fixed `source` and `recipient` HTTPS origins and workload policies. Both may
+coexist; each route selects exactly the requested saved `operationRef` and
+rejects duplicate selectors or a recipient environment placed in the wrong
+profile. Source remains Production, in the same team and a separate project.
+The owner review GET `/api/hosted-operator/key-custody/invoke` preserves its
+legacy Preview default. Production review requires the sole query parameter
+`?operationRef=<saved Production UUID>`. Sign-in and reload links retain that
+selector; the native POST contains only the same hidden saved operation selector.
+There is no automatic fallback from a missing or unknown selector to Production. The
 recipient origin must be an existing stable, team-owned alias that resolves to the
 separately approved refreshed deployment. Preview plans retain action
 `transfer-active-vercel-token-key-to-operator-preview`; a Production recipient

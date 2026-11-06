@@ -37,7 +37,7 @@ const browserActorSchema = z.strictObject({
 });
 export type CustodyBrowserActor = z.infer<typeof browserActorSchema>;
 interface CustodyOwnerInvocationDependencies {
-  readSetup?: () => Promise<CustodySetupConfiguration>;
+  readSetup?: (operationRef?: string) => Promise<CustodySetupConfiguration>;
   readBrowserActor?: (
     request: Request,
     config: CustodySetupConfiguration,
@@ -183,8 +183,7 @@ const renderReview = (record: CustodyRecord, now: number) => {
       "Continue the saved operation to check the approved receiving deployment and verify key possession.",
     "possession-verified":
       "The saved receipt confirms key possession by the exact receiving deployment.",
-    reserved:
-      `This administrator-approved operation creates the missing active v1 key Secret in the fixed Operator ${record.plan.destination.environment === "production" ? "Production" : "Preview"} slot.`,
+    reserved: `This administrator-approved operation creates the missing active v1 key Secret in the fixed Operator ${record.plan.destination.environment === "production" ? "Production" : "Preview"} slot.`,
     "secret-confirmed":
       "Continue the saved operation to check the approved receiving deployment and verify key possession.",
   };
@@ -236,6 +235,21 @@ const readCustodyOwnerReview = async (
   assertCustodyGrant(plan, record.setupGrant, config.capturedOwner.authority, now);
   return record;
 };
+const reviewPath = (operationRef: string) =>
+  `${custodyOwnerInvocationPath}?operationRef=${encodeURIComponent(operationRef)}`;
+const readReviewSelector = (url: URL) => {
+  const entries = [...url.searchParams.entries()];
+  if (entries.length === 0) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Absence intentionally selects only the legacy Preview profile.
+    return undefined;
+  }
+  if (entries.length !== 1 || entries[0][0] !== "operationRef") {
+    throw new CustodyUnavailableError();
+  }
+  return z.uuid().parse(entries[0][1]);
+};
+const readOwnerSelector = async (request: Request, url: URL) =>
+  request.method === "POST" ? await readFormSelector(request) : readReviewSelector(url);
 const renderSourceResult = async (response: Response, operationRef: string) => {
   if (!response.ok) {
     try {
@@ -244,7 +258,7 @@ const renderSourceResult = async (response: Response, operationRef: string) => {
       /* Transport disposal cannot expose response bodies. */
     }
     return page(
-      `<h1>Key custody needs review</h1><p>The saved operation could not complete. <a href="${custodyOwnerInvocationPath}">Reload its current state</a> before continuing.</p>`,
+      `<h1>Key custody needs review</h1><p>The saved operation could not complete. <a href="${reviewPath(operationRef)}">Reload its current state</a> before continuing.</p>`,
       response.status === 409 ? 409 : 503,
     );
   }
@@ -267,7 +281,7 @@ const renderSourceResult = async (response: Response, operationRef: string) => {
     throw new CustodyUnavailableError();
   }
   return page(
-    `<h1>Saved operation continued</h1><p>${"possession" in result ? "Key possession is verified for the saved receiving deployment." : "The Secret metadata is confirmed. The separately approved recipient refresh and possession check remain required."}</p><p><a href="${custodyOwnerInvocationPath}">Review the saved operation</a></p>`,
+    `<h1>Saved operation continued</h1><p>${"possession" in result ? "Key possession is verified for the saved receiving deployment." : "The Secret metadata is confirmed. The separately approved recipient refresh and possession check remain required."}</p><p><a href="${reviewPath(operationRef)}">Review the saved operation</a></p>`,
   );
 };
 
@@ -279,9 +293,9 @@ export const createCustodyOwnerInvocationHandler = (
   const now = dependencies.now ?? Date.now;
   const readSetup =
     dependencies.readSetup ??
-    (async () => {
+    (async (operationRef?: string) => {
       await Promise.resolve();
-      return readCustodySetupConfiguration(environment);
+      return readCustodySetupConfiguration(environment, operationRef);
     });
   const readBrowserActor =
     dependencies.readBrowserActor ??
@@ -299,13 +313,17 @@ export const createCustodyOwnerInvocationHandler = (
   return async (request: Request) => {
     let close: (() => Promise<void>) | undefined;
     try {
-      const config = custodySetupConfigurationSchema.parse(await readSetup());
       const url = new URL(request.url);
+      const operationRef = await readOwnerSelector(request, url);
+      const config = custodySetupConfigurationSchema.parse(await readSetup(operationRef));
+      if (operationRef !== undefined && operationRef !== config.operationRef) {
+        throw new CustodyUnavailableError();
+      }
       const sourceOrigin = new URL(config.source.origin).origin;
       const validAddress = [
         url.origin === sourceOrigin,
         url.pathname === custodyOwnerInvocationPath,
-        url.search === "",
+        request.method !== "POST" || url.search === "",
         url.hash === "",
         url.username === "",
         url.password === "",
@@ -326,7 +344,7 @@ export const createCustodyOwnerInvocationHandler = (
           return new Response(null, {
             headers: {
               ...noStore,
-              location: `${sourceOrigin}/auth/sign-in?redirectTo=${encodeURIComponent(custodyOwnerInvocationPath)}`,
+              location: `${sourceOrigin}/auth/sign-in?redirectTo=${encodeURIComponent(url.pathname + url.search)}`,
             },
             status: 303,
           });
@@ -358,10 +376,6 @@ export const createCustodyOwnerInvocationHandler = (
       if (request.method === "GET") {
         return renderReview(record, now());
       }
-      const operationRef = await readFormSelector(request);
-      if (operationRef !== config.operationRef) {
-        throw new CustodyUnavailableError();
-      }
       await assertCaller(config);
       const sourceHandler = createSourceHandler(environment, {
         currentOwner: assertCaller,
@@ -372,7 +386,7 @@ export const createCustodyOwnerInvocationHandler = (
       // The sole selector becomes an in-process JSON request. Cookies stay in the closed browser-auth recheck.
       const response = await sourceHandler(
         new Request(`${sourceOrigin}/api/hosted-operator/key-custody`, {
-          body: JSON.stringify({ operationRef }),
+          body: JSON.stringify({ operationRef: config.operationRef }),
           headers: { "content-type": "application/json" },
           method: "POST",
         }),
