@@ -23,6 +23,10 @@ export interface UserViewProps {
   };
 }
 
+function hasText(value: string | null | undefined): value is string {
+  return value !== null && value !== undefined && value !== "";
+}
+
 /**
  * Render a compact user item with an avatar, a primary label (display username, name, or email), and an optional subtitle (email).
  *
@@ -36,12 +40,12 @@ export interface UserViewProps {
 export function UserView({ className, isPending, hideSubtitle = false, user }: UserViewProps) {
   const { authClient } = useAuth<UsernameAuthClient>();
   const { data: session, isPending: sessionPending } = useSession(authClient, {
-    enabled: !user && !isPending,
+    enabled: (user === null || user === undefined) && isPending !== true,
   });
 
   const resolvedUser = user ?? session?.user;
 
-  if ((isPending || sessionPending) && !user) {
+  if ((isPending === true || sessionPending) && (user === null || user === undefined)) {
     return (
       <div className={cn("flex items-center gap-2 min-w-0", className)}>
         <UserAvatar isPending />
@@ -61,12 +65,17 @@ export function UserView({ className, isPending, hideSubtitle = false, user }: U
 
       <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
         <span className="truncate font-medium text-foreground">
-          {resolvedUser?.displayUsername || resolvedUser?.name || resolvedUser?.email}
+          {hasText(resolvedUser?.displayUsername)
+            ? resolvedUser.displayUsername
+            : hasText(resolvedUser?.name)
+              ? resolvedUser.name
+              : resolvedUser?.email}
         </span>
 
-        {!hideSubtitle && (resolvedUser?.displayUsername || resolvedUser?.name) && (
-          <span className="text-muted-foreground truncate text-xs">{resolvedUser?.email}</span>
-        )}
+        {!hideSubtitle &&
+          (hasText(resolvedUser?.displayUsername) || hasText(resolvedUser?.name)) && (
+            <span className="text-muted-foreground truncate text-xs">{resolvedUser?.email}</span>
+          )}
       </div>
     </div>
   );
