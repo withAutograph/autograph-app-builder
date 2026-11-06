@@ -20,6 +20,13 @@ import { createBuilderSessionDestinationService } from "./builder-session-destin
 import { createPostgresNativeTargetOnboardingStore } from "./native-target-onboarding-store";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 
+export class BuilderSessionDestinationSignInRequiredError extends Error {
+  constructor() {
+    super("Sign in to continue this build.");
+    this.name = "BuilderSessionDestinationSignInRequiredError";
+  }
+}
+
 const originEpoch = (session: DurableHostedSessionRecord) => {
   const idle = [
     session.status === "waiting",
@@ -75,7 +82,7 @@ export const openBuilderSessionDestination = async (
   const readOwner = () => ensurePreviewOAuthDeploymentSessionOrganization({ headers, environment });
   const owner = await readOwner();
   if (owner === null || owner === undefined) {
-    throw new Error("Sign in to continue this build.");
+    throw new BuilderSessionDestinationSignInRequiredError();
   }
   const config = readPreviewOAuthRuntimeConfig(environment);
   const authority = {

@@ -125,6 +125,15 @@ test("anonymous account settings redirects through a safe local callback", async
   await expect(page).toHaveURL(/\/auth\/sign-in\?callbackURL=%2F/u);
 });
 
+test("anonymous saved app destination preserves the build on sign-in", async ({ page }) => {
+  const destination = `/builds/${encodeURIComponent("saved/session?fragment#")}/destination`;
+  await page.goto(destination);
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname === "/auth/sign-in" && url.searchParams.get("callbackURL") === destination,
+  );
+});
+
 test("anonymous setup fails closed with a callback-preserving sign-in link", async ({ page }) => {
   const callbackURL = "/?source=expired-session#complete";
   await page.goto(`/auth/setting-up?callbackURL=${encodeURIComponent(callbackURL)}`);

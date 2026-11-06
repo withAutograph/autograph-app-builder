@@ -1,7 +1,11 @@
 import { BuilderPublicOriginForm } from "@/app/ui/builder-public-origin-form";
 import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
-import { openBuilderSessionDestination } from "@/lib/provisioning/builder-session-destination-deployment";
+import { redirect } from "next/navigation";
+import {
+  BuilderSessionDestinationSignInRequiredError,
+  openBuilderSessionDestination,
+} from "@/lib/provisioning/builder-session-destination-deployment";
 import {
   selectBuilderSessionPublicOrigin,
   selectBuilderSessionDestination,
@@ -14,7 +18,16 @@ export default async function SavedSessionDestinationPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const [{ sessionId }, incoming] = await Promise.all([params, headers()]);
-  const context = await openBuilderSessionDestination(new Headers(incoming));
+  let context;
+  try {
+    context = await openBuilderSessionDestination(new Headers(incoming));
+  } catch (error) {
+    if (!(error instanceof BuilderSessionDestinationSignInRequiredError)) {
+      throw error;
+    }
+    const destination = `/builds/${encodeURIComponent(sessionId)}/destination`;
+    redirect(`/auth/sign-in?callbackURL=${encodeURIComponent(destination)}`);
+  }
   const data = await context.readPage(sessionId);
   let originChoice;
   if (data.ready) {

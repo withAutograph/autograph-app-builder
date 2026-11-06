@@ -17,6 +17,7 @@ type OwnedDestination = PublicationDestinationSelector & { repositoryId: string 
 interface Selection {
   authority: BuilderProvisionAuthority;
   appId: string;
+  publicSessionId: string;
   destination?: BuilderSessionDestination;
   /** Exact current private owner context, including recovery/cancellation generation. */
   owner: object;
@@ -30,8 +31,7 @@ export const createBuilderPublicationDestinationReader =
     const selected = await deps.readSelection();
     const ref = selected.destination;
     if (ref === undefined) {
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- The optional destination reader must distinguish no recorded destination from authorized publication.
-      return undefined;
+      return { publicSessionId: selected.publicSessionId };
     }
     const row = await deps.readProvisioning({
       authority: selected.authority,
@@ -62,19 +62,22 @@ export const createBuilderPublicationDestinationReader =
       throw new Error("The saved Builder app destination changed during publication review.");
     }
     return {
-      repository: response.github.fullName,
-      repositoryId: response.github.repositoryId,
-      selectedInstallationId: response.github.installationId,
-    } satisfies PublicationDestinationSelector & { repositoryId: string };
+      publicSessionId: selected.publicSessionId,
+      destination: {
+        repository: response.github.fullName,
+        repositoryId: response.github.repositoryId,
+        selectedInstallationId: response.github.installationId,
+      } satisfies OwnedDestination,
+    };
   };
 
 /** Resolve private canonical metadata, never an ambient template repository or model-selected owner. */
 export const readBuilderPublicationDestinationForTool = async (
   ctx: ToolContext,
   appId: string,
-): Promise<OwnedDestination | undefined> => {
+): Promise<{ publicSessionId?: string; destination?: OwnedDestination }> => {
   if (process.env.EVE_HOSTED_ADAPTER !== "1") {
-    return undefined;
+    return {};
   }
   const [
     { exactForwardedSessionAuthority },
@@ -127,7 +130,7 @@ export const readBuilderPublicationDestinationForTool = async (
         appId,
         findProvisioningForAppRepository: provisioning.findSettledAppRepository,
       });
-      return { authority, appId, owner, destination };
+      return { authority, appId, owner, destination, publicSessionId: session.sessionId };
     },
   })();
 };

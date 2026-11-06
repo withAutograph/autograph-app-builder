@@ -326,10 +326,12 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
    do not replace a requested backend outcome with a simulated transition.
-   Use the user's GitHub repository URL or owner/name as the delivery destination.
-   Carry it into `prepare_github_draft_review` for a fresh-template app. Show the
-   resolved repository during review. If access is missing, use the GitHub
-   connection flow for that repository.
+   Use the saved Builder destination for delivery. If a new app has no
+   destination, send the user to the destination setup link returned by
+   `prepare_github_draft_review`, then continue the same saved build. If the user
+   explicitly chose an existing repository, carry that repository into the
+   review and use its ordinary GitHub connection flow if access is missing.
+   Show the resolved repository during review.
    Before initial draft publication, run `prepare_github_draft_review` to bind the
    actual destination snapshot. Inspect its before/after content as needed with
    `change_set_status`, `view: "next-page"`, and the selected `contentSide`.
