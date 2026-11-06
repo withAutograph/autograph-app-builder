@@ -351,7 +351,7 @@ describe("resume the approved build through the planning tool", () => {
       existingAppRepairHistory.update(() => []);
       await expect(
         prepareAppCreationTool.execute({ resumeApprovedBuild: true }, hostedRecoveryContext),
-      ).rejects.toThrow("Inspect the current change set and follow its normal approval state");
+      ).rejects.toThrow("Its normal approval policy presents or reuses Build approval for the exact current proposal");
       expect(appBuilderWorkflowState.get()).toEqual(planned);
       expect(ports.execute).not.toHaveBeenCalled();
       expect(ports.run).not.toHaveBeenCalled();
