@@ -1,6 +1,6 @@
 # Durable source review continuation
 
-Ordinary `accept_change_set` prepares final independent review from the parent
+When explicitly requested with `runSourceReview: true`, `accept_change_set` prepares final independent review from the parent
 session's applied checkout at `state.applyReceipt.applyRoot` and returns an opaque
 reference. Builder follows it through the blocking
 `review-current-product-source` workflow, then calls ordinary

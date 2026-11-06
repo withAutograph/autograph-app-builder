@@ -362,7 +362,7 @@ operations select the verified tenant-owned installation explicitly, preserve
 current membership and provider permission checks, and retain separate
 publication approval and mutation reconciliation.
 
-The final independent source review attempt remains advisory. An unavailable
+Independent source review is optional and advisory. An unavailable
 or interrupted assessment is reported as unassessed and does not block private
 Preview or publication, require another technical validation, or authorize a
 replacement app. See [Product source review](product-source-review.md).
@@ -507,18 +507,26 @@ head and current ready cycle. Builder reads the repository's result without
 repeating affected-code selection. A moved revision is visible but cannot use
 the original review for merge.
 
-With `APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED=1`, an eligible reviewed publication
-can return an input for `finish-github-pr-delivery`. This is a separate native
+When hosted GitHub publication is enabled, an eligible reviewed publication
+can return an input for `finish-github-pr-delivery`. Operators can explicitly
+disable Ready and merge with `APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED=0`. This is a separate native
 approval to mark the PR ready and merge the reviewed revision when required
 checks pass. It is scoped to the current session and repository. The GitHub
 App installation needs Actions read, Pull requests write for Ready, and
 Contents write for merge. The provider requests a repository-scoped token
 attenuated for each operation. GitHub applies its own review and merge policy.
 
-Apply the additive PR effect journal migration before enabling the mutation
-tool. The journal claims each approved effect before sending a write. After
+Apply the additive PR effect journal migration to Builder’s hosted storage
+as part of normal deployment. The journal claims each approved effect before sending a write. After
 an uncertain response, the same operation can observe provider evidence and
 settle its receipt. Pending effects are never replayed blindly. GitHub's merge
 request guards the expected head atomically. Base and ready-cycle changes are
 checked around the request. A merge result and protected hosted app evidence
 remain separate facts.
+
+For an existing repository with native Production delivery, the approved merge
+hands off to the repository's native deploy integration. The PR effect journal
+records GitHub writes in Builder's own storage. This flow has no dependency on
+a Preview app, a managed runtime journal, or synthetic app data. Actual runtime
+bindings are owned by the destination's Production setup. GitHub merge evidence
+and the provider's deployment result are reported separately.

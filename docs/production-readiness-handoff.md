@@ -26,10 +26,12 @@ database release prerequisite.
 - No recorded product observation means behavior is `unassessed`. Passing
   repository checks does not change that status.
 
-The handoff does not provision providers, install a release, grant app access,
-or activate a deployment. Preview runtime validation must supply the missing
-observations. Hosted preparation and provider activation keep their separate
-operator approval gates, followed by semantic read-only Production proof.
+The descriptor summarizes source facts. In the target delivery flow, the
+approved release operation prepares the intended live resources and reads
+back the actual installation and access bindings. Provider activation
+follows native Git delivery. Verify the authenticated app on its final
+domain. Hosted Preview and synthetic testing are optional. See the
+[public release contract](public-app-release.md).
 
 ## Onboarding requirements for each new authenticated app
 
@@ -48,13 +50,11 @@ must not silently reproduce manual provider changes or claim they are automated.
   cluster/installer credentials to app processes. Use a separately authorized
   Auth operator principal that can read membership and write app assignments;
   cluster authority does not imply Auth table privileges.
-- Reuse the approved synthetic QA identity through real Better Auth sessions.
-  Fleet-wide QA authorization still requires each new app's declared role
-  policy, organization app enablement, explicit actor assignment and kernel
-  membership. Verify these stores independently, including denied access and
-  revocation; do not grant arbitrary business tenants or guess a role from its
-  name. Keep QA passwords in the protected proof environment and out of logs,
-  generated app source and handoff receipts.
+- Verify the intended owner's real Better Auth session, organization app
+  enablement, explicit assignment and kernel membership. Check denied access
+  with an unauthorized identity. Verify grants and revocation as access
+  operations against the same live app. Use synthetic QA identities only in
+  explicitly scoped engineering or acceptance exercises.
 - Name the descriptor's runtime variable, selected provider project and target
   environment in the approved binding action. Save the restricted runtime
   secret before native Git delivery. Saving a variable does not change an
@@ -68,7 +68,7 @@ must not silently reproduce manual provider changes or claim they are automated.
 
 Arrusted exposes plan/prepare/grant/revoke/export through `app:production`; use
 its reviewed plan digest and operator guide rather than direct handwritten SQL.
-Builder's current hosted preparation capability targets Preview. Production
-onboarding stays operator-owned until a supported effect-approved capability
-exists. These checklist entries remain unassessed until observed in the intended
-environment; a passing local or Preview run never grants Production authority.
+The current public release implementation consumes a verified synthetic
+runtime receipt. Direct preparation of the live target remains implementation
+work. Keep the operator's authority checks and independent readback as the
+source of live readiness evidence.

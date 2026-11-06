@@ -1,5 +1,12 @@
 # A-469: normal Builder create, public delivery and revision acceptance
 
+November delivery decision: qualify the saved app on its final public domain
+using the [direct release contract](../public-app-release.md). Prepare and
+verify the approved target as part of release. Hosted Preview and synthetic
+testing are optional. The prior attempt and approval history below remain
+historical evidence. Any qualification using isolated test data stays scoped
+to that approved target.
+
 Status: accepted implementation direction; implementation and hosted acceptance
 remain incomplete. Publish this decision before implementation. Iterate on the
 local Builder first, then publish the reviewed shared workflow and exercise the
