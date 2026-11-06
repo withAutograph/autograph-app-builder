@@ -97,6 +97,7 @@ try {
       setup.source.workload.ownerId !== record.plan.source.teamId,
       setup.recipient.workload.projectId !== record.plan.destination.projectId,
       setup.recipient.workload.ownerId !== record.plan.destination.teamId,
+      setup.recipient.workload.environment !== record.plan.destination.environment,
     ].some(Boolean)
   ) {
     throw new Error("Custody setup identity mismatch.");

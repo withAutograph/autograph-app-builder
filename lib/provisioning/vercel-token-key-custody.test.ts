@@ -44,14 +44,14 @@ const actor = {
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
-const fixture = () => {
+const fixture = (environment: "preview" | "production" = "preview") => {
   let clock = Date.parse("2026-10-10T12:00:00Z");
   const plan = custodyPlanSchema.parse({
-    action: "transfer-active-vercel-token-key-to-operator-preview",
+    action: `transfer-active-vercel-token-key-to-operator-${environment}`,
     actorAuthorityDigest: custodyActorDigest(actor),
     approvalExpiresAt: "2026-10-10T13:00:00Z",
     destination: {
-      environment: "preview",
+      environment,
       gitBranch: null,
       key: "VERCEL_INTEGRATION_TOKEN_KEY",
       projectId: "operator",
@@ -148,7 +148,7 @@ const fixture = () => {
     id: "secret-row",
     key: "VERCEL_INTEGRATION_TOKEN_KEY" as const,
     projectId: "operator",
-    target: ["preview"] satisfies ["preview"],
+    target: [environment] satisfies ["preview" | "production"],
     teamId: "team",
     type: "sensitive" as const,
   };
@@ -226,8 +226,8 @@ describe("closed custody state machine", () => {
     expect(f.secretPort.create).not.toHaveBeenCalled();
     expect(f.store.compareAndSet).not.toHaveBeenCalled();
   });
-  it("persists attempted before one Secret write, verifies HMAC, consumes once and reconciles duplicate delivery", async () => {
-    const f = fixture();
+  it.each(["preview", "production"] as const)("persists attempted before one %s Secret write, verifies HMAC and reconciles duplicate delivery", async (environment) => {
+    const f = fixture(environment);
     const receipt = await f.run(operationRef);
     expect(receipt).toMatchObject({
       possession: "verified",
@@ -241,6 +241,18 @@ describe("closed custody state machine", () => {
     expect(f.requestPossession).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(f.row())).not.toContain(Buffer.alloc(32, 7).toString("base64"));
     expect(f.store.reserve).not.toHaveBeenCalled();
+  });
+  it("keeps Preview approvals, slot locks and saved Secret metadata separate from Production", async () => {
+    const preview = fixture();
+    const production = fixture("production");
+    expect(custodyPlanSchema.safeParse({ ...preview.plan, destination: production.plan.destination }).success).toBe(false);
+    expect(custodySlotLockKey(preview.plan)).not.toBe(custodySlotLockKey(production.plan));
+    production.edit((record) => { record.setupGrant = preview.grant; });
+    await expect(production.run(operationRef)).rejects.toThrow();
+    expect(production.secretPort.create).not.toHaveBeenCalled();
+    await preview.run(operationRef);
+    const row = preview.row().record;
+    expect(custodyRecordSchema.safeParse({ ...row, secret: { ...row.secret, target: ["production"] } }).success).toBe(false);
   });
   it("retains unknown attempted state after timeout and never retries even with one absent read", async () => {
     const f = fixture();
@@ -445,8 +457,8 @@ describe("private enrollment and HTTP boundary", () => {
     expect((await createCustodySourceHandler({})(request.clone())).status).toBe(503);
     expect((await createCustodyPossessionHandler({})(request.clone())).status).toBe(503);
   });
-  it("composes the actual Source handler from the narrow saved grant and original installation without full runtime setup", async () => {
-    const f = fixture();
+  it.each(["preview", "production"] as const)("composes the actual Source handler for the exact %s recipient without full runtime setup", async (targetEnvironment) => {
+    const f = fixture(targetEnvironment);
     vi.spyOn(Date, "now").mockImplementation(f.now);
     const sourceWorkload = {
       audience: "https://vercel.com/team",
@@ -471,7 +483,7 @@ describe("private enrollment and HTTP boundary", () => {
         origin: "https://operator.example",
         workload: {
           ...sourceWorkload,
-          environment: "preview" as const,
+          environment: targetEnvironment,
           projectId: "operator",
           subject: "recipient-subject",
         },
@@ -537,12 +549,16 @@ describe("private enrollment and HTTP boundary", () => {
     );
     expect(local).toHaveBeenCalledWith(environment, setup, "source", "source");
     expect(owner).toHaveBeenCalled();
+    setup.recipient.workload.environment = targetEnvironment === "production" ? "preview" : "production";
+    expect((await handler(request.clone())).status).toBe(503);
+    expect(tokenReader).toHaveBeenCalledTimes(1);
+    setup.recipient.workload.environment = targetEnvironment;
     owner.mockRejectedValueOnce(new CustodyUnavailableError());
     expect((await handler(request.clone())).status).toBe(503);
     expect(tokenReader).toHaveBeenCalledTimes(1);
   });
-  it("accepts only a saved pending selector and rechecks checkpoint before returning the possession proof", async () => {
-    const f = fixture();
+  it.each(["preview", "production"] as const)("rechecks the pending selector before returning the %s possession proof", async (targetEnvironment) => {
+    const f = fixture(targetEnvironment);
     vi.spyOn(Date, "now").mockImplementation(f.now);
     const sourceWorkload = {
       audience: "https://vercel.com/team",
@@ -567,7 +583,7 @@ describe("private enrollment and HTTP boundary", () => {
         origin: "https://operator.example",
         workload: {
           ...sourceWorkload,
-          environment: "preview" as const,
+          environment: targetEnvironment,
           projectId: "operator",
           subject: "recipient-subject",
         },
@@ -629,8 +645,8 @@ describe("private enrollment and HTTP boundary", () => {
 });
 
 describe("fixed Vercel Secret wire port", () => {
-  const portFixture = () => {
-    const f = fixture();
+  const portFixture = (environment: "preview" | "production" = "preview") => {
+    const f = fixture(environment);
     let present = false;
     let visibility = "secret";
     const calls: { url: URL; init?: RequestInit }[] = [];
@@ -640,7 +656,7 @@ describe("fixed Vercel Secret wire port", () => {
       gitBranch: null,
       id: "row",
       key: "VERCEL_INTEGRATION_TOKEN_KEY",
-      target: "preview",
+      target: environment,
       type: "encrypted",
       visibility,
     });
@@ -665,7 +681,7 @@ describe("fixed Vercel Secret wire port", () => {
           ownerId: "team",
           projectId: "operator",
           readyState: "READY",
-          target: null,
+          target: environment === "production" ? "production" : null,
           url: "receiver.example",
         });
       }
@@ -673,7 +689,7 @@ describe("fixed Vercel Secret wire port", () => {
         return Response.json({
           id: "version",
           key: "VERCEL_INTEGRATION_TOKEN_KEY_VERSION",
-          target: ["preview"],
+          target: [environment],
           type: "encrypted",
           value: "v1",
           visibility: "config",
@@ -686,7 +702,7 @@ describe("fixed Vercel Secret wire port", () => {
             {
               id: "version",
               key: "VERCEL_INTEGRATION_TOKEN_KEY_VERSION",
-              target: ["preview"],
+              target: [environment],
               type: "encrypted",
               value: "ciphertext",
               visibility: "config",
@@ -715,8 +731,8 @@ describe("fixed Vercel Secret wire port", () => {
       port,
     };
   };
-  it("uses sensitive create-only, reads only VERSION Config plaintext, ignores unrelated layout and observes immutable receiver", async () => {
-    const f = portFixture();
+  it.each(["preview", "production"] as const)("uses sensitive create-only %s storage and observes the exact receiver", async (environment) => {
+    const f = portFixture(environment);
     expect(await f.port.inspect()).toBeUndefined();
     const fence = vi.fn(async () => {});
     const metadata = await f.port.create(Buffer.alloc(32, 7), fence);
@@ -731,7 +747,7 @@ describe("fixed Vercel Secret wire port", () => {
     expect(JSON.parse(z.string().parse(post.init?.body))).toMatchObject({
       gitBranch: null,
       key: "VERCEL_INTEGRATION_TOKEN_KEY",
-      target: ["preview"],
+      target: [environment],
       type: "sensitive",
     });
     expect(f.calls.filter((call) => call.url.pathname.endsWith("/env/row"))).toHaveLength(0);
@@ -742,6 +758,14 @@ describe("fixed Vercel Secret wire port", () => {
     });
     f.downgrade();
     await expect(f.port.inspect(metadata)).rejects.toThrow("reconciliation");
+  });
+  it("refuses a Preview deployment as the receiving Production deployment", async () => {
+    const f = portFixture("production");
+    f.fetcher.mockResolvedValueOnce(Response.json({
+      createdAt: f.f.now() + 1, id: "receiver", ownerId: "team", projectId: "operator",
+      readyState: "READY", target: null, url: "receiver.example",
+    }));
+    await expect(f.port.observeReceiver(new Date(f.f.now()).toISOString(), "receiver")).rejects.toThrow("unavailable");
   });
   it("treats HTTP 200 partial failures and reflected provider body as unknown safe outcomes", async () => {
     const f = portFixture();

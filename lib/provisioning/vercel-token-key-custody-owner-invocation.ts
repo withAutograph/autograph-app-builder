@@ -157,7 +157,7 @@ const reviewRows = (record: CustodyRecord) => {
     ["Source deployment", plan.source.deploymentId],
     [
       "Destination",
-      `${plan.destination.teamId} / ${plan.destination.projectId} / Preview / all branches`,
+      `${plan.destination.teamId} / ${plan.destination.projectId} / ${plan.destination.environment === "production" ? "Production" : "Preview / all branches"}`,
     ],
     [
       "Secret",
@@ -184,7 +184,7 @@ const renderReview = (record: CustodyRecord, now: number) => {
     "possession-verified":
       "The saved receipt confirms key possession by the exact receiving deployment.",
     reserved:
-      "This administrator-approved operation creates the missing active v1 key Secret in the fixed Operator Preview slot.",
+      `This administrator-approved operation creates the missing active v1 key Secret in the fixed Operator ${record.plan.destination.environment === "production" ? "Production" : "Preview"} slot.`,
     "secret-confirmed":
       "Continue the saved operation to check the approved receiving deployment and verify key possession.",
   };
@@ -228,6 +228,7 @@ const readCustodyOwnerReview = async (
     plan.source.projectId === config.source.workload.projectId,
     plan.destination.teamId === config.recipient.workload.ownerId,
     plan.destination.projectId === config.recipient.workload.projectId,
+    plan.destination.environment === config.recipient.workload.environment,
   ].every(Boolean);
   if (!validRecord) {
     throw new CustodyUnavailableError();

@@ -14,11 +14,14 @@ export const canonicalSourceActorSchema = hostedTenantAuthoritySchema;
 export type CanonicalSourceActor = z.infer<typeof canonicalSourceActorSchema>;
 export const custodyPlanSchema = z
   .strictObject({
-    action: z.literal("transfer-active-vercel-token-key-to-operator-preview"),
+    action: z.enum([
+      "transfer-active-vercel-token-key-to-operator-preview",
+      "transfer-active-vercel-token-key-to-operator-production",
+    ]),
     actorAuthorityDigest: digest,
     approvalExpiresAt: instant,
     destination: z.strictObject({
-      environment: z.literal("preview"),
+      environment: z.enum(["preview", "production"]),
       gitBranch: z.null(),
       key: z.literal(custodySecretKey),
       projectId: id,
@@ -45,7 +48,8 @@ export const custodyPlanSchema = z
   .refine(
     (plan) =>
       plan.source.teamId === plan.destination.teamId &&
-      plan.source.projectId !== plan.destination.projectId,
+      plan.source.projectId !== plan.destination.projectId &&
+      plan.action === `transfer-active-vercel-token-key-to-operator-${plan.destination.environment}`,
   );
 export type CustodyPlan = z.infer<typeof custodyPlanSchema>;
 export const trustedCustodySetupGrantSchema = z.strictObject({
@@ -66,7 +70,7 @@ export const custodySecretMetadataSchema = z.strictObject({
   id,
   key: z.literal(custodySecretKey),
   projectId: id,
-  target: z.tuple([z.literal("preview")]),
+  target: z.tuple([z.enum(["preview", "production"])]),
   teamId: id,
   type: z.literal("sensitive"),
 });
@@ -215,7 +219,8 @@ export const custodyRecordSchema = z
     if (
       record.secret !== undefined &&
       (record.secret.teamId !== record.plan.destination.teamId ||
-        record.secret.projectId !== record.plan.destination.projectId)
+        record.secret.projectId !== record.plan.destination.projectId ||
+        record.secret.target[0] !== record.plan.destination.environment)
     ) {
       issue("Secret scope mismatch.");
     }
@@ -343,7 +348,7 @@ export const custodySlotLockKey = (plan: CustodyPlan) =>
     "vercel-token-key-custody-slot-v1",
     plan.destination.teamId,
     plan.destination.projectId,
-    "preview",
+    plan.destination.environment,
     null,
     [custodySecretKey, custodyVersionKey],
   ]);

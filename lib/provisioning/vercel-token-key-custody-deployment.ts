@@ -58,7 +58,6 @@ export const custodySetupConfigurationSchema = z
     if (
       [
         config.source.workload.environment !== "production",
-        config.recipient.workload.environment !== "preview",
         config.source.workload.ownerId !== config.recipient.workload.ownerId,
         config.source.workload.projectId === config.recipient.workload.projectId,
         config.source.origin === config.recipient.origin,
@@ -193,6 +192,7 @@ const openComposition = async (
         current.source.workload.ownerId !== plan.source.teamId,
         current.recipient.workload.projectId !== plan.destination.projectId,
         current.recipient.workload.ownerId !== plan.destination.teamId,
+        current.recipient.workload.environment !== plan.destination.environment,
       ].some(Boolean)
     ) {
       throw new CustodyUnavailableError();

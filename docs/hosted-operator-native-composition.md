@@ -468,15 +468,23 @@ They remain unavailable without a separate trusted global custody enrollment.
 The receiver path dispatches before ordinary runtime composition and requires
 neither full operator configuration nor a Realm callback or Auth signing secret.
 Both endpoints verify the configured Source Production workload; Source also
-verifies its own exact enrolled deployment. Receiver verifies its trusted Preview
-workload and its own exact persisted receiving deployment before reading the key.
+verifies its own exact enrolled deployment. Receiver verifies its explicitly
+approved Preview or Production workload and its own exact persisted receiving
+deployment before reading the key.
 
 `PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION` is nonsecret, deployment-owned
 setup: version 1, one `operationRef` and `grantRef`, the captured canonical
 `capturedOwner` context, and fixed `source` and `recipient` HTTPS origins and
-workload policies. Source is Production and recipient is Preview, in the same
-team and separate projects. The recipient origin must be an existing stable,
-team-owned alias that will resolve to the separately approved refreshed Preview.
+workload policies. Source is Production and the recipient is the plan's explicit
+Preview or Production environment, in the same team and separate projects. The
+recipient origin must be an existing stable, team-owned alias that resolves to the
+separately approved refreshed deployment. Preview plans retain action
+`transfer-active-vercel-token-key-to-operator-preview`; a Production recipient
+requires `transfer-active-vercel-token-key-to-operator-production` and a matching
+Production destination. These actions are not interchangeable. Slot locks,
+provider Secret metadata, recipient OIDC policy and native deployment target all
+include the approved environment, so a Preview grant cannot authorize a
+Production write or possession receipt.
 This source change creates no alias, deployment or enrollment. Operator needs
 approved read access to the original session, membership and saved custody row;
 it does not need journal mutation permission for possession.
