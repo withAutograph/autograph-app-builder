@@ -1,3 +1,4 @@
+import { waitUntil } from "@vercel/functions";
 import { createRepositoryProductionNativeHandler } from "./repository-production-native";
 import {
   repositoryProductionCompletionPath,
@@ -13,7 +14,7 @@ import {
 const runtime = createHostedOperatorNativeHandler({
   createRequestDependencies: createNativeTargetRequestDependencies(),
 });
-const production = createRepositoryProductionNativeHandler();
+const production = createRepositoryProductionNativeHandler(process.env, waitUntil);
 const possession = createCustodyPossessionHandler();
 export default {
   async fetch(request: Request) {

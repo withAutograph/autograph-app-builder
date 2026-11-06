@@ -96,6 +96,12 @@ workload, reads the stored inviter and verified invitee, and rechecks current
 ownership. Neither an email match nor the invitee's possession of a Creator
 Builder session is required or sufficient.
 
+The authenticated callback returns pending if setup is still running. The
+operator keeps the authorized work and its database connection alive for the
+invocation. The Auth page continues polling the same invitation. If the
+invocation ends before setup finishes, the next callback resumes from the
+existing journal and lock.
+
 Normal delivery tools are `plan-app-production`, `prepare-app-production` and
 `get-app-production`. Planning resolves the saved destination and captured app
 description without provider writes. The preparation approval covers data and

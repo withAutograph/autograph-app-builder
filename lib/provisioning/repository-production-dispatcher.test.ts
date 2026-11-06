@@ -3,6 +3,7 @@ import type { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import {
   createRepositoryProductionHandler,
+  observeRepositoryProductionCompletion,
   repositoryProductionPath,
   repositoryProductionCompletionPath,
 } from "./repository-production-dispatcher";
@@ -84,7 +85,7 @@ const fixture = () => {
     management: {
       read: vi.fn(async () => snapshot),
       execute: vi.fn(async () => snapshot),
-      completeInvitation: vi.fn(async () => {}),
+      completeInvitation: vi.fn(async () => "ready" as const),
     },
   };
   const send = (
@@ -129,6 +130,27 @@ describe("protected repository Production dispatcher", () => {
       status: "ready",
     });
     expect(f.deps.verifyBuilderWorkload).not.toHaveBeenCalled();
+  });
+  it("returns progress without closing the verified callback's operation", async () => {
+    const f = fixture();
+    const work = Promise.withResolvers<"ready">();
+    const retain = vi.fn<(task: Promise<void>) => void>();
+    const dispose = vi.fn(async () => {});
+    vi.mocked(f.deps.management.completeInvitation).mockImplementation(() =>
+      observeRepositoryProductionCompletion(work.promise, retain, dispose, 5),
+    );
+    const response = await f.send(
+      { version: 1, invitationId: "11111111-1111-4111-a111-111111111111" },
+      "auth",
+      repositoryProductionCompletionPath,
+    );
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ version: 1, status: "pending" });
+    expect(retain).toHaveBeenCalledOnce();
+    expect(dispose).not.toHaveBeenCalled();
+    work.resolve("ready");
+    await retain.mock.calls[0]?.[0];
+    expect(dispose).toHaveBeenCalledOnce();
   });
   it("rejects actor injection and moved owner-session requests before effects", async () => {
     const f = fixture();

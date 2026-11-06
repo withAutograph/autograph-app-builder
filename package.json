@@ -66,6 +66,7 @@
     "@opentelemetry/api": "1.9.1",
     "@tanstack/react-query": "^5.102.8",
     "@vercel/connect": "1.0.0",
+    "@vercel/functions": "3.9.5",
     "@vercel/oidc": "3.8.5",
     "@vercel/sandbox": "3.3.0",
     "ai": "7.0.105",

@@ -36,8 +36,15 @@ import {
   assertNoConflictingCreatorRoleUpdate,
 } from "./repository-production-role-update";
 import { createRepositoryProductionCreator } from "./repository-production-creator";
-import { createRepositoryProductionHandler } from "./repository-production-dispatcher";
-import type { RepositoryProductionRequestOwner } from "./repository-production-dispatcher";
+import {
+  createRepositoryProductionHandler,
+  observeRepositoryProductionCompletion,
+  repositoryProductionCompletionPath,
+} from "./repository-production-dispatcher";
+import type {
+  RepositoryProductionCompletion,
+  RepositoryProductionRequestOwner,
+} from "./repository-production-dispatcher";
 import { readRepositoryProductionConfiguration } from "./repository-production-configuration";
 import {
   repositoryProductionApprovalInput,
@@ -121,13 +128,22 @@ export const createRepositoryProductionIntentBoundSetup = (
   };
 };
 export const createRepositoryProductionNativeHandler =
-  (environment: Readonly<Record<string, string | undefined>> = process.env) =>
+  (
+    environment: Readonly<Record<string, string | undefined>> = process.env,
+    waitUntil?: (task: Promise<void>) => void,
+  ) =>
   async (request: Request): Promise<Response> => {
     const configuration = readRepositoryProductionConfiguration(environment);
     const settings = readHostedOperatorOwnerReaderConfiguration(environment);
     const keyring = readVercelTokenKeyringEnvironment(environment);
     const client = postgres(settings.databaseUrl, hostedRuntimePostgresOptions);
     const database = drizzle(client, { schema });
+    const effectSignal =
+      waitUntil && new URL(request.url).pathname === repositoryProductionCompletionPath
+        ? AbortSignal.timeout(20 * 60 * 1000)
+        : request.signal;
+    let deferredCleanup = false;
+    const dispose = () => client.end({ timeout: 5 });
     try {
       const sessions = createPostgresHostedEveStore(database);
       const membership = createPostgresPreviewOrganizationAuthority(database, {
@@ -363,7 +379,7 @@ export const createRepositoryProductionNativeHandler =
           keyring,
           builderOrigin,
           authRealm: realm(scope),
-          signal: request.signal,
+          signal: effectSignal,
           readCreator: (row) => creator.readCreator(row),
           readGeneratedRelease: async (row) => {
             if (row.record.intent.storage.kind !== "postgres") {
@@ -403,12 +419,12 @@ export const createRepositoryProductionNativeHandler =
               resources: profile,
               environment,
               assertCurrent: context.assertCurrent,
-              signal: request.signal,
+              signal: effectSignal,
             })(),
           runtimeBinding: createRepositoryProductionRuntimeBinding({
             teamId: configuration.operator.ownerId,
             readCredential,
-            signal: request.signal,
+            signal: effectSignal,
           }),
           frontendAccess: {
             apply: () =>
@@ -824,19 +840,26 @@ export const createRepositoryProductionNativeHandler =
             return await managementFor(undefined, command).execute(owner, command);
           },
           completeInvitation: async (id) => {
-            const result = await creator.complete(id);
-            if (result === "not-owned") {
+            const complete = async (): Promise<RepositoryProductionCompletion> => {
+              const result = await creator.complete(id);
+              if (result !== "not-owned") {
+                return result;
+              }
               await management.completeInvitation(id);
-              return;
+              return "ready";
+            };
+            if (!waitUntil) {
+              return await complete();
             }
-            if (result !== "ready") {
-              throw new Error("repository_production_pending");
-            }
+            deferredCleanup = true;
+            return await observeRepositoryProductionCompletion(complete(), waitUntil, dispose);
           },
         },
       });
       return await handler(request);
     } finally {
-      await client.end({ timeout: 5 });
+      if (!deferredCleanup) {
+        await dispose();
+      }
     }
   };

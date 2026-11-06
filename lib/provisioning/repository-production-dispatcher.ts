@@ -1,4 +1,5 @@
 /* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity -- The two authenticated entry points explicitly dispatch their closed request union. */
+import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { appAccessCommandSchema, appAccessSnapshotSchema } from "../app-access/contracts";
 import type { AppAccessCommand, AppAccessSnapshot } from "../app-access/contracts";
@@ -16,6 +17,38 @@ import type {
 
 export const repositoryProductionPath = "/v1/repository-production";
 export const repositoryProductionCompletionPath = `${repositoryProductionPath}/access/complete`;
+export type RepositoryProductionCompletion = "ready" | "pending";
+
+/** Keep the authorized completion alive if the Auth browser needs a progress response. */
+export const observeRepositoryProductionCompletion = async (
+  work: Promise<RepositoryProductionCompletion>,
+  waitUntil: (task: Promise<void>) => void,
+  dispose: () => Promise<void>,
+  responseBudgetMs = 1000,
+): Promise<RepositoryProductionCompletion> => {
+  const timer = new AbortController();
+  const finish = async () => {
+    try {
+      await work;
+    } catch {
+      // The saved invitation and journal retain the state for the next callback.
+    }
+    try {
+      await dispose();
+    } catch {
+      // Disposal cannot change the outcome of an already settled operation.
+    }
+  };
+  waitUntil(finish());
+  try {
+    return await Promise.race([
+      work,
+      delay(responseBudgetMs, "pending" as const, { signal: timer.signal, ref: false }),
+    ]);
+  } finally {
+    timer.abort();
+  }
+};
 export interface RepositoryProductionRequestOwner {
   appId: string;
   sessionId: string;
@@ -69,7 +102,7 @@ export interface RepositoryProductionHandlerDependencies {
       owner: RepositoryProductionRequestOwner,
       command: AppAccessCommand,
     ) => Promise<AppAccessSnapshot>;
-    completeInvitation: (invitationId: string) => Promise<void>;
+    completeInvitation: (invitationId: string) => Promise<RepositoryProductionCompletion>;
   };
 }
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Serializes the already parsed closed responses from this HTTP boundary.
@@ -96,8 +129,8 @@ export const createRepositoryProductionHandler =
         }
         await deps.verifyAuthWorkload(request, body.data.invitationId);
         authenticated = true;
-        await deps.management.completeInvitation(body.data.invitationId);
-        return reply({ version: 1, status: "ready" });
+        const status = await deps.management.completeInvitation(body.data.invitationId);
+        return reply({ version: 1, status }, status === "ready" ? 200 : 202);
       }
       await deps.verifyBuilderWorkload(request);
       authenticated = true;
