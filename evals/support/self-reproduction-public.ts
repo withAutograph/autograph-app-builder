@@ -557,6 +557,16 @@ const observePendingResponse = async (options: SessionOptions, accept: AcceptSes
   );
 };
 
+const reconcileMessageProgress = (state: PublicState, result: EveSessionResult) => {
+  if (
+    state.awaitingMessageProgressAfterCursor !== undefined &&
+    (result.cursor > state.awaitingMessageProgressAfterCursor ||
+      ["input_required", "completed", "failed", "cancelled"].includes(result.status))
+  ) {
+    delete state.awaitingMessageProgressAfterCursor;
+  }
+};
+
 export const runPublicSession = async (options: SessionOptions) => {
   const { state, transport, save } = options;
   if (state.session?.sessionId === "") {
@@ -579,13 +589,7 @@ export const runPublicSession = async (options: SessionOptions) => {
         "Builder returned no public session handle. The prior session and exact pending request are preserved; inspect the retained response before resuming.",
       );
     }
-    if (
-      state.awaitingMessageProgressAfterCursor !== undefined &&
-      (result.cursor > state.awaitingMessageProgressAfterCursor ||
-        ["input_required", "completed", "failed", "cancelled"].includes(result.status))
-    ) {
-      delete state.awaitingMessageProgressAfterCursor;
-    }
+    reconcileMessageProgress(state, result);
     state.session = retainPublicSessionCursor(state.session, result);
     state.outcome = state.session.status;
     delete state.error;

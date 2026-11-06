@@ -12,6 +12,7 @@ import {
   runPublicSession,
   parsePublicStartFile,
 } from "../evals/support/self-reproduction-public";
+import { eveSessionResultSchema } from "../lib/mcp/contracts";
 import type { PublicState } from "../evals/support/self-reproduction-public";
 
 const session = (
@@ -670,7 +671,7 @@ describe("public self-reproduction driver", () => {
     "ignores stale waiting after accepted SEND until public %s evidence",
     async (status) => {
       const current = state();
-      current.session = { ...session("waiting"), cursor: 1054 };
+      current.session = eveSessionResultSchema.parse({ ...session("waiting"), cursor: 1054 });
       const calls: string[] = [];
       const pages = [
         { ...session("waiting"), cursor: 1054 },
@@ -690,7 +691,9 @@ describe("public self-reproduction driver", () => {
           call: async (name) => {
             calls.push(name);
             const page = pages.shift();
-            if (!page) throw new Error("Unexpected extra public call");
+            if (!page) {
+              throw new Error("Unexpected extra public call");
+            }
             return page;
           },
         },
@@ -711,7 +714,7 @@ describe("public self-reproduction driver", () => {
     vi.useFakeTimers();
     try {
       const current = state();
-      current.session = { ...session("waiting"), cursor: 1054 };
+      current.session = eveSessionResultSchema.parse({ ...session("waiting"), cursor: 1054 });
       let saved: PublicState = current;
       await runPublicSession({
         message: "Continue the saved app",
