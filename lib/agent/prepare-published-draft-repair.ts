@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ToolContext } from "eve/tools";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import { appBuilderWorkflowState } from "./workflow-state";
@@ -32,6 +33,10 @@ import {
   preparePublishedDraftRepairCandidate,
 } from "../repository/sandbox-draft-reconciliation";
 import type { DraftReconciliationInput } from "../repository/sandbox-draft-reconciliation";
+import { observeNormalizedChangeSet, reviewableChanges } from "../../agent/tools/change_set_status";
+import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
+import { overlayChanges } from "../repository/target-apply";
+import type { SandboxSession } from "eve/sandbox";
 import { priorResumedBuildDraftProposal } from "./existing-app-repair-planning";
 
 type Reviewed = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
@@ -64,6 +69,7 @@ interface PreparationInput {
   ctx: ToolContext;
   pullRequestNumber: number;
   recovery?: "reopen-current-owned-draft";
+  restoreInitialAppSource?: boolean;
 }
 
 /** Rebuild request-local recovery authority from owned workflow metadata, never public arguments. */
@@ -400,6 +406,90 @@ const reconciliationPreparationLineage = (
   return { ownedPrevious, preservedPrevious, recoveryMode, reopenCurrent, previousInput };
 };
 
+const retainedInitialAppSource = async (input: {
+  state: Reviewed;
+  sandbox: SandboxSession;
+  priorPublishedHeadSha: string;
+  publishedPaths: readonly string[];
+}): Promise<NonNullable<DraftReconciliationInput["unpublished"]>> => {
+  const { state, sandbox } = input;
+  const appRoot = `apps/${state.appSpec.appId}/`;
+  const manifest = `${appRoot}package.json`;
+  if (input.publishedPaths.includes(manifest)) {
+    throw new Error("The first publication already included the app manifest.");
+  }
+  const [{ observed }, original] = await Promise.all([
+    observeNormalizedChangeSet({ sandbox, state }),
+    readPreparedSandboxSourceManifest(sandbox, state.workspace),
+  ]);
+  if (original.some(({ path }) => path.startsWith(appRoot))) {
+    throw new Error("The original starter already contained this app.");
+  }
+  if (!observed.files.some(({ path }) => path === manifest)) {
+    throw new Error("The retained app source has no package manifest to restore.");
+  }
+  const before = original.map(({ path, sha256: digest, mode }) => ({
+    path,
+    digest,
+    mode: mode.slice(3),
+  }));
+  const delta = overlayChanges(
+    { files: before, treeDigest: state.workspace.workspaceDigest },
+    observed,
+  );
+  const appFiles = reviewableChanges(delta, state.appSpec.appId, true);
+  const registrationPaths = new Set([
+    "package.json",
+    "bun.lock",
+    state.applyReceipt.targetReceipt.topology.path,
+  ]);
+  const registration = delta.filter(
+    ({ path, kind }) => registrationPaths.has(path) && kind !== "deleted",
+  );
+  const changes = [...appFiles, ...registration];
+  return {
+    changes,
+    contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
+    priorPublishedHeadSha: input.priorPublishedHeadSha,
+    restoreInitialAppSource: true,
+    reviewDigest: createHash("sha256")
+      .update(JSON.stringify([state.reviewReceipt.digest, changes]))
+      .digest("hex"),
+  };
+};
+
+const publishedDraftUnpublishedSource = async (input: {
+  state: Reviewed;
+  sandbox: SandboxSession;
+  owned: Awaited<ReturnType<typeof acquireOwnedPublishedDraft>>["owned"];
+  repair: ReturnType<typeof createPublishedDraftRepairSource>;
+  reopenCurrent: boolean;
+  restoreInitialAppSource?: boolean;
+}) => {
+  const { state, sandbox, owned, repair } = input;
+  if (input.restoreInitialAppSource === true) {
+    return await retainedInitialAppSource({
+      state,
+      sandbox,
+      priorPublishedHeadSha: owned.publication.branchSha,
+      publishedPaths: owned.proposal.approvedPaths,
+    });
+  }
+  const changes = state.reviewReceipt.changes.filter(({ path }) =>
+    path.startsWith(`apps/${repair.appId}/`),
+  );
+  return input.reopenCurrent ||
+    reviewedOriginAlreadyPublished(state, owned, repair) ||
+    changes.length === 0
+    ? undefined
+    : {
+        reviewDigest: state.reviewReceipt.digest,
+        changes,
+        priorPublishedHeadSha: owned.publication.branchSha,
+        contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
+      };
+};
+
 /** Reconcile the owned draft with its live base without changing the accepted starter source. */
 export const preparePublishedDraftReconciliation = async (input: PreparationInput) => {
   const { state, ctx } = input;
@@ -453,20 +543,17 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   }
   assertCurrentOrigin(state, previous);
   const sandbox = await getSourceBoundSandbox(ctx);
-  // The original full publication already carries its approved root registration.
-  const changes = state.reviewReceipt.changes.filter((change) =>
-    change.path.startsWith(`apps/${repair.appId}/`),
-  );
-  const unpublished =
-    reopenCurrent || reviewedOriginAlreadyPublished(state, owned, repair) || changes.length === 0
-      ? undefined
-      : {
-          reviewDigest: state.reviewReceipt.digest,
-          changes,
-          priorPublishedHeadSha: owned.publication.branchSha,
-          contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
-        };
-  const accessRuntime = await repositoryAccessRuntimeForSession(ctx.session.auth);
+  const [unpublished, accessRuntime] = await Promise.all([
+    publishedDraftUnpublishedSource({
+      state,
+      sandbox,
+      owned,
+      repair,
+      reopenCurrent,
+      restoreInitialAppSource: input.restoreInitialAppSource,
+    }),
+    repositoryAccessRuntimeForSession(ctx.session.auth),
+  ]);
   const { prepared, retriedGitFetch } = await prepareWithVerifiedGitHubFetchRecovery({
     acquireCredential: async () =>
       await accessRuntime.acquireExistingSourceCredential({
@@ -490,7 +577,9 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
         headBranch: source.draft.headBranch,
         headSha: source.draft.headSha,
         ownedPublication: { proposal: owned.proposal, publication: owned.publication },
-        ...(input.recovery === undefined ? {} : { forceFreshCandidate: true }),
+        ...(input.recovery === undefined && input.restoreInitialAppSource !== true
+          ? {}
+          : { forceFreshCandidate: true }),
         ...(unpublished === undefined ? {} : { unpublished }),
         ...previousInput,
       });

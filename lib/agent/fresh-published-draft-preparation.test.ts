@@ -14,6 +14,8 @@ import { preparePublishedDraftReconciliation } from "./prepare-published-draft-r
 import { freshFixture, workflowKey } from "../eve/test-support/draft-reviewed-recovery";
 import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
 import type { PublishedDraftRepairSource } from "./published-draft-repair";
+import type { observeNormalizedChangeSet } from "../../agent/tools/change_set_status";
+import type { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import type { OwnedPublicationReconciliationScope } from "../repository/github-draft-reconciliation";
 
 type Fixture = Awaited<ReturnType<typeof freshFixture>>;
@@ -118,6 +120,21 @@ vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   preparePublishedDraftRepairCandidate: vi.fn(),
 }));
 
+const retainedSource = vi.hoisted(() => ({
+  observed: vi.fn(),
+  original: vi.fn(),
+}));
+vi.mock("../../agent/tools/change_set_status", async (importOriginal) => ({
+  ...(await importOriginal<{ observeNormalizedChangeSet: typeof observeNormalizedChangeSet }>()),
+  observeNormalizedChangeSet: retainedSource.observed,
+}));
+vi.mock("../repository/supported-template", async (importOriginal) => ({
+  ...(await importOriginal<{
+    readPreparedSandboxSourceManifest: typeof readPreparedSandboxSourceManifest;
+  }>()),
+  readPreparedSandboxSourceManifest: retainedSource.original,
+}));
+
 describe("owned fresh-template draft preparation after review recovery", () => {
   let fixture: Fixture;
   let root: string;
@@ -165,6 +182,47 @@ describe("owned fresh-template draft preparation after review recovery", () => {
   });
   afterEach(() => {
     rmSync(root, { recursive: true, force: true });
+  });
+
+  it("restores a missing package and registration into the same owned draft candidate", async () => {
+    const state = structuredClone(fixture.reviewed);
+    const appRoot = `apps/${state.appSpec.appId}`;
+    retainedSource.original.mockResolvedValue([
+      { path: "microfrontends.json", mode: "100644", sha256: "starter" },
+    ]);
+    retainedSource.observed.mockResolvedValue({
+      observed: {
+        treeDigest: "current",
+        files: [
+          { path: `${appRoot}/package.json`, mode: "644", digest: "manifest" },
+          { path: `${appRoot}/app/page.tsx`, mode: "644", digest: "page" },
+          { path: "microfrontends.json", mode: "644", digest: "registered" },
+          { path: "apps/another/app/page.tsx", mode: "644", digest: "other" },
+        ],
+      },
+    });
+    await preparePublishedDraftReconciliation({
+      state,
+      ctx,
+      pullRequestNumber: 42,
+      restoreInitialAppSource: true,
+    });
+    expect(mocks.prepare.mock.calls[0]?.[0]).toMatchObject({
+      forceFreshCandidate: true,
+      ownedPublication: { proposal: mocks.owned.proposal, publication: mocks.owned.publication },
+      unpublished: {
+        restoreInitialAppSource: true,
+        changes: [
+          { kind: "added", path: `${appRoot}/app/page.tsx` },
+          { kind: "added", path: `${appRoot}/package.json` },
+          {
+            kind: "modified",
+            path: "microfrontends.json",
+            before: { mode: "644", digest: "starter" },
+          },
+        ],
+      },
+    });
   });
 
   it("keeps the validated workflow and exact candidate/private edits when normal preparation reuses it", async () => {

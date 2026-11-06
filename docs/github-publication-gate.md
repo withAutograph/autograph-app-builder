@@ -240,6 +240,13 @@ candidate. A prior candidate of the same owned publication remains available for
 inspection even when the newly completed review has a different digest; that
 retention does not authorize replaying its edits or its prior review.
 
+If the first owned draft omitted the new app manifest, use
+`restoreInitialAppSource: true` in the same reconciliation tool. Builder reads
+the retained app and its registration changes against the original starter
+manifest. It stages the exact app bytes and checks shared registration
+preimages before its private merge with the current base. The resulting draft
+candidate still needs its normal build, review, and approved update.
+
 The recovery mode follows subsequent preparation attempts within the same owned
 review lineage. Original app-review content remains available through
 `change_set_status`; retained draft candidates can be read through the bounded,

@@ -95,6 +95,7 @@ export interface DraftReconciliationInput {
   ownedPublication?: Pick<OwnedPublicationReconciliationScope, "proposal" | "publication">;
   unpublished?: {
     reviewDigest: string;
+    restoreInitialAppSource?: true;
     /** Exact original publication head, resolved from this workflow's tenant receipt. */
     priorPublishedHeadSha?: string;
     changes: readonly OverlayChange[];
@@ -156,6 +157,8 @@ const candidateNeedsCreation = async (sandbox: SandboxSession, root: string): Pr
 const appPath = (appId: string, path: string) =>
   safeSourcePath(path) && path.startsWith(`apps/${appId}/`);
 
+const initialRegistrationPaths = new Set(["package.json", "bun.lock", "microfrontends.json"]);
+
 const verifyInputs = (input: DraftReconciliationInput) => {
   const fields = [
     [NAME, input.repository.owner],
@@ -171,6 +174,15 @@ const verifyInputs = (input: DraftReconciliationInput) => {
   ] as const;
   if (fields.some(([pattern, value]) => !pattern.test(value))) {
     throw new Error(INVALID_INPUT);
+  }
+  if (input.unpublished?.restoreInitialAppSource === true) {
+    const manifest = `apps/${input.appId}/package.json`;
+    if (
+      input.ownedPublication === undefined ||
+      input.ownedPublication.proposal.approvedPaths.includes(manifest)
+    ) {
+      throw new Error("Initial source restoration requires an incomplete owned publication.");
+    }
   }
   if (input.ownedPublication !== undefined) {
     assertOwnedPublicationReconciliationOrigin(input.ownedPublication);
@@ -268,8 +280,23 @@ const matchesFileState = (
   if (expected === undefined) {
     return observed === null;
   }
-  const mode = expected.mode === "100755" ? "755" : "644";
+  const mode = expected.mode === "100755" || expected.mode === "755" ? "755" : "644";
   return observed?.digest === expected.digest && observed.mode === mode;
+};
+
+const restoredRegistrationPaths = (
+  restore: true | undefined,
+  changes: readonly OverlayChange[],
+) => {
+  const paths = new Set<string>();
+  if (restore === true) {
+    for (const { path, kind } of changes) {
+      if (initialRegistrationPaths.has(path) && kind !== "deleted") {
+        paths.add(path);
+      }
+    }
+  }
+  return paths;
 };
 
 const stageUnpublished = async (
@@ -306,6 +333,9 @@ const stageUnpublished = async (
   if (priorPublishedHeadSha !== undefined) {
     await Promise.all(
       candidates.map(async (change) => {
+        if (!appPath(input.appId, change.path)) {
+          return;
+        }
         const original = await currentFileState(
           input.sandbox,
           root,
@@ -327,9 +357,13 @@ const stageUnpublished = async (
   const pendingChanges = unpublished.changes.filter(
     (change, index) => !matchesFileState(observed[index] ?? null, change.after),
   );
+  const registration = restoredRegistrationPaths(
+    unpublished.restoreInitialAppSource,
+    pendingChanges,
+  );
   // oxlint-disable-next-line react-doctor/async-await-in-loop -- reviewed postimages are staged in deterministic order.
   for (const change of pendingChanges) {
-    if (!appPath(input.appId, change.path)) {
+    if (!appPath(input.appId, change.path) && !registration.has(change.path)) {
       throw new Error(
         `Builder cannot reconcile unpublished change ${change.path}: it is outside apps/${input.appId}/.`,
       );
@@ -377,7 +411,7 @@ const stageUnpublished = async (
   await checked(
     input.sandbox,
     "stage unpublished app changes",
-    git(root, ["add", "--all", "--", `apps/${input.appId}`]),
+    git(root, ["add", "--all", "--", `apps/${input.appId}`, ...registration]),
   );
   await checked(
     input.sandbox,
