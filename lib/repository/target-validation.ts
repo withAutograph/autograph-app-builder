@@ -473,11 +473,15 @@ export const sandboxValidationCommandExecutor =
     // pipe open after the validation task exits.
     const runtimeTask = command.includes(" app:check ") ? "repository-check" : "repository-test";
     const shard = command.includes(" app:test ") ? ` ${command.split(" ").at(-1)}` : "";
+    const deliveryEnvironment = {
+      ...environment,
+      ...(runtimeTask === "repository-check" ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
+    };
     if (options?.runtime) {
       return await options.runtime.runTask({
         task: runtimeTask,
         ...(options?.alreadyCompiled === true ? { alreadyCompiled: true } : {}),
-        environment,
+        environment: deliveryEnvironment,
         ...(shard ? { shard: shard.trim() } : {}),
         onChunk,
         signal: abortSignal,
@@ -486,7 +490,7 @@ export const sandboxValidationCommandExecutor =
     const environmentPath = localRuntimeEnvironmentPath(validationRoot, appId);
     const env = {
       ...Object.fromEntries(
-        Object.entries(environment ?? {}).filter(
+        Object.entries(deliveryEnvironment).filter(
           (entry): entry is [string, string] =>
             entry[1] !== undefined && entry[0] !== "APP_RUNTIME_ALREADY_COMPILED",
         ),

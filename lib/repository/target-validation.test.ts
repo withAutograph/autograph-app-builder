@@ -351,7 +351,10 @@ describe("target validation", () => {
       expect(result).toMatchObject({ exitCode: 0, stdout: "checks passed" });
       expect(runTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          environment,
+          environment: {
+            ...environment,
+            ...(task === "repository-check" ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
+          },
           onChunk,
           task,
           ...(shard ? { shard } : {}),
@@ -951,6 +954,7 @@ cat "$log"
 rm -f "$log"
 exit "$status"`,
         env: {
+          ...(command.includes(" app:check ") ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
           ...(alreadyCompiled ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
           APP_RUNTIME_STATE_DIR: path.posix.dirname(
             localRuntimeEnvironmentPath("/workspace/repository", "example"),
@@ -1052,6 +1056,7 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
         expect((streaming ? spawn : run).mock.calls[0]?.[0].env).toEqual({
           APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
           APP_RUNTIME_STATE_DIR: stateDirectory,
+          ...(runtimeTask === "repository-check" ? { APP_BUILDER_DELIVERY_BUILD_ONLY: "1" } : {}),
         });
         expect(streaming ? run : spawn).not.toHaveBeenCalled();
       } finally {
