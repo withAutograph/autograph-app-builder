@@ -186,14 +186,14 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
     world.runs.list = () => {
       readOperations.push(["runs.list"]);
       return Promise.resolve({
-        data: options.omitListedOwner ? [runs.get(anchorRunId)] : [...runs.values()],
+        data: options.omitListedOwner === true ? [runs.get(anchorRunId)] : [...runs.values()],
         hasMore: false,
       });
     };
-    if (options.omitListedOwner) {
+    if (options.omitListedOwner === true) {
       world.hooks = {
-        getByToken: (token) => {
-          assert.equal(token, inbox);
+        getByToken: (requestedToken) => {
+          assert.equal(requestedToken, inbox);
           return Promise.resolve({ runId: ownerRunId });
         },
       };
