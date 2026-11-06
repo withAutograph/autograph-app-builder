@@ -13,15 +13,29 @@ import { createWorkingPreviewAccess } from "./working-preview-access";
 import { previewOwnershipRoot, previewOwnershipSource } from "./working-preview-ownership";
 import { workingPreviewSupervisorSource } from "./working-preview-runtime";
 
-const unusedPort = async () => {
-  const server = createServer();
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const { port } = server.address() as AddressInfo;
-  const closed = once(server, "close");
-  server.close();
-  await closed;
-  return port;
+const distinctPreviewPorts = async () => {
+  const gateway = createServer();
+  const app = createServer();
+  try {
+    gateway.listen(0, "127.0.0.1");
+    await once(gateway, "listening");
+    app.listen(0, "127.0.0.1");
+    await once(app, "listening");
+    return {
+      appPort: (app.address() as AddressInfo).port,
+      gatewayPort: (gateway.address() as AddressInfo).port,
+    };
+  } finally {
+    await Promise.all(
+      [gateway, app]
+        .filter((server) => server.listening)
+        .map(async (server) => {
+          const closed = once(server, "close");
+          server.close();
+          await closed;
+        }),
+    );
+  }
 };
 const waitFor = async (condition: () => boolean) => {
   const deadline = Date.now() + 5000;
@@ -41,8 +55,7 @@ describe("generated working preview supervisor", () => {
     "classifies a %s private runtime environment without exposing its path",
     async (mode, expected) => {
       const directory = await mkdtemp(nodePath.join(tmpdir(), "preview-supervisor-environment-"));
-      const gatewayPort = await unusedPort();
-      const appPort = await unusedPort();
+      const { appPort, gatewayPort } = await distinctPreviewPorts();
       const environmentPath = nodePath.join(directory, "private-environment.json");
       const configurationPath = nodePath.join(directory, "access.json");
       const failurePath = nodePath.join(directory, "failed.json");
@@ -101,8 +114,7 @@ describe("generated working preview supervisor", () => {
 
   it("loads a valid private runtime environment into the actual child process", async () => {
     const directory = await mkdtemp(nodePath.join(tmpdir(), "preview-supervisor-environment-"));
-    const gatewayPort = await unusedPort();
-    const appPort = await unusedPort();
+    const { appPort, gatewayPort } = await distinctPreviewPorts();
     const environmentPath = nodePath.join(directory, "private-environment.json");
     const markerPath = nodePath.join(directory, "child-value");
     const configurationPath = nodePath.join(directory, "access.json");
@@ -152,11 +164,7 @@ describe("generated working preview supervisor", () => {
     "waits for configuration and closes the process group on %s",
     async (mode) => {
       const directory = await mkdtemp(nodePath.join(tmpdir(), "preview-supervisor-"));
-      const gatewayPort = await unusedPort();
-      let appPort = await unusedPort();
-      if (appPort === gatewayPort) {
-        appPort = gatewayPort === 65_535 ? gatewayPort - 1 : gatewayPort + 1;
-      }
+      const { appPort, gatewayPort } = await distinctPreviewPorts();
       const configurationPath = nodePath.join(directory, "access.json");
       const readyPath = nodePath.join(directory, "ready");
       const observedPortPath = nodePath.join(directory, "observed-port");

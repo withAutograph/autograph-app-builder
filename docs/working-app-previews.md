@@ -19,6 +19,16 @@ and returns before running repository checks. Start the preview again to
 exercise the updated app. This path does not produce a validation receipt or
 publication authority.
 
+An unapplied repair proposal can become the current plan while the previously
+approved implementation remains saved. When preview startup reports
+`planned` and the user wants the saved app, Builder can use
+`prepare_app_creation({ resumeApprovedBuild: true })` to select the applied
+workspace under its original Build approval. The selection changes no source
+files and retains the draft in repair history. After `resumed_approved_build`,
+Builder starts the preview or applies an in-scope `repairOnly` fix before
+starting it. Continuing with the pending changes uses the ordinary planning
+and Build controls for that scope.
+
 ## Startup ownership and diagnostics
 
 A sandbox-local attempt journal records ownership before the supervisor starts.

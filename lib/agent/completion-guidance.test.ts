@@ -24,6 +24,7 @@ describe("shared app delivery guidance", () => {
   it("continues a planned implementation without regenerating its accepted design", () => {
     const guidance = completionGuidance({ phase: "planned" });
     expect(guidance).toContain("apply_app_creation for the planned implementation");
+    expect(guidance).toContain("prepare_app_creation with resumeApprovedBuild: true");
     expect(guidance).toContain("Reuse the accepted UI reference");
     expect(guidance).toContain("not a reason to regenerate the prototype");
     expect(guidance).toContain("Genuine product revisions still follow the design acceptance flow");

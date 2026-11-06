@@ -17,8 +17,12 @@ import {
   GITHUB_PUBLICATION_VERSION,
 } from "../repository/github-publication";
 import type {
+  DraftPublicationReadBack,
+  DraftPullRequestProposal,
+  DraftPullRequestSuccessReceipt,
   GitHubOperation,
   GitHubPublicationAdapter,
+  GitHubPublicationReceiptStore,
   ImmutableGitHubSourceReceipt,
   GitHubMutationPendingReceipt,
 } from "../repository/github-publication";
@@ -140,11 +144,15 @@ const fixture = () => {
       async (operation: GitHubOperation) => await Promise.resolve(installation(operation)),
     );
   const inspectDestinationFiles = vi.fn().mockResolvedValue(destination.preTree);
+  const inspectDraftPublication = vi.fn<GitHubPublicationAdapter["inspectDraftPublication"]>();
+  const compareAndSet = vi
+    .fn<GitHubPublicationReceiptStore["compareAndSet"]>()
+    .mockResolvedValue(true);
   const adapter: GitHubPublicationAdapter = {
     createPrivateFreshHistoryRepository: unexpected,
     inspectDestination: unexpected,
     inspectDestinationFiles,
-    inspectDraftPublication: unexpected,
+    inspectDraftPublication,
     inspectExistingDraft: unexpected,
     inspectFreshRepositoryOutcome: unexpected,
     inspectInstallation,
@@ -160,16 +168,95 @@ const fixture = () => {
     adapter,
     enabled: true,
     proposals: { read: vi.fn(), save },
-    receipts: { compareAndSet: vi.fn(), read: readReceipt },
+    receipts: { compareAndSet, read: readReceipt },
   });
   return {
+    compareAndSet,
     inspectDestinationFiles,
+    inspectDraftPublication,
     inspectInstallation,
     inspectRepository,
     readReceipt,
     runtime,
     save,
+    unexpected,
   };
+};
+
+const sealDraft = async (runtime: ReturnType<typeof fixture>["runtime"]) =>
+  await runtime.sealDraftPullRequestProposal({
+    destinationReview: destination,
+    githubSource: source,
+    review,
+    source: sourceEvidence,
+    title: "Update reviewed schema",
+  });
+
+const pendingReceipt = (proposal: DraftPullRequestProposal): GitHubMutationPendingReceipt => {
+  const pending = {
+    approvedByCallId: "prior-approval",
+    idempotencyKey: proposal.idempotencyKey,
+    kind: "draft-pull-request" as const,
+    proposalDigest: proposal.digest,
+    status: "pending" as const,
+    version: GITHUB_PUBLICATION_VERSION,
+  };
+  return { ...pending, digest: hash(pending) };
+};
+
+const pendingReadBackCases = ["absent", "branch-only", "different-head"] as const;
+
+const draftReadBack = (
+  proposal: DraftPullRequestProposal,
+  observation: (typeof pendingReadBackCases)[number] | "exact",
+): DraftPublicationReadBack => {
+  const branchSha = "5".repeat(40);
+  const body: Omit<DraftPublicationReadBack, "digest"> = {
+    version: GITHUB_PUBLICATION_VERSION,
+    idempotencyKey: proposal.idempotencyKey,
+    repository: createRepositoryObservation({
+      defaultBranch: repository.defaultBranch,
+      headSha: repository.headSha,
+      headTree: repository.headTree,
+      installationIdentityDigest: proposal.installationIdentityDigest,
+      name: repository.name,
+      owner: repository.owner,
+      releaseGate: repository.releaseGate,
+      repositoryId: repository.repositoryId,
+      visibility: repository.visibility,
+    }),
+    changedPathsSinceBase: [],
+    branch:
+      observation === "absent"
+        ? { status: "absent" }
+        : {
+            status: "present",
+            branchName: proposal.branchName,
+            branchSha,
+            branchTree: "6".repeat(40),
+            normalizedChangedPaths: proposal.approvedPaths,
+            changedContentDigest: proposal.changedContentDigest,
+            idempotencyKey: proposal.idempotencyKey,
+          },
+    pullRequest:
+      observation === "exact" || observation === "different-head"
+        ? {
+            status: "present",
+            pullRequestId: "1234",
+            pullRequestNumber: 42,
+            draft: true,
+            headRepositoryId: proposal.repositoryId,
+            headBranch: proposal.branchName,
+            headSha: observation === "exact" ? branchSha : "7".repeat(40),
+            baseRepositoryId: proposal.repositoryId,
+            baseBranch: proposal.baseBranch,
+            baseSha: repository.headSha,
+            changeSetDigest: proposal.changeSetDigest,
+            idempotencyKey: proposal.idempotencyKey,
+          }
+        : { status: "absent" },
+  };
+  return { ...body, digest: createHash("sha256").update(JSON.stringify(body)).digest("hex") };
 };
 
 describe("initial draft destination runtime", () => {
@@ -236,7 +323,62 @@ describe("initial draft destination runtime", () => {
     expect(refreshed.sourceSha).toBe("79952fedea119831cc30beab504d3d7d6b271209");
     expect(f.inspectRepository).not.toHaveBeenCalled();
   });
-  it("retains a pending mutation journal and blocks replacing its unknown proposal", async () => {
+  it.each([...pendingReadBackCases, "unavailable"] as const)(
+    "preserves pending publication when readback is %s",
+    async (observation) => {
+      const f = fixture();
+      const proposal = await sealDraft(f.runtime);
+      f.readReceipt.mockResolvedValue(pendingReceipt(proposal));
+      if (observation === "unavailable") {
+        f.inspectDraftPublication.mockRejectedValue(new Error("Provider unavailable"));
+      } else {
+        f.inspectDraftPublication.mockResolvedValue(draftReadBack(proposal, observation));
+      }
+      await expect(
+        f.runtime.inspectDraftDestination?.({
+          existingProposal: proposal,
+          githubSource: source,
+          paths: [path],
+        }),
+      ).rejects.toThrow("outcome is unknown");
+      expect(f.inspectDraftPublication).toHaveBeenCalledExactlyOnceWith(proposal);
+      expect(f.compareAndSet).not.toHaveBeenCalled();
+      expect(f.inspectRepository).not.toHaveBeenCalled();
+      expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+      expect(f.unexpected).not.toHaveBeenCalled();
+    },
+  );
+
+  it("settles an exact pending branch and draft readback under the original approval", async () => {
+    const f = fixture();
+    const proposal = await sealDraft(f.runtime);
+    const pending = pendingReceipt(proposal);
+    f.readReceipt.mockResolvedValue(pending);
+    const readBack = draftReadBack(proposal, "exact");
+    f.inspectDraftPublication.mockResolvedValue(readBack);
+
+    const request = { existingProposal: proposal, githubSource: source, paths: [path] };
+    await expect(f.runtime.inspectDraftDestination?.(request)).rejects.toThrow("pull request #42");
+    expect(f.compareAndSet).toHaveBeenCalledExactlyOnceWith(
+      proposal.digest,
+      pending.digest,
+      expect.objectContaining({
+        approvedByCallId: pending.approvedByCallId,
+        providerReadBackDigest: readBack.digest,
+        pullRequestNumber: 42,
+        recoveredFromPending: true,
+        status: "succeeded",
+      }),
+    );
+
+    f.readReceipt.mockResolvedValue(f.compareAndSet.mock.calls[0]?.[2]);
+    await expect(f.runtime.inspectDraftDestination?.(request)).rejects.toThrow("pull request #42");
+    expect(f.inspectDraftPublication).toHaveBeenCalledExactlyOnceWith(proposal);
+    expect(f.inspectRepository).not.toHaveBeenCalled();
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+  it("opens an ordinary review for a sealed-only draft and identifies the same PR after publication", async () => {
     const f = fixture();
     const proposal = await f.runtime.sealDraftPullRequestProposal({
       destinationReview: destination,
@@ -245,27 +387,42 @@ describe("initial draft destination runtime", () => {
       source: sourceEvidence,
       title: "Update reviewed schema",
     });
-    const pending = {
-      approvedByCallId: "prior-approval",
+    const request = { existingProposal: proposal, githubSource: source, paths: [path] };
+    await expect(f.runtime.inspectDraftDestination?.(request)).resolves.toMatchObject({
+      repository,
+    });
+
+    const published: Omit<DraftPullRequestSuccessReceipt, "digest"> = {
+      approvedByCallId: "prior-publication",
+      baseBranch: repository.defaultBranch,
+      baseSha: proposal.baseSha,
+      branchName: proposal.branchName,
+      branchSha: "5".repeat(40),
+      branchTree: "6".repeat(40),
+      changedContentDigest: review.changedContentDigest,
+      changeSetDigest: review.changeSetDigest,
+      draft: true,
       idempotencyKey: proposal.idempotencyKey,
-      kind: "draft-pull-request" as const,
+      installationIdentityDigest: proposal.installationIdentityDigest,
+      kind: "draft-pull-request",
+      normalizedChangedPaths: [path],
       proposalDigest: proposal.digest,
-      status: "pending" as const,
+      providerReadBackDigest: "7".repeat(64),
+      pullRequestId: "1234",
+      pullRequestNumber: 42,
+      recoveredFromPending: false,
+      releaseGateUnchanged: true,
+      repositoryId: repository.repositoryId,
+      status: "succeeded",
       version: GITHUB_PUBLICATION_VERSION,
     };
-    const receipt = { ...pending, digest: hash(pending) };
-    f.readReceipt.mockResolvedValue(receipt);
+    f.readReceipt.mockResolvedValue({
+      ...published,
+      digest: createHash("sha256").update(JSON.stringify(published)).digest("hex"),
+    });
     f.inspectRepository.mockClear();
-    await expect(
-      f.runtime.inspectDraftDestination?.({
-        existingProposal: proposal,
-        githubSource: source,
-        paths: [path],
-      }),
-    ).rejects.toThrow("unknown outcome");
+    await expect(f.runtime.inspectDraftDestination?.(request)).rejects.toThrow("pull request #42");
     expect(f.inspectRepository).not.toHaveBeenCalled();
-    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
-    expect(receipt.status).toBe("pending");
   });
   it("reads destination metadata with source-only authority", async () => {
     const f = fixture();

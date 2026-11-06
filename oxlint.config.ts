@@ -2533,12 +2533,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
     },
   },
   {
-    files: ["**/evals/support/self-reproduction-runtime.ts"],
-    rules: {
-      "typescript/no-unnecessary-type-arguments": "off",
-    },
-  },
-  {
     files: [
       "**/app/\\(product\\)/page.tsx",
       "**/app/actions/builder.test.ts",
@@ -3242,12 +3236,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
     ],
     rules: {
       "typescript/prefer-regexp-exec": "off",
-    },
-  },
-  {
-    files: ["**/lib/agent/product-acceptance.ts"],
-    rules: {
-      "typescript/prefer-string-starts-ends-with": "off",
     },
   },
   {

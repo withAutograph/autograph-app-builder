@@ -16,11 +16,11 @@ export const productAcceptanceObligations = (
     if (marker) {
       if (fence === undefined) {
         fence = marker.charAt(0);
-      } else if (marker.charAt(0) === fence) {
+      } else if (marker.startsWith(fence)) {
         fence = undefined;
       }
     }
-    if (fence === undefined && /^##\s+/u.test(line)) {
+    if (fence === undefined && line.startsWith("##") && /\s/u.test(line[2] ?? "")) {
       if (inWalkthrough) {
         break;
       }

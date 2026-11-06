@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { APIError } from "@vercel/sandbox";
 import type { Sandbox } from "@vercel/sandbox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -221,6 +222,28 @@ describe("shared working preview startup", () => {
     expect(command.kill).not.toHaveBeenCalled();
   });
 
+  it("replaces a retained preview whose provider command no longer exists", async () => {
+    const { options, provider } = setup();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation((url) =>
+        Promise.resolve(
+          String(url).includes("/__autograph_preview_launch")
+            ? launchResponse()
+            : new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
+        ),
+      );
+    const previous = await startWorkingPreview({ ...options, fetch: fetcher });
+    const missingCommand = new APIError(new Response("", { status: 404 }), {
+      message: "command not found or has exited",
+    });
+    provider.getCommand.mockRejectedValueOnce(missingCommand).mockRejectedValueOnce(missingCommand);
+
+    const replacement = await startWorkingPreview({ ...options, fetch: fetcher, previous });
+    expect(replacement.receipt.status).toBe("ready");
+    expect(provider.runCommand).toHaveBeenCalledTimes(2);
+  });
+
   it("reports a supervisor exit even when startup markers were never written", async () => {
     const { options, provider, command } = setup();
     provider.getCommand.mockResolvedValue({ ...command, exitCode: 137 });
@@ -405,7 +428,11 @@ describe("safe interrupted startup diagnostics", () => {
 describe("preview command termination", () => {
   it("does not finish cleanup on signal acknowledgement before command termination", async () => {
     const exited = Promise.withResolvers<null>();
-    const command = { kill: vi.fn(() => Promise.resolve()), wait: vi.fn(() => exited.promise) };
+    const command = {
+      exitCode: null,
+      kill: vi.fn(() => Promise.resolve()),
+      wait: vi.fn(() => exited.promise),
+    };
     let settled = false;
     const cleanup = stopWorkingPreviewCommand(
       command as unknown as Parameters<typeof stopWorkingPreviewCommand>[0],

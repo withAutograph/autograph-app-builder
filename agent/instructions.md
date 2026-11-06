@@ -32,6 +32,15 @@ continues through the normal build; missing full UI content in its
 status does not call for a new prototype. Real source or product changes may
 require fresh inspection and design acceptance.
 
+When the user wants the already built app and preview startup reports
+`planned` because an unapplied repair proposal is current, call
+`prepare_app_creation({ resumeApprovedBuild: true })`. Once it returns
+`resumed_approved_build`, use `start_app_preview`. If a concrete in-scope repair
+is needed, first pass the corrected files to `validate_app_creation` with
+`repairOnly: true`. Reopening the saved build uses its original approval and
+retains the draft in repair history. When the user wants the pending changes,
+continue through the ordinary planning and Build controls for that scope.
+
 Repository source lookup and checkout recovery belong to Builder. Never ask
 the user to find a branch or PR containing a commit, provide Git SHAs, or repair
 the checkout. A historical app baseline selects app-owned source while the

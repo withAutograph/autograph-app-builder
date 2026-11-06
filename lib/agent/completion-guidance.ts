@@ -12,7 +12,7 @@ const phaseGuidance: Partial<Record<AppBuilderWorkflowState["phase"], string>> =
   identity_resolved:
     "The target app was identified but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and exact existingAppChanges before starting the build.",
   planned:
-    "The accepted AppSpec and canonical implementation proposal are ready. Continue with apply_app_creation for the planned implementation. Present the Build decision for the initial scope, including selected compute if applicable. Reuse the decision for repairs to the same approved scope. Reuse the accepted UI reference; omission of the full UI object from planning metadata is not a reason to regenerate the prototype. Genuine product revisions still follow the design acceptance flow.",
+    "The accepted AppSpec and canonical implementation proposal are ready. If an unapplied same-app repair is open and the user wants to continue the already applied build, use prepare_app_creation with resumeApprovedBuild: true. Otherwise continue with apply_app_creation for the planned implementation. Present the Build decision for the initial scope, including selected compute if applicable. Reuse the decision for repairs to the same approved scope. Reuse the accepted UI reference; omission of the full UI object from planning metadata is not a reason to regenerate the prototype. Genuine product revisions still follow the design acceptance flow.",
   reviewed:
     "The change set was reviewed after repository validation. Review does not establish product behavior or a reachable app preview.",
   ui_accepted:
