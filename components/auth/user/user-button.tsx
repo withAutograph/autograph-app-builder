@@ -5,8 +5,10 @@ import { useAuth, useSession } from "@better-auth-ui/react";
 import { useSetActiveSession } from "@better-auth-ui/react/plugins/multi-session";
 import { ChevronsUpDown, LogIn, LogOut, Settings, UserPlus2 } from "lucide-react";
 import Link from "next/link";
+import type { VariantProps } from "class-variance-authority";
+import type { ComponentProps } from "react";
 
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,10 +24,10 @@ import { UserView } from "./user-view";
 
 export interface UserButtonProps {
   className?: string;
-  align?: "center" | "end" | "start" | undefined;
+  align?: ComponentProps<typeof DropdownMenuContent>["align"];
   sideOffset?: number;
   size?: "default" | "icon";
-  variant?: "default" | "destructive" | "ghost" | "link" | "outline" | "secondary";
+  variant?: VariantProps<typeof buttonVariants>["variant"];
 }
 
 /**
@@ -53,6 +55,7 @@ export function UserButton({
 
   const { isPending: settingActiveSession } = useSetActiveSession(authClient);
   const { data: session, isPending: sessionPending } = useSession(authClient);
+  const showUserView = Boolean(session ?? sessionPending ?? settingActiveSession);
 
   const pluginMenuItems = plugins.flatMap(
     (plugin) =>
@@ -74,8 +77,8 @@ export function UserButton({
           <UserAvatar />
         ) : (
           <>
-            {session || sessionPending || settingActiveSession ? (
-              <UserView isPending={!!settingActiveSession} />
+            {showUserView ? (
+              <UserView isPending={settingActiveSession} />
             ) : (
               <>
                 <UserAvatar />

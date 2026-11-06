@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
 import { builderConnectionsFlag, selfServiceSignupFlag } from "../../../../lib/feature-flags";
-import type * as FlagsVercel from "@flags-sdk/vercel";
+import type { getProviderData as getProviderDataType } from "@flags-sdk/vercel";
 
 const getProviderData = vi.hoisted(() => vi.fn());
 
 vi.mock("@flags-sdk/vercel", async (importOriginal) => ({
-  ...(await importOriginal<typeof FlagsVercel>()),
+  ...(await importOriginal<{ getProviderData: typeof getProviderDataType }>()),
   getProviderData,
 }));
 

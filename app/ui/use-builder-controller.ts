@@ -276,7 +276,6 @@ export function useBuilderController({
         };
       }
     },
-    undefined,
   );
   const serverSaveWaiters = useRef(
     new Map<
@@ -326,7 +325,7 @@ export function useBuilderController({
       startTransition(() => {
         dispatchServerSave(input);
       });
-      return acknowledgement.promise;
+      return await acknowledgement.promise;
     },
     [dispatchServerSave],
   );

@@ -23,9 +23,7 @@ const navigation = vi.hoisted(() => ({
 const builderActions = vi.hoisted(() => ({
   continueBuilderHandoff: vi.fn(),
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  loadActiveBuilderDraft: vi.fn(async () =>
-    Promise.resolve<BuilderDraftPageData | undefined>(globalThis.undefined),
-  ),
+  loadActiveBuilderDraft: vi.fn(async () => globalThis.undefined),
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   saveActiveBuilderDraft: vi.fn(async (input: { draftId: string; expectedRevision: number }) => ({
     draftId: input.draftId,
@@ -291,7 +289,7 @@ const waitForFrame = async () => {
   requestAnimationFrame(() => {
     frame.resolve(null);
   });
-  return frame.promise;
+  return await frame.promise;
 };
 
 const remoteDraft = (revision: number, brief: string): BuilderDraftPageData => ({
@@ -364,12 +362,13 @@ describe("Vercel-faithful App Builder flow", () => {
       if (!restartEffect) {
         return autosave;
       }
-      restartedDiscard ??= async (revision) => autosave.discardSupersededByRemoteRevision(revision);
+      restartedDiscard ??= async (revision) =>
+        await autosave.discardSupersededByRemoteRevision(revision);
       return { ...autosave, discardSupersededByRemoteRevision: restartedDiscard };
     });
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
-      .mockImplementationOnce(async () => pending.promise)
+      .mockImplementationOnce(async () => await pending.promise)
       .mockResolvedValueOnce(remoteDraft(3, "Fresh remote brief."));
     // oxlint-disable-next-line eslint/require-await -- Preserve the Server Action test interface.
     builderActions.saveActiveBuilderDraft.mockImplementation(async (input) => ({
@@ -404,7 +403,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("coalesces slow draft polls through timer ticks and rerenders", async () => {
     vi.useFakeTimers();
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
-    builderActions.loadActiveBuilderDraft.mockImplementationOnce(async () => pending.promise);
+    builderActions.loadActiveBuilderDraft.mockImplementationOnce(async () => await pending.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => await vi.advanceTimersByTimeAsync(10_000));
@@ -458,7 +457,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("coalesces visibility events while preserving a fresh read after return", async () => {
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
-      .mockImplementationOnce(async () => pending.promise)
+      .mockImplementationOnce(async () => await pending.promise)
       .mockResolvedValueOnce(remoteDraft(3, "Newest remote brief."));
     const view = await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
@@ -490,7 +489,7 @@ describe("Vercel-faithful App Builder flow", () => {
     vi.useFakeTimers();
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
     builderActions.loadActiveBuilderDraft
-      .mockImplementationOnce(async () => pending.promise)
+      .mockImplementationOnce(async () => await pending.promise)
       .mockResolvedValueOnce(remoteDraft(2, "Recovered remote brief."));
     const view = await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
@@ -510,7 +509,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not refresh or apply a pending draft after unmount", async () => {
     vi.useFakeTimers();
     const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
-    builderActions.loadActiveBuilderDraft.mockImplementationOnce(async () => pending.promise);
+    builderActions.loadActiveBuilderDraft.mockImplementationOnce(async () => await pending.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
     await act(async () => await vi.advanceTimersByTimeAsync(10_000));
@@ -891,7 +890,7 @@ describe("Vercel-faithful App Builder flow", () => {
     vi.useFakeTimers();
     sessionStorage.setItem("autograph-app-brief", "Claim this anonymous brief.");
     const saved = Promise.withResolvers<{ draftId: string; revision: number; updatedAt: string }>();
-    builderActions.saveActiveBuilderDraft.mockImplementationOnce(async () => saved.promise);
+    builderActions.saveActiveBuilderDraft.mockImplementationOnce(async () => await saved.promise);
     await render(<AppBuilder authenticated />);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersToNextFrame());
@@ -987,7 +986,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not apply an older remote revision after a newer revision settles", async () => {
     const delayedRead = Promise.withResolvers<undefined>();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const read = vi.fn(async () => undefined);
+    const read = vi.fn(async () => {});
     vi.spyOn(draftOutbox, "createBuilderDraftOutbox").mockReturnValue({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clear: async () => {},
@@ -1034,7 +1033,9 @@ describe("Vercel-faithful App Builder flow", () => {
       />
     );
     const view = await render(page(1));
-    read.mockImplementationOnce(async () => delayedRead.promise);
+    read.mockImplementationOnce(async () => {
+      await delayedRead.promise;
+    });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => root?.render(page(2)));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -1044,7 +1045,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
-      delayedRead.resolve(undefined as undefined);
+      delayedRead.resolve();
     });
     expect(requireElement(view.querySelector<HTMLInputElement>("#app-name")).value).toBe(
       "Revision 3",
@@ -1054,7 +1055,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not replace newer edits with its own in-flight autosave", async () => {
     vi.useFakeTimers();
     const save = Promise.withResolvers<{ draftId: string; revision: number; updatedAt: string }>();
-    builderActions.saveActiveBuilderDraft.mockImplementationOnce(async () => save.promise);
+    builderActions.saveActiveBuilderDraft.mockImplementationOnce(async () => await save.promise);
     const view = await render(
       <AppBuilder authenticated user={{ email: "taylor@example.com", name: "Taylor" }} />,
     );
@@ -1325,7 +1326,9 @@ describe("Vercel-faithful App Builder flow", () => {
 
   it("keeps the edited form mounted through a failed continuation and retries the same intent", async () => {
     const continuation = Promise.withResolvers<{ status: "error" }>();
-    builderActions.continueBuilderHandoff.mockImplementationOnce(async () => continuation.promise);
+    builderActions.continueBuilderHandoff.mockImplementationOnce(
+      async () => await continuation.promise,
+    );
     const view = await render(<AppBuilder authenticated />);
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
     await fill(brief, "Do not lose this saved intent.");

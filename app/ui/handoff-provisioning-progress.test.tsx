@@ -5,19 +5,15 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts";
+import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts-schema";
+import { builderProvisionProjectionSchema } from "@/lib/provisioning/contracts-schema";
 import { HandoffProvisioningProgress } from "./handoff-provisioning-progress";
 
-const navigation = vi.hoisted(() => ({ refresh: vi.fn() }));
-const actions = vi.hoisted(() => ({
+const navigation = { refresh: vi.fn() };
+const actions = {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
   continue: vi.fn(async () => ({ status: "updated" as const })),
-}));
-
-vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
-vi.mock("@/app/actions/builder", () => ({
-  continueHandoffProvisioning: actions.continue,
-}));
+};
 
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
@@ -43,7 +39,7 @@ function projection(
 }
 
 class TestEventSource {
-  static instances: TestEventSource[] = [];
+  static readonly instances: TestEventSource[] = [];
   readonly listeners = new Map<string, Set<(event: MessageEvent<string>) => void>>();
   readonly url: string;
   closed = false;
@@ -63,8 +59,17 @@ class TestEventSource {
     this.closed = true;
   }
 
-  emit(name: "snapshot" | "end" | "open" | "error", value?: unknown) {
-    const event = new MessageEvent("message", { data: JSON.stringify(value) });
+  emit(name: string, value: BuilderProvisionProjection | undefined) {
+    const parsed = builderProvisionProjectionSchema.safeParse(value);
+    this.emitData(name, JSON.stringify(parsed.success ? parsed.data : null));
+  }
+
+  emitRaw(name: string, serialized: string) {
+    this.emitData(name, serialized);
+  }
+
+  private emitData(name: string, data: string) {
+    const event = new MessageEvent("message", { data });
     for (const listener of this.listeners.get(name) ?? []) {
       listener(event);
     }
@@ -80,17 +85,16 @@ class TestEventSource {
 
 const streamAt = (index: number): TestEventSource => {
   const stream = TestEventSource.instances[index];
-  if (!stream) {
+  if (stream === undefined) {
     throw new Error(`Expected EventSource instance at index ${index}`);
   }
   return stream;
 };
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-let root: Root | undefined;
-let container: HTMLDivElement | undefined;
+let root: Root | null = null;
+let container: HTMLDivElement | null = null;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function render(initial = projection(1)) {
@@ -99,21 +103,21 @@ async function render(initial = projection(1)) {
   root = createRoot(container);
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
   await act(async () => {
-    root?.render(<HandoffProvisioningProgress handoffId={handoffId} initial={initial} />);
+    root.render(<HandoffProvisioningProgress handoffId={handoffId} initial={initial} />);
   });
 }
 
 afterEach(async () => {
-  if (root) {
+  if (root !== null) {
     await act(async () => {
-      root?.unmount();
+      root.unmount();
       await Promise.resolve();
     });
   }
   container?.remove();
-  root = undefined;
-  container = undefined;
-  TestEventSource.instances = [];
+  root = null;
+  container = null;
+  TestEventSource.instances.length = 0;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
@@ -152,7 +156,7 @@ describe("HandoffProvisioningProgress", () => {
     await act(async () => {
       stream.malformed("snapshot");
     });
-    for (const invalid of [
+    const invalidSnapshots: unknown[] = [
       { ...projection(99), provisioning: { ...projection(99).provisioning, status: "unexpected" } },
       { ...projection(99), provisioning: { ...projection(99).provisioning, requestId: handoffId } },
       { ...projection(99), provisioning: { ...projection(99).provisioning, github: {} } },
@@ -162,10 +166,16 @@ describe("HandoffProvisioningProgress", () => {
       },
       { ...projection(99), extra: "unexpected" },
       { ...projection(99), revision: Number.MAX_SAFE_INTEGER + 1 },
-    ]) {
+    ];
+    for (const invalid of invalidSnapshots) {
       // oxlint-disable-next-line eslint/no-await-in-loop, eslint/require-await -- preserve intentional sequential control flow
       await act(async () => {
-        stream.emit("snapshot", invalid);
+        const parsed = builderProvisionProjectionSchema.safeParse(invalid);
+        if (!parsed.success) {
+          stream.emitRaw("snapshot", JSON.stringify(invalid));
+          return;
+        }
+        stream.emit("snapshot", parsed.data);
       });
     }
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
@@ -217,7 +227,7 @@ describe("HandoffProvisioningProgress", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     await act(async () => root?.unmount());
     expect(stream.closed).toBe(true);
-    root = undefined;
+    root = null;
   });
 
   it("explicitly reconnects from the last accepted revision without retrying provider work", async () => {

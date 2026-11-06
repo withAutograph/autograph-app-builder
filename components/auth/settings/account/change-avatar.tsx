@@ -7,7 +7,8 @@ import { useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { toast } from "sonner";
 import { UserAvatar } from "@/components/auth/user/user-avatar";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,7 +55,9 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
       updateUser(
         { image },
         {
-          onSuccess: () => toast.success(localization.settings.avatarChangedSuccess),
+          onSuccess: () => {
+            toast.success(localization.settings.avatarChangedSuccess);
+          },
         },
       );
     } catch (error) {
@@ -98,7 +101,9 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={handleFileChange}
+        onChange={(event) => {
+          handleFileChange(event);
+        }}
       />
 
       <div className="flex items-center gap-4">
@@ -132,7 +137,9 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
             <DropdownMenuItem
               variant="destructive"
               disabled={!session?.user.image}
-              onClick={handleDelete}
+              onClick={() => {
+                handleDelete();
+              }}
             >
               <Trash2 />
 

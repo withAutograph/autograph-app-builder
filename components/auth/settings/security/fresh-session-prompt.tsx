@@ -11,7 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useSignInContinuation } from "@/lib/auth/use-sign-in-continuation";
 
 export interface FreshSessionPromptProps {
-  onFresh: () => unknown | Promise<unknown>;
+  onFresh: () => void | Promise<void>;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -38,7 +38,7 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
   const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const email = session.data?.user.email;
-    if (!email) {
+    if (email === null || email === undefined || email === "") {
       return;
     }
     signIn.mutate({ email, password });
@@ -68,8 +68,16 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
                 type="password"
                 required
               />
-              {signIn.error && (
-                <FieldError>{signIn.error.error?.message ?? signIn.error.message}</FieldError>
+              {signIn.error !== null && signIn.error !== undefined && (
+                <FieldError>
+                  {(typeof signIn.error.error === "object" &&
+                  signIn.error.error !== null &&
+                  "message" in signIn.error.error &&
+                  typeof signIn.error.error.message === "string"
+                    ? signIn.error.error.message
+                    : undefined) ??
+                    (signIn.error instanceof Error ? signIn.error.message : undefined)}
+                </FieldError>
               )}
             </Field>
             <Button disabled={!password || signIn.isPending} type="submit">

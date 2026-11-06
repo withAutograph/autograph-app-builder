@@ -54,7 +54,7 @@ export function Appearance({ className }: AppearanceProps) {
               value={isMounted ? theme : ""}
               onValueChange={setTheme}
               className="grid gap-3 grid-cols-2 sm:grid-cols-3"
-              disabled={!isMounted || !theme}
+              disabled={!isMounted || theme === null || theme === ""}
             >
               {themes.includes("system") && (
                 <FieldLabel htmlFor="system">

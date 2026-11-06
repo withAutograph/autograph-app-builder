@@ -4,11 +4,13 @@ import { parseLocalOAuthAuthorization } from "@/lib/auth/local-oauth-approval";
 import { readProviderEmulation } from "@/lib/integrations/local-provider-emulation";
 import { providerEmulationFetch } from "@/lib/integrations/provider-emulation-fetch";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function completeAuthorization(
+const hasValue = (value: string | null | undefined): value is string =>
+  value !== null && value !== undefined && value !== "";
+
+export const completeAuthorization = async (
   context: { params: Promise<{ provider: string }> },
   values: Record<string, string | undefined>,
-) {
+) => {
   try {
     const { provider } = await context.params;
     const emulation = readProviderEmulation(process.env);
@@ -28,19 +30,19 @@ export async function completeAuthorization(
       parsed.provider === "github"
         ? new URL(`${emulation.githubOrigin}/login/oauth/callback`)
         : new URL(`${emulation.vercelOrigin}/oauth/authorize/callback`);
-    const body = new URLSearchParams({
+    const bodyValues = {
       client_id: parsed.authorization.client_id,
       [parsed.provider === "github" ? "login" : "username"]: "autograph-dev",
       redirect_uri: parsed.authorization.redirect_uri,
       scope: parsed.authorization.scope,
       state: parsed.authorization.state,
-      ...(parsed.authorization.code_challenge && parsed.authorization.code_challenge_method
-        ? {
-            code_challenge: parsed.authorization.code_challenge,
-            code_challenge_method: parsed.authorization.code_challenge_method,
-          }
-        : {}),
-    });
+    };
+    const { code_challenge, code_challenge_method } = parsed.authorization;
+    if (hasValue(code_challenge) && hasValue(code_challenge_method)) {
+      bodyValues.code_challenge = code_challenge;
+      bodyValues.code_challenge_method = code_challenge_method;
+    }
+    const body = new URLSearchParams(bodyValues);
     const response = await providerEmulationFetch(
       callback,
       {
@@ -53,7 +55,7 @@ export async function completeAuthorization(
       emulation,
     );
     const location = response.headers.get("location");
-    if (!location || response.status < 300 || response.status >= 400) {
+    if (location === null || location === "" || response.status < 300 || response.status >= 400) {
       throw new Error("Emulated OAuth approval failed.");
     }
     const destination = new URL(location);
@@ -64,13 +66,12 @@ export async function completeAuthorization(
       stateCount: destination.searchParams.getAll("state").length,
       stateMatches: destination.searchParams.get("state") === parsed.authorization.state,
     };
-    if (
-      !callbackValidation.origin ||
-      !callbackValidation.path ||
-      callbackValidation.codeCount !== 1 ||
-      callbackValidation.stateCount !== 1 ||
-      !callbackValidation.stateMatches
-    ) {
+    const hasValidCallback =
+      callbackValidation.origin &&
+      callbackValidation.path &&
+      callbackValidation.codeCount === 1 &&
+      callbackValidation.stateCount === 1;
+    if (!hasValidCallback || !callbackValidation.stateMatches) {
       console.error(
         JSON.stringify({
           level: "error",
@@ -101,4 +102,4 @@ export async function completeAuthorization(
       status: 400,
     });
   }
-}
+};
