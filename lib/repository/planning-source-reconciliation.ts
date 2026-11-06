@@ -85,10 +85,23 @@ const complete = plan => {
     const destination = resolve(root, file);
     let existing;
     try { existing = lstatSync(destination); } catch (error) { if (error.code !== "ENOENT") throw error; }
-    if (existing?.isSymbolicLink() || entry.mode === "120000") rmSync(destination, { force: true });
     const bytes = git(["cat-file", "blob", entry.objectId], { buffer: true });
-    if (entry.mode === "120000") symlinkSync(bytes.toString("utf8"), destination);
-    else { writeFileSync(destination, bytes); chmodSync(destination, entry.mode === "100755" ? 493 : 420); }
+    if (entry.mode === "120000") {
+      const target = bytes.toString("utf8");
+      if (existing?.isSymbolicLink() && readlinkSync(destination) === target) continue;
+      rmSync(destination, { force: true });
+      symlinkSync(target, destination);
+      continue;
+    }
+    // Writing identical files consumes storage on the Sandbox's snapshot-backed filesystem.
+    const mode = entry.mode === "100755" ? 493 : 420;
+    if (existing?.isFile() && readFileSync(destination).equals(bytes)) {
+      if ((existing.mode & 511) !== mode) chmodSync(destination, mode);
+      continue;
+    }
+    if (existing?.isSymbolicLink()) rmSync(destination, { force: true });
+    writeFileSync(destination, bytes);
+    chmodSync(destination, mode);
   }
   git(["update-ref", "HEAD", plan.sourceSha]);
   git(["read-tree", plan.sourceSha]);
