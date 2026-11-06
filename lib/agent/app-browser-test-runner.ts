@@ -20,6 +20,37 @@ export const appBrowserTestCommand = (appId: string): string =>
 
 const quoteBrowserArgument = (argument: string) => `'${argument.replaceAll("'", "'\\''")}'`;
 
+const missingBrowserLibrary = /error while loading shared libraries: [A-Za-z0-9_.+-]+\.so/iu;
+const browserDependencyProbe = `node -e 'const { chromium } = require("playwright"); chromium.launch().then((browser) => browser.close()).catch((error) => { process.exitCode = /error while loading shared libraries: [A-Za-z0-9_.+-]+\\.so/i.test(error.message) ? 42 : 1; });'`;
+
+const needsBrowserDependencies = async (
+  input: {
+    sandbox: Pick<SandboxSession, "run">;
+    root: string;
+    privateBrowserEnvironment?: Readonly<Record<string, string>>;
+    signal?: AbortSignal;
+  },
+  result: { exitCode: number | null; stdout: string; stderr: string },
+): Promise<boolean> => {
+  if (result.exitCode === 0) {
+    return false;
+  }
+  if (missingBrowserLibrary.test(`${result.stderr}\n${result.stdout}`)) {
+    return true;
+  }
+  if (input.privateBrowserEnvironment === undefined) {
+    return false;
+  }
+
+  // The private reporter suppresses browser launch errors. Probe without app authority.
+  const probe = await input.sandbox.run({
+    command: browserDependencyProbe,
+    workingDirectory: input.root,
+    ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+  });
+  return probe.exitCode === 42;
+};
+
 const safeOutput = (value: string): string =>
   value
     .replaceAll(/\p{Cc}/gu, (character) =>
@@ -115,12 +146,7 @@ export const runAppBrowserTests = async (input: {
           });
     };
     let result = await runTask();
-    if (
-      result.exitCode !== 0 &&
-      /error while loading shared libraries: [A-Za-z0-9_.+-]+\.so/iu.test(
-        `${result.stderr}\n${result.stdout}`,
-      )
-    ) {
+    if (await needsBrowserDependencies(input, result)) {
       const dependencyCommand =
         'sudo env PATH="$PATH" ./node_modules/.bin/playwright install-deps chromium';
       const dependencies = await input.sandbox.run({

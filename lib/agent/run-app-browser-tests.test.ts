@@ -200,6 +200,27 @@ describe("private app browser tests", () => {
       }),
     );
   });
+  it("recovers a missing browser library when the private reporter hides the loader error", async () => {
+    const run = vi
+      .fn<
+        (
+          options: SandboxRunOptions,
+        ) => Promise<{ exitCode: number; stdout: string; stderr: string }>
+      >()
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "[private browser] run failed" })
+      .mockResolvedValueOnce({ exitCode: 42, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "[private browser] run passed" });
+    const result = await runResolvedAppBrowserTests({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+      privateBrowserEnvironment: { APP_TEST_PREVIEW_AUTHORITY_FILE: "/workspace/private.json" },
+    });
+    expect(result).toMatchObject({ status: "passed" });
+    expect(run.mock.calls[1]?.[0]?.command).toContain("chromium.launch");
+    expect(run.mock.calls[2]?.[0]?.command).toContain("playwright install-deps chromium");
+  });
   it.each([false, true])(
     "reuses prepared local state with explicit signal %s and preserves it across dependency recovery",
     async (withSignal) => {
