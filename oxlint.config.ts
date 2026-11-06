@@ -3239,12 +3239,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
     },
   },
   {
-    files: ["**/lib/agent/product-acceptance.ts"],
-    rules: {
-      "typescript/prefer-string-starts-ends-with": "off",
-    },
-  },
-  {
     files: [
       "**/.config/mise/scripts/repository/test-postgres-sandbox-leases.mts",
       "**/agent/hooks/release-sandbox-compute.ts",
