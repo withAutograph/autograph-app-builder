@@ -148,8 +148,43 @@ if (stateDirectory) {
     }
   }
 }
-const { runApplicationTasks } = await import("./.config/mise/scripts/repository/app-validation.ts");
-await runApplicationTasks(process.cwd(), appId, ["build"]);
+const root = process.cwd();
+const validation = await import("./.config/mise/scripts/repository/app-validation.ts");
+if (typeof validation.runApplicationTasks === "function") {
+  await validation.runApplicationTasks(root, appId, ["build"]);
+} else {
+  // Older Arrusted kept its build runner private and exported its selection helpers.
+  const { spawnSync } = await import("node:child_process");
+  const path = await import("node:path");
+  const app = validation.discoverApplications(root).find((candidate) => candidate.id === appId);
+  if (!app) throw new Error("Unknown convention-discovered application: " + appId);
+  const run = (command, args, env = process.env) => {
+    const result = spawnSync(command, args, { cwd: root, env, stdio: "inherit" });
+    if (result.error) throw result.error;
+    if (result.status !== 0) process.exit(result.status ?? 1);
+  };
+  run("bun", [".config/mise/scripts/repository/generate-microfrontends.ts"]);
+  const environment = validation.applicationTaskEnvironment?.(root) ?? {
+    ...process.env,
+    TURBO_TELEMETRY_DISABLED: "1",
+    VC_MICROFRONTENDS_CONFIG: path.join(root, ".scratch", "microfrontends", "microfrontends.json"),
+  };
+  const turbo = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "turbo.exe" : "turbo");
+  const taskArguments = validation.applicationTaskArguments ?? validation.lifecycleTaskArguments;
+  run(turbo, taskArguments(root, app, "build"), environment);
+  if (app.framework === "next") {
+    const { assertNativeNextBuild } = await import("./packages/platform-microfrontends/src/hosting/vercel/next-build-output");
+    const appRoot = path.join(root, app.directory);
+    if (assertNativeNextBuild.length < 3) {
+      await assertNativeNextBuild(appRoot, appId);
+    } else {
+      const { readMicrofrontendsConfig } = await import("@autograph/microfrontends/config");
+      const { platformCatalogApplication } = await import("./packages/platform-microfrontends/src/policy/application-identity");
+      const selected = platformCatalogApplication(readMicrofrontendsConfig({ cwd: root, environment }), appId);
+      await assertNativeNextBuild(appRoot, appId, selected.assetPrefix === null ? "" : "/" + selected.assetPrefix);
+    }
+  }
+}
 `.trim();
 
 const repositoryDeliveryBuild = (appId: string) =>
