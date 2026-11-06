@@ -1,4 +1,7 @@
-import { createGitHubPrEffectIntent } from "../repository/github-pr-effect-journal";
+import {
+  createGitHubPrEffectIntent,
+  githubPrEffectIntentDigest,
+} from "../repository/github-pr-effect-journal";
 import type {
   GitHubPrEffectReceipt,
   GitHubPrEffectStore,
@@ -951,17 +954,37 @@ export function composeGitHubPublicationRuntime(input: {
                 ? { ...common, kind: request.kind }
                 : { ...common, kind: request.kind, readyAt: request.readyAt },
             );
-            const execute =
-              request.reconcileOnly === true
-                ? reconcileApprovedGitHubPrEffect
-                : executeApprovedGitHubPrEffect;
-            return await execute({
+            const effect = {
               approvedByCallId: request.approvedByCallId,
               ...(request.abortSignal === undefined ? {} : { abortSignal: request.abortSignal }),
               intent,
               provider,
               store,
-            });
+            };
+            if (intent.kind === "pr-merge") {
+              return request.reconcileOnly === true
+                ? await reconcileApprovedGitHubPrEffect(effect)
+                : await executeApprovedGitHubPrEffect(effect);
+            }
+            const legacy = await store.read(githubPrEffectIntentDigest(intent));
+            const readyAuthorization: NonNullable<GitHubPrDeliveryRef["readyAuthorization"]> =
+              legacy?.status === "pending" ? "recover-first-ready" : "contents-write";
+            const authorized = { ...effect, intent: { ...intent, readyAuthorization } };
+            if (request.reconcileOnly === true) {
+              return (
+                (await reconcileApprovedGitHubPrEffect(authorized)) ??
+                (await reconcileApprovedGitHubPrEffect(effect))
+              );
+            }
+            // A fresh approval can recover a first Ready with the corrected
+            // credential. The provider checks the live draft and its history.
+            if (
+              legacy !== undefined &&
+              (legacy.status !== "pending" || legacy.approvedByCallId === request.approvedByCallId)
+            ) {
+              return legacy;
+            }
+            return await executeApprovedGitHubPrEffect(authorized);
           },
         }),
     async inspectPublishedReconciliationHead(proposalDigest, reconciliation) {
