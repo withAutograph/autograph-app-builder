@@ -16,6 +16,8 @@ const hooks = vi.hoisted(() => ({
   readExport: vi.fn(),
   readContinuity: vi.fn(),
   readContinuityBindings: vi.fn(),
+  readContinuityCheckpoints: vi.fn(),
+  readContinuityVerifiedActors: vi.fn(),
   resolve: vi.fn(),
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
@@ -420,10 +422,26 @@ describe("saved continuity lookup tool", () => {
       request: hooks.request,
       readContinuity: hooks.readContinuity,
       readContinuityBindings: hooks.readContinuityBindings,
+      readContinuityCheckpoints: hooks.readContinuityCheckpoints,
+      readContinuityVerifiedActors: hooks.readContinuityVerifiedActors,
       readTenantExport: hooks.readExport,
       resolvePreviewTarget: hooks.resolve,
       sessionId: selection.sessionId,
     });
+  });
+  it("routes saved checkpoint and verified actor reads without effects", async () => {
+    const checkpoint = { intentId, checkpoints: { suiteDispatch: "unrecorded" } };
+    const actors = { requestCorrelation: "not_established", actors: [] };
+    hooks.readContinuityCheckpoints.mockResolvedValueOnce(checkpoint);
+    hooks.readContinuityVerifiedActors.mockResolvedValueOnce(actors);
+    await expect(
+      getTool.execute({ operation: "continuity-checkpoints", intentId }, toolCtx),
+    ).resolves.toEqual(checkpoint);
+    await expect(
+      getTool.execute({ operation: "continuity-verified-actors", intentId }, toolCtx),
+    ).resolves.toEqual(actors);
+    expect(hooks.request).not.toHaveBeenCalled();
+    expect(hooks.resolve).not.toHaveBeenCalled();
   });
   it("returns owner-scoped binding readback without triggering effects", async () => {
     const result = {

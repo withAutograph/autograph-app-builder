@@ -147,6 +147,8 @@ const selectedApp = async (
     input.action === "continuity-status" ||
     input.action === "continuity-read" ||
     input.action === "continuity-binding-read" ||
+    input.action === "continuity-checkpoints" ||
+    input.action === "continuity-verified-actors" ||
     input.action === "continuity-approval" ||
     input.action === "continuity"
   ) {

@@ -23,6 +23,7 @@ import {
   createManagedRuntimeExecution,
   observeManagedRuntimePorts,
 } from "../agent/managed-runtime-execution";
+import { createVerifiedActorReadback } from "./hosted-operator-verified-actor-readback";
 import { createHostedContinuityOperations } from "./hosted-operator-continuity";
 import { createPostgresContinuityJournalStore } from "./postgres-hosted-operator-continuity-journal";
 import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-custody";
@@ -3956,6 +3957,18 @@ export const createHostedOperatorControlPlane = async (input: {
     const continuityRequest = createContinuityDispatcher({
       store: continuityStore,
       operations: continuities,
+      async readVerifiedActors(context, intentId) {
+        const saved = await continuities.readPlan(context, intentId);
+        await continuitySetup(context, saved.plan);
+        const { operator } = await preparedForContinuity(context);
+        const result = await createVerifiedActorReadback(sharedNormalActorDependencies)({
+          ...context,
+          plan: operator.plan,
+          operationRef: operator.operationRef,
+        });
+        await continuitySetup(context, saved.plan);
+        return result;
+      },
       async readTenantBindings(context, intentId) {
         const saved = await continuities.readPlan(context, intentId);
         const assertCurrent = async () => {

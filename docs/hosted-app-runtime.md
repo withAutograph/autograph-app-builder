@@ -21,7 +21,12 @@ rechecks the prepared setup and the native runtime identity before a locking
 metadata read, with no persistent writes. A principal-scope denial, absent
 actor row, inactive row and active row are distinct; unknown reads fail closed.
 An active row does not identify a browser request or prove its fence, and no
-binding result authorizes an effect or proves app acceptance.
+binding result authorizes an effect or proves app acceptance. The separate
+`continuity-checkpoints` read exposes only recorded journal markers; an
+unrecorded marker is not proof that an effect did not occur. The
+`continuity-verified-actors` read revalidates approved normal sessions and
+memberships and projects account, actor and organization without credentials.
+It does not correlate a historical browser request or prove its fence.
 
 ## Normal app destination versus protected Preview onboarding
 
