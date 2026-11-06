@@ -965,12 +965,21 @@ export const createGitHubAppHttpProvider = (input: {
     const base = property(pull.body, "base");
     const headBranch = stringProperty(head, "ref");
     const snapshotHeadSha = objectId.parse(stringProperty(head, "sha"));
-    const reference = await github({
-      authorization: repository.accessToken,
-      expected: [200],
-      path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/git/ref/heads/${encodePath(headBranch)}`,
-    });
-    const headSha = objectId.parse(stringProperty(property(reference.body, "object"), "sha"));
+    const readLiveHead = async () => {
+      const reference = await github({
+        authorization: repository.accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/git/ref/heads/${encodePath(headBranch)}`,
+      });
+      return objectId.parse(stringProperty(property(reference.body, "object"), "sha"));
+    };
+    // GitHub retains the merged pull's head even after deleting its branch.
+    const mergedReconciliation =
+      draftRequest.reconciliation !== undefined &&
+      record(pull.body) &&
+      pull.body.state === "closed" &&
+      pull.body.merged === true;
+    const headSha = mergedReconciliation ? snapshotHeadSha : await readLiveHead();
     const stalePull = headSha !== snapshotHeadSha;
     const commit = await github({
       authorization: repository.accessToken,

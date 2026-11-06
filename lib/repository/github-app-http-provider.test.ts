@@ -1856,6 +1856,7 @@ describe("existing draft reconciliation provider", () => {
     };
     const calls: { url: string; body: unknown }[] = [];
     const observedHead = head;
+    let merged = false;
     let liveRef = head;
     let liveMessage = `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
     // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
@@ -1887,15 +1888,16 @@ describe("existing draft reconciliation provider", () => {
         return json({
           base: { ref: "main", repo: { id: 100 } },
           body: `<!-- App-Builder-Idempotency: ${"d".repeat(64)} -->`,
-          draft: true,
-          head: { ref: branchName, repo: { id: 100 }, sha: observedHead },
+          draft: !merged,
+          merged,
+          head: { ref: branchName, repo: { id: 100 }, sha: merged ? liveRef : observedHead },
           id: 150_000,
           number: 1500,
-          state: "open",
+          state: merged ? "closed" : "open",
           user: { id: 900, login: "autograph-app-builder[bot]", type: "Bot" },
         });
       if (url.endsWith(`/git/ref/heads/${branchName}`))
-        return json({ node_id: "REF_NODE", object: { sha: liveRef } });
+        return merged ? json({}, 404) : json({ node_id: "REF_NODE", object: { sha: liveRef } });
       if (url.endsWith(`/commits/${head}`))
         return json({
           commit: {
@@ -1977,6 +1979,16 @@ describe("existing draft reconciliation provider", () => {
     await expect(provider.inspectAppliedDraftReconciliation(proposal, observed)).resolves.toBe(
       true,
     );
+    merged = true;
+    const mergedPull = (await provider.inspectExistingDraft({
+      ...inspection,
+      reconciliation: proposal,
+    })) as ExistingDraftObservation;
+    expect(mergedPull).toMatchObject({ state: "closed", draft: false, headSha: mergeCommit });
+    await expect(provider.inspectAppliedDraftReconciliation(proposal, mergedPull)).resolves.toBe(
+      true,
+    );
+    merged = false;
     liveRef = "2".repeat(40);
     liveMessage = `A different operation\n\nApp-Builder-Origin: ${proposal.originMarker}`;
     await expect(

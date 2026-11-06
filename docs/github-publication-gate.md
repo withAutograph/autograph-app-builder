@@ -529,7 +529,9 @@ repeating affected-code selection. A moved revision is visible but cannot use
 the original review for merge. For a published reconciliation, Builder
 checks the retained approved reconciliation against GitHub's current commit
 before offering a new delivery approval for that head. The Ready cycle and
-required Check then bind to that reconciled head.
+required Check then bind to that reconciled head. After merge, Builder can
+verify the retained commit from the closed, merged PR even if GitHub deleted
+its source branch.
 
 When hosted GitHub publication is enabled, an eligible reviewed publication
 can return an input for `finish-github-pr-delivery`. Operators can explicitly
