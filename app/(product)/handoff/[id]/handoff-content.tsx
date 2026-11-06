@@ -58,6 +58,7 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
       headers: requestHeaders,
     });
   } catch {
+    const callbackPath = `/handoff/${encodeURIComponent(id)}`;
     return (
       <div className={styles.appShell}>
         <Header />
@@ -68,9 +69,7 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
               Use the same Autograph account and workspace as the web form. If you are already
               signed into that account, try reloading this page.
             </p>
-            <Link
-              href={`/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`}
-            >
+            <Link href={`/auth/sign-in?callbackURL=${encodeURIComponent(callbackPath)}`}>
               Sign in with the same account
             </Link>
           </section>
@@ -79,9 +78,8 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
     );
   }
   if (!data) {
-    redirect(
-      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`,
-    );
+    const callbackPath = `/handoff/${encodeURIComponent(id)}`;
+    redirect(`/auth/sign-in?callbackURL=${encodeURIComponent(callbackPath)}`);
   }
   const { intent, ...controls } = data;
   const vercel = intent.provisioning?.vercel;
@@ -93,7 +91,8 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
         <section className={`${styles.readyCard} ${handoffStyles.card}`}>
           <h1>{intent.appName}</h1>
           <p>Your prepared app and existing provider connections are saved with Autograph.</p>
-          <div className={handoffStyles.resources} aria-label="Prepared resources">
+          <section className={handoffStyles.resources} aria-labelledby="prepared-resources-heading">
+            <h2 id="prepared-resources-heading">Prepared resources</h2>
             <GitHubResource intent={intent} returnTo={returnTo} />
             {vercel && !(vercel.status === "skipped" && vercel.code === "not_selected") ? (
               <article>
@@ -121,7 +120,7 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
                 </div>
               </article>
             ) : null}
-          </div>
+          </section>
           {intent.connections.length ? (
             <p>App connections: {intent.connections.join(", ")}</p>
           ) : null}
@@ -129,7 +128,9 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
             <summary>Prepared brief</summary>
             <p style={{ whiteSpace: "pre-wrap" }}>{intent.brief}</p>
           </details>
-          {intent.provisioning && data.provisioningRevision ? (
+          {intent.provisioning &&
+          data.provisioningRevision !== undefined &&
+          data.provisioningRevision !== null ? (
             <HandoffProvisioningProgress
               handoffId={data.handoffId}
               initial={{

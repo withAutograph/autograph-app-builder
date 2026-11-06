@@ -13,8 +13,16 @@ export const choiceRequest: PublicInputRequest = {
 };
 
 export const semanticChoiceRequest: PublicInputRequest = {
-  ...choiceRequest,
+  allowFreeform: false,
+  description: "Select where you want to continue building.",
+  kind: "question",
+  options: [
+    { id: "codex", label: "ChatGPT / Codex" },
+    { id: "cursor", label: "Cursor" },
+  ],
   presentation: { control: "choice", section: "build-with" },
+  requestId: "build-client",
+  title: "Choose a build client",
 };
 
 export const repositoryScopeRequest: PublicInputRequest = {
@@ -90,13 +98,10 @@ export const authorizationRequest: PublicInputRequest = {
   title: "Connect GitHub",
 };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function sessionResult(inputRequests: PublicInputRequest[]): EveSessionResult {
-  return {
-    cursor: 4,
-    events: [],
-    inputRequests,
-    sessionId: "session-story",
-    status: "input_required",
-  };
-}
+export const sessionResult = (inputRequests: PublicInputRequest[]): EveSessionResult => ({
+  cursor: 4,
+  events: [],
+  inputRequests,
+  sessionId: "session-story",
+  status: "input_required",
+});

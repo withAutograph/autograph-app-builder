@@ -152,11 +152,10 @@ export function StoreInSection({
 }) {
   const githubView = githubStoreInViewModel({
     action: connected ? "update" : "connect",
-    scopes: gitScopeOptions.map((scope) => ({
-      id: scope.value,
-      label: scope.label,
-      ...(scope.detail === undefined ? {} : { detail: scope.detail }),
-    })),
+    scopes: gitScopeOptions.map((scope) => {
+      const option = { id: scope.value, label: scope.label };
+      return scope.detail === undefined ? option : { ...option, detail: scope.detail };
+    }),
   });
   return (
     <ProviderChoiceSection

@@ -1,53 +1,49 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolveBuilderFlagsForStorybook } from "./main";
+import type { StorybookFlag } from "./main";
 
-const runs = vi.hoisted(() => ({
-  comingSoon: vi.fn(),
-  connections: vi.fn(),
-  provisioning: vi.fn(),
-}));
-
-vi.mock("../lib/feature-flags.ts", () => ({
-  builderComingSoonFlag: { run: runs.comingSoon },
-  builderConnectionsFlag: { run: runs.connections },
-  builderResourceProvisioningFlag: { run: runs.provisioning },
-}));
+const createFlag = (result: boolean): StorybookFlag => ({
+  run: vi.fn(async () => {
+    await Promise.resolve();
+    return result;
+  }),
+});
 
 describe("Storybook feature flags", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   it("uses the production Vercel flag values", async () => {
-    vi.stubEnv("FLAGS", "storybook-sdk-key");
-    runs.connections.mockResolvedValue(true);
-    runs.comingSoon.mockResolvedValue(false);
-    runs.provisioning.mockResolvedValue(true);
+    const flags = {
+      comingSoon: createFlag(false),
+      connections: createFlag(true),
+      provisioning: createFlag(true),
+    } satisfies Record<string, StorybookFlag>;
 
-    await expect(resolveBuilderFlagsForStorybook()).resolves.toEqual({
+    await expect(resolveBuilderFlagsForStorybook(flags, true)).resolves.toEqual({
       comingSoonEnabled: false,
       connectionsEnabled: true,
       provisioningEnabled: true,
     });
-    for (const run of Object.values(runs)) {
-      expect(run).toHaveBeenCalledWith({
-        identify: {},
-        request: expect.any(Request),
-      });
+    for (const flag of Object.values(flags)) {
+      const run = vi.mocked(flag.run);
+      expect(run).toHaveBeenCalledOnce();
+      const context = run.mock.lastCall?.[0];
+      expect(context).toBeDefined();
+      expect(context.identify).toEqual({});
+      expect(context.request).toBeInstanceOf(Request);
     }
   });
 
   it("fails each flag closed when it cannot be resolved", async () => {
-    vi.stubEnv("FLAGS", "storybook-sdk-key");
-    runs.connections.mockResolvedValue(true);
-    runs.comingSoon.mockRejectedValue(new Error("feature flags unavailable"));
-    runs.provisioning.mockResolvedValue(false);
+    const flags = {
+      comingSoon: {
+        run: vi
+          .fn<StorybookFlag["run"]>()
+          .mockRejectedValue(new Error("feature flags unavailable")),
+      },
+      connections: createFlag(true),
+      provisioning: createFlag(false),
+    } satisfies Record<string, StorybookFlag>;
 
-    await expect(resolveBuilderFlagsForStorybook()).resolves.toEqual({
+    await expect(resolveBuilderFlagsForStorybook(flags, true)).resolves.toEqual({
       comingSoonEnabled: false,
       connectionsEnabled: true,
       provisioningEnabled: false,
@@ -55,15 +51,19 @@ describe("Storybook feature flags", () => {
   });
 
   it("uses the production defaults when Vercel Flags is not configured", async () => {
-    vi.stubEnv("FLAGS", "");
+    const flags = {
+      comingSoon: createFlag(true),
+      connections: createFlag(true),
+      provisioning: createFlag(true),
+    };
 
-    await expect(resolveBuilderFlagsForStorybook()).resolves.toEqual({
+    await expect(resolveBuilderFlagsForStorybook(flags, false)).resolves.toEqual({
       comingSoonEnabled: false,
       connectionsEnabled: false,
       provisioningEnabled: false,
     });
-    expect(runs.connections).not.toHaveBeenCalled();
-    expect(runs.comingSoon).not.toHaveBeenCalled();
-    expect(runs.provisioning).not.toHaveBeenCalled();
+    for (const flag of Object.values(flags)) {
+      expect(flag.run).not.toHaveBeenCalled();
+    }
   });
 });

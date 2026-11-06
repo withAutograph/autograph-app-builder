@@ -77,7 +77,7 @@ export function SignIn({
 
   const [password, setPassword] = useState("");
   const currentLocation = useSyncExternalStore(
-    () => () => null,
+    () => () => {},
     () => window.location.href,
     () => "",
   );
@@ -126,12 +126,11 @@ export function SignIn({
     const email = formData.get("email") as string;
     const rememberMe = formData.get("rememberMe") === "on";
 
-    signInEmail({
-      email,
-      password,
-      ...(emailAndPassword?.rememberMe ? { rememberMe } : {}),
-      fetchOptions,
-    });
+    if (emailAndPassword?.rememberMe === true) {
+      signInEmail({ email, fetchOptions, password, rememberMe });
+    } else {
+      signInEmail({ email, fetchOptions, password });
+    }
   };
 
   const showSeparator = emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;

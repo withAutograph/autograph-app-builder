@@ -26,6 +26,11 @@ const allConnectionNames = featuredConnections.map(([name]) => name);
 export const comingSoonConnections = new Set(["Ramp", "NetSuite", "Xero", "Sage Intacct"]);
 
 const connectionKind = new Map<string, string>(featuredConnections);
+const icons = {
+  quickbooks: SiQuickbooks,
+  "sage-intacct": SiSage,
+  xero: SiXero,
+};
 
 const connectionDescriptions: Record<string, string> = {
   NetSuite: "Import vendor data from a NetSuite account",
@@ -42,11 +47,6 @@ function connectionDescription(name: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
-  const icons = {
-    quickbooks: SiQuickbooks,
-    "sage-intacct": SiSage,
-    xero: SiXero,
-  };
   const Icon = kind ? icons[kind as keyof typeof icons] : undefined;
   const hasBrandAsset = kind === "ramp" || kind === "netsuite";
   return (
@@ -84,9 +84,11 @@ export function ConnectionsSection({
   showMore: boolean;
 }) {
   const normalizedSearch = search.trim().toLowerCase();
-  const available = (
-    showMore || normalizedSearch ? allConnectionNames : allConnectionNames.slice(0, 2)
-  ).filter((name) => !normalizedSearch || name.toLowerCase().includes(normalizedSearch));
+  const source = showMore || normalizedSearch ? allConnectionNames : allConnectionNames.slice(0, 2);
+  const selectedNames = new Set(selected);
+  const available = source.filter(
+    (name) => !normalizedSearch || name.toLowerCase().includes(normalizedSearch),
+  );
   const controls = (
     <>
       <label className={styles.searchBox}>
@@ -100,7 +102,11 @@ export function ConnectionsSection({
           onChange={(event) => {
             onSearchChange(event.target.value);
           }}
-          onKeyDown={(event) => event.key === "Escape" && onSearchChange("")}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              onSearchChange("");
+            }
+          }}
           placeholder="Search connections…"
         />
         {search ? (
@@ -116,7 +122,7 @@ export function ConnectionsSection({
       </label>
       <div className={styles.connectionGrid}>
         {available
-          .filter((name) => !selected.includes(name))
+          .filter((name) => !selectedNames.has(name))
           .map((name) => {
             const comingSoon = comingSoonConnections.has(name);
             if (comingSoon && !comingSoonEnabled) {
@@ -205,10 +211,10 @@ export function ConnectionDrawer({
   onConnected: () => void;
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
-  const [connectionName, setConnectionName] = useState(
+  const [connectionName, setConnectionName] = useState(() =>
     flow.name.toLowerCase().replaceAll(/[^a-z0-9]+/gu, "-"),
   );
-  const [description, setDescription] = useState(connectionDescription(flow.name));
+  const [description, setDescription] = useState(() => connectionDescription(flow.name));
   const accountLabel = flow.name === "Slack" ? "Slack Workspace" : "Account";
 
   useEffect(() => {
