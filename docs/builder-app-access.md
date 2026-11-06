@@ -34,3 +34,18 @@ These controls do not introduce a synthetic runtime, behavior qualification, or
 another release approval. Tests exercise identity continuation, scoped actions,
 pagination and uncertainty recovery; they are implementation verification, not
 requirements imposed on each generated app.
+
+The Production creator link lives in the existing app setup journal. Before
+Auth receives a write, Builder records the original owner scope, saved session,
+invitation identity and return destination. Email only routes the invitation;
+it never proves an account match. The protected Auth service must report a
+verified actor and real sign-in session before setup can grant app access.
+Its callback resumes that saved setup through the same app lease. Accepted
+links survive ordinary app revisions without creating another account or
+requesting another sign-in.
+
+Interrupted creation reads the original invitation before retrying. Status
+reads never send email. An explicit renewal retains the invitation and records
+its new expiry and request identity before the protected write; repeating that
+request cannot send a second email. The creator enrollment is not an ordinary
+People invitation and cannot be cancelled through People controls.
