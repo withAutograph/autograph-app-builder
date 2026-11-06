@@ -44,7 +44,7 @@ describe("reference navigation evidence", () => {
     ).toEqual([]);
     const unrelated = report(["passed", "passed"]);
     const [suite] = unrelated.suites;
-    if (!suite) {
+    if (suite === undefined) {
       throw new Error("Expected a navigation suite.");
     }
     suite.file = "unrelated.spec.ts";

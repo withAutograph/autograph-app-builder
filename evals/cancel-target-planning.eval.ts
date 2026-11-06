@@ -1,5 +1,6 @@
 import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
+import { z } from "zod";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
@@ -21,12 +22,15 @@ export default defineEval({
     t.check(turn1.message, includes("private preview"));
     t.check(
       turn1.message,
-      satisfies(
-        (reply) =>
-          typeof reply === "string" &&
-          !/canonical proposal|digest-bound|target identity|target mutation/iu.test(reply),
-        "automatic planning stays product-facing",
-      ),
+      satisfies((reply) => {
+        const parsedReply = z.string().safeParse(reply);
+        return (
+          parsedReply.success &&
+          !/canonical proposal|digest-bound|target identity|target mutation/iu.test(
+            parsedReply.data,
+          )
+        );
+      }, "automatic planning stays product-facing"),
     );
     t.notCalledTool("bash");
     t.notCalledTool("write_file");

@@ -11,6 +11,13 @@ interface ProbeOutcome {
   status: "passed" | "failed" | "blocked";
   detail: string;
 }
+interface ProbeReceipt {
+  applicationFunctionalCredit: false;
+  childCleanup: ProbeOutcome;
+  childSandbox: ProbeOutcome;
+  model: ProbeOutcome;
+  producer: "evaluator";
+}
 interface ProbePorts {
   model: () => Promise<string>;
   createChild: () => Promise<{
@@ -21,14 +28,14 @@ interface ProbePorts {
 
 /** These assertions prove infrastructure access only, never generated product behavior. */
 export const exerciseCandidateCapabilities = async (ports: ProbePorts) => {
-  const receipt = {
+  const receipt: ProbeReceipt = {
     applicationFunctionalCredit: false,
-    childCleanup: { detail: "No child Sandbox acquired.", status: "blocked" } as ProbeOutcome,
+    childCleanup: { detail: "No child Sandbox acquired.", status: "blocked" },
     childSandbox: {
       detail: "Child Sandbox probe not completed.",
       status: "blocked",
-    } as ProbeOutcome,
-    model: { detail: "Model probe not completed.", status: "blocked" } as ProbeOutcome,
+    },
+    model: { detail: "Model probe not completed.", status: "blocked" },
     producer: "evaluator",
   };
   try {
@@ -124,7 +131,11 @@ export const runCandidateCapabilityProbe = async (input: {
   abortSignal: AbortSignal;
   model: string;
 }) => {
-  const setup = { exitCode: null as number | null, stderr: "", stdout: "" };
+  const setup = {
+    exitCode: null,
+    stderr: "",
+    stdout: "",
+  } satisfies { exitCode: number | null; stderr: string; stdout: string };
   try {
     await input.session.writeTextFile({
       content: JSON.stringify({

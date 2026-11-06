@@ -6,13 +6,16 @@ import { includes } from "eve/evals/expect";
 import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
+const branchPublicationStale = "branch-publication-stale";
+const gitHeadCommand = ["rev-parse", "HEAD"];
+
 export default defineEval({
   description:
     "A stale branch-worktree proposal is rejected after approval without creating its branch or worktree.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    const session = await prepareReviewedWorkflow(t, repository, "branch-publication-stale");
-    const head = execFileSync("git", ["rev-parse", "HEAD"], {
+    const session = await prepareReviewedWorkflow(t, repository, branchPublicationStale);
+    const head = execFileSync("/opt/homebrew/bin/git", gitHeadCommand, {
       cwd: repository,
       encoding: "utf-8",
     });
@@ -24,7 +27,7 @@ export default defineEval({
     t.succeeded();
     t.check(turn1.message, includes("rejected without creating a branch or worktree"));
     if (
-      execFileSync("git", ["rev-parse", "HEAD"], {
+      execFileSync("/opt/homebrew/bin/git", gitHeadCommand, {
         cwd: repository,
         encoding: "utf-8",
       }) !== head
@@ -32,7 +35,7 @@ export default defineEval({
       throw new Error("A stale approval changed the source HEAD.");
     }
     if (
-      execFileSync("git", ["branch", "--list", "app-builder/*"], {
+      execFileSync("/opt/homebrew/bin/git", ["branch", "--list", "app-builder/*"], {
         cwd: repository,
         encoding: "utf-8",
       }) !== ""

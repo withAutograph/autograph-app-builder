@@ -13,6 +13,17 @@ export const vercelEmulatorOrigin = `http://localhost:${emulateBasePort}`;
 export const githubEmulatorOrigin = `http://localhost:${emulateBasePort + 1}`;
 export const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/autograph_app_builder`;
 
+interface BrowserBoundaryState {
+  clipboard: string[];
+  opened: string[];
+}
+
+declare global {
+  interface Window {
+    __e2eBoundaries: BrowserBoundaryState;
+  }
+}
+
 export const emulatedProviders = ["GitHub", "Vercel"] as const;
 export type EmulatedProvider = (typeof emulatedProviders)[number];
 
@@ -121,7 +132,8 @@ export async function currentSession(page: Page) {
   try {
     const response = await page.request.get("/api/auth/get-session");
     if (!response.ok()) return null;
-    return response.json();
+    const session: unknown = await response.json();
+    return session;
   } catch {
     return null;
   }
@@ -290,9 +302,9 @@ export async function installBrowserBoundaries(
   mode: "success" | "blocked" = "success",
 ) {
   await context.addInitScript((boundaryMode) => {
-    const state = {
-      clipboard: [] as string[],
-      opened: [] as string[],
+    const state: BrowserBoundaryState = {
+      clipboard: [],
+      opened: [],
     };
     Object.defineProperty(window, "__e2eBoundaries", {
       configurable: false,
@@ -308,36 +320,35 @@ export async function installBrowserBoundaries(
         },
       },
     });
-    window.open = (url?: string | URL) => {
-      if (boundaryMode === "blocked") throw new Error("Protocol blocked");
-      const value = String(url ?? "");
-      if (value !== "about:blank") state.opened.push(value);
-      return {
-        close() {
-          // The emulated window has no resources to close.
-        },
-        location: {
-          get href() {
-            return state.opened.at(-1) ?? "";
+    Object.defineProperty(window, "open", {
+      configurable: true,
+      value: (url?: string | URL) => {
+        if (boundaryMode === "blocked") throw new Error("Protocol blocked");
+        const value = String(url ?? "");
+        if (value !== "about:blank") state.opened.push(value);
+        return {
+          close() {
+            // The emulated window has no resources to close.
           },
-          set href(next: string) {
-            state.opened.push(next);
+          location: {
+            get href() {
+              return state.opened.at(-1) ?? "";
+            },
+            set href(next: string) {
+              state.opened.push(next);
+            },
           },
-        },
-        opener: null,
-      } as unknown as Window;
-    };
+          opener: null,
+        };
+      },
+    });
   }, mode);
 }
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function browserBoundaryState(page: Page) {
   return await page.evaluate(() => {
-    const state = (
-      window as typeof window & {
-        __e2eBoundaries: { clipboard: string[]; opened: string[] };
-      }
-    ).__e2eBoundaries;
+    const state = window.__e2eBoundaries;
     return structuredClone(state);
   });
 }

@@ -1,40 +1,70 @@
 import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
+import { z } from "zod";
+
+const redactedValue = "[REDACTED]";
+const redactedToken = "Bearer [REDACTED]";
+const redactedJwt = "[REDACTED JWT]";
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+interface JsonObject {
+  [key: string]: JsonValue;
+}
+const jsonObjectSchema: z.ZodType<JsonObject> = z.record(z.string(), jsonValueSchema);
+type EvidenceRecord = JsonObject;
+const statusEventSchema = z.looseObject({
+  data: z.looseObject({
+    result: z.looseObject({ output: jsonValueSchema, toolName: z.string().optional() }).optional(),
+    toolName: z.string().optional(),
+  }),
+  type: z.string(),
+});
 
 export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
 
 // Apply to structured receipts and native diagnostics before persistence. Never
 // serialize the runtime environment or session continuation credentials.
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function sanitizeEvidence(value: unknown): unknown {
-  if (typeof value === "string") {
-    return value
-      .replaceAll(/\bBearer\s+[^\s"',}]+/giu, "Bearer [REDACTED]")
-      .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[REDACTED JWT]")
+export function sanitizeEvidence(value: JsonValue): JsonValue {
+  const parsedString = z.string().safeParse(value);
+  if (parsedString.success) {
+    return parsedString.data
+      .replaceAll(/\bBearer\s+[^\s"',}]+/giu, redactedToken)
+      .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, redactedJwt)
       .replaceAll(
         /(?<prefix>[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z_]*["']?\s*[:=]\s*["']?)[^\s"',}]+/gu,
-        "$<prefix>[REDACTED]",
+        `$<prefix>${redactedValue}`,
       )
       .replaceAll(
         /(?<prefix>["'](?:authorization|cookie|continuationToken|[^"']*(?:token|secret|password)|api[_-]?key)["']\s*:\s*["'])[^"']+/giu,
-        "$<prefix>[REDACTED]",
+        `$<prefix>${redactedValue}`,
       )
       .replaceAll(
         /(?<prefix>[?&](?:token|key|signature|code|state|x-vercel-protection-bypass)=)[^&\s"']+/giu,
-        "$<prefix>[REDACTED]",
+        `$<prefix>${redactedValue}`,
       );
   }
   if (Array.isArray(value)) {
     return value.map(sanitizeEvidence);
   }
-  if (value && typeof value === "object") {
+  const parsedObject = jsonObjectSchema.safeParse(value);
+  if (parsedObject.success) {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
+      Object.entries(parsedObject.data).map(([key, item]) => [
         key,
         /^(?:authorization|cookie|set-cookie|.*(?:token|secret|password)|api[_-]?key|credentials)$/iu.test(
           key,
         )
-          ? "[REDACTED]"
+          ? redactedValue
           : sanitizeEvidence(item),
       ]),
     );
@@ -48,7 +78,7 @@ export function digest(content: string) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function evidenceCompletion(exitCode: number | null, records: Record<string, unknown>[]) {
+export function evidenceCompletion(exitCode: number | null, records: EvidenceRecord[]) {
   if (exitCode !== 0) {
     return { reason: "Native eval failed or was interrupted.", status: "failed" };
   }
@@ -69,29 +99,30 @@ export function evidenceCompletion(exitCode: number | null, records: Record<stri
 
 /** Line framing prevents credentials split across stream chunks leaking to disk. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function evidenceSink(
-  logPath: string,
-  transcriptPath: string,
-  records: Record<string, unknown>[],
-) {
+export function evidenceSink(logPath: string, transcriptPath: string, records: EvidenceRecord[]) {
   let pending = "";
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function line(raw: string) {
-    appendFileSync(logPath, `${sanitizeEvidence(raw)}\n`, { mode: 0o600 });
+    const sanitizedLine = z.string().parse(sanitizeEvidence(raw));
+    appendFileSync(logPath, `${sanitizedLine}\n`, { mode: 0o600 });
     const start = raw.indexOf(evidencePrefix);
     if (start === -1) {
       return;
     }
     try {
-      const record = sanitizeEvidence(
+      const parsedRecord = jsonValueSchema.safeParse(
         JSON.parse(raw.slice(start + evidencePrefix.length)),
-      ) as Record<string, unknown>;
-      if (
-        !record ||
-        Array.isArray(record) ||
-        typeof record !== "object" ||
-        typeof record.kind !== "string"
-      ) {
+      );
+      if (!parsedRecord.success || Array.isArray(parsedRecord.data) || parsedRecord.data === null) {
+        return;
+      }
+      const sanitizedRecord = jsonObjectSchema.safeParse(sanitizeEvidence(parsedRecord.data));
+      if (!sanitizedRecord.success) {
+        return;
+      }
+      const record = sanitizedRecord.data;
+      const kind = z.string().safeParse(record.kind);
+      if (!kind.success) {
         return;
       }
       records.push(record);
@@ -102,7 +133,7 @@ export function evidenceSink(
   }
   return {
     end() {
-      if (pending) {
+      if (pending.length > 0) {
         line(pending);
       }
       pending = "";
@@ -121,35 +152,34 @@ export function evidenceSink(
 export type CandidateExportFile = Readonly<{ path: string; content: string }>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function changeSetStatusOutput(
-  record: Record<string, unknown>,
-): Record<string, unknown> | undefined {
-  const event = record.event as
-    | {
-        type?: unknown;
-        data?: {
-          toolName?: unknown;
-          result?: { toolName?: unknown; output?: unknown } | Record<string, unknown>;
-        };
-      }
-    | undefined;
-  if (event?.type !== "action.result" || !event.data?.result) {
+function asEvidenceRecord(value: JsonValue | undefined): EvidenceRecord | undefined {
+  const parsed = jsonObjectSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+const isStatusTool = (value: JsonValue | undefined) => {
+  const name = z.string().safeParse(value);
+  return name.success && (name.data === "change-set-status" || name.data === "change_set_status");
+};
+
+const changeSetStatusOutput = (record: EvidenceRecord): EvidenceRecord | undefined => {
+  const parsedEvent = statusEventSchema.safeParse(record.event);
+  if (!parsedEvent.success || parsedEvent.data.type !== "action.result") {
     return undefined;
   }
-  if (["change-set-status", "change_set_status"].includes(event.data.result.toolName as string)) {
-    const { output } = event.data.result;
-    return output && typeof output === "object" && !Array.isArray(output)
-      ? (output as Record<string, unknown>)
-      : undefined;
+  const { data: dataValue } = parsedEvent.data;
+  const resultValue = dataValue.result;
+  if (resultValue && isStatusTool(resultValue.toolName)) {
+    return asEvidenceRecord(resultValue.output);
   }
-  return ["change-set-status", "change_set_status"].includes(event.data.toolName as string)
-    ? event.data.result
+  return resultValue && isStatusTool(dataValue.toolName)
+    ? asEvidenceRecord(resultValue)
     : undefined;
-}
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function candidateExportProvenanceFromEvidence(
-  records: readonly Record<string, unknown>[],
+  records: readonly EvidenceRecord[],
 ): "native reviewed change-set-status export" | "native unreviewed validation-failed export" {
   for (const record of records.toReversed()) {
     const output = changeSetStatusOutput(record);
@@ -162,48 +192,74 @@ export function candidateExportProvenanceFromEvidence(
   return "native reviewed change-set-status export";
 }
 
+const parseCandidateFiles = (files: JsonValue[]): CandidateExportFile[] | undefined => {
+  const validated: CandidateExportFile[] = [];
+  const paths = new Set<string>();
+  for (const file of files) {
+    const parsedFile = jsonObjectSchema.safeParse(file);
+    if (!parsedFile.success) {
+      return undefined;
+    }
+    const path = z.string().safeParse(parsedFile.data.path);
+    const content = z.string().safeParse(parsedFile.data.content);
+    if (!path.success || !content.success) {
+      return undefined;
+    }
+    const filePath = path.data;
+    if (
+      filePath.startsWith("/") ||
+      filePath.includes("\\") ||
+      filePath
+        .split("/")
+        .some((segment) => segment.length === 0 || segment === "." || segment === "..") ||
+      paths.has(filePath)
+    ) {
+      return undefined;
+    }
+    paths.add(filePath);
+    validated.push({ content: content.data, path: filePath });
+  }
+  return validated;
+};
+
+const candidateAppRoots = (files: CandidateExportFile[]): Set<string> => {
+  const roots = new Set<string>();
+  for (const file of files) {
+    const match = /^(?<appRoot>apps\/[^/]+)\/next\.config\.(?:[cm]?[jt]s)$/u.exec(file.path);
+    const appRoot = z.string().safeParse(match?.groups?.appRoot);
+    if (appRoot.success) {
+      roots.add(appRoot.data);
+    }
+  }
+  return roots;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function candidateExportFromEvidence(
-  records: readonly Record<string, unknown>[],
+  records: readonly EvidenceRecord[],
 ): CandidateExportFile[] | undefined {
   for (const record of records.toReversed()) {
     const files = changeSetStatusOutput(record)?.exportFiles;
     if (!Array.isArray(files) || files.length === 0) {
       continue;
     }
-    const validated: CandidateExportFile[] = [];
-    const paths = new Set<string>();
-    for (const file of files) {
-      if (!file || typeof file !== "object" || Array.isArray(file)) {
-        return undefined;
-      }
-      const { path, content } = file as { path?: unknown; content?: unknown };
-      if (
-        typeof path !== "string" ||
-        typeof content !== "string" ||
-        path.startsWith("/") ||
-        path.includes("\\") ||
-        path.split("/").some((segment) => !segment || segment === "." || segment === "..") ||
-        paths.has(path)
-      ) {
-        return undefined;
-      }
-      paths.add(path);
-      validated.push({ content, path });
+    const validated = parseCandidateFiles(files);
+    if (!validated) {
+      return undefined;
     }
-    const appRoots = new Set(
-      validated.flatMap((file) => {
-        const match = /^(?<appRoot>apps\/[^/]+)\/next\.config\.(?:[cm]?[jt]s)$/u.exec(file.path);
-        return match?.groups?.appRoot ? [match.groups.appRoot] : [];
-      }),
-    );
+    const appRoots = candidateAppRoots(validated);
     if (appRoots.size === 1) {
-      const [appRoot] = appRoots;
-      const prefix = `${appRoot}/`;
-      return validated
-        .filter((file) => file.path.startsWith(prefix))
-        .map((file) => ({ ...file, path: file.path.slice(prefix.length) }))
-        .toSorted((left, right) => left.path.localeCompare(right.path));
+      const appRoot = appRoots.values().next().value;
+      if (appRoot !== undefined && appRoot.length > 0) {
+        const prefix = `${appRoot}/`;
+        const appFiles: CandidateExportFile[] = [];
+        for (const file of validated) {
+          if (file.path.startsWith(prefix)) {
+            appFiles.push({ ...file, path: file.path.slice(prefix.length) });
+          }
+        }
+        return appFiles.toSorted((left, right) => left.path.localeCompare(right.path));
+      }
     }
     return validated.toSorted((left, right) => left.path.localeCompare(right.path));
   }

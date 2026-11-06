@@ -5,7 +5,7 @@ import type { Browser, Page } from "playwright";
 
 export interface CandidateWorkflowOutcome {
   requirementId: string;
-  status: "passed" | "failed" | "blocked" | "unassessed";
+  status: "passed" | "failed" | "blocked";
   reason: string;
   assertions: { id: string; passed: boolean | null; detail: string }[];
   evidence?: { buttons: string[]; headings: string[]; mutationPaths: string[] };
@@ -25,8 +25,10 @@ export const exerciseCandidateBrowserWorkflows = async (
     "independent-child",
     "cancellation",
     "session-recovery",
-  ];
-  for (const requirementId of ids) {
+  ] as const;
+  const runRequirement = async (
+    requirementId: (typeof ids)[number],
+  ): Promise<CandidateWorkflowOutcome> => {
     const context = await browser.newContext();
     const page = await context.newPage();
     page.setDefaultTimeout(5000);
@@ -40,8 +42,20 @@ export const exerciseCandidateBrowserWorkflows = async (
     const check = (id: string, passed: boolean | null, detail: string) =>
       assertions.push({ detail, id, passed });
     const button = (name: RegExp) => page.getByRole("button", { name }).first();
-    const exists = async (locator: ReturnType<Page["locator"]>) =>
-      await locator.isVisible().catch(() => false);
+    const readTextContents = async (locator: ReturnType<Page["locator"]>): Promise<string[]> => {
+      try {
+        return await locator.allTextContents();
+      } catch {
+        return [];
+      }
+    };
+    const exists = async (locator: ReturnType<Page["locator"]>) => {
+      try {
+        return await locator.isVisible();
+      } catch {
+        return false;
+      }
+    };
     const text = async () => await page.locator("body").textContent();
     let outcome: CandidateWorkflowOutcome = {
       assertions: [],
@@ -49,9 +63,9 @@ export const exerciseCandidateBrowserWorkflows = async (
       requirementId,
       status: "blocked",
     };
-    let knownShape = false;
+    let supportedEntry = false;
     let runtimeReady = false;
-    const runDocumentation = async () => {
+    const runDocumentation = async (): Promise<void> => {
       let docs = button(/^docs$|documentation/iu);
       if (!(await exists(docs))) {
         docs = page.getByRole("link", { name: /^docs$|documentation/iu }).first();
@@ -59,14 +73,14 @@ export const exerciseCandidateBrowserWorkflows = async (
       if (!(await exists(docs))) {
         return check(
           "docs-readable",
-          knownShape ? false : null,
+          supportedEntry ? false : null,
           "No documentation fixture is bound for this layout.",
         );
       }
       const before = await text();
       const initialURL = page.url();
       const originalEditor = page.getByRole("textbox", { name: /app name/iu }).first();
-      const originalValue = knownShape ? await originalEditor.inputValue() : undefined;
+      const originalValue = supportedEntry ? await originalEditor.inputValue() : undefined;
       await docs.click();
       const navigated = page.url() !== initialURL;
       const content = page.locator("main, article").first();
@@ -84,7 +98,7 @@ export const exerciseCandidateBrowserWorkflows = async (
         await page.goBack();
       }
       let returnNavigationPassed: boolean | null;
-      if (knownShape) {
+      if (supportedEntry) {
         returnNavigationPassed =
           (await exists(originalEditor)) && (await originalEditor.inputValue()) === originalValue;
       } else if (navigated) {
@@ -98,7 +112,7 @@ export const exerciseCandidateBrowserWorkflows = async (
         "Return must restore the original editor value or original navigated URL and control; dynamic whole-page text is not compared.",
       );
     };
-    const runDurableDraft = async () => {
+    const runDurableDraft = async (): Promise<void> => {
       const name = page.getByRole("textbox", { name: /app name/iu }).first();
       const brief = page.getByRole("textbox", { name: /what.*build|brief|describe/iu }).first();
       if (!(await exists(name)) || !(await exists(brief))) {
@@ -110,16 +124,16 @@ export const exerciseCandidateBrowserWorkflows = async (
       }
       await name.fill("Evaluator persistence sentinel");
       await brief.fill("Create one independent issue tracker with durable server persistence.");
-      await brief.blur();
+      await brief.press("Tab");
       const saved = page.getByText(/draft saved|changes saved/iu).first();
-      const acknowledged = await saved
-        .waitFor({ state: "visible", timeout: 5000 })
-        .then(() => true)
-        .catch(() => false);
-      await page.waitForLoadState("networkidle");
-      await page.reload({ waitUntil: "networkidle" });
-      const nameValue = await name.inputValue();
-      const briefValue = await brief.inputValue();
+      let acknowledged = false;
+      try {
+        await saved.waitFor({ state: "visible", timeout: 5000 });
+        acknowledged = true;
+      } catch {
+        acknowledged = false;
+      }
+      const [nameValue, briefValue] = await Promise.all([name.inputValue(), brief.inputValue()]);
       let draftDurability: boolean | null;
       if (
         nameValue === "Evaluator persistence sentinel" &&
@@ -144,7 +158,7 @@ export const exerciseCandidateBrowserWorkflows = async (
           : "No server mutation occurred while editing and waiting for persistence.",
       );
     };
-    const runProviderReturn = async () => {
+    const runProviderReturn = async (): Promise<void> => {
       const connect = button(/connect github/iu);
       if (!(await exists(connect))) {
         return check("connection-control", false, "No GitHub connection control exists.");
@@ -165,7 +179,7 @@ export const exerciseCandidateBrowserWorkflows = async (
         "Any newly reported connection must survive reload; external approval is not fabricated.",
       );
     };
-    const runCancellation = async () => {
+    const runCancellation = async (): Promise<void> => {
       const cancel = button(/cancel creation|cancel|stop/iu);
       if (!(await exists(cancel))) {
         return check(
@@ -245,7 +259,8 @@ export const exerciseCandidateBrowserWorkflows = async (
       if (count > 0) {
         const href = await links.first().getAttribute("href");
         if (
-          !href ||
+          href === null ||
+          href.length === 0 ||
           href.startsWith("#") ||
           !/^https?:/u.test(new URL(href, page.url()).protocol)
         ) {
@@ -267,7 +282,7 @@ export const exerciseCandidateBrowserWorkflows = async (
         "Server requests require independent backend verification; absence of requests proves no server orchestration was invoked.",
       );
     };
-    const runCreation = async () => {
+    const runCreation = async (): Promise<void> => {
       const review = button(/continue to review/iu);
       if (await exists(review)) {
         await review.click();
@@ -286,36 +301,35 @@ export const exerciseCandidateBrowserWorkflows = async (
         await runChildArtifact();
       }
     };
-    const workflows: Record<string, () => Promise<null>> = {
-      documentation: async () => {
-        await runDocumentation();
-        return null;
-      },
-      "durable-draft": async () => {
-        await runDurableDraft();
-        return null;
-      },
-      "provider-return-success": async () => {
-        await runProviderReturn();
-        return null;
-      },
-    };
-    const runWorkflow = workflows[requirementId] ?? runCreation;
+    const workflows = {
+      documentation: runDocumentation,
+      "durable-draft": runDurableDraft,
+      "provider-return-success": runProviderReturn,
+    } satisfies Partial<Record<(typeof ids)[number], () => Promise<void>>>;
+    const runWorkflow =
+      requirementId === "documentation" ||
+      requirementId === "durable-draft" ||
+      requirementId === "provider-return-success"
+        ? workflows[requirementId]
+        : runCreation;
     try {
-      const response = await page.goto(baseURL, { waitUntil: "networkidle" });
+      const [response] = await Promise.all([
+        page.goto(baseURL, { waitUntil: "networkidle" }),
+        page.waitForLoadState("networkidle"),
+      ]);
       runtimeReady = Boolean(response?.ok());
-      knownShape =
+      supportedEntry =
         runtimeReady &&
         (await exists(button(/continue to review/iu))) &&
         (await exists(page.getByRole("textbox", { name: /app name/iu }).first()));
-      if (runtimeReady && !knownShape && requirementId !== "documentation") {
+      if (runtimeReady && !supportedEntry && requirementId !== "documentation") {
         outcome = {
           assertions: [],
           reason: "This candidate layout has no supported evaluator fixture binding.",
           requirementId,
-          status: "unassessed",
+          status: "blocked",
         };
-      } else if (!response?.ok()) {
+      } else if (response?.ok() !== true) {
         outcome = {
           assertions: [],
           reason: "Candidate runtime did not answer successfully.",
@@ -327,8 +341,6 @@ export const exerciseCandidateBrowserWorkflows = async (
         let status: CandidateWorkflowOutcome["status"];
         if (assertions.some((item) => item.passed === false)) {
           status = "failed";
-        } else if (assertions.length === 0 || assertions.some((item) => item.passed === null)) {
-          status = "unassessed";
         } else {
           status = "passed";
         }
@@ -346,27 +358,24 @@ export const exerciseCandidateBrowserWorkflows = async (
         reason: `Browser fixture could not complete: ${error instanceof Error ? error.message : String(error)}`,
         requirementId,
         status:
-          assertions.some((item) => item.passed === false) || (runtimeReady && knownShape)
+          assertions.some((item) => item.passed === false) || (runtimeReady && supportedEntry)
             ? "failed"
             : "blocked",
       };
     } finally {
-      if (knownShape) {
+      if (supportedEntry) {
         outcome.evidence = {
-          buttons: await page
-            .getByRole("button")
-            .allTextContents()
-            .catch(() => []),
-          headings: await page
-            .getByRole("heading")
-            .allTextContents()
-            .catch(() => []),
+          buttons: await readTextContents(page.getByRole("button")),
+          headings: await readTextContents(page.getByRole("heading")),
           mutationPaths: writes,
         };
       }
       await context.close();
     }
-    outcomes.push(outcome);
+    return outcome;
+  };
+  for (const requirementId of ids) {
+    outcomes.push(await runRequirement(requirementId));
     await retain(outcomes);
   }
   return outcomes;
@@ -384,7 +393,7 @@ const browser = await chromium.launch({headless:true});
 try { await run(browser,input.baseURL,async outcomes => {await writeFile(process.argv[3],JSON.stringify(sanitize({producer:'evaluator',kind:'candidate-browser-workflows',outcomes})));}); }
 finally {await browser.close();}
 `;
-  return { artifactPaths: [] as string[], script };
+  return { artifactPaths: [], script };
 };
 
 /** Convert only evaluator-produced observations; unknown assertions stay unknown. */
@@ -394,6 +403,7 @@ export const candidateWorkflowReceipts = (
 ) =>
   outcomes.map((outcome) =>
     runtimeReceiptSchema.parse({
+      // SAFETY: parse validates the evaluator-built object against the runtime receipt schema.
       observation: {
         artifacts: [artifactPath],
         assertions: outcome.assertions

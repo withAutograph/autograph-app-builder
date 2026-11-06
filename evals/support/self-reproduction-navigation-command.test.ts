@@ -4,10 +4,10 @@ import { navigationReporterOptions } from "./self-reproduction-navigation-comman
 describe("production navigation reporter command", () => {
   it("forwards exact JSON path through the deliberately restricted child environment", () => {
     expect(
-      navigationReporterOptions(["--json-report", "/tmp/run evidence/report.json", "--workers=1"]),
+      navigationReporterOptions(["--json-report", "/var/run evidence/report.json", "--workers=1"]),
     ).toEqual({
       args: ["--workers=1", "--reporter=list,json"],
-      environment: { PLAYWRIGHT_JSON_OUTPUT_FILE: "/tmp/run evidence/report.json" },
+      environment: { PLAYWRIGHT_JSON_OUTPUT_FILE: "/var/run evidence/report.json" },
     });
   });
   it("preserves ordinary test invocation and rejects incomplete output paths", () => {

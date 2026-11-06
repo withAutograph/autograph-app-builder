@@ -7,7 +7,7 @@ import type { FullConfig } from "playwright/test";
 const flagsStorageState = "test-results/passkey-flags-storage-state.json";
 
 export default async function globalSetup(config: FullConfig) {
-  const projectRoot = config.configFile ? path.dirname(config.configFile) : process.cwd();
+  const projectRoot = path.dirname(config.configFile ?? process.cwd());
   const secretFile = await readFile(path.resolve(projectRoot, ".emulate/flags-secret"), "utf-8");
   const secret = secretFile.trim();
   const override = await encryptOverrides({ passkeys: true }, secret, "1h");

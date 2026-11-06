@@ -6,18 +6,22 @@ import {
   parityEvidenceFromReceipts,
 } from "./self-reproduction-parity-evidence";
 
-const artifactExists = async () => true;
+const artifactExists = () => true;
 const base = {
   candidate: { output: "available" as const, reason: "ready", sourceRevision: "candidate" },
   reference: { output: "available" as const, reason: "ready", sourceRevision: "ref" },
   runId: "receipt-fixture",
 };
 
-const runtimeReceipt = (
-  requirementId: string,
-  disposition: "observed" | "missing-functionality" | "infrastructure-unavailable" | "not-run",
-  passed = true,
-) => {
+const runtimeDisposition = {
+  infrastructureUnavailable: "infrastructure-unavailable",
+  missingFunctionality: "missing-functionality",
+  notRun: "not-run",
+  observed: "observed",
+} as const;
+type RuntimeDisposition = (typeof runtimeDisposition)[keyof typeof runtimeDisposition];
+
+const runtimeReceipt = (requirementId: string, disposition: RuntimeDisposition, passed = true) => {
   const row = requirements.find((item) => item.id === requirementId);
   if (!row) {
     throw new Error(`Unknown parity requirement: ${requirementId}`);
