@@ -343,10 +343,13 @@ and reviewed source may proceed through the existing publication approval flow
 without successful private UI startup. Report an actual startup failure; claim
 a working local or hosted Preview only after exercising that actual app.
 The tool returns a private, expiring browser URL only after the running app
-answers an HTTP readiness check. Open the returned URL and follow redirects to
-the actual app screen. A missing route or error screen is a runtime diagnostic.
-Repair it within the approved scope and reopen the preview before reporting
-that the app works.
+answers an HTTP readiness check. For a private Sandbox preview, use
+`run-app-browser-tests` with the app's repository-owned browser tests. The
+runner opens the preview through its owner-bound launch flow. A 403 from a
+generic fetch does not establish that the app is broken. If the browser
+runner is unavailable, report behavior as unverified and continue any
+unfinished approved implementation and repository validation. Repair actual
+app errors within the approved scope before reporting that the app works.
 For a private local preview or candidate checks, if the selected app has a
 repository-owned `app:local` task and requires local data, call
 `prepare-app-local-preview` in the same private sandbox before checking product
