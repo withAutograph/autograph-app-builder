@@ -15,6 +15,9 @@ import { toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { loadBuilderIntegrationState } from "../integrations/builder-integration-deployment";
 import { createBuilderProvisioningDependencies } from "./deployment";
+import { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
+import { readVercelIntegrationEnvironment } from "../integrations/vercel-installation";
+import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
 import { executeBuilderProvisioning } from "./service";
 import { createBuilderSessionDestinationService } from "./builder-session-destination";
 import { createPostgresNativeTargetOnboardingStore } from "./native-target-onboarding-store";
@@ -87,7 +90,7 @@ export const openBuilderSessionDestination = async (
   const principal: HostedPrincipal = { ...authority, scopes: ["autograph:session"] };
   const database = openHostedPostgresDatabase(config.databaseUrl);
   const sessions = createPostgresHostedEveStore(database);
-  const { dependencies } = createBuilderProvisioningDependencies(environment);
+  const journal = createPostgresBuilderProvisionJournalStore(database);
   const assertMember = async (selected: HostedPrincipal) => {
     const current = await readOwner();
     if (
@@ -117,7 +120,7 @@ export const openBuilderSessionDestination = async (
           if (reference === undefined || reference.appId !== session.appId) {
             throw new Error("Select this app's normal destination first.");
           }
-          const row = await dependencies.journal.read({
+          const row = await journal.read({
             authority,
             requestId: reference.requestId,
           });
@@ -151,6 +154,13 @@ export const openBuilderSessionDestination = async (
           throw new Error("This build's destination changed. Refresh before choosing a domain.");
         }
       };
+      const readCredential = (input: { installationId: string }) =>
+        readActiveVercelInstallationToken({
+          authority,
+          config: readVercelIntegrationEnvironment(environment),
+          database,
+          installationId: input.installationId,
+        });
       return {
         scope: target.scope,
         expected: target.expected,
@@ -164,7 +174,7 @@ export const openBuilderSessionDestination = async (
             requireServicesRoot: true,
             requirePublicAppConfiguration: true,
             requireExpectedRepositoryId: target.repositoryId,
-            readCredential: dependencies.readVercelCredential,
+            readCredential,
           });
           if (
             access.status !== "ready" ||
@@ -178,8 +188,7 @@ export const openBuilderSessionDestination = async (
             destination: target.scope,
             assertCurrent,
             readCredential: () =>
-              dependencies.readVercelCredential({
-                authority,
+              readCredential({
                 installationId: target.scope.installationId,
               }),
           });
@@ -192,14 +201,18 @@ export const openBuilderSessionDestination = async (
     publicOrigins,
     authority,
     sessions,
-    dependencies,
-    service: createBuilderSessionDestinationService({
-      sessions,
-      provisioning: dependencies,
-      execute: executeBuilderProvisioning,
-      assertMember,
-      readNativeTarget: createPostgresNativeTargetOnboardingStore(database).read,
-    }),
+    service: {
+      select: (
+        input: Parameters<ReturnType<typeof createBuilderSessionDestinationService>["select"]>[0],
+      ) =>
+        createBuilderSessionDestinationService({
+          sessions,
+          provisioning: createBuilderProvisioningDependencies(environment).dependencies,
+          execute: executeBuilderProvisioning,
+          assertMember,
+          readNativeTarget: createPostgresNativeTargetOnboardingStore(database).read,
+        }).select(input),
+    },
     readPage: async (sessionId: string) => {
       const stored = await sessions.getSession(principal, sessionId);
       if (stored === null) {
@@ -228,7 +241,7 @@ export const openBuilderSessionDestination = async (
       const row =
         reference === undefined
           ? undefined
-          : await dependencies.journal.read({ authority, requestId: reference.requestId });
+          : await journal.read({ authority, requestId: reference.requestId });
       if (reference !== undefined && row?.requestDigest !== reference.requestDigest) {
         throw new Error("This build's saved destination is unavailable.");
       }
