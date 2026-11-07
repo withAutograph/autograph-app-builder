@@ -1,6 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { z } from "zod";
 import { desktopViewports } from "./self-reproduction-parity";
 
 export type ObservationStatus = "passed" | "failed" | "blocked" | "unassessed";
@@ -50,31 +49,32 @@ export const sanitizePreviewEvidence = (value: string) =>
       }
     });
 
-const previewStateSchema = z.looseObject({
-  outcome: z.string().optional(),
-  session: z
-    .object({
-      sessionId: z.string().nullable().optional(),
-      status: z.string().optional(),
-      workingPreview: z.unknown().optional(),
-    })
-    .optional(),
-  sourceRevision: z.string().nullable().optional(),
-});
-const previewReceiptSchema = z.object({
-  expiresAt: z.string(),
-  url: z.string(),
-  verifiedAt: z.string(),
-});
+const sanitizeValue = (value: unknown): unknown => {
+  if (typeof value === "string") {
+    return sanitizePreviewEvidence(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, sanitizeValue(item)]),
+    );
+  }
+  return value;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const previewProvenance = (
-  sourceRevision: string | null,
-  sessionId: string | null,
+  sourceRevision: unknown,
+  sessionId: unknown,
   receipt: PreviewReceipt,
 ): PreviewSourceProvenance => ({
   expiresAt: receipt.expiresAt,
-  sessionId,
-  sourceRevision,
+  sessionId: typeof sessionId === "string" ? sessionId : null,
+  sourceRevision: typeof sourceRevision === "string" ? sourceRevision : null,
   verifiedAt: receipt.verifiedAt,
 });
 
@@ -92,40 +92,45 @@ export const loadWorkingPreview = async (
   nowMs = Date.now(),
 ): Promise<
   | { provenance: PreviewSourceProvenance; receipt: PreviewReceipt; status: "ready" }
-  | {
-      reason: string;
-      status: Exclude<ObservationStatus, "passed" | "blocked" | "unassessed"> | "missing-final";
-    }
+  | { reason: string; status: "expired" | "missing" | "missing-final" | "invalid" }
 > => {
-  let state: z.infer<typeof previewStateSchema>;
+  let state: unknown;
   try {
-    state = previewStateSchema.parse(JSON.parse(await readFile(statePath, "utf-8")));
+    state = JSON.parse(await readFile(statePath, "utf-8"));
   } catch {
     return { reason: "The owner-only state file was missing or invalid JSON.", status: "invalid" };
   }
-  const publicState = state;
-  const receiptResult = previewReceiptSchema.safeParse(publicState.session?.workingPreview);
-  if (!receiptResult.success) {
-    if (
-      publicState.session?.workingPreview === undefined ||
-      publicState.session.workingPreview === null
-    ) {
-      const finalWaiting =
-        publicState.outcome === "waiting" && publicState.session?.status === "waiting";
-      return {
-        reason: finalWaiting
-          ? "The final waiting public session did not deliver a working-preview receipt."
-          : "The public eval state has no delivered working-preview receipt.",
-        status: finalWaiting ? "missing-final" : "missing",
-      };
-    }
+  if (!isRecord(state)) {
+    return { reason: "The public eval state must be a JSON object.", status: "invalid" };
+  }
+  const publicState = state as {
+    outcome?: string;
+    sourceRevision?: unknown;
+    session?: { sessionId?: unknown; status?: string; workingPreview?: unknown };
+  };
+  const receipt = publicState?.session?.workingPreview;
+  if (!receipt || typeof receipt !== "object") {
+    const finalWaiting =
+      publicState.outcome === "waiting" && publicState.session?.status === "waiting";
+    return {
+      reason: finalWaiting
+        ? "The final waiting public session did not deliver a working-preview receipt."
+        : "The public eval state has no delivered working-preview receipt.",
+      status: finalWaiting ? "missing-final" : "missing",
+    };
+  }
+  const candidate = receipt as Partial<PreviewReceipt>;
+  if (
+    typeof candidate.url !== "string" ||
+    typeof candidate.expiresAt !== "string" ||
+    typeof candidate.verifiedAt !== "string"
+  ) {
     return { reason: "The delivered working-preview receipt is incomplete.", status: "invalid" };
   }
-  const receipt = receiptResult.data;
-  if (!isSafePreviewUrl(receipt.url)) {
+  if (!isSafePreviewUrl(candidate.url)) {
     return { reason: "The delivered working-preview URL is invalid or unsafe.", status: "invalid" };
   }
-  const expiration = Date.parse(receipt.expiresAt);
+  const expiration = Date.parse(candidate.expiresAt);
   if (!Number.isFinite(expiration)) {
     return { reason: "The delivered working-preview expiration is invalid.", status: "invalid" };
   }
@@ -136,9 +141,9 @@ export const loadWorkingPreview = async (
     provenance: previewProvenance(
       publicState.sourceRevision,
       publicState.session?.sessionId,
-      receipt,
+      candidate as PreviewReceipt,
     ),
-    receipt,
+    receipt: candidate as PreviewReceipt,
     status: "ready",
   };
 };
@@ -154,39 +159,7 @@ export const writePreviewObservationReport = async (
   report: PreviewObservationReport,
 ) => {
   await mkdir(output, { mode: 0o700, recursive: true });
-  const sanitized = {
-    ...report,
-    note: sanitizePreviewEvidence(report.note),
-    provenance: report.provenance === undefined ? undefined : { ...report.provenance },
-    rows: report.rows.map((row) => ({
-      ...row,
-      evidence: row.evidence.map(sanitizePreviewEvidence),
-      id: sanitizePreviewEvidence(row.id),
-      reason: sanitizePreviewEvidence(row.reason),
-    })),
-    viewports: report.viewports.map((item) => ({
-      ...item,
-      brief:
-        item.brief === undefined
-          ? undefined
-          : {
-              ...item.brief,
-              actualValue:
-                item.brief.actualValue === undefined
-                  ? undefined
-                  : sanitizePreviewEvidence(item.brief.actualValue),
-              reason: sanitizePreviewEvidence(item.brief.reason),
-            },
-      consoleErrors: item.consoleErrors.map(sanitizePreviewEvidence),
-      controls: item.controls.map((control) => ({
-        name: sanitizePreviewEvidence(control.name),
-        role: sanitizePreviewEvidence(control.role),
-      })),
-      pageErrors: item.pageErrors.map(sanitizePreviewEvidence),
-      screenshot:
-        item.screenshot === undefined ? undefined : sanitizePreviewEvidence(item.screenshot),
-    })),
-  } satisfies PreviewObservationReport;
+  const sanitized = sanitizeValue(report) as PreviewObservationReport;
   const json = `${JSON.stringify(sanitized, null, 2)}\n`;
   await writeFile(path.join(output, "report.json"), json, { mode: 0o600 });
   const rows = sanitized.rows
@@ -207,21 +180,21 @@ export const writePreviewObservationReport = async (
         )}</td></tr>`,
     )
     .join("");
-  const figures: string[] = [];
-  for (const item of sanitized.viewports) {
-    if (item.screenshot !== undefined && item.screenshot !== "") {
-      figures.push(
-        `<figure><figcaption>${escapeHtml(item.viewport.name)}</figcaption><img src="${escapeHtml(item.screenshot)}" alt="Preview"></figure>`,
-      );
-    }
-  }
-  const figureMarkup = figures.join("");
+  const figures = sanitized.viewports
+    .filter((item) => item.screenshot)
+    .map(
+      (item) =>
+        `<figure><figcaption>${escapeHtml(item.viewport.name)}</figcaption><img src="${escapeHtml(
+          item.screenshot ?? "",
+        )}" alt="Preview"></figure>`,
+    )
+    .join("");
   await writeFile(
     path.join(output, "index.html"),
     `<!doctype html><meta charset="utf-8"><title>Working-preview observation</title><style>body{font:15px/1.5 system-ui;margin:32px auto;max-width:1440px;padding:0 24px}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:10px;text-align:left}img{max-width:100%}</style><h1>Working-preview observation</h1><p>${escapeHtml(
       sanitized.note,
     )}</p><table><tr><th>Requirement</th><th>Status</th><th>Finding</th></tr>${htmlRows}</table>${
-      figureMarkup
+      figures
     }`,
     { mode: 0o600 },
   );
@@ -232,9 +205,7 @@ export const summarizePreviewRows = (
   viewports: PreviewViewportObservation[],
   briefRequested: boolean,
 ): PreviewObservationReport["rows"] => {
-  const screenshots = viewports.flatMap((item) =>
-    item.screenshot !== undefined && item.screenshot !== "" ? [item.screenshot] : [],
-  );
+  const screenshots = viewports.flatMap((item) => (item.screenshot ? [item.screenshot] : []));
   let browserStatus: ObservationStatus = "unassessed";
   if (viewports.some((item) => item.status === "failed")) {
     browserStatus = "failed";
