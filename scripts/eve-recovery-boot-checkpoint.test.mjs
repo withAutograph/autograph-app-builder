@@ -353,6 +353,25 @@ for (const [name, change] of [
   });
 }
 
+test("rejects malformed carried inbox evidence while retaining an explicit empty inbox", async () => {
+  await Promise.all(
+    [{}, { length: 0 }, null, "", 0, false].map(async (value) => {
+      const malformed = await fixture((f) => {
+        f.entry.carriedInbox = value;
+      });
+      const result = await malformed.collect(malformed.input);
+      assert.equal(result.kind, "unavailable");
+      assert.equal(await malformed.status(), undefined);
+    }),
+  );
+  const empty = await fixture((f) => {
+    f.entry.carriedInbox = [];
+  });
+  const result = await empty.collect(empty.input);
+  assert.equal(result.kind, "candidate");
+  assert.equal(await empty.status(), "failed");
+});
+
 test("owner revocation precedes private checkpoint reads", async () => {
   const f = await fixture();
   f.revoke();

@@ -6182,7 +6182,7 @@ diff --git a/dist/src/execution/session/recovery-boot-checkpoint.js b/dist/src/e
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-boot-checkpoint.js
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,100 @@
 +import { isDeepStrictEqual } from "node:util";
 +
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -6213,7 +6213,9 @@ new file mode 100644
 +  if (!record(entry) || entry.kind !== "terminal-recovery" ||
 +      entry.ownerDeploymentId !== run.deploymentId || typeof entry.activationToken !== "string" ||
 +      entry.activationToken.length === 0 || !record(entry.checkpoint) ||
-+      !record(entry.provenance) || (entry.carriedInbox?.length ?? 0) !== 0) return;
++      !record(entry.provenance) ||
++      (entry.carriedInbox !== undefined &&
++        (!Array.isArray(entry.carriedInbox) || entry.carriedInbox.length !== 0))) return;
 +  const { parseTerminalRecoveryDescriptor } = await import("#execution/session/terminal-recovery.js");
 +  const descriptor = parseTerminalRecoveryDescriptor(entry.descriptor, entry.descriptor?.operationId);
 +  if (descriptor === undefined || descriptor.logicalSessionId !== binding.logicalSessionId ||
