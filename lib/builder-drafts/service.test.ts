@@ -195,6 +195,7 @@ describe("builder draft service", () => {
     };
 
     await expect(
+      // SAFETY: This test deliberately supplies an extra runtime field to verify validation rejects malformed input.
       service.saveActive(authority, invalid as SaveActiveBuilderDraftInput),
     ).rejects.toThrow();
   });
