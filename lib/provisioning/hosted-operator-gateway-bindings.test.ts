@@ -235,9 +235,9 @@ const fixture = (
   let protectionReadbackTransform:
     | ((value: z.infer<typeof z.json>) => z.infer<typeof z.json>)
     | undefined;
-  const assertCurrent = vi.fn(async () => {});
-  const assertCurrentObservation = vi.fn(async () => {});
-  const assertCanonicalOwner = vi.fn(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const assertCurrentObservation = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const assertCanonicalOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const checkpointGatewayEnvironment = vi.fn(
     async (next: readonly ManagedOperatorEnvironmentRow[]) => {
       journal = structuredClone([...next]);
