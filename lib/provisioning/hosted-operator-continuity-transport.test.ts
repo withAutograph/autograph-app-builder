@@ -237,39 +237,52 @@ const setup = () => {
     expect(binding.token()).not.toBe("changed-after-verification");
   };
   const dependencies: HostedContinuityDependencies = {
-    store: {
-      async compareAndSet(input) {
-        if (record?.revision !== input.expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing rows and CAS conflicts are explicit optional store results.
-          return undefined;
+    ...custody,
+    assertOwner,
+    async assertSetup(ctx, plan) {
+      await assertOwner(ctx);
+      if (
+        !originalApproved ||
+        !isDeepStrictEqual(plan.preparedPlan.release, preparedPlan.release) ||
+        plan.originalSetup.approvalId !== "original-approved"
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+    },
+    projection: {
+      async publish(ctx, current, _capabilities, assertCurrent, checkpoint) {
+        await assertOwner(ctx);
+        await assertCurrent();
+        if (!live || current.current?.state !== "ready") {
+          throw new Error("Published without owned ready runtime");
         }
-        record = continuityRecordSchema.parse(input.record);
-        snapshots.push(read());
-        return read();
+        stats.publishes += 1;
+        await checkpoint({ deliveryAttempted: true });
       },
-      async read(input) {
-        stats.storeReads += 1;
-        if (
-          record === undefined ||
-          record.requestId !== input.intentId ||
-          !isDeepStrictEqual(record.plan.authority, input.authority)
-        ) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing rows and CAS conflicts are explicit optional store results.
-          return undefined;
+      async revoke(ctx, _current, assertCurrent, checkpoint) {
+        await assertOwner(ctx);
+        await assertCurrent();
+        if (live) {
+          throw new Error("Revoked before owned runtime closed");
         }
-        return read();
-      },
-      async reserve(input) {
-        if (record !== undefined) {
-          throw new Error("Duplicate controlled reserve");
-        }
-        stats.reservations += 1;
-        record = continuityRecordSchema.parse(input.record);
-        snapshots.push(read());
-        return read();
+        stats.revokes += 1;
+        await checkpoint([]);
       },
     },
-    assertOwner,
+
+    async readApproval(ctx, request, callId) {
+      await assertOwner(ctx);
+      if (!approved) {
+        return null;
+      }
+      const receipt = {
+        ...request,
+        approvalId: "continuity-approved",
+        approvedByCallId: callId ?? "approval-call",
+      };
+      receipts.set(request.planDigest, receipt);
+      return receipt;
+    },
     async resolvePlan(ctx, runtime) {
       await assertOwner(ctx);
       expect(runtime).toEqual(logicalRuntime);
@@ -295,45 +308,6 @@ const setup = () => {
         target,
         version: 1,
       };
-    },
-    async assertSetup(ctx, plan) {
-      await assertOwner(ctx);
-      if (
-        !originalApproved ||
-        !isDeepStrictEqual(plan.preparedPlan.release, preparedPlan.release) ||
-        plan.originalSetup.approvalId !== "original-approved"
-      ) {
-        throw new HostedOperatorError("authorization_required");
-      }
-    },
-    async readApproval(ctx, request, callId) {
-      await assertOwner(ctx);
-      if (!approved) {
-        return null;
-      }
-      const receipt = {
-        ...request,
-        approvalId: "continuity-approved",
-        approvedByCallId: callId ?? "approval-call",
-      };
-      receipts.set(request.planDigest, receipt);
-      return receipt;
-    },
-    ...custody,
-    async withResourceLease(input, run) {
-      if (held) {
-        throw new HostedOperatorError("operation_in_progress");
-      }
-      held = true;
-      try {
-        await input.initializeUnderLock?.();
-        const fence = await input.readCurrentFence();
-        return await run(async () => {
-          expect(await input.readCurrentFence()).toEqual(fence);
-        });
-      } finally {
-        held = false;
-      }
     },
     runtime: {
       async close(ctx) {
@@ -417,25 +391,50 @@ const setup = () => {
         });
       },
     },
-    projection: {
-      async publish(ctx, current, _capabilities, assertCurrent, checkpoint) {
-        await assertOwner(ctx);
-        await assertCurrent();
-        if (!live || current.current?.state !== "ready") {
-          throw new Error("Published without owned ready runtime");
+    store: {
+      async compareAndSet(input): Promise<ContinuityRecord | undefined> {
+        if (record?.revision !== input.expectedRevision) {
+          return undefined;
         }
-        stats.publishes += 1;
-        await checkpoint({ deliveryAttempted: true });
+        record = continuityRecordSchema.parse(input.record);
+        snapshots.push(read());
+        return read();
       },
-      async revoke(ctx, _current, assertCurrent, checkpoint) {
-        await assertOwner(ctx);
-        await assertCurrent();
-        if (live) {
-          throw new Error("Revoked before owned runtime closed");
+      async read(input): Promise<ContinuityRecord | undefined> {
+        stats.storeReads += 1;
+        if (
+          record === undefined ||
+          record.requestId !== input.intentId ||
+          !isDeepStrictEqual(record.plan.authority, input.authority)
+        ) {
+          return undefined;
         }
-        stats.revokes += 1;
-        await checkpoint([]);
+        return read();
       },
+      async reserve(input) {
+        if (record !== undefined) {
+          throw new Error("Duplicate controlled reserve");
+        }
+        stats.reservations += 1;
+        record = continuityRecordSchema.parse(input.record);
+        snapshots.push(read());
+        return read();
+      },
+    },
+    async withResourceLease(input, run) {
+      if (held) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      held = true;
+      try {
+        await input.initializeUnderLock?.();
+        const fence = await input.readCurrentFence();
+        return await run(async () => {
+          expect(await input.readCurrentFence()).toEqual(fence);
+        });
+      } finally {
+        held = false;
+      }
     },
   };
   const operations = createHostedContinuityOperations(dependencies);
@@ -474,23 +473,23 @@ const setup = () => {
       stats.bound.push(token());
     },
     operations,
-    readVerifiedActors: async (ctx, intentId) => {
-      await operations.readPlan(ctx, intentId);
-      return { requestCorrelation: "not_established" as const, actors: [] };
-    },
     readTenantBindings: async (ctx, intentId) => {
       const saved = await operations.readPlan(ctx, intentId);
       return {
         bindings: saved.plan.preparedPlan.access.flatMap((access) =>
           access.roles.map((role) => ({
-            appId: ctx.target.appId,
             actorId: access.actorId,
+            appId: ctx.target.appId,
             organizationId: access.organizationId,
             role,
             status: "actor_active" as const,
           })),
         ),
       };
+    },
+    readVerifiedActors: async (ctx, intentId) => {
+      await operations.readPlan(ctx, intentId);
+      return { actors: [], requestCorrelation: "not_established" as const };
     },
     store: dependencies.store,
     verifyWorkload: async (request) => {
@@ -677,8 +676,8 @@ it.each(["initial", "owner-checked"] as const)(
     reads.mockRejectedValueOnce(new Error("private journal detail"));
     await expect(f.client.readContinuity(planned.plan.intentId)).rejects.toMatchObject({
       code: "operator_unavailable",
-      recoveryStage: "canonical_read",
       message: "operator_unavailable",
+      recoveryStage: "canonical_read",
     });
     expect(f.record).toEqual(before);
     expect(f.stats.reservations).toBe(1);
@@ -700,8 +699,8 @@ it("reads saved checkpoints and verified actor facts only for the owner without 
   expect(checkpoints.intentId).toBe(planned.plan.intentId);
   expect(checkpoints.checkpoints.suiteDispatch).toBe("unrecorded");
   expect(await f.client.readContinuityVerifiedActors(planned.plan.intentId)).toEqual({
-    requestCorrelation: "not_established",
     actors: [],
+    requestCorrelation: "not_established",
   });
   expect(f.record).toEqual(before);
   f.setOwner(false);
@@ -727,8 +726,8 @@ it("reads approved binding status through the owner-verified transport without d
   const result = await f.client.readContinuityBindings(planned.plan.intentId);
   expect(result.bindings).toEqual([
     {
-      appId: target.appId,
       actorId: "actor",
+      appId: target.appId,
       organizationId: "org",
       role: "ordinary_role",
       status: "actor_active",
