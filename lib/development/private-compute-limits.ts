@@ -5,8 +5,8 @@ import { z } from "zod";
 import { parseLinkedVercelProject, readOwnerBoundLocalFile } from "../eve/local-vercel-oidc";
 import { privateComputeLimitsSchema } from "../sandbox/private-compute-profile";
 
-// oxlint-disable-next-line typescript/strict-void-return -- Node execFile returns a ChildProcess handle alongside its callback; the official promisify adapter intentionally uses callback completion.
-const execute = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execute = promisifyExecFile(execFile);
 const teamSchema = z.object({
   billing: z.object({ plan: z.enum(["hobby", "pro", "enterprise"]) }),
   id: z.string(),

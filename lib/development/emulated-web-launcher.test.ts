@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 
-// oxlint-disable-next-line typescript/strict-void-return -- Adapt Node's overloaded callback API.
-const execute = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execute = promisifyExecFile(execFile);
 
 it("hands explicit mise through the actual sanitized launcher to the shared task", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "emulated-launcher-"));

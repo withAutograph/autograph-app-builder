@@ -13,8 +13,8 @@ import type { DevelopmentArguments } from "./local-mode";
 import { stopEmulatedWebServices } from "./emulated-web-stop";
 import { developmentChildExit } from "./process-supervisor";
 
-// oxlint-disable-next-line typescript/strict-void-return -- Adapt Node overloaded callback API with promisify.
-const execFileAsync = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execFileAsync = promisifyExecFile(execFile);
 const caName = "rootCA.pem";
 
 export const emulatedWebEnvironmentKeys = [

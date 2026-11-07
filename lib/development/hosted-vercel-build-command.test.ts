@@ -9,8 +9,8 @@ import { expect, it } from "vitest";
 import { z } from "zod";
 import configuration from "../../vercel.json";
 
-// oxlint-disable-next-line typescript/strict-void-return -- Adapt Node's overloaded callback API.
-const execute = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execute = promisifyExecFile(execFile);
 const require = createRequire(import.meta.url);
 const outputSchema = z.object({
   services: z.record(z.string(), z.object({ buildCommand: z.string(), root: z.string() })),
