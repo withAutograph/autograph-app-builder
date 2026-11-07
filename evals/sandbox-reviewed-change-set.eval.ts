@@ -7,7 +7,7 @@ import { isProductFacing } from "./support/public-conversation";
 
 const staysProductFacing = satisfies(
   (reply) =>
-    isProductFacing(reply) &&
+    isProductFacing(String(reply)) &&
     !/(?:builder-owned|overlay|fixed check|normalized change set|approval receipt|publication did not run|nothing (?:has been|was) published)/iu.test(
       String(reply),
     ),

@@ -113,7 +113,7 @@ ${renewalReviewDesignPrompt}`);
       turn.message,
       satisfies(
         (reply) =>
-          isProductFacing(reply) &&
+          isProductFacing(String(reply)) &&
           !/implementation plan|Context|Draft spec|manifest|receipt/iu.test(String(reply)),
         "the review remains product-facing and exposes no internal workbench material",
       ),

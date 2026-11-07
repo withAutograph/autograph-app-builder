@@ -22,7 +22,7 @@ export default defineEval({
     t.check(
       turn.message,
       satisfies(
-        (reply) => isProductFacing(reply) && String(reply).endsWith("?"),
+        (reply) => isProductFacing(String(reply)) && String(reply).endsWith("?"),
         "the only question is product-facing and recommends a default",
       ),
     );

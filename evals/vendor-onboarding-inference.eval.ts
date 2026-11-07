@@ -105,7 +105,7 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
       turn1.message,
       satisfies(
         (reply) =>
-          isProductFacing(reply) &&
+          isProductFacing(String(reply)) &&
           !/(?:no mutation|nothing was (?:created|written)|[0-9a-f]{40})/iu.test(String(reply)) &&
           !/\b(?:queue|form|dashboard)\?/iu.test(String(reply)),
         "assistant reply stays product-facing and does not ask identity or interface-selection questions",

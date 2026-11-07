@@ -8,7 +8,7 @@ import { isProductFacing } from "./support/public-conversation";
 
 const staysProductFacing = satisfies(
   (reply) =>
-    isProductFacing(reply) &&
+    isProductFacing(String(reply)) &&
     !/(?:sandbox|image|receipt|dependency cache|publication did not run)/iu.test(String(reply)),
   "assistant reply stays product-facing during existing-app iteration",
 );
