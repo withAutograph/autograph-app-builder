@@ -282,7 +282,7 @@ describe("automatic observation of one approved execution", () => {
       status: "pending",
       execution: { state: "settled", outcome: { status: "planned" } },
     });
-    const sleepUntil = vi.fn<(deadline: Date) => Promise<void>>(() => Promise.resolve());
+    const sleepUntil = vi.fn<(deadline: Date) => Promise<void>>().mockResolvedValue();
     const generator = continueHostedRuntimeExecutionObservation(f.approved, f.context, prepared, {
       snapshot: f.snapshot,
       read: f.read,
