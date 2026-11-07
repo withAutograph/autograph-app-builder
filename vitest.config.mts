@@ -24,7 +24,6 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          name: "unit",
           exclude: [
             ...configDefaults.exclude,
             "**/.artifacts/**",
@@ -33,6 +32,7 @@ export default defineConfig({
             "**/e2e/**",
           ],
           maxWorkers: 2,
+          name: "unit",
           pool: "threads",
           testTimeout: 10_000,
         },

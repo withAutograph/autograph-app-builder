@@ -6,7 +6,16 @@ import {
   sourceHandoffIdForSessionAuth,
 } from "./session-authority";
 
-const auth = (overrides: Record<string, unknown> = {}) => ({
+const auth = (
+  overrides: Partial<{
+    attributes: Record<string, string | string[]>;
+    authenticator: string;
+    issuer: string;
+    principalId: string;
+    principalType: string;
+    subject: string;
+  }> = {},
+) => ({
   attributes: {
     "mcp:audience": "https://builder.example.test/mcp",
     "mcp:scopes": ["eve:start"],
