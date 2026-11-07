@@ -146,7 +146,7 @@ export const sendDeliveryObservationDiagnostic = (input: {
   const turns = input.proof?.turns ?? [];
   const { deliveryId } = input.delivery;
   const matches = turns.filter((turn) => turn.deliveryIds.includes(deliveryId));
-  return {
+  const diagnostic = {
     ackObserved: true,
     boundaryStampMatchCount: turns.filter(
       (turn) => turn.boundaryDeliveryIds?.includes(deliveryId) === true,
@@ -167,8 +167,14 @@ export const sendDeliveryObservationDiagnostic = (input: {
     startedStampMatchCount: turns.filter(
       (turn) => turn.startedDeliveryIds?.includes(deliveryId) === true,
     ).length,
-    ...(input.nativeRead === undefined ? {} : { nativeRead: input.nativeRead }),
   };
+  if (input.nativeRead !== undefined) {
+    return {
+      ...diagnostic,
+      nativeRead: input.nativeRead,
+    } satisfies SendDeliveryObservationDiagnostic;
+  }
+  return diagnostic satisfies SendDeliveryObservationDiagnostic;
 };
 
 export interface HostedSubmissionDiagnostic {
