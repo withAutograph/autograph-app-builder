@@ -2,9 +2,6 @@ import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { z } from "zod";
 
-const redactedValue = "[REDACTED]";
-const redactedToken = "Bearer [REDACTED]";
-const redactedJwt = "[REDACTED JWT]";
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
     z.string(),
@@ -34,37 +31,35 @@ export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
 // Apply to structured receipts and native diagnostics before persistence. Never
 // serialize the runtime environment or session continuation credentials.
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function sanitizeEvidence(value: JsonValue): JsonValue {
-  const parsedString = z.string().safeParse(value);
-  if (parsedString.success) {
-    return parsedString.data
-      .replaceAll(/\bBearer\s+[^\s"',}]+/giu, redactedToken)
-      .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, redactedJwt)
+export function sanitizeEvidence(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value
+      .replaceAll(/\bBearer\s+[^\s"',}]+/giu, "Bearer [REDACTED]")
+      .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[REDACTED JWT]")
       .replaceAll(
         /(?<prefix>[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z_]*["']?\s*[:=]\s*["']?)[^\s"',}]+/gu,
-        `$<prefix>${redactedValue}`,
+        "$<prefix>[REDACTED]",
       )
       .replaceAll(
         /(?<prefix>["'](?:authorization|cookie|continuationToken|[^"']*(?:token|secret|password)|api[_-]?key)["']\s*:\s*["'])[^"']+/giu,
-        `$<prefix>${redactedValue}`,
+        "$<prefix>[REDACTED]",
       )
       .replaceAll(
         /(?<prefix>[?&](?:token|key|signature|code|state|x-vercel-protection-bypass)=)[^&\s"']+/giu,
-        `$<prefix>${redactedValue}`,
+        "$<prefix>[REDACTED]",
       );
   }
   if (Array.isArray(value)) {
     return value.map(sanitizeEvidence);
   }
-  const parsedObject = jsonObjectSchema.safeParse(value);
-  if (parsedObject.success) {
+  if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(parsedObject.data).map(([key, item]) => [
+      Object.entries(value).map(([key, item]) => [
         key,
         /^(?:authorization|cookie|set-cookie|.*(?:token|secret|password)|api[_-]?key|credentials)$/iu.test(
           key,
         )
-          ? redactedValue
+          ? "[REDACTED]"
           : sanitizeEvidence(item),
       ]),
     );
