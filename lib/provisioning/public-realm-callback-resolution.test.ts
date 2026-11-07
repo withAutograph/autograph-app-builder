@@ -227,9 +227,9 @@ const fixture = () => {
   };
   let rows: PublicRealmCallbackCandidate[] = [candidate];
   const deps = {
-    assertCurrentOwner: vi.fn(async () => {}),
-    assertPublicApproval: vi.fn(async () => {}),
-    assertSourceApproval: vi.fn(async () => {}),
+    assertCurrentOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    assertPublicApproval: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    assertSourceApproval: vi.fn<() => Promise<void>>().mockResolvedValue(),
     configuration: {
       standardRuntime: {
         appSpecDigest: "e".repeat(64),

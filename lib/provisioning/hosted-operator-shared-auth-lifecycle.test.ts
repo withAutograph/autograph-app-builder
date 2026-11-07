@@ -340,8 +340,8 @@ const composed = (active = true) => {
     teamId: "team",
     workloadPolicy: workload,
   };
-  const assertCurrent = vi.fn(async () => {});
-  const assertAuthorized = vi.fn(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const assertAuthorized = vi.fn<() => Promise<void>>().mockResolvedValue();
   const inputFor = (input: { plan: HostedOperatorPlan }) => ({ ...destination, plan: input.plan });
   const preparedCredentials = (input: { plan: HostedOperatorPlan }) => {
     const prepared = prepareHostedOperatorResourceCredentials({
@@ -494,7 +494,7 @@ const composed = (active = true) => {
     verifySharedAuthAdoption: unavailable,
     withResourceLease: unavailable,
   };
-  const maintenance = vi.fn(async () => {});
+  const maintenance = vi.fn<() => Promise<void>>().mockResolvedValue();
   vi.spyOn(nativeNeon, "createPreviewNeonMcpReader").mockImplementation(() => ({
     inspectPlanningTarget: unavailable,
     withMaintenanceCredential: async (input, scope, consume) => {
