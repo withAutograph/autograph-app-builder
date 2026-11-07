@@ -31,7 +31,6 @@ it("uploads multiple bounded chunks, reconciles unknown completion and retains i
         throw new SourceUploadError("source_upload_conflict");
       }
       rows.set(id, value);
-      return;
     },
   });
   const authority = {

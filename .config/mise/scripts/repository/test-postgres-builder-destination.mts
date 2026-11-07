@@ -321,7 +321,6 @@ try {
     assertPlanOrigin: async (owner, plan) => {
       assert.deepEqual(owner, legacyOwner);
       assert.deepEqual(plan, legacyPlan);
-      return;
     },
     authorize: async () => legacyOwner,
     now: () => legacyNow,
