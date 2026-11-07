@@ -99,13 +99,13 @@ const fixture = () => {
   const request = {
     appId: callerPlan.selection.initiatingAppId,
     appProjectId: callerPlan.caller.projectId,
-    assertCurrentOwner: vi.fn(async () => {}),
+    assertCurrentOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
     authority: callerPlan.authority,
     signal: new AbortController().signal,
     teamId: callerPlan.central.teamId,
   };
   const ports = {
-    assertSetupAuthorized: vi.fn(async () => {}),
+    assertSetupAuthorized: vi.fn<() => Promise<void>>().mockResolvedValue(),
     observe: vi.fn(async () => structuredClone(actual)),
     store: {
       read: vi.fn(async () => structuredClone(setup)),
