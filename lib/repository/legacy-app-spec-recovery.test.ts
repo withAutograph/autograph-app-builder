@@ -332,7 +332,7 @@ const compactionFixture = (transportPath = "prototype/demo/app-spec.md") => {
     appSpecDigest: workflow.appSpec.digest,
     artifactRevision: workflow.appSpec.artifactRevision,
     proposalAppSpec: workflow.proposal.contract.appSpec,
-    readAcceptedContent: async () => accepted,
+    readAcceptedContent: vi.fn().mockResolvedValue(accepted),
     retainedRoots: [workflow.applyRoot, workflow.candidateRoot],
     sandbox: f.input.sandbox,
   };
@@ -368,16 +368,14 @@ describe("current accepted planning input compaction", () => {
     await expect(
       compactAcceptedPlanningInput({
         ...f.input,
-        readAcceptedContent: async () => {
-          throw failure;
-        },
+        readAcceptedContent: vi.fn().mockRejectedValue(failure),
       }),
     ).rejects.toBe(failure);
     expect(readFileSync(f.staleFile, "utf-8")).toBe("derived source copy");
     await expect(
       compactAcceptedPlanningInput({
         ...f.input,
-        readAcceptedContent: async () => "different content",
+        readAcceptedContent: vi.fn().mockResolvedValue("different content"),
       }),
     ).rejects.toThrow("planning input was retained");
     expect(readFileSync(f.staleFile, "utf-8")).toBe("derived source copy");
@@ -432,7 +430,7 @@ describe("current accepted planning input compaction", () => {
     "retains a current planning root containing referenced %s working output",
     async () => {
       const f = compactionFixture();
-      const readAcceptedContent = vi.fn(async () => accepted);
+      const readAcceptedContent = vi.fn().mockResolvedValue(accepted);
       await expect(
         compactAcceptedPlanningInput({
           ...f.input,
