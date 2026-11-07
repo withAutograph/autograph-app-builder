@@ -24,7 +24,7 @@ import { themePlugin } from "@/lib/auth/theme-plugin";
 import { getQueryClient } from "@/lib/query-client";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function authPlugins(passkeysEnabled: boolean, themeHook: typeof useTheme) {
+function authPlugins(passkeysEnabled: boolean, themeHook: typeof useTheme) {
   return [
     {
       ...oauthProviderPlugin(),
