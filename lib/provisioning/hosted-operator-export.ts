@@ -32,6 +32,8 @@ import type {
   TenantExportWorkerInput,
 } from "./hosted-operator-export-contract";
 
+const APP_EXPORT_KIND = "app-export";
+
 /** Private execution locator, retained before dispatch; no credentials or output bytes. */
 export const tenantExportWorkerLocatorSchema = z.strictObject({
   commandId: z.string().min(1).optional(),
@@ -43,7 +45,7 @@ export type TenantExportWorkerLocator = z.infer<typeof tenantExportWorkerLocator
 export const hostedTenantExportExecutionRecordSchema = z.strictObject({
   approvalObservation: privateOperatorApprovalObservationSchema.optional(),
   journal: tenantExportJournalRecordSchema,
-  kind: z.literal("app-export"),
+  kind: z.literal(APP_EXPORT_KIND),
   originalTarget: hostedRuntimeTargetSchema,
   workers: z.array(
     z.strictObject({
@@ -192,22 +194,25 @@ const workerFor = (
     version: 1,
   };
 };
-export const tenantExportStatus = (record: TenantExportJournalRecord): TenantExportStatus =>
-  tenantExportStatusSchema.parse({
+export const tenantExportStatus = (record: TenantExportJournalRecord): TenantExportStatus => {
+  const status = {
     exportId: record.plan.exportId,
     planRef: record.plan.planRef,
     state: record.state,
-    ...(record.completion === undefined
-      ? {}
-      : {
-          counts: {
-            byteLength: record.completion.byteLength,
-            fileCount: record.completion.fileCount,
-            rowCount: record.completion.rowCount,
-          },
-          download: { indexPath: `/api/hosted-operator/exports/${record.plan.exportId}` },
-        }),
+  };
+  if (record.completion === undefined) {
+    return tenantExportStatusSchema.parse(status);
+  }
+  return tenantExportStatusSchema.parse({
+    ...status,
+    counts: {
+      byteLength: record.completion.byteLength,
+      fileCount: record.completion.fileCount,
+      rowCount: record.completion.rowCount,
+    },
+    download: { indexPath: `/api/hosted-operator/exports/${record.plan.exportId}` },
   });
+};
 export const createHostedTenantExportOperations = (deps: HostedTenantExportDependencies) => {
   const now = deps.now ?? (() => new Date());
   const read = async (context: HostedOperatorContext, exportId: string) => {
@@ -240,12 +245,16 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
   };
   const approvalObservation = (
     record: HostedTenantExportExecutionRecord,
-  ): PrivateOperatorApprovalObservationPort => ({
-    ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
-    save: async (state) => {
-      await update(record, (value) => ({ ...value, approvalObservation: state }));
-    },
-  });
+  ): PrivateOperatorApprovalObservationPort => {
+    const observation =
+      record.approvalObservation === undefined ? {} : { state: record.approvalObservation };
+    return {
+      ...observation,
+      save: async (state) => {
+        await update(record, (value) => ({ ...value, approvalObservation: state }));
+      },
+    };
+  };
   const assertApproval = async (
     context: HostedOperatorContext,
     record: HostedTenantExportExecutionRecord,
@@ -588,7 +597,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
             authority: plan.authority,
             fenceGeneration: 0,
             idempotencyKey,
-            kind: "app-export",
+            kind: APP_EXPORT_KIND,
             plan,
             planDigest: tenantExportPlanDigest(plan),
             requestId: exportId,
@@ -597,7 +606,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
             target: plan.target,
             version: 1,
           },
-          kind: "app-export",
+          kind: APP_EXPORT_KIND,
           originalTarget: context.target,
           workers: [],
         },
