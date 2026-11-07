@@ -41,6 +41,9 @@ interface Destroyable {
   destroy: () => void;
 }
 const unavailable = () => new Error("Managed Gateway request unavailable.");
+const denyUpgrade = (socket: Duplex) => {
+  socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+};
 const incomingHeaders = (request: IncomingMessage) => {
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers)) {
@@ -193,14 +196,16 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       throw unavailable();
     }
     await assertCurrent();
-    await input.verification.verifyRequest({
-      verification,
+    const requestDetails: Omit<VerifiedRequest, "actors"> & { verification: Configuration } = {
       headers: incomingHeaders(request),
       method: request.method ?? "GET",
       target: request.url ?? "/",
-      ...(body === undefined ? {} : { body }),
-      actors,
-    });
+      verification,
+    };
+    if (body !== undefined) {
+      requestDetails.body = body;
+    }
+    await input.verification.verifyRequest({ ...requestDetails, actors });
     await assertCurrent();
   };
   const server = createServer((request, response) => {
@@ -260,9 +265,6 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       }
     })();
   });
-  const denyUpgrade = (socket: Duplex) => {
-    socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
-  };
   server.on("upgrade", (request, socket, head) => {
     connections.add(socket);
     socket.once("close", () => {
