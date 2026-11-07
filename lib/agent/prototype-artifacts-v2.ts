@@ -60,12 +60,7 @@ export const durablePrototypeToolReceipt = (result: DurablePrototypeChunkResult)
   };
 };
 
-/** Store one ordered chunk, then publish only a digest-verified manifest to Eve state. */
-// oxlint-disable sonarjs/expression-complexity -- Exact retry and stale-revision checks require all receipt fields.
-// oxlint-disable-next-line eslint/complexity -- Transfer validation and receipt publication share one atomic decision path.
-export const recordDurablePrototypeChunk = async (
-  input: DurablePrototypeChunkInput,
-): Promise<DurablePrototypeChunkResult> => {
+const validateChunkInput = (input: DurablePrototypeChunkInput): string => {
   const { appId } = parsePrototypeArtifactPath(input.path);
   if (appId !== input.appId || expectedPrototypeArtifactMediaType(input.path) !== input.mediaType) {
     throw new Error("The durable prototype artifact identity is invalid.");
@@ -83,14 +78,25 @@ export const recordDurablePrototypeChunk = async (
   if (input.sessionId.length === 0 || input.callId.length === 0) {
     throw new Error("The durable prototype artifact chunk is invalid.");
   }
+  return appId;
+};
+
+/** Store one ordered chunk, then publish only a digest-verified manifest to Eve state. */
+// Exact retry and stale-revision checks require all receipt fields.
+// Transfer validation and receipt publication share one atomic decision path.
+export const recordDurablePrototypeChunk = async (
+  input: DurablePrototypeChunkInput,
+): Promise<DurablePrototypeChunkResult> => {
+  const appId = validateChunkInput(input);
   const prior = input.current;
   if (prior && (prior.path !== input.path || prior.sessionId !== input.sessionId)) {
     throw new Error("The prototype artifact belongs to a different session or path.");
   }
   const chunkDigest = sha256(input.content);
+  const matchingReceipt =
+    !!prior && prior.lastChunkReceipt?.expectedDigest === input.expectedDigest;
   if (
-    prior &&
-    prior.lastChunkReceipt?.expectedDigest === input.expectedDigest &&
+    matchingReceipt &&
     prior.lastChunkReceipt.lastChunkIndex === input.chunkIndex &&
     prior.lastChunkReceipt.lastChunkDigest === chunkDigest &&
     prior.lastChunkReceipt.lastCallId === input.callId
@@ -98,9 +104,9 @@ export const recordDurablePrototypeChunk = async (
     return { artifact: prior, complete: true, nextChunkIndex: input.chunkIndex + 1, reused: true };
   }
   const transfer = prior?.transfer;
+  const matchingTransfer = !!prior && transfer?.expectedDigest === input.expectedDigest;
   if (
-    prior &&
-    transfer?.expectedDigest === input.expectedDigest &&
+    matchingTransfer &&
     transfer.nextChunkIndex - 1 === input.chunkIndex &&
     transfer.lastChunkDigest === chunkDigest &&
     transfer.lastCallId === input.callId
@@ -113,9 +119,9 @@ export const recordDurablePrototypeChunk = async (
     };
   }
   const restart = input.chunkIndex === 0 && transfer?.expectedDigest !== input.expectedDigest;
+  const continuingTransfer = !restart && !!transfer;
   if (
-    !restart &&
-    transfer &&
+    continuingTransfer &&
     (transfer.expectedDigest !== input.expectedDigest ||
       transfer.nextChunkIndex !== input.chunkIndex ||
       prior?.revision !== input.baseRevision)
