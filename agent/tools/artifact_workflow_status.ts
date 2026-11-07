@@ -2,7 +2,11 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { prototypeArtifactReceipt } from "@/lib/agent/prototype-artifacts";
-import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import {
+  appBuilderWorkflowState,
+  assertCurrentGitHubDraftProposal,
+} from "@/lib/agent/workflow-state";
+import { approvalReceiptForDraftProposal } from "@/lib/agent/approval-receipt";
 
 const isReviewedPhase = (
   state: ReturnType<typeof appBuilderWorkflowState.get>,
@@ -57,9 +61,35 @@ const appSpecSummary = (appSpec: {
   ...(appSpec.uiRevision === undefined ? {} : { uiRevision: appSpec.uiRevision }),
 });
 
+const githubDraftPublicationSummary = (state: ReturnType<typeof appBuilderWorkflowState.get>) => {
+  if (state.phase !== "reviewed" || state.githubDraftProposal === undefined) {
+    return {};
+  }
+  const proposal = assertCurrentGitHubDraftProposal({
+    binding: state.githubDraftProposal,
+    expectedProposalDigest: state.githubDraftProposal.proposal.digest,
+    reviewDigest: state.reviewReceipt.digest,
+    changeSetDigest: state.reviewReceipt.changeSetDigest,
+    sourceReceiptDigest: state.sourceReceipt.digest,
+    githubSource: state.githubSource,
+    destinationReview: state.githubDestinationReview,
+  });
+  return {
+    githubDraftPublication: {
+      nextCall: {
+        tool: "publish_github_draft_pr" as const,
+        arguments: {
+          expectedProposalDigest: proposal.digest,
+          approvalReceipt: approvalReceiptForDraftProposal(proposal),
+        },
+      },
+    },
+  };
+};
+
 export default defineTool({
   description:
-    "Return session-bound artifact workflow receipt metadata without artifact content or mutation. uiPreview.revision is the current component-backed UI revision for accept_ui_preview expectedRevision and record_ui_preview baseRevision. artifacts[].revision identifies a document artifact and must not be used as a UI revision. After AppSpec acceptance, the full uiPreview object may be absent; acceptedUIReference and appSpec.uiRevision preserve the UI revision accepted with that AppSpec. This is historical acceptance metadata, not the current component-backed UI revision or source. Its absence from uiPreview is expected and does not mean the design is missing or should be regenerated. Actual UI source changes still follow normal preview, validation, and acceptance. A planned phase continues through the ordinary private implementation path and separate Build approval; no approval is implied.",
+    "Return session-bound artifact workflow receipt metadata without artifact content or mutation. uiPreview.revision is the current component-backed UI revision for accept_ui_preview expectedRevision and record_ui_preview baseRevision. artifacts[].revision identifies a document artifact and must not be used as a UI revision. After AppSpec acceptance, the full uiPreview object may be absent; acceptedUIReference and appSpec.uiRevision preserve the UI revision accepted with that AppSpec. This is historical acceptance metadata, not the current component-backed UI revision or source. Its absence from uiPreview is expected and does not mean the design is missing or should be regenerated. Actual UI source changes still follow normal preview, validation, and acceptance. A planned phase continues through the ordinary private implementation path and separate Build approval; no approval is implied. For an exact retained sealed draft, githubDraftPublication.nextCall restores the canonical publication input, including legacy seals whose tool result lacked an approvalReceipt. This is reviewed subject metadata, not consent or publication status; use the existing publication or recovery flow and its native approval.",
   execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase === "empty") {
@@ -72,6 +102,7 @@ export default defineTool({
     if (state.artifacts.some(({ sessionId }) => sessionId !== ctx.session.id)) {
       throw new Error("Prototype artifact state belongs to a different session.");
     }
+    const githubDraftPublication = githubDraftPublicationSummary(state);
     let publication = {};
     if (state.phase === "publication_pending") {
       publication = {
@@ -261,6 +292,7 @@ export default defineTool({
             },
           }
         : {}),
+      ...githubDraftPublication,
       ...publication,
       ...branchPublication,
       ...freshBootstrap,

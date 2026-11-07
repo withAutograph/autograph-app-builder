@@ -567,4 +567,11 @@ subject metadata. Builder passes that receipt unchanged to
 `publish_github_draft_pr` to present Eve's ordinary approval control. Calling the
 tool does not publish before the user approves, and the receipt itself grants
 no consent. No separate approval-request tool or creator-supplied receipt is
-required. Denial and a changed sealed proposal continue to prevent publication.
+required. A recovered session can read `artifact_workflow_status` to recover
+`githubDraftPublication.nextCall` for its retained exact sealed draft, including
+older seals whose tool result did not include the receipt. This read checks the
+saved source, destination and reviewed change-set bindings without resealing,
+opening a Sandbox, or calling GitHub. It returns subject metadata, not consent
+or a claim about whether publication has occurred. The normal publication or
+recovery flow and native approval still apply. Denial and a changed sealed
+proposal continue to prevent publication.
