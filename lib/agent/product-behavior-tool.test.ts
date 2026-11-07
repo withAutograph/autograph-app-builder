@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   readback: vi.fn(),
 }));
 
-vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
+vi.mock("eve/tools", () => ({ defineTool: <T>(value: T): T => value }));
 vi.mock("./product-behavior", () => ({ executeProductReadback: mocks.readback }));
 vi.mock("./product-behavior-state", () => ({
   captureProductBehaviorProvenance: () =>

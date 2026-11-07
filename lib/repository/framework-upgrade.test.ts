@@ -115,8 +115,8 @@ interface FixtureSandboxPorts {
   run?: (input: {
     command: string;
   }) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
-  readBinaryFile?: (input: { path: string }) => Promise<Uint8Array | null>;
-  readTextFile?: (input: { path: string }) => Promise<string | null>;
+  readBinaryFile?: SandboxSession["readBinaryFile"];
+  readTextFile?: SandboxSession["readTextFile"];
   writeTextFile?: ReturnType<typeof vi.fn> | (() => Promise<void>);
   removePath?: () => Promise<void>;
   setNetworkPolicy?: () => Promise<void>;
