@@ -6,6 +6,11 @@ export interface IdentityInvitationState {
   invitations: PublicIdentityInvitation[];
 }
 
+const invitationKey = (invitation: Pick<PublicIdentityInvitation, "callId" | "operationRef">) =>
+  invitation.operationRef === undefined
+    ? `call:${invitation.callId}`
+    : `setup:${invitation.operationRef}`;
+
 /** Retain pending invitations across delta reads, ignoring already observed public events. */
 export const reduceIdentityInvitations = (
   previous: IdentityInvitationState | undefined,
@@ -16,7 +21,7 @@ export const reduceIdentityInvitations = (
       ? previous
       : { sessionId: result.sessionId, lastIndex: -1, invitations: [] };
   const invitations = new Map(
-    state.invitations.map((invitation) => [invitation.callId, invitation]),
+    state.invitations.map((invitation) => [invitationKey(invitation), invitation]),
   );
   let { lastIndex } = state;
   for (const event of result.events) {
@@ -25,10 +30,15 @@ export const reduceIdentityInvitations = (
     }
     lastIndex = Math.max(lastIndex, event.index);
     if (event.type === "auth_identity_invitation") {
-      const { callId, url, expiresAt } = event;
-      invitations.set(callId, { callId, url, expiresAt });
+      const { callId, url, expiresAt, operationRef } = event;
+      invitations.set(invitationKey(event), {
+        callId,
+        url,
+        expiresAt,
+        ...(operationRef === undefined ? {} : { operationRef }),
+      });
     } else if (event.type === "auth_identity_invitation_resolved") {
-      invitations.delete(event.callId);
+      invitations.delete(invitationKey(event));
     }
   }
   if (["completed", "failed", "cancelled"].includes(result.status)) {

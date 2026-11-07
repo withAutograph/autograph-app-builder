@@ -33,6 +33,19 @@ product answers and effect approvals continue through `autograph_send` and
 `autograph_respond` in the saved session. The five tools do not expose private
 stage forcing, nor does private build approval authorize deployment or publication.
 
+App account linking is an ordinary browser sign-in, not an approval response.
+After approved Production setup requests identity, the public stream includes
+`auth_identity_invitation` with the safe sign-in URL and expiry. It exposes no
+identity proof, provider credentials, or membership data. `callId` retains the
+actual emitting tool call; optional `operationRef` identifies the same Production
+setup across prepare and read-status calls. A later successful ready result emits
+`auth_identity_invitation_resolved` for that operation, so an unrelated status
+result cannot dismiss the invitation. Legacy Preview invitations continue to
+correlate by their original `callId`. Cursor replay retains one current invitation
+per setup. The Auth callback resumes approved setup; the event itself neither
+verifies identity nor grants access. The saved app's access page remains available
+for expiry renewal and app-scoped People controls.
+
 `autograph_get` without `sessionId` or `clientRequestId` returns a tenant-scoped
 paginated recent session index. With `sessionId`, it retains absolute-cursor
 event pagination. With the original start's `clientRequestId`, it
