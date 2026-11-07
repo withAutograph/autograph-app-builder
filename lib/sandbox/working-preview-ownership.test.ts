@@ -3,11 +3,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { promisify } from "node:util";
+import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import { workingPreviewSupervisorSource } from "./working-preview-runtime";
 import { previewOwnershipRoot, previewOwnershipSource } from "./working-preview-ownership";
 
-const execute = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execute = promisifyExecFile(execFile);
 interface OwnershipOperation {
   attempt?: { attemptId?: string; expiresAt?: number; providerSessionId?: string; status?: string };
   attemptId?: string;
@@ -15,6 +17,14 @@ interface OwnershipOperation {
   patch?: { status: string };
   providerSessionId?: string;
 }
+const ownershipResultSchema = z.object({
+  attempt: z.object({ attemptId: z.string() }).optional(),
+  claimed: z.boolean().optional(),
+  status: z.string().optional(),
+});
+
+const parseOwnershipResult = (output: string) => ownershipResultSchema.parse(JSON.parse(output));
+
 describe("sandbox preview ownership journal", () => {
   it("claims exclusively across processes and fences stale attempts", async () => {
     const directory = await mkdtemp(nodePath.join(tmpdir(), "preview-owner-"));
@@ -28,11 +38,7 @@ describe("sandbox preview ownership journal", () => {
         "-e",
         `${source}\nconsole.log(JSON.stringify(await ownershipOperation(${JSON.stringify(operation)})));`,
       ]);
-      return JSON.parse(result.stdout) as {
-        claimed?: boolean;
-        attempt?: { attemptId: string };
-        status?: string;
-      };
+      return parseOwnershipResult(result.stdout);
     };
     const identity = { attemptId: "first", providerSessionId: "provider" };
     const attempt = { ...identity, expiresAt: Date.now() + 60_000, status: "starting" };
@@ -41,8 +47,8 @@ describe("sandbox preview ownership journal", () => {
         run({ attempt, kind: "claim" }),
         run({ attempt: { ...attempt, attemptId: "second" }, kind: "claim" }),
       ]);
-      expect(claims.filter((claim) => claim.claimed)).toHaveLength(1);
-      const winner = claims.find((claim) => claim.claimed)?.attempt?.attemptId;
+      expect(claims.filter((claim) => claim.claimed === true)).toHaveLength(1);
+      const winner = claims.find((claim) => claim.claimed === true)?.attempt?.attemptId;
       const owner = { ...identity, attemptId: winner };
       await expect(run({ kind: "assert", ...owner })).resolves.toMatchObject({
         status: "starting",
