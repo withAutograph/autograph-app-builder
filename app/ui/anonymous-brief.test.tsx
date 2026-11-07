@@ -20,8 +20,7 @@ const requireElement = (element: Element | null | undefined): HTMLElement => {
   return element;
 };
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root | undefined;
 let container: HTMLDivElement;
 afterEach(async () => {
@@ -67,7 +66,7 @@ it("hydrates the brief island and persists the selected brief before sign-in nav
 });
 
 it("supports the isolated story continuation without browser navigation", async () => {
-  const onContinue = vi.fn();
+  const onContinue = vi.fn<(brief: string) => void>();
   container = document.createElement("div");
   container.innerHTML = renderToString(<AnonymousBrief onContinue={onContinue} />);
   document.body.append(container);
