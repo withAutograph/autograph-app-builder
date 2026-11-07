@@ -24,19 +24,20 @@ export const observePrivateComputeLimits = async (input: {
     readOwnerBoundLocalFile(path.join(input.repositoryRoot, ".vercel/project.json")),
   );
   try {
+    const environment: NodeJS.ProcessEnv = {
+      HOME: input.environment.HOME,
+      NODE_ENV: "development",
+      PATH: input.environment.PATH,
+    };
+    if (input.environment.XDG_DATA_HOME !== undefined) {
+      environment.XDG_DATA_HOME = input.environment.XDG_DATA_HOME;
+    }
     const { stdout } = await execute(
       input.vercelExecutable,
       ["api", `/v2/teams/${project.orgId}`, "--scope", project.orgId],
       {
         cwd: input.repositoryRoot,
-        env: {
-          HOME: input.environment.HOME,
-          NODE_ENV: "development",
-          PATH: input.environment.PATH,
-          ...(input.environment.XDG_DATA_HOME === undefined
-            ? {}
-            : { XDG_DATA_HOME: input.environment.XDG_DATA_HOME }),
-        },
+        env: environment,
         maxBuffer: Infinity,
         signal: input.signal,
       },
