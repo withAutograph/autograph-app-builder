@@ -127,7 +127,6 @@ const fixture = () => {
       if (!allowed) {
         throw new Error("closure-current-owner-revoked");
       }
-      return;
     },
     store: {
       getPrivateOperation: async (_principal, operationId) => {
@@ -177,14 +176,11 @@ describe("fresh authorization to close an immutable recovery loser", () => {
     "does not infer nonexecution from a %s holder without a committed winner",
     async (state) => {
       const f = fixture();
-      f.operations.set(
-        holderDescriptor.operationId,
-        hostedOperationRecordSchema.parse({
-          ...operation(holderDescriptor),
-          ...(state === "reserved" ? {} : { safeErrorCode: "unknown" }),
-          state,
-        }),
-      );
+      const record =
+        state === "reserved"
+          ? { ...operation(holderDescriptor), state }
+          : { ...operation(holderDescriptor), safeErrorCode: "unknown", state };
+      f.operations.set(holderDescriptor.operationId, hostedOperationRecordSchema.parse(record));
       await expect(f.binding.authorizeRecoveryHolderClosure(call)).rejects.toThrow();
     },
   );
