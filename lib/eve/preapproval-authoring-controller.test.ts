@@ -74,10 +74,10 @@ const fixture = async () => {
     },
   });
   await store.recordPreapprovalAuthoringDecision({ decision, principal, sessionId: "public" });
-  const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async () => {});
+  const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>().mockResolvedValue();
   const observe = vi.fn(async () => ({ pendingRequests: [], status: "waiting" }));
   return {
-    assertCurrentOwner: vi.fn(async () => {}),
+    assertCurrentOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
     now: () => 2,
     observe,
     principal,
