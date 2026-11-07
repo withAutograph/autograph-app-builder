@@ -14,13 +14,20 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-
 import {
   applyCandidateCatalogProgram,
   catalogDependencyName,
   normalizeCandidateCatalogProgram,
   normalizeCandidateDependencyCatalog,
 } from "./candidate-dependency-catalog";
+
+const byteStream = (bytes: Uint8Array) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
 
 const roots: string[] = [];
 afterEach(() => {
@@ -273,16 +280,9 @@ describe("candidate-bound same-version dependency catalog", () => {
             PATH: path.dirname(process.execPath) + path.delimiter + process.env.PATH,
           },
         });
-        const stream = (bytes: Uint8Array) =>
-          new ReadableStream<Uint8Array>({
-            start(controller) {
-              controller.enqueue(bytes);
-              controller.close();
-            },
-          });
         return {
-          stderr: stream(result.stderr),
-          stdout: stream(result.stdout),
+          stderr: byteStream(result.stderr),
+          stdout: byteStream(result.stdout),
           wait: async () => ({ exitCode: result.status }),
         };
       },
