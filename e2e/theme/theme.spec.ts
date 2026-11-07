@@ -9,14 +9,9 @@ import {
 
 const html = (page: Page) => page.locator("html");
 
-async function readStoredTheme(page: Page): Promise<string | null> {
-  return await page.evaluate(() => {
-    const theme: unknown = localStorage.getItem("theme");
-    return typeof theme === "string" ? theme : null;
-  });
-}
+const readStoredTheme = async (page: Page): Promise<string | null> =>
+  await page.evaluate(() => localStorage.getItem("theme"));
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 const expectTheme = async (
   page: Page,
   theme: "light" | "dark",
