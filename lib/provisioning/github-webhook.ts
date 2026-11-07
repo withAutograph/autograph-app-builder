@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { z } from "zod";
 
 import {
@@ -9,31 +9,25 @@ import {
   hostedGitHubInstallations,
   hostedGitHubUserCredentials,
 } from "../db/schema";
-import type * as databaseSchema from "../db/schema";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function verify(input: { body: Uint8Array; signature: string; secret: string }) {
+const verify = (input: { body: Uint8Array; signature: string; secret: string }) => {
   if (!/^sha256=[0-9a-f]{64}$/u.test(input.signature)) {
     return false;
   }
   const expected = `sha256=${createHmac("sha256", input.secret).update(input.body).digest("hex")}`;
   return timingSafeEqual(Buffer.from(expected), Buffer.from(input.signature));
-}
+};
 
-const installationEvent = z
-  .object({
-    action: z.enum(["deleted", "suspend", "unsuspend"]),
-    installation: z.object({ id: z.number().int().positive() }).passthrough(),
-  })
-  .passthrough();
-const authorizationEvent = z
-  .object({
-    action: z.literal("revoked"),
-    sender: z.object({ id: z.number().int().positive() }).passthrough(),
-  })
-  .passthrough();
+const installationEvent = z.looseObject({
+  action: z.enum(["deleted", "suspend", "unsuspend"]),
+  installation: z.looseObject({ id: z.number().int().positive() }),
+});
+const authorizationEvent = z.looseObject({
+  action: z.literal("revoked"),
+  sender: z.looseObject({ id: z.number().int().positive() }),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubProvisioningWebhookHandler(input: {
@@ -49,7 +43,8 @@ export function createGitHubProvisioningWebhookHandler(input: {
     }
     const declaredLength = request.headers.get("content-length");
     if (
-      declaredLength &&
+      declaredLength !== null &&
+      declaredLength !== "" &&
       (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > 1024 * 1024)
     ) {
       return new Response(null, { status: 413 });

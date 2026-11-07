@@ -14,6 +14,11 @@ import {
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const centralIntegrationBootstrap = "central-integration-bootstrap-v1";
+const singleProjectServices = "single-project-services";
+const generatedAppReleaseInstall = "generated-app-release-install-v1";
+const protectedGeneratedAppInstall = "protected-generated-app-install";
+const neonResourceBootstrap = "neon-resource-bootstrap-v1";
 const httpsOrigin = z.url().refine((value) => {
   const url = new URL(value);
   return [
@@ -29,16 +34,16 @@ export const hostedOperatorWorkerDescriptorSchema = z.strictObject({
   executablePath: id,
   id,
   operationScope: z.enum([
-    "generated-app-release-install-v1",
+    generatedAppReleaseInstall,
     "generated-app-access-v1",
     "auth-protected-schema-v1",
     "auth-protected-membership-v1",
-    "neon-resource-bootstrap-v1",
+    neonResourceBootstrap,
   ]),
   sha256: digest,
   sourceCapture: operatorWorkerSourceCaptureSchema.optional(),
   subcommand: z.enum([
-    "protected-generated-app-install",
+    protectedGeneratedAppInstall,
     "protected-generated-app-access",
     "auth-protected-schema",
     "auth-protected-membership",
@@ -67,8 +72,8 @@ const sandboxConfigurationFields = {
   centralIntegrationWorker: z
     .strictObject({
       executablePath: id,
-      id: z.literal("central-integration-bootstrap-v1"),
-      operationScope: z.literal("central-integration-bootstrap-v1"),
+      id: z.literal(centralIntegrationBootstrap),
+      operationScope: z.literal(centralIntegrationBootstrap),
       sha256: digest,
       subcommand: z.literal("central-integration-schema"),
     })
@@ -76,18 +81,18 @@ const sandboxConfigurationFields = {
   exportWorker: tenantExportWorkerDescriptorSchema.optional(),
   genericInstallerWorker: worker
     .extend({
-      operationScope: z.literal("generated-app-release-install-v1"),
+      operationScope: z.literal(generatedAppReleaseInstall),
       sourceCapture: operatorWorkerSourceCaptureSchema.extend({
         family: z.literal("genericInstaller"),
       }),
-      subcommand: z.literal("protected-generated-app-install"),
+      subcommand: z.literal(protectedGeneratedAppInstall),
     })
     .optional(),
   integrationResourcesWorker: z
     .strictObject({
       executablePath: id,
-      id: z.literal("neon-resource-bootstrap-v1"),
-      operationScope: z.literal("neon-resource-bootstrap-v1"),
+      id: z.literal(neonResourceBootstrap),
+      operationScope: z.literal(neonResourceBootstrap),
       sha256: digest,
       subcommand: z.literal("neon-resource-bootstrap"),
     })
@@ -182,7 +187,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   builderCallbackOrigin: httpsOrigin,
   catalogAppIds: z.array(id).min(1),
   /** Explicit deployment-owned topology; omitted configurations retain legacy behavior. */
-  composition: z.literal("single-project-services").optional(),
+  composition: z.literal(singleProjectServices).optional(),
   gateway: z.strictObject({
     authBrowserOrigin: httpsOrigin,
     branch: id,
@@ -259,7 +264,7 @@ export const validateHostedOperatorSourceConfiguration = (
     Object.values(config.applications).every(
       (app) =>
         app.projectId !== config.operator.projectId &&
-        (config.composition === "single-project-services" ||
+        (config.composition === singleProjectServices ||
           app.projectId !== config.gateway.projectId),
     ),
     config.sandbox.projectId === config.operator.projectId,
@@ -277,24 +282,24 @@ export const validateHostedOperatorSourceConfiguration = (
     new Set([config.operator.projectId, config.gateway.projectId]).size === 2,
     config.standardRuntime === undefined ||
       [
-        config.composition === "single-project-services",
+        config.composition === singleProjectServices,
         config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
         config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
       ].every(Boolean),
-    config.composition !== "single-project-services" || hasSingleProjectServicesTopology(config),
+    config.composition !== singleProjectServices || hasSingleProjectServicesTopology(config),
     config.standardRuntime === undefined ||
       [
-        config.composition === "single-project-services",
+        config.composition === singleProjectServices,
         config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
         config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
       ].every(Boolean),
     config.standardRuntime === undefined ||
       [
-        config.composition === "single-project-services",
+        config.composition === singleProjectServices,
         config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
         config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
       ].every(Boolean),
-    config.composition !== "single-project-services" || hasSingleProjectServicesTopology(config),
+    config.composition !== singleProjectServices || hasSingleProjectServicesTopology(config),
   ].every(Boolean);
   if (!ownedConfiguration) {
     throw new Error("Protected operator deployment configuration is unavailable.");
