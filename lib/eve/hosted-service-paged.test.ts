@@ -92,16 +92,16 @@ const principal: HostedPrincipal = {
 
 const emptySnapshot = { events: [], status: "waiting" as const };
 
+const createRetainedEventStream = async function* createRetainedEventStream(event: PublicEveEvent) {
+  yield event;
+};
+
 const transport = (observe: NonNullable<HostedEveTransport["observe"]>): HostedEveTransport => ({
-  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous transport contract.
-  cancel: vi.fn(async () => emptySnapshot),
-  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous transport contract.
-  get: vi.fn(async () => emptySnapshot),
+  cancel: vi.fn().mockResolvedValue(emptySnapshot),
+  get: vi.fn().mockResolvedValue(emptySnapshot),
   observe,
-  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous transport contract.
-  respond: vi.fn(async () => emptySnapshot),
-  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous transport contract.
-  send: vi.fn(async () => emptySnapshot),
+  respond: vi.fn().mockResolvedValue(emptySnapshot),
+  send: vi.fn().mockResolvedValue(emptySnapshot),
   // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous transport contract.
   start: vi.fn(async () => ({ adapterSessionId: "adapter_1", snapshot: emptySnapshot })),
 });
@@ -469,9 +469,7 @@ describe("unchanged paged observation reuse", () => {
     });
     const revoked = new Error("owner revoked");
     const service = createHostedEveSessionService({
-      beforeRead: async () => {
-        throw revoked;
-      },
+      beforeRead: vi.fn().mockRejectedValue(revoked),
       principal,
       store: f.store,
       transport: f.adapter,
@@ -1492,15 +1490,18 @@ describe("paged hosted session observation", () => {
           );
         }
         const pendingRequests = kind === "respond" && !accepted ? [question] : [];
-        const state = {
+        const baseState = {
           ...nativeState({
             adapterSessionId: input.adapterSessionId,
             nextNativeIndex: total + (accepted ? 1 : 0),
             publicEventCount: total,
           }),
           pendingRequests,
-          ...(accepted && kind === "send" ? { nativeDeliveryState: sendProof } : {}),
         };
+        const state =
+          accepted && kind === "send"
+            ? { ...baseState, nativeDeliveryState: sendProof }
+            : baseState;
         return {
           artifactProjectionRequiresLegacyReadback: false,
           installedEventCount: state.nextNativeIndex,
@@ -1968,14 +1969,12 @@ describe("send preflight dispatch classification", () => {
         throw new Error("Expected the owned durable session.");
       }
       const saved = await f.observeSessionPaged({
-        events: (async function* retainedEvents() {
-          yield {
-            index: 0,
-            text: "retained",
-            turnId: "turn_1",
-            type: "assistant_message" as const,
-          };
-        })(),
+        events: createRetainedEventStream({
+          index: 0,
+          text: "retained",
+          turnId: "turn_1",
+          type: "assistant_message" as const,
+        }),
         expectedCheckpointDigest: initial.checkpointDigest,
         metadata: {
           capturedAtEpochMs: 1000,
