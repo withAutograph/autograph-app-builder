@@ -135,8 +135,8 @@ const fixture = () => {
     throw new Error("Unexpected provider route");
   });
   const deps: PublicReleaseVercelDependencies = {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit void fulfillment value.
-    assertCurrent: vi.fn().mockResolvedValue(undefined),
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    fetch: fetcher,
     readCredential: vi.fn().mockResolvedValue({
       binding: {
         active: true,
@@ -150,9 +150,8 @@ const fixture = () => {
       },
       token: "synthetic-private-provider-token",
     }),
-    readRuntimeBindings: vi.fn().mockResolvedValue([{ key: "INVOICE_APP_DATABASE_URL", value }]),
     readDeliveredRelease: vi.fn().mockResolvedValue({ releaseId: plan.runtime.releaseId }),
-    fetch: fetcher,
+    readRuntimeBindings: vi.fn().mockResolvedValue([{ key: "INVOICE_APP_DATABASE_URL", value }]),
   };
   const context: PublicReleaseEffectContext = {
     bindings: {
