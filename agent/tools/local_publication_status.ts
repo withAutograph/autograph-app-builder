@@ -31,22 +31,36 @@ const publicationWorkflow = () => {
   return workflow;
 };
 
+const receiptIdentityMismatch = (
+  workflow: ReturnType<typeof publicationWorkflow>,
+  journal: NonNullable<Awaited<ReturnType<typeof readLocalPublicationJournal>>>,
+) =>
+  journal.sourceReceiptDigest !== workflow.sourceReceipt.digest ||
+  journal.reviewDigest !== workflow.reviewReceipt.digest ||
+  journal.changeSetDigest !== workflow.reviewReceipt.changeSetDigest;
+
+const sourceIdentityMismatch = (
+  workflow: ReturnType<typeof publicationWorkflow>,
+  journal: NonNullable<Awaited<ReturnType<typeof readLocalPublicationJournal>>>,
+) =>
+  journal.baseSha !== workflow.sourceReceipt.sourceSha ||
+  journal.sourceTree !== workflow.sourceReceipt.sourceTree ||
+  journal.contractDigest !== workflow.sourceReceipt.contractDigest;
+
 const assertJournalMatchesWorkflow = (
   workflow: ReturnType<typeof publicationWorkflow>,
   destinationPath: string,
   expectedReviewDigest: string,
   journal: NonNullable<Awaited<ReturnType<typeof readLocalPublicationJournal>>>,
 ) => {
-  if (
+  const destinationMismatch =
     destinationPath !== workflow.sourceReceipt.sourcePath ||
-    destinationPath !== journal.destinationPath ||
+    destinationPath !== journal.destinationPath;
+  if (
+    destinationMismatch ||
     expectedReviewDigest !== workflow.reviewReceipt.digest ||
-    journal.sourceReceiptDigest !== workflow.sourceReceipt.digest ||
-    journal.reviewDigest !== workflow.reviewReceipt.digest ||
-    journal.changeSetDigest !== workflow.reviewReceipt.changeSetDigest ||
-    journal.baseSha !== workflow.sourceReceipt.sourceSha ||
-    journal.sourceTree !== workflow.sourceReceipt.sourceTree ||
-    journal.contractDigest !== workflow.sourceReceipt.contractDigest
+    receiptIdentityMismatch(workflow, journal) ||
+    sourceIdentityMismatch(workflow, journal)
   ) {
     throw new Error(
       "The durable local-publication journal does not belong to the current workflow.",
@@ -71,6 +85,10 @@ const assertJournalMatchesWorkflow = (
     throw new Error("The terminal workflow does not have its exact terminal publication journal.");
   }
 };
+
+const workspaceSourceMismatch = (workflow: ReturnType<typeof publicationWorkflow>) =>
+  workflow.workspace.sourceTree !== workflow.sourceReceipt.sourceTree ||
+  workflow.workspace.sourceSha !== workflow.sourceReceipt.sourceSha;
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 
@@ -99,8 +117,7 @@ export const exactLocalPublicationProposal = async (input: {
     proposal.destinationPath !== workflow.sourceReceipt.sourcePath ||
     proposal.sourceReceiptDigest !== workflow.sourceReceipt.digest ||
     proposal.baseSha !== workflow.sourceReceipt.sourceSha ||
-    workflow.workspace.sourceTree !== workflow.sourceReceipt.sourceTree ||
-    workflow.workspace.sourceSha !== workflow.sourceReceipt.sourceSha
+    workspaceSourceMismatch(workflow)
   ) {
     throw new Error("The selected destination is not the exact original source checkout.");
   }
