@@ -28,6 +28,7 @@ interface TwoFactorRedirect {
 /** Detect the redirect payload Better Auth returns before a second factor. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isTwoFactorRedirect(data: unknown): data is TwoFactorRedirect {
+  // SAFETY: The preceding operands establish an object; the asserted property remains unknown.
   return (
     typeof data === "object" &&
     data !== null &&
