@@ -297,16 +297,16 @@ describe("draft reconciliation command progress", () => {
       context,
     );
     expect(result).toMatchObject({
-      status: "in_progress",
       command: installCommand,
       nextCommand: schemaCommand,
+      status: "in_progress",
     });
     const installs = candidateInstallCalls();
     expect(installs).toHaveLength(1);
     expect(installs[0]).toMatchObject({
-      workingDirectory: "/workspace/candidate",
-      env: { MISE_ENV: "app-validation" },
       abortSignal,
+      env: { MISE_ENV: "app-validation" },
+      workingDirectory: "/workspace/candidate",
     });
     expect(installs[0].env).not.toHaveProperty("DATABASE_URL");
     expect(mocks.compile).not.toHaveBeenCalled();
@@ -333,13 +333,13 @@ describe("draft reconciliation command progress", () => {
     };
     const call = candidateValidationCall;
     await expect(call(checkCommand)).resolves.toMatchObject({
-      status: "plan_refreshed",
       nextCommand: installCommand,
+      status: "plan_refreshed",
     });
     expect(candidateInstallCalls()).toHaveLength(0);
     await expect(call(installCommand)).resolves.toMatchObject({
-      status: "in_progress",
       nextCommand: checkCommand,
+      status: "in_progress",
     });
     mocks.check.mockResolvedValue({
       exitCode: 1,
@@ -347,12 +347,12 @@ describe("draft reconciliation command progress", () => {
       stdout: "",
     });
     await expect(call(checkCommand)).resolves.toMatchObject({
-      status: "needs_repair",
       exitCode: 1,
+      status: "needs_repair",
     });
     await expect(call(checkCommand)).resolves.toMatchObject({
-      status: "needs_repair",
       exitCode: 1,
+      status: "needs_repair",
     });
     expect(mocks.compile).not.toHaveBeenCalled();
     expect(mocks.attempts).toContain(historical);
@@ -404,7 +404,7 @@ describe("draft reconciliation command progress", () => {
     expect(candidateInstallCalls()).toHaveLength(0);
     expect(mocks.compile).not.toHaveBeenCalled();
     expect(mocks.check).not.toHaveBeenCalled();
-    expect(mocks.candidate?.validationRun).toMatchObject({ nextIndex: 0, commands: [] });
+    expect(mocks.candidate?.validationRun).toMatchObject({ commands: [], nextIndex: 0 });
   });
 
   it("does not loop locked installation when a declared dependency error persists", async () => {
@@ -414,20 +414,20 @@ describe("draft reconciliation command progress", () => {
       stdout: "",
     });
     await expect(incremental(checkCommand)).resolves.toMatchObject({
-      status: "in_progress",
       nextCommand: installCommand,
+      status: "in_progress",
     });
     await expect(incremental(installCommand)).resolves.toMatchObject({
-      status: "in_progress",
       nextCommand: checkCommand,
+      status: "in_progress",
     });
     await expect(incremental(checkCommand)).resolves.toMatchObject({
-      status: "needs_repair",
       exitCode: 1,
+      status: "needs_repair",
     });
     await expect(incremental(checkCommand)).resolves.toMatchObject({
-      status: "needs_repair",
       exitCode: 1,
+      status: "needs_repair",
     });
     expect(candidateInstallCalls()).toHaveLength(2);
   });
@@ -453,20 +453,20 @@ describe("draft reconciliation command progress", () => {
     };
     const call = candidateValidationCall;
     await expect(call(captureCommand)).resolves.toMatchObject({
-      status: "plan_refreshed",
       nextCommand: installCommand,
+      status: "plan_refreshed",
     });
     await expect(call(installCommand)).resolves.toMatchObject({
-      status: "in_progress",
       nextCommand: checkCommand,
+      status: "in_progress",
     });
     await expect(call(checkCommand)).resolves.toMatchObject({
-      status: "in_progress",
       nextCommand: testCommand,
+      status: "in_progress",
     });
     await expect(call(testCommand)).resolves.toMatchObject({
-      status: "in_progress",
       nextCommand: captureCommand,
+      status: "in_progress",
     });
     expect(mocks.compile).not.toHaveBeenCalled();
     expect(mocks.publish).not.toHaveBeenCalled();
@@ -489,16 +489,16 @@ describe("draft reconciliation command progress", () => {
         context,
       );
     await expect(call()).resolves.toMatchObject({
-      status: "needs_repair",
       command: installCommand,
       output: { stderr: "lockfile mismatch" },
+      status: "needs_repair",
     });
-    expect(mocks.candidate?.validationRun).toMatchObject({ nextIndex: 0, commands: [] });
+    expect(mocks.candidate?.validationRun).toMatchObject({ commands: [], nextIndex: 0 });
     expect(mocks.compile).not.toHaveBeenCalled();
     mocks.run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
     await expect(call()).resolves.toMatchObject({
-      status: "in_progress",
       nextCommand: schemaCommand,
+      status: "in_progress",
     });
   });
 
@@ -520,7 +520,6 @@ describe("draft reconciliation command progress", () => {
     const events: string[] = [];
     mocks.retire.mockImplementation(async (input) => {
       expect(input).toMatchObject({
-        workspaceRoot: "/workspace",
         retainedRoots: [
           "/workspace/repository",
           "/workspace/applied",
@@ -530,6 +529,7 @@ describe("draft reconciliation command progress", () => {
           "/workspace/completed-two",
         ],
         signal: abortSignal,
+        workspaceRoot: "/workspace",
       });
       expect(input.sandbox.run).toBeTypeOf("function");
       events.push("retire");
@@ -544,8 +544,8 @@ describe("draft reconciliation command progress", () => {
       return { command: schemaCommand, exitCode: 0, status: "compiled", stderr: "", stdout: "" };
     });
     await expect(incremental(schemaCommand)).resolves.toMatchObject({
-      status: "in_progress",
       nextCommand: checkCommand,
+      status: "in_progress",
     });
     expect(mocks.retire).toHaveBeenCalledOnce();
     expect(events.indexOf("retire")).toBeLessThan(events.indexOf("attach"));
@@ -617,7 +617,7 @@ describe("draft reconciliation command progress", () => {
             },
             context,
           ),
-        ).resolves.toMatchObject({ status: "plan_refreshed", nextCommand: installCommand });
+        ).resolves.toMatchObject({ nextCommand: installCommand, status: "plan_refreshed" });
       }
       expect(mocks.compile).not.toHaveBeenCalled();
       expect(mocks.candidate?.root).toBe(root);
@@ -740,11 +740,11 @@ describe("draft reconciliation command progress", () => {
       `Builder could not run ${checkCommand} during draft PR candidate validation`,
     );
     expect(mocks.candidate?.validationRun).toMatchObject({
-      nextIndex: 2,
       commands: [
         { command: installCommand, exitCode: 0 },
         { command: schemaCommand, exitCode: 0 },
       ],
+      nextIndex: 2,
     });
     expect(mocks.publish).not.toHaveBeenCalled();
     await expect(incremental(checkCommand)).resolves.toMatchObject({ status: "in_progress" });
@@ -877,9 +877,9 @@ describe("draft reconciliation command progress", () => {
       stdout: "",
     });
     await expect(incremental(checkCommand)).resolves.toMatchObject({
+      exitCode: 1,
       nextCommand: installCommand,
       status: "in_progress",
-      exitCode: 1,
     });
     let installFailed = false;
     mocks.run.mockImplementation((input: { command: string }) => {
@@ -924,28 +924,28 @@ describe("draft reconciliation command progress", () => {
       problem: "The selected local runtime failed",
     });
     await expect(incremental("mise run app:local -- spend-review setup")).resolves.toMatchObject({
-      status: "needs_repair",
       exitCode: 1,
+      status: "needs_repair",
     });
     const attempt = mocks.attempts.at(-1) as {
       attemptDigest: string;
       logs: { stderr: ValidationLogReference };
     };
     expect(attempt).toMatchObject({
-      category: "local-preparation",
-      command: "mise run app:local -- spend-review setup",
       appId: "spend-review",
       baseSha: "base-sha",
-      headSha: "head-sha",
-      repositoryId: "repo-id",
-      pullRequestNumber: 7,
-      githubSourceDigest: digest,
-      originalReviewDigest: digest,
-      resolvedTree: tree,
       callId: "validation_1",
+      category: "local-preparation",
+      command: "mise run app:local -- spend-review setup",
       completion: "complete",
       durability: "available",
       exitCode: 1,
+      githubSourceDigest: digest,
+      headSha: "head-sha",
+      originalReviewDigest: digest,
+      pullRequestNumber: 7,
+      repositoryId: "repo-id",
+      resolvedTree: tree,
     });
     expect(mocks.attempts.slice(0, -1)).toEqual(prior);
     const key = {
@@ -983,8 +983,8 @@ describe("draft reconciliation command progress", () => {
         stderr: "kernel_bind_actor_membership rejected runtime preparation",
       });
       await expect(incremental("mise run app:local -- spend-review setup")).resolves.toMatchObject({
-        status: "needs_repair",
         exitCode: 3,
+        status: "needs_repair",
       });
       expect(mocks.attempts.at(-1)).toMatchObject({
         category: "local-preparation",
@@ -1017,7 +1017,7 @@ describe("draft reconciliation command progress", () => {
         });
         await expect(
           incremental("mise run app:local -- spend-review setup"),
-        ).resolves.toMatchObject({ status: "needs_repair", exitCode: null });
+        ).resolves.toMatchObject({ exitCode: null, status: "needs_repair" });
       } else {
         mocks.local.mockRejectedValueOnce(new Error("sandbox command interrupted"));
         await expect(incremental("mise run app:local -- spend-review setup")).rejects.toThrow(
@@ -1064,7 +1064,7 @@ describe("draft reconciliation command progress", () => {
       completion: "complete",
       durability: "available",
       exitCode: 2,
-      logs: { stderr: { completion: "complete", channel: "stderr" } },
+      logs: { stderr: { channel: "stderr", completion: "complete" } },
     });
     const attempt = mocks.attempts[0] as {
       attemptDigest: string;
@@ -1102,8 +1102,8 @@ describe("draft reconciliation command progress", () => {
       mocks.check.mockResolvedValueOnce({ exitCode: 1, stderr: diagnostic, stdout: "" });
       await expect(incremental(checkCommand)).resolves.toMatchObject({
         exitCode: 1,
-        status: "in_progress",
         nextCommand: repair,
+        status: "in_progress",
       });
       expect(mocks.publish).not.toHaveBeenCalled();
       await expect(incremental(repair)).resolves.toMatchObject({
@@ -1128,8 +1128,8 @@ describe("draft reconciliation command progress", () => {
   ])("does not install or compile for %s", async (diagnostic) => {
     mocks.check.mockResolvedValueOnce({ exitCode: 2, stderr: diagnostic, stdout: "" });
     await expect(incremental(checkCommand)).resolves.toMatchObject({
-      status: "needs_repair",
       exitCode: 2,
+      status: "needs_repair",
     });
     expect(candidateInstallCalls()).toHaveLength(1);
     expect(mocks.compile).toHaveBeenCalledOnce();
@@ -1145,8 +1145,8 @@ describe("draft reconciliation command progress", () => {
     await incremental(checkCommand);
     await incremental(schemaCommand);
     await expect(incremental(checkCommand)).resolves.toMatchObject({
-      status: "needs_repair",
       exitCode: 1,
+      status: "needs_repair",
     });
     expect(mocks.compile).toHaveBeenCalledTimes(2);
     await expect(incremental(checkCommand)).resolves.toMatchObject({ status: "needs_repair" });
@@ -1158,9 +1158,9 @@ describe("draft reconciliation command progress", () => {
     await incremental(testCommand);
     mocks.publish.mockRejectedValueOnce(new Error("artifact storage unavailable"));
     await expect(incremental(captureCommand)).resolves.toMatchObject({
-      status: "needs_repair",
       command: captureCommand,
       exitCode: null,
+      status: "needs_repair",
     });
     expect(mocks.candidate?.validation).toBeUndefined();
     await expect(
@@ -1222,12 +1222,12 @@ describe("draft reconciliation command progress", () => {
         },
         context,
       ),
-    ).resolves.toMatchObject({ status: "needs_repair", exitCode: 1 });
+    ).resolves.toMatchObject({ exitCode: 1, status: "needs_repair" });
     expect(mocks.spawn).toHaveBeenCalledWith(
       expect.objectContaining({
+        abortSignal,
         command: "mise run --no-deps --skip-tools check:package-manifests",
         workingDirectory: "/workspace/candidate",
-        abortSignal,
       }),
     );
     // Repair may reset current validation; historical diagnostics must remain discoverable.
@@ -1513,15 +1513,15 @@ describe("draft reconciliation command progress", () => {
       stdout: "",
     });
     await expect(incremental(schemaCommand)).resolves.toMatchObject({
-      status: "needs_repair",
       exitCode: 2,
-      problem: "CUE source diagnostic",
       output: { stderr: "source.cue:42: invalid type" },
+      problem: "CUE source diagnostic",
+      status: "needs_repair",
     });
     expect(mocks.candidate?.validation).toBeUndefined();
     await expect(incremental(schemaCommand)).resolves.toMatchObject({
-      status: "in_progress",
       nextCommand: checkCommand,
+      status: "in_progress",
     });
     expect(mocks.compile).toHaveBeenCalledTimes(3);
   });
@@ -1607,17 +1607,17 @@ describe("draft reconciliation command progress", () => {
       stdout: "",
     });
     await expect(incremental(checkCommand)).resolves.toMatchObject({
-      status: "needs_repair",
       exitCode: 1,
+      status: "needs_repair",
     });
     expect(candidateInstallCalls()).toHaveLength(1);
     expect(mocks.compile).toHaveBeenCalledOnce();
     expect(mocks.candidate?.validationRun).toMatchObject({
-      nextIndex: 2,
       commands: [
         { command: installCommand, exitCode: 0 },
         { command: schemaCommand, exitCode: 0 },
       ],
+      nextIndex: 2,
     });
   });
 
@@ -1631,8 +1631,8 @@ describe("draft reconciliation command progress", () => {
       });
     });
     await expect(incremental(checkCommand)).resolves.toMatchObject({
-      status: "needs_repair",
       exitCode: 1,
+      status: "needs_repair",
     });
     expect(candidateInstallCalls()).toHaveLength(1);
   });
@@ -1644,8 +1644,8 @@ describe("draft reconciliation command progress", () => {
     async (diagnostic) => {
       mocks.check.mockResolvedValueOnce({ exitCode: 1, stderr: diagnostic, stdout: "" });
       await expect(incremental(checkCommand)).resolves.toMatchObject({
-        status: "needs_repair",
         exitCode: 1,
+        status: "needs_repair",
       });
       expect(candidateInstallCalls()).toHaveLength(1);
       expect(mocks.compile).toHaveBeenCalledOnce();
@@ -1658,8 +1658,8 @@ describe("draft reconciliation command progress", () => {
       status: "in_progress",
     });
     expect(mocks.candidate?.validationRun).toMatchObject({
-      schemaTaskCompleted: true,
       nextIndex: 2,
+      schemaTaskCompleted: true,
     });
     expect(mocks.check).not.toHaveBeenCalled();
     await incremental(checkCommand);
@@ -1678,9 +1678,9 @@ describe("draft reconciliation command progress", () => {
       stdout: "",
     });
     await expect(incremental(schemaCommand)).resolves.toMatchObject({
-      status: "in_progress",
-      nextCommand: installCommand,
       exitCode: 1,
+      nextCommand: installCommand,
+      status: "in_progress",
     });
     expect(mocks.candidate?.validationRun).not.toHaveProperty("schemaTaskCompleted", true);
     await expect(incremental(installCommand)).resolves.toMatchObject({

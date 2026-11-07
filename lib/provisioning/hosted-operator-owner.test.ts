@@ -2064,7 +2064,7 @@ describe("owner project access diagnostics", () => {
         expect.arrayContaining([
           expect.objectContaining({
             httpStatus: status,
-            planningFailure: { stage: "plan_owner_authorization", errorClass: "unexpected" },
+            planningFailure: { errorClass: "unexpected", stage: "plan_owner_authorization" },
           }),
         ]),
       );
@@ -2135,7 +2135,7 @@ describe("owner project access diagnostics", () => {
       expect(diagnostics).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            planningFailure: { stage: "plan_owner_authorization", errorClass: "type_error" },
+            planningFailure: { errorClass: "type_error", stage: "plan_owner_authorization" },
           }),
         ]),
       );
@@ -2158,8 +2158,8 @@ describe("hosted operator owner authority", () => {
       }
       await expect(f.readApproval(f.prepareInput)).resolves.toEqual({
         action: "prepare",
-        approved: true,
         approvalId: f.approval.requestId,
+        approved: true,
         callId: f.callId,
         planDigest: f.prepareInput.planDigest,
       });
@@ -2220,8 +2220,8 @@ describe("hosted operator owner authority", () => {
     const retained = narrowedGatewayApprovalFixture();
     await expect(retained.readApproval(retained.prepareInput)).resolves.toEqual({
       action: "prepare",
-      approved: true,
       approvalId: retained.prepareReceipt.requestId,
+      approved: true,
       callId: retained.prepareReceipt.callId,
       planDigest: retained.prepareReceipt.toolInput.planDigest,
     });
@@ -2368,8 +2368,8 @@ describe("hosted operator owner authority", () => {
       captures: [],
     };
     await expect(retained.readApproval(retained.prepareInput)).resolves.toMatchObject({
-      approved: true,
       approvalId: retained.prepareReceipt.requestId,
+      approved: true,
       planDigest,
     });
     retained.record.accountPreparation.accountOperationRef =
@@ -3441,9 +3441,9 @@ describe("normal Builder destination authority", () => {
         ),
     );
     await expect(read(f)).resolves.toMatchObject({
+      installationId: "icfg_1",
       projectId: selection.projectId,
       teamId: "team_1",
-      installationId: "icfg_1",
     });
     expect(f.fetch).toHaveBeenCalledOnce();
     expect(f.currentSession.appId).toBe(selection.appId);
@@ -3731,9 +3731,9 @@ describe("attached direct-session standard destination", () => {
   it("uses the actual attached normal receipt without rewriting source handoff or history", async () => {
     const x = await fixture();
     await expect(x.read()).resolves.toMatchObject({
+      installationId: "icfg_1",
       projectId: selection.projectId,
       teamId: "team_1",
-      installationId: "icfg_1",
     });
     expect(x.f.currentSession.sourceHandoffId).toBeUndefined();
     expect(x.f.handoffs.read).toHaveBeenCalledOnce();
@@ -3757,10 +3757,10 @@ describe("attached direct-session standard destination", () => {
     const x = await fixture(true);
     const before = structuredClone(x.f.currentSession);
     await expect(x.read()).resolves.toMatchObject({
-      projectId: selection.projectId,
-      repositoryId: "200",
       githubInstallationId: "10",
+      projectId: selection.projectId,
       provisioningRequestId: x.row.requestId,
+      repositoryId: "200",
     });
     expect(x.findProvisioningForAppRepository).toHaveBeenCalledWith({
       authority: ownerContext.authority,
@@ -3861,9 +3861,9 @@ describe("normal Builder destination authority", () => {
         ),
     );
     await expect(read(f)).resolves.toMatchObject({
+      installationId: "icfg_1",
       projectId: selection.projectId,
       teamId: "team_1",
-      installationId: "icfg_1",
     });
     expect(f.fetch).toHaveBeenCalledOnce();
     expect(f.currentSession.appId).toBe(selection.appId);

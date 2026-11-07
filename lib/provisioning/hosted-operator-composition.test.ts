@@ -553,7 +553,7 @@ describe("final verifier entry diagnostics", () => {
       await expect(dependencies.verify({ ...context, plan: bootstrapPlan() })).rejects.toBe(error);
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
-        expect.objectContaining({ executionFailure: { stage, errorClass: "type_error" } }),
+        expect.objectContaining({ executionFailure: { errorClass: "type_error", stage } }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain(error.message);
       expect(read.mock.calls.length).toBe(stage === "final_owner_authorization" ? 0 : 1);
@@ -1364,12 +1364,12 @@ describe("empty approved access effects", () => {
     const observed = await f.dependencies.reconcile(f.input);
     const executed = await f.dependencies.executeEffect(f.input);
     expect(observed).toMatchObject({
-      status: "applied",
       receipt: {
         effectId: f.input.effect.id,
         fenceGeneration: 7,
         resourceVersion: executed.resourceVersion,
       },
+      status: "applied",
     });
     expect(executed.resourceVersion).toBe(
       createHash("sha256")
@@ -3069,8 +3069,8 @@ describe("existing populated Auth workflow planning", () => {
       selection: plan.selection,
     });
     expect(proposal).toMatchObject({
+      plan: { contextId: retainedAuth.plan.contextId, stage: "auth-bootstrap" },
       status: "planned",
-      plan: { stage: "auth-bootstrap", contextId: retainedAuth.plan.contextId },
     });
     expect(f.row.record.accountPreparation).toEqual(before.accountPreparation);
     expect(f.row.record.privateState).toEqual(before.privateState);
@@ -3236,8 +3236,8 @@ describe("existing populated Auth workflow planning", () => {
     expect(plan.gatewayBindings?.trustedSources).toBeUndefined();
     expect(plan.gatewayDelivery?.projectId).toBe("gateway");
     expect(plan.gatewayBindings?.readonlyAttesters).toMatchObject({
-      builderProduction: { projectId: "builder", environment: "production" },
-      operatorPreview: { projectId: "operator", environment: "preview" },
+      builderProduction: { environment: "production", projectId: "builder" },
+      operatorPreview: { environment: "preview", projectId: "operator" },
     });
     expect(plan.gatewayBindings).toMatchObject({
       authBrowserOrigin: f.configuration.gateway.authBrowserOrigin,
@@ -3313,8 +3313,8 @@ describe("existing populated Auth workflow planning", () => {
       workerCheckpoints: [],
     };
     expect(await f.dependencies.reconcile(input)).toEqual({
-      status: "retryable",
       resourceVersion: "d".repeat(64),
+      status: "retryable",
     });
     expect(reconcileMigration).toHaveBeenCalledOnce();
     const observed = f.propose.mock.calls[0]?.[0];
@@ -4077,8 +4077,8 @@ describe("approved historical organization inspection", () => {
   it("reads current credentials and capture but inspects the original approved full plan with today's fence", async () => {
     const f = setup(true, "applied");
     await expect(f.dependencies.reconcile(f.input)).resolves.toMatchObject({
-      status: "applied",
       receipt: { effectId: f.input.effect.id, resourceVersion: "e".repeat(64) },
+      status: "applied",
     });
     expect(f.readResourceBindings).toHaveBeenCalledWith(f.input);
     expect(f.f.readCapturedRealmIdentityProof).toHaveBeenCalledWith(f.input);
@@ -4216,8 +4216,8 @@ describe("retained active schema installation scope", () => {
     f.desired.appInstallation = { customerIds: ["original-org"] };
     await expect(f.readScopes(context, f.desired)).resolves.toEqual([
       {
-        appId: context.target.appId,
         actorId: "original-owner",
+        appId: context.target.appId,
         organizationId: "original-org",
         role: "member",
       },
@@ -4546,8 +4546,8 @@ describe("retained active schema installation scope", () => {
         runtimeUrl: f.bindings.appDatabase.runtimeUrl,
         scopes: [
           {
-            appId: context.target.appId,
             actorId: "original-owner",
+            appId: context.target.appId,
             organizationId: "original-org",
             role: "member",
           },
@@ -4556,7 +4556,7 @@ describe("retained active schema installation scope", () => {
     );
     expect(f.metadataRead).toHaveBeenCalled();
     expect(f.assertAuthorized).toHaveBeenCalledWith(
-      expect.objectContaining({ purpose: "planning", plan: f.prior }),
+      expect.objectContaining({ plan: f.prior, purpose: "planning" }),
     );
   });
 
@@ -4600,8 +4600,8 @@ describe("retained active schema installation scope", () => {
     expect(f.readApproval).toHaveBeenCalledWith(context, f.receipt(8));
     expect(f.readActiveCustomers).toHaveBeenCalledWith(context, f.desired, [
       {
-        appId: context.target.appId,
         actorId: "original-owner",
+        appId: context.target.appId,
         organizationId: "original-org",
         role: "member",
       },

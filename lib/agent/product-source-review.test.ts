@@ -357,9 +357,9 @@ describe("independent application source review", () => {
     );
     expect(model.doGenerateCalls).toHaveLength(3);
     expect(final.assessment).toMatchObject({
+      findings: [{ citations: [{ endLine: 1, path: "packages/shared/server.ts", startLine: 1 }] }],
       reviewCompleted: true,
       status: "failed",
-      findings: [{ citations: [{ path: "packages/shared/server.ts", startLine: 1, endLine: 1 }] }],
     });
     expect(final.continuation.findings[0][1].requirementQuote).toBe(
       applicationFinding.requirementQuote,
@@ -427,7 +427,7 @@ describe("independent application source review", () => {
     ).toMatchObject({
       output: {
         type: "json",
-        value: { kind: "retained-evidence-result", firstToolCallId: "step-1-0" },
+        value: { firstToolCallId: "step-1-0", kind: "retained-evidence-result" },
       },
     });
   });
@@ -469,8 +469,8 @@ describe("independent application source review", () => {
     expect(result?.assessment?.findings).toHaveLength(1);
     expect(continuation?.invocation).toMatchObject({
       requestAttempts: 5,
-      successfulRequests: 4,
       requestsWithIncompleteUsage: 1,
+      successfulRequests: 4,
     });
     expect(starts.map(({ requestOrdinal, stepNumber }) => [requestOrdinal, stepNumber])).toEqual([
       [1, 0],
@@ -746,8 +746,8 @@ describe("independent application source review", () => {
     );
     expect(newest).toContainEqual(
       expect.objectContaining({
-        toolCallId: "step-4-0",
         output: { type: "json", value: { text } },
+        toolCallId: "step-4-0",
       }),
     );
     expect(newest).toContainEqual(
@@ -819,14 +819,14 @@ describe("independent application source review", () => {
     );
     expect(results).toContainEqual(
       expect.objectContaining({
+        output: { type: "json", value: { nextCursor: 1, text } },
         toolCallId: "step-1-0",
-        output: { type: "json", value: { text, nextCursor: 1 } },
       }),
     );
     expect(results).toContainEqual(
       expect.objectContaining({
+        output: { type: "json", value: { nextCursor: 2, text } },
         toolCallId: "step-2-0",
-        output: { type: "json", value: { text, nextCursor: 2 } },
       }),
     );
   });
@@ -909,7 +909,6 @@ describe("independent application source review", () => {
     for (const id of ["step-1-0", "step-2-0"]) {
       expect(results).toContainEqual(
         expect.objectContaining({
-          toolCallId: id,
           output: {
             type: "json",
             value: {
@@ -917,13 +916,14 @@ describe("independent application source review", () => {
               message: "Choose an existing document.",
             },
           },
+          toolCallId: id,
         }),
       );
     }
     expect(results).toContainEqual(
       expect.objectContaining({
-        toolCallId: "step-1-1",
         output: { type: "json", value: { text } },
+        toolCallId: "step-1-1",
       }),
     );
     expect(
@@ -932,8 +932,8 @@ describe("independent application source review", () => {
       output: {
         type: "json",
         value: {
-          kind: "retained-evidence-result",
           firstToolCallId: "step-1-1",
+          kind: "retained-evidence-result",
         },
       },
     });
@@ -974,8 +974,8 @@ describe("independent application source review", () => {
     );
     expect(results).toContainEqual(
       expect.objectContaining({
-        toolCallId: "step-4-0",
         output: { type: "json", value: { text } },
+        toolCallId: "step-4-0",
       }),
     );
     expect(
@@ -1008,9 +1008,9 @@ describe("independent application source review", () => {
     expect(evidence.readRequirements).toHaveBeenCalledWith({ id: "spec" });
     expect(evidence.readSource).toHaveBeenCalledWith({ path: "packages/shared/server.ts" });
     expect(result).toMatchObject({
+      findings: [{ citations: [{ path: "packages/shared/server.ts" }] }],
       reviewCompleted: true,
       status: "failed",
-      findings: [{ citations: [{ path: "packages/shared/server.ts" }] }],
     });
     expect(result.bindingDigest).toBe(validateSourceJudgment(input, judgment).bindingDigest);
     expect(result.invocation?.requestAttempts).toBe(model.doGenerateCalls.length);
@@ -1088,7 +1088,7 @@ describe("independent application source review", () => {
           endLine: 1,
           endColumn: oldBody.length + 1,
           totalLines: 1,
-          nextCursor: { line: 2, column: 1, endLine: 4 },
+          nextCursor: { column: 1, endLine: 4, line: 2 },
         },
       },
     });
@@ -1100,8 +1100,8 @@ describe("independent application source review", () => {
       output: {
         type: "json",
         value: {
-          kind: "retained-evidence-result",
           firstToolCallId: "step-1-3",
+          kind: "retained-evidence-result",
         },
       },
     });

@@ -602,11 +602,11 @@ describe("native recovery refusal diagnostics", () => {
           "builder.native_source_observation",
         );
         expect(diagnostic).toMatchObject({
-          event: "builder.native_source_observation",
+          candidate: false,
           collectionKind: "unavailable",
           collectionReason: expected,
           collectionStage: "candidate_collect",
-          candidate: false,
+          event: "builder.native_source_observation",
           lineageResolved: false,
         });
         expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
@@ -640,14 +640,14 @@ describe("native recovery refusal diagnostics", () => {
         () => Promise.resolve(f.dependencies),
       );
       expect(response.status).toBe(409);
-      expect(await response.json()).toEqual({ ok: false, code: "terminal_recovery_unavailable" });
+      expect(await response.json()).toEqual({ code: "terminal_recovery_unavailable", ok: false });
       const diagnostic: unknown = loggedEvent(info.mock.calls, "builder.native_recovery_refusal");
       expect(diagnostic).toEqual({
+        boundary: null,
         event: "builder.native_recovery_refusal",
         outcome: "unavailable",
         reason: expected,
         stage: "live_transfer_preflight",
-        boundary: null,
       });
       expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
       expect(JSON.stringify(info.mock.calls)).not.toContain("old-native");
@@ -677,7 +677,7 @@ it("preserves a native recovery refusal when its advisory sink fails", async () 
       () => Promise.resolve(f.dependencies),
     );
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ ok: false, code: "terminal_recovery_unavailable" });
+    expect(await response.json()).toEqual({ code: "terminal_recovery_unavailable", ok: false });
     expect(f.stopSource).not.toHaveBeenCalled();
     expect(f.start).not.toHaveBeenCalled();
   } finally {
@@ -759,24 +759,24 @@ describe("native refusal boundary observation", () => {
           "builder.native_source_observation",
         );
         expect(diagnostic).toMatchObject({
-          collectionKind: "unavailable",
-          collectionReason: "source-not-terminal",
-          collectionBoundary: {
-            stage: expectedStage,
-            status: expectedStatus,
-            parentStatus: "other",
-            allowParked: true,
-          },
           anchorStatus: expectedAnchor,
-          anchorUnsettledStepCount: 1,
           anchorStepCounts: {
+            cancelled: 0,
             completed: 4,
+            failed: 3,
             pending: 1,
             running: 2,
-            failed: 3,
-            cancelled: 0,
             unknown: 0,
           },
+          anchorUnsettledStepCount: 1,
+          collectionBoundary: {
+            allowParked: true,
+            parentStatus: "other",
+            stage: expectedStage,
+            status: expectedStatus,
+          },
+          collectionKind: "unavailable",
+          collectionReason: "source-not-terminal",
           lineageResolved: false,
         });
         expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
@@ -833,17 +833,17 @@ it("continues exact-source collection after step inspection fails, retaining aut
     const body: unknown = await response.json();
     expect(body).toMatchObject({
       sourceDiagnostic: {
-        collectionKind: "unavailable",
-        collectionReason: "source-not-terminal",
-        collectionBoundary: { stage: "handoff_parent", status: "running", allowParked: true },
         anchorRead: {
+          errorCategory: "type",
           outcome: "failed",
           stage: "steps_list",
-          errorCategory: "type",
           status: "running",
-          unsettledStepCount: null,
           stepCounts: null,
+          unsettledStepCount: null,
         },
+        collectionBoundary: { allowParked: true, stage: "handoff_parent", status: "running" },
+        collectionKind: "unavailable",
+        collectionReason: "source-not-terminal",
       },
     });
     expect(reads).toEqual(["run", "steps"]);
@@ -876,9 +876,9 @@ it("returns a safe private summary for collector errors after successful owner a
     expect(response.status).toBe(202);
     expect(await response.json()).toMatchObject({
       sourceDiagnostic: {
-        collectionKind: "failed",
-        collectionErrorCategory: "reference",
         anchorRead: { outcome: "succeeded" },
+        collectionErrorCategory: "reference",
+        collectionKind: "failed",
       },
     });
     expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
@@ -963,12 +963,12 @@ it("relays the actual native diagnostic response through postMutation on the sta
       },
     });
     expect(loggedEvent(info.mock.calls, "builder.native_source_observation_relay")).toMatchObject({
-      outcome: "available",
       diagnostic: {
-        collectionReason: "source-not-terminal",
+        anchorRead: { errorCategory: "type", outcome: "failed" },
         collectionBoundary: { stage: "handoff_parent", status: "running" },
-        anchorRead: { outcome: "failed", errorCategory: "type" },
+        collectionReason: "source-not-terminal",
       },
+      outcome: "available",
     });
     expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
     expect(f.stopSource).not.toHaveBeenCalled();
@@ -998,15 +998,15 @@ it("relays dependency-load failure only after successful exact source authorizat
     expect(response.status).toBe(202);
     expect(await response.json()).toMatchObject({
       sourceDiagnostic: {
-        collectionKind: "failed",
-        collectionStage: "dependencies",
-        collectionErrorCategory: "reference",
         anchorRead: {
+          errorCategory: "reference",
           outcome: "failed",
           stage: "dependencies",
-          errorCategory: "reference",
           status: null,
         },
+        collectionErrorCategory: "reference",
+        collectionKind: "failed",
+        collectionStage: "dependencies",
       },
     });
     expect(f.collect).not.toHaveBeenCalled();
@@ -1085,8 +1085,8 @@ describe("owned running-lineage execution transfer", () => {
     expect(await f.run()).toMatchObject({
       kind: "accepted",
       recoveryBinding: {
-        operationId: descriptor.operationId,
         logicalSessionId: descriptor.logicalSessionId,
+        operationId: descriptor.operationId,
         provenance: { resumePhase: "await-input" },
       },
     });
@@ -1297,8 +1297,8 @@ it("uses server-default bulk pagination and exhausts all step pages", async () =
   expect(result).toMatchObject({
     runId: "old-native",
     status: "running",
-    unsettledStepIds: ["two"],
     stepCounts: { completed: 1, failed: 1 },
+    unsettledStepIds: ["two"],
   });
 });
 
@@ -1448,8 +1448,8 @@ it("retains the canonical unknown operation and source fence after a partial nat
     expect(operationIds[0]).toBe(operationIds[1]);
     const retained = await store.getStartOperation(principal, request.clientRequestId);
     expect(retained).toMatchObject({
-      state: "submission_unknown",
       operationId: unknown?.operationId,
+      state: "submission_unknown",
     });
     const approval = await store.getPrivateOperation(principal, originalResponse.operationId);
     expect(approval).toMatchObject({ state: "submission_unknown" });
@@ -1515,24 +1515,24 @@ it("GET-only opaque preflight relays complete owned-lineage facts without stoppi
       },
     });
     expect(loggedEvent(info.mock.calls, "builder.native_source_observation_relay")).toMatchObject({
-      outcome: "available",
       diagnostic: {
         collectionKind: "preflight",
-        reconciliation: { kind: "ready" },
         lineageRead: {
           outcome: "succeeded",
           provenRunCount: 2,
-          unsettledStepCount: 0,
           stepCounts: {
+            cancelled: 0,
             completed: 26,
+            failed: 0,
             pending: 0,
             running: 0,
-            failed: 0,
-            cancelled: 0,
             unknown: 0,
           },
+          unsettledStepCount: 0,
         },
+        reconciliation: { kind: "ready" },
       },
+      outcome: "available",
     });
     expect(f.stopSource).not.toHaveBeenCalled();
     expect(f.start).not.toHaveBeenCalled();

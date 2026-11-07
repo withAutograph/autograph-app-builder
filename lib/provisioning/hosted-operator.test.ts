@@ -545,8 +545,8 @@ describe("legacy owner bootstrap public readiness", () => {
     const { f, request } = await completedOwnerBootstrap();
     const result = await f.client.request(request);
     expect(result).toMatchObject({
-      status: "prepared",
       authenticatedBehavior: "unassessed",
+      status: "prepared",
       operationRef: request.operationRef,
     });
     expect(result).not.toHaveProperty("appUrl");
@@ -622,7 +622,7 @@ describe("protected hosted operator boundary", () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       const result = await f.client.request({ action: "plan", operation: "prepare", selection });
-      expect(result).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+      expect(result).toMatchObject({ code: "operation_in_progress", status: "blocked" });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
@@ -1235,7 +1235,7 @@ describe("protected hosted operator boundary", () => {
       planDigest: z.string().parse(second.planDigest),
       selection,
     });
-    expect(execution).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(execution).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
   it("denies changed product input or revoked owner on pending prepared Preview retry", async () => {
@@ -1260,12 +1260,12 @@ describe("protected hosted operator boundary", () => {
         appRoles: ["reviewer"],
       },
     });
-    expect(changed).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+    expect(changed).toMatchObject({ code: "operation_in_progress", status: "blocked" });
     expect(f.row).toEqual(before);
     f.revoke();
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
@@ -1303,8 +1303,8 @@ describe("protected hosted operator boundary", () => {
       }
     };
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "operation_in_progress",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
@@ -1761,7 +1761,7 @@ describe("protected hosted operator boundary", () => {
       planDigest: z.string().parse(next.planDigest),
       selection,
     });
-    expect(unapproved).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(unapproved).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(4);
     expect(f.row?.record.privateState).toEqual(credentials);
     expect(f.row?.record.operator?.approvalId).toBeUndefined();
@@ -2801,8 +2801,8 @@ describe("idle installer source successor planning", () => {
       };
     });
     expect(await f.client.request(originalRequest)).toMatchObject({
-      status: "blocked",
       code: "resource_mismatch",
+      status: "blocked",
     });
     const failed = structuredClone(requireRow());
     expect(failed.record).toMatchObject({
@@ -2841,7 +2841,7 @@ describe("idle installer source successor planning", () => {
     originalApproved = false;
     expect(
       await f.client.request({ action: "plan", operation: "prepare", selection }),
-    ).toMatchObject({ status: "blocked", code: "authorization_required" });
+    ).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.row).toEqual(failed);
     originalApproved = true;
     const proposed = await f.client.request({ action: "plan", operation: "prepare", selection });
@@ -2878,14 +2878,14 @@ describe("idle installer source successor planning", () => {
     }));
     f.deps.reconcile = reconcile;
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(reconcile).not.toHaveBeenCalled();
     newApproved = true;
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "reconciliation_required",
+      status: "blocked",
     });
     expect(reconcile).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2902,8 +2902,8 @@ describe("idle installer source successor planning", () => {
         : { status: "unknown" as const },
     );
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "reconciliation_required",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(1);
     expect(f.deps.executeEffect).toHaveBeenCalledWith(
@@ -3078,7 +3078,7 @@ describe("approved retention renewal planning", () => {
         });
         expect(
           await f.client.request({ action: "plan", operation: "prepare", selection }),
-        ).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+        ).toMatchObject({ code: "operator_unavailable", status: "blocked" });
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
@@ -3104,8 +3104,8 @@ describe("approved retention renewal planning", () => {
           selection,
         };
         expect(await f.client.request(execute)).toMatchObject({
-          status: "blocked",
           code: "authorization_required",
+          status: "blocked",
         });
         expect(f.deps.executeEffect).not.toHaveBeenCalled();
         const blockedReconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(
@@ -3116,8 +3116,8 @@ describe("approved retention renewal planning", () => {
           input.callId === "original-approved-call" ? null : await readApproval(input),
         );
         expect(await f.client.request(execute)).toMatchObject({
-          status: "blocked",
           code: "authorization_required",
+          status: "blocked",
         });
         expect(blockedReconcile).not.toHaveBeenCalled();
         expect(f.deps.executeEffect).not.toHaveBeenCalled();
@@ -3125,8 +3125,8 @@ describe("approved retention renewal planning", () => {
         const reconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) => {
           if (input.effect.id === pendingEffectId) {
             expect(input.renewalBindingProvenance).toMatchObject({
-              approvedByCallId: "original-approved-call",
               approvalId: "durable-human-decision",
+              approvedByCallId: "original-approved-call",
               effectId: pendingEffectId,
               kind: pendingKind,
               operationRef,
@@ -3150,8 +3150,8 @@ describe("approved retention renewal planning", () => {
         });
         f.deps.reconcile = reconcile;
         expect(await f.client.request(execute)).toMatchObject({
-          status: "blocked",
           code: "reconciliation_required",
+          status: "blocked",
         });
         expect(reconcile.mock.calls.some(([input]) => input.effect.id === pendingEffectId)).toBe(
           true,
@@ -3212,8 +3212,8 @@ describe("read-only configured Preview target resolution", () => {
       });
       const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
       expect(await result.json()).toMatchObject({
-        status: "blocked",
         code: "authorization_required",
+        status: "blocked",
       });
     },
   );
@@ -3232,8 +3232,8 @@ describe("read-only configured Preview target resolution", () => {
     };
     const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
     expect(await result.json()).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(f.row).toBeUndefined();
   });
@@ -3471,8 +3471,8 @@ describe("closed prepare pre-effect diagnostics", () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       expect(await f.client.request(request)).toMatchObject({
-        status: "blocked",
         code: "operator_unavailable",
+        status: "blocked",
       });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
@@ -3888,7 +3888,7 @@ describe("canonical runtime proof through the production verifier and handler", 
             executionFailure: { stage: "final_proof_parse", errorClass: "validation_error" },
           }),
         ]);
-        expect(result).toMatchObject({ status: "prepared", authenticatedBehavior: "unassessed" });
+        expect(result).toMatchObject({ authenticatedBehavior: "unassessed", status: "prepared" });
         const persisted = hostedRuntimeProofSchema.parse(f.row?.record.proof);
         expect(persisted).toMatchObject({
           actors: 0,
@@ -3984,7 +3984,7 @@ describe("closed prepare final verification diagnostics", () => {
     const verify = vi.spyOn(f.deps, "verify");
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(captured).toBe(privateError);
       expect(verify).not.toHaveBeenCalled();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
@@ -4013,7 +4013,7 @@ describe("closed prepare final verification diagnostics", () => {
     const verify = vi.spyOn(f.deps, "verify").mockRejectedValue(privateError);
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(verify).toHaveBeenCalledOnce();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
       expect(f.row?.record.proof).toBeUndefined();
@@ -4097,7 +4097,7 @@ describe("closed prepare final verification diagnostics", () => {
     vi.spyOn(f.deps, "verify").mockResolvedValue({ ...proof, releaseId: "different-release" });
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "resource_mismatch" });
+      expect(await execute()).toMatchObject({ code: "resource_mismatch", status: "blocked" });
       expect(f.row?.record.proof).toBeUndefined();
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
@@ -4129,7 +4129,7 @@ describe("closed prepare final verification diagnostics", () => {
     const verify = vi.spyOn(f.deps, "verify");
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(f.row?.record.proof).toBeUndefined();
       expect(f.row?.record.leaseId).toBeUndefined();
       expect(log.mock.calls).toContainEqual([
@@ -4216,7 +4216,7 @@ describe("closed prepare final verification diagnostics", () => {
     };
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(f.row?.record.proof).toEqual(proof);
       expect(f.row?.record.leaseId).toBeDefined();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
