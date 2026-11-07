@@ -4,22 +4,19 @@ import { z } from "zod";
 
 const repositorySchema = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
 
-const localOrigin = z
-  .string()
-  .url()
-  .transform((value, context) => {
-    const url = new URL(value);
-    const local =
-      (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) ||
-      (url.protocol === "https:" && url.hostname.endsWith(".emulate.localhost"));
-    if (!local || url.pathname !== "/" || url.search || url.hash) {
-      context.addIssue({
-        code: "custom",
-        message: "Emulator origin must be a loopback origin.",
-      });
-    }
-    return url.origin;
-  });
+const localOrigin = z.url().transform((value, context) => {
+  const url = new URL(value);
+  const local =
+    (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) ||
+    (url.protocol === "https:" && url.hostname.endsWith(".emulate.localhost"));
+  if (!local || url.pathname !== "/" || url.search || url.hash) {
+    context.addIssue({
+      code: "custom",
+      message: "Emulator origin must be a loopback origin.",
+    });
+  }
+  return url.origin;
+});
 
 const vercelHost = z
   .string()
@@ -100,7 +97,7 @@ export function readPreviewProviderEmulation(
   }
 
   const parsed = z
-    .object({
+    .strictObject({
       branch: branchSchema,
       githubClientId: z.string().min(1).max(255),
       githubClientSecret: z.string().min(20).max(512),
@@ -112,7 +109,6 @@ export function readPreviewProviderEmulation(
       vercelClientId: z.string().min(1).max(255),
       vercelClientSecret: z.string().min(20).max(512),
     })
-    .strict()
     .parse({
       branch: environment.VERCEL_GIT_COMMIT_REF,
       githubClientId: environment.EMULATE_PREVIEW_GITHUB_CLIENT_ID,
@@ -159,8 +155,8 @@ export function readLocalProviderEmulation(
     throw new Error("Local provider emulation is unavailable.");
   }
   const parsed = z
-    .object({
-      canonicalOrigin: z.string().url(),
+    .strictObject({
+      canonicalOrigin: z.url(),
       githubClientId: z.string().min(1).max(255),
       githubClientSecret: z.string().min(20).max(512),
       githubOrigin: localOrigin,
@@ -171,7 +167,6 @@ export function readLocalProviderEmulation(
       vercelClientSecret: z.string().min(20).max(512),
       vercelOrigin: localOrigin,
     })
-    .strict()
     .parse({
       canonicalOrigin: new URL(environment.BETTER_AUTH_URL ?? "").origin,
       githubClientId: environment.GITHUB_CLIENT_ID,
