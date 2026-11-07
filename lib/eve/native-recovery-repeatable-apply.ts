@@ -66,10 +66,11 @@ const hasUniqueApprovedBinding = (parts: z.infer<typeof partSchema>[], id: strin
   const requests = parts.filter(
     (part) => part.type === "tool-approval-request" && part.toolCallId === id,
   );
-  if (requests.length !== 1) {
+  const [request] = requests;
+  if (requests.length !== 1 || request === undefined) {
     return false;
   }
-  const { approvalId } = requests[0];
+  const { approvalId } = request;
   if (approvalId === undefined || approvalId.length === 0) {
     return false;
   }
@@ -114,6 +115,36 @@ const matchingLatestIdentity = (
 ): boolean =>
   latest.serializedContext["eve.sessionId"] === logical &&
   latest.sessionState.snapshot.session.sessionId === logical;
+
+const authorizesApplyCall = (
+  parts: z.infer<typeof partSchema>[],
+  authority: {
+    grant: z.infer<typeof scopeSchema> | null;
+    pending: { callId: string; scope: z.infer<typeof scopeSchema> }[];
+  },
+  workflow: z.infer<typeof workflowSchema>,
+  expected: z.infer<typeof scopeSchema>,
+  results: Set<string | undefined>,
+  call: z.infer<typeof partSchema>,
+): string | undefined => {
+  if (call.type !== "tool-call" || call.toolName !== "apply_app_creation") {
+    return undefined;
+  }
+  const { toolCallId: id } = call;
+  if (id === undefined || id.length === 0 || call.providerExecuted === true || results.has(id)) {
+    return undefined;
+  }
+  if (!hasUniqueApprovedBinding(parts, id)) {
+    return undefined;
+  }
+  const pending = authority.pending.filter((entry) => entry.callId === id);
+  const boundToPending = pending.length === 1 && isDeepStrictEqual(pending[0].scope, expected);
+  const boundToGrant =
+    pending.length === 0 &&
+    isDeepStrictEqual(authority.grant, expected) &&
+    hasCallReceipt(workflow, id);
+  return boundToPending || boundToGrant ? id : undefined;
+};
 
 // Validate every history, but release parsed older copies after selecting the latest.
 const readLatestCandidate = (values: unknown[]): z.infer<typeof candidateSchema> | undefined => {
@@ -175,25 +206,8 @@ export const authorizeRepeatablePrivateApplyCalls = (
   );
   const authorized: string[] = [];
   for (const call of parts) {
-    if (call.type !== "tool-call" || call.toolName !== "apply_app_creation") {
-      continue;
-    }
-    const id = call.toolCallId;
-    if (id === undefined || id.length === 0) {
-      continue;
-    }
-    if (call.providerExecuted === true || results.has(id)) {
-      continue;
-    }
-    if (!hasUniqueApprovedBinding(parts, id)) {
-      continue;
-    }
-    const pending = authority.pending.filter((entry) => entry.callId === id);
-    const boundToCall =
-      pending.length > 0
-        ? pending.length === 1 && isDeepStrictEqual(pending[0].scope, expected)
-        : isDeepStrictEqual(authority.grant, expected) && hasCallReceipt(workflow, id);
-    if (boundToCall) {
+    const id = authorizesApplyCall(parts, authority, workflow, expected, results, call);
+    if (id !== undefined) {
       authorized.push(id);
     }
   }
