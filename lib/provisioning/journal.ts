@@ -11,64 +11,52 @@ import {
 } from "./contracts";
 import type { BuilderProvisionRequest } from "./contracts";
 
-const storedRequestSchema = z
-  .object({
-    appName: z.string().trim().min(1).max(120),
-    deploymentAccess: z.literal("public-app").optional(),
-    providers: z
-      .object({
-        githubInstallationId: z
-          .string()
-          .regex(/^[1-9][0-9]*$/u)
-          .optional(),
-        vercelInstallationId: z.string().min(1).max(256).optional(),
-      })
-      .strict(),
-    repository: z
-      .object({
-        name: z
-          .string()
-          .trim()
-          .min(1)
-          .max(100)
-          .regex(/^[A-Za-z0-9._-]+$/u),
-        private: z.boolean(),
-      })
-      .strict(),
-    requestId: z.string().uuid(),
-    version: z.literal(1),
-  })
-  .strict();
+const storedRequestSchema = z.strictObject({
+  appName: z.string().trim().min(1).max(120),
+  deploymentAccess: z.literal("public-app").optional(),
+  providers: z.strictObject({
+    githubInstallationId: z
+      .string()
+      .regex(/^[1-9][0-9]*$/u)
+      .optional(),
+    vercelInstallationId: z.string().min(1).max(256).optional(),
+  }),
+  repository: z.strictObject({
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .regex(/^[A-Za-z0-9._-]+$/u),
+    private: z.boolean(),
+  }),
+  requestId: z.string().uuid(),
+  version: z.literal(1),
+});
 
-const operationStateSchema = z
-  .object({
-    absentCandidates: z.array(z.string().min(1).max(100)),
-    attemptCount: z.number().int().nonnegative().optional(),
-    attempted: z.boolean(),
-    candidates: z.array(z.string().min(1).max(100)),
-    failureDetail: z.string().max(2048).optional(),
-    lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
+const operationStateSchema = z.strictObject({
+  absentCandidates: z.array(z.string().min(1).max(100)),
+  attemptCount: z.number().int().nonnegative().optional(),
+  attempted: z.boolean(),
+  candidates: z.array(z.string().min(1).max(100)),
+  failureDetail: z.string().max(2048).optional(),
+  lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
 
-    leaseExpiresAt: z.string().datetime({ offset: true }).optional(),
-    leaseId: z.string().uuid().optional(),
-    nextRetryAt: z.string().datetime({ offset: true }).optional(),
-    outcomeKnown: z.boolean().optional(),
-  })
-  .strict();
+  leaseExpiresAt: z.string().datetime({ offset: true }).optional(),
+  leaseId: z.string().uuid().optional(),
+  nextRetryAt: z.string().datetime({ offset: true }).optional(),
+  outcomeKnown: z.boolean().optional(),
+});
 
-export const builderProvisionJournalRecordSchema = z
-  .object({
-    operations: z
-      .object({
-        github: operationStateSchema,
-        vercel: operationStateSchema,
-      })
-      .strict(),
-    request: storedRequestSchema,
-    response: builderProvisionResponseSchema,
-    version: z.literal(1),
-  })
-  .strict();
+export const builderProvisionJournalRecordSchema = z.strictObject({
+  operations: z.strictObject({
+    github: operationStateSchema,
+    vercel: operationStateSchema,
+  }),
+  request: storedRequestSchema,
+  response: builderProvisionResponseSchema,
+  version: z.literal(1),
+});
 
 export type BuilderProvisionJournalRecord = z.infer<typeof builderProvisionJournalRecordSchema>;
 export type BuilderProvisionAuthority = z.infer<typeof hostedTenantAuthoritySchema>;

@@ -59,17 +59,16 @@ const tokenKeyringSchema = z
   });
 
 const configSchema = z
-  .object({
+  .strictObject({
     clientId: z.string().min(1).max(512),
     clientSecret: z.string().min(1).max(512),
-    issuer: z.string().url(),
+    issuer: z.url(),
     previousTokenKeys: previousTokenKeysSchema.optional(),
-    resource: z.string().url(),
+    resource: z.url(),
     slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/u),
     tokenKey: z.instanceof(Buffer).refine((value) => value.length === 32),
     tokenKeyVersion: tokenKeyVersionSchema,
   })
-  .strict()
   .superRefine((config, context) => {
     if (config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion)) {
       context.addIssue({
@@ -335,33 +334,24 @@ export function decryptVersionedVercelInstallationToken(input: {
   throw lastError;
 }
 
-const tokenResponseSchema = z.object({ access_token: z.string().min(1).max(8192) }).passthrough();
-const teamSchema = z
-  .object({
-    billing: z
-      .object({ plan: z.string().min(1) })
-      .passthrough()
-      .optional(),
-    id: z.string().min(1),
-    name: z.string().min(1),
-    slug: z.string().min(1),
-  })
-  .passthrough();
+const tokenResponseSchema = z.looseObject({ access_token: z.string().min(1).max(8192) });
+const teamSchema = z.looseObject({
+  billing: z.looseObject({ plan: z.string().min(1) }).optional(),
+  id: z.string().min(1),
+  name: z.string().min(1),
+  slug: z.string().min(1),
+});
 const teamResponseSchema = z.union([
   teamSchema,
   z.object({ team: teamSchema }).transform(({ team }) => team),
 ]);
-const userSchema = z
-  .object({
-    user: z
-      .object({
-        id: z.string().min(1),
-        name: z.string().min(1).optional(),
-        username: z.string().min(1),
-      })
-      .passthrough(),
-  })
-  .passthrough();
+const userSchema = z.looseObject({
+  user: z.looseObject({
+    id: z.string().min(1),
+    name: z.string().min(1).optional(),
+    username: z.string().min(1),
+  }),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelInstallationAuthorization(input: {

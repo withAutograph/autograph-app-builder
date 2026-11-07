@@ -848,31 +848,25 @@ export const hostedStorageExpectedConstraints = [
   ["verification", "verification_pkey"],
 ] as const;
 
-const migrationRowSchema = z
-  .object({
-    createdAt: z.string().regex(/^\d+$/u),
-    hash: z.string().regex(/^[0-9a-f]{64}$/u),
-  })
-  .strict();
-const columnRowSchema = z
-  .object({
-    column: z.string(),
-    notNull: z.boolean(),
-    table: z.string(),
-    type: z.string(),
-  })
-  .strict();
-const namedObjectRowSchema = z.object({ name: z.string(), table: z.string() }).strict();
+const migrationRowSchema = z.strictObject({
+  createdAt: z.string().regex(/^\d+$/u),
+  hash: z.string().regex(/^[0-9a-f]{64}$/u),
+});
+const columnRowSchema = z.strictObject({
+  column: z.string(),
+  notNull: z.boolean(),
+  table: z.string(),
+  type: z.string(),
+});
+const namedObjectRowSchema = z.strictObject({ name: z.string(), table: z.string() });
 
-export const hostedStorageReadBackSchema = z
-  .object({
-    columns: z.array(columnRowSchema),
-    constraints: z.array(namedObjectRowSchema),
-    indexes: z.array(namedObjectRowSchema),
-    migrations: z.array(migrationRowSchema),
-    transactionReadOnly: z.literal(true),
-  })
-  .strict();
+export const hostedStorageReadBackSchema = z.strictObject({
+  columns: z.array(columnRowSchema),
+  constraints: z.array(namedObjectRowSchema),
+  indexes: z.array(namedObjectRowSchema),
+  migrations: z.array(migrationRowSchema),
+  transactionReadOnly: z.literal(true),
+});
 
 export type HostedStorageReadBack = z.infer<typeof hostedStorageReadBackSchema>;
 
@@ -888,22 +882,19 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
     readFile(path.resolve(repositoryRoot, "drizzle/meta/_journal.json"), "utf-8"),
   ]);
   const journal = z
-    .object({
+    .strictObject({
       dialect: z.literal("postgresql"),
       entries: z.array(
-        z
-          .object({
-            breakpoints: z.literal(true),
-            idx: z.number().int().nonnegative(),
-            tag: z.string(),
-            version: z.literal("7"),
-            when: z.number().int().positive(),
-          })
-          .strict(),
+        z.strictObject({
+          breakpoints: z.literal(true),
+          idx: z.number().int().nonnegative(),
+          tag: z.string(),
+          version: z.literal("7"),
+          when: z.number().int().positive(),
+        }),
       ),
       version: z.literal("7"),
     })
-    .strict()
     .parse(JSON.parse(rawJournal));
   if (
     JSON.stringify(journal.entries.map(({ idx }) => idx)) !==

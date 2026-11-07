@@ -22,37 +22,29 @@ import { safeSourcePath } from "../repository/source-path";
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const objectId = z.string().regex(/^[0-9a-f]{40}$/u);
 
-export const starterSourceManifestSchema = z
-  .object({
-    archive: z
-      .object({
-        bytes: z.number().int().positive(),
+export const starterSourceManifestSchema = z.strictObject({
+  archive: z.strictObject({
+    bytes: z.number().int().positive(),
+    sha256: digest,
+    url: z.string().url().startsWith("https://"),
+  }),
+  files: z
+    .array(
+      z.strictObject({
+        bytes: z.number().int().nonnegative(),
+        mode: z.enum(["100644", "100755"]),
+        path: z.string().min(1),
         sha256: digest,
-        url: z.string().url().startsWith("https://"),
-      })
-      .strict(),
-    files: z
-      .array(
-        z
-          .object({
-            bytes: z.number().int().nonnegative(),
-            mode: z.enum(["100644", "100755"]),
-            path: z.string().min(1),
-            sha256: digest,
-          })
-          .strict(),
-      )
-      .min(1),
-    source: z
-      .object({
-        repository: z.literal("https://github.com/withAutograph/arrusted-development"),
-        sha: objectId,
-        tree: objectId,
-      })
-      .strict(),
-    version: z.literal(1),
-  })
-  .strict();
+      }),
+    )
+    .min(1),
+  source: z.strictObject({
+    repository: z.literal("https://github.com/withAutograph/arrusted-development"),
+    sha: objectId,
+    tree: objectId,
+  }),
+  version: z.literal(1),
+});
 
 export type StarterSourceManifest = z.infer<typeof starterSourceManifestSchema>;
 export interface StarterSourceFile {
@@ -145,11 +137,10 @@ function restrictedGit(args: string[], askpass?: { credentialFile: string; askpa
 }
 
 const starterConfigSchema = z
-  .object({
+  .strictObject({
     manifestSha256: digest,
     manifestUrl: z.string().url().startsWith("https://"),
   })
-  .strict()
   .superRefine((value, context) => {
     if (!new URL(value.manifestUrl).pathname.includes(value.manifestSha256)) {
       context.addIssue({

@@ -168,16 +168,14 @@ const artifactPath = z
     /^(?!\/)(?!.*\\)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*\/\/)[^\s]+(?<!\/)$/u,
     "Use a relative evidence artifact path without traversal",
   );
-const assertionSchema = z
-  .object({
-    artifacts: z.array(artifactPath).min(1),
-    detail: z.string().min(1),
-    id: z.string().min(1),
-    passed: z.boolean(),
-  })
-  .strict();
+const assertionSchema = z.strictObject({
+  artifacts: z.array(artifactPath).min(1),
+  detail: z.string().min(1),
+  id: z.string().min(1),
+  passed: z.boolean(),
+});
 export const observationSchema = z
-  .object({
+  .strictObject({
     artifacts: z.array(artifactPath),
     assertions: z.array(assertionSchema),
     disposition: z.enum([
@@ -196,20 +194,18 @@ export const observationSchema = z
     reason: z.string().min(1),
     requirementId: z.enum(requirements.map((row) => row.id)),
   })
-  .strict()
   .superRefine((value, ctx) => {
     if (new Set(value.assertions.map((item) => item.id)).size !== value.assertions.length) {
       ctx.addIssue({ code: "custom", message: "Duplicate assertions" });
     }
   });
 export const sideEvidenceSchema = z
-  .object({
+  .strictObject({
     observations: z.array(observationSchema),
     output: z.enum(["available", "missing", "infrastructure-unavailable"]),
     reason: z.string().min(1),
     sourceRevision: z.string().min(1),
   })
-  .strict()
   .superRefine((value, ctx) => {
     if (
       new Set(value.observations.map((item) => item.requirementId)).size !==
@@ -218,16 +214,14 @@ export const sideEvidenceSchema = z
       ctx.addIssue({ code: "custom", message: "Duplicate requirement observations" });
     }
   });
-export const parityEvidenceSchema = z
-  .object({
-    candidate: sideEvidenceSchema,
-    fixtureVersion: z.literal(1),
-    producer: z.literal("evaluator"),
-    reference: sideEvidenceSchema,
-    runId: z.string().min(1),
-    schemaVersion: z.literal(parityVersion),
-  })
-  .strict();
+export const parityEvidenceSchema = z.strictObject({
+  candidate: sideEvidenceSchema,
+  fixtureVersion: z.literal(1),
+  producer: z.literal("evaluator"),
+  reference: sideEvidenceSchema,
+  runId: z.string().min(1),
+  schemaVersion: z.literal(parityVersion),
+});
 export type ParityEvidence = z.infer<typeof parityEvidenceSchema>;
 export type Observation = z.infer<typeof observationSchema>;
 export type Status = "passed" | "failed" | "blocked" | "unassessed";
@@ -245,26 +239,22 @@ export const parityReasonCodes = [
 ] as const;
 export type ParityReasonCode = (typeof parityReasonCodes)[number];
 
-export const parityAssessmentSchema = z
-  .object({
-    rows: z.array(
-      z
-        .object({
-          artifacts: z.array(artifactPath),
-          kind: z.enum(["workflow", "framework", "capture"]),
-          reason: z.string(),
-          reasonCode: z.enum(parityReasonCodes),
-          requirementId: z.enum(requirements.map((row) => row.id)),
-          side: z.enum(sides),
-          status: z.enum(["passed", "failed", "blocked", "unassessed"]),
-        })
-        .strict(),
-    ),
-    runId: z.string(),
-    schemaVersion: z.literal(parityVersion),
-    visualScoresAdvisory: z.literal(true),
-  })
-  .strict();
+export const parityAssessmentSchema = z.strictObject({
+  rows: z.array(
+    z.strictObject({
+      artifacts: z.array(artifactPath),
+      kind: z.enum(["workflow", "framework", "capture"]),
+      reason: z.string(),
+      reasonCode: z.enum(parityReasonCodes),
+      requirementId: z.enum(requirements.map((row) => row.id)),
+      side: z.enum(sides),
+      status: z.enum(["passed", "failed", "blocked", "unassessed"]),
+    }),
+  ),
+  runId: z.string(),
+  schemaVersion: z.literal(parityVersion),
+  visualScoresAdvisory: z.literal(true),
+});
 export type Assessment = z.infer<typeof parityAssessmentSchema>;
 
 /** artifactExists must verify a nonempty file within the evaluator evidence root. */
