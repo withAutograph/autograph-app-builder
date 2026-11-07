@@ -11,58 +11,58 @@ const spool = `/vercel/sandbox/protected-installer/${workerAttemptId}`;
 const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
 const worker = {
-  id: "auth-protected-schema-v1",
-  sha256: "a".repeat(64),
-  operationScope: "auth-protected-schema-v1",
   executablePath: "/worker/auth",
+  id: "auth-protected-schema-v1",
+  operationScope: "auth-protected-schema-v1",
+  sha256: "a".repeat(64),
   subcommand: "auth-protected-schema",
 } as const;
 const resource = {
-  version: 1,
+  database: "pilot_auth",
   environment: "preview",
   hostname: "ep-isolated.neon.tech",
-  port: 5432,
-  database: "pilot_auth",
-  schema: "public",
   migratorRole: "pilot_migrator",
+  neon: { branchId: "isolated-branch", projectId: "isolated-project" },
+  port: 5432,
   runtimeRole: "pilot_runtime",
-  neon: { projectId: "isolated-project", branchId: "isolated-branch" },
+  schema: "public",
+  version: 1,
 };
 const plan = {
-  version: 1,
   action: "prepare",
-  owner: { sessionId: "saved-pilot-session", appId: "pilot", userId: "owner" },
-  source: { sha256: "d".repeat(64) },
   authDatabase: {
     database: resource.database,
-    resourceId: "isolated-auth",
     migratorRole: resource.migratorRole,
+    resourceId: "isolated-auth",
     runtimeRole: resource.runtimeRole,
   },
   authSchema: {
     artifactRef: "owned-auth-proposal",
+    installer: { reference: worker.id, sha256: worker.sha256 },
     planDigest: "b".repeat(64),
     targetDigest: "c".repeat(64),
-    installer: { reference: worker.id, sha256: worker.sha256 },
   },
   neon: { endpoint: resource.hostname, ...resource.neon },
+  owner: { appId: "pilot", sessionId: "saved-pilot-session", userId: "owner" },
+  source: { sha256: "d".repeat(64) },
+  version: 1,
 };
 const proposal = {
-  version: 1,
   proposal: "new-empty",
   resource,
   schemaPlan: {
-    resource,
     planDigest: plan.authSchema.planDigest,
+    resource,
     targetDigest: plan.authSchema.targetDigest,
   },
+  version: 1,
 };
 const config = {
+  authWorker: worker,
   image: "pinned-control",
   projectId: "operator-project",
   teamId: "owned-team",
   workers: {},
-  authWorker: worker,
 };
 const fixture = (
   options: { denyFence?: boolean; wrongPin?: boolean; wrongEffect?: boolean } = {},
@@ -75,23 +75,17 @@ const fixture = (
   const kill = vi.fn(async () => {});
   const frame = (name: string, value: unknown) => files.set(`${spool}/${name}`, bytes(value));
   const sandbox = {
+    delete: vi.fn(async () => {}),
+    extendTimeout: vi.fn(async () => {}),
     fs: {
-      mkdir: vi.fn(async () => {}),
-      rm: vi.fn(async () => {}),
       lstat: vi.fn(async (path: string) => ({
         isFile: () => files.has(path),
         size: files.get(path)?.length ?? 0,
       })),
+      mkdir: vi.fn(async () => {}),
+      rm: vi.fn(async () => {}),
     },
-    writeFiles: vi.fn(async (rows: { path: string; content: Buffer; mode?: number }[]) => {
-      for (const row of rows) {
-        files.set(row.path, row.content);
-        modes.set(row.path, row.mode);
-      }
-    }),
     readFileToBuffer: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
-    delete: vi.fn(async () => {}),
-    extendTimeout: vi.fn(async () => {}),
     runCommand: vi.fn(async (command: { detached?: boolean; args: string[] }) => {
       if (!command.detached) {
         return {
@@ -175,27 +169,33 @@ const fixture = (
         },
       };
     }),
+    writeFiles: vi.fn(async (rows: { path: string; content: Buffer; mode?: number }[]) => {
+      for (const row of rows) {
+        files.set(row.path, row.content);
+        modes.set(row.path, row.mode);
+      }
+    }),
   };
   const createSandbox = vi.fn(async () => {
     expect(bindWorkerContext).toHaveBeenCalledOnce();
     return sandbox;
   });
   const input = {
-    approvedPlanBytes: bytes(plan),
     approvalDigest: sha(bytes(plan)),
-    authSchemaPlan: { artifactRef: plan.authSchema.artifactRef, content: bytes(proposal) },
-    operationRef,
-    workerAttemptId,
-    fenceGeneration: 7,
-    credentials: {
-      migrationUrl:
-        "postgresql://pilot_migrator:fixture@ep-isolated.neon.tech/pilot_auth?sslmode=verify-full",
-    },
+    approvedPlanBytes: bytes(plan),
     assertCurrent: vi.fn(async () => {
       if (options.denyFence && fenceRequested)
         throw new HostedOperatorError("authorization_required");
     }),
+    authSchemaPlan: { artifactRef: plan.authSchema.artifactRef, content: bytes(proposal) },
     bindWorkerContext,
+    credentials: {
+      migrationUrl:
+        "postgresql://pilot_migrator:fixture@ep-isolated.neon.tech/pilot_auth?sslmode=verify-full",
+    },
+    fenceGeneration: 7,
+    operationRef,
+    workerAttemptId,
   };
   // SAFETY: The fake supplies only the official SDK methods consumed by this transport.
   const dependencies = {
@@ -204,15 +204,15 @@ const fixture = (
     >["createSandbox"],
   };
   return {
-    input,
-    dependencies,
-    createSandbox,
-    sandbox,
-    files,
-    modes,
-    kill,
-    recordCheckpoint,
     bindWorkerContext,
+    createSandbox,
+    dependencies,
+    files,
+    input,
+    kill,
+    modes,
+    recordCheckpoint,
+    sandbox,
   };
 };
 
@@ -227,16 +227,16 @@ it("executes and checkpoints an Auth-only approved plan with exact private start
   expect(JSON.parse(contextBytes.toString())).toMatchObject({
     app_id: "auth",
     operation: {
-      operation_id: operationRef,
       approval_digest: f.input.approvalDigest,
       fence_generation: 7,
-    },
-    resource: {
-      resource_id: "isolated-auth",
-      database: "pilot_auth",
-      runtime_role: "pilot_runtime",
+      operation_id: operationRef,
     },
     release: { id: plan.authSchema.targetDigest, sha256: plan.authSchema.planDigest },
+    resource: {
+      database: "pilot_auth",
+      resource_id: "isolated-auth",
+      runtime_role: "pilot_runtime",
+    },
     tenant_targets: [],
   });
   expect(f.bindWorkerContext).toHaveBeenCalledWith({ contextDigest: sha(contextBytes) });
@@ -246,13 +246,13 @@ it("executes and checkpoints an Auth-only approved plan with exact private start
   );
   expect(startup.every((path) => f.modes.get(path) === 0o600)).toBe(true);
   expect(f.createSandbox).toHaveBeenCalledWith(
-    expect.objectContaining({ networkPolicy: "allow-all", env: {} }),
+    expect.objectContaining({ env: {}, networkPolicy: "allow-all" }),
   );
   expect(f.sandbox.runCommand).toHaveBeenLastCalledWith(
     expect.objectContaining({
+      args: [worker.subcommand, "--file-spool", spool, workerAttemptId, "120000"],
       cmd: worker.executablePath,
       env: {},
-      args: [worker.subcommand, "--file-spool", spool, workerAttemptId, "120000"],
     }),
   );
   expect(f.recordCheckpoint).toHaveBeenCalledOnce();
@@ -273,7 +273,7 @@ it("keeps the approved startup and worker pin stable across asynchronous custody
   const configuration = { ...config, authWorker: { ...worker } };
   const approvedBytes = Buffer.from(f.input.approvedPlanBytes);
   const proposalBytes = Buffer.from(f.input.authSchemaPlan.content);
-  const migrationUrl = f.input.credentials.migrationUrl;
+  const { migrationUrl } = f.input.credentials;
   f.input.assertCurrent.mockImplementationOnce(async () => {
     f.input.approvedPlanBytes.fill(32);
     f.input.authSchemaPlan.content.fill(32);
@@ -312,25 +312,33 @@ it.each([
   "fence",
 ] as const)("rejects a mismatched %s before allocating a Sandbox", async (kind) => {
   const f = fixture();
-  if (kind === "approval") f.input.approvalDigest = "f".repeat(64);
-  if (kind === "owner")
+  if (kind === "approval") {
+    f.input.approvalDigest = "f".repeat(64);
+  }
+  if (kind === "owner") {
     f.input.approvedPlanBytes = bytes({ ...plan, owner: { ...plan.owner, userId: "other" } });
-  if (kind === "artifact") f.input.authSchemaPlan.artifactRef = "other";
-  if (kind === "schema")
+  }
+  if (kind === "artifact") {
+    f.input.authSchemaPlan.artifactRef = "other";
+  }
+  if (kind === "schema") {
     f.input.authSchemaPlan.content = bytes({
       ...proposal,
       schemaPlan: { ...proposal.schemaPlan, planDigest: "f".repeat(64) },
     });
-  if (kind === "resource")
+  }
+  if (kind === "resource") {
     f.input.authSchemaPlan.content = bytes({
       ...proposal,
       resource: { ...resource, database: "other" },
     });
-  if (kind === "nested-resource")
+  }
+  if (kind === "nested-resource") {
     f.input.authSchemaPlan.content = bytes({
       ...proposal,
       schemaPlan: { ...proposal.schemaPlan, resource: { ...resource, database: "other" } },
     });
+  }
   if (kind === "installer") {
     f.input.approvedPlanBytes = bytes({
       ...plan,
@@ -341,12 +349,15 @@ it.each([
     });
     f.input.approvalDigest = sha(f.input.approvedPlanBytes);
   }
-  if (kind === "credential")
+  if (kind === "credential") {
     f.input.credentials.migrationUrl = f.input.credentials.migrationUrl.replace(
       "pilot_migrator",
       "another_login",
     );
-  if (kind === "fence") f.input.fenceGeneration = 0;
+  }
+  if (kind === "fence") {
+    f.input.fenceGeneration = 0;
+  }
   await expect(runAuthSchemaFileSpool(config, f.input, f.dependencies)).rejects.toThrow();
   expect(f.createSandbox).not.toHaveBeenCalled();
   expect(f.bindWorkerContext).not.toHaveBeenCalled();

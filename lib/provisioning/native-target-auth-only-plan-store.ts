@@ -24,14 +24,14 @@ export const createNativeTargetAuthOnlyPlanStore = (input: {
 }) => {
   const scope = (context: OperatorArtifactContext, appSpecDigest: string, planDigest: string) => ({
     ...hostedTenantAuthoritySchema.parse(context.authority),
-    sessionId: z.string().min(1).parse(context.target.sessionId),
+    chunkIndex: 0,
     path: `_protected-operator/native-target-auth-only/${z
       .string()
       .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
       .parse(
         context.target.appId,
       )}/${digestSchema.parse(appSpecDigest)}/${digestSchema.parse(planDigest)}`,
-    chunkIndex: 0,
+    sessionId: z.string().min(1).parse(context.target.sessionId),
   });
   const predicate = (selected: ReturnType<typeof scope>) =>
     and(
@@ -54,6 +54,37 @@ export const createNativeTargetAuthOnlyPlanStore = (input: {
     return plan;
   };
   return {
+    async read(context: OperatorArtifactContext, appSpecDigest: string, planDigest: string) {
+      const selected = scope(context, appSpecDigest, planDigest);
+      await input.assertCurrentOwner(context);
+      const rows = await input.database
+        .select()
+        .from(prototypeArtifactChunks)
+        .where(predicate(selected))
+        .orderBy(
+          desc(prototypeArtifactChunks.createdAt),
+          desc(prototypeArtifactChunks.transferDigest),
+        )
+        .limit(1);
+      await input.assertCurrentOwner(context);
+      const row = rows.at(0);
+      if (row === undefined) {
+        return undefined;
+      }
+      const plan = parse(row.content, row.chunkDigest, planDigest);
+      if (
+        context.target.appId !== plan.appId ||
+        context.target.sessionId !== plan.origin.publicSessionId ||
+        plan.origin.appSpecDigest !== appSpecDigest ||
+        !isDeepStrictEqual(
+          hostedTenantAuthoritySchema.parse(context.authority),
+          plan.origin.authority,
+        )
+      ) {
+        throw operatorArtifactUnavailable();
+      }
+      return plan;
+    },
     async record(context: OperatorArtifactContext, planInput: NativeTargetAuthOnlyPlan) {
       const plan = nativeTargetAuthOnlyPlanSchema.parse(planInput);
       if (
@@ -87,37 +118,6 @@ export const createNativeTargetAuthOnlyPlanStore = (input: {
         throw operatorArtifactUnavailable();
       }
       return parse(row.content, row.chunkDigest, planDigest);
-    },
-    async read(context: OperatorArtifactContext, appSpecDigest: string, planDigest: string) {
-      const selected = scope(context, appSpecDigest, planDigest);
-      await input.assertCurrentOwner(context);
-      const rows = await input.database
-        .select()
-        .from(prototypeArtifactChunks)
-        .where(predicate(selected))
-        .orderBy(
-          desc(prototypeArtifactChunks.createdAt),
-          desc(prototypeArtifactChunks.transferDigest),
-        )
-        .limit(1);
-      await input.assertCurrentOwner(context);
-      const row = rows.at(0);
-      if (row === undefined) {
-        return undefined;
-      }
-      const plan = parse(row.content, row.chunkDigest, planDigest);
-      if (
-        context.target.appId !== plan.appId ||
-        context.target.sessionId !== plan.origin.publicSessionId ||
-        plan.origin.appSpecDigest !== appSpecDigest ||
-        !isDeepStrictEqual(
-          hostedTenantAuthoritySchema.parse(context.authority),
-          plan.origin.authority,
-        )
-      ) {
-        throw operatorArtifactUnavailable();
-      }
-      return plan;
     },
   };
 };

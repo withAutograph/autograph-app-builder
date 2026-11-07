@@ -19,96 +19,96 @@ import {
 } from "./private-native-target-auth-only-final-routing-approval";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-fixture",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner-fixture",
+  workspaceId: "workspace-fixture",
 };
 const owner = {
+  adapterGeneration: 1,
+  adapterSessionId: "saved-adapter",
   authority,
   publicSessionId: "saved-session",
-  adapterSessionId: "saved-adapter",
-  adapterGeneration: 1,
 };
 const historyOwner = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: owner.adapterGeneration,
+  adapterSessionId: owner.adapterSessionId,
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: owner.publicSessionId,
-  adapterSessionId: owner.adapterSessionId,
-  adapterGeneration: owner.adapterGeneration,
 });
 const operationRef = "11111111-1111-4111-a111-111111111111";
 const routingOperationRef = "22222222-2222-4222-a222-222222222222";
 const deliveryPlanDigest = "d".repeat(64);
 const routingPlan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse({
-  version: 1,
-  kind: "native-target-auth-only-final-routing",
-  operationRef: routingOperationRef,
+  app: {
+    branch: "pilot",
+    deploymentId: "dpl-app",
+    operationRef,
+    origin: "https://app.vercel.app",
+    projectId: "app-project",
+    readyState: "READY",
+    repoId: "app-repo",
+  },
+  bootstrap: {
+    branch: "gateway-pilot",
+    deploymentId: "dpl-bootstrap",
+    operationRef,
+    origin: "https://bootstrap.vercel.app",
+    projectId: "gateway-project",
+    readyState: "READY",
+    repoId: "gateway-repo",
+  },
   deliveryOperationRef: operationRef,
   deliveryPlanDigest,
-  target: {
-    appId: "signup-pilot",
-    sessionId: owner.publicSessionId,
-    projectId: "app-project",
-    branch: "pilot",
-    environment: "preview",
-    installationId: "install-fixture",
-    scopeType: "team",
-    scopeId: "team-fixture",
-  },
   gateway: {
-    projectId: "gateway-project",
-    repoId: "gateway-repo",
     branch: "gateway-pilot",
     gitRef: "gateway-pilot",
     gitSha: "a".repeat(40),
+    projectId: "gateway-project",
     publicOrigin: "https://pilot.example",
+    repoId: "gateway-repo",
+  },
+  kind: "native-target-auth-only-final-routing",
+  operationRef: routingOperationRef,
+  projection: {
+    appDeploymentId: "dpl-app",
+    deliveryPlanDigest,
+    gatewayProjectId: "gateway-project",
+    nextSha256: "c".repeat(64),
+    operationRef,
+    physicalBranch: "gateway-pilot",
+    priorSha256: "b".repeat(64),
+    rowId: "row-fixture",
   },
   source: {
-    projectId: "gateway-project",
-    ownerId: "team-fixture",
+    audience: "https://vercel.com/team-fixture",
     environment: "preview",
     issuer: "https://oidc.vercel.com/team-fixture",
-    audience: "https://vercel.com/team-fixture",
+    ownerId: "team-fixture",
+    projectId: "gateway-project",
     publicOrigin: "https://pilot.example",
     subject: "owner:team-fixture:project:gateway:environment:preview",
   },
-  bootstrap: {
-    readyState: "READY",
-    deploymentId: "dpl-bootstrap",
-    origin: "https://bootstrap.vercel.app",
-    operationRef,
-    projectId: "gateway-project",
-    branch: "gateway-pilot",
-    repoId: "gateway-repo",
-  },
-  app: {
-    readyState: "READY",
-    deploymentId: "dpl-app",
-    origin: "https://app.vercel.app",
-    operationRef,
-    projectId: "app-project",
+  target: {
+    appId: "signup-pilot",
     branch: "pilot",
-    repoId: "app-repo",
+    environment: "preview",
+    installationId: "install-fixture",
+    projectId: "app-project",
+    scopeId: "team-fixture",
+    scopeType: "team",
+    sessionId: owner.publicSessionId,
   },
-  projection: {
-    operationRef,
-    deliveryPlanDigest,
-    gatewayProjectId: "gateway-project",
-    physicalBranch: "gateway-pilot",
-    rowId: "row-fixture",
-    appDeploymentId: "dpl-app",
-    priorSha256: "b".repeat(64),
-    nextSha256: "c".repeat(64),
-  },
+  version: 1,
 });
 const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
 const routingPlanDigest = nativeTargetAuthOnlyFinalRoutingPlanDigest(bytes(routingPlan));
 const toolInput = {
   appId: routingPlan.target.appId,
-  operationRef,
   deliveryPlanDigest,
+  operationRef,
   routingOperationRef,
   routingPlanDigest,
 };
@@ -120,12 +120,7 @@ const requested = (
     callId?: string;
   } = {},
 ): MessageStreamEvent => ({
-  type: "input.requested",
-  meta: { at: "2026-11-06T12:00:00.000Z", id: "request-event" },
   data: {
-    sequence: 1,
-    stepIndex: 0,
-    turnId: "routing-turn",
     requests: [
       {
         kind: "tool-approval",
@@ -139,7 +134,12 @@ const requested = (
         },
       },
     ],
+    sequence: 1,
+    stepIndex: 0,
+    turnId: "routing-turn",
   },
+  meta: { at: "2026-11-06T12:00:00.000Z", id: "request-event" },
+  type: "input.requested",
 });
 const settled = (
   changes: {
@@ -149,33 +149,32 @@ const settled = (
     at?: string;
   } = {},
 ): MessageStreamEvent => ({
-  type: "approval.settled",
-  meta: { at: changes.at ?? "2026-11-06T12:00:01.000Z", id: "settled-event" },
   data: {
+    outcome: changes.outcome ?? "approved",
+    requestId: changes.requestId ?? "routing-request",
+    responderPrincipalId: changes.principal ?? authority.ownerUserId,
     sequence: 2,
     stepIndex: 0,
     turnId: "routing-turn",
-    requestId: changes.requestId ?? "routing-request",
-    responderPrincipalId: changes.principal ?? authority.ownerUserId,
-    outcome: changes.outcome ?? "approved",
   },
+  meta: { at: changes.at ?? "2026-11-06T12:00:01.000Z", id: "settled-event" },
+  type: "approval.settled",
 });
 const proof: NativeTargetAuthOnlyApproval = {
-  requestId: "routing-request",
   callId: "original-call",
-  planDigest: routingPlanDigest,
-  sourceDigest: routingPlanDigest,
-  publicSessionId: owner.publicSessionId,
-  responderPrincipalId: authority.ownerUserId,
-  outcome: "approved",
   observedAt: "2026-11-06T12:00:01.000Z",
+  outcome: "approved",
+  planDigest: routingPlanDigest,
+  publicSessionId: owner.publicSessionId,
+  requestId: "routing-request",
+  responderPrincipalId: authority.ownerUserId,
+  sourceDigest: routingPlanDigest,
 };
 const fixture = (events: MessageStreamEvent[] = [requested(), settled()], complete = true) => ({
-  owner: structuredClone(owner),
-  historyOwner: structuredClone(historyOwner),
   approvalInput: structuredClone(toolInput),
-  routingPlanBytes: bytes(routingPlan),
   assertOwner: vi.fn(async () => undefined),
+  historyOwner: structuredClone(historyOwner),
+  owner: structuredClone(owner),
   readHistory: vi.fn(async (start: number, observe: (event: MessageStreamEvent) => void) => {
     for (const event of events) observe(event);
     return {
@@ -184,6 +183,7 @@ const fixture = (events: MessageStreamEvent[] = [requested(), settled()], comple
       nativeTailIndex: Math.max(0, start + events.length - 1),
     };
   }),
+  routingPlanBytes: bytes(routingPlan),
 });
 
 it("accepts digest-only routing intent and rejects caller-supplied plan fields", () => {
@@ -191,10 +191,10 @@ it("accepts digest-only routing intent and rejects caller-supplied plan fields",
   expect(
     nativeTargetAuthOnlyFinalRoutingPlanInputSchema.parse({
       appId: toolInput.appId,
-      operationRef,
       deliveryPlanDigest,
+      operationRef,
     }),
-  ).toEqual({ appId: toolInput.appId, operationRef, deliveryPlanDigest });
+  ).toEqual({ appId: toolInput.appId, deliveryPlanDigest, operationRef });
   expect(
     nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.safeParse({
       ...toolInput,
@@ -223,13 +223,24 @@ it.each([
   "extra-input",
 ] as const)("does not treat %s as approval for this routing effect", async (kind) => {
   const changed = structuredClone(toolInput);
-  if (kind === "app") changed.appId = "another-app";
-  if (kind === "parent-operation") changed.operationRef = "33333333-3333-4333-a333-333333333333";
-  if (kind === "delivery-digest") changed.deliveryPlanDigest = "e".repeat(64);
-  if (kind === "routing-operation")
+  if (kind === "app") {
+    changed.appId = "another-app";
+  }
+  if (kind === "parent-operation") {
+    changed.operationRef = "33333333-3333-4333-a333-333333333333";
+  }
+  if (kind === "delivery-digest") {
+    changed.deliveryPlanDigest = "e".repeat(64);
+  }
+  if (kind === "routing-operation") {
     changed.routingOperationRef = "33333333-3333-4333-a333-333333333333";
-  if (kind === "routing-digest") changed.routingPlanDigest = "e".repeat(64);
-  if (kind === "extra-input") Object.assign(changed, { bypassApproval: true });
+  }
+  if (kind === "routing-digest") {
+    changed.routingPlanDigest = "e".repeat(64);
+  }
+  if (kind === "extra-input") {
+    Object.assign(changed, { bypassApproval: true });
+  }
   await expect(
     readPrivateNativeTargetAuthOnlyFinalRoutingApproval(
       fixture([
@@ -242,7 +253,7 @@ it.each([
             ? { toolName: "prepare-app-native-target-auth-only-entry" }
             : {}),
         }),
-        settled({ ...(kind === "unmatched-settlement" ? { requestId: "another-request" } : {}) }),
+        settled(kind === "unmatched-settlement" ? { requestId: "another-request" } : {}),
       ]),
     ),
   ).resolves.toBeNull();
@@ -272,25 +283,60 @@ it.each([
 ] as const)("rejects mismatched retained %s before reading history", async (kind) => {
   const f = fixture();
   const changed = structuredClone(routingPlan);
-  if (kind === "owner") f.owner.authority.ownerUserId = "foreign";
-  if (kind === "session") f.owner.publicSessionId = "foreign";
-  if (kind === "adapter-session") f.owner.adapterSessionId = "foreign";
-  if (kind === "adapter-generation") f.owner.adapterGeneration = 2;
-  if (kind === "app") changed.target.appId = "another-app";
-  if (kind === "plan-session") changed.target.sessionId = "another-session";
-  if (kind === "parent-operation")
+  if (kind === "owner") {
+    f.owner.authority.ownerUserId = "foreign";
+  }
+  if (kind === "session") {
+    f.owner.publicSessionId = "foreign";
+  }
+  if (kind === "adapter-session") {
+    f.owner.adapterSessionId = "foreign";
+  }
+  if (kind === "adapter-generation") {
+    f.owner.adapterGeneration = 2;
+  }
+  if (kind === "app") {
+    changed.target.appId = "another-app";
+  }
+  if (kind === "plan-session") {
+    changed.target.sessionId = "another-session";
+  }
+  if (kind === "parent-operation") {
     changed.deliveryOperationRef = "33333333-3333-4333-a333-333333333333";
-  if (kind === "routing-operation") changed.operationRef = "33333333-3333-4333-a333-333333333333";
-  if (kind === "delivery-digest") changed.deliveryPlanDigest = "e".repeat(64);
-  if (kind === "provider-scope") changed.source.ownerId = "foreign-team";
-  if (kind === "gateway-source") changed.source.projectId = "foreign-gateway";
-  if (kind === "gateway-origin") changed.source.publicOrigin = "https://foreign.example";
-  if (kind === "bootstrap") changed.bootstrap.projectId = "foreign-gateway";
-  if (kind === "app-receipt") changed.app.projectId = "another-project";
-  if (kind === "projection-operation") changed.projection.operationRef = routingOperationRef;
-  if (kind === "projection-digest") changed.projection.deliveryPlanDigest = "e".repeat(64);
-  if (kind === "projection-app") changed.projection.appDeploymentId = "dpl-another";
-  if (kind === "projection-gateway") changed.projection.gatewayProjectId = "another-gateway";
+  }
+  if (kind === "routing-operation") {
+    changed.operationRef = "33333333-3333-4333-a333-333333333333";
+  }
+  if (kind === "delivery-digest") {
+    changed.deliveryPlanDigest = "e".repeat(64);
+  }
+  if (kind === "provider-scope") {
+    changed.source.ownerId = "foreign-team";
+  }
+  if (kind === "gateway-source") {
+    changed.source.projectId = "foreign-gateway";
+  }
+  if (kind === "gateway-origin") {
+    changed.source.publicOrigin = "https://foreign.example";
+  }
+  if (kind === "bootstrap") {
+    changed.bootstrap.projectId = "foreign-gateway";
+  }
+  if (kind === "app-receipt") {
+    changed.app.projectId = "another-project";
+  }
+  if (kind === "projection-operation") {
+    changed.projection.operationRef = routingOperationRef;
+  }
+  if (kind === "projection-digest") {
+    changed.projection.deliveryPlanDigest = "e".repeat(64);
+  }
+  if (kind === "projection-app") {
+    changed.projection.appDeploymentId = "dpl-another";
+  }
+  if (kind === "projection-gateway") {
+    changed.projection.gatewayProjectId = "another-gateway";
+  }
   if (kind === "same-operation") {
     changed.operationRef = operationRef;
     f.approvalInput.routingOperationRef = operationRef;
@@ -299,7 +345,9 @@ it.each([
   f.approvalInput.routingPlanDigest = nativeTargetAuthOnlyFinalRoutingPlanDigest(
     f.routingPlanBytes,
   );
-  if (kind === "bytes") f.routingPlanBytes = Buffer.concat([f.routingPlanBytes, Buffer.from(" ")]);
+  if (kind === "bytes") {
+    f.routingPlanBytes = Buffer.concat([f.routingPlanBytes, Buffer.from(" ")]);
+  }
   await expect(readPrivateNativeTargetAuthOnlyFinalRoutingApproval(f)).rejects.toThrow();
   expect(f.readHistory).not.toHaveBeenCalled();
 });
@@ -315,7 +363,7 @@ it("rejects a foreign responder and ambiguous approved requests", async () => {
       fixture([
         requested(),
         settled(),
-        requested({ requestId: "second", callId: "second-call" }),
+        requested({ callId: "second-call", requestId: "second" }),
         settled({ requestId: "second" }),
       ]),
     ),
@@ -329,7 +377,7 @@ it("preserves cancellation after a later settlement and a newly approved retry",
         requested(),
         settled({ outcome: "cancelled" }),
         settled({ at: "2026-11-06T12:00:02.000Z" }),
-        requested({ requestId: "retry", callId: "retry-call" }),
+        requested({ callId: "retry-call", requestId: "retry" }),
         settled({ requestId: "retry" }),
       ]),
     ),
@@ -342,7 +390,7 @@ it("reuses the retained original approval even when a retry has a different call
       ...fixture([
         requested(),
         settled(),
-        requested({ requestId: "retry", callId: "retry-call" }),
+        requested({ callId: "retry-call", requestId: "retry" }),
         settled({ requestId: "retry" }),
       ]),
       retainedApproval: proof,
@@ -354,22 +402,34 @@ it("observes later cancellation of the retained original approval", async () => 
   const observedAt = "2026-11-06T12:00:02.000Z";
   await expect(
     readPrivateNativeTargetAuthOnlyFinalRoutingApproval({
-      ...fixture([requested(), settled(), settled({ outcome: "cancelled", at: observedAt })]),
+      ...fixture([requested(), settled(), settled({ at: observedAt, outcome: "cancelled" })]),
       retainedApproval: proof,
     }),
-  ).resolves.toEqual({ ...proof, outcome: "cancelled", observedAt });
+  ).resolves.toEqual({ ...proof, observedAt, outcome: "cancelled" });
 });
 
 it.each(["missing", "request", "time", "digest", "source", "session", "responder"] as const)(
   "does not replace or transplant a retained approval with mismatched %s",
   async (kind) => {
     const retained = { ...proof };
-    if (kind === "request") retained.requestId = "another-request";
-    if (kind === "time") retained.observedAt = "2026-11-06T12:00:02.000Z";
-    if (kind === "digest") retained.planDigest = "e".repeat(64);
-    if (kind === "source") retained.sourceDigest = deliveryPlanDigest;
-    if (kind === "session") retained.publicSessionId = "another-session";
-    if (kind === "responder") retained.responderPrincipalId = "another-owner";
+    if (kind === "request") {
+      retained.requestId = "another-request";
+    }
+    if (kind === "time") {
+      retained.observedAt = "2026-11-06T12:00:02.000Z";
+    }
+    if (kind === "digest") {
+      retained.planDigest = "e".repeat(64);
+    }
+    if (kind === "source") {
+      retained.sourceDigest = deliveryPlanDigest;
+    }
+    if (kind === "session") {
+      retained.publicSessionId = "another-session";
+    }
+    if (kind === "responder") {
+      retained.responderPrincipalId = "another-owner";
+    }
     await expect(
       readPrivateNativeTargetAuthOnlyFinalRoutingApproval({
         ...fixture(kind === "missing" ? [] : undefined),
@@ -394,15 +454,15 @@ it.each(["approved", "cancelled"] as const)(
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
     expect(saved?.native.capture.request).toEqual({
       action: nativeTargetAuthOnlyFinalRoutingApprovalAction,
-      planRef: routingOperationRef,
-      planDigest: routingPlanDigest,
       idempotencyKey: toolInput.appId,
+      planDigest: routingPlanDigest,
+      planRef: routingOperationRef,
     });
     const resumed = fixture([]);
     await expect(
       readPrivateNativeTargetAuthOnlyFinalRoutingApproval({
         ...resumed,
-        observation: { state: saved, save },
+        observation: { save, state: saved },
       }),
     ).resolves.toEqual({ ...proof, outcome });
     expect(resumed.readHistory).toHaveBeenCalledWith(2, expect.any(Function));
@@ -426,7 +486,7 @@ it("does not carry an incomplete positive grant into a recovered adapter", async
   await expect(
     readPrivateNativeTargetAuthOnlyFinalRoutingApproval({
       ...resumed,
-      observation: { state: saved, save },
+      observation: { save, state: saved },
     }),
   ).resolves.toBeNull();
   expect(resumed.readHistory).toHaveBeenCalledWith(0, expect.any(Function));
@@ -435,7 +495,7 @@ it("does not carry an incomplete positive grant into a recovered adapter", async
 it("withholds approval after owner loss and snapshots mutable caller inputs before awaiting", async () => {
   const lost = fixture();
   lost.assertOwner
-    .mockImplementationOnce(async () => undefined)
+    .mockImplementationOnce(async () => {})
     .mockRejectedValueOnce(new Error("revoked"));
   await expect(readPrivateNativeTargetAuthOnlyFinalRoutingApproval(lost)).rejects.toThrow(
     "revoked",

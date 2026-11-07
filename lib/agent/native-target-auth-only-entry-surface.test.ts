@@ -23,34 +23,34 @@ import type { NativeTargetOnboardingRuntimePorts } from "./native-target-onboard
 type Preparation = z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>;
 const fixture = (effect: Preparation["effect"] = "organization") => {
   const authority = {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
+    workspaceId: "workspace",
   };
   const owner = operatorOwnerContextSchema.parse({
-    kind: "direct",
-    authority,
-    principal: { ...authority, scopes: ["autograph:start"] },
     adapterGeneration: 1,
     adapterSessionId: "adapter",
+    authority,
+    kind: "direct",
+    principal: { ...authority, scopes: ["autograph:start"] },
     sessionId: "saved-public-session",
   });
   const actor = {
-    authenticator: "mcp-oauth-jwks",
-    principalType: "user",
-    principalId: "owner",
-    subject: "owner",
-    issuer: authority.issuer,
     attributes: {},
+    authenticator: "mcp-oauth-jwks",
+    issuer: authority.issuer,
+    principalId: "owner",
+    principalType: "user",
+    subject: "owner",
   };
   const prep = nativeTargetAuthOnlyEntryApprovalInputSchema.parse({
     appId: "pilot",
+    childOperationRef: "22222222-2222-4222-a222-222222222222",
+    childPlanDigest: "b".repeat(64),
     deliveryOperationRef: "11111111-1111-4111-a111-111111111111",
     deliveryPlanDigest: "a".repeat(64),
     effect,
-    childOperationRef: "22222222-2222-4222-a222-222222222222",
-    childPlanDigest: "b".repeat(64),
   });
   const planInput = nativeTargetAuthOnlyEntryPlanInputSchema.parse({
     appId: prep.appId,
@@ -59,26 +59,17 @@ const fixture = (effect: Preparation["effect"] = "organization") => {
     effect: prep.effect,
   });
   const prepared = nativeTargetAuthOnlyEntryResultSchema.parse({
-    status: "prepared",
-    effect,
     childOperationRef: prep.childOperationRef,
     childPlanDigest: prep.childPlanDigest,
+    effect,
+    status: "prepared",
   });
   const ctx = {
-    session: { id: "adapter", auth: { current: actor, initiator: actor } },
-    callId: "current-call",
     abortSignal: new AbortController().signal,
+    callId: "current-call",
+    session: { auth: { current: actor, initiator: actor }, id: "adapter" },
   };
   const responseCtx: ApprovalResponseContext<Preparation> = {
-    responder: actor,
-    session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
-    request: {
-      requestId: "original-request",
-      callId: "original-call",
-      toolName: nativeTargetAuthOnlyEntryApprovalTool,
-      toolInput: prep,
-    },
-    response: { decision: "approve" },
     auth: {
       getToken: async () => {
         throw new Error("unused");
@@ -87,6 +78,15 @@ const fixture = (effect: Preparation["effect"] = "organization") => {
         throw new Error("unused");
       },
     },
+    request: {
+      callId: "original-call",
+      requestId: "original-request",
+      toolInput: prep,
+      toolName: nativeTargetAuthOnlyEntryApprovalTool,
+    },
+    responder: actor,
+    response: { decision: "approve" },
+    session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
   };
   let output: unknown = prep;
   const sent: z.infer<typeof nativeTargetTransportRequestSchema>[] = [];
@@ -96,23 +96,23 @@ const fixture = (effect: Preparation["effect"] = "organization") => {
   });
   const client = createNativeTargetOnboardingClient({
     endpoint: "https://operator.example",
+    fetch,
     ownerContext: owner,
     token: async () => "private-workload-token",
-    fetch,
   });
   return {
-    prep,
-    planInput,
-    prepared,
-    ctx,
-    responseCtx,
-    owner,
-    sent,
-    fetch,
     client,
+    ctx,
+    fetch,
     output(value: unknown) {
       output = value;
     },
+    owner,
+    planInput,
+    prep,
+    prepared,
+    responseCtx,
+    sent,
   };
 };
 
@@ -126,17 +126,17 @@ it.each(["organization", "signup-policy"] as const)(
     expect(f.sent).toEqual([
       {
         action: "native-target-auth-only-entry-plan",
-        ownerContext: f.owner,
         adapterSessionId: "adapter",
         callId: "current-call",
         input: f.planInput,
+        ownerContext: f.owner,
       },
       {
         action: "native-target-auth-only-entry",
-        ownerContext: f.owner,
         adapterSessionId: "adapter",
         callId: "current-call",
         input: f.prep,
+        ownerContext: f.owner,
       },
     ]);
   },
@@ -147,11 +147,18 @@ it.each(["appId", "deliveryOperationRef", "deliveryPlanDigest", "effect"] as con
   async (key) => {
     const f = fixture();
     const changed = { ...f.prep };
-    if (key === "appId") changed.appId = "another-app";
-    if (key === "deliveryOperationRef")
+    if (key === "appId") {
+      changed.appId = "another-app";
+    }
+    if (key === "deliveryOperationRef") {
       changed.deliveryOperationRef = "33333333-3333-4333-a333-333333333333";
-    if (key === "deliveryPlanDigest") changed.deliveryPlanDigest = "c".repeat(64);
-    if (key === "effect") changed.effect = "signup-policy";
+    }
+    if (key === "deliveryPlanDigest") {
+      changed.deliveryPlanDigest = "c".repeat(64);
+    }
+    if (key === "effect") {
+      changed.effect = "signup-policy";
+    }
     f.output(changed);
     await expect(f.client.planAuthOnlyEntry(f.planInput, f.ctx)).rejects.toThrow();
   },
@@ -162,10 +169,15 @@ it.each(["childOperationRef", "childPlanDigest", "effect"] as const)(
   async (key) => {
     const f = fixture();
     const changed = { ...f.prepared };
-    if (key === "childOperationRef")
+    if (key === "childOperationRef") {
       changed.childOperationRef = "33333333-3333-4333-a333-333333333333";
-    if (key === "childPlanDigest") changed.childPlanDigest = "c".repeat(64);
-    if (key === "effect") changed.effect = "signup-policy";
+    }
+    if (key === "childPlanDigest") {
+      changed.childPlanDigest = "c".repeat(64);
+    }
+    if (key === "effect") {
+      changed.effect = "signup-policy";
+    }
     f.output(changed);
     await expect(f.client.prepareAuthOnlyEntry(f.prep, f.ctx)).rejects.toThrow();
   },
@@ -203,15 +215,25 @@ it.each(["owner", "principal-type", "session", "tool", "malformed-intent"] as co
     const f = fixture();
     const ctx = {
       ...f.responseCtx,
+      request: { ...f.responseCtx.request, toolInput: { ...f.prep } },
       responder: { ...f.responseCtx.responder },
       session: { ...f.responseCtx.session },
-      request: { ...f.responseCtx.request, toolInput: { ...f.prep } },
     };
-    if (kind === "owner") ctx.responder.principalId = "other";
-    if (kind === "principal-type") ctx.responder.principalType = "service";
-    if (kind === "session") ctx.session.id = "other";
-    if (kind === "tool") ctx.request.toolName = "prepare-app-native-target-auth-only-delivery";
-    if (kind === "malformed-intent") ctx.request.toolInput.childPlanDigest = "invalid";
+    if (kind === "owner") {
+      ctx.responder.principalId = "other";
+    }
+    if (kind === "principal-type") {
+      ctx.responder.principalType = "service";
+    }
+    if (kind === "session") {
+      ctx.session.id = "other";
+    }
+    if (kind === "tool") {
+      ctx.request.toolName = "prepare-app-native-target-auth-only-delivery";
+    }
+    if (kind === "malformed-intent") {
+      ctx.request.toolInput.childPlanDigest = "invalid";
+    }
     await expect(f.client.authorizeAuthOnlyEntryApprovalResponse(ctx)).rejects.toThrow();
     expect(f.fetch).not.toHaveBeenCalled();
   },
@@ -237,10 +259,10 @@ it("rejects mismatched adapter ownership in the transport", () => {
   expect(() =>
     nativeTargetTransportRequestSchema.parse({
       action: "native-target-auth-only-entry",
-      ownerContext: f.owner,
       adapterSessionId: "another-adapter",
       callId: "call",
       input: f.prep,
+      ownerContext: f.owner,
     }),
   ).toThrow();
 });
@@ -266,10 +288,10 @@ it("stops cancelled requests before transport", async () => {
 it("routes through private ports and checks returned child identity", async () => {
   const f = fixture();
   const ports = {
+    authorizeAuthOnlyEntryApprovalResponse: vi.fn(async () => undefined),
+    hasAuthOnlyEntryApproval: vi.fn(async () => true),
     planAuthOnlyEntry: vi.fn(async () => f.prep),
     prepareAuthOnlyEntry: vi.fn(async () => f.prepared),
-    hasAuthOnlyEntryApproval: vi.fn(async () => true),
-    authorizeAuthOnlyEntryApprovalResponse: vi.fn(async () => undefined),
   };
   const runtime = createNativeTargetOnboardingRuntime(
     z.custom<NativeTargetOnboardingRuntimePorts>().parse(ports),

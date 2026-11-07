@@ -74,6 +74,11 @@ export const createNativeTargetAuthOnlyFinalRoutingAuthority = (input: {
     return source;
   };
   return {
+    async assertCatalogApp(value) {
+      if (!isDeepStrictEqual(await readSource(value.environment), value.source)) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+    },
     async preparePlan(value) {
       const source = await readSource(value.environment);
       // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Verify the exact registered source before opening the owned provider row.
@@ -88,11 +93,6 @@ export const createNativeTargetAuthOnlyFinalRoutingAuthority = (input: {
         source: { ...source, environment: "preview" },
         projectionRow: row,
       });
-    },
-    async assertCatalogApp(value) {
-      if (!isDeepStrictEqual(await readSource(value.environment), value.source)) {
-        throw new HostedOperatorError("resource_mismatch");
-      }
     },
     async withGatewayLease(value, run) {
       const source = await readSource(value.environment);

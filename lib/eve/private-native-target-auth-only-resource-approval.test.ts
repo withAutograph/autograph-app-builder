@@ -19,49 +19,64 @@ import {
 } from "./private-native-target-auth-only-resource-approval";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-fixture",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner-fixture",
+  workspaceId: "workspace-fixture",
 };
 const owner = {
+  adapterGeneration: 1,
+  adapterSessionId: "saved-adapter",
   authority,
   publicSessionId: "saved-session",
-  adapterSessionId: "saved-adapter",
-  adapterGeneration: 1,
 };
 const historyOwner = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: 1,
+  adapterSessionId: owner.adapterSessionId,
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: owner.publicSessionId,
-  adapterSessionId: owner.adapterSessionId,
-  adapterGeneration: 1,
 });
 const plan = nativeTargetAuthOnlyPlanSchema.parse({
-  version: 1,
-  kind: "native-target-auth-only",
   appId: "signup-pilot",
+  appRole: "pilot_user",
+  authResource: {
+    authorityDigest: "1".repeat(64),
+    database: "pilot_auth",
+    endpointId: "ep-pilot",
+    hostname: "ep-pilot.neon.tech",
+    profileId: "pilot-auth",
+    resourceId: "isolated-auth",
+  },
+  authSchema: {
+    artifactRef: "auth-artifact",
+    installer: { reference: "auth-worker", sha256: "4".repeat(64) },
+    planDigest: "2".repeat(64),
+    targetDigest: "3".repeat(64),
+  },
+  branch: "pilot",
+  cost: { description: "Isolated Preview", ownership: "current-owner" },
+  kind: "native-target-auth-only",
   origin: {
-    authority,
-    publicSessionId: owner.publicSessionId,
-    adapterSessionId: owner.adapterSessionId,
     adapterGeneration: 1,
+    adapterSessionId: owner.adapterSessionId,
     appSpecDigest: "a".repeat(64),
+    authority,
     capturedDescription: { appId: "signup-pilot", kind: "static", sha256: "b".repeat(64) },
+    publicSessionId: owner.publicSessionId,
   },
   project: {
-    name: "signup-pilot",
-    teamId: "team-fixture",
     installationId: "install-fixture",
+    name: "signup-pilot",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/signup-pilot",
       sourceFilesOutsideRootDirectory: true,
     },
     protection: nativeTargetRequiredProjectProtection,
+    teamId: "team-fixture",
   },
-  branch: "pilot",
   publishedSource: {
     branch: "pilot",
     changeSetDigest: "c".repeat(64),
@@ -70,49 +85,23 @@ const plan = nativeTargetAuthOnlyPlanSchema.parse({
     repositoryId: "repo-fixture",
     reviewDigest: "f".repeat(64),
   },
-  authResource: {
-    profileId: "pilot-auth",
-    authorityDigest: "1".repeat(64),
-    resourceId: "isolated-auth",
-    database: "pilot_auth",
-    endpointId: "ep-pilot",
-    hostname: "ep-pilot.neon.tech",
-  },
-  authSchema: {
-    artifactRef: "auth-artifact",
-    planDigest: "2".repeat(64),
-    targetDigest: "3".repeat(64),
-    installer: { reference: "auth-worker", sha256: "4".repeat(64) },
-  },
-  appRole: "pilot_user",
-  signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
-  cost: { ownership: "current-owner", description: "Isolated Preview" },
   retention: { policy: "Until approved cleanup" },
+  signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
+  version: 1,
 });
 const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
 const operationRef = "11111111-1111-4111-a111-111111111111";
 const resourcePlan = {
-  version: 1,
   action: "prepare",
-  authOnlyPlanDigest: planDigest,
-  target: {
-    appId: plan.appId,
-    sessionId: owner.publicSessionId,
-    projectId: "prj-created",
-    branch: plan.branch,
-    environment: "preview",
-    installationId: plan.project.installationId,
-    scopeType: "team",
-    scopeId: plan.project.teamId,
-  },
   authDatabase: {
-    resourceId: "isolated-auth",
     database: "pilot_auth",
     migratorRole: "pilot_migrator",
+    resourceId: "isolated-auth",
     runtimeRole: "pilot_runtime",
   },
+  authOnlyPlanDigest: planDigest,
   bootstrap: { endpointId: "ep-pilot", maintenanceDatabase: "neondb", role: "bootstrap_owner" },
-  neon: { projectId: "pilot-project", branchId: "pilot-branch", endpoint: "ep-pilot.neon.tech" },
+  effects: [{ id: "auth-resources", kind: "resources", resourceId: "isolated-auth" }],
   nativeNeonConfiguration: {
     connector: "neon-owned",
     nativeStore: {
@@ -121,20 +110,31 @@ const resourcePlan = {
       sourceProjectId: "prj-anchor",
     },
     operator: {
-      projectId: "prj-operator",
-      ownerId: plan.project.teamId,
+      audience: "https://vercel.com/fixture",
       environment: "preview",
       issuer: "https://oidc.vercel.com/fixture",
-      audience: "https://vercel.com/fixture",
+      ownerId: plan.project.teamId,
+      projectId: "prj-operator",
     },
   },
+  neon: { branchId: "pilot-branch", endpoint: "ep-pilot.neon.tech", projectId: "pilot-project" },
   resourcesInstaller: { reference: "neon-resource-bootstrap-v1", sha256: "5".repeat(64) },
-  effects: [{ id: "auth-resources", kind: "resources", resourceId: "isolated-auth" }],
+  target: {
+    appId: plan.appId,
+    branch: plan.branch,
+    environment: "preview",
+    installationId: plan.project.installationId,
+    projectId: "prj-created",
+    scopeId: plan.project.teamId,
+    scopeType: "team",
+    sessionId: owner.publicSessionId,
+  },
+  version: 1,
 };
 const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
 const sha = (value: Buffer) => createHash("sha256").update(value).digest("hex");
 const resourcePlanDigest = sha(bytes(resourcePlan));
-const toolInput = { appId: plan.appId, operationRef, planDigest, resourcePlanDigest, resourcePlan };
+const toolInput = { appId: plan.appId, operationRef, planDigest, resourcePlan, resourcePlanDigest };
 const requested = (
   changes: {
     requestId?: string;
@@ -143,12 +143,7 @@ const requested = (
     input?: typeof toolInput;
   } = {},
 ): MessageStreamEvent => ({
-  type: "input.requested",
-  meta: { at: "2026-11-06T12:00:00.000Z", id: "request-event" },
   data: {
-    sequence: 1,
-    stepIndex: 0,
-    turnId: "resource-turn",
     requests: [
       {
         kind: "tool-approval",
@@ -162,7 +157,12 @@ const requested = (
         },
       },
     ],
+    sequence: 1,
+    stepIndex: 0,
+    turnId: "resource-turn",
   },
+  meta: { at: "2026-11-06T12:00:00.000Z", id: "request-event" },
+  type: "input.requested",
 });
 const settled = (
   changes: {
@@ -172,35 +172,33 @@ const settled = (
     at?: string;
   } = {},
 ): MessageStreamEvent => ({
-  type: "approval.settled",
-  meta: { at: changes.at ?? "2026-11-06T12:00:01.000Z", id: "settled-event" },
   data: {
+    outcome: changes.outcome ?? "approved",
+    requestId: changes.requestId ?? "resource-request",
+    responderPrincipalId: changes.principal ?? authority.ownerUserId,
     sequence: 2,
     stepIndex: 0,
     turnId: "resource-turn",
-    requestId: changes.requestId ?? "resource-request",
-    responderPrincipalId: changes.principal ?? authority.ownerUserId,
-    outcome: changes.outcome ?? "approved",
   },
+  meta: { at: changes.at ?? "2026-11-06T12:00:01.000Z", id: "settled-event" },
+  type: "approval.settled",
 });
 const proof: NativeTargetAuthOnlyApproval = {
-  requestId: "resource-request",
   callId: "original-call",
-  planDigest,
-  sourceDigest: resourcePlanDigest,
-  publicSessionId: owner.publicSessionId,
-  responderPrincipalId: authority.ownerUserId,
-  outcome: "approved",
   observedAt: "2026-11-06T12:00:01.000Z",
+  outcome: "approved",
+  planDigest,
+  publicSessionId: owner.publicSessionId,
+  requestId: "resource-request",
+  responderPrincipalId: authority.ownerUserId,
+  sourceDigest: resourcePlanDigest,
 };
 const fixture = (events: MessageStreamEvent[] = [requested(), settled()], complete = true) => ({
-  owner: structuredClone(owner),
-  historyOwner: structuredClone(historyOwner),
-  plan: structuredClone(plan),
-  operationRef,
-  resourcePlanBytes: bytes(resourcePlan),
-  resourcePlanDigest,
   assertOwner: vi.fn(async () => undefined),
+  historyOwner: structuredClone(historyOwner),
+  operationRef,
+  owner: structuredClone(owner),
+  plan: structuredClone(plan),
   readHistory: vi.fn(async (start: number, observe: (event: MessageStreamEvent) => void) => {
     for (const event of events) observe(event);
     return {
@@ -209,6 +207,8 @@ const fixture = (events: MessageStreamEvent[] = [requested(), settled()], comple
       nativeTailIndex: Math.max(0, start + events.length - 1),
     };
   }),
+  resourcePlanBytes: bytes(resourcePlan),
+  resourcePlanDigest,
 });
 
 it("proves the actual separate resource settlement and preserves its original identity", async () => {
@@ -228,20 +228,30 @@ it.each([
   "extra-field",
 ] as const)("does not treat %s as this resource approval", async (kind) => {
   const changed = structuredClone(toolInput);
-  if (kind === "schema-digest")
+  if (kind === "schema-digest") {
     changed.resourcePlanDigest = nativeTargetAuthOnlySchemaEffectDigest(plan, plan.publishedSource);
-  if (kind === "operation") changed.operationRef = "22222222-2222-4222-a222-222222222222";
-  if (kind === "target") changed.resourcePlan.target.projectId = "other-project";
-  if (kind === "resource") changed.resourcePlan.authDatabase.database = "other";
-  if (kind === "source") changed.planDigest = "f".repeat(64);
-  if (kind === "extra-field")
+  }
+  if (kind === "operation") {
+    changed.operationRef = "22222222-2222-4222-a222-222222222222";
+  }
+  if (kind === "target") {
+    changed.resourcePlan.target.projectId = "other-project";
+  }
+  if (kind === "resource") {
+    changed.resourcePlan.authDatabase.database = "other";
+  }
+  if (kind === "source") {
+    changed.planDigest = "f".repeat(64);
+  }
+  if (kind === "extra-field") {
     Object.assign(changed.resourcePlan, { appDatabase: { database: "not-approved" } });
+  }
   const events = [
     requested({
       input: changed,
       ...(kind === "project-tool" ? { toolName: "prepare-app-native-target-auth-only" } : {}),
     }),
-    settled({ ...(kind === "unmatched-settlement" ? { requestId: "other" } : {}) }),
+    settled(kind === "unmatched-settlement" ? { requestId: "other" } : {}),
   ];
   await expect(
     readPrivateNativeTargetAuthOnlyResourceApproval(fixture(events)),
@@ -253,13 +263,24 @@ it.each(["digest", "owner", "session", "adapter", "scope", "second-resource"] as
   async (kind) => {
     const f = fixture();
     const changed = structuredClone(resourcePlan);
-    if (kind === "digest") f.resourcePlanDigest = "f".repeat(64);
-    if (kind === "owner") f.owner.authority.ownerUserId = "foreign";
-    if (kind === "session") f.owner.publicSessionId = "foreign";
-    if (kind === "adapter") f.owner.adapterGeneration = 2;
-    if (kind === "scope") changed.target.scopeId = "foreign";
-    if (kind === "second-resource")
+    if (kind === "digest") {
+      f.resourcePlanDigest = "f".repeat(64);
+    }
+    if (kind === "owner") {
+      f.owner.authority.ownerUserId = "foreign";
+    }
+    if (kind === "session") {
+      f.owner.publicSessionId = "foreign";
+    }
+    if (kind === "adapter") {
+      f.owner.adapterGeneration = 2;
+    }
+    if (kind === "scope") {
+      changed.target.scopeId = "foreign";
+    }
+    if (kind === "second-resource") {
       changed.effects.push({ id: "app-resource", kind: "resources", resourceId: "app-db" });
+    }
     if (kind === "scope" || kind === "second-resource") {
       f.resourcePlanBytes = bytes(changed);
       f.resourcePlanDigest = sha(f.resourcePlanBytes);
@@ -273,7 +294,7 @@ it("retains cancellation even after a later approved retry", async () => {
   const f = fixture([
     requested(),
     settled({ outcome: "cancelled" }),
-    requested({ requestId: "retry-request", callId: "retry-call" }),
+    requested({ callId: "retry-call", requestId: "retry-request" }),
     settled({ requestId: "retry-request" }),
   ]);
   await expect(readPrivateNativeTargetAuthOnlyResourceApproval(f)).resolves.toEqual({
@@ -305,7 +326,7 @@ it("rejects a foreign responder and two ambiguous approved requests", async () =
       fixture([
         requested(),
         settled(),
-        requested({ requestId: "second", callId: "second-call" }),
+        requested({ callId: "second-call", requestId: "second" }),
         settled({ requestId: "second" }),
       ]),
     ),
@@ -316,7 +337,7 @@ it("uses the retained original settlement when a retry has a different call ID",
   const f = fixture([
     requested(),
     settled(),
-    requested({ requestId: "retry", callId: "retry-call" }),
+    requested({ callId: "retry-call", requestId: "retry" }),
     settled({ requestId: "retry" }),
   ]);
   await expect(
@@ -328,9 +349,15 @@ it.each(["missing", "different-request", "different-time", "wrong-resource"] as 
   "never turns a retained %s proof into a fresh approval request",
   async (kind) => {
     const retained = { ...proof };
-    if (kind === "different-request") retained.requestId = "other";
-    if (kind === "different-time") retained.observedAt = "2026-11-06T12:00:02.000Z";
-    if (kind === "wrong-resource") retained.sourceDigest = "f".repeat(64);
+    if (kind === "different-request") {
+      retained.requestId = "other";
+    }
+    if (kind === "different-time") {
+      retained.observedAt = "2026-11-06T12:00:02.000Z";
+    }
+    if (kind === "wrong-resource") {
+      retained.sourceDigest = "f".repeat(64);
+    }
     const f = fixture(kind === "missing" ? [] : undefined);
     await expect(
       readPrivateNativeTargetAuthOnlyResourceApproval({ ...f, retainedApproval: retained }),
@@ -353,15 +380,15 @@ it.each(["approved", "cancelled"] as const)(
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
     expect(saved?.native.capture.request).toEqual({
       action: nativeTargetAuthOnlyResourceApprovalAction,
-      planRef: operationRef,
-      planDigest: resourcePlanDigest,
       idempotencyKey: plan.appId,
+      planDigest: resourcePlanDigest,
+      planRef: operationRef,
     });
     const resumed = fixture([]);
     await expect(
       readPrivateNativeTargetAuthOnlyResourceApproval({
         ...resumed,
-        observation: { state: saved, save },
+        observation: { save, state: saved },
       }),
     ).resolves.toEqual({ ...proof, outcome });
     expect(resumed.readHistory).toHaveBeenCalledWith(2, expect.any(Function));
@@ -387,7 +414,7 @@ it("discards an incomplete positive grant when the verified adapter generation c
   await expect(
     readPrivateNativeTargetAuthOnlyResourceApproval({
       ...resumed,
-      observation: { state: saved, save },
+      observation: { save, state: saved },
     }),
   ).resolves.toBeNull();
   expect(resumed.readHistory).toHaveBeenCalledWith(0, expect.any(Function));
@@ -396,7 +423,7 @@ it("discards an incomplete positive grant when the verified adapter generation c
 it("withholds approval after owner loss and snapshots caller inputs before awaiting", async () => {
   const lost = fixture();
   lost.assertOwner
-    .mockImplementationOnce(async () => undefined)
+    .mockImplementationOnce(async () => {})
     .mockRejectedValueOnce(new Error("revoked"));
   await expect(readPrivateNativeTargetAuthOnlyResourceApproval(lost)).rejects.toThrow("revoked");
   const frozen = fixture();

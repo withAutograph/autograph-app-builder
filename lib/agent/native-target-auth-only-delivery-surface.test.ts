@@ -26,53 +26,42 @@ import type { NativeTargetOnboardingRuntimePorts } from "./native-target-onboard
 type Preparation = z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>;
 const fixture = () => {
   const authority = {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
+    workspaceId: "workspace",
   };
   const owner = operatorOwnerContextSchema.parse({
-    kind: "direct",
-    authority,
-    principal: { ...authority, scopes: ["autograph:start"] },
     adapterGeneration: 1,
     adapterSessionId: "adapter",
+    authority,
+    kind: "direct",
+    principal: { ...authority, scopes: ["autograph:start"] },
     sessionId: "saved-public-session",
   });
   const actor = {
-    authenticator: "mcp-oauth-jwks",
-    principalType: "user",
-    principalId: "owner",
-    subject: "owner",
-    issuer: authority.issuer,
     attributes: {},
+    authenticator: "mcp-oauth-jwks",
+    issuer: authority.issuer,
+    principalId: "owner",
+    principalType: "user",
+    subject: "owner",
   };
   const operationRef = "11111111-1111-4111-a111-111111111111";
   const deliveryPlan = {
-    version: 1,
-    kind: "native-target-auth-only-delivery",
     authOnlyPlanDigest: "a".repeat(64),
-    resourcePlanDigest: "b".repeat(64),
-    target: {
-      appId: "pilot",
-      branch: "preview",
-      environment: "preview",
-      installationId: "installation",
-      projectId: "pilot-project",
-      scopeId: "team",
-      scopeType: "team",
-      sessionId: owner.sessionId,
-    },
-    source: { branch: "preview", gitSha: "c".repeat(40), repositoryId: "repository" },
     delivery: {
       action: "prepare",
-      stage: "app",
       delivery: {
         branch: "preview",
         gitSha: "c".repeat(40),
         projectId: "pilot-project",
         repoId: "repository",
       },
+      effects: [
+        { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
+        { id: "auth-only-app-preview", kind: "delivery" },
+      ],
       gatewayDelivery: {
         branch: "gateway-preview",
         gitRef: "gateway-preview",
@@ -87,23 +76,34 @@ const fixture = () => {
         origin: "https://pilot.example",
         projectId: "gateway-project",
       },
-      effects: [
-        { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
-        { id: "auth-only-app-preview", kind: "delivery" },
-      ],
+      stage: "app",
     },
     effects: [
       { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
       { id: "auth-only-app-preview", kind: "delivery" },
     ],
+    kind: "native-target-auth-only-delivery",
+    resourcePlanDigest: "b".repeat(64),
+    source: { branch: "preview", gitSha: "c".repeat(40), repositoryId: "repository" },
+    target: {
+      appId: "pilot",
+      branch: "preview",
+      environment: "preview",
+      installationId: "installation",
+      projectId: "pilot-project",
+      scopeId: "team",
+      scopeType: "team",
+      sessionId: owner.sessionId,
+    },
+    version: 1,
   };
   const prep = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse({
     appId: "pilot",
+    deliveryPlan,
+    deliveryPlanDigest: createHash("sha256").update(JSON.stringify(deliveryPlan)).digest("hex"),
     operationRef,
     planDigest: "a".repeat(64),
     resourcePlanDigest: "b".repeat(64),
-    deliveryPlanDigest: createHash("sha256").update(JSON.stringify(deliveryPlan)).digest("hex"),
-    deliveryPlan,
   });
   const planInput = nativeTargetAuthOnlyDeliveryPlanInputSchema.parse({
     appId: prep.appId,
@@ -112,48 +112,39 @@ const fixture = () => {
     resourcePlanDigest: prep.resourcePlanDigest,
   });
   const prepared = nativeTargetAuthOnlyDeliveryResultSchema.parse({
-    status: "prepared",
-    deliveryPlanDigest: prep.deliveryPlanDigest,
     app: {
-      operationRef,
       branch: "preview",
       deploymentId: "app-deployment",
+      operationRef,
       origin: "https://app-deployment.example",
       projectId: "pilot-project",
       readyState: "READY",
       repoId: "repository",
     },
+    deliveryPlanDigest: prep.deliveryPlanDigest,
     gateway: {
-      operationRef,
       branch: "gateway-preview",
       deploymentId: "gateway-deployment",
+      operationRef,
       origin: "https://gateway-deployment.example",
       projectId: "gateway-project",
       readyState: "READY",
       repoId: "gateway-repository",
     },
+    status: "prepared",
   });
   const pending = {
-    status: "pending-owner",
-    deliveryPlanDigest: prep.deliveryPlanDigest,
     authIdentityLink: "https://pilot.example/auth/sign-in?nonce=fixture",
     authIdentityLinkExpiresAt: "2026-11-07T04:00:00.000Z",
+    deliveryPlanDigest: prep.deliveryPlanDigest,
+    status: "pending-owner",
   } as const;
   const ctx = {
-    session: { id: "adapter", auth: { current: actor, initiator: actor } },
-    callId: "current-call",
     abortSignal: new AbortController().signal,
+    callId: "current-call",
+    session: { auth: { current: actor, initiator: actor }, id: "adapter" },
   };
   const responseCtx: ApprovalResponseContext<Preparation> = {
-    responder: actor,
-    session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
-    request: {
-      requestId: "original-request",
-      callId: "original-call",
-      toolName: nativeTargetAuthOnlyDeliveryApprovalTool,
-      toolInput: prep,
-    },
-    response: { decision: "approve" },
     auth: {
       getToken: async () => {
         throw new Error("unused");
@@ -162,6 +153,15 @@ const fixture = () => {
         throw new Error("unused");
       },
     },
+    request: {
+      callId: "original-call",
+      requestId: "original-request",
+      toolInput: prep,
+      toolName: nativeTargetAuthOnlyDeliveryApprovalTool,
+    },
+    responder: actor,
+    response: { decision: "approve" },
+    session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
   };
   let output: unknown = prep;
   const sent: z.infer<typeof nativeTargetTransportRequestSchema>[] = [];
@@ -171,24 +171,24 @@ const fixture = () => {
   });
   const client = createNativeTargetOnboardingClient({
     endpoint: "https://operator.example",
+    fetch,
     ownerContext: owner,
     token: async () => "private-workload-token",
-    fetch,
   });
   return {
     client,
-    prep,
-    planInput,
-    prepared,
-    pending,
     ctx,
-    responseCtx,
-    owner,
-    sent,
     fetch,
     output(value: unknown) {
       output = value;
     },
+    owner,
+    pending,
+    planInput,
+    prep,
+    prepared,
+    responseCtx,
+    sent,
   };
 };
 
@@ -197,8 +197,8 @@ it("plans the same saved operation and returns the retained delivery preparation
   expect(await f.client.planAuthOnlyDelivery(f.planInput, f.ctx)).toEqual(f.prep);
   expect(f.sent[0]).toMatchObject({
     action: "native-target-auth-only-delivery-plan",
-    ownerContext: f.owner,
     input: f.planInput,
+    ownerContext: f.owner,
   });
   expect(f.fetch).toHaveBeenCalledOnce();
 });
@@ -215,10 +215,18 @@ it.each(["app", "session", "plan", "resource"] as const)(
   async (kind) => {
     const f = fixture();
     const changed = structuredClone(f.prep);
-    if (kind === "app") changed.deliveryPlan.target.appId = "other";
-    if (kind === "session") changed.deliveryPlan.target.sessionId = "other";
-    if (kind === "plan") changed.deliveryPlan.authOnlyPlanDigest = "f".repeat(64);
-    if (kind === "resource") changed.deliveryPlan.resourcePlanDigest = "f".repeat(64);
+    if (kind === "app") {
+      changed.deliveryPlan.target.appId = "other";
+    }
+    if (kind === "session") {
+      changed.deliveryPlan.target.sessionId = "other";
+    }
+    if (kind === "plan") {
+      changed.deliveryPlan.authOnlyPlanDigest = "f".repeat(64);
+    }
+    if (kind === "resource") {
+      changed.deliveryPlan.resourcePlanDigest = "f".repeat(64);
+    }
     await expect(f.client.prepareAuthOnlyDelivery(changed, f.ctx)).rejects.toThrow();
     expect(f.fetch).not.toHaveBeenCalled();
   },
@@ -229,11 +237,21 @@ it.each(["app", "operation", "plan", "resource", "target-session"] as const)(
   async (kind) => {
     const f = fixture();
     const changed = structuredClone(f.prep);
-    if (kind === "app") changed.appId = "other";
-    if (kind === "operation") changed.operationRef = "22222222-2222-4222-a222-222222222222";
-    if (kind === "plan") changed.planDigest = "f".repeat(64);
-    if (kind === "resource") changed.resourcePlanDigest = "f".repeat(64);
-    if (kind === "target-session") changed.deliveryPlan.target.sessionId = "other";
+    if (kind === "app") {
+      changed.appId = "other";
+    }
+    if (kind === "operation") {
+      changed.operationRef = "22222222-2222-4222-a222-222222222222";
+    }
+    if (kind === "plan") {
+      changed.planDigest = "f".repeat(64);
+    }
+    if (kind === "resource") {
+      changed.resourcePlanDigest = "f".repeat(64);
+    }
+    if (kind === "target-session") {
+      changed.deliveryPlan.target.sessionId = "other";
+    }
     f.output(changed);
     await expect(f.client.planAuthOnlyDelivery(f.planInput, f.ctx)).rejects.toThrow();
   },
@@ -249,15 +267,31 @@ it.each([
   "not-ready",
 ] as const)("rejects mismatched delivery %s", async (kind) => {
   const f = fixture();
-  if (f.prepared.status !== "prepared") throw new Error("fixture");
+  if (f.prepared.status !== "prepared") {
+    throw new Error("fixture");
+  }
   const changed = structuredClone(f.prepared);
-  if (kind === "digest") changed.deliveryPlanDigest = "f".repeat(64);
-  if (kind === "app-project") changed.app.projectId = "other";
-  if (kind === "gateway-project") changed.gateway.projectId = "other";
-  if (kind === "operation") changed.gateway.operationRef = "22222222-2222-4222-a222-222222222222";
-  if (kind === "branch") changed.app.branch = "other";
-  if (kind === "repository") changed.gateway.repoId = "other";
-  if (kind === "not-ready") Object.assign(changed.gateway, { readyState: "BUILDING" });
+  if (kind === "digest") {
+    changed.deliveryPlanDigest = "f".repeat(64);
+  }
+  if (kind === "app-project") {
+    changed.app.projectId = "other";
+  }
+  if (kind === "gateway-project") {
+    changed.gateway.projectId = "other";
+  }
+  if (kind === "operation") {
+    changed.gateway.operationRef = "22222222-2222-4222-a222-222222222222";
+  }
+  if (kind === "branch") {
+    changed.app.branch = "other";
+  }
+  if (kind === "repository") {
+    changed.gateway.repoId = "other";
+  }
+  if (kind === "not-ready") {
+    Object.assign(changed.gateway, { readyState: "BUILDING" });
+  }
   f.output(changed);
   await expect(f.client.prepareAuthOnlyDelivery(f.prep, f.ctx)).rejects.toThrow();
 });
@@ -273,13 +307,21 @@ it.each(["http-link", "credentials", "private-proof", "gateway", "digest"] as co
   async (kind) => {
     const f = fixture();
     const changed = { ...f.pending };
-    if (kind === "http-link")
+    if (kind === "http-link") {
       Object.assign(changed, { authIdentityLink: "http://pilot.example/auth" });
-    if (kind === "credentials")
+    }
+    if (kind === "credentials") {
       Object.assign(changed, { authIdentityLink: "https://user:password@pilot.example/auth" });
-    if (kind === "private-proof") Object.assign(changed, { proof: "must-not-cross" });
-    if (kind === "gateway") Object.assign(changed, { gateway: {} });
-    if (kind === "digest") Object.assign(changed, { deliveryPlanDigest: "f".repeat(64) });
+    }
+    if (kind === "private-proof") {
+      Object.assign(changed, { proof: "must-not-cross" });
+    }
+    if (kind === "gateway") {
+      Object.assign(changed, { gateway: {} });
+    }
+    if (kind === "digest") {
+      Object.assign(changed, { deliveryPlanDigest: "f".repeat(64) });
+    }
     f.output(changed);
     await expect(f.client.prepareAuthOnlyDelivery(f.prep, f.ctx)).rejects.toThrow();
   },
@@ -303,15 +345,25 @@ it.each(["owner", "principal-type", "session", "tool", "target-session"] as cons
     const f = fixture();
     const ctx = {
       ...f.responseCtx,
+      request: { ...f.responseCtx.request, toolInput: structuredClone(f.prep) },
       responder: { ...f.responseCtx.responder },
       session: { ...f.responseCtx.session },
-      request: { ...f.responseCtx.request, toolInput: structuredClone(f.prep) },
     };
-    if (kind === "owner") ctx.responder.principalId = "other";
-    if (kind === "principal-type") ctx.responder.principalType = "service";
-    if (kind === "session") ctx.session.id = "other";
-    if (kind === "tool") ctx.request.toolName = "prepare-app-native-target-auth-only-resources";
-    if (kind === "target-session") ctx.request.toolInput.deliveryPlan.target.sessionId = "other";
+    if (kind === "owner") {
+      ctx.responder.principalId = "other";
+    }
+    if (kind === "principal-type") {
+      ctx.responder.principalType = "service";
+    }
+    if (kind === "session") {
+      ctx.session.id = "other";
+    }
+    if (kind === "tool") {
+      ctx.request.toolName = "prepare-app-native-target-auth-only-resources";
+    }
+    if (kind === "target-session") {
+      ctx.request.toolInput.deliveryPlan.target.sessionId = "other";
+    }
     await expect(f.client.authorizeAuthOnlyDeliveryApprovalResponse(ctx)).rejects.toThrow();
     expect(f.fetch).not.toHaveBeenCalled();
   },
@@ -335,10 +387,10 @@ it("does not resend an uncertain delivery request", async () => {
 it("routes the private runtime through its typed delivery ports and rejects wrong results", async () => {
   const f = fixture();
   const ports = {
+    authorizeAuthOnlyDeliveryApprovalResponse: vi.fn(async () => undefined),
+    hasAuthOnlyDeliveryApproval: vi.fn(async () => true),
     planAuthOnlyDelivery: vi.fn(async () => f.prep),
     prepareAuthOnlyDelivery: vi.fn(async () => f.prepared),
-    hasAuthOnlyDeliveryApproval: vi.fn(async () => true),
-    authorizeAuthOnlyDeliveryApprovalResponse: vi.fn(async () => undefined),
   };
   // Unused legacy project-creation ports intentionally do not exist in this Auth-only fixture.
   const runtime = createNativeTargetOnboardingRuntime(
@@ -410,14 +462,14 @@ it("returns the retained digest-only routing approval intent while delivery rema
   const f = fixture();
   const routing = {
     ...f.prepared,
-    status: "routing-required",
     finalRoutingPlan: {
       appId: f.prep.appId,
-      operationRef: f.prep.operationRef,
       deliveryPlanDigest: f.prep.deliveryPlanDigest,
+      operationRef: f.prep.operationRef,
       routingOperationRef: "22222222-2222-4222-a222-222222222222",
       routingPlanDigest: "f".repeat(64),
     },
+    status: "routing-required",
   };
   f.output(routing);
   expect(await f.client.prepareAuthOnlyDelivery(f.prep, f.ctx)).toEqual(routing);
@@ -430,8 +482,8 @@ it.each(["appId", "operationRef", "deliveryPlanDigest", "routingPlanBase64"] as 
     const f = fixture();
     const intent: Record<string, string> = {
       appId: f.prep.appId,
-      operationRef: f.prep.operationRef,
       deliveryPlanDigest: f.prep.deliveryPlanDigest,
+      operationRef: f.prep.operationRef,
       routingOperationRef: "22222222-2222-4222-a222-222222222222",
       routingPlanDigest: "f".repeat(64),
     };
@@ -443,29 +495,31 @@ it.each(["appId", "operationRef", "deliveryPlanDigest", "routingPlanBase64"] as 
           : field === "deliveryPlanDigest"
             ? "e".repeat(64)
             : "private-fixture";
-    f.output({ ...f.prepared, status: "routing-required", finalRoutingPlan: intent });
+    f.output({ ...f.prepared, finalRoutingPlan: intent, status: "routing-required" });
     await expect(f.client.prepareAuthOnlyDelivery(f.prep, f.ctx)).rejects.toThrow();
   },
 );
 
 const finalPrepared = (f: ReturnType<typeof fixture>) => {
-  if (f.prepared.status !== "prepared") throw new Error("Expected prepared fixture");
+  if (f.prepared.status !== "prepared") {
+    throw new Error("Expected prepared fixture");
+  }
   const finalRoutingPlan = {
     appId: f.prep.appId,
-    operationRef: f.prep.operationRef,
     deliveryPlanDigest: f.prep.deliveryPlanDigest,
+    operationRef: f.prep.operationRef,
     routingOperationRef: "22222222-2222-4222-a222-222222222222",
     routingPlanDigest: "f".repeat(64),
   };
   return {
     ...f.prepared,
     finalRoutingPlan,
-    projectionDigest: "e".repeat(64),
     gateway: {
       ...f.prepared.gateway,
       deploymentId: "refreshed-gateway",
       operationRef: finalRoutingPlan.routingOperationRef,
     },
+    projectionDigest: "e".repeat(64),
   };
 };
 
@@ -499,15 +553,24 @@ it.each([
     const f = fixture();
     const final = finalPrepared(f);
     const changed = structuredClone(final);
-    if (kind === "app") changed.finalRoutingPlan.appId = "another-app";
-    if (kind === "parent-operation")
+    if (kind === "app") {
+      changed.finalRoutingPlan.appId = "another-app";
+    }
+    if (kind === "parent-operation") {
       changed.finalRoutingPlan.operationRef = "33333333-3333-4333-a333-333333333333";
-    if (kind === "parent-digest") changed.finalRoutingPlan.deliveryPlanDigest = "d".repeat(64);
-    if (kind === "same-operation")
+    }
+    if (kind === "parent-digest") {
+      changed.finalRoutingPlan.deliveryPlanDigest = "d".repeat(64);
+    }
+    if (kind === "same-operation") {
       changed.finalRoutingPlan.routingOperationRef = f.prep.operationRef;
-    if (kind === "gateway-operation") changed.gateway.operationRef = f.prep.operationRef;
-    if (kind === "app-operation")
+    }
+    if (kind === "gateway-operation") {
+      changed.gateway.operationRef = f.prep.operationRef;
+    }
+    if (kind === "app-operation") {
       changed.app.operationRef = final.finalRoutingPlan.routingOperationRef;
+    }
     const output =
       kind === "missing-intent"
         ? { ...changed, finalRoutingPlan: undefined }

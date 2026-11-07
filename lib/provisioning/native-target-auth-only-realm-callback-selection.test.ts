@@ -8,14 +8,50 @@ import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source
 
 const builderOrigin = "https://builder.example";
 const authority = {
-  issuer: `${builderOrigin}/api/auth`,
   audience: `${builderOrigin}/mcp`,
-  workspaceId: "owned-workspace",
+  issuer: `${builderOrigin}/api/auth`,
   ownerUserId: "canonical-owner",
+  workspaceId: "owned-workspace",
 };
 const operationRef = "44444444-4444-4444-a444-444444444444";
 const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse({
+  audience: "https://operator-preview.example",
+  authOnlyPlanDigest: "a".repeat(64),
+  authResourceId: "isolated-auth",
   authority,
+  bootstrapResource: {
+    database: "pilot_auth",
+    environment: "preview",
+    hostname: "ep-pilot.neon.tech",
+    migratorRole: "pilot_migrator",
+    neon: { branchId: "br-pilot", projectId: "neon-pilot" },
+    port: 5432,
+    runtimeRole: "pilot_runtime",
+    schema: "public",
+    version: 1,
+  },
+  browserOrigin: "https://auth-pilot.example",
+  gateway: {
+    branch: "isolated-gateway",
+    deploymentId: "dpl-ready",
+    operationRef,
+    origin: "https://immutable-gateway.example",
+    projectId: "prj-gateway",
+    readyState: "READY",
+    repoId: "repo-approved",
+  },
+  gatewayDeliveryPlanDigest: "c".repeat(64),
+  issuer: "https://auth-pilot.example",
+  operationRef,
+  resourcePlanDigest: "b".repeat(64),
+  sender: {
+    audience: "https://vercel.com/owner",
+    environment: "preview",
+    issuer: "https://oidc.vercel.com/owner",
+    ownerId: "team-owner",
+    projectId: "prj-gateway",
+    subject: "owner:owner:project:gateway:environment:preview",
+  },
   target: {
     appId: "signup-pilot",
     branch: "pilot",
@@ -26,81 +62,43 @@ const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse({
     scopeType: "team",
     sessionId: "saved-session",
   },
-  operationRef,
-  authOnlyPlanDigest: "a".repeat(64),
-  resourcePlanDigest: "b".repeat(64),
-  gatewayDeliveryPlanDigest: "c".repeat(64),
-  gateway: {
-    branch: "isolated-gateway",
-    deploymentId: "dpl-ready",
-    operationRef,
-    origin: "https://immutable-gateway.example",
-    projectId: "prj-gateway",
-    readyState: "READY",
-    repoId: "repo-approved",
-  },
-  sender: {
-    issuer: "https://oidc.vercel.com/owner",
-    audience: "https://vercel.com/owner",
-    projectId: "prj-gateway",
-    ownerId: "team-owner",
-    subject: "owner:owner:project:gateway:environment:preview",
-    environment: "preview",
-  },
-  browserOrigin: "https://auth-pilot.example",
-  issuer: "https://auth-pilot.example",
-  audience: "https://operator-preview.example",
-  authResourceId: "isolated-auth",
-  bootstrapResource: {
-    environment: "preview",
-    port: 5432,
-    schema: "public",
-    version: 1,
-    database: "pilot_auth",
-    hostname: "ep-pilot.neon.tech",
-    migratorRole: "pilot_migrator",
-    runtimeRole: "pilot_runtime",
-    neon: { branchId: "br-pilot", projectId: "neon-pilot" },
-  },
 });
 const ownerSessionId = binding.target.sessionId;
 const nonceSha256 = "d".repeat(64);
-const selector = { ownerSessionId, nonceSha256 };
+const selector = { nonceSha256, ownerSessionId };
 const pending = {
   binding,
-  link: {
-    audience: binding.audience,
-    issuer: binding.issuer,
-    authResourceId: binding.authResourceId,
-    browserOrigin: binding.browserOrigin,
-    endpointOrigin: binding.gateway.origin,
-    bootstrapPlanDigest: binding.resourcePlanDigest,
-    ownerSessionId,
-    nonceSha256,
-    organizationId: null,
-    expiresAt: new Date(Date.now() + 600_000).toISOString(),
-  },
   bootstrapResource: binding.bootstrapResource,
   jwksUrl: new URL("/_platform/jwks.json", binding.gateway.origin).href,
+  link: {
+    audience: binding.audience,
+    authResourceId: binding.authResourceId,
+    bootstrapPlanDigest: binding.resourcePlanDigest,
+    browserOrigin: binding.browserOrigin,
+    endpointOrigin: binding.gateway.origin,
+    expiresAt: new Date(Date.now() + 600_000).toISOString(),
+    issuer: binding.issuer,
+    nonceSha256,
+    organizationId: null,
+    ownerSessionId,
+  },
   sender: binding.sender,
 };
 const configuration = {
+  authDatabase: {
+    database: binding.bootstrapResource.database,
+    migratorRole: binding.bootstrapResource.migratorRole,
+    resourceId: binding.authResourceId,
+    runtimeRole: binding.bootstrapResource.runtimeRole,
+  },
   builderCallbackOrigin: builderOrigin,
-  teamId: binding.target.scopeId,
-  operator: { origin: binding.audience, environment: "preview" },
   gateway: {
+    authBrowserOrigin: binding.browserOrigin,
+    branch: binding.gateway.branch,
     environment: "preview",
     projectId: binding.gateway.projectId,
-    branch: binding.gateway.branch,
-    authBrowserOrigin: binding.browserOrigin,
     publicOrigin: binding.issuer,
     workload: binding.sender,
-  },
-  authDatabase: {
-    resourceId: binding.authResourceId,
-    database: binding.bootstrapResource.database,
-    runtimeRole: binding.bootstrapResource.runtimeRole,
-    migratorRole: binding.bootstrapResource.migratorRole,
   },
   nativeNeon: {
     scope: {
@@ -108,10 +106,11 @@ const configuration = {
       ...binding.bootstrapResource.neon,
     },
   },
+  operator: { environment: "preview", origin: binding.audience },
+  teamId: binding.target.scopeId,
 } as HostedOperatorSourceConfiguration;
 const context = {
   authority,
-  target: binding.target,
   ownerContext: operatorOwnerContextSchema.parse({
     kind: "direct",
     authority,
@@ -120,25 +119,26 @@ const context = {
     adapterSessionId: "saved-adapter",
     adapterGeneration: 1,
   }),
+  target: binding.target,
 };
 const ready = {
-  context,
   configuration,
+  context,
   gateway: binding.gateway,
   readiness: {
     authOnlyPlanDigest: binding.authOnlyPlanDigest,
-    resourcePlanDigest: binding.resourcePlanDigest,
-    gatewayDeliveryPlanDigest: binding.gatewayDeliveryPlanDigest,
     authResourceId: binding.authResourceId,
     catalogFingerprint: "e".repeat(64),
+    gatewayDeliveryPlanDigest: binding.gatewayDeliveryPlanDigest,
+    resourcePlanDigest: binding.resourcePlanDigest,
   },
 };
 const fixture = () => ({
   ownerLink: {
+    consume: vi.fn<NativeTargetAuthOnlyRealmCallbackPorts["ownerLink"]["consume"]>(),
     readPending: vi
       .fn<NativeTargetAuthOnlyRealmCallbackPorts["ownerLink"]["readPending"]>()
       .mockResolvedValue(pending),
-    consume: vi.fn<NativeTargetAuthOnlyRealmCallbackPorts["ownerLink"]["consume"]>(),
   },
   readReadyBinding: vi
     .fn<NativeTargetAuthOnlyRealmCallbackPorts["readReadyBinding"]>()
@@ -155,7 +155,7 @@ it("uses the authenticated retained Auth-only READY binding for the same saved s
   expect(selected).toMatchObject({
     binding,
     context,
-    staging: { jwksUrl: pending.jwksUrl, bootstrapResource: binding.bootstrapResource },
+    staging: { bootstrapResource: binding.bootstrapResource, jwksUrl: pending.jwksUrl },
   });
   expect(selected?.staging.link).not.toHaveProperty("sealedNonce");
   expect(ports.readReadyBinding).toHaveBeenCalledWith(binding);
@@ -164,12 +164,12 @@ it("uses the authenticated retained Auth-only READY binding for the same saved s
 
 it("falls back only for a true lookup miss and rejects missing live readiness for a matched row", async () => {
   const ports = fixture();
-  ports.ownerLink.readPending.mockResolvedValueOnce(undefined);
+  ports.ownerLink.readPending.mockResolvedValueOnce();
   expect(
     await selectNativeTargetAuthOnlyRealmCallback(ports, selector, builderOrigin),
   ).toBeUndefined();
   expect(ports.readReadyBinding).not.toHaveBeenCalled();
-  ports.readReadyBinding.mockResolvedValueOnce(undefined);
+  ports.readReadyBinding.mockResolvedValueOnce();
   await expect(
     selectNativeTargetAuthOnlyRealmCallback(ports, selector, builderOrigin),
   ).rejects.toThrow("auth_identity_required");

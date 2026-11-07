@@ -31,11 +31,11 @@ import type { NativeTargetCurrentOwner } from "../provisioning/native-target-onb
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const terminalSchema = nativeTargetAuthOnlyApprovalSchema.pick({
-  requestId: true,
   callId: true,
-  responderPrincipalId: true,
-  outcome: true,
   observedAt: true,
+  outcome: true,
+  requestId: true,
+  responderPrincipalId: true,
 });
 const unavailable = () => new Error("Auth-only delivery approval is unavailable.");
 export const nativeTargetAuthOnlyDeliveryApprovalAction =
@@ -45,11 +45,11 @@ export const nativeTargetAuthOnlyDeliveryApprovalTool =
 
 export const nativeTargetAuthOnlyDeliveryPreparationInputSchema = z.strictObject({
   appId: nativeTargetAuthOnlyPlanSchema.shape.appId,
+  deliveryPlan: nativeTargetAuthOnlyDeliveryPlanSchema,
+  deliveryPlanDigest: digest,
   operationRef: z.uuid(),
   planDigest: digest,
   resourcePlanDigest: digest,
-  deliveryPlanDigest: digest,
-  deliveryPlan: nativeTargetAuthOnlyDeliveryPlanSchema,
 });
 
 /** Reads the authenticated settlement for one immutable delivery projection and its two ordered effects. */
@@ -76,7 +76,7 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
   const bytes = Buffer.from(input.deliveryPlanBytes);
   const deliveryPlanDigest = digest.parse(input.deliveryPlanDigest);
   const deliveryPlan = nativeTargetAuthOnlyDeliveryPlanSchema.parse(
-    JSON.parse(bytes.toString("utf8")),
+    JSON.parse(bytes.toString("utf-8")),
   );
   const operationRef = z.uuid().parse(input.operationRef);
   const resourcePlanDigest = digest.parse(input.resourcePlanDigest);
@@ -97,16 +97,17 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
     deliveryPlan.source.branch !== plan.branch ||
     deliveryPlan.source.gitSha !== plan.publishedSource.gitSha ||
     deliveryPlan.source.repositoryId !== plan.publishedSource.repositoryId
-  )
+  ) {
     throw unavailable();
+  }
 
   const expected = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse({
     appId: plan.appId,
+    deliveryPlan,
+    deliveryPlanDigest,
     operationRef,
     planDigest,
     resourcePlanDigest,
-    deliveryPlanDigest,
-    deliveryPlan,
   });
   const retained =
     input.retainedApproval === undefined
@@ -118,14 +119,15 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
       retained.sourceDigest !== deliveryPlanDigest ||
       retained.publicSessionId !== plan.origin.publicSessionId ||
       retained.responderPrincipalId !== owner.authority.ownerUserId)
-  )
+  ) {
     throw unavailable();
+  }
   const saved =
     input.observation?.state === undefined
       ? undefined
       : privateNativeTargetApprovalObservationSchema.parse(input.observation.state);
   const terminals = new Map<string, z.infer<typeof terminalSchema>>();
-  const assertOwner = input.assertOwner;
+  const { assertOwner } = input;
   await assertOwner();
   return await readPrivateOperatorApproval({
     owner: historyOwner,
@@ -137,9 +139,9 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
             save: async (native: PrivateOperatorApprovalObservation) => {
               await input.observation!.save(
                 privateNativeTargetApprovalObservationSchema.parse({
-                  version: 1,
                   native,
                   terminals: [...terminals.values()],
+                  version: 1,
                 }),
               );
             },
@@ -147,13 +149,13 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
         }),
     capture: (state?: PrivateOperatorApprovalCapture) => {
       const current = createPrivateOperatorApprovalCapture({
+        ownerUserId: owner.authority.ownerUserId,
         request: {
           action: nativeTargetAuthOnlyDeliveryApprovalAction,
-          planRef: operationRef,
-          planDigest: deliveryPlanDigest,
           idempotencyKey: plan.appId,
+          planDigest: deliveryPlanDigest,
+          planRef: operationRef,
         },
-        ownerUserId: owner.authority.ownerUserId,
         ...(retained === undefined ? {} : { callId: retained.callId }),
         ...(state === undefined ? {} : { state }),
       });
@@ -161,8 +163,9 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
         const entry = current
           .snapshot()
           .entries.find((candidate) => candidate.requestId === terminal.requestId);
-        if (entry !== undefined && entry.callId === terminal.callId)
+        if (entry !== undefined && entry.callId === terminal.callId) {
           terminals.set(terminal.requestId, terminalSchema.parse(terminal));
+        }
       }
       const proofFor = (entry: PrivateOperatorApprovalCapture["entries"][number]) => {
         const terminal = terminals.get(entry.requestId);
@@ -171,20 +174,22 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
           terminal.callId !== entry.callId ||
           terminal.responderPrincipalId !== owner.authority.ownerUserId ||
           terminal.outcome !== (entry.cancelled ? "cancelled" : "approved")
-        )
+        ) {
           throw unavailable();
+        }
         const proof = nativeTargetAuthOnlyApprovalSchema.parse({
           ...terminal,
           planDigest: deliveryPlanDigest,
-          sourceDigest: deliveryPlanDigest,
           publicSessionId: plan.origin.publicSessionId,
+          sourceDigest: deliveryPlanDigest,
         });
         if (
           proof.outcome === "approved" &&
           retained !== undefined &&
           !isDeepStrictEqual(proof, retained)
-        )
+        ) {
           throw unavailable();
+        }
         return proof;
       };
       return {
@@ -228,6 +233,7 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
             }
           }
         },
+        proveComplete: current.proveComplete,
         read(): NativeTargetAuthOnlyApproval | null {
           const entries = current.snapshot().entries;
           const cancelled = entries.filter((entry) => entry.cancelled);
@@ -243,7 +249,6 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
           return proofFor(entry);
         },
         snapshot: current.snapshot,
-        proveComplete: current.proveComplete,
       };
     },
     readHistory: input.readHistory,

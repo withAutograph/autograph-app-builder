@@ -311,10 +311,10 @@ const bindSignupPolicy = (
   }
   return {
     ...policy,
-    policyId: `${plan.selection.appId}:${organizationId}:signup`,
-    authResourceId: plan.authDatabase.resourceId,
     appId: plan.selection.appId,
+    authResourceId: plan.authDatabase.resourceId,
     origin: publicOrigin,
+    policyId: `${plan.selection.appId}:${organizationId}:signup`,
   };
 };
 type ControlPlane = Omit<
@@ -413,8 +413,8 @@ const normalActorFingerprint = (state: NormalActorState) =>
           signup: actor.signup,
           session: actor.session,
         })),
-        organizations: state.organizations,
         memberships: state.memberships,
+        organizations: state.organizations,
       }),
     )
     .digest("hex");
@@ -513,7 +513,7 @@ const environmentHash = (
   input.plan.hostProtection === undefined
     ? hash(rows)
     : createHash("sha256")
-        .update(JSON.stringify({ rows, configuredHostProtection: input.plan.hostProtection }))
+        .update(JSON.stringify({ configuredHostProtection: input.plan.hostProtection, rows }))
         .digest("hex");
 const selectedApplication = (
   configuration: Pick<HostedOperatorSourceConfiguration, "applications" | "teamId">,
@@ -527,8 +527,8 @@ const selectedApplication = (
     throw new HostedOperatorError(RESOURCE_MISMATCH);
   }
   const failed = {
-    app_project: selected.projectId !== context.target.projectId,
     app_branch: selected.branch !== context.target.branch,
+    app_project: selected.projectId !== context.target.projectId,
     team: context.target.scopeId !== configuration.teamId,
   };
   if (Object.values(failed).some(Boolean)) {
@@ -559,8 +559,9 @@ export const createConfiguredPreviewTargetResolver =
       application === undefined &&
       (authOnlyRegistration?.sessionId !== identity.sessionId ||
         authOnlyRegistration.ownerUserId !== currentOwner.authority.ownerUserId)
-    )
+    ) {
       throw new HostedOperatorError(RESOURCE_MISMATCH);
+    }
     const selection = operatorSelectionSchema.parse({
       appId: identity.appId,
       branch: application?.branch ?? authOnlyRegistration!.branch,
@@ -569,13 +570,15 @@ export const createConfiguredPreviewTargetResolver =
       sessionId: identity.sessionId,
     });
     const context = await controlPlane.authorize(request, selection, currentOwner.ownerContext);
-    if (application !== undefined) selectedApplication(configuration, context);
-    else if (
+    if (application !== undefined) {
+      selectedApplication(configuration, context);
+    } else if (
       context.target.projectId !== authOnlyRegistration?.projectId ||
       context.target.branch !== authOnlyRegistration.branch ||
       context.target.scopeId !== configuration.teamId
-    )
+    ) {
       throw new HostedOperatorError(RESOURCE_MISMATCH);
+    }
     await controlPlane.assertPlanningAuthorized(context);
     return context;
   };
@@ -702,11 +705,10 @@ const assertParticipantOrganizationProposal = (
 const gatewayApprovalIdentity = (record: HostedRuntimeJournalRecord | undefined) => {
   const predecessor = record === undefined ? undefined : readAppGatewaySourcePredecessor(record);
   return {
-    request: record?.request,
+    approvalId: record?.operator?.approvalId,
     approvedByCallId: record?.approvedByCallId,
     operationRef: record?.operator?.operationRef,
     planDigest: record?.operator?.planDigest,
-    approvalId: record?.operator?.approvalId,
     predecessor:
       predecessor === undefined
         ? undefined
@@ -716,6 +718,7 @@ const gatewayApprovalIdentity = (record: HostedRuntimeJournalRecord | undefined)
             planDigest: predecessor.operator.planDigest,
             approvalId: predecessor.operator.approvalId,
           },
+    request: record?.request,
   };
 };
 type AppGatewaySourcePlanningContext = HostedOperatorContext & {
@@ -843,7 +846,7 @@ export const readCompletedCaptureBootstrap = (
     ) ||
     desired.deploymentBoundary?.teamId !== current.plan.deploymentBoundary?.teamId
   ) {
-    return undefined;
+    return;
   }
   /* oxlint-enable sonarjs/expression-complexity */
   return readUnapprovedCapturePredecessor(record, account.accountPlan, Date.now());
@@ -863,7 +866,6 @@ const createCompletedParticipantBootstrapHandoff = (
   return bootstrap === undefined
     ? undefined
     : {
-        bootstrap,
         assertCurrent: async () => {
           await controlPlane.assertCanonicalOwner(context);
           await assertCompletedParticipantBootstrapApproval(
@@ -911,6 +913,7 @@ const createCompletedParticipantBootstrapHandoff = (
           }
           await controlPlane.assertCanonicalOwner(context);
         },
+        bootstrap,
       };
 };
 
@@ -987,7 +990,6 @@ const resolveParticipantPlan = async (
   if (prepared === undefined) {
     return hostedOperatorPlanSchema.parse({
       ...base,
-      stage: "auth-participants",
       effects: [
         {
           id: "normal-accounts",
@@ -996,6 +998,7 @@ const resolveParticipantPlan = async (
             "Prepare only the approved participants through ordinary signup, sign-in, or normal session capture; persist private state before account effects.",
         },
       ],
+      stage: "auth-participants",
     });
   }
   const { preparation } = prepared;
@@ -1024,45 +1027,45 @@ const resolveParticipantPlan = async (
   const effects: HostedOperatorPlan["effects"] = [
     ...base.effects.filter((effect) => ![GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
     {
-      id: "app-install",
-      kind: "install",
       description:
         "Install and independently observe the exact compiled app release and protected runtime scope.",
+      id: "app-install",
+      kind: "install",
     },
     ...organizations.map<HostedOperatorPlan["effects"][number]>((organization) => ({
-      id: `auth-membership:${organization.organizationId}`,
-      kind: AUTH_MEMBERSHIP,
       description:
         "Prepare this approved organization, ordinary invitations and actual memberships for its normally authenticated participants.",
+      id: `auth-membership:${organization.organizationId}`,
+      kind: AUTH_MEMBERSHIP,
     })),
     ...(signupPolicy === undefined
       ? []
       : [
           {
+            description: signupEffectDescription(base),
             id: AUTH_SIGNUP_POLICY,
             kind: "auth-signup-policy" as const,
-            description: signupEffectDescription(base),
           },
         ]),
     {
-      id: "access",
-      kind: "access",
       description:
         "Grant only the resolved approved actors, organizations and app roles after fresh normal session and membership readback.",
+      id: "access",
+      kind: "access",
     },
     {
-      id: "bindings",
-      kind: "bindings",
       description:
         appTrustedSources === undefined
           ? "Bind app-owned runtime URL and public verification context."
           : "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.",
+      id: "bindings",
+      kind: "bindings",
     },
     {
-      id: "delivery",
-      kind: "delivery",
       description:
         "Deliver and pin an independently READY native Preview under the exact approval.",
+      id: "delivery",
+      kind: "delivery",
     },
     ...base.effects.filter((effect) => [GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
   ];
@@ -1088,11 +1091,11 @@ const resolveParticipantPlan = async (
           ? undefined
           : { kind: "create-owned-organizations", organizations },
       normalActorPreparation: {
-        accountOperationRef: preparation.accountOperationRef,
-        programDigest: preparation.programDigest,
-        accountPlanDigest: preparation.accountPlanDigest,
         accountApprovalId: preparation.accountApprovalId,
         accountApprovedByCallId: preparation.accountApprovedByCallId,
+        accountOperationRef: preparation.accountOperationRef,
+        accountPlanDigest: preparation.accountPlanDigest,
+        programDigest: preparation.programDigest,
       },
       delivery,
       deploymentBoundary:
@@ -1132,7 +1135,6 @@ const resolveCapturedRealmMembership = (input: {
   }
   const { organizationId } = organization;
   return {
-    organizationId,
     authMembership: {
       actorId: verified.identity.actorId,
       bootstrapPlanDigest: captured.bootstrapPlanDigest,
@@ -1156,6 +1158,7 @@ const resolveCapturedRealmMembership = (input: {
       organizationId,
       slug: organization.slug,
     },
+    organizationId,
   };
 };
 
@@ -1251,7 +1254,6 @@ export const resolveFullPlan = async (
     getKey,
     pending: privateProof.link,
     proof: privateProof.proof,
-    transportOrigin,
     readback: async (request) => await transport(request),
     resource: {
       database: base.authDatabase.database,
@@ -1264,6 +1266,7 @@ export const resolveFullPlan = async (
       schema: "public",
       version: 1,
     },
+    transportOrigin,
   });
   if (
     !matchesSelectedRealmOrganization(application.organizationId, verified.identity.organizationId)
@@ -1273,10 +1276,10 @@ export const resolveFullPlan = async (
   const { organizationId, authMembership } = resolveCapturedRealmMembership({
     application,
     captured,
-    privateProof,
-    verified,
-    transportOrigin,
     configuration,
+    privateProof,
+    transportOrigin,
+    verified,
   });
   const effects: HostedOperatorPlan["effects"] = [
     ...base.effects.filter((effect) => ![GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
@@ -1297,9 +1300,9 @@ export const resolveFullPlan = async (
   }
   if (signupPolicy !== undefined) {
     effects.push({
+      description: signupEffectDescription(base),
       id: AUTH_SIGNUP_POLICY,
       kind: AUTH_SIGNUP_POLICY,
-      description: signupEffectDescription(base),
     });
   }
   effects.push(
@@ -1390,7 +1393,7 @@ export const composeHostedOperatorDependencies = (
     readInstallationScopes:
       readInstallationScopes === undefined
         ? undefined
-        : (input) => readInstallationScopes(input, input.plan),
+        : async (input) => readInstallationScopes(input, input.plan),
     readReleaseManifest: async (input) => {
       const release = await readRelease(controlPlane, input);
       return release.files["release-manifest.json"];
@@ -1458,6 +1461,10 @@ export const composeHostedOperatorDependencies = (
     readCredential: controlPlane.readCredential,
   });
   const appDelivery = createHostedOperatorDeploymentDelivery({
+    assertAuthorized: controlPlane.assertAuthorized,
+    assertEnvironment: async (input) => {
+      await appEnvironment.verifyForDelivery(managedContext(input), await bindings(input));
+    },
     beforeCreate: async (input) => {
       if (!input.plan.appDeliveryReplacement) {
         return;
@@ -1471,13 +1478,15 @@ export const composeHostedOperatorDependencies = (
         assertCurrent: input.assertCurrent,
       }).verify(input.plan, input.readyReplacement);
     },
-    assertAuthorized: controlPlane.assertAuthorized,
-    assertEnvironment: async (input) => {
-      await appEnvironment.verifyForDelivery(managedContext(input), await bindings(input));
-    },
     readCredential: controlPlane.readCredential,
   });
   const gatewayDelivery = createHostedOperatorDeploymentDelivery({
+    assertAuthorized: controlPlane.assertAuthorized,
+    assertEnvironment: async (input) => {
+      await gatewayEnvironment.verifyForDelivery(
+        gatewayContext({ ...input, deliveryCandidates: input.appDeliveryCandidates }),
+      );
+    },
     beforeAliasWrite: async (input, selected) => {
       if (!input.plan.appDeliveryReplacement) {
         return "write";
@@ -1507,12 +1516,6 @@ export const composeHostedOperatorDependencies = (
         readCredential: controlPlane.readCredential,
         assertCurrent: input.assertCurrent,
       }).verify(input.plan, input.readyReplacement);
-    },
-    assertAuthorized: controlPlane.assertAuthorized,
-    assertEnvironment: async (input) => {
-      await gatewayEnvironment.verifyForDelivery(
-        gatewayContext({ ...input, deliveryCandidates: input.appDeliveryCandidates }),
-      );
     },
     readCredential: controlPlane.readCredential,
     target: "gateway",
@@ -2018,7 +2021,6 @@ export const composeHostedOperatorDependencies = (
         ? freshBase
         : hostedOperatorPlanSchema.parse({
             ...freshBase,
-            existingResources,
             effects: freshBase.effects.map((effect) =>
               effect.kind === "resources"
                 ? {
@@ -2028,6 +2030,7 @@ export const composeHostedOperatorDependencies = (
                   }
                 : effect,
             ),
+            existingResources,
           });
     const gatewayPlan =
       base.runtimePreparation === undefined
@@ -2066,10 +2069,10 @@ export const composeHostedOperatorDependencies = (
       await controlPlane.readApprovedPublicAuthBootstrap(context);
       await authReadiness.verify({
         ...context,
-        plan: bootstrapPreparation.auth.plan,
         assertCurrent: async () => {
           await controlPlane.assertPlanningAuthorized(context);
         },
+        plan: bootstrapPreparation.auth.plan,
       });
       participantsBootstrapPrepared = true;
     }
@@ -2079,10 +2082,10 @@ export const composeHostedOperatorDependencies = (
       await controlPlane.readApprovedPublicAuthBootstrap(context);
       await authReadiness.verify({
         ...context,
-        plan: bootstrapPreparation.auth.plan,
         assertCurrent: async () => {
           await controlPlane.assertPlanningAuthorized(context);
         },
+        plan: bootstrapPreparation.auth.plan,
       });
       participantsBootstrapPrepared = true;
     }
@@ -2392,15 +2395,15 @@ export const composeHostedOperatorDependencies = (
         },
         directMigrationUrl: urls.authDatabase.migrationUrl,
         resource: {
-          version: 1,
+          database: current.plan.authDatabase.database,
           environment: "preview",
           hostname: current.plan.neon.endpoint,
-          port: 5432,
-          database: current.plan.authDatabase.database,
-          schema: "public",
-          runtimeRole: current.plan.authDatabase.runtimeRole,
           migratorRole: current.plan.authDatabase.migratorRole,
           neon: { branchId: current.plan.neon.branchId, projectId: current.plan.neon.projectId },
+          port: 5432,
+          runtimeRole: current.plan.authDatabase.runtimeRole,
+          schema: "public",
+          version: 1,
         },
       });
       return proposed.content;
@@ -2418,7 +2421,7 @@ export const composeHostedOperatorDependencies = (
   };
   const emptyAccessScope = (input: HostedOperatorEffectContext) => {
     if (input.effect.kind !== "access" || input.plan.access.length !== 0) {
-      return undefined;
+      return;
     }
     if (input.plan.action !== "prepare") {
       throw new HostedOperatorError(RESOURCE_MISMATCH);
@@ -2432,11 +2435,11 @@ export const composeHostedOperatorDependencies = (
       throw new HostedOperatorError(RESOURCE_MISMATCH);
     }
     return {
-      planDigest: operatorPlanDigest(input.plan),
       effect: structuredClone(input.effect),
-      operationRef: input.operationRef,
       fenceGeneration: input.fenceGeneration,
       leaseId: input.leaseId,
+      operationRef: input.operationRef,
+      planDigest: operatorPlanDigest(input.plan),
     };
   };
   const emptyAccessReceipt = async (
@@ -2444,7 +2447,7 @@ export const composeHostedOperatorDependencies = (
     approved: ReturnType<typeof emptyAccessScope>,
   ) => {
     if (approved === undefined) {
-      return undefined;
+      return;
     }
     const assertScope = () => {
       if (!isDeepStrictEqual(emptyAccessScope(input), approved)) {
@@ -2650,7 +2653,7 @@ export const composeHostedOperatorDependencies = (
         return { status: "absent" };
       }
       if (prepared.state.actors.some((actor) => actor.signup !== "complete")) {
-        return { status: "retryable", resourceVersion: normalActorFingerprint(prepared.state) };
+        return { resourceVersion: normalActorFingerprint(prepared.state), status: "retryable" };
       }
       if (input.checkpointAccountPreparation === undefined || input.leaseId === undefined) {
         throw new HostedOperatorError(OPERATION_IN_PROGRESS);
@@ -2658,11 +2661,11 @@ export const composeHostedOperatorDependencies = (
       try {
         const state = await controlPlane.verifyNormalActorAccounts({
           ...input,
-          leaseId: input.leaseId,
           accountPreparation: prepared.preparation,
           checkpointAccountPreparation: input.checkpointAccountPreparation,
+          leaseId: input.leaseId,
         });
-        return { status: "applied", receipt: receipt(input, normalActorFingerprint(state)) };
+        return { receipt: receipt(input, normalActorFingerprint(state)), status: "applied" };
       } catch {
         return { status: "unknown" };
       }
@@ -2919,7 +2922,7 @@ export const composeHostedOperatorDependencies = (
     if (!knownPrepared) {
       throw new HostedOperatorError(OPERATION_IN_PROGRESS);
     }
-    const organizationId = selectedApplication(configuration, input).organizationId;
+    const { organizationId } = selectedApplication(configuration, input);
     const capturedOwner = hasCapturedSelectedOwnerIdentity(
       current.record,
       operator,
@@ -2981,6 +2984,7 @@ export const composeHostedOperatorDependencies = (
       throw new HostedOperatorError(RECONCILIATION_REQUIRED);
     }
     await readHostedOperatorProviderInventory({
+      approvedAppBranch: boundary.app.branch,
       assertCurrentOwner: async () => {
         await controlPlane.assertPlanningAuthorized(input);
       },
@@ -3005,7 +3009,6 @@ export const composeHostedOperatorDependencies = (
       },
       context: input,
       phase: "bootstrap-planning",
-      approvedAppBranch: boundary.app.branch,
       readVercelCredential: async ({ authority, installationId }) =>
         await controlPlane.readCredential(authority, installationId),
     });
@@ -3028,15 +3031,40 @@ export const composeHostedOperatorDependencies = (
     };
   };
   return {
-    exportRequest: controlPlane.exportRequest,
-    continuityRequest: controlPlane.continuityRequest,
-    nativeTargetRequest: controlPlane.nativeTargetRequest,
-    publicReleaseRequest: controlPlane.publicReleaseRequest,
     appIntegrationCapabilityRequest: controlPlane.appIntegrationCapabilityRequest,
-    centralIntegrationHostRequest: controlPlane.centralIntegrationHostRequest,
+    assertAuthorized: controlPlane.assertAuthorized,
+    assertCanonicalOwner: controlPlane.assertCanonicalOwner,
+    authIdentityInput,
+    authorize: controlPlane.authorize,
+    authorizeNeonConsent: consentOwner.authorize,
+    bindings,
     centralIntegrationDeploymentReceiptRequest:
       controlPlane.centralIntegrationDeploymentReceiptRequest,
-    assertAuthorized: controlPlane.assertAuthorized,
+    centralIntegrationHostRequest: controlPlane.centralIntegrationHostRequest,
+    continuityRequest: controlPlane.continuityRequest,
+    ensureNormalActorCapture: async (input) => await controlPlane.ensureNormalActorCapture(input),
+    executeEffect,
+    exportRequest: controlPlane.exportRequest,
+    nativeTargetRequest: controlPlane.nativeTargetRequest,
+    neonAuthorization: createHostedOperatorNeonAuthorization({
+      assertCurrentOwner: consentOwner.assertCurrent,
+      configuration: neonAuthorizationConfigurationSchema.parse({
+        builderCallbackOrigin: configuration.builderCallbackOrigin,
+        builderWorkload: configuration.workloadPolicy,
+        operatorWorkload: configuration.nativeNeon.configuration.operator,
+      }),
+    }),
+    normalActorRuntimeBindings: async (input) =>
+      await controlPlane.readNormalActorRuntimeBindings(input),
+    plan,
+    publicReleaseRequest: controlPlane.publicReleaseRequest,
+    publicRuntimeBinding: controlPlane.readPublicRuntimeBinding,
+    readAppProjectSettings: async (context) =>
+      Promise.resolve(selectedApplication(configuration, context).projectSettings),
+    readApproval: controlPlane.readApproval,
+    readApprovedPlan: controlPlane.readApprovedPlan,
+    readGatewayDeliverySource: async (_context, currentPlan) =>
+      Promise.resolve(gatewayDeliverySourceForPlan(configuration, currentPlan)),
     readReadyDeliveryReplacementPlan: async (context) => {
       const policy = selectedApplication(configuration, context).hostProtection;
       if (policy === undefined) {
@@ -3058,45 +3086,12 @@ export const composeHostedOperatorDependencies = (
           }).readGatewayAlias(deliveryPlan),
       });
     },
-    verifyReadyDeliveryReplacement: async (context, replacementPlan, predecessor) => {
-      await createReadyReplacementNativeReader({
-        context,
-        readCredential: controlPlane.readCredential,
-        assertCurrent: async () => {
-          await controlPlane.assertPlanningAuthorized(context);
-        },
-      }).verify(replacementPlan, predecessor);
-    },
-    assertCanonicalOwner: controlPlane.assertCanonicalOwner,
-    authIdentityInput,
-    authorize: controlPlane.authorize,
-    authorizeNeonConsent: consentOwner.authorize,
+    reconcile,
     resolvePreviewTarget: createConfiguredPreviewTargetResolver(
       configuration,
       consentOwner,
       controlPlane,
     ),
-    bindings,
-    publicRuntimeBinding: controlPlane.readPublicRuntimeBinding,
-    normalActorRuntimeBindings: async (input) =>
-      await controlPlane.readNormalActorRuntimeBindings(input),
-    executeEffect,
-    readGatewayDeliverySource: (_context, currentPlan) =>
-      Promise.resolve(gatewayDeliverySourceForPlan(configuration, currentPlan)),
-    readAppProjectSettings: (context) =>
-      Promise.resolve(selectedApplication(configuration, context).projectSettings),
-    neonAuthorization: createHostedOperatorNeonAuthorization({
-      assertCurrentOwner: consentOwner.assertCurrent,
-      configuration: neonAuthorizationConfigurationSchema.parse({
-        builderCallbackOrigin: configuration.builderCallbackOrigin,
-        builderWorkload: configuration.workloadPolicy,
-        operatorWorkload: configuration.nativeNeon.configuration.operator,
-      }),
-    }),
-    plan,
-    readApproval: controlPlane.readApproval,
-    readApprovedPlan: controlPlane.readApprovedPlan,
-    reconcile,
     store: controlPlane.store,
     verify: async (input) => {
       await observeOperatorExecutionStage(
@@ -3200,7 +3195,15 @@ export const composeHostedOperatorDependencies = (
       return observed;
     },
     verifyNormalActorAccounts: async (input) => await controlPlane.verifyNormalActorAccounts(input),
-    ensureNormalActorCapture: async (input) => await controlPlane.ensureNormalActorCapture(input),
+    verifyReadyDeliveryReplacement: async (context, replacementPlan, predecessor) => {
+      await createReadyReplacementNativeReader({
+        context,
+        readCredential: controlPlane.readCredential,
+        assertCurrent: async () => {
+          await controlPlane.assertPlanningAuthorized(context);
+        },
+      }).verify(replacementPlan, predecessor);
+    },
     withResourceLease: controlPlane.withResourceLease,
   };
 };
@@ -3268,9 +3271,9 @@ export const createRequestScopedHostedOperatorDependencies =
     try {
       controlPlane = await (input.openControlPlane ?? createHostedOperatorControlPlane)({
         environment: input.environment,
+        request,
         sourceConfiguration: configuration,
         workloadPolicy: configuration.workloadPolicy,
-        request,
       });
     } catch (error) {
       reportHostedOperatorNativeFailure("control_plane", error);
@@ -3278,8 +3281,8 @@ export const createRequestScopedHostedOperatorDependencies =
     }
     try {
       return {
+        close: async () => controlPlane.close(),
         dependencies: composeHostedOperatorDependencies(configuration, controlPlane),
-        close: () => controlPlane.close(),
       };
     } catch (error) {
       reportHostedOperatorNativeFailure("composition", error);

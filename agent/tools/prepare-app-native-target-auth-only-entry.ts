@@ -2,10 +2,6 @@ import { defineWorkflowTool } from "eve/tools";
 import { nativeTargetAuthOnlyEntryApprovalInputSchema } from "../../lib/provisioning/native-target-auth-only-entry-plan-store";
 
 export default defineWorkflowTool({
-  availableInSubagents: false,
-  description:
-    "Approve and prepare exactly one retained organization or signup-policy effect for this Auth-only Preview delivery. Reuses its settled approval and saved child operation on retry. Private owner proof and controlled email details stay in retained state. Creates no account, app database or product-data grants; this result does not establish hosted signup acceptance.",
-  inputSchema: nativeTargetAuthOnlyEntryApprovalInputSchema,
   approval: {
     request: async (ctx) => {
       if (ctx.toolInput === undefined) return "user-approval" as const;
@@ -39,6 +35,9 @@ export default defineWorkflowTool({
       }
     },
   },
+  availableInSubagents: false,
+  description:
+    "Approve and prepare exactly one retained organization or signup-policy effect for this Auth-only Preview delivery. Reuses its settled approval and saved child operation on retry. Private owner proof and controlled email details stay in retained state. Creates no account, app database or product-data grants; this result does not establish hosted signup acceptance.",
   async execute(input, ctx) {
     "use workflow";
     const { nativeTargetOnboardingRuntimeForSession } =
@@ -46,4 +45,5 @@ export default defineWorkflowTool({
     const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
     return await runtime.prepareAuthOnlyEntry(input, ctx);
   },
+  inputSchema: nativeTargetAuthOnlyEntryApprovalInputSchema,
 });

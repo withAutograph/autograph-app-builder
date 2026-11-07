@@ -54,14 +54,16 @@ export const readNativeTargetAuthOnlyPublishedSource = async (input: {
     .limit(1);
   await input.assertCurrentOwner(input.context);
   const row = rows.at(0);
-  if (row === undefined || digest(row.content) !== row.chunkDigest) return undefined;
+  if (row === undefined || digest(row.content) !== row.chunkDigest) {
+    return undefined;
+  }
   const parsed = z
     .strictObject({
-      version: z.literal(1),
       appId: z.string(),
       appSpecDigest: z.string(),
       descriptionSha256: z.string().regex(/^[a-f0-9]{64}$/u),
       source: publishedAppSourceSchema,
+      version: z.literal(1),
     })
     .safeParse(JSON.parse(row.content));
   if (
@@ -69,22 +71,23 @@ export const readNativeTargetAuthOnlyPublishedSource = async (input: {
     parsed.data.appId !== input.context.target.appId ||
     parsed.data.appSpecDigest !== input.appSpecDigest ||
     parsed.data.descriptionSha256 !== capturedStaticDescriptionProvenance(input.description).sha256
-  )
+  ) {
     return undefined;
+  }
   return parsed.data.source;
 };
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 export const nativeTargetAuthOnlySchemaApprovalSchema = z.strictObject({
-  requestId: z.string().min(1),
   callId: z.string().min(1),
-  planDigest: sha256Schema,
-  sourceDigest: sha256Schema,
-  responderPrincipalId: z.string().min(1),
-  publicSessionId: z.string().min(1),
-  outcome: z.enum(["approved", "cancelled"]),
   observedAt: z.iso.datetime({ offset: true }),
+  outcome: z.enum(["approved", "cancelled"]),
+  planDigest: sha256Schema,
+  publicSessionId: z.string().min(1),
+  requestId: z.string().min(1),
+  responderPrincipalId: z.string().min(1),
+  sourceDigest: sha256Schema,
 });
 export type NativeTargetAuthOnlySchemaApproval = z.infer<
   typeof nativeTargetAuthOnlySchemaApprovalSchema
@@ -97,19 +100,19 @@ const approvalFields = {
 const stateSchema = z.discriminatedUnion("stage", [
   z.strictObject({
     kind: z.literal("native-target-auth-only-runtime"),
-    version: z.literal(1),
-    stage: z.literal("planned"),
     plan: nativeTargetAuthOnlyPlanSchema,
     planDigest: sha256Schema,
     source: publishedAppSourceSchema,
+    stage: z.literal("planned"),
+    version: z.literal(1),
   }),
   z.strictObject({
     kind: z.literal("native-target-auth-only-runtime"),
-    version: z.literal(1),
-    stage: z.literal("approved"),
     plan: nativeTargetAuthOnlyPlanSchema,
     planDigest: sha256Schema,
     source: publishedAppSourceSchema,
+    stage: z.literal("approved"),
+    version: z.literal(1),
     ...approvalFields,
   }),
   z.strictObject({
@@ -215,26 +218,47 @@ export const createPostgresNativeTargetAuthOnlyRuntimeStore = (
     );
   const parse = (row: typeof builderProvisioningJournals.$inferSelect) => {
     const authority = hostedTenantAuthoritySchema.parse({
-      issuer: row.issuer,
       audience: row.audience,
-      workspaceId: row.workspaceId,
+      issuer: row.issuer,
       ownerUserId: row.ownerUserId,
+      workspaceId: row.workspaceId,
     });
     const state = stateSchema.parse(row.record);
     if (
       row.requestId !==
         requestIdFor({
-          authority,
           appId: state.plan.appId,
+          authority,
           sessionId: state.plan.origin.publicSessionId,
         }) ||
       row.requestDigest !== state.planDigest ||
       row.state !== journalState(state)
-    )
+    ) {
       throw new Error("native_target_auth_only_runtime_mismatch");
+    }
     return { revision: row.revision, state };
   };
   return {
+    async compareAndSet(key, expectedRevision, rawState) {
+      const state = stateSchema.parse(rawState);
+      if (
+        state.plan.appId !== key.appId ||
+        state.plan.origin.publicSessionId !== key.sessionId ||
+        !isDeepStrictEqual(state.plan.origin.authority, key.authority)
+      )
+        throw new Error("native_target_auth_only_runtime_mismatch");
+      const rows = await database
+        .update(builderProvisioningJournals)
+        .set({
+          record: state,
+          revision: expectedRevision + 1,
+          state: journalState(state),
+          updatedAt: new Date(),
+        })
+        .where(and(predicate(key), eq(builderProvisioningJournals.revision, expectedRevision)))
+        .returning();
+      return rows[0] === undefined ? undefined : parse(rows[0]);
+    },
     async read(key) {
       const rows = await database
         .select()
@@ -276,32 +300,12 @@ export const createPostgresNativeTargetAuthOnlyRuntimeStore = (
       if (saved === undefined) throw new Error("native_target_auth_only_runtime_conflict");
       return saved;
     },
-    async compareAndSet(key, expectedRevision, rawState) {
-      const state = stateSchema.parse(rawState);
-      if (
-        state.plan.appId !== key.appId ||
-        state.plan.origin.publicSessionId !== key.sessionId ||
-        !isDeepStrictEqual(state.plan.origin.authority, key.authority)
-      )
-        throw new Error("native_target_auth_only_runtime_mismatch");
-      const rows = await database
-        .update(builderProvisioningJournals)
-        .set({
-          record: state,
-          revision: expectedRevision + 1,
-          state: journalState(state),
-          updatedAt: new Date(),
-        })
-        .where(and(predicate(key), eq(builderProvisioningJournals.revision, expectedRevision)))
-        .returning();
-      return rows[0] === undefined ? undefined : parse(rows[0]);
-    },
   };
 };
 
 const runtimeKey = (plan: NativeTargetAuthOnlyPlan) => ({
-  authority: plan.origin.authority,
   appId: plan.appId,
+  authority: plan.origin.authority,
   sessionId: plan.origin.publicSessionId,
 });
 const sourceMatches = (left: PublishedAppSource, right: PublishedAppSource) =>
@@ -312,43 +316,44 @@ const selectedProfile = (
   environment: Readonly<Record<string, string | undefined>>,
 ) => {
   const selected = resolveNativeTargetResourceProfile({
-    base: configuration,
-    resourceProfileId: plan.authResource.profileId,
-    authority: plan.origin.authority,
     appId: plan.appId,
+    authority: plan.origin.authority,
+    base: configuration,
     environment,
+    resourceProfileId: plan.authResource.profileId,
   });
   const roles = selected.authOnlyApplications?.[plan.appId]?.accessRoles ?? [];
   const binding = {
     authDatabase: selected.authDatabase,
-    nativeNeon: selected.nativeNeon,
     gateway: {
-      projectId: selected.gateway.projectId,
-      environment: selected.gateway.environment,
-      branch: selected.gateway.branch,
       authBrowserOrigin: selected.gateway.authBrowserOrigin,
+      branch: selected.gateway.branch,
+      environment: selected.gateway.environment,
       gatewayOrigin: selected.gateway.gatewayOrigin,
+      projectId: selected.gateway.projectId,
       publicOrigin: selected.gateway.publicOrigin,
       workload: selected.gateway.workload,
     },
+    nativeNeon: selected.nativeNeon,
     operator: {
-      projectId: selected.operator.projectId,
       environment: selected.operator.environment,
       origin: selected.operator.origin,
+      projectId: selected.operator.projectId,
     },
   };
   if (
     nativeTargetAuthOnlyAuthorityDigest({
-      authority: plan.origin.authority,
       appId: plan.appId,
-      profileId: plan.authResource.profileId,
       authDatabase: selected.authDatabase,
-      roles,
+      authority: plan.origin.authority,
       authorityBinding: binding,
       physicalEndpointId: selected.nativeNeon.scope.endpointId,
+      profileId: plan.authResource.profileId,
+      roles,
     }) !== plan.authResource.authorityDigest
-  )
+  ) {
     throw new Error("native_target_auth_only_resource_mismatch");
+  }
   return selected;
 };
 
@@ -418,75 +423,78 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
     },
   ) {
     const authority = hostedTenantAuthoritySchema.parse(context.authority);
-    if (context.target.appId !== proposal.appId || context.target.sessionId.length === 0)
+    if (context.target.appId !== proposal.appId || context.target.sessionId.length === 0) {
       throw new Error("native_target_auth_only_runtime_mismatch");
+    }
     const description = await input.readCapturedDescription(context);
     const source = publishedAppSourceSchema.parse(await input.readPublishedSource(context));
     const authSchema = await input.readAuthSchemaSelection({ context, source });
     const profile = resolveNativeTargetResourceProfile({
-      base: input.configuration,
-      resourceProfileId: proposal.authProfileId,
-      authority,
       appId: proposal.appId,
+      authority,
+      base: input.configuration,
       environment: input.environment,
+      resourceProfileId: proposal.authProfileId,
     });
     const roles = profile.authOnlyApplications?.[proposal.appId]?.accessRoles;
     if (
       roles === undefined ||
       !roles.includes(proposal.appRole) ||
       input.configuration.applications[proposal.appId] !== undefined
-    )
+    ) {
       throw new Error("native_target_auth_only_resource_mismatch");
+    }
     const authorityBinding = {
       authDatabase: profile.authDatabase,
-      nativeNeon: profile.nativeNeon,
       gateway: {
-        projectId: profile.gateway.projectId,
-        environment: profile.gateway.environment,
-        branch: profile.gateway.branch,
         authBrowserOrigin: profile.gateway.authBrowserOrigin,
+        branch: profile.gateway.branch,
+        environment: profile.gateway.environment,
         gatewayOrigin: profile.gateway.gatewayOrigin,
+        projectId: profile.gateway.projectId,
         publicOrigin: profile.gateway.publicOrigin,
         workload: profile.gateway.workload,
       },
+      nativeNeon: profile.nativeNeon,
       operator: {
-        projectId: profile.operator.projectId,
         environment: profile.operator.environment,
         origin: profile.operator.origin,
+        projectId: profile.operator.projectId,
       },
     };
     const plan = planNativeTargetAuthOnly({
+      authAuthorityBinding: authorityBinding,
+      authSchema,
+      capturedDescription: description,
+      configuredAppRoles: roles,
       owner: {
+        adapterGeneration: proposal.adapterGeneration,
+        adapterSessionId: proposal.adapterSessionId,
         authority,
         publicSessionId: context.target.sessionId,
-        adapterSessionId: proposal.adapterSessionId,
-        adapterGeneration: proposal.adapterGeneration,
       },
       proposal: {
         appId: proposal.appId,
-        authProfileId: proposal.authProfileId,
-        project: proposal.project,
-        branch: proposal.branch,
-        appSpecDigest: proposal.appSpecDigest,
         appRole: proposal.appRole,
+        appSpecDigest: proposal.appSpecDigest,
+        authProfileId: proposal.authProfileId,
+        branch: proposal.branch,
+        project: proposal.project,
       },
-      capturedDescription: description,
+      publishedSource: source,
+      selectedPhysicalEndpointId: profile.nativeNeon.scope.endpointId,
       selectedProfile: {
-        id: proposal.authProfileId,
         appId: proposal.appId,
         authority,
         configuration: profile,
+        id: proposal.authProfileId,
       },
       sharedAuthResourceId: input.configuration.authDatabase.resourceId,
       sharedPhysicalEndpointId: input.configuration.nativeNeon.scope.endpointId,
-      selectedPhysicalEndpointId: profile.nativeNeon.scope.endpointId,
-      authAuthorityBinding: authorityBinding,
-      configuredAppRoles: roles,
-      publishedSource: source,
-      authSchema,
     });
-    if (source.repositoryId.length === 0 || source.branch !== proposal.branch)
+    if (source.repositoryId.length === 0 || source.branch !== proposal.branch) {
       throw new Error("native_target_auth_only_source_mismatch");
+    }
     const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
     const store = input.store ?? createPostgresNativeTargetAuthOnlyRuntimeStore(input.database);
     const key = runtimeKey(plan);
@@ -495,9 +503,10 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
       existing !== undefined &&
       (!isDeepStrictEqual(existing.state.plan, plan) ||
         !sourceMatches(existing.state.source, source))
-    )
+    ) {
       throw new Error("native_target_auth_only_conflict");
-    if (existing === undefined)
+    }
+    if (existing === undefined) {
       await store.write(key, undefined, {
         kind: "native-target-auth-only-runtime",
         version: 1,
@@ -506,6 +515,7 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
         planDigest,
         source,
       });
+    }
     await input.assertCurrentOwner(context);
     return { plan, planDigest, status: "planned" as const };
   },
@@ -518,8 +528,9 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
     if (
       context.target.appId !== plan.appId ||
       context.target.sessionId !== plan.origin.publicSessionId
-    )
+    ) {
       throw new Error("native_target_auth_only_runtime_mismatch");
+    }
     const store = input.store ?? createPostgresNativeTargetAuthOnlyRuntimeStore(input.database);
     const key = runtimeKey(plan);
     await input.assertCurrentOwner(context);
@@ -530,33 +541,38 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
       nativeTargetAuthOnlyPlanDigest(plan) !== expectedPlanDigest ||
       !isDeepStrictEqual(current.state.plan, plan) ||
       !isDeepStrictEqual(plan.origin.authority, authority)
-    )
+    ) {
       throw new Error("native_target_auth_only_conflict");
+    }
     const description = await input.readCapturedDescription(context);
     if (
       !isDeepStrictEqual(
         capturedStaticDescriptionProvenance(description),
         plan.origin.capturedDescription,
       )
-    )
+    ) {
       throw new Error("native_target_auth_only_source_mismatch");
+    }
     const published = publishedAppSourceSchema.parse(await input.readPublishedSource(context));
     if (
       !sourceMatches(published, current.state.source) ||
       !sourceMatches(published, plan.publishedSource) ||
       published.branch !== plan.branch
-    )
+    ) {
       throw new Error("native_target_auth_only_source_mismatch");
+    }
     selectedProfile(input.configuration, plan, input.environment);
     const effectDigest = nativeTargetAuthOnlySchemaEffectDigest(plan, published);
     const approvalValue = await input.readApproval({
       context,
-      plan,
-      source: published,
-      planDigest: expectedPlanDigest,
       effectDigest,
+      plan,
+      planDigest: expectedPlanDigest,
+      source: published,
     });
-    if (approvalValue === null) throw new Error("native_target_auth_only_approval_required");
+    if (approvalValue === null) {
+      throw new Error("native_target_auth_only_approval_required");
+    }
     const approval = nativeTargetAuthOnlySchemaApprovalSchema.parse(approvalValue);
     if (
       approval.outcome !== "approved" ||
@@ -564,14 +580,16 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
       approval.sourceDigest !== effectDigest ||
       approval.publicSessionId !== plan.origin.publicSessionId ||
       approval.responderPrincipalId !== authority.ownerUserId
-    )
+    ) {
       throw new Error("native_target_auth_only_approval_mismatch");
+    }
     if (current.state.stage === "prepared") {
       if (
         current.state.effectDigest !== effectDigest ||
         !isDeepStrictEqual(current.state.approval, approval)
-      )
+      ) {
         throw new Error("native_target_auth_only_approval_mismatch");
+      }
       return current.state;
     }
     const now = input.now ?? (() => new Date());
@@ -580,7 +598,7 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
       row = await store.write(
         key,
         row.revision,
-        stateSchema.parse({ ...row.state, stage: "approved", approval, effectDigest }),
+        stateSchema.parse({ ...row.state, approval, effectDigest, stage: "approved" }),
       );
     } else if (
       row.state.stage === "approved" &&
@@ -591,10 +609,12 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
       if (
         !isDeepStrictEqual(row.state.approval, approval) ||
         row.state.effectDigest !== effectDigest
-      )
+      ) {
         throw new Error("native_target_auth_only_approval_mismatch");
-      if (Date.parse(row.state.leaseExpiresAt) > now().getTime())
+      }
+      if (Date.parse(row.state.leaseExpiresAt) > now().getTime()) {
         throw new Error("native_target_auth_only_busy");
+      }
       row = await store.write(
         key,
         row.revision,
@@ -605,15 +625,18 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
       if (
         !isDeepStrictEqual(row.state.approval, approval) ||
         row.state.effectDigest !== effectDigest
-      )
+      ) {
         throw new Error("native_target_auth_only_approval_mismatch");
+      }
       const reconciled = await input.reconcileAuthSchema({
-        plan,
-        source: published,
         approval,
+        assertCurrent: async () => {
+          await input.assertCurrentOwner(context);
+        },
         attemptId: row.state.attemptId,
         leaseId: row.state.leaseId,
-        assertCurrent: async () => await input.assertCurrentOwner(context),
+        plan,
+        source: published,
       });
       await input.assertCurrentOwner(context);
       if (reconciled.status === "prepared") {
@@ -625,32 +648,34 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
         });
         return (await store.write(key, row.revision, prepared)).state;
       }
-      if (reconciled.status === "uncertain")
+      if (reconciled.status === "uncertain") {
         throw new Error("native_target_auth_only_reconciliation_required");
+      }
       row = await store.write(
         key,
         row.revision,
         stateSchema.parse({
+          approval,
+          effectDigest,
           kind: "native-target-auth-only-runtime",
-          version: 1,
-          stage: "approved",
           plan,
           planDigest: expectedPlanDigest,
           source: published,
-          approval,
-          effectDigest,
+          stage: "approved",
+          version: 1,
         }),
       );
     }
-    if (row.state.stage !== "approved" || !isDeepStrictEqual(row.state.approval, approval))
+    if (row.state.stage !== "approved" || !isDeepStrictEqual(row.state.approval, approval)) {
       throw new Error("native_target_auth_only_conflict");
+    }
     const attemptId = crypto.randomUUID();
     const leaseId = crypto.randomUUID();
     const leaseExpiresAt = new Date(now().getTime() + (input.leaseMs ?? 20 * 60_000)).toISOString();
     row = await store.write(
       key,
       row.revision,
-      stateSchema.parse({ ...row.state, stage: "dispatching", attemptId, leaseId, leaseExpiresAt }),
+      stateSchema.parse({ ...row.state, attemptId, leaseExpiresAt, leaseId, stage: "dispatching" }),
     );
     const assertLease = async () => {
       await input.assertCurrentOwner(context);
@@ -660,18 +685,19 @@ export const createNativeTargetAuthOnlyRuntime = (input: {
         latest.state.attemptId !== attemptId ||
         latest.state.leaseId !== leaseId ||
         Date.parse(latest.state.leaseExpiresAt) <= now().getTime()
-      )
+      ) {
         throw new Error("native_target_auth_only_lease_lost");
+      }
       row = latest;
     };
     try {
       const result = await input.prepareAuthSchema({
-        plan,
-        source: published,
         approval,
+        assertCurrent: assertLease,
         attemptId,
         leaseId,
-        assertCurrent: assertLease,
+        plan,
+        source: published,
       });
       await assertLease();
       const prepared = stateSchema.parse({ ...row.state, ...result, stage: "prepared" });

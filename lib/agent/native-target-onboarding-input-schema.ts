@@ -1,12 +1,17 @@
 import { z } from "zod";
 
-import { nativeTargetOnboardingPlanSchema } from "../provisioning/native-target-onboarding-plan-schema";
+import {
+  nativeTargetOnboardingPlanSchema,
+  nativeTargetPreparationRequestSchema,
+} from "../provisioning/native-target-onboarding-plan-schema";
 import { nativeTargetProviderAuthorizationSchema } from "../provisioning/native-target-vercel-authorization";
 import {
   nativeTargetAuthOnlyPlanDigest,
   nativeTargetAuthOnlyPlanSchema,
 } from "../provisioning/native-target-auth-only-plan-schema";
 import { nativeTargetAuthOnlyResourcePreparationInputSchema } from "../eve/private-native-target-auth-only-resource-approval";
+
+export { nativeTargetPreparationRequestSchema } from "../provisioning/native-target-onboarding-plan-schema";
 
 export const nativeTargetAuthOnlyPlanRequestSchema = z.strictObject({
   appId: nativeTargetAuthOnlyPlanSchema.shape.appId,
@@ -79,12 +84,6 @@ export const nativeTargetPlanRequestSchema = z.strictObject({
   conflictPolicy: nativeTargetOnboardingPlanSchema.shape.conflictPolicy,
 });
 export type NativeTargetPlanRequest = z.infer<typeof nativeTargetPlanRequestSchema>;
-export const nativeTargetPreparationRequestSchema = z.strictObject({
-  appId,
-  operationRef: z.uuid(),
-  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  plan: nativeTargetOnboardingPlanSchema,
-});
 export type NativeTargetPreparationRequest = z.infer<typeof nativeTargetPreparationRequestSchema>;
 export const nativeTargetOnboardingResultSchema = nativeTargetPreparationRequestSchema
   .extend({

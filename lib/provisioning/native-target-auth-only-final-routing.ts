@@ -4,7 +4,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import type { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderProvisioningJournals } from "../db/schema";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle uses the complete schema type.
 import type * as databaseSchema from "../db/schema";
@@ -44,12 +44,10 @@ const denied = () => new HostedOperatorError("authorization_required");
 const uncertain = () => new HostedOperatorError("reconciliation_required");
 
 export const nativeTargetAuthOnlyFinalRoutingPlanSchema = z.strictObject({
-  version: z.literal(1),
-  kind: z.literal("native-target-auth-only-final-routing"),
-  operationRef: z.uuid(),
+  app: ready,
+  bootstrap: ready,
   deliveryOperationRef: z.uuid(),
   deliveryPlanDigest: sha256,
-  target: nativeTargetAuthOnlyDeliveryPlanSchema.shape.target,
   gateway: z.strictObject({
     projectId: id,
     repoId: id,
@@ -58,10 +56,12 @@ export const nativeTargetAuthOnlyFinalRoutingPlanSchema = z.strictObject({
     gitSha: z.string().regex(/^[a-f0-9]{40}$/u),
     publicOrigin: exactHttpsOrigin,
   }),
-  source: trustedGatewayProjectProjectionSchema.shape.source,
-  bootstrap: ready,
-  app: ready,
+  kind: z.literal("native-target-auth-only-final-routing"),
+  operationRef: z.uuid(),
   projection: nativeTargetAuthOnlyGatewayProjectionIntentSchema,
+  source: trustedGatewayProjectProjectionSchema.shape.source,
+  target: nativeTargetAuthOnlyDeliveryPlanSchema.shape.target,
+  version: z.literal(1),
 });
 type RoutingPlan = z.infer<typeof nativeTargetAuthOnlyFinalRoutingPlanSchema>;
 
@@ -69,28 +69,28 @@ export const nativeTargetAuthOnlyFinalRoutingPlanDigest = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
 
 export const nativeTargetAuthOnlyFinalRoutingRecordSchema = z.strictObject({
-  kind: z.literal("native-target-auth-only-final-routing"),
-  version: z.literal(1),
-  operationRef: z.uuid(),
-  routingPlanDigest: sha256,
-  routingPlanBase64: id,
   approval: nativeTargetAuthOnlyApprovalSchema,
+  kind: z.literal("native-target-auth-only-final-routing"),
+  operationRef: z.uuid(),
   projectionAttempt: nativeTargetAuthOnlyGatewayProjectionIntentSchema.optional(),
   refreshAttempted: z.boolean(),
   refreshCandidates: z.array(operatorDeploymentCandidateSchema),
   refreshReceipt: ready.optional(),
+  routingPlanBase64: id,
+  routingPlanDigest: sha256,
+  version: z.literal(1),
 });
 type RoutingRecord = z.infer<typeof nativeTargetAuthOnlyFinalRoutingRecordSchema>;
 interface RoutingRow {
   revision: number;
   record: RoutingRecord;
 }
-export type NativeTargetAuthOnlyFinalRoutingKey = {
+export interface NativeTargetAuthOnlyFinalRoutingKey {
   authority: z.infer<typeof hostedTenantAuthoritySchema>;
   appId: string;
   sessionId: string;
   operationRef: string;
-};
+}
 interface RoutingStore {
   /** This instance is bound to the same owner, saved session, and routing operation. */
   read: () => Promise<RoutingRow | undefined>;
@@ -134,7 +134,7 @@ export const createPostgresNativeTargetAuthOnlyFinalRoutingStore = (
     const record = nativeTargetAuthOnlyFinalRoutingRecordSchema.parse(raw);
     const bytes = Buffer.from(record.routingPlanBase64, "base64");
     const plan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
-      JSON.parse(bytes.toString("utf8")),
+      JSON.parse(bytes.toString("utf-8")),
     );
     if (
       bytes.toString("base64") !== record.routingPlanBase64 ||
@@ -152,7 +152,9 @@ export const createPostgresNativeTargetAuthOnlyFinalRoutingStore = (
     ) {
       throw mismatch();
     }
-    for (const candidate of record.refreshCandidates) validateCandidate(candidate, plan);
+    for (const candidate of record.refreshCandidates) {
+      validateCandidate(candidate, plan);
+    }
     if (
       record.refreshReceipt !== undefined &&
       !record.refreshCandidates.some((candidate) =>
@@ -187,7 +189,7 @@ export const createPostgresNativeTargetAuthOnlyFinalRoutingStore = (
     ) {
       throw mismatch();
     }
-    return { revision: row.revision, record };
+    return { record, revision: row.revision };
   };
   const read: (
     key: NativeTargetAuthOnlyFinalRoutingKey,
@@ -200,6 +202,30 @@ export const createPostgresNativeTargetAuthOnlyFinalRoutingStore = (
     return row === undefined ? undefined : parse(key, row);
   };
   return {
+    async compareAndSet(
+      key: NativeTargetAuthOnlyFinalRoutingKey,
+      revision: number,
+      rawRecord: RoutingRecord,
+    ) {
+      const record = validateKeyRecord(key, rawRecord);
+      const [row] = await database
+        .update(builderProvisioningJournals)
+        .set({
+          record,
+          revision: revision + 1,
+          state: routingRowState(record),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            predicate(key),
+            eq(builderProvisioningJournals.revision, revision),
+            eq(builderProvisioningJournals.requestDigest, record.routingPlanDigest),
+          ),
+        )
+        .returning();
+      return row === undefined ? undefined : parse(key, row);
+    },
     read,
     async retain(
       key: NativeTargetAuthOnlyFinalRoutingKey,
@@ -258,30 +284,6 @@ export const createPostgresNativeTargetAuthOnlyFinalRoutingStore = (
       }
       return retained;
     },
-    async compareAndSet(
-      key: NativeTargetAuthOnlyFinalRoutingKey,
-      revision: number,
-      rawRecord: RoutingRecord,
-    ) {
-      const record = validateKeyRecord(key, rawRecord);
-      const [row] = await database
-        .update(builderProvisioningJournals)
-        .set({
-          record,
-          revision: revision + 1,
-          state: routingRowState(record),
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            predicate(key),
-            eq(builderProvisioningJournals.revision, revision),
-            eq(builderProvisioningJournals.requestDigest, record.routingPlanDigest),
-          ),
-        )
-        .returning();
-      return row === undefined ? undefined : parse(key, row);
-    },
   };
 };
 
@@ -310,27 +312,27 @@ const matchesReceiptSource = (
 ) =>
   isDeepStrictEqual(
     {
-      projectId: candidate.projectId,
       branch: candidate.branch,
-      repoId: candidate.repoId,
       operationRef: candidate.operationRef,
+      projectId: candidate.projectId,
+      repoId: candidate.repoId,
     },
-    { projectId: source.projectId, branch: source.branch, repoId: source.repoId, operationRef },
+    { branch: source.branch, operationRef, projectId: source.projectId, repoId: source.repoId },
   );
 
 const checkProjectionScope = (plan: RoutingPlan, ownerId: string) => {
   const projectionScope = {
-    operationRef: plan.projection.operationRef,
+    appDeploymentId: plan.projection.appDeploymentId,
     deliveryPlanDigest: plan.projection.deliveryPlanDigest,
     gatewayProjectId: plan.projection.gatewayProjectId,
-    appDeploymentId: plan.projection.appDeploymentId,
+    operationRef: plan.projection.operationRef,
   };
   if (
     !isDeepStrictEqual(projectionScope, {
-      operationRef: plan.deliveryOperationRef,
+      appDeploymentId: plan.app.deploymentId,
       deliveryPlanDigest: plan.deliveryPlanDigest,
       gatewayProjectId: plan.gateway.projectId,
-      appDeploymentId: plan.app.deploymentId,
+      operationRef: plan.deliveryOperationRef,
     })
   ) {
     throw mismatch();
@@ -370,12 +372,12 @@ export const buildNativeTargetAuthOnlyFinalRoutingPlanBytes = (input: {
   const deliveryPlanDigest = nativeTargetAuthOnlyDeliveryPlanDigest(parentBytes);
   assertParentApproval(environment, deliveryPlanDigest);
   const exactGateway = {
-    projectId: gatewayDelivery.projectId,
-    repoId: gatewayDelivery.repoId,
     branch: gatewayDelivery.branch,
     gitRef: gatewayDelivery.gitRef ?? gatewayDelivery.branch,
     gitSha: gatewayDelivery.gitSha,
+    projectId: gatewayDelivery.projectId,
     publicOrigin: publicGateway.origin,
+    repoId: gatewayDelivery.repoId,
   };
   if (
     !matchesReceiptSource(bootstrap, exactGateway, deliveryOperationRef) ||
@@ -384,31 +386,31 @@ export const buildNativeTargetAuthOnlyFinalRoutingPlanBytes = (input: {
     throw mismatch();
   }
   const nextProjection = projectNativeTargetAuthOnlyGatewayBinding(
-    { environment, appReceipt: app, source },
+    { appReceipt: app, environment, source },
     projectionRow.value,
     app,
   );
   const plan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse({
-    version: 1,
-    kind: "native-target-auth-only-final-routing",
-    operationRef,
+    app,
+    bootstrap,
     deliveryOperationRef,
     deliveryPlanDigest,
-    target,
     gateway: exactGateway,
-    source,
-    bootstrap,
-    app,
+    kind: "native-target-auth-only-final-routing",
+    operationRef,
     projection: {
-      operationRef: deliveryOperationRef,
+      appDeploymentId: app.deploymentId,
       deliveryPlanDigest,
       gatewayProjectId: projectionRow.projectId,
-      physicalBranch: projectionRow.physicalBranch,
-      rowId: projectionRow.rowId,
-      appDeploymentId: app.deploymentId,
-      priorSha256: createHash("sha256").update(projectionRow.value).digest("hex"),
       nextSha256: createHash("sha256").update(nextProjection).digest("hex"),
+      operationRef: deliveryOperationRef,
+      physicalBranch: projectionRow.physicalBranch,
+      priorSha256: createHash("sha256").update(projectionRow.value).digest("hex"),
+      rowId: projectionRow.rowId,
     },
+    source,
+    target,
+    version: 1,
   });
   return Buffer.from(JSON.stringify(plan));
 };
@@ -463,12 +465,12 @@ const checkParent = (input: RoutingInput, plan: RoutingPlan, parent: RetainedPar
     throw mismatch();
   }
   const exactGateway = {
-    projectId: gatewayDelivery.projectId,
-    repoId: gatewayDelivery.repoId,
     branch: gatewayDelivery.branch,
     gitRef: gatewayDelivery.gitRef ?? gatewayDelivery.branch,
     gitSha: gatewayDelivery.gitSha,
+    projectId: gatewayDelivery.projectId,
     publicOrigin: publicGateway.origin,
+    repoId: gatewayDelivery.repoId,
   };
   if (!isDeepStrictEqual(plan.gateway, exactGateway)) {
     throw mismatch();
@@ -482,10 +484,10 @@ const checkParent = (input: RoutingInput, plan: RoutingPlan, parent: RetainedPar
   checkProjectionScope(plan, target.scopeId);
   return nativeTargetAuthOnlyPreviewDeliveryPlanSchema.parse({
     action: "prepare",
-    stage: "app",
     effects: [{ id: REFRESH_EFFECT, kind: "gateway-delivery" }],
     gatewayDelivery: { ...gatewayDelivery, gitRef: exactGateway.gitRef },
     publicGateway,
+    stage: "app",
   });
 };
 
@@ -513,13 +515,13 @@ const requestUrl = (raw: URL | Request | string) =>
   new URL(raw instanceof Request ? raw.url : String(raw));
 
 const deploymentBodySchema = z.object({
-  project: id,
   gitSource: z.strictObject({ type: z.literal("github"), ref: id, repoId: id, sha: id }),
   meta: z.strictObject({
     autograph_operator_effect: z.literal(REFRESH_EFFECT),
     autograph_operator_operation: z.uuid(),
     autograph_operator_plan: sha256,
   }),
+  project: id,
 });
 const aliasSchema = z.object({
   alias: id,
@@ -557,7 +559,7 @@ const readApprovedRouting = (input: RoutingInput) => {
   ) {
     throw denied();
   }
-  return { environment, planBytes, plan, planDigest, approval };
+  return { approval, environment, plan, planBytes, planDigest };
 };
 
 /** Publish only the approved projection and separately reconcile a refreshed Gateway and stable alias. */
@@ -618,7 +620,7 @@ export const createNativeTargetAuthOnlyFinalRouting =
         }
       }
       await assertCurrent();
-      return { revision: row.revision, record };
+      return { record, revision: row.revision };
     };
     const readParent = async () => {
       await assertCurrent();
@@ -659,9 +661,9 @@ export const createNativeTargetAuthOnlyFinalRouting =
       const url = new URL(`/v4/aliases/${encodeURIComponent(aliasHost)}`, API);
       url.searchParams.set("teamId", target.scopeId);
       const response = await providerFetch(url, {
+        cache: "no-store",
         headers: { Authorization: `Bearer ${credential.token}` },
         redirect: "error",
-        cache: "no-store",
         signal: AbortSignal.any([environment.signal, AbortSignal.timeout(20_000)]),
       });
       if (!response.ok) {
@@ -695,10 +697,6 @@ export const createNativeTargetAuthOnlyFinalRouting =
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
         assertAuthorized: assertProjection,
         journal: {
-          read: async () => {
-            const current = await readCurrent();
-            return current.record.projectionAttempt;
-          },
           claim: async (intent) => {
             await assertProjection(intent);
             const current = await readCurrent();
@@ -707,6 +705,10 @@ export const createNativeTargetAuthOnlyFinalRouting =
             }
             await assertChange(current.revision, { ...current.record, projectionAttempt: intent });
             return true;
+          },
+          read: async () => {
+            const current = await readCurrent();
+            return current.record.projectionAttempt;
           },
         },
       },
@@ -745,10 +747,10 @@ export const createNativeTargetAuthOnlyFinalRouting =
       }
       const body = deploymentBodySchema.parse(JSON.parse(payload.data));
       const expectedSource = {
-        type: "github",
         ref: plan.gateway.gitRef,
         repoId: plan.gateway.repoId,
         sha: plan.gateway.gitSha,
+        type: "github",
       };
       if (
         body.project !== plan.gateway.projectId ||
@@ -837,18 +839,18 @@ export const createNativeTargetAuthOnlyFinalRouting =
     }
     await verifyProjection();
     const refreshInput: NativeTargetAuthOnlyPreviewDeliveryInput = {
-      authority: environment.authority,
-      target,
-      plan: refreshPlan,
-      approvedPlanDigest: planDigest,
       approval,
-      operationRef: plan.operationRef,
-      fenceGeneration: input.fenceGeneration,
-      effectId: REFRESH_EFFECT,
-      deliveryCandidates: current.record.refreshCandidates,
-      checkpointDelivery: checkpoint,
+      approvedPlanDigest: planDigest,
       assertCurrent,
+      authority: environment.authority,
+      checkpointDelivery: checkpoint,
+      deliveryCandidates: current.record.refreshCandidates,
+      effectId: REFRESH_EFFECT,
+      fenceGeneration: input.fenceGeneration,
+      operationRef: plan.operationRef,
+      plan: refreshPlan,
       signal: environment.signal,
+      target,
     };
     const observed = await adapter.reconcile(refreshInput);
     // Prepared replays verify current provider READY metadata and the alias,
@@ -858,15 +860,16 @@ export const createNativeTargetAuthOnlyFinalRouting =
         observed.status !== "applied" ||
         !isDeepStrictEqual(observed.selected, current.record.refreshReceipt) ||
         alias !== current.record.refreshReceipt.deploymentId
-      )
+      ) {
         throw uncertain();
+      }
       await verifyProjection();
       await readParent();
       return {
-        status: "prepared" as const,
-        gateway: current.record.refreshReceipt,
         app: plan.app,
+        gateway: current.record.refreshReceipt,
         projectionDigest: plan.projection.nextSha256,
+        status: "prepared" as const,
       };
     }
     const result =
@@ -897,9 +900,9 @@ export const createNativeTargetAuthOnlyFinalRouting =
       await assertChange(final.revision, { ...final.record, refreshReceipt: gateway });
     }
     return {
-      status: "prepared" as const,
-      gateway,
       app: plan.app,
+      gateway,
       projectionDigest: plan.projection.nextSha256,
+      status: "prepared" as const,
     };
   };

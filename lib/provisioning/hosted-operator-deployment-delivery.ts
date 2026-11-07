@@ -272,9 +272,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       | undefined;
     let failure: Pick<OperatorGatewayDeliveryDiagnostic, "errorClass" | "publicCode"> = {};
     return {
-      failed(error: Parameters<typeof projectOperatorGatewayDeliveryFailure>[0]) {
-        failure = projectOperatorGatewayDeliveryFailure(error);
-      },
       at(value: OperatorGatewayDeliveryDiagnostic["stage"]) {
         stage = value;
         phase = undefined;
@@ -282,19 +279,8 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         httpStatus = undefined;
         providerFailure = undefined;
       },
-      phase(value: OperatorGatewayDeliveryDiagnostic["phase"]) {
-        phase = value;
-      },
-      request(value: OperatorGatewayDeliveryDiagnostic["method"]) {
-        method = value;
-        httpStatus = undefined;
-        providerFailure = undefined;
-      },
-      response(value: number) {
-        httpStatus = value;
-      },
-      providerFailure(value: NonNullable<typeof providerFailure>) {
-        providerFailure = value;
+      failed(error: Parameters<typeof projectOperatorGatewayDeliveryFailure>[0]) {
+        failure = projectOperatorGatewayDeliveryFailure(error);
       },
       finish(result: OperatorGatewayDeliveryDiagnostic["result"]) {
         if (deps.target !== "gateway") {
@@ -319,6 +305,20 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         } catch {
           /* Advisory metadata never changes delivery or its original exception. */
         }
+      },
+      phase(value: OperatorGatewayDeliveryDiagnostic["phase"]) {
+        phase = value;
+      },
+      providerFailure(value: NonNullable<typeof providerFailure>) {
+        providerFailure = value;
+      },
+      request(value: OperatorGatewayDeliveryDiagnostic["method"]) {
+        method = value;
+        httpStatus = undefined;
+        providerFailure = undefined;
+      },
+      response(value: number) {
+        httpStatus = value;
       },
     };
   };
@@ -351,12 +351,12 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       response = await send();
     } catch (error) {
       if (stage !== undefined) {
-        observeAlias({ stage, method, category: "unknown" });
+        observeAlias({ category: "unknown", method, stage });
       }
       throw error;
     }
     if (stage === undefined) {
-      return { response, rejectedAssignment: false };
+      return { rejectedAssignment: false, response };
     }
     const rejectedAssignment =
       stage === "assignment" && [400, 401, 403, 404, 409, 429].includes(response.status);
@@ -368,8 +368,8 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     } else if (rejectedAssignment) {
       category = "rejected";
     }
-    observeAlias({ stage, method, httpStatus: response.status, category });
-    return { response, rejectedAssignment };
+    observeAlias({ category, httpStatus: response.status, method, stage });
+    return { rejectedAssignment, response };
   };
   const io = (
     input: HostedOperatorDeploymentContext,
@@ -638,9 +638,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       }
       await assertCurrent();
       deliveryCorrection = await input.checkpointDeliveryCorrection({
+        createAttempted: false,
         effectId: input.effect.id,
         rejectedDeploymentIds: [deploymentId],
-        createAttempted: false,
       });
       // This observed Production result never enters the Preview candidate collection.
       // oxlint-disable-next-line unicorn/no-useless-undefined -- A rejected deployment explicitly has no Preview candidate.
@@ -747,21 +747,21 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         observed.redirect !== null &&
         observed.redirect.length > 0;
       if (redirected) {
-        observeAlias({ stage: "readback", method: "GET", category: "redirected" });
+        observeAlias({ category: "redirected", method: "GET", stage: "readback" });
       }
       return { alias, deploymentId: observed.deploymentId, redirected };
     };
     return {
       assertCurrent,
       delivery,
-      gitRef,
+      deliveryCorrection: () => deliveryCorrection,
       expectedMeta,
+      gitRef,
+      provesDifferentGatewayAliasTarget,
       readCandidate,
       readCandidateOrRejection,
       readCandidates,
-      deliveryCorrection: () => deliveryCorrection,
       readGatewayAlias,
-      provesDifferentGatewayAliasTarget,
       request,
     };
   };
@@ -1256,13 +1256,13 @@ export const reconcileGatewayAppCandidate = async <T extends HostedOperatorEffec
   }
   const observed = await delivery.reconcile({
     ...input,
-    effect,
     checkpointDelivery: async (candidates, deploymentId) => {
       if (deploymentId !== undefined && deploymentId !== selected.deploymentId) {
         throw new HostedOperatorError("reconciliation_required");
       }
       await checkpointDelivery(candidates, deploymentId);
     },
+    effect,
   });
   if (observed.status !== "applied" || observed.selected.deploymentId !== selected.deploymentId) {
     throw new HostedOperatorError("reconciliation_required");

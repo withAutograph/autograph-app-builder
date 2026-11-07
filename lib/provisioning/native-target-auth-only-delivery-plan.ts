@@ -5,7 +5,7 @@ import { hostedRuntimeTargetSchema } from "./hosted-runtime-journal";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
 import type { NativeTargetAuthOnlyPlan } from "./native-target-auth-only-plan-schema";
 import { nativeTargetAuthOnlyPlanDigest } from "./native-target-auth-only-plan-schema";
-import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "./native-target-auth-only-maintenance";
+import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "./native-target-auth-only-resource-plan-schema";
 import { nativeTargetAuthOnlyPreviewDeliveryPlanSchema } from "./native-target-auth-only-preview-delivery";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);

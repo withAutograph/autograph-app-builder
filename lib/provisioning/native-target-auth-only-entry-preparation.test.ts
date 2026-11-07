@@ -10,19 +10,19 @@ import type { NativeTargetAuthOnlyAfterGatewayReadyInput } from "./native-target
 
 const sha256 = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const target = {
   appId: "signup-pilot",
   branch: "pilot",
   environment: "preview" as const,
-  scopeType: "team" as const,
-  scopeId: "team",
-  projectId: "app",
   installationId: "install",
+  projectId: "app",
+  scopeId: "team",
+  scopeType: "team" as const,
   sessionId: "saved-session",
 };
 const operationRef = "11111111-1111-4111-a111-111111111111";
@@ -35,24 +35,24 @@ const policyDigest = "f".repeat(64);
 const proof = "private-test-proof";
 const consumedAt = "2026-11-06T12:00:00.000Z";
 const gateway = {
-  origin: "https://immutable-gateway.example",
-  projectId: "gateway",
   branch: "gateway-pilot",
   deploymentId: "deployment",
-  repoId: "gateway-repo",
   operationRef,
+  origin: "https://immutable-gateway.example",
+  projectId: "gateway",
   readyState: "READY" as const,
+  repoId: "gateway-repo",
 };
 const bootstrapResource = {
-  version: 1,
+  database: "pilot_auth",
   environment: "preview",
   hostname: "ep-pilot.neon.tech",
-  port: 5432,
-  schema: "public",
-  database: "pilot_auth",
   migratorRole: "pilot_migrator",
+  neon: { branchId: "br-pilot", projectId: "neon-pilot" },
+  port: 5432,
   runtimeRole: "pilot_runtime",
-  neon: { projectId: "neon-pilot", branchId: "br-pilot" },
+  schema: "public",
+  version: 1,
 };
 const appRole = "pilot_user";
 const issuer = "https://signup-pilot.example";
@@ -61,123 +61,122 @@ const operatorOrigin = "https://operator-pilot.example";
 const authResourceId = "isolated-auth";
 const organizationId = "owner-organization";
 const plan: NativeTargetAuthOnlyPlan = {
-  version: 1,
-  kind: "native-target-auth-only",
   appId: target.appId,
-  branch: target.branch,
-  origin: {
-    authority,
-    publicSessionId: target.sessionId,
-    adapterSessionId: "adapter-session",
-    adapterGeneration: 1,
-    appSpecDigest: "a".repeat(64),
-    capturedDescription: { appId: target.appId, kind: "static", sha256: "b".repeat(64) },
+  appRole,
+  authResource: {
+    authorityDigest: "a".repeat(64),
+    database: bootstrapResource.database,
+    endpointId: "ep-pilot",
+    hostname: bootstrapResource.hostname,
+    profileId: "pilot-profile",
+    resourceId: authResourceId,
   },
-  publishedSource: {
-    branch: target.branch,
-    gitSha: "a".repeat(40),
-    gitTree: "b".repeat(40),
-    repositoryId: "app-repo",
-    changeSetDigest: "c".repeat(64),
-    reviewDigest: "d".repeat(64),
+  authSchema: {
+    artifactRef: "auth-schema",
+    installer: { reference: "auth-schema", sha256: "c".repeat(64) },
+    planDigest: "a".repeat(64),
+    targetDigest: "b".repeat(64),
+  },
+  branch: target.branch,
+  cost: { description: "pilot", ownership: "current-owner" },
+  kind: "native-target-auth-only",
+  origin: {
+    adapterGeneration: 1,
+    adapterSessionId: "adapter-session",
+    appSpecDigest: "a".repeat(64),
+    authority,
+    capturedDescription: { appId: target.appId, kind: "static", sha256: "b".repeat(64) },
+    publicSessionId: target.sessionId,
   },
   project: {
-    teamId: target.scopeId,
     installationId: target.installationId,
     name: "signup-pilot",
     projectSettings: { rootDirectory: "apps/pilot" },
     protection: {
-      ssoProtection: { deploymentType: "all" },
       oidcTokenConfig: { enabled: true, issuerMode: "team" },
+      ssoProtection: { deploymentType: "all" },
     },
+    teamId: target.scopeId,
   },
-  authResource: {
-    profileId: "pilot-profile",
-    authorityDigest: "a".repeat(64),
-    resourceId: authResourceId,
-    database: bootstrapResource.database,
-    hostname: bootstrapResource.hostname,
-    endpointId: "ep-pilot",
+  publishedSource: {
+    branch: target.branch,
+    changeSetDigest: "c".repeat(64),
+    gitSha: "a".repeat(40),
+    gitTree: "b".repeat(40),
+    repositoryId: "app-repo",
+    reviewDigest: "d".repeat(64),
   },
-  authSchema: {
-    artifactRef: "auth-schema",
-    planDigest: "a".repeat(64),
-    targetDigest: "b".repeat(64),
-    installer: { reference: "auth-schema", sha256: "c".repeat(64) },
-  },
-  appRole,
-  signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
-  cost: { ownership: "current-owner", description: "pilot" },
   retention: { policy: "pilot" },
+  signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
+  version: 1,
 };
 const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse({
-  authority,
-  target,
-  operationRef,
-  authOnlyPlanDigest: nativeTargetAuthOnlyPlanDigest(plan),
-  resourcePlanDigest,
-  gatewayDeliveryPlanDigest: deliveryPlanDigest,
-  gateway,
-  sender: {
-    issuer: "https://oidc.vercel.com/team",
-    audience: "https://vercel.com/team",
-    projectId: gateway.projectId,
-    ownerId: target.scopeId,
-    subject: "owner:team:project:gateway:environment:preview",
-    environment: "preview",
-  },
-  browserOrigin: appBrowserOrigin,
-  issuer,
   audience: operatorOrigin,
+  authOnlyPlanDigest: nativeTargetAuthOnlyPlanDigest(plan),
   authResourceId,
+  authority,
   bootstrapResource,
+  browserOrigin: appBrowserOrigin,
+  gateway,
+  gatewayDeliveryPlanDigest: deliveryPlanDigest,
+  issuer,
+  operationRef,
+  resourcePlanDigest,
+  sender: {
+    audience: "https://vercel.com/team",
+    environment: "preview",
+    issuer: "https://oidc.vercel.com/team",
+    ownerId: target.scopeId,
+    projectId: gateway.projectId,
+    subject: "owner:team:project:gateway:environment:preview",
+  },
+  target,
 });
 const captured = {
   audience: binding.audience,
-  issuer: binding.issuer,
   authResourceId,
-  browserOrigin: binding.browserOrigin,
-  endpointOrigin: gateway.origin,
   bootstrapPlanDigest: resourcePlanDigest,
+  browserOrigin: binding.browserOrigin,
+  consumedAt,
+  endpointOrigin: gateway.origin,
+  expiresAt: "2026-11-06T12:01:00.000Z",
+  issuer: binding.issuer,
+  nonceSha256: "a".repeat(64),
   organizationId: null,
   ownerSessionId: target.sessionId,
-  nonceSha256: "a".repeat(64),
-  expiresAt: "2026-11-06T12:01:00.000Z",
-  consumedAt,
   proofRef: "saved-proof",
   proofSha256: sha256(proof),
 };
 const liveOwner = {
-  reference: captured.proofRef,
-  proof,
-  oidcToken: "private-test-oidc",
   actorId: "realm-user",
+  oidcToken: "private-test-oidc",
+  proof,
   realmSessionId: "realm-session",
+  reference: captured.proofRef,
 };
-const operator = { projectId: "operator", environment: "preview" };
+const operator = { environment: "preview", projectId: "operator" };
 const jwksUrl = `${gateway.origin}/_platform/jwks.json`;
 const planBase = {
-  version: 1,
   action: "prepare",
   authDatabase: {
-    resourceId: authResourceId,
     database: bootstrapResource.database,
     migratorRole: bootstrapResource.migratorRole,
+    resourceId: authResourceId,
     runtimeRole: bootstrapResource.runtimeRole,
+  },
+  deploymentBoundary: {
+    operator,
+    teamId: target.scopeId,
+    verification: { gatewayOrigin: gateway.origin, jwksUrl, publicOrigin: issuer },
   },
   neon: { ...bootstrapResource.neon, endpoint: bootstrapResource.hostname },
   selection: { sessionId: target.sessionId, workspaceId: authority.workspaceId },
-  deploymentBoundary: {
-    teamId: target.scopeId,
-    operator,
-    verification: { publicOrigin: issuer, gatewayOrigin: gateway.origin, jwksUrl },
-  },
+  version: 1,
 };
 const installer = { reference: "auth-owned-organization-v1", sha256: "e".repeat(64) };
 const organizationPlan = {
   ...planBase,
   authMembership: {
-    kind: "create-owned-organization",
     actorId: liveOwner.actorId,
     bootstrapPlanDigest: resourcePlanDigest,
     identityCapture: { capturedAt: consumedAt, realmSessionId: liveOwner.realmSessionId },
@@ -188,65 +187,66 @@ const organizationPlan = {
       issuer,
       jwksUrl,
       transportSource: {
-        ownerId: target.scopeId,
-        projectId: operator.projectId,
+        audience: "https://vercel.com/team",
         environment: "preview",
         issuer: "https://oidc.vercel.com/team",
-        audience: "https://vercel.com/team",
+        ownerId: target.scopeId,
+        projectId: operator.projectId,
       },
     },
+    kind: "create-owned-organization",
     name: "Pilot",
     organizationId,
     slug: "pilot",
   },
-  membershipInstaller: installer,
   effects: [{ id: "auth-membership", kind: "auth-membership", resourceId: authResourceId }],
+  membershipInstaller: installer,
 };
 const signupPlan = {
   ...planBase,
   authSignupPolicy: {
-    version: 1,
-    policyId: "pilot-signup",
-    appId: target.appId,
-    authResourceId,
-    origin: issuer,
-    appPath: "/app",
-    organizationId,
-    eligibility: "approved-email",
     allowedEmails: ["pilot@example.test"],
-    membershipRole: "member",
-    appRoles: [appRole],
-  },
-  normalActorProgram: {
     appId: target.appId,
+    appPath: "/app",
+    appRoles: [appRole],
+    authResourceId,
+    eligibility: "approved-email",
+    membershipRole: "member",
+    organizationId,
     origin: issuer,
-    organizations: [{ organizationId }],
+    policyId: "pilot-signup",
+    version: 1,
+  },
+  effects: [{ id: "auth-signup-policy", kind: "auth-signup-policy", resourceId: authResourceId }],
+  normalActorProgram: {
     appAccess: [{ appId: target.appId, organizationId, roles: [appRole] }],
+    appId: target.appId,
+    organizations: [{ organizationId }],
+    origin: issuer,
   },
   signupPolicyInstaller: installer,
-  effects: [{ id: "auth-signup-policy", kind: "auth-signup-policy", resourceId: authResourceId }],
 };
 const approval = (sourceDigest: string) => ({
-  requestId: `approval-${sourceDigest.slice(0, 6)}`,
   callId: `call-${sourceDigest.slice(0, 6)}`,
-  planDigest: deliveryPlanDigest,
-  sourceDigest,
-  outcome: "approved" as const,
-  publicSessionId: target.sessionId,
-  responderPrincipalId: authority.ownerUserId,
   observedAt: consumedAt,
+  outcome: "approved" as const,
+  planDigest: deliveryPlanDigest,
+  publicSessionId: target.sessionId,
+  requestId: `approval-${sourceDigest.slice(0, 6)}`,
+  responderPrincipalId: authority.ownerUserId,
+  sourceDigest,
 });
 const effect = (approvedPlan: typeof organizationPlan | typeof signupPlan, operation: string) => {
   const approvedPlanBytes = Buffer.from(JSON.stringify(approvedPlan));
   return {
     approval: approval(sha256(approvedPlanBytes)),
     approvedPlanBytes,
+    assertCurrent: vi.fn(async () => {}),
+    bindWorkerContext: vi.fn(async () => async () => {}),
+    claimFirstDispatch: vi.fn(async () => true),
+    fenceGeneration: 2,
     operationRef: operation,
     workerAttemptId,
-    fenceGeneration: 2,
-    assertCurrent: vi.fn(async () => {}),
-    claimFirstDispatch: vi.fn(async () => true),
-    bindWorkerContext: vi.fn(async () => async () => {}),
   };
 };
 const observed = (
@@ -254,12 +254,12 @@ const observed = (
   operation: string,
   readbackDigest = "e".repeat(64),
 ) => ({
-  version: 1 as const,
-  status,
-  operation_id: operation,
   context_digest: "b".repeat(64),
   fence_generation: 2,
+  operation_id: operation,
   readback_sha256: readbackDigest,
+  status,
+  version: 1 as const,
 });
 const policyAttestation = sha256(
   JSON.stringify({ appId: target.appId, organizationId, policyDigest }),
@@ -277,27 +277,13 @@ const fixture = () => {
   const organization = effect(organizationPlan, organizationOperationRef);
   const signup = effect(signupPlan, signupOperationRef);
   const input: NativeTargetAuthOnlyAfterGatewayReadyInput = {
+    approval: approval(deliveryPlanDigest),
+    assertCurrent: vi.fn(async () => {}),
     authority,
-    target,
-    plan,
     deliveryPlan: {
-      version: 1,
-      kind: "native-target-auth-only-delivery",
       authOnlyPlanDigest: binding.authOnlyPlanDigest,
-      resourcePlanDigest,
-      target,
-      source: {
-        branch: plan.branch,
-        gitSha: plan.publishedSource.gitSha,
-        repositoryId: plan.publishedSource.repositoryId,
-      },
-      effects: [
-        { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
-        { id: "auth-only-app-preview", kind: "delivery" },
-      ],
       delivery: {
         action: "prepare",
-        stage: "app",
         effects: [{ id: "auth-only-gateway-preview", kind: "gateway-delivery" }],
         publicGateway: {
           authBrowserOrigin: appBrowserOrigin,
@@ -306,17 +292,47 @@ const fixture = () => {
           origin: issuer,
           projectId: gateway.projectId,
         },
+        stage: "app",
       },
+      effects: [
+        { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
+        { id: "auth-only-app-preview", kind: "delivery" },
+      ],
+      kind: "native-target-auth-only-delivery",
+      resourcePlanDigest,
+      source: {
+        branch: plan.branch,
+        gitSha: plan.publishedSource.gitSha,
+        repositoryId: plan.publishedSource.repositoryId,
+      },
+      target,
+      version: 1,
     },
-    operationRef,
-    approval: approval(deliveryPlanDigest),
-    gateway,
     deliveryPlanDigest,
     fenceGeneration: 5,
-    assertCurrent: vi.fn(async () => {}),
+    gateway,
+    operationRef,
+    plan,
     signal: new AbortController().signal,
+    target,
   };
   const ports = {
+    ownerLink: {
+      prepare: vi.fn<Ports["ownerLink"]["prepare"]>().mockResolvedValue({
+        status: "linked",
+        operationRef,
+        sessionId: target.sessionId,
+      }),
+      readCaptured: vi.fn<Ports["ownerLink"]["readCaptured"]>().mockResolvedValue(captured),
+    },
+    readApprovedOrganization: vi
+      .fn<Ports["readApprovedOrganization"]>()
+      .mockResolvedValue(organization),
+    readApprovedSignupPolicy: vi.fn<Ports["readApprovedSignupPolicy"]>().mockResolvedValue(signup),
+    readCredentials: vi
+      .fn<Ports["readCredentials"]>()
+      .mockResolvedValue({ migrationUrl: "private-test-migrator" }),
+    readCurrentOwnerProof: vi.fn<Ports["readCurrentOwnerProof"]>().mockResolvedValue(liveOwner),
     readReadyBinding: vi.fn<Ports["readReadyBinding"]>().mockResolvedValue({
       binding,
       sandbox: {
@@ -326,36 +342,20 @@ const fixture = () => {
         projectId: operator.projectId,
       },
     }),
-    ownerLink: {
-      prepare: vi.fn<Ports["ownerLink"]["prepare"]>().mockResolvedValue({
-        status: "linked",
-        operationRef,
-        sessionId: target.sessionId,
-      }),
-      readCaptured: vi.fn<Ports["ownerLink"]["readCaptured"]>().mockResolvedValue(captured),
-    },
-    readCurrentOwnerProof: vi.fn<Ports["readCurrentOwnerProof"]>().mockResolvedValue(liveOwner),
-    readCredentials: vi
-      .fn<Ports["readCredentials"]>()
-      .mockResolvedValue({ migrationUrl: "private-test-migrator" }),
-    readApprovedOrganization: vi
-      .fn<Ports["readApprovedOrganization"]>()
-      .mockResolvedValue(organization),
-    readApprovedSignupPolicy: vi.fn<Ports["readApprovedSignupPolicy"]>().mockResolvedValue(signup),
     readSignupPolicy: vi
       .fn<Ports["readSignupPolicy"]>()
       .mockResolvedValue({ status: "applied", policyDigest }),
   };
   return {
     input,
-    ports,
     organization,
-    signup,
-    run: () =>
+    ports,
+    run: async () =>
       createNativeTargetAuthOnlyEntryPreparation(ports, {
         organization: orgWorker,
         signupPolicy: policyWorker,
       })(input),
+    signup,
   };
 };
 
@@ -363,16 +363,16 @@ it("returns the existing browser invitation and waits for owner consumption befo
   const { run, ports } = fixture();
   const browserUrl = "https://auth-pilot.example/auth?nonce=browser-only";
   ports.ownerLink.prepare.mockResolvedValue({
-    status: "waiting-for-owner",
-    operationRef,
-    sessionId: target.sessionId,
     browserUrl,
     expiresAt: captured.expiresAt,
+    operationRef,
+    sessionId: target.sessionId,
+    status: "waiting-for-owner",
   });
   expect(await run()).toEqual({
-    status: "pending-owner",
     authIdentityLink: browserUrl,
     authIdentityLinkExpiresAt: captured.expiresAt,
+    status: "pending-owner",
   });
   expect(ports.readApprovedOrganization).not.toHaveBeenCalled();
   expect(ports.readCredentials).not.toHaveBeenCalled();
@@ -387,9 +387,9 @@ it("validates both effects in order and projects only observed organization and 
   ports.readSignupPolicy.mockResolvedValueOnce({ status: "absent" });
   policyWorker.mockResolvedValueOnce(null);
   expect(await run()).toEqual({
-    status: "ready",
     organizationId,
     signupPolicyDigest: policyDigest,
+    status: "ready",
   });
   expect(orgWorker.mock.calls.map(([, args]) => args.readbackOnly === true)).toEqual([
     true,
@@ -410,17 +410,17 @@ it("validates both effects in order and projects only observed organization and 
 it("rechecks both installed effects without dispatching either on a later read", async () => {
   const { run, organization, signup } = fixture();
   await expect(run()).resolves.toEqual({
-    status: "ready",
     organizationId,
     signupPolicyDigest: policyDigest,
+    status: "ready",
   });
   expect(orgWorker.mock.calls[0]?.[1]).toMatchObject({
-    readbackOnly: true,
     operationRef: organizationOperationRef,
+    readbackOnly: true,
   });
   expect(policyWorker.mock.calls[0]?.[1]).toMatchObject({
-    readbackOnly: true,
     operationRef: signupOperationRef,
+    readbackOnly: true,
   });
   expect(organization.claimFirstDispatch).not.toHaveBeenCalled();
   expect(signup.claimFirstDispatch).not.toHaveBeenCalled();
@@ -488,7 +488,7 @@ it("blocks unknown and previously dispatched missing policy observations", async
 
 it("denies an applied policy digest when the pinned readback disagrees", async () => {
   const { run, ports, signup } = fixture();
-  ports.readSignupPolicy.mockResolvedValue({ status: "applied", policyDigest: "b".repeat(64) });
+  ports.readSignupPolicy.mockResolvedValue({ policyDigest: "b".repeat(64), status: "applied" });
   await expect(run()).rejects.toMatchObject({ code: "reconciliation_required" });
   expect(signup.claimFirstDispatch).not.toHaveBeenCalled();
 });

@@ -146,9 +146,9 @@ const resolveCompiledArtifactSession = async (
         adapterSessionId: input.adapterSessionId,
         authority,
         environment: process.env,
+        execution: input.callbackExecution,
         principal,
         sessionAuth: input.sessionAuth,
-        execution: input.callbackExecution,
       });
     const owner = await resolve();
     context = {
@@ -225,7 +225,7 @@ const resolveCompiledArtifactSession = async (
     context,
     ...(privateApplyScope === undefined ? {} : { privateApplyScope }),
   };
-  return { assertCurrentOwner, context, localAuthority, captureAuthority };
+  return { assertCurrentOwner, captureAuthority, context, localAuthority };
 };
 
 const openCompiledArtifactStorage = async (
@@ -246,15 +246,15 @@ const openCompiledArtifactStorage = async (
       throw operatorArtifactUnavailable();
     }
     storage = {
+      descriptions: createCapturedAppDescriptionStore({
+        assertCurrentOwner,
+        database: opened,
+      }),
       selections: createPostgresOperatorArtifactSelections({
         assertCurrentOwner,
         database: opened,
       }),
       store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database: opened }),
-      descriptions: createCapturedAppDescriptionStore({
-        assertCurrentOwner,
-        database: opened,
-      }),
     };
   } else {
     storage = {
@@ -285,7 +285,9 @@ export const recordPublishedOperatorSourceForSession = async (
     }
     const binding = await resolveCompiledArtifactSession(input);
     const storage = await openCompiledArtifactStorage(binding);
-    if (storage.descriptions === undefined) return { status: "not-required" };
+    if (storage.descriptions === undefined) {
+      return { status: "not-required" };
+    }
     const description = await storage.descriptions.read(binding.context, input.appSpecDigest);
     if (description === undefined || description.backend.kind !== "static") {
       throw operatorArtifactUnavailable();
@@ -298,9 +300,9 @@ export const recordPublishedOperatorSourceForSession = async (
     const db = await openArtifactDatabase();
     const key = {
       ...hostedTenantAuthoritySchema.parse(binding.context.authority),
-      sessionId: binding.context.target.sessionId,
-      path,
       chunkIndex: 0,
+      path,
+      sessionId: binding.context.target.sessionId,
     };
     const scope = and(
       eq(prototypeArtifactChunks.issuer, key.issuer),
@@ -312,11 +314,11 @@ export const recordPublishedOperatorSourceForSession = async (
       eq(prototypeArtifactChunks.chunkIndex, key.chunkIndex),
     );
     const content = JSON.stringify({
-      version: 1,
       appId: input.appId,
       appSpecDigest: input.appSpecDigest,
       descriptionSha256: createHash("sha256").update(JSON.stringify(description)).digest("hex"),
       source,
+      version: 1,
     });
     const chunkDigest = createHash("sha256").update(content).digest("hex");
     const transferDigest = createHash("sha256").update(source.reviewDigest).digest("hex");
@@ -325,10 +327,10 @@ export const recordPublishedOperatorSourceForSession = async (
       .insert(prototypeArtifactChunks)
       .values({
         ...key,
-        transferDigest,
-        content,
         chunkDigest,
+        content,
         createdAt: new Date(),
+        transferDigest,
       })
       .onConflictDoNothing();
     const rows = await db
@@ -341,7 +343,7 @@ export const recordPublishedOperatorSourceForSession = async (
     if (row === undefined || row.chunkDigest !== chunkDigest || row.content !== content) {
       throw operatorArtifactUnavailable();
     }
-    return { status: "recorded-static", publishedSource: source };
+    return { publishedSource: source, status: "recorded-static" };
   }
   const binding = await resolveCompiledArtifactSession(input);
   const storage = await openCompiledArtifactStorage(binding);
@@ -363,9 +365,13 @@ export const readPublishedStaticAppSourceForSession = async (
 ): Promise<PublishedAppSource | undefined> => {
   const binding = await resolveCompiledArtifactSession(input);
   const storage = await openCompiledArtifactStorage(binding);
-  if (storage.descriptions === undefined) return undefined;
+  if (storage.descriptions === undefined) {
+    return undefined;
+  }
   const description = await storage.descriptions.read(binding.context, input.appSpecDigest);
-  if (description === undefined || description.backend.kind !== "static") return undefined;
+  if (description === undefined || description.backend.kind !== "static") {
+    return undefined;
+  }
   const { prototypeArtifactChunks } = await import("../db/schema");
   const { and, desc, eq } = await import("drizzle-orm");
   const { createHash } = await import("node:crypto");
@@ -406,15 +412,16 @@ export const readPublishedStaticAppSourceForSession = async (
   if (
     row === undefined ||
     createHash("sha256").update(row.content).digest("hex") !== row.chunkDigest
-  )
+  ) {
     return undefined;
+  }
   const value = z
     .object({
-      version: z.literal(1),
       appId: z.string(),
       appSpecDigest: z.string(),
       descriptionSha256: z.string().regex(/^[a-f0-9]{64}$/u),
       source: publishedAppSourceSchema,
+      version: z.literal(1),
     })
     .strict()
     .safeParse(JSON.parse(row.content));
@@ -424,8 +431,9 @@ export const readPublishedStaticAppSourceForSession = async (
     value.data.appSpecDigest !== input.appSpecDigest ||
     value.data.descriptionSha256 !==
       createHash("sha256").update(JSON.stringify(description)).digest("hex")
-  )
+  ) {
     return undefined;
+  }
   return value.data.source;
 };
 
@@ -441,8 +449,8 @@ export const assertReconciliationCompletionOwnerForSession = async (input: {
       ...input,
       appId: input.completion.appId,
       appSpecDigest: input.completion.appReview.appSpecDigest,
-      root: input.completion.root,
       callId: input.completion.proposal.digest,
+      root: input.completion.root,
     },
     input.completion,
   );
@@ -467,8 +475,8 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
       ...input,
       appId: completion.appId,
       appSpecDigest: completion.appReview.appSpecDigest,
-      root: completion.root,
       callId: completion.proposal.digest,
+      root: completion.root,
     },
     completion,
   );
@@ -500,8 +508,8 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
       assertCurrentOwner: binding.assertCurrentOwner,
       context: binding.context,
       lookup: {
-        artifactRef: release.selection.artifactRef,
         appSpecDigest: release.selection.appSpecDigest,
+        artifactRef: release.selection.artifactRef,
       },
       selections: storage.selections,
       store: storage.store,
@@ -522,8 +530,8 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
       }
       return await storage.selections.associatePublishedSource(binding.context, {
         approvedSelection: release.selection,
-        publishedSource: input.publishedSource,
         operationId: `draft-reconciliation:${completion.proposal.digest}`,
+        publishedSource: input.publishedSource,
       });
     }
     const selection = await storage.selections.record(
@@ -667,11 +675,11 @@ export const publishCompiledOperatorArtifactsForSession = async (
       await assertCurrentOwner(context);
       checkStopped();
       return {
-        status: "not-required" as const,
         compilation: {
           ...binding.captureAuthority,
           release: { status: "not-required" as const },
         } satisfies ReconciliationCompilation,
+        status: "not-required" as const,
       };
     }
     observe({ outcome: "started", stage: "storage" });
@@ -720,12 +728,12 @@ export const publishCompiledOperatorArtifactsForSession = async (
     checkStopped();
     observe({ outcome: "completed", stage: "selection" });
     return {
-      selection,
-      status: "published" as const,
       compilation: {
         ...binding.captureAuthority,
         release: { status: "published" as const, selection },
       } satisfies ReconciliationCompilation,
+      selection,
+      status: "published" as const,
     };
   } catch (error) {
     observe({ outcome: input.signal?.aborted === true ? "cancelled" : "failed", stage });

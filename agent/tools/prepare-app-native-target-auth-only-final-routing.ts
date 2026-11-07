@@ -2,10 +2,6 @@ import { defineWorkflowTool } from "eve/tools";
 import { nativeTargetAuthOnlyFinalRoutingApprovalInputSchema } from "../../lib/eve/private-native-target-auth-only-final-routing-approval";
 
 export default defineWorkflowTool({
-  availableInSubagents: false,
-  description:
-    "Approve and complete the retained final Gateway routing operation for this isolated Auth-only Preview. Reconciles the exact saved source, app projection, refreshed Gateway and stable alias on retry. The prepared result establishes routing readiness; hosted signup, sign-in and email delivery remain separate acceptance results.",
-  inputSchema: nativeTargetAuthOnlyFinalRoutingApprovalInputSchema,
   approval: {
     request: async (ctx) => {
       if (ctx.toolInput === undefined) return "user-approval" as const;
@@ -40,6 +36,9 @@ export default defineWorkflowTool({
       }
     },
   },
+  availableInSubagents: false,
+  description:
+    "Approve and complete the retained final Gateway routing operation for this isolated Auth-only Preview. Reconciles the exact saved source, app projection, refreshed Gateway and stable alias on retry. The prepared result establishes routing readiness; hosted signup, sign-in and email delivery remain separate acceptance results.",
   async execute(input, ctx) {
     "use workflow";
     const { nativeTargetOnboardingRuntimeForSession } =
@@ -47,4 +46,5 @@ export default defineWorkflowTool({
     const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
     return await runtime.prepareAuthOnlyFinalRouting(input, ctx);
   },
+  inputSchema: nativeTargetAuthOnlyFinalRoutingApprovalInputSchema,
 });

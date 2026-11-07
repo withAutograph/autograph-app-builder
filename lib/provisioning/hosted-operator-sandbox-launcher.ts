@@ -1409,8 +1409,9 @@ const runPinnedFileSpoolTransport = async (
       authPlanBytes !== undefined ||
       worker.operationScope !== MEMBERSHIP_SCOPE ||
       ![SIGNUP_POLICY_COMMAND, MEMBERSHIP_INSPECT_COMMAND].includes(worker.subcommand))
-  )
+  ) {
     throw resourceMismatch();
+  }
   if (
     input.organization &&
     (!membership ||
@@ -1419,8 +1420,9 @@ const runPinnedFileSpoolTransport = async (
       authPlanBytes !== undefined ||
       worker.operationScope !== MEMBERSHIP_SCOPE ||
       ![MEMBERSHIP_COMMAND, MEMBERSHIP_INSPECT_COMMAND].includes(worker.subcommand))
-  )
+  ) {
     throw resourceMismatch();
+  }
   const leaseAbort = new AbortController();
   const signal = input.signal
     ? AbortSignal.any([input.signal, leaseAbort.signal])
@@ -1884,8 +1886,8 @@ const runPinnedFileSpoolTransport = async (
       );
     }
     if (membership && input.membershipProof !== undefined) {
-      const legacyPlan = input.legacyPlan;
-      const legacyEffect = input.legacyEffect;
+      const { legacyPlan } = input;
+      const { legacyEffect } = input;
       if (legacyPlan === undefined || legacyEffect === undefined) {
         throw resourceMismatch();
       }
@@ -1992,7 +1994,7 @@ const runPinnedFileSpoolTransport = async (
       (worker.operationScope === GENERATED_APP_SCOPE || needsAccessConnections) &&
       !input.repositoryProduction
     ) {
-      const legacyPlan = input.legacyPlan;
+      const { legacyPlan } = input;
       if (legacyPlan === undefined) {
         throw resourceMismatch();
       }
@@ -2266,7 +2268,9 @@ export const runAuthResourceFileSpool = async (
 ) => {
   const approvedPlanBytes = Buffer.from(input.approvedPlanBytes);
   const approvalDigest = digestSchema.parse(input.approvalDigest);
-  if (sha256(approvedPlanBytes) !== approvalDigest) throw resourceMismatch();
+  if (sha256(approvedPlanBytes) !== approvalDigest) {
+    throw resourceMismatch();
+  }
   const plan = authResourceBootstrapPlanSchema.parse(parseJsonBytes(approvedPlanBytes));
   const parsedCredentials = z
     .strictObject({
@@ -2307,8 +2311,9 @@ export const runAuthResourceFileSpool = async (
     !Number.isSafeInteger(input.fenceGeneration) ||
     input.fenceGeneration <= 0 ||
     /[\0\r\n]/u.test(input.credentials.maintenanceUrl)
-  )
+  ) {
     throw resourceMismatch();
+  }
   const maintenanceUrl = privateMaintenanceUrl(input.credentials.maintenanceUrl, {
     ...plan.neon,
     hostname: plan.neon.endpoint,
@@ -2346,16 +2351,22 @@ export const runAuthResourceFileSpool = async (
     tenant_targets: [],
   };
   const contextBytes = canonicalContextBytes(context);
-  if (contextBytes.length > MAX_PROTOCOL_FRAME_BYTES) throw resourceMismatch();
+  if (contextBytes.length > MAX_PROTOCOL_FRAME_BYTES) {
+    throw resourceMismatch();
+  }
   const contextDigest = sha256(contextBytes);
   const runId = workerRunIdSchema.parse(input.workerAttemptId);
   const readbackOnly = input.readbackOnly === true;
-  const assertCurrent = input.assertCurrent;
-  const assertCredentialsCheckpointed = input.assertCredentialsCheckpointed;
+  const { assertCurrent } = input;
+  const { assertCredentialsCheckpointed } = input;
   const bindWorkerContext = input.readbackOnly === true ? undefined : input.bindWorkerContext;
-  const signal = input.signal;
-  if (!readbackOnly && bindWorkerContext === undefined) throw resourceMismatch();
-  if (readbackOnly) worker.subcommand = RESOURCES_INSPECT_COMMAND;
+  const { signal } = input;
+  if (!readbackOnly && bindWorkerContext === undefined) {
+    throw resourceMismatch();
+  }
+  if (readbackOnly) {
+    worker.subcommand = RESOURCES_INSPECT_COMMAND;
+  }
   signal?.throwIfAborted();
   await assertCurrent();
   await assertCredentialsCheckpointed({
@@ -2494,7 +2505,9 @@ export const runAuthSignupPolicyFileSpool = async (
 ) => {
   const approvedPlanBytes = Buffer.from(input.approvedPlanBytes);
   const approvalDigest = digestSchema.parse(input.approvalDigest);
-  if (sha256(approvedPlanBytes) !== approvalDigest) throw resourceMismatch();
+  if (sha256(approvedPlanBytes) !== approvalDigest) {
+    throw resourceMismatch();
+  }
   const plan = authOnlySignupPolicyPlanSchema.parse(parseJsonBytes(approvedPlanBytes));
   const sandboxConfiguration = structuredClone(configuration);
   const policy = plan.authSignupPolicy;
@@ -2529,8 +2542,9 @@ export const runAuthSignupPolicyFileSpool = async (
     ) ||
     !Number.isSafeInteger(input.fenceGeneration) ||
     input.fenceGeneration <= 0
-  )
+  ) {
     throw resourceMismatch();
+  }
   const resource = authResourceSchema.parse({
     version: 1,
     environment: "preview",
@@ -2542,7 +2556,7 @@ export const runAuthSignupPolicyFileSpool = async (
     runtimeRole: plan.authDatabase.runtimeRole,
     neon: { projectId: plan.neon.projectId, branchId: plan.neon.branchId },
   });
-  const migrationUrl = input.credentials.migrationUrl;
+  const { migrationUrl } = input.credentials;
   assertAuthProposalMigrationUrl(migrationUrl, resource);
   const context: ProtectedInstallContextWire = {
     version: 1,
@@ -2569,14 +2583,18 @@ export const runAuthSignupPolicyFileSpool = async (
     tenant_targets: [],
   };
   const contextBytes = canonicalContextBytes(context);
-  if (contextBytes.length > MAX_PROTOCOL_FRAME_BYTES) throw resourceMismatch();
+  if (contextBytes.length > MAX_PROTOCOL_FRAME_BYTES) {
+    throw resourceMismatch();
+  }
   const contextDigest = sha256(contextBytes);
   const runId = workerRunIdSchema.parse(input.workerAttemptId);
-  const assertCurrent = input.assertCurrent;
-  const signal = input.signal;
+  const { assertCurrent } = input;
+  const { signal } = input;
   const readbackOnly = input.readbackOnly === true;
   const bindWorkerContext = readbackOnly ? undefined : input.bindWorkerContext;
-  if (!readbackOnly && bindWorkerContext === undefined) throw resourceMismatch();
+  if (!readbackOnly && bindWorkerContext === undefined) {
+    throw resourceMismatch();
+  }
   worker.subcommand = readbackOnly ? MEMBERSHIP_INSPECT_COMMAND : SIGNUP_POLICY_COMMAND;
   signal?.throwIfAborted();
   await assertCurrent();
@@ -2682,14 +2700,16 @@ export const runAuthOrganizationFileSpool = async (
 ) => {
   const approvedPlanBytes = Buffer.from(input.approvedPlanBytes);
   const approvalDigest = digestSchema.parse(input.approvalDigest);
-  if (sha256(approvedPlanBytes) !== approvalDigest) throw resourceMismatch();
+  if (sha256(approvedPlanBytes) !== approvalDigest) {
+    throw resourceMismatch();
+  }
   const plan = authOnlyOrganizationPlanSchema.parse(parseJsonBytes(approvedPlanBytes));
   const sandboxConfiguration = structuredClone(configuration);
   const worker = sandboxConfiguration.membershipWorker;
   const organization = plan.authMembership;
   const verification = organization.identityVerification;
   const boundary = plan.deploymentBoundary;
-  const proof = z.string().min(1).max(16384).parse(input.ownerProof.proof);
+  const proof = z.string().min(1).max(16_384).parse(input.ownerProof.proof);
   const oidcToken = z.string().min(1).parse(input.ownerProof.oidcToken);
   if (
     worker === undefined ||
@@ -2715,8 +2735,9 @@ export const runAuthOrganizationFileSpool = async (
     ) ||
     !Number.isSafeInteger(input.fenceGeneration) ||
     input.fenceGeneration <= 0
-  )
+  ) {
     throw resourceMismatch();
+  }
   const resource = authResourceSchema.parse({
     version: 1,
     environment: "preview",
@@ -2728,7 +2749,7 @@ export const runAuthOrganizationFileSpool = async (
     runtimeRole: plan.authDatabase.runtimeRole,
     neon: { projectId: plan.neon.projectId, branchId: plan.neon.branchId },
   });
-  const migrationUrl = input.credentials.migrationUrl;
+  const { migrationUrl } = input.credentials;
   assertAuthProposalMigrationUrl(migrationUrl, resource);
   const context: ProtectedInstallContextWire = {
     version: 1,
@@ -2755,10 +2776,12 @@ export const runAuthOrganizationFileSpool = async (
     tenant_targets: [],
   };
   const contextBytes = canonicalContextBytes(context);
-  if (contextBytes.length > MAX_PROTOCOL_FRAME_BYTES) throw resourceMismatch();
+  if (contextBytes.length > MAX_PROTOCOL_FRAME_BYTES) {
+    throw resourceMismatch();
+  }
   const contextDigest = sha256(contextBytes);
   const runId = workerRunIdSchema.parse(input.workerAttemptId);
-  const assertCurrentOwnerProof = input.assertCurrentOwnerProof;
+  const { assertCurrentOwnerProof } = input;
   const proofBinding: AuthOnlyOrganizationProofBinding = {
     approvalDigest,
     operationRef: context.operation.operation_id,
@@ -2772,10 +2795,12 @@ export const runAuthOrganizationFileSpool = async (
   const assertCurrent = async () => {
     await assertCurrentOwnerProof(structuredClone(proofBinding));
   };
-  const signal = input.signal;
+  const { signal } = input;
   const readbackOnly = input.readbackOnly === true;
   const bindWorkerContext = readbackOnly ? undefined : input.bindWorkerContext;
-  if (!readbackOnly && bindWorkerContext === undefined) throw resourceMismatch();
+  if (!readbackOnly && bindWorkerContext === undefined) {
+    throw resourceMismatch();
+  }
   worker.subcommand = readbackOnly ? MEMBERSHIP_INSPECT_COMMAND : MEMBERSHIP_COMMAND;
   signal?.throwIfAborted();
   await assertCurrent();
@@ -2854,7 +2879,7 @@ export const runAuthSchemaFileSpool = async (
   // Freeze approved bytes and private inputs before the first asynchronous custody check.
   const approvedPlanBytes = Buffer.from(input.approvedPlanBytes);
   const authPlanBytes = Buffer.from(input.authSchemaPlan.content);
-  const migrationUrl = input.credentials.migrationUrl;
+  const { migrationUrl } = input.credentials;
   const approvalDigest = digestSchema.parse(input.approvalDigest);
   if (sha256(approvedPlanBytes) !== approvalDigest) {
     throw resourceMismatch();
@@ -3029,7 +3054,7 @@ export const runAppIntegrationFileSpool = async (
   ) {
     throw resourceMismatch();
   }
-  const context = input.context;
+  const { context } = input;
   if (context.installer.id !== worker.id || context.installer.sha256 !== worker.sha256) {
     throw resourceMismatch();
   }

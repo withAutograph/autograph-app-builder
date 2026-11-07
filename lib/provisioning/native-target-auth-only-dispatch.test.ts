@@ -27,34 +27,49 @@ const description = {
   version: 1,
 };
 const plan = nativeTargetAuthOnlyPlanSchema.parse({
-  version: 1,
-  kind: "native-target-auth-only",
   appId: "signup-reset-pilot",
+  appRole: "pilot_user",
+  authResource: {
+    authorityDigest: "b".repeat(64),
+    database: "auth_identity",
+    endpointId: "endpoint_fixture",
+    hostname: "auth-preview.neon.tech",
+    profileId: "preview-auth",
+    resourceId: "isolated-auth",
+  },
+  authSchema: {
+    artifactRef: "auth-artifact",
+    installer: { reference: "auth-worker", sha256: "3".repeat(64) },
+    planDigest: "1".repeat(64),
+    targetDigest: "2".repeat(64),
+  },
+  branch: "main",
+  cost: { description: "Auth only", ownership: "current-owner" },
+  kind: "native-target-auth-only",
   origin: {
-    authority: {
-      issuer: "https://builder.example/api/auth",
-      audience: "https://builder.example/mcp",
-      workspaceId: "workspace_fixture",
-      ownerUserId: "owner_fixture",
-    },
-    publicSessionId: "public_original",
-    adapterSessionId: "native_original",
     adapterGeneration: 1,
+    adapterSessionId: "native_original",
     appSpecDigest: "a".repeat(64),
+    authority: {
+      audience: "https://builder.example/mcp",
+      issuer: "https://builder.example/api/auth",
+      ownerUserId: "owner_fixture",
+      workspaceId: "workspace_fixture",
+    },
     capturedDescription: capturedStaticDescriptionProvenance(description),
+    publicSessionId: "public_original",
   },
   project: {
-    name: "signup-reset-pilot",
-    teamId: "team_fixture",
     installationId: "install_fixture",
+    name: "signup-reset-pilot",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/signup-reset-pilot",
       sourceFilesOutsideRootDirectory: true,
     },
     protection: nativeTargetRequiredProjectProtection,
+    teamId: "team_fixture",
   },
-  branch: "main",
   publishedSource: {
     branch: "main",
     changeSetDigest: "c".repeat(64),
@@ -63,50 +78,35 @@ const plan = nativeTargetAuthOnlyPlanSchema.parse({
     repositoryId: "repo_fixture",
     reviewDigest: "f".repeat(64),
   },
-  authResource: {
-    profileId: "preview-auth",
-    authorityDigest: "b".repeat(64),
-    resourceId: "isolated-auth",
-    database: "auth_identity",
-    endpointId: "endpoint_fixture",
-    hostname: "auth-preview.neon.tech",
-  },
-  authSchema: {
-    artifactRef: "auth-artifact",
-    planDigest: "1".repeat(64),
-    targetDigest: "2".repeat(64),
-    installer: { reference: "auth-worker", sha256: "3".repeat(64) },
-  },
-  appRole: "pilot_user",
-  signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
-  cost: { ownership: "current-owner", description: "Auth only" },
   retention: { policy: "Retain until explicit cleanup" },
+  signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
+  version: 1,
 });
 
 const fixture = () => {
   let row: { revision: number; state: NativeTargetAuthOnlyDispatchState } | undefined;
   const store: NativeTargetAuthOnlyDispatchStore = {
+    compareAndSet: async (_key, expected, state) => {
+      if (row?.revision !== expected) return undefined;
+      row = { revision: expected + 1, state };
+      return row;
+    },
     read: async () => row,
     reserve: async (_key, state) => {
       if (row !== undefined) throw new Error("occupied");
       row = { revision: 1, state };
       return row;
     },
-    compareAndSet: async (_key, expected, state) => {
-      if (row?.revision !== expected) return undefined;
-      row = { revision: expected + 1, state };
-      return row;
-    },
   };
   const approval = {
-    requestId: "approval_fixture",
     callId: "call_fixture",
-    planDigest: nativeTargetAuthOnlyPlanDigest(plan),
-    sourceDigest: nativeTargetAuthOnlySchemaEffectDigest(plan, plan.publishedSource),
-    responderPrincipalId: "owner_fixture",
-    publicSessionId: "public_original",
-    outcome: "approved" as const,
     observedAt: "2026-11-06T12:00:00.000Z",
+    outcome: "approved" as const,
+    planDigest: nativeTargetAuthOnlyPlanDigest(plan),
+    publicSessionId: "public_original",
+    requestId: "approval_fixture",
+    responderPrincipalId: "owner_fixture",
+    sourceDigest: nativeTargetAuthOnlySchemaEffectDigest(plan, plan.publishedSource),
   };
   let uncertain = false;
   const createProject = vi.fn(
@@ -122,30 +122,30 @@ const fixture = () => {
       await authorizeAttempt();
       await acceptProjectId("vercel_project_fixture");
       return uncertain
-        ? { status: "uncertain", projectId: "vercel_project_fixture" }
-        : { status: "created", projectId: "vercel_project_fixture" };
+        ? { projectId: "vercel_project_fixture", status: "uncertain" }
+        : { projectId: "vercel_project_fixture", status: "created" };
     },
   );
   const service = createNativeTargetAuthOnlyDispatch({
-    store,
     authorize: async () => ({
       authority: plan.origin.authority,
       ownerUserId: "owner_fixture",
       publicSessionId: "public_original",
     }),
-    readApproval: async () => approval,
-    revalidate: async () => undefined,
-    observeProject: async ({ projectId }) => ({ status: "verified" as const, projectId }),
     createProject,
     now: () => new Date("2026-11-06T12:00:00.000Z"),
+    observeProject: async ({ projectId }) => ({ status: "verified" as const, projectId }),
+    readApproval: async () => approval,
+    revalidate: async () => undefined,
+    store,
   });
   return {
-    service,
     createProject,
-    store,
     makeUncertain: () => {
       uncertain = true;
     },
+    service,
+    store,
   };
 };
 
@@ -154,21 +154,21 @@ describe("Auth-only fenced dispatch", () => {
     const f = fixture();
     await f.service.approve("request", plan);
     await expect(f.service.dispatch("request", plan)).resolves.toEqual({
-      status: "created",
       projectId: "vercel_project_fixture",
+      status: "created",
     });
     expect(f.createProject).toHaveBeenCalledTimes(1);
     await expect(f.service.dispatch("request", plan)).resolves.toEqual({
-      status: "created",
       projectId: "vercel_project_fixture",
+      status: "created",
     });
     expect(f.createProject).toHaveBeenCalledTimes(1);
     await expect(f.service.dispatch("request", plan)).resolves.toEqual({
-      status: "created",
       projectId: "vercel_project_fixture",
+      status: "created",
     });
     expect(
-      (await f.store.read({ authority: plan.origin.authority, appId: plan.appId }))?.state.stage,
+      (await f.store.read({ appId: plan.appId, authority: plan.origin.authority }))?.state.stage,
     ).toBe("created");
   });
 
@@ -187,44 +187,38 @@ describe("Auth-only fenced dispatch", () => {
     await f.service.approve("request", plan);
     f.makeUncertain();
     await expect(f.service.dispatch("request", plan)).resolves.toEqual({
-      status: "unknown",
       projectId: "vercel_project_fixture",
+      status: "unknown",
     });
     await expect(f.service.dispatch("request", plan)).resolves.toEqual({
-      status: "created",
       projectId: "vercel_project_fixture",
+      status: "created",
     });
     expect(f.createProject).toHaveBeenCalledTimes(1);
   });
 
   it("routes the hosted prepare action through owner approval and fenced dispatch", async () => {
     const f = fixture();
-    const authority = plan.origin.authority;
+    const { authority } = plan.origin;
     const ownerContext = {
-      kind: "direct" as const,
-      authority,
       adapterGeneration: 1,
       adapterSessionId: "native_original",
-      sessionId: "public_original",
+      authority,
+      kind: "direct" as const,
       principal: {
         audience: authority.audience,
         issuer: authority.issuer,
         ownerUserId: authority.ownerUserId,
-        workspaceId: authority.workspaceId,
         scopes: ["autograph:operate"],
+        workspaceId: authority.workspaceId,
       },
+      sessionId: "public_original",
     };
     const hostedDependencies = {
-      authorize: vi.fn(),
-      plan: vi.fn(),
       assertAuthorized: vi.fn(),
-      readApproval: vi.fn(),
-      withResourceLease: vi.fn(),
-      reconcile: vi.fn(),
-      executeEffect: vi.fn(),
-      verify: vi.fn(),
+      authorize: vi.fn(),
       bindings: vi.fn(),
-      store: {},
+      executeEffect: vi.fn(),
       nativeTargetRequest: async (_request: Request, raw: unknown) => {
         const request = raw as { action: string; input: { plan: typeof plan } };
         expect(request.action).toBe("native-target-auth-only-prepare");
@@ -232,12 +226,16 @@ describe("Auth-only fenced dispatch", () => {
         const result = await f.service.dispatch("request", request.input.plan);
         return Response.json(result);
       },
+      plan: vi.fn(),
+      readApproval: vi.fn(),
+      reconcile: vi.fn(),
+      store: {},
+      verify: vi.fn(),
+      withResourceLease: vi.fn(),
     } as unknown as ProtectedHostedOperatorDependencies;
     const handler = createProtectedHostedOperatorHandler(hostedDependencies);
     const response = await handler(
       new Request("https://builder.example/v1/runtime", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "native-target-auth-only-prepare",
           ownerContext,
@@ -250,12 +248,14 @@ describe("Auth-only fenced dispatch", () => {
             plan,
           },
         }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
       }),
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      status: "created",
       projectId: "vercel_project_fixture",
+      status: "created",
     });
     expect(f.createProject).toHaveBeenCalledTimes(1);
   });

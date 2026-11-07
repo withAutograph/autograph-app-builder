@@ -50,17 +50,17 @@ const providerRow = z.object({
 type ProviderRow = z.infer<typeof providerRow>;
 // Public Vercel project Trusted Sources schema; retain unrelated provider-owned fields on round-trip.
 const trustedEnvironmentSet = z.looseObject({
-  slugs: z.array(z.string()).optional(),
   preset: z.literal("all-custom").optional(),
+  slugs: z.array(z.string()).optional(),
 });
 const trustedProjectSource = z.looseObject({
-  label: z.string().optional(),
   customAllow: z
     .array(z.looseObject({ from: trustedEnvironmentSet, to: trustedEnvironmentSet }))
     .optional(),
+  label: z.string().optional(),
 });
 const trustedSourcesSchema = z.looseObject({
-  projects: z.record(z.string(), trustedProjectSource).optional(),
+  enableVercelCiSameRepository: z.boolean().optional(),
   oidcProviders: z
     .record(
       z.string(),
@@ -73,11 +73,11 @@ const trustedSourcesSchema = z.looseObject({
       ),
     )
     .optional(),
-  enableVercelCiSameRepository: z.boolean().optional(),
+  projects: z.record(z.string(), trustedProjectSource).optional(),
 });
 const trustedProjectSnapshot = z.object({
-  id: z.string(),
   accountId: z.string(),
+  id: z.string(),
   trustedSources: trustedSourcesSchema.nullish(),
 });
 type ApprovedTrustedSources = NonNullable<
@@ -481,8 +481,37 @@ export const createHostedOperatorGatewayBindings = (deps: {
           providerFailure = undefined;
         }
       },
-      get stage() {
-        return stage;
+      finish(result: OperatorGatewayBindingsDiagnostic["result"]) {
+        report?.({
+          boundary: "operator",
+          phase: "inline",
+          stage: "operator_request",
+          outcome: result === "failed" || result === "unknown" ? "setup_unavailable" : "verified",
+          gatewayBindings: {
+            mode,
+            stage,
+            result,
+            ...(method === undefined ? {} : { method }),
+            ...((result === "failed" || result === "unknown") && requestTarget !== undefined
+              ? { requestTarget }
+              : {}),
+            ...(result === "failed" || result === "unknown" ? protection : {}),
+            ...(statusCategory === undefined ? {} : { statusCategory }),
+            ...(httpStatus === undefined ? {} : { httpStatus }),
+            ...providerFailure,
+          },
+        });
+      },
+      noResponse() {
+        statusCategory = "no_response";
+      },
+      protection(value?: typeof protection) {
+        protection = value;
+      },
+      providerFailure(
+        failure: ReturnType<typeof projectOperatorGatewayProviderFailure> | undefined,
+      ) {
+        providerFailure = failure;
       },
       request(
         next: NonNullable<OperatorGatewayBindingsDiagnostic["method"]>,
@@ -490,9 +519,6 @@ export const createHostedOperatorGatewayBindings = (deps: {
       ) {
         method = next;
         requestTarget = target;
-      },
-      protection(value?: typeof protection) {
-        protection = value;
       },
       response(status: number) {
         if (!Number.isFinite(status)) {
@@ -517,46 +543,20 @@ export const createHostedOperatorGatewayBindings = (deps: {
           statusCategory = "other";
         }
       },
-      noResponse() {
-        statusCategory = "no_response";
-      },
-      providerFailure(
-        failure: ReturnType<typeof projectOperatorGatewayProviderFailure> | undefined,
-      ) {
-        providerFailure = failure;
-      },
-      finish(result: OperatorGatewayBindingsDiagnostic["result"]) {
-        report?.({
-          boundary: "operator",
-          phase: "inline",
-          stage: "operator_request",
-          outcome: result === "failed" || result === "unknown" ? "setup_unavailable" : "verified",
-          gatewayBindings: {
-            mode,
-            stage,
-            result,
-            ...(method === undefined ? {} : { method }),
-            ...((result === "failed" || result === "unknown") && requestTarget !== undefined
-              ? { requestTarget }
-              : {}),
-            ...(result === "failed" || result === "unknown" ? protection : {}),
-            ...(statusCategory === undefined ? {} : { statusCategory }),
-            ...(httpStatus === undefined ? {} : { httpStatus }),
-            ...providerFailure,
-          },
-        });
+      get stage() {
+        return stage;
       },
     };
   };
   const silentObservation: ReturnType<typeof diagnostic> = {
     at: ignoreDiagnostic,
-    stage: "context",
-    request: ignoreDiagnostic,
-    protection: ignoreDiagnostic,
-    response: ignoreDiagnostic,
-    noResponse: ignoreDiagnostic,
-    providerFailure: ignoreDiagnostic,
     finish: ignoreDiagnostic,
+    noResponse: ignoreDiagnostic,
+    protection: ignoreDiagnostic,
+    providerFailure: ignoreDiagnostic,
+    request: ignoreDiagnostic,
+    response: ignoreDiagnostic,
+    stage: "context",
   };
   const open = (
     liveInput: GatewayManagedEnvironmentContext,
@@ -702,7 +702,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         .parse(await request(`/v10/projects/${encodeURIComponent(projectId)}/env`)).envs;
     };
     let previewGitBranch: Promise<string | null> | undefined;
-    const newRowGitBranch = () => {
+    const newRowGitBranch = async () => {
       previewGitBranch ??= (async () => {
         const raw = await request(
           `/v9/projects/${encodeURIComponent(projectId)}`,
@@ -710,7 +710,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           undefined,
           "project_settings",
         );
-        const project = z.object({ id: z.string(), accountId: z.string() }).parse(raw);
+        const project = z.object({ accountId: z.string(), id: z.string() }).parse(raw);
         if (project.id !== projectId || project.accountId !== target.scopeId) {
           throw unavailable();
         }
@@ -751,8 +751,8 @@ export const createHostedOperatorGatewayBindings = (deps: {
         visibility = "null";
       }
       observation.protection({
-        trustedSourcesVisibility: visibility,
         missingApprovedPairCount: missing.length,
+        trustedSourcesVisibility: visibility,
       });
       if (renewal !== undefined && project.trustedSources === undefined) {
         throw unavailable();
@@ -763,7 +763,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           sources.projects?.[rule.projectId] !== undefined &&
           sources.projects[rule.projectId].customAllow === undefined,
       );
-      return { sources, missing, requiresReconciliation };
+      return { missing, requiresReconciliation, sources };
     };
     const bindTrustedSources = async () => {
       const observed = await observeTrustedSources();
@@ -1407,6 +1407,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     return {
       acknowledgedValues,
       approvedCanonical,
+      bindTrustedSources,
       branch,
       checkpoint,
       comment,
@@ -1416,7 +1417,6 @@ export const createHostedOperatorGatewayBindings = (deps: {
       inspectIteration,
       inspectOwnership,
       observeTrustedSources,
-      bindTrustedSources,
       prepareWrite,
       projectId,
       readSelectedValue,
@@ -1525,10 +1525,10 @@ export const createHostedOperatorGatewayBindings = (deps: {
           // The diagnostic vocabulary reports unapplied setup as unknown.
           observation.finish("unknown");
           return {
-            status: "retryable",
             resourceVersion: valueDigest(
               JSON.stringify(io.referenceRows(observed.rows, observed.known, observed.values)),
             ),
+            status: "retryable",
           };
         }
         const { expected, known, rows, values } = await io.inspect(true);
@@ -1547,8 +1547,8 @@ export const createHostedOperatorGatewayBindings = (deps: {
           if (protection !== undefined && protection.missing.length !== 0) {
             observation.finish("unknown");
             return {
-              status: "retryable",
               resourceVersion: valueDigest(JSON.stringify(protection.sources)),
+              status: "retryable",
             };
           }
           const result = {

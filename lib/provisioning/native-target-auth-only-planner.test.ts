@@ -11,15 +11,15 @@ import {
 import { nativeTargetRequiredProjectProtection } from "./native-target-onboarding-plan-schema";
 
 const owner = {
+  adapterGeneration: 1,
+  adapterSessionId: "native_original",
   authority: {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace_fixture",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner_fixture",
+    workspaceId: "workspace_fixture",
   },
   publicSessionId: "public_original",
-  adapterSessionId: "native_original",
-  adapterGeneration: 1,
 };
 const description = {
   app: { id: "signup-reset-pilot", routes: ["/"], workspacePath: "apps/signup-reset-pilot" },
@@ -33,45 +33,47 @@ const description = {
   version: 1,
 };
 const profile = {
-  id: "signup-reset-pilot-preview-auth",
   appId: "signup-reset-pilot",
   authority: owner.authority,
   configuration: {
     authDatabase: {
-      resourceId: "isolated-auth-resource",
       database: "auth_identity",
       migratorRole: "auth_migrator",
+      resourceId: "isolated-auth-resource",
       runtimeRole: "auth_runtime",
     },
   },
+  id: "signup-reset-pilot-preview-auth",
 };
 const authAuthorityBinding = {
+  gateway: { branch: "preview-fixture", projectId: "gateway-fixture" },
   nativeNeon: { scope: { endpointId: "isolated-endpoint", hostname: "auth-preview.neon.tech" } },
-  gateway: { projectId: "gateway-fixture", branch: "preview-fixture" },
 };
 const proposal = {
   appId: "signup-reset-pilot",
+  appRole: "pilot_user",
+  appSpecDigest: "a".repeat(64),
   authProfileId: profile.id,
+  branch: "main",
   project: {
+    installationId: "install_fixture",
     name: "signup-reset-pilot",
     teamId: "team_fixture",
-    installationId: "install_fixture",
   },
-  branch: "main",
-  appSpecDigest: "a".repeat(64),
-  appRole: "pilot_user",
 };
 const makePlan = (overrides: Partial<Parameters<typeof planNativeTargetAuthOnly>[0]> = {}) =>
   planNativeTargetAuthOnly({
+    authAuthorityBinding,
+    authSchema: {
+      artifactRef: "auth-artifact",
+      installer: { reference: "auth-worker", sha256: "3".repeat(64) },
+      planDigest: "1".repeat(64),
+      targetDigest: "2".repeat(64),
+    },
+    capturedDescription: description,
+    configuredAppRoles: ["pilot_user"],
     owner,
     proposal,
-    capturedDescription: description,
-    selectedProfile: profile,
-    sharedAuthResourceId: "shared-auth-resource",
-    sharedPhysicalEndpointId: "shared-endpoint",
-    selectedPhysicalEndpointId: "isolated-endpoint",
-    authAuthorityBinding,
-    configuredAppRoles: ["pilot_user"],
     publishedSource: {
       branch: "main",
       changeSetDigest: "c".repeat(64),
@@ -80,12 +82,10 @@ const makePlan = (overrides: Partial<Parameters<typeof planNativeTargetAuthOnly>
       repositoryId: "repo_fixture",
       reviewDigest: "f".repeat(64),
     },
-    authSchema: {
-      artifactRef: "auth-artifact",
-      planDigest: "1".repeat(64),
-      targetDigest: "2".repeat(64),
-      installer: { reference: "auth-worker", sha256: "3".repeat(64) },
-    },
+    selectedPhysicalEndpointId: "isolated-endpoint",
+    selectedProfile: profile,
+    sharedAuthResourceId: "shared-auth-resource",
+    sharedPhysicalEndpointId: "shared-endpoint",
     ...overrides,
   });
 
@@ -118,19 +118,19 @@ describe("native Auth-only planning", () => {
     const plan = makePlan();
     expect(plan).toMatchObject({
       appId: "signup-reset-pilot",
+      appRole: "pilot_user",
+      authResource: {
+        profileId: profile.id,
+        resourceId: profile.configuration.authDatabase.resourceId,
+      },
       project: {
-        protection: nativeTargetRequiredProjectProtection,
         projectSettings: {
           framework: "nextjs",
           rootDirectory: "apps/signup-reset-pilot",
           sourceFilesOutsideRootDirectory: true,
         },
+        protection: nativeTargetRequiredProjectProtection,
       },
-      authResource: {
-        profileId: profile.id,
-        resourceId: profile.configuration.authDatabase.resourceId,
-      },
-      appRole: "pilot_user",
       signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
     });
     expect(plan).not.toHaveProperty("appDatabase");
@@ -192,19 +192,25 @@ describe("native Auth-only planning", () => {
   it("loads the captured static description and selected Auth profile from owner-scoped ports", async () => {
     const reads: string[] = [];
     const planned = await planNativeTargetAuthOnlyFromOwnedState({
+      authAuthorityBinding,
       owner,
       proposal,
-      sharedAuthResourceId: "shared-auth-resource",
-      sharedPhysicalEndpointId: "shared-endpoint",
-      selectedPhysicalEndpointId: "isolated-endpoint",
-      authAuthorityBinding,
-      readCapturedDescription: async (input) => {
-        reads.push(`description:${input.appId}:${input.appSpecDigest}:${input.publicSessionId}`);
-        return description;
-      },
       readAuthProfile: async (input) => {
         reads.push(`profile:${input.appId}:${input.profileId}:${input.authority.ownerUserId}`);
         return profile;
+      },
+      readAuthSchemaSelection: async (input) => {
+        reads.push(`auth-schema:${input.appId}:${input.appSpecDigest}:${input.publicSessionId}`);
+        return {
+          artifactRef: "auth-artifact",
+          planDigest: "1".repeat(64),
+          targetDigest: "2".repeat(64),
+          installer: { reference: "auth-worker", sha256: "3".repeat(64) },
+        };
+      },
+      readCapturedDescription: async (input) => {
+        reads.push(`description:${input.appId}:${input.appSpecDigest}:${input.publicSessionId}`);
+        return description;
       },
       readConfiguredAppRoles: async (input) => {
         reads.push(`roles:${input.appId}:${input.profileId}`);
@@ -221,15 +227,9 @@ describe("native Auth-only planning", () => {
           reviewDigest: "f".repeat(64),
         };
       },
-      readAuthSchemaSelection: async (input) => {
-        reads.push(`auth-schema:${input.appId}:${input.appSpecDigest}:${input.publicSessionId}`);
-        return {
-          artifactRef: "auth-artifact",
-          planDigest: "1".repeat(64),
-          targetDigest: "2".repeat(64),
-          installer: { reference: "auth-worker", sha256: "3".repeat(64) },
-        };
-      },
+      selectedPhysicalEndpointId: "isolated-endpoint",
+      sharedAuthResourceId: "shared-auth-resource",
+      sharedPhysicalEndpointId: "shared-endpoint",
     });
     expect(planned.authResource.resourceId).toBe("isolated-auth-resource");
     expect(reads).toContain(`description:signup-reset-pilot:${"a".repeat(64)}:public_original`);

@@ -13,51 +13,32 @@ import { nativeTargetAuthOnlyDeliveryPlanDigest } from "./native-target-auth-onl
 import type { NativeTargetAuthOnlyPreviewDeliveryInput } from "./native-target-auth-only-preview-delivery";
 
 const key = {
-  authority: {
-    issuer: "https://builder.example/api/auth",
-    audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
-    ownerUserId: "owner",
-  },
   appId: "pilot",
-  sessionId: "session",
+  authority: {
+    audience: "https://builder.example/mcp",
+    issuer: "https://builder.example/api/auth",
+    ownerUserId: "owner",
+    workspaceId: "workspace",
+  },
   operationRef: "11111111-1111-4111-a111-111111111111",
+  sessionId: "session",
 };
 const bytes = Buffer.from(
   JSON.stringify({
-    version: 1,
-    kind: "native-target-auth-only-delivery",
     authOnlyPlanDigest: "a".repeat(64),
-    resourcePlanDigest: "b".repeat(64),
-    target: {
-      appId: key.appId,
-      sessionId: key.sessionId,
-      environment: "preview",
-      scopeType: "team",
-      scopeId: "team",
-      installationId: "install",
-      projectId: "app",
-      branch: "pilot",
-    },
-    source: { branch: "pilot", gitSha: "c".repeat(40), repositoryId: "repo" },
-    effects: [
-      { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
-      { id: "auth-only-app-preview", kind: "delivery" },
-    ],
     delivery: {
       action: "prepare",
-      stage: "app",
-      effects: [
-        { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
-        { id: "auth-only-app-preview", kind: "delivery" },
-      ],
       delivery: {
         branch: "pilot",
         gitSha: "c".repeat(40),
         projectId: "app",
-        repoId: "repo",
         projectSettings: { framework: "nextjs", rootDirectory: "apps/pilot" },
+        repoId: "repo",
       },
+      effects: [
+        { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
+        { id: "auth-only-app-preview", kind: "delivery" },
+      ],
       gatewayDelivery: {
         branch: "gateway-pilot",
         gitRef: "gateway-pilot",
@@ -72,132 +53,151 @@ const bytes = Buffer.from(
         origin: "https://pilot.example",
         projectId: "gateway",
       },
+      stage: "app",
     },
+    effects: [
+      { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
+      { id: "auth-only-app-preview", kind: "delivery" },
+    ],
+    kind: "native-target-auth-only-delivery",
+    resourcePlanDigest: "b".repeat(64),
+    source: { branch: "pilot", gitSha: "c".repeat(40), repositoryId: "repo" },
+    target: {
+      appId: key.appId,
+      branch: "pilot",
+      environment: "preview",
+      installationId: "install",
+      projectId: "app",
+      scopeId: "team",
+      scopeType: "team",
+      sessionId: key.sessionId,
+    },
+    version: 1,
   }),
 );
 const deliveryPlanDigest = nativeTargetAuthOnlyDeliveryPlanDigest(bytes);
 const approval = {
-  requestId: "approval",
   callId: "original-call",
-  planDigest: deliveryPlanDigest,
-  sourceDigest: deliveryPlanDigest,
-  responderPrincipalId: "owner",
-  publicSessionId: "session",
-  outcome: "approved" as const,
   observedAt: "2026-11-06T12:00:00.000Z",
+  outcome: "approved" as const,
+  planDigest: deliveryPlanDigest,
+  publicSessionId: "session",
+  requestId: "approval",
+  responderPrincipalId: "owner",
+  sourceDigest: deliveryPlanDigest,
 };
 const candidate = (
   target: "gateway" | "app",
 ): OperatorDeploymentCandidate & { readyState: "READY" } => ({
-  operationRef: key.operationRef,
-  projectId: target,
-  deploymentId: `dpl-${target}`,
   branch: target === "gateway" ? "gateway-pilot" : "pilot",
-  repoId: "repo",
+  deploymentId: `dpl-${target}`,
+  operationRef: key.operationRef,
   origin: `https://${target}.example`,
+  projectId: target,
   readyState: "READY" as const,
+  repoId: "repo",
 });
 const applied = (target: "gateway" | "app") => ({
-  status: "applied" as const,
-  selected: candidate(target),
   candidates: [candidate(target)],
+  selected: candidate(target),
+  status: "applied" as const,
 });
-const retryable = { status: "retryable" as const, candidates: [], resourceVersion: "e".repeat(64) };
+const retryable = { candidates: [], resourceVersion: "e".repeat(64), status: "retryable" as const };
 
 it("keeps callback and running-lease readiness modes separate and fenced", () => {
   const gateway = candidate("gateway");
   const running = {
-    kind: "native-target-auth-only-delivery" as const,
-    version: 1 as const,
-    operationRef: key.operationRef,
-    deliveryPlanDigest,
-    planBase64: bytes.toString("base64"),
-    phase: "running" as const,
-    approval,
-    fenceGeneration: 7,
-    lease: {
-      id: "22222222-2222-4222-a222-222222222222",
-      expiresAt: "2026-11-06T12:01:00.000Z",
-    },
-    gateway: { attempted: true, candidates: [gateway], receipt: gateway },
     app: { attempted: false, candidates: [] },
+    approval,
+    deliveryPlanDigest,
+    fenceGeneration: 7,
+    gateway: { attempted: true, candidates: [gateway], receipt: gateway },
+    kind: "native-target-auth-only-delivery" as const,
+    lease: {
+      expiresAt: "2026-11-06T12:01:00.000Z",
+      id: "22222222-2222-4222-a222-222222222222",
+    },
+    operationRef: key.operationRef,
+    phase: "running" as const,
+    planBase64: bytes.toString("base64"),
+    version: 1 as const,
   };
   expect(
     nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
-      record: running,
       gateway,
-      runningLease: { fenceGeneration: 7 },
       now: Date.parse("2026-11-06T12:00:00.000Z"),
+      record: running,
+      runningLease: { fenceGeneration: 7 },
     }),
   ).toBe(true);
   expect(
     nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
-      record: running,
       gateway,
+      now: Date.parse("2026-11-06T12:00:00.000Z"),
+      record: running,
       runningLease: { fenceGeneration: 6 },
-      now: Date.parse("2026-11-06T12:00:00.000Z"),
     }),
   ).toBe(false);
   expect(
     nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
-      record: running,
       gateway,
-      runningLease: { fenceGeneration: 7 },
       now: Date.parse("2026-11-06T12:02:00.000Z"),
-    }),
-  ).toBe(false);
-  expect(
-    nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
       record: running,
-      gateway: candidate("app"),
       runningLease: { fenceGeneration: 7 },
-      now: Date.parse("2026-11-06T12:00:00.000Z"),
     }),
   ).toBe(false);
   expect(
     nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
-      record: {
-        ...running,
-        app: { attempted: true, candidates: [candidate("app")], receipt: candidate("app") },
-      },
-      gateway,
+      gateway: candidate("app"),
+      now: Date.parse("2026-11-06T12:00:00.000Z"),
+      record: running,
       runningLease: { fenceGeneration: 7 },
-      now: Date.parse("2026-11-06T12:00:00.000Z"),
     }),
-  ).toBe(true);
-  expect(nativeTargetAuthOnlyDeliveryAllowsReadyBinding({ record: running, gateway })).toBe(false);
+  ).toBe(false);
   expect(
     nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
-      record: { ...running, phase: "pending-owner", lease: undefined },
       gateway,
-    }),
-  ).toBe(true);
-  expect(
-    nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
+      now: Date.parse("2026-11-06T12:00:00.000Z"),
       record: {
         ...running,
-        phase: "prepared",
         app: { attempted: true, candidates: [candidate("app")], receipt: candidate("app") },
       },
+      runningLease: { fenceGeneration: 7 },
+    }),
+  ).toBe(true);
+  expect(nativeTargetAuthOnlyDeliveryAllowsReadyBinding({ gateway, record: running })).toBe(false);
+  expect(
+    nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
       gateway,
-      entryMode: { mode: "fenced", fenceGeneration: 7 },
-      now: Date.parse("2026-11-06T12:00:00.000Z"),
+      record: { ...running, lease: undefined, phase: "pending-owner" },
     }),
   ).toBe(true);
   expect(
     nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
-      record: { ...running, phase: "prepared", lease: undefined },
+      entryMode: { fenceGeneration: 7, mode: "fenced" },
       gateway,
-      entryMode: { mode: "retained", fenceGeneration: 7 },
       now: Date.parse("2026-11-06T12:00:00.000Z"),
+      record: {
+        ...running,
+        app: { attempted: true, candidates: [candidate("app")], receipt: candidate("app") },
+        phase: "prepared",
+      },
     }),
   ).toBe(true);
   expect(
     nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
-      record: { ...running, phase: "unknown", app: { attempted: true, candidates: [] } },
+      entryMode: { fenceGeneration: 7, mode: "retained" },
       gateway,
-      entryMode: { mode: "fenced", fenceGeneration: 7 },
       now: Date.parse("2026-11-06T12:00:00.000Z"),
+      record: { ...running, lease: undefined, phase: "prepared" },
+    }),
+  ).toBe(true);
+  expect(
+    nativeTargetAuthOnlyDeliveryAllowsReadyBinding({
+      entryMode: { fenceGeneration: 7, mode: "fenced" },
+      gateway,
+      now: Date.parse("2026-11-06T12:00:00.000Z"),
+      record: { ...running, app: { attempted: true, candidates: [] }, phase: "unknown" },
     }),
   ).toBe(false);
 });
@@ -205,59 +205,59 @@ it("keeps callback and running-lease readiness modes separate and fenced", () =>
 const routingOperationRef = "33333333-3333-4333-a333-333333333333";
 const routingBytes = Buffer.from(
   JSON.stringify({
-    version: 1,
-    kind: "native-target-auth-only-final-routing",
-    operationRef: routingOperationRef,
+    app: candidate("app"),
+    bootstrap: candidate("gateway"),
     deliveryOperationRef: key.operationRef,
     deliveryPlanDigest,
-    target: JSON.parse(bytes.toString()).target,
     gateway: {
-      projectId: "gateway",
-      repoId: "repo",
       branch: "gateway-pilot",
       gitRef: "gateway-pilot",
       gitSha: "d".repeat(40),
-      publicOrigin: "https://pilot.example",
-    },
-    bootstrap: candidate("gateway"),
-    app: candidate("app"),
-    source: {
-      environment: "preview",
-      ownerId: "team",
       projectId: "gateway",
-      audience: "https://vercel.com/team",
-      issuer: "https://oidc.vercel.com/team",
-      subject: "gateway",
       publicOrigin: "https://pilot.example",
+      repoId: "repo",
     },
+    kind: "native-target-auth-only-final-routing",
+    operationRef: routingOperationRef,
     projection: {
-      operationRef: key.operationRef,
+      appDeploymentId: "dpl-app",
       deliveryPlanDigest,
       gatewayProjectId: "gateway",
-      physicalBranch: "gateway-pilot",
-      rowId: "env-projection",
-      appDeploymentId: "dpl-app",
-      priorSha256: "1".repeat(64),
       nextSha256: "2".repeat(64),
+      operationRef: key.operationRef,
+      physicalBranch: "gateway-pilot",
+      priorSha256: "1".repeat(64),
+      rowId: "env-projection",
     },
+    source: {
+      audience: "https://vercel.com/team",
+      environment: "preview",
+      issuer: "https://oidc.vercel.com/team",
+      ownerId: "team",
+      projectId: "gateway",
+      publicOrigin: "https://pilot.example",
+      subject: "gateway",
+    },
+    target: JSON.parse(bytes.toString()).target,
+    version: 1,
   }),
 );
 const routingProposal = {
   appId: key.appId,
-  operationRef: key.operationRef,
   deliveryPlanDigest,
+  operationRef: key.operationRef,
   routingOperationRef,
   routingPlanDigest: nativeTargetAuthOnlyFinalRoutingPlanDigest(routingBytes),
 };
 
 const fixture = async () => {
-  type Row = {
+  interface Row {
     requestId: string;
     requestDigest: string;
     revision: number;
     record: unknown;
     state: string;
-  };
+  }
   const rows = new Map<string, Row>();
   const parameters = (where: SQL) => new PgDialect().sqlToQuery(where).params;
   const validate = (row: Row) => {
@@ -269,6 +269,14 @@ const fixture = async () => {
     expect(row.revision).toBeGreaterThan(0);
   };
   const database = {
+    insert: () => ({
+      values: (row: Row) => ({
+        onConflictDoNothing: async () => {
+          validate(row);
+          if (!rows.has(row.requestId)) rows.set(row.requestId, structuredClone(row));
+        },
+      }),
+    }),
     select: () => ({
       from: () => ({
         where: (where: SQL) => ({
@@ -277,14 +285,6 @@ const fixture = async () => {
             return row === undefined ? [] : [structuredClone(row)];
           },
         }),
-      }),
-    }),
-    insert: () => ({
-      values: (row: Row) => ({
-        onConflictDoNothing: async () => {
-          validate(row);
-          if (!rows.has(row.requestId)) rows.set(row.requestId, structuredClone(row));
-        },
       }),
     }),
     update: () => ({
@@ -304,10 +304,10 @@ const fixture = async () => {
       }),
     }),
   };
-  const store = createPostgresNativeTargetAuthOnlyDeliveryStore(database as never);
+  const store = createPostgresNativeTargetAuthOnlyDeliveryStore(database);
   await store.retain(key, bytes);
   const reconcile = {
-    gateway: vi.fn(
+    app: vi.fn(
       async (_context: NativeTargetAuthOnlyPreviewDeliveryInput) =>
         retryable as Awaited<
           ReturnType<
@@ -317,7 +317,7 @@ const fixture = async () => {
           >
         >,
     ),
-    app: vi.fn(
+    gateway: vi.fn(
       async (_context: NativeTargetAuthOnlyPreviewDeliveryInput) =>
         retryable as Awaited<
           ReturnType<
@@ -329,32 +329,32 @@ const fixture = async () => {
     ),
   };
   const deliver = {
+    app: vi.fn(async (_context: NativeTargetAuthOnlyPreviewDeliveryInput) => applied("app")),
     gateway: vi.fn(async (_context: NativeTargetAuthOnlyPreviewDeliveryInput) =>
       applied("gateway"),
     ),
-    app: vi.fn(async (_context: NativeTargetAuthOnlyPreviewDeliveryInput) => applied("app")),
   };
   const afterGatewayReady = vi.fn(async () => ({
-    status: "ready" as const,
     organizationId: "pilot-org",
     signupPolicyDigest: "f".repeat(64),
+    status: "ready" as const,
   }));
   const assertCurrent = vi.fn(async () => {});
-  const run = (
+  const run = async (
     gate: Parameters<
       typeof prepareNativeTargetAuthOnlyDelivery
     >[0]["afterGatewayReady"] = afterGatewayReady,
   ) =>
     prepareNativeTargetAuthOnlyDelivery({
-      store,
-      key,
+      adapter: (target) => ({ reconcile: reconcile[target], deliver: deliver[target] }),
+      afterGatewayReady: gate,
       approval,
       assertCurrent,
-      afterGatewayReady: gate,
+      key,
       prepareFinalRoutingPlan: async () => routingBytes,
-      adapter: (target) => ({ reconcile: reconcile[target], deliver: deliver[target] }),
+      store,
     });
-  return { store, rows, reconcile, deliver, afterGatewayReady, assertCurrent, run };
+  return { afterGatewayReady, assertCurrent, deliver, reconcile, rows, run, store };
 };
 
 it("persists valid UUID/pending-settled journal rows and exact bytes; stale CAS and other owner/session cannot replace them", async () => {
@@ -362,7 +362,7 @@ it("persists valid UUID/pending-settled journal rows and exact bytes; stale CAS 
   const saved = (await f.store.read(key))!;
   expect(await f.store.retain(key, bytes)).toEqual(saved);
   await expect(
-    f.store.retain(key, Buffer.from(bytes.toString().replace('"pilot-org"', '"other"') + " ")),
+    f.store.retain(key, Buffer.from(`${bytes.toString().replace('"pilot-org"', '"other"')} `)),
   ).rejects.toThrow("resource_mismatch");
   expect(
     await f.store.read({ ...key, authority: { ...key.authority, ownerUserId: "other" } }),
@@ -371,9 +371,9 @@ it("persists valid UUID/pending-settled journal rows and exact bytes; stale CAS 
   expect(await f.store.compareAndSet(key, 0, saved.record)).toBeUndefined();
   const result = await f.run();
   expect(result).toMatchObject({
-    status: "routing-required",
-    gateway: candidate("gateway"),
     app: candidate("app"),
+    gateway: candidate("gateway"),
+    status: "routing-required",
   });
   expect([...f.rows.values()][0].state).toBe("pending");
 });
@@ -381,9 +381,9 @@ it("persists valid UUID/pending-settled journal rows and exact bytes; stale CAS 
 it("retains the verified Gateway receipt and yields only the owner link before app deployment", async () => {
   const f = await fixture();
   const pending = {
-    status: "pending-owner" as const,
     authIdentityLink: "https://gateway.example/auth/link",
     authIdentityLinkExpiresAt: new Date(Date.now() + 60000).toISOString(),
+    status: "pending-owner" as const,
   };
   expect(
     await f.run(async (input) => {
@@ -419,8 +419,8 @@ it("does not acquire an active lease and rejects source/project mismatch in prov
   await f.store.compareAndSet(key, row.revision, {
     ...row.record,
     lease: {
-      id: "22222222-2222-4222-a222-222222222222",
       expiresAt: new Date(Date.now() + 60000).toISOString(),
+      id: "22222222-2222-4222-a222-222222222222",
     },
   });
   await expect(f.run()).rejects.toThrow("reconciliation_required");
@@ -438,34 +438,34 @@ it("holds prepared settlement behind a separate Gateway routing lease", async ()
   const f = await fixture();
   const routePlan = routingProposal;
   const result = await prepareNativeTargetAuthOnlyDelivery({
-    store: f.store,
-    key,
+    adapter: (target) => ({ reconcile: f.reconcile[target], deliver: f.deliver[target] }),
+    afterGatewayReady: f.afterGatewayReady,
     approval,
     assertCurrent: f.assertCurrent,
-    afterGatewayReady: f.afterGatewayReady,
+    key,
     prepareFinalRoutingPlan: vi.fn(async () => routingBytes),
-    adapter: (target) => ({ reconcile: f.reconcile[target], deliver: f.deliver[target] }),
+    store: f.store,
   });
   expect(result).toMatchObject({
-    status: "routing-required",
+    app: candidate("app"),
     finalRoutingPlan: routePlan,
     gateway: candidate("gateway"),
-    app: candidate("app"),
+    status: "routing-required",
   });
   const pending = (await f.store.read(key))!;
   expect(pending.record.phase).toBe("routing-pending");
   const routed = await withNativeTargetAuthOnlyFinalRoutingLease({
-    store: f.store,
-    key,
-    deliveryPlanDigest,
-    approval,
-    gateway: candidate("gateway"),
     app: candidate("app"),
+    approval,
+    deliveryPlanDigest,
+    gateway: candidate("gateway"),
+    key,
     run: async ({ fenceGeneration, assertCurrent }) => {
       expect(fenceGeneration).toBe(pending.record.fenceGeneration + 1);
       await assertCurrent();
       return { status: "routed" };
     },
+    store: f.store,
   });
   expect(routed).toEqual({ status: "routed" });
   expect((await f.store.read(key))?.record.phase).toBe("prepared");
@@ -474,25 +474,25 @@ it("holds prepared settlement behind a separate Gateway routing lease", async ()
 it("does not publish prepared when the separately approved Gateway route is uncertain", async () => {
   const f = await fixture();
   await prepareNativeTargetAuthOnlyDelivery({
-    store: f.store,
-    key,
+    adapter: (target) => ({ reconcile: f.reconcile[target], deliver: f.deliver[target] }),
+    afterGatewayReady: f.afterGatewayReady,
     approval,
     assertCurrent: f.assertCurrent,
-    afterGatewayReady: f.afterGatewayReady,
+    key,
     prepareFinalRoutingPlan: async () => routingBytes,
-    adapter: (target) => ({ reconcile: f.reconcile[target], deliver: f.deliver[target] }),
+    store: f.store,
   });
   await expect(
     withNativeTargetAuthOnlyFinalRoutingLease({
-      store: f.store,
-      key,
-      deliveryPlanDigest,
-      approval,
-      gateway: candidate("gateway"),
       app: candidate("app"),
+      approval,
+      deliveryPlanDigest,
+      gateway: candidate("gateway"),
+      key,
       run: async () => {
         throw new Error("reconciliation_required");
       },
+      store: f.store,
     }),
   ).rejects.toThrow("reconciliation_required");
   expect((await f.store.read(key))?.record.phase).toBe("unknown-final");
@@ -503,13 +503,14 @@ it("rechecks entry readiness before app provider work and rejects revocation", a
   let checks = 0;
   await expect(
     f.run(async () => {
-      if (++checks > 1)
+      if (++checks > 1) {
         return {
           status: "pending-owner",
           authIdentityLink: "https://gateway.example/auth/link",
           authIdentityLinkExpiresAt: new Date(Date.now() + 60000).toISOString(),
         };
-      return { status: "ready", organizationId: "pilot-org", signupPolicyDigest: "f".repeat(64) };
+      }
+      return { organizationId: "pilot-org", signupPolicyDigest: "f".repeat(64), status: "ready" };
     }),
   ).rejects.toThrow("auth_identity_required");
   expect(f.reconcile.app).not.toHaveBeenCalled();
@@ -536,8 +537,8 @@ it.each(["routing-pending", "unknown-final", "running-final", "prepared"] as con
     const retained = (await f.store.read(key))!;
     await f.store.compareAndSet(key, retained.revision, {
       ...retained.record,
-      phase,
       lease: undefined,
+      phase,
     });
     f.reconcile.gateway.mockClear();
     f.reconcile.app.mockClear();
@@ -547,15 +548,15 @@ it.each(["routing-pending", "unknown-final", "running-final", "prepared"] as con
       throw new Error("must reuse retained plan");
     });
     const replay = await prepareNativeTargetAuthOnlyDelivery({
-      store: f.store,
-      key,
+      adapter: (target) => ({ reconcile: f.reconcile[target], deliver: f.deliver[target] }),
+      afterGatewayReady: f.afterGatewayReady,
       approval,
       assertCurrent: f.assertCurrent,
-      afterGatewayReady: f.afterGatewayReady,
+      key,
       prepareFinalRoutingPlan: builder,
-      adapter: (target) => ({ reconcile: f.reconcile[target], deliver: f.deliver[target] }),
+      store: f.store,
     });
-    expect(replay).toMatchObject({ status: "routing-required", finalRoutingPlan: routingProposal });
+    expect(replay).toMatchObject({ finalRoutingPlan: routingProposal, status: "routing-required" });
     expect(builder).not.toHaveBeenCalled();
     expect(f.reconcile.gateway).not.toHaveBeenCalled();
     expect(f.reconcile.app).not.toHaveBeenCalled();
@@ -570,13 +571,13 @@ it("does not settle parent after the held physical Gateway fence is lost", async
   await f.run();
   await expect(
     withNativeTargetAuthOnlyFinalRoutingLease({
-      store: f.store,
-      key,
-      deliveryPlanDigest,
-      approval,
-      gateway: candidate("gateway"),
       app: candidate("app"),
+      approval,
+      deliveryPlanDigest,
+      gateway: candidate("gateway"),
+      key,
       run: async () => ({ status: "prepared" }),
+      store: f.store,
       withExecutionLease: async (_, complete) =>
         await complete(async () => {
           throw new Error("physical fence lost");

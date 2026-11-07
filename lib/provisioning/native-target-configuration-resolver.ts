@@ -70,13 +70,13 @@ const configurationRequestSchema = z.union([
   z.object({
     action: z.literal("resolve-preview-target"),
     appId: operatorSelectionSchema.shape.appId,
-    sessionId: operatorSelectionSchema.shape.sessionId,
     ownerContext: operatorOwnerContextSchema.optional(),
+    sessionId: operatorSelectionSchema.shape.sessionId,
   }),
   z.object({
     action: z.enum(["plan", "execute", "status", "bindings", "auth-identity-input"]),
-    selection: operatorSelectionSchema,
     ownerContext: operatorOwnerContextSchema.optional(),
+    selection: operatorSelectionSchema,
   }),
   appIntegrationCapabilityTransportRequestSchema,
   continuityTransportRequestSchema,
@@ -132,24 +132,27 @@ export const resolveNativeTargetAuthOnlyRegistration = async (input: {
   if (policy === undefined || input.configuration.applications[input.appId] !== undefined) {
     throw new HostedOperatorError("resource_mismatch");
   }
-  const row = await input.store.read({ authority: input.authority, appId: input.appId });
-  if (row?.state.stage !== "created") return undefined;
+  const row = await input.store.read({ appId: input.appId, authority: input.authority });
+  if (row?.state.stage !== "created") {
+    return undefined;
+  }
   const { plan, projectId } = row.state;
   if (
     plan.appId !== input.appId ||
     plan.origin.publicSessionId !== input.sessionId ||
     !isDeepStrictEqual(plan.origin.authority, input.authority) ||
     !policy.accessRoles.includes(plan.appRole)
-  )
+  ) {
     throw new HostedOperatorError("resource_mismatch");
+  }
   let selected: HostedOperatorSourceConfiguration;
   try {
     selected = resolveNativeTargetResourceProfile({
-      base: input.configuration,
-      resourceProfileId: plan.authResource.profileId,
-      authority: input.authority,
       appId: input.appId,
+      authority: input.authority,
+      base: input.configuration,
       environment: input.environment,
+      resourceProfileId: plan.authResource.profileId,
     });
   } catch {
     throw new HostedOperatorError("resource_mismatch");
@@ -160,30 +163,30 @@ export const resolveNativeTargetAuthOnlyRegistration = async (input: {
   }
   const binding = {
     authDatabase: selected.authDatabase,
-    nativeNeon: selected.nativeNeon,
     gateway: {
-      projectId: selected.gateway.projectId,
-      environment: selected.gateway.environment,
-      branch: selected.gateway.branch,
       authBrowserOrigin: selected.gateway.authBrowserOrigin,
+      branch: selected.gateway.branch,
+      environment: selected.gateway.environment,
       gatewayOrigin: selected.gateway.gatewayOrigin,
+      projectId: selected.gateway.projectId,
       publicOrigin: selected.gateway.publicOrigin,
       workload: selected.gateway.workload,
     },
+    nativeNeon: selected.nativeNeon,
     operator: {
-      projectId: selected.operator.projectId,
       environment: selected.operator.environment,
       origin: selected.operator.origin,
+      projectId: selected.operator.projectId,
     },
   };
   const authorityDigest = nativeTargetAuthOnlyAuthorityDigest({
-    authority: input.authority,
     appId: input.appId,
-    profileId: plan.authResource.profileId,
     authDatabase: selected.authDatabase,
-    roles,
+    authority: input.authority,
     authorityBinding: binding,
     physicalEndpointId: selected.nativeNeon.scope.endpointId,
+    profileId: plan.authResource.profileId,
+    roles,
   });
   if (
     selected.authDatabase.resourceId !== plan.authResource.resourceId ||
@@ -191,20 +194,21 @@ export const resolveNativeTargetAuthOnlyRegistration = async (input: {
     selected.nativeNeon.scope.endpointId !== plan.authResource.endpointId ||
     selected.nativeNeon.scope.hostname !== plan.authResource.hostname ||
     authorityDigest !== plan.authResource.authorityDigest
-  )
+  ) {
     throw new HostedOperatorError("resource_mismatch");
+  }
   // Return the selected owner/app profile so downstream Auth runtime setup cannot
   // fall back to base/shared Auth custody.
   const effective = structuredClone(selected);
   effective.authOnlyApplications![input.appId]!.registration = {
-    ownerUserId: input.authority.ownerUserId,
-    sessionId: input.sessionId,
-    projectId,
-    branch: plan.branch,
-    projectSettings: structuredClone(plan.project.projectSettings),
-    planDigest: row.state.planDigest,
-    authResource: structuredClone(plan.authResource),
     appRole: plan.appRole,
+    authResource: structuredClone(plan.authResource),
+    branch: plan.branch,
+    ownerUserId: input.authority.ownerUserId,
+    planDigest: row.state.planDigest,
+    projectId,
+    projectSettings: structuredClone(plan.project.projectSettings),
+    sessionId: input.sessionId,
   };
   return effective;
 };
@@ -283,9 +287,9 @@ export const resolveOwnedStandardRuntimeConfiguration = async (input: {
     throw new HostedOperatorError("builder_destination_configuration_required");
   }
   const explicitProfile = selectStandardBuilderRuntimeProfile({
-    environment: input.environment,
-    authority: input.context.authority,
     appId: input.context.target.appId,
+    authority: input.context.authority,
+    environment: input.environment,
   });
   const selectedOrigin = await input.resources.readStandardOriginSelection?.(
     input.context,
@@ -310,11 +314,11 @@ export const resolveOwnedStandardRuntimeConfiguration = async (input: {
     throw new HostedOperatorError("resource_mismatch");
   }
   const result = assembleStandardBuilderRuntimeConfiguration({
-    base: input.configuration,
-    authority: input.context.authority,
     appId: input.context.target.appId,
-    destination,
+    authority: input.context.authority,
+    base: input.configuration,
     captured,
+    destination,
     environment: input.environment,
     ...(verifiedPublicOrigin === undefined ? {} : { verifiedPublicOrigin }),
   });
@@ -355,7 +359,7 @@ export const createNativeTargetConfigurationResolver =
       try {
         stage = "resolver_owner";
         const selected = await selectedApp(parsed.data, request, resources);
-        const ownerContext = parsed.data.ownerContext;
+        const { ownerContext } = parsed.data;
         if (ownerContext === undefined || ownerContext.sessionId !== selected.sessionId) {
           throw new HostedOperatorError("authorization_required");
         }
@@ -377,16 +381,16 @@ export const createNativeTargetConfigurationResolver =
           };
           await resources.owner.assertCanonicalAppOwner(context);
           const effective = await resolveNativeTargetAuthOnlyRegistration({
+            appId: selected.appId,
+            authority: ownerContext.authority,
             configuration: input.configuration,
+            environment: input.environment ?? {},
+            sessionId: selected.sessionId,
             store: resources.authOnlyDispatch ?? {
               read: async () => {
                 throw new HostedOperatorError("resource_mismatch");
               },
             },
-            authority: ownerContext.authority,
-            sessionId: selected.sessionId,
-            appId: selected.appId,
-            environment: input.environment ?? {},
           });
           if (effective === undefined) {
             throw new HostedOperatorError("builder_destination_required");
@@ -406,9 +410,9 @@ export const createNativeTargetConfigurationResolver =
           };
           return await resolveOwnedStandardRuntimeConfiguration({
             configuration: input.configuration,
-            resources,
             context,
             environment: input.environment ?? {},
+            resources,
           });
         }
         if (input.environment?.PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES !== undefined) {
@@ -428,11 +432,11 @@ export const createNativeTargetConfigurationResolver =
             throw new HostedOperatorError("builder_destination_configuration_required");
           }
           const configuration = assembleStandardBuilderRuntimeConfiguration({
-            base: input.configuration,
-            authority: ownerContext.authority,
             appId: selected.appId,
-            destination,
+            authority: ownerContext.authority,
+            base: input.configuration,
             captured,
+            destination,
             environment: input.environment,
           });
           await resources.owner.assertCanonicalAppOwner(context);
@@ -503,7 +507,6 @@ export const createNativeTargetConfigurationResolver =
           return structuredClone(input.configuration);
         }
         const reader = createNativeTargetOnboardingReader<RegistryInvocation>({
-          store: resources.registry,
           authorize: async (invocation, appId) => {
             stage = "resolver_workload";
             await resources.owner.verifyWorkload(invocation.request);
@@ -521,12 +524,18 @@ export const createNativeTargetConfigurationResolver =
               adapterGeneration: invocation.ownerContext.adapterGeneration,
             };
           },
+          store: resources.registry,
         });
         stage = "resolver_effective_config";
         return await resolveNativeTargetEffectiveConfiguration({
-          configuration: input.configuration,
-          invocation: { request, ownerContext, sessionId: selected.sessionId },
           appId: selected.appId,
+          configuration: input.configuration,
+          invocation: { ownerContext, request, sessionId: selected.sessionId },
+          readReady: async (invocation, appId) => {
+            const ready = await reader.readReady(invocation, appId);
+            stage = "resolver_effective_config";
+            return ready;
+          },
           selectResourceConfiguration: (ready) => {
             try {
               return resolveNativeTargetResourceProfile({
@@ -539,11 +548,6 @@ export const createNativeTargetConfigurationResolver =
             } catch {
               throw new HostedOperatorError("resource_mismatch");
             }
-          },
-          readReady: async (invocation, appId) => {
-            const ready = await reader.readReady(invocation, appId);
-            stage = "resolver_effective_config";
-            return ready;
           },
         });
       } finally {
@@ -596,16 +600,51 @@ export const openNativeTargetConfigurationResources = async (
             workspaceId,
           }),
       },
-      workloadPolicy: configuration.workloadPolicy,
       realmContinuation: {
         config: tokenKeyring,
         service: realmContinuationServiceIdentityForWorkload(configuration.workloadPolicy),
       },
+      workloadPolicy: configuration.workloadPolicy,
     } satisfies Parameters<typeof createHostedOperatorAppOwnerAuthority>[0];
     const owner = createHostedOperatorAppOwnerAuthority(ownerDependencies);
     return {
+      authOnlyDispatch: createPostgresNativeTargetAuthOnlyDispatchStore(database),
+      close: async () => {
+        await client.end({ timeout: 5 });
+      },
+      continuity: createPostgresContinuityJournalStore(database),
+      exports: createPostgresTenantExportJournalStore(database),
       owner,
-      readStandardDestination: (context) =>
+      readStandardCapture: async (context) => {
+        const session = await readCanonicalAppOwnerSession(ownerDependencies, context);
+        const spec = session.privateBuildDecision?.currentSpec;
+        if (spec === undefined || spec.appId !== context.target.appId) {
+          throw new HostedOperatorError("builder_destination_configuration_required");
+        }
+        const artifactContext = { authority: context.authority, target: context.target };
+        const assertCurrentOwner = async () => {
+          await readCanonicalAppOwnerSession(ownerDependencies, context);
+        };
+        const selections = createPostgresOperatorArtifactSelections({
+          database,
+          assertCurrentOwner,
+        });
+        const selection = await selections.read(artifactContext, spec.appSpecDigest);
+        if (selection === undefined || selection.appId !== context.target.appId) {
+          throw new HostedOperatorError("builder_destination_configuration_required");
+        }
+        const publication = createOperatorArtifactPublication({
+          store: createPostgresOperatorArtifactStore({ database, assertCurrentOwner }),
+          assertCurrentOwner,
+        });
+        const captured = await publication.readGeneratedRelease(artifactContext, selection);
+        await assertCurrentOwner();
+        if (captured.description === undefined) {
+          throw new HostedOperatorError("builder_destination_configuration_required");
+        }
+        return { selection, description: captured.description };
+      },
+      readStandardDestination: async (context) =>
         readStandardBuilderDestination(
           {
             ...ownerDependencies,
@@ -613,7 +652,7 @@ export const openNativeTargetConfigurationResources = async (
             findProvisioningForAppRepository:
               createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
 
-            readVercelCredential: (credential) =>
+            readVercelCredential: async (credential) =>
               readActiveVercelInstallationToken({
                 ...credential,
                 database,
@@ -622,7 +661,7 @@ export const openNativeTargetConfigurationResources = async (
           },
           context,
         ),
-      readStandardOriginSelection: (context, destination) =>
+      readStandardOriginSelection: async (context, destination) =>
         createBuilderPublicOriginStore(database).read({
           authority: context.authority,
           scope: {
@@ -640,7 +679,10 @@ export const openNativeTargetConfigurationResources = async (
           readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
           findProvisioningForAppRepository:
             createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
-          readVercelCredential: (credential: { authority: unknown; installationId: string }) =>
+          readVercelCredential: async (credential: {
+            authority: unknown;
+            installationId: string;
+          }) =>
             readActiveVercelInstallationToken({ ...credential, database, config: tokenKeyring }),
         };
         const choiceStore = createBuilderPublicOriginStore(database);
@@ -682,43 +724,7 @@ export const openNativeTargetConfigurationResources = async (
             }),
         });
       },
-      readStandardCapture: async (context) => {
-        const session = await readCanonicalAppOwnerSession(ownerDependencies, context);
-        const spec = session.privateBuildDecision?.currentSpec;
-        if (spec === undefined || spec.appId !== context.target.appId) {
-          throw new HostedOperatorError("builder_destination_configuration_required");
-        }
-        const artifactContext = { authority: context.authority, target: context.target };
-        const assertCurrentOwner = async () => {
-          await readCanonicalAppOwnerSession(ownerDependencies, context);
-        };
-        const selections = createPostgresOperatorArtifactSelections({
-          database,
-          assertCurrentOwner,
-        });
-        const selection = await selections.read(artifactContext, spec.appSpecDigest);
-        if (selection === undefined || selection.appId !== context.target.appId) {
-          throw new HostedOperatorError("builder_destination_configuration_required");
-        }
-        const publication = createOperatorArtifactPublication({
-          store: createPostgresOperatorArtifactStore({ database, assertCurrentOwner }),
-          assertCurrentOwner,
-        });
-        const captured = await publication.readGeneratedRelease(artifactContext, selection);
-        await assertCurrentOwner();
-        if (captured.description === undefined) {
-          throw new HostedOperatorError("builder_destination_configuration_required");
-        }
-        return { selection, description: captured.description };
-      },
-
       registry: createPostgresNativeTargetOnboardingStore(database),
-      authOnlyDispatch: createPostgresNativeTargetAuthOnlyDispatchStore(database),
-      continuity: createPostgresContinuityJournalStore(database),
-      exports: createPostgresTenantExportJournalStore(database),
-      close: async () => {
-        await client.end({ timeout: 5 });
-      },
     };
   } catch (error) {
     try {
@@ -743,10 +749,10 @@ export const createNativeTargetRequestDependencies =
     ) {
       try {
         return {
+          close: async () => Promise.resolve(),
           dependencies: composeHostedOperatorAuthorizationDependencies(
             readNeonAuthorizationConfiguration(environment),
           ),
-          close: () => Promise.resolve(),
         };
       } catch (error) {
         reportHostedOperatorNativeFailure("resolver_configuration_authorization", error);

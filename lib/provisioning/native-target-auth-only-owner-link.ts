@@ -34,35 +34,35 @@ const httpsOrigin = z.url().refine((value) => {
   return url.protocol === "https:" && url.origin === value;
 });
 const previewSenderSchema = z.strictObject({
-  issuer: z.url(),
   audience: z.url(),
-  projectId: id,
-  ownerId: id,
-  subject: id,
   environment: z.literal("preview"),
+  issuer: z.url(),
+  ownerId: id,
+  projectId: id,
+  subject: id,
 });
 export const nativeTargetAuthOnlyOwnerLinkBindingSchema = z
   .strictObject({
-    authority: hostedTenantAuthoritySchema,
-    target: hostedRuntimeTargetSchema.extend({
-      environment: z.literal("preview"),
-      scopeType: z.literal("team"),
-      sessionId,
-    }),
-    operationRef: z.uuid(),
-    authOnlyPlanDigest: digest,
-    resourcePlanDigest: digest,
-    gatewayDeliveryPlanDigest: digest,
-    gateway: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
-    sender: previewSenderSchema,
-    browserOrigin: httpsOrigin,
-    issuer: httpsOrigin,
     audience: httpsOrigin,
+    authOnlyPlanDigest: digest,
     authResourceId: id,
+    authority: hostedTenantAuthoritySchema,
     bootstrapResource: realmPhysicalResourceSchema.extend({
       environment: z.literal("preview"),
       port: z.literal(5432),
       neon: realmPhysicalResourceSchema.shape.neon.unwrap(),
+    }),
+    browserOrigin: httpsOrigin,
+    gateway: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
+    gatewayDeliveryPlanDigest: digest,
+    issuer: httpsOrigin,
+    operationRef: z.uuid(),
+    resourcePlanDigest: digest,
+    sender: previewSenderSchema,
+    target: hostedRuntimeTargetSchema.extend({
+      environment: z.literal("preview"),
+      scopeType: z.literal("team"),
+      sessionId,
     }),
   })
   .superRefine((binding, context) => {
@@ -82,19 +82,22 @@ export type NativeTargetAuthOnlyOwnerLinkBinding = z.infer<
 >;
 
 const selectorSchema = z.strictObject({
-  ownerSessionId: sessionId,
-  nonceSha256: digest,
   authority: hostedTenantAuthoritySchema.optional(),
+  nonceSha256: digest,
+  ownerSessionId: sessionId,
 });
 type Selector = z.infer<typeof selectorSchema>;
 const recordSchema = z.strictObject({
-  kind: z.literal("native-target-auth-only-owner-link"),
-  version: z.literal(1),
   binding: nativeTargetAuthOnlyOwnerLinkBindingSchema,
+  kind: z.literal("native-target-auth-only-owner-link"),
   link: operatorRealmIdentityLinkSchema,
+  version: z.literal(1),
 });
 type Record = z.infer<typeof recordSchema>;
-type Row = { record: Record; revision: number };
+interface Row {
+  record: Record;
+  revision: number;
+}
 
 export interface NativeTargetAuthOnlyOwnerLinkStore {
   read(binding: NativeTargetAuthOnlyOwnerLinkBinding): Promise<Row | undefined>;
@@ -137,8 +140,9 @@ const validateRecord = (value: unknown): Record => {
     link.publicRelease !== undefined ||
     link.browserSession !== undefined ||
     (link.consumedAt === undefined) !== (link.sealedNonce !== undefined)
-  )
+  ) {
     throw denied();
+  }
   return record;
 };
 
@@ -161,46 +165,22 @@ export const createPostgresNativeTargetAuthOnlyOwnerLinkStore = (
   const parseRow = (row: typeof builderProvisioningJournals.$inferSelect): Row => {
     const record = validateRecord(row.record);
     const authority = hostedTenantAuthoritySchema.parse({
-      issuer: row.issuer,
       audience: row.audience,
-      workspaceId: row.workspaceId,
+      issuer: row.issuer,
       ownerUserId: row.ownerUserId,
+      workspaceId: row.workspaceId,
     });
     if (
       !isDeepStrictEqual(authority, record.binding.authority) ||
       row.requestId !== requestIdFor(record.binding) ||
       row.requestDigest !== bindingDigest(record.binding) ||
       row.state !== (record.link.consumedAt === undefined ? "pending" : "settled")
-    )
+    ) {
       throw denied();
+    }
     return { record, revision: row.revision };
   };
   return {
-    async read(binding) {
-      const [row] = await database
-        .select()
-        .from(builderProvisioningJournals)
-        .where(predicate(binding))
-        .limit(1);
-      return row === undefined ? undefined : parseRow(row);
-    },
-    async lookup(rawSelector) {
-      const selector = selectorSchema.parse(rawSelector);
-      const rows = await database
-        .select()
-        .from(builderProvisioningJournals)
-        .where(
-          and(
-            kind,
-            sql`${builderProvisioningJournals.record}->'link'->>'ownerSessionId' = ${selector.ownerSessionId}`,
-            sql`${builderProvisioningJournals.record}->'link'->>'nonceSha256' = ${selector.nonceSha256}`,
-          ),
-        )
-        .limit(2);
-      const [row] = rows;
-      if (rows.length > 1) throw denied();
-      return row === undefined ? undefined : parseRow(row);
-    },
     async compareAndSet(rawRecord, expectedRevision) {
       const record = validateRecord(rawRecord);
       const { binding, link } = record;
@@ -235,6 +215,31 @@ export const createPostgresNativeTargetAuthOnlyOwnerLinkStore = (
               .returning();
       return row === undefined ? undefined : parseRow(row);
     },
+    async lookup(rawSelector) {
+      const selector = selectorSchema.parse(rawSelector);
+      const rows = await database
+        .select()
+        .from(builderProvisioningJournals)
+        .where(
+          and(
+            kind,
+            sql`${builderProvisioningJournals.record}->'link'->>'ownerSessionId' = ${selector.ownerSessionId}`,
+            sql`${builderProvisioningJournals.record}->'link'->>'nonceSha256' = ${selector.nonceSha256}`,
+          ),
+        )
+        .limit(2);
+      const [row] = rows;
+      if (rows.length > 1) throw denied();
+      return row === undefined ? undefined : parseRow(row);
+    },
+    async read(binding) {
+      const [row] = await database
+        .select()
+        .from(builderProvisioningJournals)
+        .where(predicate(binding))
+        .limit(1);
+      return row === undefined ? undefined : parseRow(row);
+    },
   };
 };
 
@@ -257,13 +262,49 @@ export const createNativeTargetAuthOnlyOwnerLink = (ports: {
     await ports.assertCurrent(binding);
     const row = await ports.store.read(binding);
     await ports.assertCurrent(binding);
-    if (row !== undefined && !isDeepStrictEqual(validateRecord(row.record).binding, binding))
+    if (row !== undefined && !isDeepStrictEqual(validateRecord(row.record).binding, binding)) {
       throw denied();
+    }
     return row;
   };
   const pending = (link: Record["link"]) =>
     link.consumedAt === undefined && Date.parse(link.expiresAt) > now();
   return {
+    async consume(input: {
+      binding: NativeTargetAuthOnlyOwnerLinkBinding;
+      nonceSha256: string;
+      proofRef: string;
+      proofSha256: string;
+    }) {
+      const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse(input.binding);
+      const current = await read(binding);
+      if (
+        current === undefined ||
+        !pending(current.record.link) ||
+        digest.parse(input.nonceSha256) !== current.record.link.nonceSha256 ||
+        input.proofRef !==
+          `_protected-operator/artifacts/realm-identity-proof/${binding.target.appId}/${digest.parse(input.proofSha256)}`
+      )
+        throw denied();
+      const proof = await ports.readPublishedProof(binding, input.proofRef);
+      if (proof === undefined || sha256(proof) !== input.proofSha256) throw denied();
+      const link = operatorRealmIdentityLinkSchema.parse({
+        ...projectPendingRealmIdentityLink(current.record.link),
+        consumedAt: new Date(now()).toISOString(),
+        proofRef: input.proofRef,
+        proofSha256: input.proofSha256,
+      });
+      await ports.assertCurrent(binding);
+      if (!pending(current.record.link)) throw denied();
+      const saved = await ports.store.compareAndSet({ ...current.record, link }, current.revision);
+      if (
+        saved === undefined ||
+        saved.revision !== current.revision + 1 ||
+        !isDeepStrictEqual(validateRecord(saved.record), { ...current.record, link })
+      )
+        throw denied();
+      await ports.assertCurrent(binding);
+    },
     async prepare(rawBinding: NativeTargetAuthOnlyOwnerLinkBinding) {
       const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse(rawBinding);
       let current = await read(binding);
@@ -317,6 +358,16 @@ export const createNativeTargetAuthOnlyOwnerLink = (ports: {
         sessionId: binding.target.sessionId,
       };
     },
+    async readCaptured(rawBinding: NativeTargetAuthOnlyOwnerLinkBinding) {
+      const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse(rawBinding);
+      const current = await read(binding);
+      const link = current?.record.link;
+      if (link?.consumedAt === undefined || link.proofRef === undefined) return undefined;
+      const proof = await ports.readPublishedProof(binding, link.proofRef);
+      if (proof === undefined || sha256(proof) !== link.proofSha256) throw denied();
+      await ports.assertCurrent(binding);
+      return projectPendingRealmIdentityLink(link);
+    },
     /** Undefined means no Auth-only routing record. An invalid matching record fails closed. */
     async readPending(rawSelector: Selector) {
       const selector = selectorSchema.parse(rawSelector);
@@ -345,51 +396,6 @@ export const createNativeTargetAuthOnlyOwnerLink = (ports: {
         jwksUrl: new URL("/_platform/jwks.json", binding.gateway.origin).href,
         sender: binding.sender,
       };
-    },
-    async consume(input: {
-      binding: NativeTargetAuthOnlyOwnerLinkBinding;
-      nonceSha256: string;
-      proofRef: string;
-      proofSha256: string;
-    }) {
-      const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse(input.binding);
-      const current = await read(binding);
-      if (
-        current === undefined ||
-        !pending(current.record.link) ||
-        digest.parse(input.nonceSha256) !== current.record.link.nonceSha256 ||
-        input.proofRef !==
-          `_protected-operator/artifacts/realm-identity-proof/${binding.target.appId}/${digest.parse(input.proofSha256)}`
-      )
-        throw denied();
-      const proof = await ports.readPublishedProof(binding, input.proofRef);
-      if (proof === undefined || sha256(proof) !== input.proofSha256) throw denied();
-      const link = operatorRealmIdentityLinkSchema.parse({
-        ...projectPendingRealmIdentityLink(current.record.link),
-        consumedAt: new Date(now()).toISOString(),
-        proofRef: input.proofRef,
-        proofSha256: input.proofSha256,
-      });
-      await ports.assertCurrent(binding);
-      if (!pending(current.record.link)) throw denied();
-      const saved = await ports.store.compareAndSet({ ...current.record, link }, current.revision);
-      if (
-        saved === undefined ||
-        saved.revision !== current.revision + 1 ||
-        !isDeepStrictEqual(validateRecord(saved.record), { ...current.record, link })
-      )
-        throw denied();
-      await ports.assertCurrent(binding);
-    },
-    async readCaptured(rawBinding: NativeTargetAuthOnlyOwnerLinkBinding) {
-      const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse(rawBinding);
-      const current = await read(binding);
-      const link = current?.record.link;
-      if (link?.consumedAt === undefined || link.proofRef === undefined) return undefined;
-      const proof = await ports.readPublishedProof(binding, link.proofRef);
-      if (proof === undefined || sha256(proof) !== link.proofSha256) throw denied();
-      await ports.assertCurrent(binding);
-      return projectPendingRealmIdentityLink(link);
     },
   };
 };

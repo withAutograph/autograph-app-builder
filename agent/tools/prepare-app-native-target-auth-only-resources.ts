@@ -2,10 +2,6 @@ import { defineWorkflowTool } from "eve/tools";
 import { nativeTargetAuthOnlyResourcePreparationInputSchema } from "../../lib/eve/private-native-target-auth-only-resource-approval";
 
 export default defineWorkflowTool({
-  availableInSubagents: false,
-  description:
-    "After the dedicated Preview project has been created, approve and prepare exactly its isolated Auth database resource from the retained resource plan. This applies only the pinned one-resource Auth bootstrap and verified-email Auth schema. It creates no app database, deployment, or product-data grant. Retry uses the original settled approval and retained resource bytes.",
-  inputSchema: nativeTargetAuthOnlyResourcePreparationInputSchema,
   approval: {
     request: async (ctx) => {
       if (ctx.toolInput === undefined) return "user-approval" as const;
@@ -38,6 +34,9 @@ export default defineWorkflowTool({
       }
     },
   },
+  availableInSubagents: false,
+  description:
+    "After the dedicated Preview project has been created, approve and prepare exactly its isolated Auth database resource from the retained resource plan. This applies only the pinned one-resource Auth bootstrap and verified-email Auth schema. It creates no app database, deployment, or product-data grant. Retry uses the original settled approval and retained resource bytes.",
   async execute(input, ctx) {
     "use workflow";
     const { nativeTargetOnboardingRuntimeForSession } =
@@ -45,4 +44,5 @@ export default defineWorkflowTool({
     const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
     return await runtime.prepareAuthOnlyResources(input, ctx);
   },
+  inputSchema: nativeTargetAuthOnlyResourcePreparationInputSchema,
 });

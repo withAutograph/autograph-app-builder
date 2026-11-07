@@ -15,14 +15,14 @@ const targetSchema = z.object({
   }),
 });
 const migrationSchema = z.object({
-  version: z.literal(1),
-  resource: z.json(),
   proposal: z.literal("new-empty").optional(),
+  resource: z.json(),
   schemaPlan: z.looseObject({
     ...targetSchema.shape.schemaPlan.shape,
     effects: z.array(z.looseObject({ owner: z.string(), sha256: digest, sql: z.string() })),
     beforeSchemaHash: digest,
   }),
+  version: z.literal(1),
 });
 const snapshotSchema = z.object({
   database: z.string(),
@@ -164,9 +164,6 @@ export const createHostedOperatorAuthReadiness = <
     }
   };
   return {
-    verify: async (input: Input<Plan>) => await verify(input, true),
-    /** Actual current publication; this never claims the newly approved target is installed. */
-    verifyPublication: async (input: Input<Plan>) => await verify(input, false),
     async reconcileMigration(
       supplied: Input<Plan>,
       repropose: (input: Input<Plan>) => Promise<Buffer>,
@@ -250,5 +247,8 @@ export const createHostedOperatorAuthReadiness = <
         return { status: "unknown" as const };
       }
     },
+    verify: async (input: Input<Plan>) => await verify(input, true),
+    /** Actual current publication; this never claims the newly approved target is installed. */
+    verifyPublication: async (input: Input<Plan>) => await verify(input, false),
   };
 };

@@ -5,7 +5,6 @@ export default defineTool({
   availableInSubagents: false,
   description:
     "Plan a dedicated Preview target for a static app that needs isolated Auth only. This reads the selected app's saved static description, published source, immutable Auth schema artifact selection and the deployment-owned owner/app Auth profile and role catalog. The retained approval digest binds the exact schema artifact and pinned installer, source description, project settings, verified-email signup policy, role and isolated Auth authority. This planning call creates no provider resources and grants no product-data access.",
-  inputSchema: nativeTargetAuthOnlyPlanRequestSchema,
   async execute(input, ctx) {
     const [
       { nativeTargetOnboardingRuntimeForSession },
@@ -44,4 +43,5 @@ export default defineTool({
     const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
     return await runtime.planAuthOnly(input, ctx, state);
   },
+  inputSchema: nativeTargetAuthOnlyPlanRequestSchema,
 });

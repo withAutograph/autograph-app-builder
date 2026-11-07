@@ -36,23 +36,23 @@ export const nativeTargetAuthOnlyAuthorityBindingSchema = z
 
 /** Narrow projection of the full deployment-owned resource profile. */
 const authOnlyProfileSchema = z.strictObject({
-  id: z.string().min(1),
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
   authority: hostedTenantAuthoritySchema,
   configuration: z.strictObject({ authDatabase: resourceSchema }),
+  id: z.string().min(1),
 });
 
 const proposalSchema = z.strictObject({
   appId: nativeTargetOnboardingPlanSchema.shape.appId,
+  appRole: roleSchema,
+  appSpecDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   authProfileId: z.string().min(1),
+  branch: nativeTargetOnboardingPlanSchema.shape.branch,
   project: z.strictObject({
     name: nativeTargetOnboardingPlanSchema.shape.project.shape.name,
     teamId: z.string().min(1),
     installationId: z.string().min(1),
   }),
-  branch: nativeTargetOnboardingPlanSchema.shape.branch,
-  appSpecDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  appRole: roleSchema,
 });
 
 export interface AuthOnlyPlanOwner {
@@ -74,13 +74,13 @@ export const nativeTargetAuthOnlyAuthorityDigest = (input: {
   createHash("sha256")
     .update(
       JSON.stringify({
-        authority: hostedTenantAuthoritySchema.parse(input.authority),
         appId: nativeTargetOnboardingPlanSchema.shape.appId.parse(input.appId),
-        profileId: z.string().min(1).parse(input.profileId),
         authDatabase: resourceSchema.parse(input.authDatabase),
-        roles: z.array(roleSchema).parse(input.roles),
+        authority: hostedTenantAuthoritySchema.parse(input.authority),
         authorityBinding: nativeTargetAuthOnlyAuthorityBindingSchema.parse(input.authorityBinding),
         physicalEndpointId: z.string().min(1).parse(input.physicalEndpointId),
+        profileId: z.string().min(1).parse(input.profileId),
+        roles: z.array(roleSchema).parse(input.roles),
       }),
     )
     .digest("hex");
@@ -138,46 +138,46 @@ export const planNativeTargetAuthOnly = (input: {
         }),
   });
   const authResourceAuthorityDigest = nativeTargetAuthOnlyAuthorityDigest({
-    authority: owner.authority,
     appId: proposal.appId,
-    profileId: profile.id,
     authDatabase: profile.configuration.authDatabase,
-    roles,
+    authority: owner.authority,
     authorityBinding,
     physicalEndpointId: input.selectedPhysicalEndpointId,
+    profileId: profile.id,
+    roles,
   });
   return nativeTargetAuthOnlyPlanSchema.parse({
-    version: 1,
-    kind: "native-target-auth-only",
     appId: proposal.appId,
+    appRole: proposal.appRole,
+    authResource: {
+      authorityDigest: authResourceAuthorityDigest,
+      database: profile.configuration.authDatabase.database,
+      endpointId: input.selectedPhysicalEndpointId,
+      hostname: authorityBinding.nativeNeon.scope.hostname,
+      profileId: profile.id,
+      resourceId: profile.configuration.authDatabase.resourceId,
+    },
+    authSchema: input.authSchema,
+    branch: proposal.branch,
+    cost: { description: "Isolated Preview Auth only", ownership: "current-owner" },
+    kind: "native-target-auth-only",
     origin: {
-      authority: owner.authority,
-      publicSessionId: owner.publicSessionId,
-      adapterSessionId: owner.adapterSessionId,
       adapterGeneration: owner.adapterGeneration,
+      adapterSessionId: owner.adapterSessionId,
       appSpecDigest: proposal.appSpecDigest,
+      authority: owner.authority,
       capturedDescription: capturedStaticDescriptionProvenance(description),
+      publicSessionId: owner.publicSessionId,
     },
     project: {
       ...proposal.project,
       projectSettings,
       protection: nativeTargetRequiredProjectProtection,
     },
-    branch: proposal.branch,
     publishedSource,
-    authResource: {
-      profileId: profile.id,
-      authorityDigest: authResourceAuthorityDigest,
-      resourceId: profile.configuration.authDatabase.resourceId,
-      database: profile.configuration.authDatabase.database,
-      endpointId: input.selectedPhysicalEndpointId,
-      hostname: authorityBinding.nativeNeon.scope.hostname,
-    },
-    authSchema: input.authSchema,
-    appRole: proposal.appRole,
-    signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
-    cost: { ownership: "current-owner", description: "Isolated Preview Auth only" },
     retention: { policy: "Retain until explicit approved cleanup" },
+    signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
+    version: 1,
   });
 };
 
@@ -228,52 +228,52 @@ export const planNativeTargetAuthOnlyFromOwnedState = async (input: {
     authority: hostedTenantAuthoritySchema.parse(input.owner.authority),
   };
   const lookup = {
-    authority: owner.authority,
     appId: proposal.appId,
+    authority: owner.authority,
     profileId: proposal.authProfileId,
   };
   const [capturedDescription, selectedProfile, configuredAppRoles, publishedSource] =
     await Promise.all([
       input.readCapturedDescription({
-        authority: owner.authority,
         appId: proposal.appId,
         appSpecDigest: proposal.appSpecDigest,
+        authority: owner.authority,
         publicSessionId: owner.publicSessionId,
       }),
       input.readAuthProfile(lookup),
       input.readConfiguredAppRoles(lookup),
       input.readPublishedSource({
-        authority: owner.authority,
         appId: proposal.appId,
         appSpecDigest: proposal.appSpecDigest,
+        authority: owner.authority,
         publicSessionId: owner.publicSessionId,
       }),
     ]);
   const authSchema = await input.readAuthSchemaSelection({
-    authority: owner.authority,
     appId: proposal.appId,
     appSpecDigest: proposal.appSpecDigest,
+    authority: owner.authority,
     publicSessionId: owner.publicSessionId,
     publishedSource,
   });
   return planNativeTargetAuthOnly({
+    authAuthorityBinding: input.authAuthorityBinding,
+    authSchema,
+    capturedDescription,
+    configuredAppRoles,
     owner,
     proposal: {
       appId: proposal.appId,
-      authProfileId: proposal.authProfileId,
-      project: proposal.project,
-      branch: proposal.branch,
-      appSpecDigest: proposal.appSpecDigest,
       appRole: proposal.appRole,
+      appSpecDigest: proposal.appSpecDigest,
+      authProfileId: proposal.authProfileId,
+      branch: proposal.branch,
+      project: proposal.project,
     },
-    capturedDescription,
+    publishedSource,
+    selectedPhysicalEndpointId: input.selectedPhysicalEndpointId,
     selectedProfile,
     sharedAuthResourceId: input.sharedAuthResourceId,
     sharedPhysicalEndpointId: input.sharedPhysicalEndpointId,
-    selectedPhysicalEndpointId: input.selectedPhysicalEndpointId,
-    authAuthorityBinding: input.authAuthorityBinding,
-    configuredAppRoles,
-    publishedSource,
-    authSchema,
   });
 };

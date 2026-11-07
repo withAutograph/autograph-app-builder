@@ -24,60 +24,56 @@ import type {
 } from "./native-target-auth-only-entry-plan-store";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "pilot-workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "pilot-owner",
+  workspaceId: "pilot-workspace",
 };
 const key = {
-  authority,
   appId: "signup-pilot",
-  sessionId: "saved-session",
+  authResourceId: "isolated-auth",
+  authority,
   deliveryOperationRef: "11111111-1111-4111-a111-111111111111",
   deliveryPlanDigest: "a".repeat(64),
-  resourcePlanDigest: "b".repeat(64),
-  ownerProofSha256: "c".repeat(64),
-  authResourceId: "isolated-auth",
   effect: "organization",
+  ownerProofSha256: "c".repeat(64),
+  resourcePlanDigest: "b".repeat(64),
+  sessionId: "saved-session",
 } satisfies NativeTargetAuthOnlyEntryPlanKey;
 const signupKey = { ...key, effect: "signup-policy" } satisfies NativeTargetAuthOnlyEntryPlanKey;
 const historyOwner = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: 1,
+  adapterSessionId: "saved-adapter",
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: key.sessionId,
-  adapterSessionId: "saved-adapter",
-  adapterGeneration: 1,
 });
 const at = "2026-11-06T12:00:00.000Z";
 const issuer = "https://pilot.example";
 const gatewayOrigin = "https://immutable-gateway.example";
 const jwksUrl = `${gatewayOrigin}/_platform/jwks.json`;
 const planBase = {
-  version: 1,
   action: "prepare",
-  selection: { sessionId: key.sessionId, workspaceId: authority.workspaceId },
   authDatabase: {
-    resourceId: key.authResourceId,
     database: "pilot_auth",
     migratorRole: "pilot_migrator",
+    resourceId: key.authResourceId,
     runtimeRole: "pilot_runtime",
   },
-  neon: { endpoint: "ep-pilot.neon.tech", projectId: "pilot-project", branchId: "pilot-branch" },
   deploymentBoundary: {
+    operator: { environment: "preview", projectId: "operator" },
     teamId: "team",
-    operator: { projectId: "operator", environment: "preview" },
-    verification: { publicOrigin: issuer, gatewayOrigin, jwksUrl },
+    verification: { gatewayOrigin, jwksUrl, publicOrigin: issuer },
   },
+  neon: { branchId: "pilot-branch", endpoint: "ep-pilot.neon.tech", projectId: "pilot-project" },
+  selection: { sessionId: key.sessionId, workspaceId: authority.workspaceId },
+  version: 1,
 };
 const installer = { reference: "auth-owned-organization-v1", sha256: "e".repeat(64) };
 const organizationPlan = authOnlyOrganizationPlanSchema.parse({
   ...planBase,
   authMembership: {
-    kind: "create-owned-organization",
-    organizationId: "pilot-org",
-    name: "Pilot",
-    slug: "pilot",
     actorId: "realm-owner",
     bootstrapPlanDigest: key.resourcePlanDigest,
     identityCapture: { capturedAt: at, realmSessionId: "realm-session" },
@@ -89,12 +85,16 @@ const organizationPlan = authOnlyOrganizationPlanSchema.parse({
       jwksUrl,
       transportSource: {
         audience: "https://vercel.com/team",
-        issuer: "https://oidc.vercel.com/team",
-        projectId: "operator",
-        ownerId: "team",
         environment: "preview",
+        issuer: "https://oidc.vercel.com/team",
+        ownerId: "team",
+        projectId: "operator",
       },
     },
+    kind: "create-owned-organization",
+    name: "Pilot",
+    organizationId: "pilot-org",
+    slug: "pilot",
   },
   effects: [{ id: "auth-membership", kind: "auth-membership", resourceId: key.authResourceId }],
   membershipInstaller: installer,
@@ -103,27 +103,27 @@ const privateAlias = "pilot-only@example.test";
 const signupPlan = authOnlySignupPolicyPlanSchema.parse({
   ...planBase,
   authSignupPolicy: {
-    version: 1,
-    policyId: "pilot-policy",
-    authResourceId: key.authResourceId,
-    appId: key.appId,
-    origin: issuer,
-    appPath: "/app",
-    organizationId: "pilot-org",
-    eligibility: "approved-email",
     allowedEmails: [privateAlias],
-    membershipRole: "member",
-    appRoles: ["pilot_user"],
-  },
-  normalActorProgram: {
     appId: key.appId,
+    appPath: "/app",
+    appRoles: ["pilot_user"],
+    authResourceId: key.authResourceId,
+    eligibility: "approved-email",
+    membershipRole: "member",
+    organizationId: "pilot-org",
     origin: issuer,
-    organizations: [{ organizationId: "pilot-org" }],
-    appAccess: [{ appId: key.appId, organizationId: "pilot-org", roles: ["pilot_user"] }],
+    policyId: "pilot-policy",
+    version: 1,
   },
   effects: [
     { id: "auth-signup-policy", kind: "auth-signup-policy", resourceId: key.authResourceId },
   ],
+  normalActorProgram: {
+    appAccess: [{ appId: key.appId, organizationId: "pilot-org", roles: ["pilot_user"] }],
+    appId: key.appId,
+    organizations: [{ organizationId: "pilot-org" }],
+    origin: issuer,
+  },
   signupPolicyInstaller: installer,
 });
 const organizationBytes = encodeNativeTargetAuthOnlyEntryPlan(key, organizationPlan);
@@ -133,12 +133,7 @@ const requested = (
   requestId = "request",
   callId = "call",
 ): MessageStreamEvent => ({
-  type: "input.requested",
-  meta: { at, id: requestId },
   data: {
-    sequence: 1,
-    stepIndex: 0,
-    turnId: "turn",
     requests: [
       {
         kind: "tool-approval",
@@ -152,16 +147,21 @@ const requested = (
         },
       },
     ],
+    sequence: 1,
+    stepIndex: 0,
+    turnId: "turn",
   },
+  meta: { at, id: requestId },
+  type: "input.requested",
 });
 const settled = (
   requestId = "request",
   responderPrincipalId = authority.ownerUserId,
   outcome: "approved" | "cancelled" = "approved",
 ): MessageStreamEvent => ({
-  type: "approval.settled",
+  data: { outcome, requestId, responderPrincipalId, sequence: 2, stepIndex: 0, turnId: "turn" },
   meta: { at, id: "settlement" },
-  data: { sequence: 2, stepIndex: 0, turnId: "turn", requestId, responderPrincipalId, outcome },
+  type: "approval.settled",
 });
 const fixture = () => {
   interface Row {
@@ -208,8 +208,8 @@ const fixture = () => {
     },
   });
   const db = {
-    select: () => ({ from: () => ({ where: select }) }),
     insert: () => ({ values: insert }),
+    select: () => ({ from: () => ({ where: select }) }),
     update: () => ({
       set: (next: Pick<Row, "state" | "revision" | "record">) => ({
         where: (predicate: SQL) => update(next, predicate),
@@ -223,7 +223,7 @@ const fixture = () => {
     database: db as never,
     assertCurrentOwner,
   });
-  const read = (
+  const read = async (
     selected: NativeTargetAuthOnlyEntryPlanKey,
     approvalInput: NativeTargetAuthOnlyEntryApprovalInput,
     events: MessageStreamEvent[],
@@ -232,12 +232,11 @@ const fixture = () => {
     save = vi.fn(async (_state: PrivateNativeTargetApprovalObservation) => {}),
   ) =>
     readPrivateNativeTargetAuthOnlyEntryApproval({
-      key: selected,
-      historyOwner,
       approvalInput,
-      store,
       assertCurrentOwner,
-      observation: { state, save },
+      historyOwner,
+      key: selected,
+      observation: { save, state },
       readHistory: async (startIndex, observe) => {
         for (const event of events) {
           observe(event);
@@ -245,8 +244,9 @@ const fixture = () => {
         const nextNativeIndex = startIndex + events.length;
         return { complete, nextNativeIndex, nativeTailIndex: Math.max(0, nextNativeIndex - 1) };
       },
+      store,
     });
-  return { store, read };
+  return { read, store };
 };
 
 it("retains separate exact children and exposes only digest-bound approval identifiers", async () => {
@@ -267,18 +267,18 @@ it("retains separate exact children and exposes only digest-bound approval ident
       settled("signup-request"),
     ]),
   ).resolves.toMatchObject({
-    sourceDigest: signup.approvalInput.childPlanDigest,
     callId: "signup-call",
+    sourceDigest: signup.approvalInput.childPlanDigest,
   });
   await expect(read(key, signup.approvalInput, orgEvents)).rejects.toMatchObject({
     code: "authorization_required",
   });
   await expect(read(key, organization.approvalInput, orgEvents)).resolves.toMatchObject({
-    planDigest: key.deliveryPlanDigest,
-    sourceDigest: organization.approvalInput.childPlanDigest,
-    requestId: "request",
     callId: "call",
     outcome: "approved",
+    planDigest: key.deliveryPlanDigest,
+    requestId: "request",
+    sourceDigest: organization.approvalInput.childPlanDigest,
   });
   await expect(
     store.retain(
@@ -341,10 +341,10 @@ it("permits one dispatch, records only the exact checkpoint, and denies cancelle
     effectId: "auth-membership",
     fenceGeneration: winner.fenceGeneration,
     operationId: winner.operationRef,
+    receipt: { readbackSha256: "0".repeat(64), state: "applied" as const },
     resourceId: key.authResourceId,
     sequence: 1,
     tenantId: null,
-    receipt: { state: "applied" as const, readbackSha256: "0".repeat(64) },
   };
   await expect(checkpoint({ ...frame, effectId: "auth-signup-policy" })).rejects.toMatchObject({
     code: "resource_mismatch",

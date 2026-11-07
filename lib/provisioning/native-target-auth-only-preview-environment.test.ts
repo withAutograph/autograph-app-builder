@@ -23,28 +23,21 @@ const target = {
   sessionId: plan.origin.publicSessionId,
 };
 const resourcePlan = {
-  version: 1 as const,
   action: "prepare" as const,
   authDatabase: {
     database: plan.authResource.database,
     migratorRole: "auth_migrator",
-    runtimeRole: "auth_runtime",
     resourceId: plan.authResource.resourceId,
+    runtimeRole: "auth_runtime",
   },
+  authOnlyPlanDigest: nativeTargetAuthOnlyPlanDigest(plan),
+  authSchema: plan.authSchema,
   bootstrap: {
     endpointId: plan.authResource.endpointId,
     maintenanceDatabase: "neondb",
     role: "neondb_owner",
   },
-  neon: {
-    endpoint: plan.authResource.hostname,
-    projectId: "auth-neon-project",
-    branchId: "auth-neon-branch",
-  },
-  resourcesInstaller: { reference: "neon-resource-bootstrap-v1", sha256: "a".repeat(64) },
   effects: [{ id: "auth-resources", kind: "resources", resourceId: plan.authResource.resourceId }],
-  authOnlyPlanDigest: nativeTargetAuthOnlyPlanDigest(plan),
-  target,
   nativeNeonConfiguration: {
     connector: "connector",
     nativeStore: {
@@ -60,28 +53,21 @@ const resourcePlan = {
       projectId: "operator",
     },
   },
-  authSchema: plan.authSchema,
+  neon: {
+    branchId: "auth-neon-branch",
+    endpoint: plan.authResource.hostname,
+    projectId: "auth-neon-project",
+  },
+  resourcesInstaller: { reference: "neon-resource-bootstrap-v1", sha256: "a".repeat(64) },
+  target,
+  version: 1 as const,
 };
 const resourcePlanBytes = Buffer.from(JSON.stringify(resourcePlan));
 const resourcePlanDigest = nativeTargetAuthOnlyResourcePlanDigest(resourcePlanBytes);
 const deliveryPlan = nativeTargetAuthOnlyDeliveryPlanSchema.parse({
-  version: 1,
-  kind: "native-target-auth-only-delivery",
   authOnlyPlanDigest: nativeTargetAuthOnlyPlanDigest(plan),
-  resourcePlanDigest,
-  target,
-  source: {
-    branch: plan.publishedSource.branch,
-    gitSha: plan.publishedSource.gitSha,
-    repositoryId: plan.publishedSource.repositoryId,
-  },
   delivery: {
     action: "prepare",
-    stage: "app",
-    effects: [
-      { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
-      { id: "auth-only-app-preview", kind: "delivery" },
-    ],
     delivery: {
       branch: plan.branch,
       gitSha: plan.publishedSource.gitSha,
@@ -89,6 +75,10 @@ const deliveryPlan = nativeTargetAuthOnlyDeliveryPlanSchema.parse({
       projectSettings: plan.project.projectSettings,
       repoId: plan.publishedSource.repositoryId,
     },
+    effects: [
+      { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
+      { id: "auth-only-app-preview", kind: "delivery" },
+    ],
     gatewayDelivery: {
       branch: "gateway-preview",
       gitRef: "gateway-preview",
@@ -104,11 +94,21 @@ const deliveryPlan = nativeTargetAuthOnlyDeliveryPlanSchema.parse({
       projectId: "gateway-preview-project",
       protectedApplicationIds: ["sibling-app"],
     },
+    stage: "app",
   },
   effects: [
     { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
     { id: "auth-only-app-preview", kind: "delivery" },
   ],
+  kind: "native-target-auth-only-delivery",
+  resourcePlanDigest,
+  source: {
+    branch: plan.publishedSource.branch,
+    gitSha: plan.publishedSource.gitSha,
+    repositoryId: plan.publishedSource.repositoryId,
+  },
+  target,
+  version: 1,
 });
 const deliveryPlanBytes = Buffer.from(JSON.stringify(deliveryPlan));
 const deliveryPlanDigest = sha256(deliveryPlanBytes);
@@ -117,50 +117,50 @@ const runtimeUrl =
 const emailVerification = {
   required: "true" as const,
   sender: {
-    provider: "resend" as const,
-    environment: "preview" as const,
-    ownerProjectId: "gateway-preview-project",
-    from: "signup@example.test",
     apiKey: {
       id: "resend-secret-row",
       key: "AUTH_RECOVERY_RESEND_API_KEY" as const,
+      physicalBranch: null as string | null,
       projectId: "gateway-preview-project",
       target: "preview" as const,
-      physicalBranch: null as string | null,
       type: "sensitive",
       updatedAt: 1793966400000,
     },
+    environment: "preview" as const,
+    from: "signup@example.test",
+    ownerProjectId: "gateway-preview-project",
+    provider: "resend" as const,
   },
 };
 const approval = {
-  requestId: "delivery-request",
   callId: "delivery-call",
-  planDigest: deliveryPlanDigest,
-  sourceDigest: deliveryPlanDigest,
-  responderPrincipalId: plan.origin.authority.ownerUserId,
-  publicSessionId: plan.origin.publicSessionId,
-  outcome: "approved" as const,
   observedAt: "2026-11-06T12:00:00.000Z",
+  outcome: "approved" as const,
+  planDigest: deliveryPlanDigest,
+  publicSessionId: plan.origin.publicSessionId,
+  requestId: "delivery-request",
+  responderPrincipalId: plan.origin.authority.ownerUserId,
+  sourceDigest: deliveryPlanDigest,
 };
 const materials = () => ({
-  deliveryPlanBytes,
-  resourcePlanDigest,
-  resourcePlan,
-  resourcePlanBytes,
+  appProjectMetadata: {
+    link: {
+      productionBranch: plan.branch,
+      repoId: plan.publishedSource.repositoryId,
+      type: "github",
+    },
+  },
   authRuntimeUrl: runtimeUrl,
+  deliveryPlanBytes,
   emailVerification,
   gatewayProfileValues: {
     PLATFORM_GATEWAY_PROJECT_BINDINGS: JSON.stringify({ version: 1, bindings: [], source: {} }),
     PLATFORM_REALM_OPERATOR_LINK_CONFIG: JSON.stringify({ identityHandoff: {} }),
   },
   gatewayProjectMetadata: { link: { productionBranch: "gateway-preview" } },
-  appProjectMetadata: {
-    link: {
-      type: "github",
-      repoId: plan.publishedSource.repositoryId,
-      productionBranch: plan.branch,
-    },
-  },
+  resourcePlan,
+  resourcePlanBytes,
+  resourcePlanDigest,
 });
 const compose = (
   overrides: Partial<{
@@ -172,18 +172,18 @@ const compose = (
   }> = {},
 ) =>
   composeNativeTargetAuthOnlyPreviewEnvironment({
-    plan,
-    deliveryPlan,
-    deliveryPlanBytes,
-    resourcePlanDigest,
-    resourcePlan,
-    resourcePlanBytes,
+    appProjectMetadata: materials().appProjectMetadata,
     approval,
     authRuntimeUrl: runtimeUrl,
+    deliveryPlan,
+    deliveryPlanBytes,
     emailVerification,
     gatewayProfileValues: materials().gatewayProfileValues,
     gatewayProjectMetadata: materials().gatewayProjectMetadata,
-    appProjectMetadata: materials().appProjectMetadata,
+    plan,
+    resourcePlan,
+    resourcePlanBytes,
+    resourcePlanDigest,
     ...overrides,
   });
 
@@ -199,7 +199,7 @@ it("composes exact Gateway and static Next Preview manifests with no app databas
     "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
     "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
   ]);
-  expect(JSON.parse(result.gatewayValues.PLATFORM_GATEWAY_PROTECTED_APPLICATIONS!)).toEqual([
+  expect(JSON.parse(result.gatewayValues.PLATFORM_GATEWAY_PROTECTED_APPLICATIONS)).toEqual([
     "sibling-app",
     "signup-reset-pilot",
   ]);
@@ -210,14 +210,14 @@ it("composes exact Gateway and static Next Preview manifests with no app databas
     PLATFORM_PUBLIC_ORIGIN: "https://gateway.example.test",
   });
   expect(result.manifest.gateway).toMatchObject({
-    physicalBranch: null,
     branch: "gateway-preview",
+    physicalBranch: null,
     recoverySecret: emailVerification.sender.apiKey,
   });
   expect(result.manifest.gateway.values.map(({ key }) => key)).not.toContain(
     "AUTH_RECOVERY_RESEND_API_KEY",
   );
-  expect(result.manifest.app).toMatchObject({ physicalBranch: null, branch: plan.branch });
+  expect(result.manifest.app).toMatchObject({ branch: plan.branch, physicalBranch: null });
   expect(JSON.stringify(result.manifest)).not.toContain("private");
   expect(result.appValues).not.toHaveProperty("DATABASE_URL");
   expect(result.appValues).not.toHaveProperty("BETTER_AUTH_SECRET");
@@ -250,28 +250,28 @@ it("sends only the selected effect's exact project, branch and hashed approval t
   const applyAndVerify = vi.fn(async () => {});
   const readMaterials = vi.fn(async () => materials());
   const assertCurrent = vi.fn(async () => {});
-  const port = createNativeTargetAuthOnlyPreviewEnvironmentPort({ readMaterials, applyAndVerify });
-  const signal = new AbortController().signal;
+  const port = createNativeTargetAuthOnlyPreviewEnvironmentPort({ applyAndVerify, readMaterials });
+  const { signal } = new AbortController();
   await port({
-    authority: plan.origin.authority,
-    target,
-    plan,
-    deliveryPlan,
-    operationRef: "11111111-1111-4111-a111-111111111111",
     approval,
-    fenceGeneration: 3,
-    effect: "app",
     assertCurrent,
+    authority: plan.origin.authority,
+    deliveryPlan,
+    effect: "app",
+    fenceGeneration: 3,
+    operationRef: "11111111-1111-4111-a111-111111111111",
+    plan,
     signal,
+    target,
   });
   expect(applyAndVerify).toHaveBeenCalledOnce();
   expect(applyAndVerify).toHaveBeenCalledWith(
     expect.objectContaining({
-      projectId: target.projectId,
+      approvedDeliveryDigest: deliveryPlanDigest,
       branch: plan.branch,
       effect: "app",
-      approvedDeliveryDigest: deliveryPlanDigest,
       physicalBranch: null,
+      projectId: target.projectId,
     }),
   );
   expect(assertCurrent).toHaveBeenCalledTimes(3);
@@ -282,11 +282,21 @@ it.each(["wrong-branch", "wrong-project", "readable-key", "extra-value", "invali
   (kind) => {
     const apiKey = { ...emailVerification.sender.apiKey };
     const sender = { ...emailVerification.sender, apiKey };
-    if (kind === "wrong-branch") apiKey.physicalBranch = "other";
-    if (kind === "wrong-project") apiKey.projectId = "other";
-    if (kind === "readable-key") apiKey.type = "encrypted";
-    if (kind === "extra-value") Object.assign(apiKey, { value: "fixture" });
-    if (kind === "invalid-from") sender.from = "Pilot <pilot@example.test>";
+    if (kind === "wrong-branch") {
+      apiKey.physicalBranch = "other";
+    }
+    if (kind === "wrong-project") {
+      apiKey.projectId = "other";
+    }
+    if (kind === "readable-key") {
+      apiKey.type = "encrypted";
+    }
+    if (kind === "extra-value") {
+      Object.assign(apiKey, { value: "fixture" });
+    }
+    if (kind === "invalid-from") {
+      sender.from = "Pilot <pilot@example.test>";
+    }
     expect(() => compose({ emailVerification: { ...emailVerification, sender } })).toThrow(
       "native_target_auth_only_preview_email_verification_unavailable",
     );

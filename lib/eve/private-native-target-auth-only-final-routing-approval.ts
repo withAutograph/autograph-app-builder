@@ -35,16 +35,16 @@ export const nativeTargetAuthOnlyFinalRoutingApprovalTool =
 /** Human approval carries only the retained parent and final-routing effect identities. */
 export const nativeTargetAuthOnlyFinalRoutingApprovalInputSchema = z.strictObject({
   appId: nativeTargetAuthOnlyFinalRoutingPlanSchema.shape.target.shape.appId,
-  operationRef: z.uuid(),
   deliveryPlanDigest: digest,
+  operationRef: z.uuid(),
   routingOperationRef: z.uuid(),
   routingPlanDigest: digest,
 });
 export const nativeTargetAuthOnlyFinalRoutingPlanInputSchema =
   nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.pick({
     appId: true,
-    operationRef: true,
     deliveryPlanDigest: true,
+    operationRef: true,
   });
 
 /** Read the same-owner/session settlement for exact private retained routing bytes. */
@@ -66,7 +66,9 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
   const historyOwner = operatorOwnerContextSchema.parse(input.historyOwner);
   const expected = nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(input.approvalInput);
   const bytes = Buffer.from(input.routingPlanBytes);
-  const plan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(JSON.parse(bytes.toString("utf8")));
+  const plan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
+    JSON.parse(bytes.toString("utf-8")),
+  );
   if (
     nativeTargetAuthOnlyFinalRoutingPlanDigest(bytes) !== expected.routingPlanDigest ||
     !isDeepStrictEqual(historyOwner.authority, owner.authority) ||
@@ -114,8 +116,8 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
       ? undefined
       : privateNativeTargetApprovalObservationSchema.parse(input.observation.state);
   const save = input.observation?.save;
-  const assertOwner = input.assertOwner;
-  const readHistory = input.readHistory;
+  const { assertOwner } = input;
+  const { readHistory } = input;
   const terminals = new Map<string, Terminal>();
   await assertOwner();
   return await readPrivateOperatorApproval({
@@ -128,9 +130,9 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
             save: async (native) => {
               await save(
                 privateNativeTargetApprovalObservationSchema.parse({
-                  version: 1,
                   native,
                   terminals: [...terminals.values()],
+                  version: 1,
                 }),
               );
             },
@@ -138,13 +140,13 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
         }),
     capture: (state?: PrivateOperatorApprovalCapture) => {
       const capture = createPrivateOperatorApprovalCapture({
+        ownerUserId: owner.authority.ownerUserId,
         request: {
           action: nativeTargetAuthOnlyFinalRoutingApprovalAction,
-          planRef: expected.routingOperationRef,
-          planDigest: expected.routingPlanDigest,
           idempotencyKey: expected.appId,
+          planDigest: expected.routingPlanDigest,
+          planRef: expected.routingOperationRef,
         },
-        ownerUserId: owner.authority.ownerUserId,
         ...(retained === undefined ? {} : { callId: retained.callId }),
         ...(state === undefined ? {} : { state }),
       });
@@ -152,7 +154,9 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
         const entry = capture
           .snapshot()
           .entries.find((item) => item.requestId === terminal.requestId);
-        if (entry?.callId === terminal.callId) terminals.set(terminal.requestId, terminal);
+        if (entry?.callId === terminal.callId) {
+          terminals.set(terminal.requestId, terminal);
+        }
       }
       const proofFor = (entry: PrivateOperatorApprovalCapture["entries"][number]) => {
         const terminal = terminals.get(entry.requestId);
@@ -167,8 +171,8 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
         const proof = nativeTargetAuthOnlyApprovalSchema.parse({
           ...terminal,
           planDigest: expected.routingPlanDigest,
-          sourceDigest: expected.routingPlanDigest,
           publicSessionId: owner.publicSessionId,
+          sourceDigest: expected.routingPlanDigest,
         });
         if (retained !== undefined && !isDeepStrictEqual(retained, proof)) {
           const sameRequest =
@@ -214,6 +218,7 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
             });
           }
         },
+        proveComplete: capture.proveComplete,
         read() {
           const entries = capture.snapshot().entries;
           const cancelled = entries.filter((entry) => entry.cancelled);
@@ -229,7 +234,6 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
           return proofFor(entry);
         },
         snapshot: capture.snapshot,
-        proveComplete: capture.proveComplete,
       };
     },
     readHistory,

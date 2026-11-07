@@ -82,9 +82,9 @@ export const readPrivateNativeTargetAuthOnlyEntryApproval = async (input: {
             save: async (native) => {
               await save(
                 privateNativeTargetApprovalObservationSchema.parse({
-                  version: 1,
                   native,
                   terminals: [...terminals.values()],
+                  version: 1,
                 }),
               );
             },
@@ -92,13 +92,13 @@ export const readPrivateNativeTargetAuthOnlyEntryApproval = async (input: {
         }),
     capture: (state?: PrivateOperatorApprovalCapture) => {
       const capture = createPrivateOperatorApprovalCapture({
+        ownerUserId: owner.authority.ownerUserId,
         request: {
           action: nativeTargetAuthOnlyEntryApprovalAction,
-          planRef: expected.childOperationRef,
-          planDigest: expected.childPlanDigest,
           idempotencyKey: expected.appId,
+          planDigest: expected.childPlanDigest,
+          planRef: expected.childOperationRef,
         },
-        ownerUserId: owner.authority.ownerUserId,
         ...(retainedApproval === undefined ? {} : { callId: retainedApproval.callId }),
         ...(state === undefined ? {} : { state }),
       });
@@ -124,8 +124,8 @@ export const readPrivateNativeTargetAuthOnlyEntryApproval = async (input: {
         const proof = nativeTargetAuthOnlyApprovalSchema.parse({
           ...terminal,
           planDigest: expected.deliveryPlanDigest,
-          sourceDigest: expected.childPlanDigest,
           publicSessionId: key.sessionId,
+          sourceDigest: expected.childPlanDigest,
         });
         if (retainedApproval !== undefined && !isDeepStrictEqual(retainedApproval, proof)) {
           const sameRequest =
@@ -180,6 +180,7 @@ export const readPrivateNativeTargetAuthOnlyEntryApproval = async (input: {
             });
           }
         },
+        proveComplete: capture.proveComplete,
         read() {
           const entries = capture.snapshot().entries;
           const cancelled = entries.filter((entry) => entry.cancelled);
@@ -203,7 +204,6 @@ export const readPrivateNativeTargetAuthOnlyEntryApproval = async (input: {
           return proofFor(entry);
         },
         snapshot: capture.snapshot,
-        proveComplete: capture.proveComplete,
       };
     },
     readHistory: input.readHistory,

@@ -21,7 +21,7 @@ import {
   nativeTargetAuthOnlyPlanSchema,
 } from "../provisioning/native-target-auth-only-plan-schema";
 import type { NativeTargetAuthOnlyPlan } from "../provisioning/native-target-auth-only-plan-schema";
-import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "../provisioning/native-target-auth-only-maintenance";
+import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "../provisioning/native-target-auth-only-resource-plan-schema";
 import { nativeTargetAuthOnlyApprovalSchema } from "../provisioning/native-target-auth-only-dispatch";
 import type { NativeTargetAuthOnlyApproval } from "../provisioning/native-target-auth-only-dispatch";
 import type { NativeTargetCurrentOwner } from "../provisioning/native-target-onboarding-store";

@@ -86,10 +86,10 @@ export const createPostgresNativeTargetAuthOnlyCredentialStore = (
       row.state !== "settled" ||
       !isDeepStrictEqual(
         hostedTenantAuthoritySchema.parse({
-          issuer: row.issuer,
           audience: row.audience,
-          workspaceId: row.workspaceId,
+          issuer: row.issuer,
           ownerUserId: row.ownerUserId,
+          workspaceId: row.workspaceId,
         }),
         record.context.authority,
       )
@@ -119,12 +119,12 @@ export const createPostgresNativeTargetAuthOnlyCredentialStore = (
         .insert(builderProvisioningJournals)
         .values({
           ...selected.context.authority,
-          requestId: selected.requestId,
-          requestDigest: selected.contextDigest,
+          createdAt: now,
           record: { ...record, stage: "sealed" },
+          requestDigest: selected.contextDigest,
+          requestId: selected.requestId,
           revision: 1,
           state: "settled",
-          createdAt: now,
           updatedAt: now,
         })
         .onConflictDoNothing()
@@ -153,66 +153,67 @@ export const nativeTargetAuthOnlyCredentialContextForPlan = (input: {
 }): AuthOnlyCredentialContext => {
   const plan = nativeTargetAuthOnlyPlanSchema.parse(input.plan);
   const profile = resolveNativeTargetResourceProfile({
-    base: input.configuration,
-    resourceProfileId: plan.authResource.profileId,
-    authority: plan.origin.authority,
     appId: plan.appId,
+    authority: plan.origin.authority,
+    base: input.configuration,
     environment: input.environment,
+    resourceProfileId: plan.authResource.profileId,
   });
   const roles = profile.authOnlyApplications?.[plan.appId]?.accessRoles;
   const binding = {
     authDatabase: profile.authDatabase,
-    nativeNeon: profile.nativeNeon,
     gateway: {
-      projectId: profile.gateway.projectId,
-      environment: profile.gateway.environment,
-      branch: profile.gateway.branch,
       authBrowserOrigin: profile.gateway.authBrowserOrigin,
+      branch: profile.gateway.branch,
+      environment: profile.gateway.environment,
       gatewayOrigin: profile.gateway.gatewayOrigin,
+      projectId: profile.gateway.projectId,
       publicOrigin: profile.gateway.publicOrigin,
       workload: profile.gateway.workload,
     },
+    nativeNeon: profile.nativeNeon,
     operator: {
-      projectId: profile.operator.projectId,
       environment: profile.operator.environment,
       origin: profile.operator.origin,
+      projectId: profile.operator.projectId,
     },
   };
   const authorityDigest = nativeTargetAuthOnlyAuthorityDigest({
-    authority: plan.origin.authority,
     appId: plan.appId,
-    profileId: plan.authResource.profileId,
     authDatabase: profile.authDatabase,
-    roles: roles ?? [],
+    authority: plan.origin.authority,
     authorityBinding: binding,
     physicalEndpointId: profile.nativeNeon.scope.endpointId,
+    profileId: plan.authResource.profileId,
+    roles: roles ?? [],
   });
   if (
     roles === undefined ||
     !roles.includes(plan.appRole) ||
     profile.applications[plan.appId] !== undefined ||
     authorityDigest !== plan.authResource.authorityDigest
-  )
+  ) {
     throw new Error("native_target_auth_only_credential_resource_mismatch");
+  }
   return authOnlyCredentialContextSchema.parse({
-    authority: plan.origin.authority,
     appId: plan.appId,
-    sessionId: plan.origin.publicSessionId,
+    authority: plan.origin.authority,
     operationRef: nativeTargetAuthOnlyCredentialOperationRef(plan),
-    profile: { id: plan.authResource.profileId, authorityDigest },
+    profile: { authorityDigest, id: plan.authResource.profileId },
     resource: {
-      resourceId: profile.authDatabase.resourceId,
-      environment: "preview",
       database: profile.authDatabase.database,
+      environment: "preview",
       migratorRole: profile.authDatabase.migratorRole,
-      runtimeRole: profile.authDatabase.runtimeRole,
       neon: {
-        projectId: profile.nativeNeon.scope.projectId,
         branchId: profile.nativeNeon.scope.branchId,
         endpointId: profile.nativeNeon.scope.endpointId,
         hostname: profile.nativeNeon.scope.hostname,
+        projectId: profile.nativeNeon.scope.projectId,
       },
+      resourceId: profile.authDatabase.resourceId,
+      runtimeRole: profile.authDatabase.runtimeRole,
     },
+    sessionId: plan.origin.publicSessionId,
   });
 };
 
@@ -230,26 +231,29 @@ export const createNativeTargetAuthOnlyCredentialAuthority =
   }) =>
   async (rawContext: AuthOnlyCredentialContext) => {
     const context = authOnlyCredentialContextSchema.parse(rawContext);
-    if (!isDeepStrictEqual(context, input.context))
+    if (!isDeepStrictEqual(context, input.context)) {
       throw new Error("native_target_auth_only_credential_context_mismatch");
+    }
     const plan = nativeTargetAuthOnlyPlanSchema.parse(input.plan);
     const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
     const expectedContext = nativeTargetAuthOnlyCredentialContextForPlan({
-      plan,
       configuration: input.configuration,
       environment: input.environment,
+      plan,
     });
     if (
       !isDeepStrictEqual(context, expectedContext) ||
       input.artifactContext.target.appId !== plan.appId ||
       input.artifactContext.target.sessionId !== plan.origin.publicSessionId ||
       !isDeepStrictEqual(input.artifactContext.authority, plan.origin.authority)
-    )
+    ) {
       throw new Error("native_target_auth_only_credential_context_mismatch");
+    }
     await input.assertCurrentOwner(input.artifactContext);
     const retained = await input.readRetainedPlan();
-    if (retained === undefined || !isDeepStrictEqual(retained, plan))
+    if (retained === undefined || !isDeepStrictEqual(retained, plan)) {
       throw new Error("native_target_auth_only_credential_plan_changed");
+    }
     const approval = nativeTargetAuthOnlyApprovalSchema.parse(await input.readApproval());
     if (
       approval.outcome !== "approved" ||
@@ -258,8 +262,9 @@ export const createNativeTargetAuthOnlyCredentialAuthority =
         nativeTargetAuthOnlySchemaEffectDigest(plan, plan.publishedSource) ||
       approval.publicSessionId !== plan.origin.publicSessionId ||
       approval.responderPrincipalId !== plan.origin.authority.ownerUserId
-    )
+    ) {
       throw new Error("native_target_auth_only_credential_approval_required");
+    }
     await input.assertCurrentOwner(input.artifactContext);
     return {
       authorityDigest: expectedContext.profile.authorityDigest,
@@ -288,13 +293,13 @@ export const createNativeTargetAuthOnlyCredentialCustody = (input: {
   });
   return {
     findReference: async () => await credentials.findReference({ context, assertCurrent }),
-    readSecrets: async (reference: Parameters<typeof credentials.readSecrets>[0]["reference"]) =>
-      await credentials.readSecrets({ context, reference, assertCurrent }),
-    seal: async (secret: { migratorPassword: string; runtimePassword: string }) =>
-      await credentials.seal({ context, credentials: secret, assertCurrent }),
     read: async (
       reference: Parameters<typeof credentials.read>[0]["reference"],
       runtimeConnection: "direct" | "pooled" = "direct",
     ) => await credentials.read({ context, reference, runtimeConnection, assertCurrent }),
+    readSecrets: async (reference: Parameters<typeof credentials.readSecrets>[0]["reference"]) =>
+      await credentials.readSecrets({ context, reference, assertCurrent }),
+    seal: async (secret: { migratorPassword: string; runtimePassword: string }) =>
+      await credentials.seal({ context, credentials: secret, assertCurrent }),
   };
 };

@@ -23,7 +23,7 @@ import {
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const plan = nativeTargetAuthOnlyTestPlan();
-const authority = plan.origin.authority;
+const { authority } = plan.origin;
 const target = {
   appId: plan.appId,
   branch: plan.branch,
@@ -42,33 +42,19 @@ const gatewayBranch = "gateway-pilot";
 const gatewaySha = "f".repeat(40);
 const publicOrigin = "https://pilot.example";
 const deliveryPlan = nativeTargetAuthOnlyDeliveryPlanSchema.parse({
-  version: 1,
-  kind: "native-target-auth-only-delivery",
   authOnlyPlanDigest: nativeTargetAuthOnlyPlanDigest(plan),
-  resourcePlanDigest: "a".repeat(64),
-  target,
-  source: {
-    branch: plan.branch,
-    gitSha: plan.publishedSource.gitSha,
-    repositoryId: plan.publishedSource.repositoryId,
-  },
-  effects: [
-    { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
-    { id: "auth-only-app-preview", kind: "delivery" },
-  ],
   delivery: {
     action: "prepare",
-    stage: "app",
-    effects: [
-      { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
-      { id: "auth-only-app-preview", kind: "delivery" },
-    ],
     delivery: {
       branch: target.branch,
       gitSha: plan.publishedSource.gitSha,
       projectId: target.projectId,
       repoId: plan.publishedSource.repositoryId,
     },
+    effects: [
+      { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
+      { id: "auth-only-app-preview", kind: "delivery" },
+    ],
     gatewayDelivery: {
       branch: gatewayBranch,
       gitRef: gatewayBranch,
@@ -77,80 +63,94 @@ const deliveryPlan = nativeTargetAuthOnlyDeliveryPlanSchema.parse({
       repoId: gatewayRepo,
     },
     publicGateway: {
-      branch: gatewayBranch,
-      origin: publicOrigin,
-      gatewayOrigin: "https://bootstrap-gateway.vercel.app",
       authBrowserOrigin: publicOrigin,
+      branch: gatewayBranch,
+      gatewayOrigin: "https://bootstrap-gateway.vercel.app",
+      origin: publicOrigin,
       projectId: gatewayProjectId,
     },
+    stage: "app",
   },
+  effects: [
+    { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
+    { id: "auth-only-app-preview", kind: "delivery" },
+  ],
+  kind: "native-target-auth-only-delivery",
+  resourcePlanDigest: "a".repeat(64),
+  source: {
+    branch: plan.branch,
+    gitSha: plan.publishedSource.gitSha,
+    repositoryId: plan.publishedSource.repositoryId,
+  },
+  target,
+  version: 1,
 });
 const parentDigest = nativeTargetAuthOnlyDeliveryPlanDigest(
   Buffer.from(JSON.stringify(deliveryPlan)),
 );
 const approval = (planDigest: string, callId: string) => ({
-  planDigest,
-  sourceDigest: planDigest,
-  outcome: "approved" as const,
   callId,
+  observedAt: "2026-11-06T12:00:00.000Z",
+  outcome: "approved" as const,
+  planDigest,
+  publicSessionId: target.sessionId,
   requestId: `request-${callId}`,
   responderPrincipalId: authority.ownerUserId,
-  publicSessionId: target.sessionId,
-  observedAt: "2026-11-06T12:00:00.000Z",
+  sourceDigest: planDigest,
 });
 const bootstrap = {
-  readyState: "READY" as const,
-  deploymentId: "dpl-bootstrap",
-  origin: "https://bootstrap-gateway.vercel.app",
-  operationRef: parentOperationRef,
-  projectId: gatewayProjectId,
   branch: gatewayBranch,
+  deploymentId: "dpl-bootstrap",
+  operationRef: parentOperationRef,
+  origin: "https://bootstrap-gateway.vercel.app",
+  projectId: gatewayProjectId,
+  readyState: "READY" as const,
   repoId: gatewayRepo,
 };
 const app = {
-  readyState: "READY" as const,
-  deploymentId: "dpl-app",
-  origin: "https://pilot-app.vercel.app",
-  operationRef: parentOperationRef,
-  projectId: target.projectId,
   branch: target.branch,
-  repoId: plan.publishedSource.repositoryId,
+  deploymentId: "dpl-app",
+  operationRef: parentOperationRef,
+  origin: "https://pilot-app.vercel.app",
+  projectId: target.projectId,
   projectName: plan.project.name,
+  readyState: "READY" as const,
+  repoId: plan.publishedSource.repositoryId,
   scopeSlug: "team-fixture",
 };
 const source = {
-  projectId: gatewayProjectId,
-  ownerId: target.scopeId,
+  audience: "https://vercel.com/team",
   environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
-  audience: "https://vercel.com/team",
+  ownerId: target.scopeId,
+  projectId: gatewayProjectId,
   publicOrigin,
   subject: "owner:team:project:gateway:environment:preview",
 };
 const projectionBefore = JSON.stringify({
-  version: 1,
+  bindings: [],
   provenance: "trusted-operator-published-provider-projection",
   source,
-  bindings: [],
+  version: 1,
 });
 
 const fixture = () => {
   const parentGuard = vi.fn(async () => {});
   const routingGuard = vi.fn(async () => {});
   const projection = {
+    appReceipt: app,
     environment: {
-      authority,
-      target,
-      plan,
-      deliveryPlan,
-      operationRef: parentOperationRef,
-      fenceGeneration: 7,
-      effect: "gateway" as const,
       approval: approval(parentDigest, "parent-approval"),
       assertCurrent: parentGuard,
+      authority,
+      deliveryPlan,
+      effect: "gateway" as const,
+      fenceGeneration: 7,
+      operationRef: parentOperationRef,
+      plan,
       signal: new AbortController().signal,
+      target,
     },
-    appReceipt: app,
     source,
   };
   const nextProjection = projectNativeTargetAuthOnlyGatewayBinding(
@@ -159,43 +159,43 @@ const fixture = () => {
     app,
   );
   const routingPlanBytes = buildNativeTargetAuthOnlyFinalRoutingPlanBytes({
-    operationRef: routingOperationRef,
-    environment: projection.environment,
-    bootstrap,
     app,
-    source,
+    bootstrap,
+    environment: projection.environment,
+    operationRef: routingOperationRef,
     projectionRow: {
-      projectId: gatewayProjectId,
       physicalBranch: gatewayBranch,
+      projectId: gatewayProjectId,
       rowId: "row",
       value: projectionBefore,
     },
+    source,
   });
   const routingPlan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
-    JSON.parse(routingPlanBytes.toString("utf8")),
+    JSON.parse(routingPlanBytes.toString("utf-8")),
   );
   const routingPlanDigest = nativeTargetAuthOnlyFinalRoutingPlanDigest(routingPlanBytes);
   const routingApproval = approval(routingPlanDigest, "routing-approval");
   const record = nativeTargetAuthOnlyFinalRoutingRecordSchema.parse({
-    version: 1,
+    approval: routingApproval,
     kind: "native-target-auth-only-final-routing",
     operationRef: routingOperationRef,
-    routingPlanDigest,
-    routingPlanBase64: routingPlanBytes.toString("base64"),
-    approval: routingApproval,
     refreshAttempted: false,
     refreshCandidates: [],
+    routingPlanBase64: routingPlanBytes.toString("base64"),
+    routingPlanDigest,
+    version: 1,
   });
-  let row = { revision: 1, record };
+  let row = { record, revision: 1 };
   let currentProjection = projectionBefore;
   let alias = bootstrap.deploymentId;
   let deploymentExists = false;
   const flags = {
-    loseCreate: false,
-    createArrives: true,
     aliasArrives: true,
-    loseAlias: false,
     aliasMovesAfterRefresh: false,
+    createArrives: true,
+    loseAlias: false,
+    loseCreate: false,
     refreshReady: true,
   };
   const refreshId = "dpl-refresh";
@@ -204,7 +204,7 @@ const fixture = () => {
     autograph_operator_operation: routingOperationRef,
     autograph_operator_plan: routingPlanDigest,
   };
-  const gitSource = { type: "github", ref: gatewayBranch, repoId: gatewayRepo, sha: gatewaySha };
+  const gitSource = { ref: gatewayBranch, repoId: gatewayRepo, sha: gatewaySha, type: "github" };
   const events: string[] = [];
   const fetcher: typeof fetch = async (raw, init) => {
     const url = new URL(raw instanceof Request ? raw.url : raw);
@@ -213,20 +213,20 @@ const fixture = () => {
     if (url.pathname === "/v4/aliases/pilot.example") {
       return Response.json({
         alias: "pilot.example",
-        projectId: gatewayProjectId,
         deploymentId: alias,
+        projectId: gatewayProjectId,
       });
     }
     if (url.pathname === "/v7/deployments") {
-      return Response.json({ deployments: deploymentExists ? [{ uid: refreshId, meta }] : [] });
+      return Response.json({ deployments: deploymentExists ? [{ meta, uid: refreshId }] : [] });
     }
     if (url.pathname === `/v9/projects/${gatewayProjectId}`) {
       return Response.json({
-        id: gatewayProjectId,
         accountId: target.scopeId,
-        name: "gateway",
         framework: "nextjs",
-        link: { type: "github", repoId: gatewayRepo },
+        id: gatewayProjectId,
+        link: { repoId: gatewayRepo, type: "github" },
+        name: "gateway",
       });
     }
     if (url.pathname === `/v2/teams/${target.scopeId}`) {
@@ -236,9 +236,9 @@ const fixture = () => {
       expect(currentProjection).toBe(nextProjection);
       expect(row.record.refreshAttempted).toBe(true);
       expect(JSON.parse(z.string().parse(init?.body))).toMatchObject({
-        project: gatewayProjectId,
         gitSource,
         meta,
+        project: gatewayProjectId,
       });
       events.push("refresh");
       deploymentExists = flags.createArrives;
@@ -255,16 +255,16 @@ const fixture = () => {
         return new Response(null, { status: 404 });
       }
       return Response.json({
-        id: refreshId,
-        projectId: gatewayProjectId,
-        ownerId: target.scopeId,
-        gitSource,
-        meta,
         customEnvironment: null,
-        target: null,
-        readyState: flags.refreshReady ? "READY" : "ERROR",
-        url: "refresh-gateway.vercel.app",
+        gitSource,
+        id: refreshId,
+        meta,
         oidcTokenClaims: { environment: "preview" },
+        ownerId: target.scopeId,
+        projectId: gatewayProjectId,
+        readyState: flags.refreshReady ? "READY" : "ERROR",
+        target: null,
+        url: "refresh-gateway.vercel.app",
       });
     }
     if (url.pathname === `/v2/deployments/${refreshId}/aliases` && method === "POST") {
@@ -286,13 +286,12 @@ const fixture = () => {
   };
   const openProjection = async () => {
     const read = async () => ({
-      projectId: gatewayProjectId,
       physicalBranch: gatewayBranch,
+      projectId: gatewayProjectId,
       rowId: "row",
       value: currentProjection,
     });
     return {
-      read,
       patch: async (
         before: Awaited<ReturnType<typeof read>>,
         value: string,
@@ -304,23 +303,13 @@ const fixture = () => {
         currentProjection = value;
         events.push("projection");
       },
+      read,
     };
   };
   const execute = createNativeTargetAuthOnlyFinalRouting(
     {
-      store: {
-        read: async () => structuredClone(row),
-        compareAndSet: async (revision, next) => {
-          if (row.revision !== revision) {
-            // oxlint-disable-next-line unicorn/no-useless-undefined -- The store reports a lost CAS with undefined.
-            return undefined;
-          }
-          row = { revision: revision + 1, record: structuredClone(next) };
-          return structuredClone(row);
-        },
-      },
-      readRetainedParent: async () => ({ bootstrap, app }),
       assertCatalogApp: async () => {},
+      fetch: fetcher,
       readCredential: async () => ({
         token: "private-fixture",
         binding: {
@@ -334,46 +323,64 @@ const fixture = () => {
           updatedAt: new Date(),
         },
       }),
-      fetch: fetcher,
+      readRetainedParent: async () => ({ bootstrap, app }),
+      store: {
+        compareAndSet: async (revision, next) => {
+          if (row.revision !== revision) {
+            // oxlint-disable-next-line unicorn/no-useless-undefined -- The store reports a lost CAS with undefined.
+            return undefined;
+          }
+          row = { revision: revision + 1, record: structuredClone(next) };
+          return structuredClone(row);
+        },
+        read: async () => structuredClone(row),
+      },
     },
     {
       openProjection,
-      reconcileApp: async () => ({ status: "applied", selected: app, candidates: [app] }),
+      reconcileApp: async () => ({ candidates: [app], selected: app, status: "applied" }),
     },
   );
   const input = {
+    approval: routingApproval,
+    assertCurrent: routingGuard,
+    fenceGeneration: 8,
     projection,
     routingPlanBytes,
-    approval: routingApproval,
-    fenceGeneration: 8,
-    assertCurrent: routingGuard,
   };
   return {
-    run: () => execute(input),
-    input,
-    flags,
-    events,
-    getRecord: () => row.record,
-    routingPlanBytes,
-    routingApproval,
     changeAlias: (value: string) => {
       alias = value;
     },
+    events,
+    flags,
+    getRecord: () => row.record,
+    input,
+    routingApproval,
+    routingPlanBytes,
+    run: async () => execute(input),
   };
 };
 
 it("retains exact separately approved routing bytes in an owner and session scoped journal", async () => {
   const f = fixture();
-  type Row = {
+  interface Row {
     requestId: string;
     requestDigest: string;
     revision: number;
     record: unknown;
     state: string;
-  };
+  }
   const rows = new Map<string, Row>();
   const parameters = (where: SQL) => new PgDialect().sqlToQuery(where).params;
   const database = {
+    insert: () => ({
+      values: (row: Row) => ({
+        onConflictDoNothing: async () => {
+          if (!rows.has(row.requestId)) rows.set(row.requestId, structuredClone(row));
+        },
+      }),
+    }),
     select: () => ({
       from: () => ({
         where: (where: SQL) => ({
@@ -382,13 +389,6 @@ it("retains exact separately approved routing bytes in an owner and session scop
             return row === undefined ? [] : [structuredClone(row)];
           },
         }),
-      }),
-    }),
-    insert: () => ({
-      values: (row: Row) => ({
-        onConflictDoNothing: async () => {
-          if (!rows.has(row.requestId)) rows.set(row.requestId, structuredClone(row));
-        },
       }),
     }),
     update: () => ({
@@ -412,19 +412,19 @@ it("retains exact separately approved routing bytes in an owner and session scop
       }),
     }),
   };
-  const store = createPostgresNativeTargetAuthOnlyFinalRoutingStore(database as never);
+  const store = createPostgresNativeTargetAuthOnlyFinalRoutingStore(database);
   const key = {
-    authority,
     appId: target.appId,
-    sessionId: target.sessionId,
+    authority,
     operationRef: routingOperationRef,
+    sessionId: target.sessionId,
   };
   const retained = await store.retain(key, f.routingPlanBytes, f.routingApproval);
   expect(retained.record.routingPlanBase64).toBe(f.routingPlanBytes.toString("base64"));
   expect(await store.read({ ...key, sessionId: "other-session" })).toBeUndefined();
   expect(await store.compareAndSet(key, 0, retained.record)).toBeUndefined();
   const plan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
-    JSON.parse(f.routingPlanBytes.toString("utf8")),
+    JSON.parse(f.routingPlanBytes.toString("utf-8")),
   );
   const intent = await store.compareAndSet(key, retained.revision, {
     ...retained.record,
@@ -458,9 +458,9 @@ it("records only a distinct pinned Gateway refresh after the stable alias reache
   const result = await f.run();
   expect(f.events).toEqual(["projection", "refresh", "alias"]);
   expect(result).toMatchObject({
-    status: "prepared",
     app,
     gateway: { deploymentId: "dpl-refresh", operationRef: routingOperationRef },
+    status: "prepared",
   });
   expect(f.getRecord().refreshReceipt).toEqual(result.gateway);
   expect(await f.run()).toEqual(result);

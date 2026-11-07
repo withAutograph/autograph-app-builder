@@ -20,10 +20,10 @@ import { nativeTargetRequiredProjectProtection } from "./native-target-onboardin
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace_fixture",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner_fixture",
+  workspaceId: "workspace_fixture",
 };
 const description = {
   app: { id: "signup-reset-pilot", routes: ["/"], workspacePath: "apps/signup-reset-pilot" },
@@ -45,86 +45,86 @@ const source = {
   reviewDigest: "f".repeat(64),
 };
 const authDatabase = {
-  resourceId: "isolated-auth-resource",
   database: "auth_identity",
   migratorRole: "auth_migrator",
+  resourceId: "isolated-auth-resource",
   runtimeRole: "auth_runtime",
 };
 const selectedProfile = {
   authDatabase,
   authOnlyApplications: { "signup-reset-pilot": { accessRoles: ["pilot_user"] } },
-  nativeNeon: { scope: { endpointId: "isolated-endpoint", hostname: "auth-preview.neon.tech" } },
   gateway: {
-    projectId: "gateway-fixture",
-    environment: "preview",
-    branch: "preview-fixture",
     authBrowserOrigin: "https://auth.example",
+    branch: "preview-fixture",
+    environment: "preview",
     gatewayOrigin: "https://gateway.example",
+    projectId: "gateway-fixture",
     publicOrigin: "https://apps.example",
     workload: { projectId: "gateway-fixture" },
   },
+  nativeNeon: { scope: { endpointId: "isolated-endpoint", hostname: "auth-preview.neon.tech" } },
   operator: {
-    projectId: "operator-fixture",
     environment: "preview",
     origin: "https://operator.example",
+    projectId: "operator-fixture",
   },
 };
 const authorityBinding = {
   authDatabase,
-  nativeNeon: selectedProfile.nativeNeon,
   gateway: selectedProfile.gateway,
+  nativeNeon: selectedProfile.nativeNeon,
   operator: selectedProfile.operator,
 };
 const plan = planNativeTargetAuthOnly({
+  authAuthorityBinding: authorityBinding,
+  authSchema: {
+    artifactRef: "artifact_fixture",
+    installer: { reference: "auth-worker", sha256: "3".repeat(64) },
+    planDigest: "1".repeat(64),
+    targetDigest: "2".repeat(64),
+  },
+  capturedDescription: description,
+  configuredAppRoles: ["pilot_user"],
   owner: {
+    adapterGeneration: 1,
+    adapterSessionId: "adapter_original",
     authority,
     publicSessionId: "public_original",
-    adapterSessionId: "adapter_original",
-    adapterGeneration: 1,
   },
   proposal: {
     appId: "signup-reset-pilot",
+    appRole: "pilot_user",
+    appSpecDigest: "a".repeat(64),
     authProfileId: "signup-reset-pilot-auth-preview",
+    branch: "main",
     project: {
+      installationId: "installation_fixture",
       name: "signup-reset-pilot",
       teamId: "team_fixture",
-      installationId: "installation_fixture",
     },
-    branch: "main",
-    appSpecDigest: "a".repeat(64),
-    appRole: "pilot_user",
   },
-  capturedDescription: description,
+  publishedSource: source,
+  selectedPhysicalEndpointId: "isolated-endpoint",
   selectedProfile: {
-    id: "signup-reset-pilot-auth-preview",
     appId: "signup-reset-pilot",
     authority,
     configuration: { authDatabase },
+    id: "signup-reset-pilot-auth-preview",
   },
   sharedAuthResourceId: "shared-auth-resource",
   sharedPhysicalEndpointId: "shared-endpoint",
-  selectedPhysicalEndpointId: "isolated-endpoint",
-  authAuthorityBinding: authorityBinding,
-  configuredAppRoles: ["pilot_user"],
-  publishedSource: source,
-  authSchema: {
-    artifactRef: "artifact_fixture",
-    planDigest: "1".repeat(64),
-    targetDigest: "2".repeat(64),
-    installer: { reference: "auth-worker", sha256: "3".repeat(64) },
-  },
 });
 const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
 const sourceDigest = nativeTargetAuthOnlySchemaEffectDigest(plan, source);
 const approval = {
-  requestId: "approval_fixture",
   callId: "call_fixture",
-  planDigest,
-  sourceDigest,
-  responderPrincipalId: authority.ownerUserId,
-  publicSessionId: plan.origin.publicSessionId,
-  outcome: "approved" as const,
   observedAt: "2026-11-06T12:00:00.000Z",
+  outcome: "approved" as const,
+  planDigest,
+  publicSessionId: plan.origin.publicSessionId,
+  requestId: "approval_fixture",
+  responderPrincipalId: authority.ownerUserId,
+  sourceDigest,
 };
 const context: OperatorArtifactContext = {
   authority,
@@ -137,27 +137,27 @@ const authSchema = {
 };
 const initialState = {
   kind: "native-target-auth-only-runtime" as const,
-  version: 1 as const,
-  stage: "planned" as const,
   plan,
   planDigest,
   source,
+  stage: "planned" as const,
+  version: 1 as const,
 };
 
 const makeStore = (): NativeTargetAuthOnlyRuntimeStore => {
   let row: Awaited<ReturnType<NativeTargetAuthOnlyRuntimeStore["read"]>>;
   return {
+    compareAndSet: async (_key, expectedRevision, state) => {
+      if (row?.revision !== expectedRevision) return undefined;
+      row = { revision: expectedRevision + 1, state };
+      return row;
+    },
     read: async () => row,
     write: async (_key, expectedRevision, state) => {
       if (expectedRevision === undefined ? row !== undefined : row?.revision !== expectedRevision) {
         throw new Error("native_target_auth_only_runtime_conflict");
       }
       row = { revision: (row?.revision ?? 0) + 1, state };
-      return row;
-    },
-    compareAndSet: async (_key, expectedRevision, state) => {
-      if (row?.revision !== expectedRevision) return undefined;
-      row = { revision: expectedRevision + 1, state };
       return row;
     },
   };
@@ -188,29 +188,29 @@ const makeRuntime = (
   );
   resolveProfileMock.mockReturnValue(selectedProfile);
   const runtime = createNativeTargetAuthOnlyRuntime({
-    database: {} as never,
-    store,
-    configuration: { applications: {} } as HostedOperatorSourceConfiguration,
-    environment: {},
     assertCurrentOwner: async () => undefined,
-    readPublishedSource: async () => source,
-    readCapturedDescription: async () => description,
-    readAuthSchemaSelection: async () => plan.authSchema,
-    readApproval: async ({ effectDigest }) => ({ ...approval, sourceDigest: effectDigest }),
+    configuration: { applications: {} } as HostedOperatorSourceConfiguration,
+    database: {} as never,
+    environment: {},
+    leaseMs: 1_000,
+    now,
     prepareAuthSchema: async (input) =>
       await prepareAuthSchema({ assertCurrent: input.assertCurrent }),
+    readApproval: async ({ effectDigest }) => ({ ...approval, sourceDigest: effectDigest }),
+    readAuthSchemaSelection: async () => plan.authSchema,
+    readCapturedDescription: async () => description,
+    readPublishedSource: async () => source,
     reconcileAuthSchema: async (input) => await reconcileAuthSchema({ attemptId: input.attemptId }),
-    now,
-    leaseMs: 1_000,
+    store,
   });
-  return { runtime, store, prepareAuthSchema, reconcileAuthSchema, now };
+  return { now, prepareAuthSchema, reconcileAuthSchema, runtime, store };
 };
 
 describe("Auth-only schema runtime", () => {
   it("requires a private exact-source approval before claiming a worker lease", async () => {
     const { runtime, store, prepareAuthSchema } = makeRuntime();
     await store.write(
-      { authority, appId: plan.appId, sessionId: plan.origin.publicSessionId },
+      { appId: plan.appId, authority, sessionId: plan.origin.publicSessionId },
       undefined,
       initialState,
     );
@@ -235,12 +235,12 @@ describe("Auth-only schema runtime", () => {
         return { authSchema, readiness: "auth_schema_ready" };
       },
       reconcileAuthSchema: async () => ({
-        status: "prepared",
         authSchema,
         readiness: "auth_schema_ready",
+        status: "prepared",
       }),
     });
-    const key = { authority, appId: plan.appId, sessionId: plan.origin.publicSessionId };
+    const key = { appId: plan.appId, authority, sessionId: plan.origin.publicSessionId };
     await store.write(key, undefined, initialState);
     await expect(runtime.prepare(context, plan, planDigest)).rejects.toThrow(
       "transport_lost_after_dispatch",
@@ -264,7 +264,7 @@ describe("Auth-only schema runtime", () => {
       },
       reconcileAuthSchema: async () => ({ status: "not-applied" }),
     });
-    const key = { authority, appId: plan.appId, sessionId: plan.origin.publicSessionId };
+    const key = { appId: plan.appId, authority, sessionId: plan.origin.publicSessionId };
     await store.write(key, undefined, initialState);
     await expect(runtime.prepare(context, plan, planDigest)).rejects.toThrow(
       "transport_lost_before_result",
@@ -283,7 +283,7 @@ describe("Auth-only schema runtime", () => {
         return { authSchema, readiness: "auth_schema_ready" };
       },
     });
-    const key = { authority, appId: plan.appId, sessionId: plan.origin.publicSessionId };
+    const key = { appId: plan.appId, authority, sessionId: plan.origin.publicSessionId };
     nestedPrepare = async () => await runtime.prepare(context, plan, planDigest);
     await store.write(key, undefined, initialState);
     await expect(runtime.prepare(context, plan, planDigest)).resolves.toMatchObject({

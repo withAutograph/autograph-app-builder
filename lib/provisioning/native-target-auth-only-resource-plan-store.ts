@@ -9,7 +9,7 @@ import { builderProvisioningJournals } from "../db/schema";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle requires the complete schema type.
 import type * as databaseSchema from "../db/schema";
 import type { OperatorArtifactContext } from "./hosted-operator-artifact-store";
-import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "./native-target-auth-only-maintenance";
+import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "./native-target-auth-only-resource-plan-schema";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const requestIdFor = (value: string) => {

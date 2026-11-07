@@ -30,14 +30,14 @@ const sha256 = z.string().regex(/^[a-f0-9]{64}$/u);
 const id = z.string().min(1);
 export const nativeTargetAuthOnlyGatewayProjectionIntentSchema = z
   .strictObject({
-    operationRef: z.uuid(),
+    appDeploymentId: id,
     deliveryPlanDigest: sha256,
     gatewayProjectId: id,
-    physicalBranch: id.nullable(),
-    rowId: id,
-    appDeploymentId: id,
-    priorSha256: sha256,
     nextSha256: sha256,
+    operationRef: z.uuid(),
+    physicalBranch: id.nullable(),
+    priorSha256: sha256,
+    rowId: id,
   })
   .refine((intent) => intent.priorSha256 !== intent.nextSha256);
 export type NativeTargetAuthOnlyGatewayProjectionIntent = z.infer<
@@ -154,11 +154,11 @@ export const projectNativeTargetAuthOnlyGatewayBinding = (
   const approved = {
     deploymentId: candidate.deploymentId,
     deploymentUrl: candidate.origin,
+    environment: "preview" as const,
+    ownerId: target.scopeId,
     projectId: candidate.projectId,
     projectName: candidate.projectName,
     scopeSlug: candidate.scopeSlug,
-    environment: "preview" as const,
-    ownerId: target.scopeId,
   };
   const appBinding = trustedGatewayAppBindingSchema.parse({
     appId: target.appId,
@@ -190,13 +190,13 @@ const proveIntendedRow = (
   candidate: OperatorDeploymentCandidate,
   nextSha256: string,
 ) => ({
-  operationRef: input.environment.operationRef,
+  appDeploymentId: candidate.deploymentId,
   deliveryPlanDigest: input.environment.approval.planDigest,
   gatewayProjectId: row.projectId,
+  nextSha256,
+  operationRef: input.environment.operationRef,
   physicalBranch: row.physicalBranch,
   rowId: row.rowId,
-  appDeploymentId: candidate.deploymentId,
-  nextSha256,
 });
 
 interface ProjectionProviderPorts {
@@ -225,30 +225,30 @@ export const createNativeTargetAuthOnlyGatewayProjection = (
       ? environmentAdapter.openGatewayProjection(environment)
       : providers.openProjection(environment));
     const appDelivery = createNativeTargetAuthOnlyPreviewDelivery({
-      target: "app",
-      readCredential: deps.readCredential,
       assertEnvironment: async () => {
         await environment.assertCurrent();
       },
+      readCredential: deps.readCredential,
+      target: "app",
       ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
     });
-    const reconcile = (value: Parameters<PreviewAdapter["reconcile"]>[0]) =>
+    const reconcile = async (value: Parameters<PreviewAdapter["reconcile"]>[0]) =>
       providers === undefined ? appDelivery.reconcile(value) : providers.reconcileApp(value);
     const observed = await reconcile({
-      authority: environment.authority,
-      target: environment.target,
-      plan: environment.deliveryPlan.delivery,
-      approvedPlanDigest: environment.approval.planDigest,
       approval: environment.approval,
-      operationRef: environment.operationRef,
-      fenceGeneration: environment.fenceGeneration,
-      effectId: environment.deliveryPlan.effects[1].id,
-      deliveryCandidates: [appReceipt],
+      approvedPlanDigest: environment.approval.planDigest,
       assertCurrent: environment.assertCurrent,
-      signal: environment.signal,
+      authority: environment.authority,
       checkpointDelivery: async () => {
         await environment.assertCurrent();
       },
+      deliveryCandidates: [appReceipt],
+      effectId: environment.deliveryPlan.effects[1].id,
+      fenceGeneration: environment.fenceGeneration,
+      operationRef: environment.operationRef,
+      plan: environment.deliveryPlan.delivery,
+      signal: environment.signal,
+      target: environment.target,
     });
     if (observed.status !== "applied" || !isDeepStrictEqual(observed.selected, appReceipt)) {
       throw uncertain();
@@ -267,8 +267,8 @@ export const createNativeTargetAuthOnlyGatewayProjection = (
     const expected = proveIntendedRow(input, prior, observed.selected, nextSha256);
     const retained = await deps.journal.read();
     const result = {
-      projectionDigest: nextSha256,
       appDeploymentId: observed.selected.deploymentId,
+      projectionDigest: nextSha256,
     };
     if (retained !== undefined) {
       const parsed = nativeTargetAuthOnlyGatewayProjectionIntentSchema.safeParse(retained);

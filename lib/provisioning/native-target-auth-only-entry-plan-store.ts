@@ -23,23 +23,23 @@ const id = z.string().min(1);
 const effect = z.enum(["organization", "signup-policy"]);
 const scopeSchema = z.strictObject({
   appId: builderAppIdSchema,
-  sessionId: id,
+  authResourceId: id,
   deliveryOperationRef: z.uuid(),
   deliveryPlanDigest: digest,
-  resourcePlanDigest: digest,
-  authResourceId: id,
-  ownerProofSha256: digest,
   effect,
+  ownerProofSha256: digest,
+  resourcePlanDigest: digest,
+  sessionId: id,
 });
 const keySchema = scopeSchema.extend({ authority: hostedTenantAuthoritySchema });
 export type NativeTargetAuthOnlyEntryPlanKey = z.infer<typeof keySchema>;
 export const nativeTargetAuthOnlyEntryApprovalInputSchema = z.strictObject({
   appId: builderAppIdSchema,
+  childOperationRef: z.uuid(),
+  childPlanDigest: digest,
   deliveryOperationRef: z.uuid(),
   deliveryPlanDigest: digest,
   effect,
-  childOperationRef: z.uuid(),
-  childPlanDigest: digest,
 });
 export type NativeTargetAuthOnlyEntryApprovalInput = z.infer<
   typeof nativeTargetAuthOnlyEntryApprovalInputSchema
@@ -50,13 +50,13 @@ const signupPolicy = authOnlySignupPolicyPlanSchema.extend({ authOnlyEntry: scop
 const planScope = (key: NativeTargetAuthOnlyEntryPlanKey) =>
   scopeSchema.parse({
     appId: key.appId,
-    sessionId: key.sessionId,
+    authResourceId: key.authResourceId,
     deliveryOperationRef: key.deliveryOperationRef,
     deliveryPlanDigest: key.deliveryPlanDigest,
-    resourcePlanDigest: key.resourcePlanDigest,
-    authResourceId: key.authResourceId,
-    ownerProofSha256: key.ownerProofSha256,
     effect: key.effect,
+    ownerProofSha256: key.ownerProofSha256,
+    resourcePlanDigest: key.resourcePlanDigest,
+    sessionId: key.sessionId,
   });
 const mismatch = () => new HostedOperatorError("resource_mismatch");
 const denied = () => new HostedOperatorError("authorization_required");
@@ -157,9 +157,9 @@ const validateApproval = (
   const approval = nativeTargetAuthOnlyApprovalSchema.parse(rawApproval);
   const expected = {
     planDigest: key.deliveryPlanDigest,
-    sourceDigest: record.planDigest,
     publicSessionId: key.sessionId,
     responderPrincipalId: key.authority.ownerUserId,
+    sourceDigest: record.planDigest,
   };
   if (!isDeepStrictEqual({ ...approval, ...expected }, approval)) {
     throw denied();
@@ -169,11 +169,11 @@ const validateApproval = (
 const approvalInput = (key: NativeTargetAuthOnlyEntryPlanKey, record: EntryRecord) =>
   nativeTargetAuthOnlyEntryApprovalInputSchema.parse({
     appId: key.appId,
+    childOperationRef: record.operationRef,
+    childPlanDigest: record.planDigest,
     deliveryOperationRef: key.deliveryOperationRef,
     deliveryPlanDigest: key.deliveryPlanDigest,
     effect: key.effect,
-    childOperationRef: record.operationRef,
-    childPlanDigest: record.planDigest,
   });
 const stateFor = (record: EntryRecord) => (record.approval === undefined ? "pending" : "settled");
 const validateFrame = (
@@ -250,11 +250,11 @@ export const createPostgresNativeTargetAuthOnlyEntryPlanStore = (input: {
       validateFrame(record, record.checkpoint, plan.effects[0].id);
     }
     return {
-      record,
-      approvedPlanBytes,
-      revision: row.revision,
       approvalInput: approvalInput(key, record),
+      approvedPlanBytes,
       effectId: plan.effects[0].id,
+      record,
+      revision: row.revision,
     };
   };
   const update = async (
@@ -282,15 +282,15 @@ export const createPostgresNativeTargetAuthOnlyEntryPlanStore = (input: {
     const approvedPlanBytes = Buffer.from(rawBytes);
     parsePlan(key, approvedPlanBytes);
     const record = recordSchema.parse({
-      kind: "native-target-auth-only-entry-plan",
-      version: 1,
-      scope: planScope(key),
-      operationRef: randomUUID(),
-      workerAttemptId: randomUUID(),
-      fenceGeneration: 1,
-      planDigest: sha256(approvedPlanBytes),
-      planBase64: approvedPlanBytes.toString("base64"),
       attempted: false,
+      fenceGeneration: 1,
+      kind: "native-target-auth-only-entry-plan",
+      operationRef: randomUUID(),
+      planBase64: approvedPlanBytes.toString("base64"),
+      planDigest: sha256(approvedPlanBytes),
+      scope: planScope(key),
+      version: 1,
+      workerAttemptId: randomUUID(),
     });
     await input.assertCurrentOwner(key);
     const now = new Date();
@@ -298,12 +298,12 @@ export const createPostgresNativeTargetAuthOnlyEntryPlanStore = (input: {
       .insert(builderProvisioningJournals)
       .values({
         ...key.authority,
-        requestId: requestIdFor(key),
-        requestDigest: record.planDigest,
+        createdAt: now,
         record,
+        requestDigest: record.planDigest,
+        requestId: requestIdFor(key),
         revision: 1,
         state: stateFor(record),
-        createdAt: now,
         updatedAt: now,
       })
       .onConflictDoNothing();
@@ -411,13 +411,13 @@ export const createPostgresNativeTargetAuthOnlyEntryPlanStore = (input: {
     return {
       approval,
       approvedPlanBytes: initial.approvedPlanBytes,
+      assertCurrent,
+      bindWorkerContext,
+      claimFirstDispatch,
+      fenceGeneration: initial.record.fenceGeneration,
       operationRef: initial.record.operationRef,
       workerAttemptId: initial.record.workerAttemptId,
-      fenceGeneration: initial.record.fenceGeneration,
-      assertCurrent,
-      claimFirstDispatch,
-      bindWorkerContext,
     };
   };
-  return { read, retain, settle, openApprovedEffect };
+  return { openApprovedEffect, read, retain, settle };
 };

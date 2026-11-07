@@ -34,7 +34,10 @@ export interface NativeTargetAuthOnlyGatewayProjectionRow {
   value: string;
 }
 
-type Credential = { binding: VercelInstallationBinding; token: string };
+interface Credential {
+  binding: VercelInstallationBinding;
+  token: string;
+}
 const senderKeys = [recoverySenderApiKey, recoverySenderFrom] as const;
 const appKeys = ["PLATFORM_JWKS_URL", "PLATFORM_ORIGIN", "PLATFORM_PUBLIC_ORIGIN"] as const;
 const gatewayKeys = [
@@ -51,12 +54,10 @@ const mismatch = () => new HostedRuntimeProviderError("resource_mismatch");
 const unavailable = () => new HostedRuntimeProviderError("provider_unavailable");
 const denied = () => new HostedRuntimeProviderError("authorization_required");
 const projectSchema = z.object({
-  id: z.string().min(1),
   accountId: z.string().min(1),
-  framework: z.string().nullable(),
-  rootDirectory: z.string().nullable(),
   buildCommand: z.string().nullable().optional(),
-  sourceFilesOutsideRootDirectory: z.boolean().optional(),
+  framework: z.string().nullable(),
+  id: z.string().min(1),
   link: z
     .object({
       type: z.literal("github"),
@@ -65,21 +66,23 @@ const projectSchema = z.object({
     })
     .nullable()
     .optional(),
+  rootDirectory: z.string().nullable(),
+  sourceFilesOutsideRootDirectory: z.boolean().optional(),
 });
 const rowSchema = z.object({
-  id: z.string().min(1),
-  key: z.string().min(1),
-  value: z.string().optional(),
   comment: z.string().nullable().optional(),
   configurationId: z.string().optional(),
-  type: z.string().optional(),
-  visibility: z.string().optional(),
   createdAt: z.number().int().nonnegative().optional(),
-  updatedAt: z.number().int().nonnegative().optional(),
-  system: z.boolean().optional(),
   customEnvironmentIds: z.array(z.string()).optional(),
-  target: z.union([z.string(), z.array(z.string())]),
   gitBranch: z.string().nullable().optional(),
+  id: z.string().min(1),
+  key: z.string().min(1),
+  system: z.boolean().optional(),
+  target: z.union([z.string(), z.array(z.string())]),
+  type: z.string().optional(),
+  updatedAt: z.number().int().nonnegative().optional(),
+  value: z.string().optional(),
+  visibility: z.string().optional(),
 });
 const listedRowSchema = rowSchema.omit({ value: true });
 const rowsSchema = z.union([
@@ -96,7 +99,9 @@ const exactPreview = (row: Row, branch: string | null) =>
     : row.target === "preview");
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   const parsed = schema.safeParse(value);
-  if (!parsed.success) throw mismatch();
+  if (!parsed.success) {
+    throw mismatch();
+  }
   return parsed.data;
 };
 const listQuery = (branch: string | null): Record<string, string> =>
@@ -151,9 +156,9 @@ const secretMetadata = (rows: Row[], projectId: string, physicalBranch: string |
   return parse(nativeTargetAuthOnlyRecoverySecretSchema, {
     id: row.id,
     key: row.key,
+    physicalBranch,
     projectId,
     target: "preview",
-    physicalBranch,
     type: row.type,
     ...(row.visibility === undefined ? {} : { visibility: row.visibility }),
     ...(row.createdAt === undefined ? {} : { createdAt: row.createdAt }),
@@ -164,8 +169,9 @@ const exactKeys = (values: Readonly<Record<string, string>>, keys: readonly stri
   if (
     !isDeepStrictEqual(Object.keys(values).toSorted(), [...keys].toSorted()) ||
     Object.values(values).some((value) => typeof value !== "string" || value.length === 0)
-  )
+  ) {
     throw mismatch();
+  }
 };
 
 /** Only the existing Preview environment API writes values; sender rows remain operator-owned and read-only. */
@@ -195,8 +201,9 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
       target.scopeType !== "team" ||
       target.scopeId !== input.target.scopeId ||
       target.installationId !== input.target.installationId
-    )
+    ) {
       throw mismatch();
+    }
     const current = async () => {
       input.signal.throwIfAborted();
       await input.assertCurrent();
@@ -211,8 +218,9 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
         credential.binding.scopeId !== target.scopeId ||
         credential.binding.scopeType !== "team" ||
         credential.token.length === 0
-      )
+      ) {
         throw denied();
+      }
       input.signal.throwIfAborted();
       await input.assertCurrent();
       return credential;
@@ -234,8 +242,9 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
           url.pathname.startsWith(`/v1/projects/${projectPath}/env/`)
         ) ||
         !["GET", "POST"].includes(method)
-      )
+      ) {
         throw mismatch();
+      }
       if (method === "GET" && url.pathname === paths[1]) {
         url.searchParams.set("decrypt", "false");
       }
@@ -245,18 +254,19 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
           url.pathname !== paths[1] ||
           url.searchParams.get("upsert") !== "false" ||
           typeof init?.body !== "string"
-        )
+        ) {
           throw mismatch();
+        }
         const body = parse(
           z
             .array(
               z.strictObject({
-                key: z.string(),
-                value: z.string(),
                 comment: z.string(),
+                gitBranch: z.string().optional(),
+                key: z.string(),
                 target: z.tuple([z.literal("preview")]),
                 type: z.literal("encrypted"),
-                gitBranch: z.string().optional(),
+                value: z.string(),
               }),
             )
             .min(1),
@@ -272,8 +282,9 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
               row.comment !== `App Builder runtime ${write.runtimeId}` ||
               !matchesPreviewEnvironmentGitBranch(row.gitBranch, write.physicalBranch),
           )
-        )
+        ) {
           throw mismatch();
+        }
       }
       if (method === "POST") {
         await write!.beforeWrite();
@@ -282,17 +293,18 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
           resolveNativePreviewEnvironmentGitBranch(target.branch, latestProject, {
             allowUnlinkedProject: write!.allowUnlinkedProject,
           }) !== write!.physicalBranch
-        )
+        ) {
           throw mismatch();
+        }
       }
       const fresh = await current();
       const headers = new Headers(init?.headers);
       headers.set("Authorization", `Bearer ${fresh.token}`);
       const response = await (deps.fetch ?? fetch)(url, {
         ...init,
+        cache: "no-store",
         headers,
         redirect: "error",
-        cache: "no-store",
         signal: AbortSignal.any([input.signal, AbortSignal.timeout(20_000)]),
       });
       try {
@@ -307,18 +319,24 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
     const get = async (path: string, query: Record<string, string> = {}) => {
       const url = new URL(path, "https://api.vercel.com");
       url.searchParams.set("teamId", target.scopeId);
-      for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
+      for (const [key, value] of Object.entries(query)) {
+        url.searchParams.set(key, value);
+      }
       let response: Response;
       try {
         response = await fencedFetch(url, { method: "GET" });
       } catch (error) {
-        if (error instanceof HostedRuntimeProviderError) throw error;
+        if (error instanceof HostedRuntimeProviderError) {
+          throw error;
+        }
         input.signal.throwIfAborted();
         throw unavailable();
       }
       if (!response.ok) {
         await response.body?.cancel();
-        if ([401, 403].includes(response.status)) throw denied();
+        if ([401, 403].includes(response.status)) {
+          throw denied();
+        }
         throw unavailable();
       }
       try {
@@ -329,8 +347,9 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
     };
     const project = async () => {
       const observed = parse(projectSchema, await get(`/v9/projects/${projectPath}`));
-      if (observed.id !== target.projectId || observed.accountId !== target.scopeId)
+      if (observed.id !== target.projectId || observed.accountId !== target.scopeId) {
         throw mismatch();
+      }
       return observed;
     };
     return {
@@ -339,11 +358,11 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
       project,
       provider: (physicalBranch: string | null) =>
         createHostedRuntimeVercelProvider({
-          target,
           credential,
+          environmentGitBranch: physicalBranch,
           fetch: fencedFetch,
           signal: input.signal,
-          environmentGitBranch: physicalBranch,
+          target,
         }),
     };
   };
@@ -390,7 +409,7 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
     ) {
       throw mismatch();
     }
-    const gatewayTarget = { ...target, projectId: gateway.projectId, branch: gateway.branch };
+    const gatewayTarget = { ...target, branch: gateway.branch, projectId: gateway.projectId };
     const connection = await connect(input, gatewayTarget);
     const projectPath = encodeURIComponent(gateway.projectId);
     const key = "PLATFORM_GATEWAY_PROJECT_BINDINGS";
@@ -433,10 +452,9 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
         throw mismatch();
       }
       await input.assertCurrent();
-      return { projectId: gateway.projectId, physicalBranch, rowId: row.id, value: detail.value };
+      return { physicalBranch, projectId: gateway.projectId, rowId: row.id, value: detail.value };
     };
     return {
-      read,
       async patch(
         expected: NativeTargetAuthOnlyGatewayProjectionRow,
         value: string,
@@ -471,58 +489,142 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
         }
         await input.assertCurrent();
       },
+      read,
     };
   };
   return {
-    openGatewayProjection,
-    async readRecoverySender(input: NativeTargetAuthOnlyDeliveryEnvironmentInput) {
-      const gateway = input.deliveryPlan.delivery.gatewayDelivery;
+    async applyAndVerify(input: NativeTargetAuthOnlyPreviewEnvironmentApplyInput): Promise<void> {
+      const manifest = parse(
+        nativeTargetAuthOnlyPreviewEnvironmentManifestSchema,
+        structuredClone(input.manifest),
+      );
+      const values = { ...input.values };
+      const selected = manifest[input.effect];
       if (
-        gateway === undefined ||
-        gateway.projectId !== input.deliveryPlan.delivery.publicGateway?.projectId ||
-        gateway.branch !== input.deliveryPlan.delivery.publicGateway?.branch ||
-        gateway.projectId === input.target.projectId
-      ) {
+        input.target.environment !== "preview" ||
+        input.target.scopeType !== "team" ||
+        manifest.deliveryPlanDigest !== input.approvedDeliveryDigest ||
+        manifest.app.projectId !== input.target.projectId ||
+        manifest.app.branch !== input.target.branch ||
+        manifest.gateway.projectId === manifest.app.projectId ||
+        input.projectId !== selected.projectId ||
+        input.branch !== selected.branch ||
+        input.physicalBranch !== selected.physicalBranch ||
+        !z.uuid().safeParse(input.operationRef).success ||
+        !Number.isSafeInteger(input.fenceGeneration) ||
+        input.fenceGeneration <= 0
+      )
         throw mismatch();
-      }
-      const target = { ...input.target, projectId: gateway.projectId, branch: gateway.branch };
-      const connection = await connect(input, target);
-      const project = await connection.project();
-      if (project.link?.repoId === undefined || String(project.link.repoId) !== gateway.repoId) {
+      exactKeys(values, input.effect === "gateway" ? gatewayKeys : appKeys);
+      if (
+        selected.values.length !== Object.keys(values).length ||
+        new Set(selected.values.map((entry) => entry.key)).size !== selected.values.length ||
+        selected.values.some((entry) => hash(values[entry.key] ?? "") !== entry.sha256)
+      )
         throw mismatch();
+      if (input.effect === "gateway") {
+        assertGatewayEmailVerification(values);
       }
-      const physicalBranch = resolveNativePreviewEnvironmentGitBranch(gateway.branch, project);
-      const path = `/v10/projects/${encodeURIComponent(target.projectId)}/env`;
-      const rows = parse(rowsSchema, await connection.get(path, listQuery(physicalBranch)));
-      const apiKey = secretMetadata(rows, target.projectId, physicalBranch);
-      const fromRow = selectSenderRow(rows, recoverySenderFrom, physicalBranch);
-      if (fromRow.id === apiKey.id || !isReadableSender(fromRow)) {
-        throw mismatch();
-      }
-      const decoded = parse(
-        rowSchema,
-        await connection.get(
-          `/v1/projects/${encodeURIComponent(target.projectId)}/env/${encodeURIComponent(fromRow.id)}`,
+      const target = { ...input.target, projectId: input.projectId, branch: input.branch };
+      const runtimeId = `auth-only-preview:${input.operationRef}:${input.approvedDeliveryDigest}:${input.projectId}`;
+      const managed = Object.fromEntries(
+        Object.entries(values).filter(
+          ([key]) => !senderKeys.includes(key as (typeof senderKeys)[number]),
         ),
       );
-      if (
-        decoded.id !== fromRow.id ||
-        decoded.key !== recoverySenderFrom ||
-        !exactPreview(decoded, physicalBranch) ||
-        !isReadableSender(decoded)
-      ) {
-        throw mismatch();
-      }
-      const from = parse(z.email(), decoded.value);
-      await connection.current();
-      return {
-        provider: "resend" as const,
-        environment: "preview" as const,
-        ownerProjectId: target.projectId,
-        from,
-        apiKey,
+      let beforeWrite: () => Promise<void> = async () => {
+        throw unavailable();
       };
+      const connection = await connect(input, target, {
+        values: managed,
+        runtimeId,
+        physicalBranch: input.physicalBranch,
+        allowUnlinkedProject: input.effect === "app",
+        beforeWrite: async () => {
+          await beforeWrite();
+        },
+      });
+      const project = await connection.project();
+      if (
+        resolveNativePreviewEnvironmentGitBranch(input.branch, project, {
+          allowUnlinkedProject: input.effect === "app",
+        }) !== input.physicalBranch
+      )
+        throw mismatch();
+      const provider = connection.provider(input.physicalBranch);
+      const list = async () =>
+        parse(
+          rowsSchema,
+          await connection.get(
+            `/v10/projects/${encodeURIComponent(target.projectId)}/env`,
+            listQuery(input.physicalBranch),
+          ),
+        );
+      const observe = async (requireAll: boolean) => {
+        const rows = await list();
+        const ids = new Set<string>();
+        if (input.effect === "gateway") {
+          const key = secretMetadata(rows, target.projectId, input.physicalBranch);
+          if (!isDeepStrictEqual(key, manifest.gateway.recoverySecret)) {
+            throw mismatch();
+          }
+          ids.add(key.id);
+        }
+        const missing: string[] = [];
+        for (const key of Object.keys(values)) {
+          const matches = rows.filter(
+            (row) =>
+              row.key === key &&
+              hasPreview(row) &&
+              matchesPreviewEnvironmentGitBranch(row.gitBranch, input.physicalBranch),
+          );
+          if (matches.length > 1) throw mismatch();
+          const row = matches[0];
+          const sender = key === recoverySenderFrom;
+          if (row === undefined) {
+            if (sender || requireAll) throw mismatch();
+            missing.push(key);
+            continue;
+          }
+          if (
+            !exactPreview(row, input.physicalBranch) ||
+            ids.has(row.id) ||
+            !ownsExpectedRow(row, runtimeId)
+          )
+            throw mismatch();
+          ids.add(row.id);
+          const decoded = parse(
+            rowSchema,
+            await connection.get(
+              `/v1/projects/${encodeURIComponent(target.projectId)}/env/${encodeURIComponent(row.id)}`,
+            ),
+          );
+          if (
+            decoded.id !== row.id ||
+            decoded.key !== key ||
+            !exactPreview(decoded, input.physicalBranch) ||
+            decoded.value !== values[key] ||
+            !ownsExpectedRow(decoded, runtimeId)
+          )
+            throw mismatch();
+        }
+        return missing;
+      };
+      beforeWrite = async () => {
+        await observe(false);
+      };
+      const missing = await observe(false);
+      await connection.current();
+      if (missing.length > 0)
+        await provider.bindEnvironment(
+          Object.fromEntries(missing.map((key) => [key, values[key]])),
+          { runtimeId },
+        );
+      await provider.assertEnvironmentBindings(managed, { runtimeId });
+      await observe(true);
+      await connection.current();
     },
+    openGatewayProjection,
     async readProjectEnvironmentValues(
       input: NativeTargetAuthOnlyDeliveryEnvironmentInput,
       target: HostedRuntimeTarget,
@@ -644,134 +746,53 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentAdapter = (deps: {
       input.signal.throwIfAborted();
       return { gatewayProjectMetadata, appProjectMetadata };
     },
-    async applyAndVerify(input: NativeTargetAuthOnlyPreviewEnvironmentApplyInput): Promise<void> {
-      const manifest = parse(
-        nativeTargetAuthOnlyPreviewEnvironmentManifestSchema,
-        structuredClone(input.manifest),
-      );
-      const values = { ...input.values };
-      const selected = manifest[input.effect];
+    async readRecoverySender(input: NativeTargetAuthOnlyDeliveryEnvironmentInput) {
+      const gateway = input.deliveryPlan.delivery.gatewayDelivery;
       if (
-        input.target.environment !== "preview" ||
-        input.target.scopeType !== "team" ||
-        manifest.deliveryPlanDigest !== input.approvedDeliveryDigest ||
-        manifest.app.projectId !== input.target.projectId ||
-        manifest.app.branch !== input.target.branch ||
-        manifest.gateway.projectId === manifest.app.projectId ||
-        input.projectId !== selected.projectId ||
-        input.branch !== selected.branch ||
-        input.physicalBranch !== selected.physicalBranch ||
-        !z.uuid().safeParse(input.operationRef).success ||
-        !Number.isSafeInteger(input.fenceGeneration) ||
-        input.fenceGeneration <= 0
-      )
+        gateway === undefined ||
+        gateway.projectId !== input.deliveryPlan.delivery.publicGateway?.projectId ||
+        gateway.branch !== input.deliveryPlan.delivery.publicGateway?.branch ||
+        gateway.projectId === input.target.projectId
+      ) {
         throw mismatch();
-      exactKeys(values, input.effect === "gateway" ? gatewayKeys : appKeys);
-      if (
-        selected.values.length !== Object.keys(values).length ||
-        new Set(selected.values.map((entry) => entry.key)).size !== selected.values.length ||
-        selected.values.some((entry) => hash(values[entry.key] ?? "") !== entry.sha256)
-      )
-        throw mismatch();
-      if (input.effect === "gateway") {
-        assertGatewayEmailVerification(values);
       }
-      const target = { ...input.target, projectId: input.projectId, branch: input.branch };
-      const runtimeId = `auth-only-preview:${input.operationRef}:${input.approvedDeliveryDigest}:${input.projectId}`;
-      const managed = Object.fromEntries(
-        Object.entries(values).filter(
-          ([key]) => !senderKeys.includes(key as (typeof senderKeys)[number]),
+      const target = { ...input.target, projectId: gateway.projectId, branch: gateway.branch };
+      const connection = await connect(input, target);
+      const project = await connection.project();
+      if (project.link?.repoId === undefined || String(project.link.repoId) !== gateway.repoId) {
+        throw mismatch();
+      }
+      const physicalBranch = resolveNativePreviewEnvironmentGitBranch(gateway.branch, project);
+      const path = `/v10/projects/${encodeURIComponent(target.projectId)}/env`;
+      const rows = parse(rowsSchema, await connection.get(path, listQuery(physicalBranch)));
+      const apiKey = secretMetadata(rows, target.projectId, physicalBranch);
+      const fromRow = selectSenderRow(rows, recoverySenderFrom, physicalBranch);
+      if (fromRow.id === apiKey.id || !isReadableSender(fromRow)) {
+        throw mismatch();
+      }
+      const decoded = parse(
+        rowSchema,
+        await connection.get(
+          `/v1/projects/${encodeURIComponent(target.projectId)}/env/${encodeURIComponent(fromRow.id)}`,
         ),
       );
-      let beforeWrite: () => Promise<void> = async () => {
-        throw unavailable();
-      };
-      const connection = await connect(input, target, {
-        values: managed,
-        runtimeId,
-        physicalBranch: input.physicalBranch,
-        allowUnlinkedProject: input.effect === "app",
-        beforeWrite: async () => await beforeWrite(),
-      });
-      const project = await connection.project();
       if (
-        resolveNativePreviewEnvironmentGitBranch(input.branch, project, {
-          allowUnlinkedProject: input.effect === "app",
-        }) !== input.physicalBranch
-      )
+        decoded.id !== fromRow.id ||
+        decoded.key !== recoverySenderFrom ||
+        !exactPreview(decoded, physicalBranch) ||
+        !isReadableSender(decoded)
+      ) {
         throw mismatch();
-      const provider = connection.provider(input.physicalBranch);
-      const list = async () =>
-        parse(
-          rowsSchema,
-          await connection.get(
-            `/v10/projects/${encodeURIComponent(target.projectId)}/env`,
-            listQuery(input.physicalBranch),
-          ),
-        );
-      const observe = async (requireAll: boolean) => {
-        const rows = await list();
-        const ids = new Set<string>();
-        if (input.effect === "gateway") {
-          const key = secretMetadata(rows, target.projectId, input.physicalBranch);
-          if (!isDeepStrictEqual(key, manifest.gateway.recoverySecret)) {
-            throw mismatch();
-          }
-          ids.add(key.id);
-        }
-        const missing: string[] = [];
-        for (const key of Object.keys(values)) {
-          const matches = rows.filter(
-            (row) =>
-              row.key === key &&
-              hasPreview(row) &&
-              matchesPreviewEnvironmentGitBranch(row.gitBranch, input.physicalBranch),
-          );
-          if (matches.length > 1) throw mismatch();
-          const row = matches[0];
-          const sender = key === recoverySenderFrom;
-          if (row === undefined) {
-            if (sender || requireAll) throw mismatch();
-            missing.push(key);
-            continue;
-          }
-          if (
-            !exactPreview(row, input.physicalBranch) ||
-            ids.has(row.id) ||
-            !ownsExpectedRow(row, runtimeId)
-          )
-            throw mismatch();
-          ids.add(row.id);
-          const decoded = parse(
-            rowSchema,
-            await connection.get(
-              `/v1/projects/${encodeURIComponent(target.projectId)}/env/${encodeURIComponent(row.id)}`,
-            ),
-          );
-          if (
-            decoded.id !== row.id ||
-            decoded.key !== key ||
-            !exactPreview(decoded, input.physicalBranch) ||
-            decoded.value !== values[key] ||
-            !ownsExpectedRow(decoded, runtimeId)
-          )
-            throw mismatch();
-        }
-        return missing;
-      };
-      beforeWrite = async () => {
-        await observe(false);
-      };
-      const missing = await observe(false);
+      }
+      const from = parse(z.email(), decoded.value);
       await connection.current();
-      if (missing.length > 0)
-        await provider.bindEnvironment(
-          Object.fromEntries(missing.map((key) => [key, values[key]!])),
-          { runtimeId },
-        );
-      await provider.assertEnvironmentBindings(managed, { runtimeId });
-      await observe(true);
-      await connection.current();
+      return {
+        provider: "resend" as const,
+        environment: "preview" as const,
+        ownerProjectId: target.projectId,
+        from,
+        apiKey,
+      };
     },
   };
 };

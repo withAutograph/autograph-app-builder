@@ -19,25 +19,25 @@ import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source
 import type { NativeTargetRequest } from "./native-target-onboarding-transport";
 
 const mock = vi.hoisted(() => ({
+  findReference: vi.fn(),
+  genericService: vi.fn(),
+  readArtifact: vi.fn(),
+  readCredentials: vi.fn(),
+  readDescription: vi.fn(),
   readDispatch: vi.fn(),
   readPlan: vi.fn(),
+  readPublishedSource: vi.fn(),
   readResource: vi.fn(),
   readResourceApproval: vi.fn(),
   readSchemaApproval: vi.fn(),
-  resolveRegistered: vi.fn(),
+  readSecrets: vi.fn(),
   resolveProfile: vi.fn(),
-  readPublishedSource: vi.fn(),
-  readDescription: vi.fn(),
-  readArtifact: vi.fn(),
-  runtimeStore: vi.fn(),
+  resolveRegistered: vi.fn(),
   runResources: vi.fn(),
   runSchema: vi.fn(),
-  verifyReadiness: vi.fn(),
-  findReference: vi.fn(),
+  runtimeStore: vi.fn(),
   seal: vi.fn(),
-  readSecrets: vi.fn(),
-  readCredentials: vi.fn(),
-  genericService: vi.fn(),
+  verifyReadiness: vi.fn(),
 }));
 
 vi.mock("./native-target-auth-only-dispatch", async (importOriginal) => ({
@@ -80,20 +80,20 @@ vi.mock("./hosted-operator-artifacts", () => ({
 vi.mock("./native-target-auth-only-maintenance", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./native-target-auth-only-maintenance")>()),
   createNativeTargetAuthOnlyMaintenanceReader: () => ({
-    withMaintenanceCredential: (
+    withMaintenanceCredential: async (
       consume: (material: { maintenanceUrl: string }) => Promise<unknown>,
     ) => consume({ maintenanceUrl: "private-maintenance-url" }),
   }),
 }));
 vi.mock("./native-target-auth-only-credential-store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./native-target-auth-only-credential-store")>()),
-  nativeTargetAuthOnlyCredentialContextForPlan: () => ({}),
   createNativeTargetAuthOnlyCredentialCustody: () => ({
     findReference: mock.findReference,
     seal: mock.seal,
     readSecrets: mock.readSecrets,
     read: mock.readCredentials,
   }),
+  nativeTargetAuthOnlyCredentialContextForPlan: () => ({}),
 }));
 vi.mock("./hosted-operator-auth-readiness", () => ({
   createHostedOperatorAuthReadiness: () => ({ verify: mock.verifyReadiness }),
@@ -112,18 +112,18 @@ vi.mock("./native-target-onboarding-service", () => ({
 }));
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-fixture",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner-fixture",
+  workspaceId: "workspace-fixture",
 };
 const historyOwner = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: 1,
+  adapterSessionId: "saved-adapter",
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: "saved-session",
-  adapterSessionId: "saved-adapter",
-  adapterGeneration: 1,
 });
 const appId = "signup-pilot";
 const teamId = "team-fixture";
@@ -143,36 +143,36 @@ const source = {
   reviewDigest: "f".repeat(64),
 };
 const authDatabase = {
-  resourceId: "isolated-auth",
   database: "pilot_auth",
   migratorRole: "pilot_migrator",
+  resourceId: "isolated-auth",
   runtimeRole: "pilot_runtime",
 };
 const authSchema = {
   artifactRef: "auth-artifact",
+  installer: { reference: "auth-worker", sha256: "4".repeat(64) },
   planDigest: "2".repeat(64),
   targetDigest: "3".repeat(64),
-  installer: { reference: "auth-worker", sha256: "4".repeat(64) },
 };
 const registration = {
-  projectId: "prj-created",
   branch: source.branch,
   ownerUserId: authority.ownerUserId,
+  projectId: "prj-created",
   sessionId: historyOwner.sessionId,
 };
 const profile = {
-  teamId,
   authDatabase,
   authOnlyApplications: { [appId]: { accessRoles: ["pilot_user"], registration } },
+  gateway: {
+    authBrowserOrigin: "https://auth.example",
+    branch: "preview-fixture",
+    environment: "preview",
+    gatewayOrigin: "https://gateway.example",
+    projectId: "gateway-fixture",
+    publicOrigin: "https://apps.example",
+    workload: { projectId: "gateway-fixture" },
+  },
   nativeNeon: {
-    scope: {
-      endpointId: "ep-pilot",
-      hostname: "ep-pilot.neon.tech",
-      projectId: "pilot-project",
-      branchId: "pilot-branch",
-      maintenanceDatabase: "neondb",
-      maintenanceRole: "bootstrap_owner",
-    },
     configuration: {
       connector: "neon-owned",
       nativeStore: {
@@ -181,99 +181,106 @@ const profile = {
         sourceProjectId: "prj-anchor",
       },
       operator: {
-        projectId: "prj-operator",
-        ownerId: teamId,
+        audience: "https://vercel.com/fixture",
         environment: "preview",
         issuer: "https://oidc.vercel.com/fixture",
-        audience: "https://vercel.com/fixture",
+        ownerId: teamId,
+        projectId: "prj-operator",
       },
     },
-  },
-  gateway: {
-    projectId: "gateway-fixture",
-    environment: "preview",
-    branch: "preview-fixture",
-    authBrowserOrigin: "https://auth.example",
-    gatewayOrigin: "https://gateway.example",
-    publicOrigin: "https://apps.example",
-    workload: { projectId: "gateway-fixture" },
+    scope: {
+      branchId: "pilot-branch",
+      endpointId: "ep-pilot",
+      hostname: "ep-pilot.neon.tech",
+      maintenanceDatabase: "neondb",
+      maintenanceRole: "bootstrap_owner",
+      projectId: "pilot-project",
+    },
   },
   operator: {
-    projectId: "operator-fixture",
     environment: "preview",
     origin: "https://operator.example",
+    projectId: "operator-fixture",
   },
   sandbox: {
     authWorker: { id: authSchema.installer.reference, sha256: authSchema.installer.sha256 },
     resourcesWorker: { id: "neon-resource-bootstrap-v1", sha256: "5".repeat(64) },
   },
+  teamId,
 };
 const selected = profile as unknown as HostedOperatorSourceConfiguration;
 const plan = planNativeTargetAuthOnly({
+  authAuthorityBinding: {
+    authDatabase,
+    gateway: profile.gateway,
+    nativeNeon: profile.nativeNeon,
+    operator: profile.operator,
+  },
+  authSchema,
+  capturedDescription: description,
+  configuredAppRoles: ["pilot_user"],
   owner: {
+    adapterGeneration: 1,
+    adapterSessionId: historyOwner.adapterSessionId,
     authority,
     publicSessionId: historyOwner.sessionId,
-    adapterSessionId: historyOwner.adapterSessionId,
-    adapterGeneration: 1,
   },
   proposal: {
     appId,
-    authProfileId: "pilot-auth",
-    branch: source.branch,
     appRole: "pilot_user",
     appSpecDigest: "a".repeat(64),
-    project: { name: appId, teamId, installationId: "install-fixture" },
+    authProfileId: "pilot-auth",
+    branch: source.branch,
+    project: { installationId: "install-fixture", name: appId, teamId },
   },
-  capturedDescription: description,
-  selectedProfile: { appId, id: "pilot-auth", authority, configuration: { authDatabase } },
+  publishedSource: source,
+  selectedPhysicalEndpointId: profile.nativeNeon.scope.endpointId,
+  selectedProfile: { appId, authority, configuration: { authDatabase }, id: "pilot-auth" },
   sharedAuthResourceId: "shared-auth",
   sharedPhysicalEndpointId: "shared-endpoint",
-  selectedPhysicalEndpointId: profile.nativeNeon.scope.endpointId,
-  authAuthorityBinding: {
-    authDatabase,
-    nativeNeon: profile.nativeNeon,
-    gateway: profile.gateway,
-    operator: profile.operator,
-  },
-  configuredAppRoles: ["pilot_user"],
-  publishedSource: source,
-  authSchema,
 });
 const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
 const operationRef = nativeTargetAuthOnlyCredentialOperationRef(plan);
-const resourceBytes = buildNativeTargetAuthOnlyResourcePlanBytes({ plan, selected, registration });
+const resourceBytes = buildNativeTargetAuthOnlyResourcePlanBytes({ plan, registration, selected });
 const resourcePlanDigest = nativeTargetAuthOnlyResourcePlanDigest(resourceBytes);
-const resourcePlan = JSON.parse(resourceBytes.toString("utf8"));
+const resourcePlan = JSON.parse(resourceBytes.toString("utf-8"));
 const schemaApproval = {
-  requestId: "schema-request",
   callId: "original-schema-call",
-  planDigest,
-  sourceDigest: nativeTargetAuthOnlySchemaEffectDigest(plan, source),
-  responderPrincipalId: authority.ownerUserId,
-  publicSessionId: historyOwner.sessionId,
-  outcome: "approved" as const,
   observedAt: "2026-11-06T12:00:00.000Z",
+  outcome: "approved" as const,
+  planDigest,
+  publicSessionId: historyOwner.sessionId,
+  requestId: "schema-request",
+  responderPrincipalId: authority.ownerUserId,
+  sourceDigest: nativeTargetAuthOnlySchemaEffectDigest(plan, source),
 };
 const resourceApproval = {
   ...schemaApproval,
-  requestId: "resource-request",
   callId: "original-resource-call",
+  requestId: "resource-request",
   sourceDigest: resourcePlanDigest,
 };
 const common = {
-  ownerContext: historyOwner,
   adapterSessionId: historyOwner.adapterSessionId,
   callId: "different-retry-call",
+  ownerContext: historyOwner,
 };
-const resourceInput = { appId, operationRef, planDigest, resourcePlanDigest, resourcePlan };
+const resourceInput = { appId, operationRef, planDigest, resourcePlan, resourcePlanDigest };
 const verifyWorkload = vi.fn();
 const assertCanonicalAppOwner = vi.fn();
 
-type JournalRow = { requestId: string; revision: number; record: unknown; state: string };
+interface JournalRow {
+  requestId: string;
+  revision: number;
+  record: unknown;
+  state: string;
+}
 const journalRows = new Map<string, JournalRow>();
 const rowId = (where: SQL) => String(new PgDialect().sqlToQuery(where).params[4]);
 const deploy = () =>
   createNativeTargetOnboardingDeployment({
+    builderOrigin: "https://builder.example",
+    configuration: { applications: {} } as HostedOperatorSourceConfiguration,
     database: {
       select: () => ({
         from: () => ({
@@ -306,21 +313,19 @@ const deploy = () =>
         }),
       }),
     } as never,
-    configuration: { applications: {} } as HostedOperatorSourceConfiguration,
     environment: {},
     owner: {
-      verifyWorkload,
       assertCanonicalAppOwner,
       assertNoStandardBuilderDestination: async () => {},
+      verifyWorkload,
     },
-    builderOrigin: "https://builder.example",
   });
 
 const request = async (input: NativeTargetRequest) =>
   await deploy()(
     new Request("https://operator.example/v1/native-target", {
-      method: "POST",
       headers: { authorization: "Bearer workload-fixture" },
+      method: "POST",
     }),
     input,
   );
@@ -330,11 +335,11 @@ beforeEach(() => {
   journalRows.clear();
   mock.readDispatch.mockResolvedValue({
     state: {
-      stage: "created",
-      planDigest,
-      plan,
-      projectId: registration.projectId,
       approval: schemaApproval,
+      plan,
+      planDigest,
+      projectId: registration.projectId,
+      stage: "created",
     },
   });
   mock.readPlan.mockResolvedValue(plan);
@@ -365,21 +370,21 @@ beforeEach(() => {
     revision: 1,
     state: {
       kind: "native-target-auth-only-runtime",
-      version: 1,
-      stage: "planned",
       plan,
       planDigest,
       source,
+      stage: "planned",
+      version: 1,
     },
   };
   const store: NativeTargetAuthOnlyRuntimeStore = {
+    compareAndSet: async () => {
+      throw new Error("unexpected CAS port");
+    },
     read: async () => row,
     write: async (_key, revision, state) => {
       if (row?.revision !== revision) throw new Error("unexpected revision");
       return (row = { revision: (revision ?? 0) + 1, state });
-    },
-    compareAndSet: async () => {
-      throw new Error("unexpected CAS port");
     },
   };
   mock.runtimeStore.mockReturnValue(store);
@@ -390,7 +395,7 @@ describe("Auth-only resource normal deployment route", () => {
     const response = await request({
       ...common,
       action: "native-target-auth-only-approval-read",
-      input: { appId, operationRef: planDigest, planDigest, plan },
+      input: { appId, operationRef: planDigest, plan, planDigest },
     });
     expect(await response.json()).toEqual({ status: "approved" });
     expect(mock.readSchemaApproval).toHaveBeenCalledWith(
@@ -409,9 +414,9 @@ describe("Auth-only resource normal deployment route", () => {
     expect(await response.json()).toEqual({ status: "approved" });
     expect(mock.readResourceApproval).toHaveBeenCalledWith(
       expect.objectContaining({
-        resourcePlanDigest,
         operationRef,
         resourcePlanBytes: resourceBytes,
+        resourcePlanDigest,
       }),
     );
     expect(mock.runtimeStore).not.toHaveBeenCalled();
@@ -437,14 +442,14 @@ describe("Auth-only resource normal deployment route", () => {
       input: resourceInput,
     });
     expect(await response.json()).toEqual({
-      status: "prepared",
-      resourcePlanDigest,
       authSchema: {
         artifactRef: authSchema.artifactRef,
         planDigest: authSchema.planDigest,
         targetDigest: authSchema.targetDigest,
       },
       readiness: "catalog-readback",
+      resourcePlanDigest,
+      status: "prepared",
     });
     expect(verifyWorkload).toHaveBeenCalled();
     expect(assertCanonicalAppOwner).toHaveBeenCalledWith(expect.objectContaining({ authority }));
@@ -458,11 +463,11 @@ describe("Auth-only resource normal deployment route", () => {
     expect(mock.runSchema).toHaveBeenCalledWith(
       selected.sandbox,
       expect.objectContaining({
-        approvedPlanBytes: resourceBytes,
         approvalDigest: resourcePlanDigest,
+        approvedPlanBytes: resourceBytes,
+        fenceGeneration: 3,
         operationRef,
         workerAttemptId: expect.any(String),
-        fenceGeneration: 3,
       }),
     );
     expect(mock.verifyReadiness).toHaveBeenCalledOnce();
@@ -475,13 +480,13 @@ describe("Auth-only resource normal deployment route", () => {
       const checkpoint = await call.bindWorkerContext({ contextDigest });
       await checkpoint({
         contextDigest,
-        operationId: operationRef,
-        fenceGeneration: call.fenceGeneration,
-        sequence: 1,
         effectId: "auth:apply-schema-plan",
+        fenceGeneration: call.fenceGeneration,
+        operationId: operationRef,
+        receipt: { readbackSha256: "7".repeat(64), state: "applied" },
         resourceId: authDatabase.resourceId,
+        sequence: 1,
         tenantId: null,
-        receipt: { state: "applied", readbackSha256: "7".repeat(64) },
       });
       throw new Error("lost schema response");
     });
@@ -494,8 +499,8 @@ describe("Auth-only resource normal deployment route", () => {
     mock.findReference.mockResolvedValue({ opaque: "sealed" });
     const response = await request({ ...invocation, callId: "second-retry-call" });
     expect(await response.json()).toMatchObject({
-      status: "prepared",
       readiness: "catalog-readback",
+      status: "prepared",
     });
     expect(mock.runResources).toHaveBeenCalledOnce();
     expect(mock.runSchema).toHaveBeenCalledOnce();

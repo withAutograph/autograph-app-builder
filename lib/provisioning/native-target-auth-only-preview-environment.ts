@@ -9,7 +9,7 @@ import type { NativeTargetAuthOnlyDeliveryPlan } from "./native-target-auth-only
 import { nativeTargetAuthOnlyDeliveryPlanDigest } from "./native-target-auth-only-delivery-plan";
 import type { NativeTargetAuthOnlyApproval } from "./native-target-auth-only-dispatch";
 import { resolveNativePreviewEnvironmentGitBranch } from "./native-preview-environment-scope";
-import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "./native-target-auth-only-maintenance";
+import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "./native-target-auth-only-resource-plan-schema";
 import { nativeTargetAuthOnlyResourcePlanDigest } from "./native-target-auth-only-resource-plan-store";
 import type { HostedRuntimeTarget } from "./hosted-runtime-journal";
 

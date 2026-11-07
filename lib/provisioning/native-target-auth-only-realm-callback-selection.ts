@@ -50,16 +50,21 @@ export const selectNativeTargetAuthOnlyRealmCallback = async (
 ) => {
   const pending = await ports.ownerLink.readPending(selector);
   // A lookup miss allows the established legacy lookup. A matched invalid record always fails closed.
-  if (pending === undefined) return undefined;
+  if (pending === undefined) {
+    return undefined;
+  }
   const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse(pending.binding);
   if (
     selector.ownerSessionId !== binding.target.sessionId ||
     selector.nonceSha256 !== pending.link.nonceSha256 ||
     (selector.authority !== undefined && !isDeepStrictEqual(selector.authority, binding.authority))
-  )
+  ) {
     throw denied();
+  }
   const ready = await ports.readReadyBinding(binding);
-  if (ready === undefined) throw denied();
+  if (ready === undefined) {
+    throw denied();
+  }
   const { context, configuration, readiness } = ready;
   const owner = operatorOwnerContextSchema.parse(context.ownerContext);
   const { scope } = configuration.nativeNeon;
@@ -103,12 +108,13 @@ export const selectNativeTargetAuthOnlyRealmCallback = async (
     readiness.gatewayDeliveryPlanDigest !== binding.gatewayDeliveryPlanDigest ||
     readiness.authResourceId !== binding.authResourceId ||
     !digest.safeParse(readiness.catalogFingerprint).success
-  )
+  ) {
     throw denied();
+  }
   return {
     binding,
-    context,
     configuration,
+    context,
     staging: {
       link: pending.link,
       bootstrapResource: pending.bootstrapResource,

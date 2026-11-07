@@ -14,36 +14,36 @@ const worker = {
   executablePath: "/worker/resources",
   id: "neon-resource-bootstrap-v1",
   operationScope: "neon-resource-bootstrap-v1",
-  subcommand: "neon-resource-bootstrap",
   sha256: "a".repeat(64),
+  subcommand: "neon-resource-bootstrap",
 } as const;
 const plan = {
-  version: 1,
   action: "prepare",
-  owner: { sessionId: "saved-pilot-session", appId: "pilot", userId: "owner" },
-  source: { sha256: "b".repeat(64) },
   authDatabase: {
     database: "pilot_auth",
     migratorRole: "pilot_migrator",
-    runtimeRole: "pilot_runtime",
     resourceId: "isolated-auth",
+    runtimeRole: "pilot_runtime",
   },
   bootstrap: { endpointId: "ep-isolated", maintenanceDatabase: "neondb", role: "neondb_owner" },
+  effects: [{ id: "auth-resources", kind: "resources", resourceId: "isolated-auth" }],
   neon: {
+    branchId: "isolated-branch",
     endpoint: "ep-isolated.neon.tech",
     projectId: "isolated-project",
-    branchId: "isolated-branch",
   },
+  owner: { appId: "pilot", sessionId: "saved-pilot-session", userId: "owner" },
   resourcesInstaller: { reference: worker.id, sha256: worker.sha256 },
-  effects: [{ id: "auth-resources", kind: "resources", resourceId: "isolated-auth" }],
+  source: { sha256: "b".repeat(64) },
+  version: 1,
 };
 const passwordPair = { migratorPassword: "m".repeat(40), runtimePassword: "r".repeat(40) };
 const config = {
   image: "pinned-control",
   projectId: "operator-project",
+  resourcesWorker: worker,
   teamId: "owned-team",
   workers: {},
-  resourcesWorker: worker,
 };
 const fixture = (
   options: {
@@ -71,23 +71,17 @@ const fixture = (
   const kill = vi.fn(async () => {});
   const frame = (name: string, value: unknown) => files.set(`${spool}/${name}`, bytes(value));
   const sandbox = {
+    delete: vi.fn(async () => {}),
+    extendTimeout: vi.fn(async () => {}),
     fs: {
-      mkdir: vi.fn(async () => {}),
-      rm: vi.fn(async () => {}),
       lstat: vi.fn(async (path: string) => ({
         isFile: () => files.has(path),
         size: files.get(path)?.length ?? 0,
       })),
+      mkdir: vi.fn(async () => {}),
+      rm: vi.fn(async () => {}),
     },
-    writeFiles: vi.fn(async (rows: { path: string; content: Buffer; mode?: number }[]) => {
-      for (const row of rows) {
-        files.set(row.path, row.content);
-        modes.set(row.path, row.mode);
-      }
-    }),
     readFileToBuffer: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
-    delete: vi.fn(async () => {}),
-    extendTimeout: vi.fn(async () => {}),
     runCommand: vi.fn(async (command: { detached?: boolean; args: string[] }) => {
       if (!command.detached)
         return {
@@ -197,30 +191,36 @@ const fixture = (
         },
       };
     }),
+    writeFiles: vi.fn(async (rows: { path: string; content: Buffer; mode?: number }[]) => {
+      for (const row of rows) {
+        files.set(row.path, row.content);
+        modes.set(row.path, row.mode);
+      }
+    }),
   };
   const createSandbox = vi.fn(async () => {
     expect(assertCredentialsCheckpointed).toHaveBeenCalledOnce();
     return sandbox;
   });
   const input = {
-    approvedPlanBytes: bytes(plan),
     approvalDigest: sha(bytes(plan)),
-    effectId: "auth-resources",
-    operationRef,
-    workerAttemptId,
-    fenceGeneration: 7,
-    credentials: {
-      maintenanceUrl:
-        "postgresql://neondb_owner:fixture@ep-isolated.neon.tech/neondb?sslmode=verify-full",
-      bytes: bytes(passwordPair),
-      sha256: sha(bytes(passwordPair)),
-    },
+    approvedPlanBytes: bytes(plan),
+    assertCredentialsCheckpointed,
     assertCurrent: vi.fn(async () => {
       if (options.denyFence && fenceRequested)
         throw new HostedOperatorError("authorization_required");
     }),
-    assertCredentialsCheckpointed,
     bindWorkerContext,
+    credentials: {
+      bytes: bytes(passwordPair),
+      maintenanceUrl:
+        "postgresql://neondb_owner:fixture@ep-isolated.neon.tech/neondb?sslmode=verify-full",
+      sha256: sha(bytes(passwordPair)),
+    },
+    effectId: "auth-resources",
+    fenceGeneration: 7,
+    operationRef,
+    workerAttemptId,
   };
   // SAFETY: The fake implements only SDK methods consumed by the real transport.
   const dependencies = {
@@ -233,17 +233,17 @@ const fixture = (
     return { ...readback, readbackOnly: true as const };
   };
   return {
+    assertCredentialsCheckpointed,
+    bindWorkerContext,
+    checkpoint,
+    createSandbox,
+    dependencies,
+    files,
     input,
     inspectInput,
-    dependencies,
-    createSandbox,
-    sandbox,
-    files,
-    modes,
     kill,
-    checkpoint,
-    bindWorkerContext,
-    assertCredentialsCheckpointed,
+    modes,
+    sandbox,
   };
 };
 
@@ -252,27 +252,27 @@ it("bootstraps only the approved Auth resource through all three fenced checkpoi
   await expect(runAuthResourceFileSpool(config, f.input, f.dependencies)).resolves.toBeNull();
   const contextBytes = f.files.get(`${spool}/startup/context.json`)!;
   expect(JSON.parse(contextBytes.toString())).toMatchObject({
-    kind: "neon_resource_bootstrap",
     app_id: "auth",
-    tenant_targets: [],
+    kind: "neon_resource_bootstrap",
     operation: {
-      operation_id: operationRef,
       approval_digest: f.input.approvalDigest,
       fence_generation: 7,
-    },
-    resource: {
-      scope: "auth_database",
-      resource_id: "isolated-auth",
-      database: "pilot_auth",
-      credentials_sha256: f.input.credentials.sha256,
-      provider_endpoint_id: "ep-isolated",
+      operation_id: operationRef,
     },
     release: { id: f.input.approvalDigest, sha256: f.input.approvalDigest },
+    resource: {
+      credentials_sha256: f.input.credentials.sha256,
+      database: "pilot_auth",
+      provider_endpoint_id: "ep-isolated",
+      resource_id: "isolated-auth",
+      scope: "auth_database",
+    },
+    tenant_targets: [],
   });
   expect(f.assertCredentialsCheckpointed).toHaveBeenCalledWith({
     approvalDigest: f.input.approvalDigest,
-    resourceId: "isolated-auth",
     credentialsSha256: f.input.credentials.sha256,
+    resourceId: "isolated-auth",
   });
   expect(f.bindWorkerContext).toHaveBeenCalledWith({ contextDigest: sha(contextBytes) });
   expect(f.files.get(`${spool}/startup/resource-credentials.json`)).toEqual(bytes(passwordPair));
@@ -296,9 +296,9 @@ it("inspects the same immutable resource without granting mutation authority", a
   await expect(
     runAuthResourceFileSpool(config, f.inspectInput(), f.dependencies),
   ).resolves.toMatchObject({
-    status: "applied",
-    scope: "auth_database",
     resource_id: "isolated-auth",
+    scope: "auth_database",
+    status: "applied",
   });
   expect(f.bindWorkerContext).not.toHaveBeenCalled();
   expect(f.checkpoint).not.toHaveBeenCalled();
@@ -373,8 +373,8 @@ it("accepts equivalent credential JSON while preserving the worker's canonical c
   f.input.credentials.bytes = Buffer.from(
     JSON.stringify(
       {
-        runtimePassword: passwordPair.runtimePassword,
         migratorPassword: passwordPair.migratorPassword,
+        runtimePassword: passwordPair.runtimePassword,
       },
       null,
       2,
@@ -416,25 +416,42 @@ it.each([
 ] as const)("rejects invalid %s before private custody or allocation", async (kind) => {
   const f = fixture();
   const changed = structuredClone(plan);
-  if (kind === "approval") f.input.approvalDigest = "f".repeat(64);
-  if (kind === "effect") f.input.effectId = "other";
-  if (kind === "second-resource")
+  if (kind === "approval") {
+    f.input.approvalDigest = "f".repeat(64);
+  }
+  if (kind === "effect") {
+    f.input.effectId = "other";
+  }
+  if (kind === "second-resource") {
     changed.effects.push({ id: "app-resources", kind: "resources", resourceId: "app-resource" });
-  if (kind === "installer") changed.resourcesInstaller.sha256 = "f".repeat(64);
-  if (kind === "credential-hash") f.input.credentials.sha256 = "f".repeat(64);
-  if (kind === "pooled-admin")
+  }
+  if (kind === "installer") {
+    changed.resourcesInstaller.sha256 = "f".repeat(64);
+  }
+  if (kind === "credential-hash") {
+    f.input.credentials.sha256 = "f".repeat(64);
+  }
+  if (kind === "pooled-admin") {
     f.input.credentials.maintenanceUrl = f.input.credentials.maintenanceUrl.replace(
       "ep-isolated.",
       "ep-isolated-pooler.",
     );
-  if (kind === "foreign-admin")
+  }
+  if (kind === "foreign-admin") {
     f.input.credentials.maintenanceUrl = f.input.credentials.maintenanceUrl.replace(
       "neondb_owner",
       "other",
     );
-  if (kind === "maintenance-database") changed.authDatabase.database = "neondb";
-  if (kind === "role") changed.authDatabase.runtimeRole = changed.bootstrap.role;
-  if (kind === "fence") f.input.fenceGeneration = 0;
+  }
+  if (kind === "maintenance-database") {
+    changed.authDatabase.database = "neondb";
+  }
+  if (kind === "role") {
+    changed.authDatabase.runtimeRole = changed.bootstrap.role;
+  }
+  if (kind === "fence") {
+    f.input.fenceGeneration = 0;
+  }
   if (["second-resource", "installer", "maintenance-database", "role"].includes(kind)) {
     f.input.approvedPlanBytes = bytes(changed);
     f.input.approvalDigest = sha(f.input.approvedPlanBytes);

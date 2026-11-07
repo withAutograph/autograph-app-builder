@@ -25,31 +25,12 @@ const digest = nativeTargetDigestSchema;
  */
 export const nativeTargetAuthOnlyPlanSchema = z
   .strictObject({
-    version: z.literal(1),
-    kind: z.literal("native-target-auth-only"),
     appId: builderAppIdSchema,
-    origin: z.strictObject({
-      authority: hostedTenantAuthoritySchema,
-      publicSessionId: id,
-      adapterSessionId: id,
-      adapterGeneration: z.number().int().positive(),
-      appSpecDigest: digest,
-      capturedDescription: z.strictObject({
-        appId: builderAppIdSchema,
-        kind: z.literal("static"),
-        sha256: digest,
-      }),
-    }),
-    /** Exact independently observed reviewed publication, part of the approval digest. */
-    publishedSource: publishedAppSourceSchema,
-    project: z.strictObject({
-      name: nativeTargetProjectNameSchema,
-      teamId: id,
-      installationId: id,
-      projectSettings: hostedOperatorAppProjectSettingsSchema,
-      protection: nativeTargetProjectProtectionSchema,
-    }),
-    branch: id,
+    /** One existing app-scoped, non-privileged role is required for policy installation. */
+    appRole: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]*$/u)
+      .refine((role) => !/(?:^|[_-])(?:owner|admin|administrator)(?:[_-]|$)/u.test(role)),
     /** Auth custody is deployment-owned and isolated from product app data. */
     authResource: z.strictObject({
       profileId: id,
@@ -66,17 +47,36 @@ export const nativeTargetAuthOnlyPlanSchema = z
       targetDigest: digest,
       installer: z.strictObject({ reference: id, sha256: digest }),
     }),
-    /** One existing app-scoped, non-privileged role is required for policy installation. */
-    appRole: z
-      .string()
-      .regex(/^[a-z][a-z0-9_]*$/u)
-      .refine((role) => !/(?:^|[_-])(?:owner|admin|administrator)(?:[_-]|$)/u.test(role)),
+    branch: id,
+    cost: z.strictObject({ ownership: z.literal("current-owner"), description: id }),
+    kind: z.literal("native-target-auth-only"),
+    origin: z.strictObject({
+      authority: hostedTenantAuthoritySchema,
+      publicSessionId: id,
+      adapterSessionId: id,
+      adapterGeneration: z.number().int().positive(),
+      appSpecDigest: digest,
+      capturedDescription: z.strictObject({
+        appId: builderAppIdSchema,
+        kind: z.literal("static"),
+        sha256: digest,
+      }),
+    }),
+    project: z.strictObject({
+      name: nativeTargetProjectNameSchema,
+      teamId: id,
+      installationId: id,
+      projectSettings: hostedOperatorAppProjectSettingsSchema,
+      protection: nativeTargetProjectProtectionSchema,
+    }),
+    /** Exact independently observed reviewed publication, part of the approval digest. */
+    publishedSource: publishedAppSourceSchema,
+    retention: z.strictObject({ policy: id, expiresAt: nativeTargetInstantSchema.optional() }),
     signupPolicy: z.strictObject({
       eligibility: z.literal("approved-email-list"),
       requireVerifiedEmail: z.literal(true),
     }),
-    cost: z.strictObject({ ownership: z.literal("current-owner"), description: id }),
-    retention: z.strictObject({ policy: id, expiresAt: nativeTargetInstantSchema.optional() }),
+    version: z.literal(1),
   })
   .superRefine((plan, context) => {
     if (plan.authResource.profileId.length === 0 || plan.authResource.resourceId.length === 0) {
@@ -114,12 +114,12 @@ export const nativeTargetAuthOnlySchemaEffectDigest = (
   createHash("sha256")
     .update(
       JSON.stringify({
+        appRole: plan.appRole,
         kind: "native-target-auth-schema-effect-v1",
         planDigest: nativeTargetAuthOnlyPlanDigest(plan),
-        source: publishedAppSourceSchema.parse(source),
         resourceId: plan.authResource.resourceId,
-        appRole: plan.appRole,
         signupPolicy: plan.signupPolicy,
+        source: publishedAppSourceSchema.parse(source),
       }),
     )
     .digest("hex");

@@ -14,8 +14,10 @@ import {
   nativeTargetAuthOnlyPlanRequestSchema as authOnlyInputSchema,
   nativeTargetAuthOnlyPlanResultSchema,
 } from "../agent/native-target-onboarding-input-schema";
-import { nativeTargetAuthOnlyPlanSchema } from "./native-target-auth-only-plan-schema";
-import { nativeTargetAuthOnlyPlanDigest } from "./native-target-auth-only-plan-schema";
+import {
+  nativeTargetAuthOnlyPlanSchema,
+  nativeTargetAuthOnlyPlanDigest,
+} from "./native-target-auth-only-plan-schema";
 import { nativeTargetAuthOnlyEntryApprovalInputSchema } from "./native-target-auth-only-entry-plan-store";
 import { nativeTargetAuthOnlyDeliveryPreparationInputSchema } from "../eve/private-native-target-auth-only-delivery-approval";
 import {
@@ -25,7 +27,7 @@ import {
 import { nativeTargetAuthOnlyResourcePreparationInputSchema } from "../eve/private-native-target-auth-only-resource-approval";
 
 const id = z.string().min(1);
-const common = { ownerContext: operatorOwnerContextSchema, adapterSessionId: id, callId: id };
+const common = { adapterSessionId: id, callId: id, ownerContext: operatorOwnerContextSchema };
 export const nativeTargetAuthOnlyPlanRequestSchema = z
   .strictObject({
     ...common,
@@ -51,8 +53,8 @@ export const nativeTargetAuthOnlyPreparationRequestSchema = z
   .strictObject({
     appId: nativeTargetAuthOnlyPlanSchema.shape.appId,
     operationRef: z.string().min(1),
-    planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
     plan: nativeTargetAuthOnlyPlanSchema,
+    planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   })
   .superRefine((value, context) => {
     if (
@@ -67,10 +69,9 @@ export const nativeTargetAuthOnlyPreparationRequestSchema = z
     }
   });
 export const nativeTargetAuthOnlyDispatchResultSchema = z.discriminatedUnion("status", [
-  z.strictObject({ status: z.literal("created"), projectId: id }),
-  z.strictObject({ status: z.literal("unknown"), projectId: id.optional() }),
+  z.strictObject({ projectId: id, status: z.literal("created") }),
+  z.strictObject({ projectId: id.optional(), status: z.literal("unknown") }),
   z.strictObject({
-    status: z.literal("rejected"),
     reason: z.enum([
       "authorization_denied",
       "collision",
@@ -78,17 +79,18 @@ export const nativeTargetAuthOnlyDispatchResultSchema = z.discriminatedUnion("st
       "provider_rejected",
       "rate_limited",
     ]),
+    status: z.literal("rejected"),
   }),
 ]);
 export const nativeTargetAuthOnlyResourceResultSchema = z.strictObject({
-  status: z.literal("prepared"),
-  resourcePlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   authSchema: z.strictObject({
     artifactRef: id,
     planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
     targetDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   }),
   readiness: id,
+  resourcePlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  status: z.literal("prepared"),
 });
 export const nativeTargetAuthOnlyEntryPlanInputSchema =
   nativeTargetAuthOnlyEntryApprovalInputSchema.pick({
@@ -99,9 +101,9 @@ export const nativeTargetAuthOnlyEntryPlanInputSchema =
   });
 export const nativeTargetAuthOnlyEntryResultSchema = nativeTargetAuthOnlyEntryApprovalInputSchema
   .pick({
-    effect: true,
     childOperationRef: true,
     childPlanDigest: true,
+    effect: true,
   })
   .extend({ status: z.literal("prepared") });
 export type NativeTargetAuthOnlyEntryPlanInput = z.infer<
@@ -116,24 +118,24 @@ export const nativeTargetAuthOnlyDeliveryPlanInputSchema =
     resourcePlanDigest: true,
   });
 export const nativeTargetAuthOnlyFinalRoutingResultSchema = z.strictObject({
-  status: z.literal("prepared"),
+  app: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
   deliveryPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   gateway: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
-  app: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
   projectionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  status: z.literal("prepared"),
 });
 export const nativeTargetAuthOnlyDeliveryResultSchema = z.discriminatedUnion("status", [
   z
     .strictObject({
-      status: z.literal("prepared"),
-      deliveryPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-      gateway: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
       app: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
+      deliveryPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
       finalRoutingPlan: nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.optional(),
+      gateway: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
       projectionDigest: z
         .string()
         .regex(/^[a-f0-9]{64}$/u)
         .optional(),
+      status: z.literal("prepared"),
     })
     .refine(
       (result) =>
@@ -143,20 +145,20 @@ export const nativeTargetAuthOnlyDeliveryResultSchema = z.discriminatedUnion("st
       },
     ),
   z.strictObject({
-    status: z.literal("pending-owner"),
-    deliveryPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
     authIdentityLink: z.url().refine((value) => {
       const url = new URL(value);
       return url.protocol === "https:" && !url.username && !url.password;
     }),
     authIdentityLinkExpiresAt: z.iso.datetime({ offset: true }),
+    deliveryPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    status: z.literal("pending-owner"),
   }),
   z.strictObject({
-    status: z.literal("routing-required"),
-    deliveryPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-    gateway: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
     app: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
+    deliveryPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
     finalRoutingPlan: nativeTargetAuthOnlyFinalRoutingApprovalInputSchema,
+    gateway: operatorDeploymentCandidateSchema.extend({ readyState: z.literal("READY") }),
+    status: z.literal("routing-required"),
   }),
 ]);
 export const nativeTargetAuthOnlyPrepareRequestSchema = z.strictObject({
@@ -173,9 +175,9 @@ export type NativeTargetAuthOnlyPlanResponse = z.infer<
 /** Minimal authenticated native responder identity; excludes auth functions and forwarded attributes. */
 export const nativeTargetApprovalResponderSchema = z.strictObject({
   authenticator: id,
+  issuer: id.optional(),
   principalId: id,
   principalType: id,
-  issuer: id.optional(),
   subject: id.optional(),
 });
 export const nativeTargetTransportRequestSchema = z
@@ -205,13 +207,13 @@ export const nativeTargetTransportRequestSchema = z
     z.strictObject({
       ...common,
       action: z.literal("native-target-approval-candidate"),
-      input: nativeTargetPreparationRequestSchema,
       candidate: z.strictObject({
         requestId: id,
         callId: id,
         toolName: z.literal("prepare-app-native-target"),
         responder: nativeTargetApprovalResponderSchema,
       }),
+      input: nativeTargetPreparationRequestSchema,
     }),
     z.strictObject({
       ...common,
@@ -333,45 +335,45 @@ export type NativeTargetRequest =
 export const nativeTargetTerminalApprovalResultSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("pending") }),
   z.strictObject({
-    status: z.literal("approved"),
     proof: nativeTargetOnboardingApprovalSchema.extend({ outcome: z.literal("approved") }),
+    status: z.literal("approved"),
   }),
   z.strictObject({
-    status: z.literal("cancelled"),
     proof: nativeTargetOnboardingApprovalSchema.extend({ outcome: z.literal("cancelled") }),
+    status: z.literal("cancelled"),
   }),
 ]);
 export const nativeTargetApprovalCandidateResultSchema = z.strictObject({
   status: z.literal("allowed"),
 });
 export const nativeTargetTransportResponseSchemas = {
-  "native-target-plan": nativeTargetOnboardingResultSchema,
-  "native-target-prepare": nativeTargetOnboardingResultSchema,
-  "native-target-approval-read": nativeTargetTerminalApprovalResultSchema,
   "native-target-approval-candidate": nativeTargetApprovalCandidateResultSchema,
-  "native-target-auth-only-prepare": nativeTargetAuthOnlyDispatchResultSchema,
+  "native-target-approval-read": nativeTargetTerminalApprovalResultSchema,
   "native-target-auth-only-approval-read": z.strictObject({
     status: z.enum(["approved", "pending"]),
   }),
+  "native-target-auth-only-delivery": nativeTargetAuthOnlyDeliveryResultSchema,
+  "native-target-auth-only-delivery-approval-read": z.strictObject({
+    status: z.enum(["approved", "pending"]),
+  }),
+  "native-target-auth-only-delivery-plan": nativeTargetAuthOnlyDeliveryPreparationInputSchema,
+  "native-target-auth-only-entry": nativeTargetAuthOnlyEntryResultSchema,
+  "native-target-auth-only-entry-approval-read": z.strictObject({
+    status: z.enum(["approved", "pending"]),
+  }),
+  "native-target-auth-only-entry-plan": nativeTargetAuthOnlyEntryApprovalInputSchema,
+  "native-target-auth-only-final-routing": nativeTargetAuthOnlyFinalRoutingResultSchema,
+  "native-target-auth-only-final-routing-approval-read": z.strictObject({
+    status: z.enum(["approved", "pending"]),
+  }),
+  "native-target-auth-only-final-routing-plan": nativeTargetAuthOnlyFinalRoutingApprovalInputSchema,
+  "native-target-auth-only-prepare": nativeTargetAuthOnlyDispatchResultSchema,
   "native-target-auth-only-resource-approval-read": z.strictObject({
     status: z.enum(["approved", "pending"]),
   }),
   "native-target-auth-only-resources": nativeTargetAuthOnlyResourceResultSchema,
-  "native-target-auth-only-delivery-plan": nativeTargetAuthOnlyDeliveryPreparationInputSchema,
-  "native-target-auth-only-delivery-approval-read": z.strictObject({
-    status: z.enum(["approved", "pending"]),
-  }),
-  "native-target-auth-only-delivery": nativeTargetAuthOnlyDeliveryResultSchema,
-  "native-target-auth-only-entry-plan": nativeTargetAuthOnlyEntryApprovalInputSchema,
-  "native-target-auth-only-entry-approval-read": z.strictObject({
-    status: z.enum(["approved", "pending"]),
-  }),
-  "native-target-auth-only-entry": nativeTargetAuthOnlyEntryResultSchema,
-  "native-target-auth-only-final-routing-plan": nativeTargetAuthOnlyFinalRoutingApprovalInputSchema,
-  "native-target-auth-only-final-routing-approval-read": z.strictObject({
-    status: z.enum(["approved", "pending"]),
-  }),
-  "native-target-auth-only-final-routing": nativeTargetAuthOnlyFinalRoutingResultSchema,
+  "native-target-plan": nativeTargetOnboardingResultSchema,
+  "native-target-prepare": nativeTargetOnboardingResultSchema,
 } as const;
 
 export type NativeTargetTransportResponse =

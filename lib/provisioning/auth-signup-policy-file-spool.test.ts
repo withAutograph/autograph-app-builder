@@ -11,66 +11,66 @@ const spool = `/vercel/sandbox/protected-installer/${workerAttemptId}`;
 const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
 const sha = (value: Buffer) => createHash("sha256").update(value).digest("hex");
 const worker = {
+  executablePath: "/worker/membership",
   id: "auth-owned-organization-v1",
   operationScope: "auth-protected-membership-v1",
-  subcommand: "auth-protected-membership",
-  executablePath: "/worker/membership",
   sha256: "a".repeat(64),
+  subcommand: "auth-protected-membership",
 } as const;
 const config = {
   image: "pinned-control",
+  membershipWorker: worker,
   projectId: "prj-operator",
   teamId: "team-owned",
   workers: {},
-  membershipWorker: worker,
 };
 const plan = {
-  version: 1,
   action: "prepare",
-  owner: { userId: "owner-fixture" },
-  source: { sha256: "b".repeat(64) },
-  selection: { sessionId: "saved-session", workspaceId: "workspace-fixture" },
   authDatabase: {
-    resourceId: "isolated-auth",
     database: "pilot_auth",
     migratorRole: "pilot_migrator",
+    resourceId: "isolated-auth",
     runtimeRole: "pilot_runtime",
   },
-  neon: {
-    endpoint: "ep-isolated.neon.tech",
-    projectId: "isolated-project",
-    branchId: "isolated-branch",
-  },
   authSignupPolicy: {
-    version: 1,
-    policyId: "pilot-signup",
-    authResourceId: "isolated-auth",
-    appId: "signup-pilot",
-    origin: "https://pilot.example",
-    appPath: "/pilot",
-    organizationId: "pilot-org",
-    eligibility: "approved-email",
     allowedEmails: ["controlled@example.test"],
-    membershipRole: "member",
-    appRoles: ["pilot_user"],
-  },
-  normalActorProgram: {
     appId: "signup-pilot",
+    appPath: "/pilot",
+    appRoles: ["pilot_user"],
+    authResourceId: "isolated-auth",
+    eligibility: "approved-email",
+    membershipRole: "member",
+    organizationId: "pilot-org",
     origin: "https://pilot.example",
-    organizations: [{ organizationId: "pilot-org" }],
-    appAccess: [{ appId: "signup-pilot", organizationId: "pilot-org", roles: ["pilot_user"] }],
+    policyId: "pilot-signup",
+    version: 1,
   },
   deploymentBoundary: {
+    operator: { environment: "preview", projectId: "prj-operator" },
     teamId: "team-owned",
-    operator: { projectId: "prj-operator", environment: "preview" },
     verification: {
-      publicOrigin: "https://pilot.example",
       gatewayOrigin: "https://gateway.example",
       jwksUrl: "https://gateway.example/_platform/jwks.json",
+      publicOrigin: "https://pilot.example",
     },
   },
-  signupPolicyInstaller: { reference: worker.id, sha256: worker.sha256 },
   effects: [{ id: "auth-signup-policy", kind: "auth-signup-policy", resourceId: "isolated-auth" }],
+  neon: {
+    branchId: "isolated-branch",
+    endpoint: "ep-isolated.neon.tech",
+    projectId: "isolated-project",
+  },
+  normalActorProgram: {
+    appAccess: [{ appId: "signup-pilot", organizationId: "pilot-org", roles: ["pilot_user"] }],
+    appId: "signup-pilot",
+    organizations: [{ organizationId: "pilot-org" }],
+    origin: "https://pilot.example",
+  },
+  owner: { userId: "owner-fixture" },
+  selection: { sessionId: "saved-session", workspaceId: "workspace-fixture" },
+  signupPolicyInstaller: { reference: worker.id, sha256: worker.sha256 },
+  source: { sha256: "b".repeat(64) },
+  version: 1,
 };
 const fixture = (
   options: {
@@ -86,28 +86,22 @@ const fixture = (
   const files = new Map<string, Buffer>();
   const modes = new Map<string, number | undefined>();
   let fenceRequested = false;
-  const checkpoint = vi.fn(async (_value: unknown) => undefined);
+  const checkpoint = vi.fn(async (_value: unknown) => {});
   const bindWorkerContext = vi.fn(async (_value: { contextDigest: string }) => checkpoint);
-  const kill = vi.fn(async () => undefined);
+  const kill = vi.fn(async () => {});
   const frame = (name: string, value: unknown) => files.set(`${spool}/${name}`, bytes(value));
   const sandbox = {
+    delete: vi.fn(async () => undefined),
+    extendTimeout: vi.fn(async () => undefined),
     fs: {
-      mkdir: vi.fn(async () => undefined),
-      rm: vi.fn(async () => undefined),
       lstat: vi.fn(async (path: string) => ({
         isFile: () => files.has(path),
         size: files.get(path)?.length ?? 0,
       })),
+      mkdir: vi.fn(async () => undefined),
+      rm: vi.fn(async () => undefined),
     },
-    writeFiles: vi.fn(async (rows: { path: string; content: Buffer; mode?: number }[]) => {
-      for (const row of rows) {
-        files.set(row.path, row.content);
-        modes.set(row.path, row.mode);
-      }
-    }),
     readFileToBuffer: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
-    delete: vi.fn(async () => undefined),
-    extendTimeout: vi.fn(async () => undefined),
     runCommand: vi.fn(async (command: { detached?: boolean; args: string[] }) => {
       if (!command.detached)
         return {
@@ -207,24 +201,30 @@ const fixture = (
         },
       };
     }),
+    writeFiles: vi.fn(async (rows: { path: string; content: Buffer; mode?: number }[]) => {
+      for (const row of rows) {
+        files.set(row.path, row.content);
+        modes.set(row.path, row.mode);
+      }
+    }),
   };
   const createSandbox = vi.fn(async () => sandbox);
   const input = {
-    approvedPlanBytes: bytes(plan),
     approvalDigest: sha(bytes(plan)),
-    effectId: "auth-signup-policy",
-    operationRef,
-    workerAttemptId,
-    fenceGeneration: 7,
-    credentials: {
-      migrationUrl:
-        "postgresql://pilot_migrator:fixture@ep-isolated.neon.tech/pilot_auth?sslmode=verify-full",
-    },
+    approvedPlanBytes: bytes(plan),
     assertCurrent: vi.fn(async () => {
       if (options.denyFence && fenceRequested)
         throw new HostedOperatorError("authorization_required");
     }),
     bindWorkerContext,
+    credentials: {
+      migrationUrl:
+        "postgresql://pilot_migrator:fixture@ep-isolated.neon.tech/pilot_auth?sslmode=verify-full",
+    },
+    effectId: "auth-signup-policy",
+    fenceGeneration: 7,
+    operationRef,
+    workerAttemptId,
   };
   const dependencies = {
     createSandbox: createSandbox as unknown as NonNullable<
@@ -236,16 +236,16 @@ const fixture = (
     return { ...rest, readbackOnly: true as const };
   };
   return {
+    bindWorkerContext,
+    checkpoint,
+    createSandbox,
+    dependencies,
+    files,
     input,
     inspectInput,
-    dependencies,
-    createSandbox,
-    sandbox,
-    files,
-    modes,
-    checkpoint,
-    bindWorkerContext,
     kill,
+    modes,
+    sandbox,
   };
 };
 
@@ -255,19 +255,19 @@ it("runs only the approved policy with complete unchanged bytes and an exact Aut
   expect(f.files.get(`${spool}/startup/operator-plan.json`)).toEqual(f.input.approvedPlanBytes);
   expect(JSON.parse(f.files.get(`${spool}/startup/context.json`)!.toString())).toMatchObject({
     app_id: "auth",
-    tenant_targets: [],
     release: { id: f.input.approvalDigest, sha256: f.input.approvalDigest },
     resource: {
-      resource_id: "isolated-auth",
       database: "pilot_auth",
       migrator_role: "pilot_migrator",
+      resource_id: "isolated-auth",
       runtime_role: "pilot_runtime",
     },
+    tenant_targets: [],
   });
   expect(JSON.parse(f.files.get(`${spool}/startup/membership-effect.json`)!.toString())).toEqual({
-    version: 1,
     effectId: "auth-signup-policy",
     kind: "auth-signup-policy",
+    version: 1,
   });
   expect(
     [...f.files.keys()]
@@ -297,7 +297,7 @@ it("independently reads the same policy without binding or authorizing a mutatio
   const f = fixture();
   await expect(
     runAuthSignupPolicyFileSpool(config, f.inspectInput(), f.dependencies),
-  ).resolves.toMatchObject({ status: "applied", fence_generation: 7 });
+  ).resolves.toMatchObject({ fence_generation: 7, status: "applied" });
   expect(f.bindWorkerContext).not.toHaveBeenCalled();
   expect(f.checkpoint).not.toHaveBeenCalled();
   expect(f.sandbox.runCommand).toHaveBeenLastCalledWith(
@@ -325,16 +325,16 @@ it.each([
   "inspect-context",
 ] as const)("denies unrelated %s", async (kind) => {
   const effects = {
+    "app-grant": "generated_app.grant_access",
     membership: "auth-membership",
     resources: "resources:database",
     schema: "auth:apply-schema-plan",
-    "app-grant": "generated_app.grant_access",
   };
   const f = fixture({
     forbiddenEffect: kind in effects ? effects[kind as keyof typeof effects] : undefined,
     foreignResource: kind === "resource",
-    tenant: kind === "tenant",
     mutateInspect: kind === "inspect-mutation",
+    tenant: kind === "tenant",
     wrongReadback: kind === "inspect-context",
   });
   await expect(
@@ -365,8 +365,8 @@ it("withholds a fence grant after authority loss and verifies the pin before wri
 it("supports the worker's organization-scoped effect ID without changing its canonical policy command", async () => {
   const f = fixture();
   const changed = structuredClone(plan);
-  changed.effects[0]!.id += ":pilot-org";
-  f.input.effectId = changed.effects[0]!.id;
+  changed.effects[0].id += ":pilot-org";
+  f.input.effectId = changed.effects[0].id;
   f.input.approvedPlanBytes = bytes(changed);
   f.input.approvalDigest = sha(f.input.approvedPlanBytes);
   await expect(runAuthSignupPolicyFileSpool(config, f.input, f.dependencies)).resolves.toBeNull();
@@ -394,9 +394,9 @@ it("snapshots approved inputs, worker and execution mode before awaiting custody
   expect(f.checkpoint).toHaveBeenCalledOnce();
   expect(f.createSandbox).toHaveBeenCalledWith(
     expect.objectContaining({
+      image: "pinned-control",
       projectId: "prj-operator",
       teamId: "team-owned",
-      image: "pinned-control",
     }),
   );
 });
@@ -424,38 +424,66 @@ it.each([
 ] as const)("rejects invalid %s before allocating a Sandbox", async (kind) => {
   const f = fixture();
   const changed = structuredClone(plan);
-  if (kind === "public-policy") changed.authSignupPolicy.eligibility = "public";
-  if (kind === "admin-role") changed.authSignupPolicy.appRoles = ["app_admin"];
-  if (kind === "duplicate-email")
+  if (kind === "public-policy") {
+    changed.authSignupPolicy.eligibility = "public";
+  }
+  if (kind === "admin-role") {
+    changed.authSignupPolicy.appRoles = ["app_admin"];
+  }
+  if (kind === "duplicate-email") {
     changed.authSignupPolicy.allowedEmails.push("CONTROLLED@example.test");
-  if (kind === "organization")
-    changed.normalActorProgram.organizations[0]!.organizationId = "other";
-  if (kind === "roles") changed.normalActorProgram.appAccess[0]!.roles = ["other"];
-  if (kind === "app") changed.normalActorProgram.appId = "other";
-  if (kind === "origin") changed.authSignupPolicy.origin = "https://other.example";
-  if (kind === "gateway")
+  }
+  if (kind === "organization") {
+    changed.normalActorProgram.organizations[0].organizationId = "other";
+  }
+  if (kind === "roles") {
+    changed.normalActorProgram.appAccess[0].roles = ["other"];
+  }
+  if (kind === "app") {
+    changed.normalActorProgram.appId = "other";
+  }
+  if (kind === "origin") {
+    changed.authSignupPolicy.origin = "https://other.example";
+  }
+  if (kind === "gateway") {
     changed.deploymentBoundary.verification.jwksUrl = "https://other.example/_platform/jwks.json";
-  if (kind === "auth-resource") changed.authSignupPolicy.authResourceId = "other";
-  if (kind === "app-database")
+  }
+  if (kind === "auth-resource") {
+    changed.authSignupPolicy.authResourceId = "other";
+  }
+  if (kind === "app-database") {
     Object.assign(changed, { appDatabase: { database: "not-approved" } });
-  if (kind === "membership")
+  }
+  if (kind === "membership") {
     Object.assign(changed, { authMembership: { organizationId: "not-approved" } });
-  if (kind === "extra-effect")
+  }
+  if (kind === "extra-effect") {
     changed.effects.push({ id: "access", kind: "access", resourceId: "other" });
-  if (kind === "effect-resource") changed.effects[0]!.resourceId = "other";
-  if (kind === "worker") changed.signupPolicyInstaller.sha256 = "f".repeat(64);
-  if (kind === "team") changed.deploymentBoundary.teamId = "other";
-  if (kind === "operator") changed.deploymentBoundary.operator.projectId = "other";
-  if (kind === "foreign-url")
+  }
+  if (kind === "effect-resource") {
+    changed.effects[0].resourceId = "other";
+  }
+  if (kind === "worker") {
+    changed.signupPolicyInstaller.sha256 = "f".repeat(64);
+  }
+  if (kind === "team") {
+    changed.deploymentBoundary.teamId = "other";
+  }
+  if (kind === "operator") {
+    changed.deploymentBoundary.operator.projectId = "other";
+  }
+  if (kind === "foreign-url") {
     f.input.credentials.migrationUrl = f.input.credentials.migrationUrl.replace(
       "pilot_migrator",
       "foreign",
     );
-  if (kind === "pooled-url")
+  }
+  if (kind === "pooled-url") {
     f.input.credentials.migrationUrl = f.input.credentials.migrationUrl.replace(
       "ep-isolated.",
       "ep-isolated-pooler.",
     );
+  }
   f.input.approvedPlanBytes = bytes(changed);
   f.input.approvalDigest = kind === "approval" ? "f".repeat(64) : sha(f.input.approvedPlanBytes);
   await expect(runAuthSignupPolicyFileSpool(config, f.input, f.dependencies)).rejects.toThrow();

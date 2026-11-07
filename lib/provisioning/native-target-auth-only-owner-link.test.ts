@@ -10,28 +10,29 @@ import {
 import type { NativeTargetAuthOnlyOwnerLinkStore } from "./native-target-auth-only-owner-link";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "owner-workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "canonical-owner",
+  workspaceId: "owner-workspace",
 };
 const operationRef = "44444444-4444-4444-a444-444444444444";
 const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse({
-  authority,
-  target: {
-    appId: "signup-pilot",
-    branch: "pilot",
-    environment: "preview",
-    installationId: "icfg-owner",
-    projectId: "prj-app",
-    scopeId: "team-owner",
-    scopeType: "team",
-    sessionId: "saved-session",
-  },
-  operationRef,
+  audience: "https://operator-preview.example",
   authOnlyPlanDigest: "a".repeat(64),
-  resourcePlanDigest: "b".repeat(64),
-  gatewayDeliveryPlanDigest: "c".repeat(64),
+  authResourceId: "isolated-auth",
+  authority,
+  bootstrapResource: {
+    database: "pilot_auth",
+    environment: "preview",
+    hostname: "ep-pilot.neon.tech",
+    migratorRole: "pilot_migrator",
+    neon: { branchId: "br-pilot", projectId: "neon-pilot" },
+    port: 5432,
+    runtimeRole: "pilot_runtime",
+    schema: "public",
+    version: 1,
+  },
+  browserOrigin: "https://auth-pilot.example",
   gateway: {
     branch: "isolated-gateway",
     deploymentId: "dpl-ready",
@@ -41,28 +42,27 @@ const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse({
     readyState: "READY",
     repoId: "repo-approved",
   },
-  sender: {
-    issuer: "https://oidc.vercel.com/owner",
-    audience: "https://vercel.com/owner",
-    projectId: "prj-gateway",
-    ownerId: "team-owner",
-    subject: "owner:owner:project:gateway:environment:preview",
-    environment: "preview",
-  },
-  browserOrigin: "https://auth-pilot.example",
+  gatewayDeliveryPlanDigest: "c".repeat(64),
   issuer: "https://auth-pilot.example",
-  audience: "https://operator-preview.example",
-  authResourceId: "isolated-auth",
-  bootstrapResource: {
+  operationRef,
+  resourcePlanDigest: "b".repeat(64),
+  sender: {
+    audience: "https://vercel.com/owner",
     environment: "preview",
-    port: 5432,
-    schema: "public",
-    version: 1,
-    database: "pilot_auth",
-    hostname: "ep-pilot.neon.tech",
-    migratorRole: "pilot_migrator",
-    runtimeRole: "pilot_runtime",
-    neon: { branchId: "br-pilot", projectId: "neon-pilot" },
+    issuer: "https://oidc.vercel.com/owner",
+    ownerId: "team-owner",
+    projectId: "prj-gateway",
+    subject: "owner:owner:project:gateway:environment:preview",
+  },
+  target: {
+    appId: "signup-pilot",
+    branch: "pilot",
+    environment: "preview",
+    installationId: "icfg-owner",
+    projectId: "prj-app",
+    scopeId: "team-owner",
+    scopeType: "team",
+    sessionId: "saved-session",
   },
 });
 const proof = "opaque-proof-fixture-from-verified-callback";
@@ -76,41 +76,43 @@ const fixture = () => {
   const assertCurrent = vi.fn(async () => {});
   const readPublishedProof = vi.fn(async () => proof);
   const store: NativeTargetAuthOnlyOwnerLinkStore = {
-    read: async () => (row === undefined ? undefined : structuredClone(row)),
+    compareAndSet: async (record, expectedRevision) => {
+      if (row?.revision !== expectedRevision) return undefined;
+      row = { record: structuredClone(record), revision: (expectedRevision ?? 0) + 1 };
+      return structuredClone(row);
+    },
     lookup: async (selector) =>
       row !== undefined &&
       row.record.link.ownerSessionId === selector.ownerSessionId &&
       row.record.link.nonceSha256 === selector.nonceSha256
         ? structuredClone(row)
         : undefined,
-    compareAndSet: async (record, expectedRevision) => {
-      if (row?.revision !== expectedRevision) return undefined;
-      row = { record: structuredClone(record), revision: (expectedRevision ?? 0) + 1 };
-      return structuredClone(row);
-    },
+    read: async () => (row === undefined ? undefined : structuredClone(row)),
   };
   const service = createNativeTargetAuthOnlyOwnerLink({
-    store,
-    keyring,
     assertCurrent,
+    keyring,
     readPublishedProof,
+    store,
   });
   const prepare = async () => {
     const result = await service.prepare(binding);
-    if (result.status !== "waiting-for-owner") throw new Error("fixture invitation missing");
+    if (result.status !== "waiting-for-owner") {
+      throw new Error("fixture invitation missing");
+    }
     const url = new URL(result.browserUrl);
     const nonce = url.searchParams.get("nonce")!;
     return {
       ...result,
-      url,
       nonce,
       selector: {
-        ownerSessionId: binding.target.sessionId,
         nonceSha256: realmIdentityNonceSha256(nonce),
+        ownerSessionId: binding.target.sessionId,
       },
+      url,
     };
   };
-  return { service, assertCurrent, readPublishedProof, prepare, row: () => row };
+  return { assertCurrent, prepare, readPublishedProof, row: () => row, service };
 };
 
 beforeEach(() => {
@@ -136,9 +138,9 @@ describe("Auth-only owner link", () => {
     const pending = await f.service.readPending(first.selector);
     expect(pending).toMatchObject({
       binding,
-      sender: binding.sender,
       bootstrapResource: binding.bootstrapResource,
       jwksUrl: "https://immutable-gateway.example/_platform/jwks.json",
+      sender: binding.sender,
     });
     expect(pending?.link).not.toHaveProperty("sealedNonce");
     expect(JSON.stringify(pending)).not.toContain(first.nonce);
@@ -168,9 +170,9 @@ describe("Auth-only owner link", () => {
       "auth_identity_required",
     );
     expect(await f.service.prepare(binding)).toEqual({
-      status: "linked",
       operationRef,
       sessionId: binding.target.sessionId,
+      status: "linked",
     });
     f.readPublishedProof.mockResolvedValue("changed-proof");
     await expect(f.service.readCaptured(binding)).rejects.toThrow("auth_identity_required");

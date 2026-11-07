@@ -14,49 +14,36 @@ const spool = `/vercel/sandbox/protected-installer/${workerAttemptId}`;
 const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
 const sha = (value: Buffer) => createHash("sha256").update(value).digest("hex");
 const worker = {
+  executablePath: "/worker/membership",
   id: "auth-owned-organization-v1",
   operationScope: "auth-protected-membership-v1",
-  subcommand: "auth-protected-membership",
-  executablePath: "/worker/membership",
   sha256: "a".repeat(64),
+  subcommand: "auth-protected-membership",
 } as const;
 const config = {
   image: "pinned-control",
+  membershipWorker: worker,
   projectId: "prj-operator",
   teamId: "team-owned",
   workers: {},
-  membershipWorker: worker,
 };
 const proof = "private-captured-realm-proof";
 const plan = {
-  version: 1,
   action: "prepare",
-  owner: { userId: "owner-fixture" },
-  source: { sha256: "b".repeat(64) },
-  selection: { sessionId: "saved-session", workspaceId: "workspace-fixture" },
   authDatabase: {
-    resourceId: "isolated-auth",
     database: "pilot_auth",
     migratorRole: "pilot_migrator",
+    resourceId: "isolated-auth",
     runtimeRole: "pilot_runtime",
   },
-  neon: {
-    endpoint: "ep-isolated.neon.tech",
-    projectId: "isolated-project",
-    branchId: "isolated-branch",
-  },
   authMembership: {
-    kind: "create-owned-organization",
-    name: "Pilot",
-    slug: "pilot-org",
-    organizationId: "pilot-org",
     actorId: "realm-owner",
     bootstrapPlanDigest: "b".repeat(64),
-    identityNonceSha256: "c".repeat(64),
     identityCapture: {
       capturedAt: "2026-01-01T00:00:00.000Z",
       realmSessionId: "live-realm-session",
     },
+    identityNonceSha256: "c".repeat(64),
     identityProof: { reference: "private-proof-reference", sha256: sha(Buffer.from(proof)) },
     identityVerification: {
       audience: "https://operator.example",
@@ -64,24 +51,37 @@ const plan = {
       jwksUrl: "https://gateway.example/_platform/jwks.json",
       transportSource: {
         audience: "https://vercel.com/team-owned",
+        environment: "preview",
         issuer: "https://oidc.vercel.com/team-owned",
         ownerId: "team-owned",
         projectId: "prj-operator",
-        environment: "preview",
       },
     },
+    kind: "create-owned-organization",
+    name: "Pilot",
+    organizationId: "pilot-org",
+    slug: "pilot-org",
   },
   deploymentBoundary: {
+    operator: { environment: "preview", projectId: "prj-operator" },
     teamId: "team-owned",
-    operator: { projectId: "prj-operator", environment: "preview" },
     verification: {
-      publicOrigin: "https://pilot.example",
       gatewayOrigin: "https://gateway.example",
       jwksUrl: "https://gateway.example/_platform/jwks.json",
+      publicOrigin: "https://pilot.example",
     },
   },
-  membershipInstaller: { reference: worker.id, sha256: worker.sha256 },
   effects: [{ id: "auth-membership", kind: "auth-membership", resourceId: "isolated-auth" }],
+  membershipInstaller: { reference: worker.id, sha256: worker.sha256 },
+  neon: {
+    branchId: "isolated-branch",
+    endpoint: "ep-isolated.neon.tech",
+    projectId: "isolated-project",
+  },
+  owner: { userId: "owner-fixture" },
+  selection: { sessionId: "saved-session", workspaceId: "workspace-fixture" },
+  source: { sha256: "b".repeat(64) },
+  version: 1,
 };
 const fixture = (
   options: {
@@ -97,28 +97,22 @@ const fixture = (
   const files = new Map<string, Buffer>();
   const modes = new Map<string, number | undefined>();
   let fenceRequested = false;
-  const checkpoint = vi.fn(async (_value: unknown) => undefined);
+  const checkpoint = vi.fn(async (_value: unknown) => {});
   const bindWorkerContext = vi.fn(async (_value: { contextDigest: string }) => checkpoint);
-  const kill = vi.fn(async () => undefined);
+  const kill = vi.fn(async () => {});
   const frame = (name: string, value: unknown) => files.set(`${spool}/${name}`, bytes(value));
   const sandbox = {
+    delete: vi.fn(async () => undefined),
+    extendTimeout: vi.fn(async () => undefined),
     fs: {
-      mkdir: vi.fn(async () => undefined),
-      rm: vi.fn(async () => undefined),
       lstat: vi.fn(async (path: string) => ({
         isFile: () => files.has(path),
         size: files.get(path)?.length ?? 0,
       })),
+      mkdir: vi.fn(async () => undefined),
+      rm: vi.fn(async () => undefined),
     },
-    writeFiles: vi.fn(async (rows: { path: string; content: Buffer; mode?: number }[]) => {
-      for (const row of rows) {
-        files.set(row.path, row.content);
-        modes.set(row.path, row.mode);
-      }
-    }),
     readFileToBuffer: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
-    delete: vi.fn(async () => undefined),
-    extendTimeout: vi.fn(async () => undefined),
     runCommand: vi.fn(async (command: { detached?: boolean; args: string[] }) => {
       if (!command.detached)
         return {
@@ -218,29 +212,35 @@ const fixture = (
         },
       };
     }),
+    writeFiles: vi.fn(async (rows: { path: string; content: Buffer; mode?: number }[]) => {
+      for (const row of rows) {
+        files.set(row.path, row.content);
+        modes.set(row.path, row.mode);
+      }
+    }),
   };
   const createSandbox = vi.fn(async () => sandbox);
   const input = {
-    approvedPlanBytes: bytes(plan),
     approvalDigest: sha(bytes(plan)),
-    effectId: "auth-membership",
-    operationRef,
-    workerAttemptId,
-    fenceGeneration: 7,
-    credentials: {
-      migrationUrl:
-        "postgresql://pilot_migrator:fixture@ep-isolated.neon.tech/pilot_auth?sslmode=verify-full",
-    },
-    ownerProof: {
-      reference: plan.authMembership.identityProof.reference,
-      proof,
-      oidcToken: "private-operator-oidc",
-    },
+    approvedPlanBytes: bytes(plan),
     assertCurrentOwnerProof: vi.fn(async (_binding: AuthOnlyOrganizationProofBinding) => {
       if (options.denyFence && fenceRequested)
         throw new HostedOperatorError("authorization_required");
     }),
     bindWorkerContext,
+    credentials: {
+      migrationUrl:
+        "postgresql://pilot_migrator:fixture@ep-isolated.neon.tech/pilot_auth?sslmode=verify-full",
+    },
+    effectId: "auth-membership",
+    fenceGeneration: 7,
+    operationRef,
+    ownerProof: {
+      oidcToken: "private-operator-oidc",
+      proof,
+      reference: plan.authMembership.identityProof.reference,
+    },
+    workerAttemptId,
   };
   const dependencies = {
     createSandbox: createSandbox as unknown as NonNullable<
@@ -252,16 +252,16 @@ const fixture = (
     return { ...rest, readbackOnly: true as const };
   };
   return {
+    bindWorkerContext,
+    checkpoint,
+    createSandbox,
+    dependencies,
+    files,
     input,
     inspectInput,
-    dependencies,
-    createSandbox,
-    sandbox,
-    files,
-    modes,
-    checkpoint,
-    bindWorkerContext,
     kill,
+    modes,
+    sandbox,
   };
 };
 
@@ -271,19 +271,19 @@ it("runs only approved organization creation with exact private proof and Auth c
   expect(f.files.get(`${spool}/startup/operator-plan.json`)).toEqual(f.input.approvedPlanBytes);
   expect(JSON.parse(f.files.get(`${spool}/startup/context.json`)!.toString())).toMatchObject({
     app_id: "auth",
-    tenant_targets: [],
     release: { id: f.input.approvalDigest, sha256: plan.authMembership.identityProof.sha256 },
     resource: {
-      resource_id: "isolated-auth",
       database: "pilot_auth",
       migrator_role: "pilot_migrator",
+      resource_id: "isolated-auth",
       runtime_role: "pilot_runtime",
     },
+    tenant_targets: [],
   });
   expect(JSON.parse(f.files.get(`${spool}/startup/membership-effect.json`)!.toString())).toEqual({
-    version: 1,
     effectId: "auth-membership",
     kind: "auth-membership",
+    version: 1,
   });
   expect(
     [...f.files.keys()]
@@ -315,7 +315,7 @@ it("independently reads the same organization without binding or authorizing a m
   const f = fixture();
   await expect(
     runAuthOrganizationFileSpool(config, f.inspectInput(), f.dependencies),
-  ).resolves.toMatchObject({ status: "applied", fence_generation: 7 });
+  ).resolves.toMatchObject({ fence_generation: 7, status: "applied" });
   expect(f.bindWorkerContext).not.toHaveBeenCalled();
   expect(f.checkpoint).not.toHaveBeenCalled();
   expect(f.sandbox.runCommand).toHaveBeenLastCalledWith(
@@ -343,16 +343,16 @@ it.each([
   "inspect-context",
 ] as const)("denies unrelated %s", async (kind) => {
   const effects = {
+    "app-grant": "generated_app.grant_access",
     policy: "auth-signup-policy",
     resources: "resources:database",
     schema: "auth:apply-schema-plan",
-    "app-grant": "generated_app.grant_access",
   };
   const f = fixture({
     forbiddenEffect: kind in effects ? effects[kind as keyof typeof effects] : undefined,
     foreignResource: kind === "resource",
-    tenant: kind === "tenant",
     mutateInspect: kind === "inspect-mutation",
+    tenant: kind === "tenant",
     wrongReadback: kind === "inspect-context",
   });
   await expect(
@@ -383,8 +383,8 @@ it("withholds a fence grant after authority loss and verifies the pin before wri
 it("supports the worker's organization-scoped effect ID without changing its canonical membership command", async () => {
   const f = fixture();
   const changed = structuredClone(plan);
-  changed.effects[0]!.id += ":pilot-org";
-  f.input.effectId = changed.effects[0]!.id;
+  changed.effects[0].id += ":pilot-org";
+  f.input.effectId = changed.effects[0].id;
   f.input.approvedPlanBytes = bytes(changed);
   f.input.approvalDigest = sha(f.input.approvedPlanBytes);
   await expect(runAuthOrganizationFileSpool(config, f.input, f.dependencies)).resolves.toBeNull();
@@ -414,9 +414,9 @@ it("snapshots approved inputs, worker and execution mode before awaiting custody
   expect(f.checkpoint).toHaveBeenCalledOnce();
   expect(f.createSandbox).toHaveBeenCalledWith(
     expect.objectContaining({
+      image: "pinned-control",
       projectId: "prj-operator",
       teamId: "team-owned",
-      image: "pinned-control",
     }),
   );
 });
@@ -438,16 +438,16 @@ it("requires retained proof authority before allocation and gives each fence an 
     count++;
     expect(binding).toMatchObject({
       approvalDigest: originalDigest,
-      operationRef,
-      fenceGeneration: 7,
-      ownerSessionId: "saved-session",
       authResourceId: "isolated-auth",
       effectId: "auth-membership",
+      fenceGeneration: 7,
+      operationRef,
       organization: plan.authMembership,
+      ownerSessionId: "saved-session",
     });
     expect(binding.resource).toMatchObject({
-      environment: "preview",
       database: "pilot_auth",
+      environment: "preview",
       hostname: "ep-isolated.neon.tech",
     });
     binding.organization.actorId = "mutated";
@@ -491,54 +491,88 @@ it.each([
 ] as const)("rejects invalid %s before allocating a Sandbox", async (kind) => {
   const f = fixture();
   const changed = structuredClone(plan);
-  if (kind === "proof") f.input.ownerProof.proof = "other";
-  if (kind === "proof-reference") f.input.ownerProof.reference = "other";
-  if (kind === "missing-capture") Reflect.deleteProperty(changed.authMembership, "identityCapture");
-  if (kind === "future-capture")
+  if (kind === "proof") {
+    f.input.ownerProof.proof = "other";
+  }
+  if (kind === "proof-reference") {
+    f.input.ownerProof.reference = "other";
+  }
+  if (kind === "missing-capture") {
+    Reflect.deleteProperty(changed.authMembership, "identityCapture");
+  }
+  if (kind === "future-capture") {
     changed.authMembership.identityCapture.capturedAt = "2999-01-01T00:00:00.000Z";
-  if (kind === "join") changed.authMembership.kind = "join-existing-organization";
-  if (kind === "group")
+  }
+  if (kind === "join") {
+    changed.authMembership.kind = "join-existing-organization";
+  }
+  if (kind === "group") {
     Object.assign(changed, {
       authMembership: {
         kind: "create-owned-organizations",
         organizations: [changed.authMembership],
       },
     });
-  if (kind === "policy") Object.assign(changed, { authSignupPolicy: { appId: "unexpected" } });
-  if (kind === "program") Object.assign(changed, { normalActorProgram: { appId: "unexpected" } });
-  if (kind === "app-database") Object.assign(changed, { appDatabase: { database: "unexpected" } });
-  if (kind === "origin")
+  }
+  if (kind === "policy") {
+    Object.assign(changed, { authSignupPolicy: { appId: "unexpected" } });
+  }
+  if (kind === "program") {
+    Object.assign(changed, { normalActorProgram: { appId: "unexpected" } });
+  }
+  if (kind === "app-database") {
+    Object.assign(changed, { appDatabase: { database: "unexpected" } });
+  }
+  if (kind === "origin") {
     changed.authMembership.identityVerification.issuer = "https://other.example";
-  if (kind === "gateway")
+  }
+  if (kind === "gateway") {
     changed.authMembership.identityVerification.jwksUrl =
       "https://other.example/_platform/jwks.json";
-  if (kind === "oidc-owner")
-    changed.authMembership.identityVerification.transportSource.ownerId = "other";
-  if (kind === "oidc-project")
-    changed.authMembership.identityVerification.transportSource.projectId = "other";
-  if (kind === "oidc-environment")
-    changed.authMembership.identityVerification.transportSource.environment = "production";
-  if (kind === "missing-oidc") f.input.ownerProof.oidcToken = "";
-  if (kind === "extra-effect")
-    changed.effects.push({ id: "access", kind: "access", resourceId: "other" });
-  if (kind === "effect-resource") changed.effects[0]!.resourceId = "other";
-  if (kind === "effect-id") {
-    changed.effects[0]!.id = "auth-membership:other";
-    f.input.effectId = changed.effects[0]!.id;
   }
-  if (kind === "worker") changed.membershipInstaller.sha256 = "f".repeat(64);
-  if (kind === "team") changed.deploymentBoundary.teamId = "other";
-  if (kind === "operator") changed.deploymentBoundary.operator.projectId = "other";
-  if (kind === "foreign-url")
+  if (kind === "oidc-owner") {
+    changed.authMembership.identityVerification.transportSource.ownerId = "other";
+  }
+  if (kind === "oidc-project") {
+    changed.authMembership.identityVerification.transportSource.projectId = "other";
+  }
+  if (kind === "oidc-environment") {
+    changed.authMembership.identityVerification.transportSource.environment = "production";
+  }
+  if (kind === "missing-oidc") {
+    f.input.ownerProof.oidcToken = "";
+  }
+  if (kind === "extra-effect") {
+    changed.effects.push({ id: "access", kind: "access", resourceId: "other" });
+  }
+  if (kind === "effect-resource") {
+    changed.effects[0].resourceId = "other";
+  }
+  if (kind === "effect-id") {
+    changed.effects[0].id = "auth-membership:other";
+    f.input.effectId = changed.effects[0].id;
+  }
+  if (kind === "worker") {
+    changed.membershipInstaller.sha256 = "f".repeat(64);
+  }
+  if (kind === "team") {
+    changed.deploymentBoundary.teamId = "other";
+  }
+  if (kind === "operator") {
+    changed.deploymentBoundary.operator.projectId = "other";
+  }
+  if (kind === "foreign-url") {
     f.input.credentials.migrationUrl = f.input.credentials.migrationUrl.replace(
       "pilot_migrator",
       "foreign",
     );
-  if (kind === "pooled-url")
+  }
+  if (kind === "pooled-url") {
     f.input.credentials.migrationUrl = f.input.credentials.migrationUrl.replace(
       "ep-isolated.",
       "ep-isolated-pooler.",
     );
+  }
   f.input.approvedPlanBytes = bytes(changed);
   f.input.approvalDigest = kind === "approval" ? "f".repeat(64) : sha(f.input.approvedPlanBytes);
   await expect(runAuthOrganizationFileSpool(config, f.input, f.dependencies)).rejects.toThrow();

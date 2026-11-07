@@ -16,29 +16,29 @@ import { centralHostCanonicalBytes } from "./central-integration-host-contract";
 import { HostedOperatorError } from "./hosted-operator-contract";
 
 const context = authOnlyCredentialContextSchema.parse({
+  appId: "pilot",
   authority: {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
     workspaceId: "workspace",
   },
-  appId: "pilot",
-  sessionId: "saved-pilot-session",
   operationRef: "11111111-1111-4111-a111-111111111111",
-  profile: { id: "pilot-profile", authorityDigest: "a".repeat(64) },
+  profile: { authorityDigest: "a".repeat(64), id: "pilot-profile" },
   resource: {
-    environment: "preview",
-    resourceId: "isolated-auth",
     database: "pilot_auth",
+    environment: "preview",
     migratorRole: "pilot_migrator",
-    runtimeRole: "pilot_runtime",
     neon: {
-      projectId: "isolated-project",
       branchId: "isolated-branch",
       endpointId: "ep-isolated",
       hostname: "ep-isolated.us-east-1.aws.neon.tech",
+      projectId: "isolated-project",
     },
+    resourceId: "isolated-auth",
+    runtimeRole: "pilot_runtime",
   },
+  sessionId: "saved-pilot-session",
 });
 const credentials = {
   migratorPassword: `migration:@/%?${"m".repeat(32)}`,
@@ -57,7 +57,9 @@ const fixture = () => {
       return record === undefined ? undefined : structuredClone(record);
     }),
     writeIfAbsent: vi.fn<AuthOnlyCredentialStore["writeIfAbsent"]>(async (key, record) => {
-      if (records.has(key.contextDigest)) return "exists";
+      if (records.has(key.contextDigest)) {
+        return "exists";
+      }
       records.set(key.contextDigest, structuredClone(record));
       return "written";
     }),
@@ -68,11 +70,11 @@ const fixture = () => {
   }));
   const custody = createHostedOperatorAuthOnlyCredentials({ keyring, store });
   const input = {
+    assertCurrent,
     context: structuredClone(context),
     credentials: { ...credentials },
-    assertCurrent,
   };
-  return { records, store, assertCurrent, custody, input };
+  return { assertCurrent, custody, input, records, store };
 };
 
 it("seals only Auth credentials, confirms durable custody and returns private role-scoped URLs", async () => {
@@ -150,9 +152,9 @@ it("recovers a lost write response by reading the same saved record, without rot
 it("reuses a concurrent winner only when its sealed credentials match", async () => {
   const f = fixture();
   const reference = await f.custody.seal(f.input);
-  f.store.read.mockResolvedValueOnce(undefined);
+  f.store.read.mockResolvedValueOnce();
   expect(await f.custody.seal(f.input)).toEqual(reference);
-  f.store.read.mockResolvedValueOnce(undefined);
+  f.store.read.mockResolvedValueOnce();
   await expect(
     f.custody.seal({
       ...f.input,
@@ -181,21 +183,51 @@ it.each([
   const f = fixture();
   const reference = await f.custody.seal(f.input);
   const changed = structuredClone(context);
-  if (field === "owner") changed.authority.ownerUserId = "other";
-  if (field === "workspace") changed.authority.workspaceId = "other";
-  if (field === "session") changed.sessionId = "other";
-  if (field === "app") changed.appId = "other";
-  if (field === "operation") changed.operationRef = "22222222-2222-4222-a222-222222222222";
-  if (field === "profile") changed.profile.id = "other";
-  if (field === "authority-digest") changed.profile.authorityDigest = "b".repeat(64);
-  if (field === "resource") changed.resource.resourceId = "other";
-  if (field === "database") changed.resource.database = "other";
-  if (field === "migrator") changed.resource.migratorRole = "other";
-  if (field === "runtime") changed.resource.runtimeRole = "other";
-  if (field === "project") changed.resource.neon.projectId = "other";
-  if (field === "branch") changed.resource.neon.branchId = "other";
-  if (field === "endpoint") changed.resource.neon.endpointId = "other";
-  if (field === "hostname") changed.resource.neon.hostname = "ep-other.neon.tech";
+  if (field === "owner") {
+    changed.authority.ownerUserId = "other";
+  }
+  if (field === "workspace") {
+    changed.authority.workspaceId = "other";
+  }
+  if (field === "session") {
+    changed.sessionId = "other";
+  }
+  if (field === "app") {
+    changed.appId = "other";
+  }
+  if (field === "operation") {
+    changed.operationRef = "22222222-2222-4222-a222-222222222222";
+  }
+  if (field === "profile") {
+    changed.profile.id = "other";
+  }
+  if (field === "authority-digest") {
+    changed.profile.authorityDigest = "b".repeat(64);
+  }
+  if (field === "resource") {
+    changed.resource.resourceId = "other";
+  }
+  if (field === "database") {
+    changed.resource.database = "other";
+  }
+  if (field === "migrator") {
+    changed.resource.migratorRole = "other";
+  }
+  if (field === "runtime") {
+    changed.resource.runtimeRole = "other";
+  }
+  if (field === "project") {
+    changed.resource.neon.projectId = "other";
+  }
+  if (field === "branch") {
+    changed.resource.neon.branchId = "other";
+  }
+  if (field === "endpoint") {
+    changed.resource.neon.endpointId = "other";
+  }
+  if (field === "hostname") {
+    changed.resource.neon.hostname = "ep-other.neon.tech";
+  }
   f.store.read.mockClear();
   await expect(f.custody.read({ ...f.input, context: changed, reference })).rejects.toThrow(
     "resource_mismatch",
@@ -323,7 +355,7 @@ it("snapshots supplied context, credentials and key bytes before asynchronous st
     return { authorityDigest: context.profile.authorityDigest, resource: context.resource };
   });
   const reference = await custody.seal(f.input);
-  const actual = await custody.read({ context, reference, assertCurrent: f.assertCurrent });
+  const actual = await custody.read({ assertCurrent: f.assertCurrent, context, reference });
   expect(decodeURIComponent(new URL(actual.runtimeUrl).password)).toBe(credentials.runtimePassword);
   expect(new URL(actual.runtimeUrl).pathname).toBe("/pilot_auth");
 });

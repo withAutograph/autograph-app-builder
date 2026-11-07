@@ -2,10 +2,6 @@ import { defineWorkflowTool } from "eve/tools";
 import { nativeTargetAuthOnlyDeliveryPreparationInputSchema } from "../../lib/eve/private-native-target-auth-only-delivery-approval";
 
 export default defineWorkflowTool({
-  availableInSubagents: false,
-  description:
-    "Approve and deliver exactly the retained Gateway and static-app Preview plan for this Auth-only target. Reuses the original settled approval and operation on retry, and reconciles uncertain delivery. Creates no app database or product-data grants; deployment readiness is not signup acceptance.",
-  inputSchema: nativeTargetAuthOnlyDeliveryPreparationInputSchema,
   approval: {
     request: async (ctx) => {
       if (ctx.toolInput === undefined) return "user-approval" as const;
@@ -39,6 +35,9 @@ export default defineWorkflowTool({
       }
     },
   },
+  availableInSubagents: false,
+  description:
+    "Approve and deliver exactly the retained Gateway and static-app Preview plan for this Auth-only target. Reuses the original settled approval and operation on retry, and reconciles uncertain delivery. Creates no app database or product-data grants; deployment readiness is not signup acceptance.",
   async *execute(input, ctx) {
     "use workflow";
     const { nativeTargetOnboardingRuntimeForSession } =
@@ -53,4 +52,5 @@ export default defineWorkflowTool({
     }
     return result;
   },
+  inputSchema: nativeTargetAuthOnlyDeliveryPreparationInputSchema,
 });

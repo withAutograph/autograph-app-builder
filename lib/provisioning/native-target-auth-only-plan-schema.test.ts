@@ -21,34 +21,49 @@ const description = {
 const capturedDescription = capturedStaticDescriptionProvenance(description);
 const plan = () =>
   nativeTargetAuthOnlyPlanSchema.parse({
-    version: 1,
-    kind: "native-target-auth-only",
     appId: "signup-reset-pilot",
+    appRole: "pilot_user",
+    authResource: {
+      authorityDigest: "b".repeat(64),
+      database: "auth_identity",
+      endpointId: "isolated-endpoint",
+      hostname: "auth-preview.neon.tech",
+      profileId: "signup-reset-pilot-preview-auth",
+      resourceId: "isolated-auth-resource",
+    },
+    authSchema: {
+      artifactRef: "auth-artifact",
+      installer: { reference: "auth-worker", sha256: "3".repeat(64) },
+      planDigest: "1".repeat(64),
+      targetDigest: "2".repeat(64),
+    },
+    branch: "main",
+    cost: { description: "Isolated Preview Auth only", ownership: "current-owner" },
+    kind: "native-target-auth-only",
     origin: {
-      authority: {
-        issuer: "https://builder.example/api/auth",
-        audience: "https://builder.example/mcp",
-        workspaceId: "workspace_fixture",
-        ownerUserId: "owner_fixture",
-      },
-      publicSessionId: "public_original",
-      adapterSessionId: "native_original",
       adapterGeneration: 1,
+      adapterSessionId: "native_original",
       appSpecDigest: "a".repeat(64),
+      authority: {
+        audience: "https://builder.example/mcp",
+        issuer: "https://builder.example/api/auth",
+        ownerUserId: "owner_fixture",
+        workspaceId: "workspace_fixture",
+      },
       capturedDescription,
+      publicSessionId: "public_original",
     },
     project: {
-      name: "signup-reset-pilot",
-      teamId: "team_fixture",
       installationId: "install_fixture",
+      name: "signup-reset-pilot",
       projectSettings: {
         framework: "nextjs",
         rootDirectory: "apps/signup-reset-pilot",
         sourceFilesOutsideRootDirectory: true,
       },
       protection: nativeTargetRequiredProjectProtection,
+      teamId: "team_fixture",
     },
-    branch: "main",
     publishedSource: {
       branch: "main",
       changeSetDigest: "c".repeat(64),
@@ -57,24 +72,9 @@ const plan = () =>
       repositoryId: "repo_fixture",
       reviewDigest: "f".repeat(64),
     },
-    authResource: {
-      profileId: "signup-reset-pilot-preview-auth",
-      authorityDigest: "b".repeat(64),
-      resourceId: "isolated-auth-resource",
-      database: "auth_identity",
-      endpointId: "isolated-endpoint",
-      hostname: "auth-preview.neon.tech",
-    },
-    authSchema: {
-      artifactRef: "auth-artifact",
-      planDigest: "1".repeat(64),
-      targetDigest: "2".repeat(64),
-      installer: { reference: "auth-worker", sha256: "3".repeat(64) },
-    },
-    appRole: "pilot_user",
-    signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
-    cost: { ownership: "current-owner", description: "Isolated Preview Auth only" },
     retention: { policy: "Retain until explicit approved cleanup" },
+    signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
+    version: 1,
   });
 export const nativeTargetAuthOnlyTestPlan = () => plan();
 
@@ -94,8 +94,8 @@ describe("native Auth-only plan contract", () => {
       capturedStaticDescriptionProvenance({
         ...description,
         backend: {
-          kind: "generated-postgres",
           authorization: "declared-policy",
+          kind: "generated-postgres",
           release: { artifactHash: "sha256:abc", directory: "release", id: "release-id" },
           roles: [],
           runtime: { databaseEnvironment: "DATABASE_URL" },

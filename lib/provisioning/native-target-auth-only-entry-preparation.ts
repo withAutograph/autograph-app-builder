@@ -143,16 +143,16 @@ const validateEffectPlan = (binding: Scope["binding"], plan: OrganizationPlan | 
   const resource = binding.bootstrapResource;
   const { verification } = plan.deploymentBoundary;
   const expectedDatabase = {
-    resourceId: binding.authResourceId,
     database: resource.database,
     migratorRole: resource.migratorRole,
+    resourceId: binding.authResourceId,
     runtimeRole: resource.runtimeRole,
   };
   const expectedNeon = { ...resource.neon, endpoint: resource.hostname };
   const expectedVerification = {
-    publicOrigin: binding.issuer,
     gatewayOrigin: binding.gateway.origin,
     jwksUrl: new URL("/_platform/jwks.json", binding.gateway.origin).href,
+    publicOrigin: binding.issuer,
   };
   if (
     plan.selection.sessionId !== binding.target.sessionId ||
@@ -218,27 +218,27 @@ const readExactEffect = <T extends OrganizationPlan | SignupPlan>(
   }
   validateEffectPlan(scope.binding, plan);
   return {
-    plan,
-    worker: {
-      approvedPlanBytes,
-      approvalDigest,
-      operationRef: effect.operationRef,
-      workerAttemptId: effect.workerAttemptId,
-      fenceGeneration: effect.fenceGeneration,
-      effectId: plan.effects[0].id,
-      signal: scope.input.signal,
-    },
     async assertCurrent() {
       scope.input.signal.throwIfAborted();
       await scope.input.assertCurrent();
       await effect.assertCurrent();
     },
+    bindWorkerContext: effect.bindWorkerContext,
     async claimFirstDispatch() {
       if (!(await effect.claimFirstDispatch())) {
         throw uncertain();
       }
     },
-    bindWorkerContext: effect.bindWorkerContext,
+    plan,
+    worker: {
+      approvalDigest,
+      approvedPlanBytes,
+      effectId: plan.effects[0].id,
+      fenceGeneration: effect.fenceGeneration,
+      operationRef: effect.operationRef,
+      signal: scope.input.signal,
+      workerAttemptId: effect.workerAttemptId,
+    },
   };
 };
 
@@ -255,7 +255,7 @@ const prepareOrganization = async (
     authOnlyOrganizationPlanSchema,
   );
   const spec = organization.plan.authMembership;
-  const organizationId = spec.organizationId;
+  const { organizationId } = spec;
   if (
     spec.bootstrapPlanDigest !== binding.resourcePlanDigest ||
     spec.identityNonceSha256 !== captured.nonceSha256 ||
@@ -296,15 +296,15 @@ const prepareOrganization = async (
   const credentials = await ports.readCredentials(scope);
   const organizationWorker = {
     ...organization.worker,
-    credentials,
-    ownerProof: {
-      reference: ownerProof.reference,
-      proof: ownerProof.proof,
-      oidcToken: ownerProof.oidcToken,
-    },
     assertCurrentOwnerProof: async () => {
       await organization.assertCurrent();
       await checkOwnerProof();
+    },
+    credentials,
+    ownerProof: {
+      oidcToken: ownerProof.oidcToken,
+      proof: ownerProof.proof,
+      reference: ownerProof.reference,
     },
   };
   let observedOrganization = await spool(sandbox, {
@@ -329,9 +329,9 @@ const prepareOrganization = async (
   await organizationWorker.assertCurrentOwnerProof();
 
   return {
-    organizationId,
-    credentials,
     assertCurrentOwnerProof: organizationWorker.assertCurrentOwnerProof,
+    credentials,
+    organizationId,
   };
 };
 
@@ -362,16 +362,16 @@ const prepareSignupPolicy = async (
     await signup.assertCurrent();
     await organization.assertCurrentOwnerProof();
   };
-  const policyWorker = { ...signup.worker, credentials, assertCurrent };
+  const policyWorker = { ...signup.worker, assertCurrent, credentials };
   const readPolicy = async () => {
     await assertCurrent();
     return await ports.readSignupPolicy({
-      scope,
-      policy,
-      operationRef: signup.worker.operationRef,
       approvalDigest: signup.worker.approvalDigest,
-      fenceGeneration: signup.worker.fenceGeneration,
       assertCurrent,
+      fenceGeneration: signup.worker.fenceGeneration,
+      operationRef: signup.worker.operationRef,
+      policy,
+      scope,
     });
   };
   let observedPolicy = await readPolicy();
@@ -430,9 +430,9 @@ const resolveEntryOwner = async (
   if (link.status === "waiting-for-owner") {
     await input.assertCurrent();
     return {
-      status: "pending-owner" as const,
       authIdentityLink: link.browserUrl,
       authIdentityLinkExpiresAt: link.expiresAt,
+      status: "pending-owner" as const,
     };
   }
   const captured = await ports.ownerLink.readCaptured(binding);
@@ -443,7 +443,7 @@ const resolveEntryOwner = async (
   ) {
     throw identityRequired();
   }
-  return { status: "linked" as const, scope: { input, binding, captured }, sandbox: ready.sandbox };
+  return { sandbox: ready.sandbox, scope: { binding, captured, input }, status: "linked" as const };
 };
 
 /** Execute only the approved organization effect and its independent readback. */
@@ -479,5 +479,5 @@ export const createNativeTargetAuthOnlyEntryPreparation =
       owner.scope,
       organization,
     );
-    return { status: "ready", organizationId: organization.organizationId, signupPolicyDigest };
+    return { organizationId: organization.organizationId, signupPolicyDigest, status: "ready" };
   };

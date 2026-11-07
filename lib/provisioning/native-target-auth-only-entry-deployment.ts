@@ -68,15 +68,15 @@ const childKey = (scope: Scope, effect: Effect): NativeTargetAuthOnlyEntryPlanKe
     throw identityRequired();
   }
   return {
-    authority: scope.binding.authority,
     appId: scope.binding.target.appId,
-    sessionId: scope.binding.target.sessionId,
+    authResourceId: scope.binding.authResourceId,
+    authority: scope.binding.authority,
     deliveryOperationRef: scope.binding.operationRef,
     deliveryPlanDigest: scope.binding.gatewayDeliveryPlanDigest,
-    resourcePlanDigest: scope.binding.resourcePlanDigest,
-    authResourceId: scope.binding.authResourceId,
-    ownerProofSha256,
     effect,
+    ownerProofSha256,
+    resourcePlanDigest: scope.binding.resourcePlanDigest,
+    sessionId: scope.binding.target.sessionId,
   };
 };
 
@@ -98,7 +98,7 @@ const readConsumed = async (ports: ResolvedAuthority, input: HookInput): Promise
   ) {
     throw identityRequired();
   }
-  const scope = { input, binding, captured };
+  const scope = { binding, captured, input };
   const live = await ports.readCurrentOwnerProof(scope);
   if (
     live.reference !== captured.proofRef ||
@@ -145,12 +145,12 @@ export const withNativeTargetAuthOnlyEntryLease = async <T>(input: {
   ) {
     throw mismatch();
   }
-  const lease = { id: randomUUID(), expiresAt: new Date(now() + 10 * 60_000).toISOString() };
+  const lease = { expiresAt: new Date(now() + 10 * 60_000).toISOString(), id: randomUUID() };
   const fenceGeneration = row.record.fenceGeneration + 1;
   const claimed = await store.compareAndSet(key, row.revision, {
     ...row.record,
-    lease,
     fenceGeneration,
+    lease,
   });
   if (claimed === undefined) {
     throw uncertain();
@@ -186,15 +186,15 @@ export const withNativeTargetAuthOnlyEntryLease = async <T>(input: {
     return (
       (await store.compareAndSet(key, current.revision, {
         ...current.record,
-        phase: row.record.phase,
         lease: undefined,
+        phase: row.record.phase,
       })) !== undefined
     );
   };
   let result: T;
   try {
     await assertCurrent();
-    result = await input.run({ ...parent, fenceGeneration, assertCurrent });
+    result = await input.run({ ...parent, assertCurrent, fenceGeneration });
     await assertCurrent();
   } catch (error) {
     await restore();
@@ -246,7 +246,7 @@ export const createNativeTargetAuthOnlyEntryDeployment = (input: {
       const opened = await input.store.openApprovedEffect(key, approval, assertCurrent);
       return effect === allowedWrite
         ? opened
-        : { ...opened, claimFirstDispatch: () => Promise.resolve(false) };
+        : { ...opened, claimFirstDispatch: async () => Promise.resolve(false) };
     };
     return {
       ...ports,
@@ -300,29 +300,9 @@ export const createNativeTargetAuthOnlyEntryDeployment = (input: {
     return proposed;
   };
   return {
-    async plan(value: HookInput, effect: Effect) {
-      const ports = await resolveAuthority(value, "retained");
-      const scope = await readConsumed(ports, value);
-      const key = childKey(scope, effect);
-      const retained = await input.store.read(key);
-      if (retained !== undefined) {
-        return retained.approvalInput;
-      }
-      const plan = await buildPlan(ports, scope, effect);
-      await value.assertCurrent();
-      const saved = await input.store.retain(key, encodeNativeTargetAuthOnlyEntryPlan(key, plan));
-      await value.assertCurrent();
-      return saved.approvalInput;
-    },
-    async readSettlement(value: HookInput, proposal: NativeTargetAuthOnlyEntryApprovalInput) {
-      const ports = await resolveAuthority(value, "retained");
-      const scope = await readConsumed(ports, value);
-      const { key } = await exactChild(scope, proposal);
-      const approval = await input.readApproval(key, proposal, value.assertCurrent);
-      if (approval?.outcome === "cancelled") {
-        throw denied();
-      }
-      return approval === null ? ("pending" as const) : ("approved" as const);
+    async afterGatewayReady(value: HookInput) {
+      const ports = await resolveAuthority(value, "fenced");
+      return await createNativeTargetAuthOnlyEntryPreparation(preparation(ports))(value);
     },
     async execute(value: HookInput, proposal: NativeTargetAuthOnlyEntryApprovalInput) {
       const ports = await resolveAuthority(value, "fenced");
@@ -357,9 +337,29 @@ export const createNativeTargetAuthOnlyEntryDeployment = (input: {
         childPlanDigest: proposal.childPlanDigest,
       };
     },
-    async afterGatewayReady(value: HookInput) {
-      const ports = await resolveAuthority(value, "fenced");
-      return await createNativeTargetAuthOnlyEntryPreparation(preparation(ports))(value);
+    async plan(value: HookInput, effect: Effect) {
+      const ports = await resolveAuthority(value, "retained");
+      const scope = await readConsumed(ports, value);
+      const key = childKey(scope, effect);
+      const retained = await input.store.read(key);
+      if (retained !== undefined) {
+        return retained.approvalInput;
+      }
+      const plan = await buildPlan(ports, scope, effect);
+      await value.assertCurrent();
+      const saved = await input.store.retain(key, encodeNativeTargetAuthOnlyEntryPlan(key, plan));
+      await value.assertCurrent();
+      return saved.approvalInput;
+    },
+    async readSettlement(value: HookInput, proposal: NativeTargetAuthOnlyEntryApprovalInput) {
+      const ports = await resolveAuthority(value, "retained");
+      const scope = await readConsumed(ports, value);
+      const { key } = await exactChild(scope, proposal);
+      const approval = await input.readApproval(key, proposal, value.assertCurrent);
+      if (approval?.outcome === "cancelled") {
+        throw denied();
+      }
+      return approval === null ? ("pending" as const) : ("approved" as const);
     },
   };
 };

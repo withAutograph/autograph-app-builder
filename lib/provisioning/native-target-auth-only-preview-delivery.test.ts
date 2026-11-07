@@ -4,10 +4,10 @@ import { createNativeTargetAuthOnlyPreviewDelivery } from "./native-target-auth-
 import type { NativeTargetAuthOnlyPreviewDeliveryInput } from "./native-target-auth-only-preview-delivery";
 
 const authority = {
-  issuer: "https://builder.example.test",
   audience: "autograph-operator",
-  workspaceId: "workspace-1",
+  issuer: "https://builder.example.test",
   ownerUserId: "owner-1",
+  workspaceId: "workspace-1",
 };
 const sha = "a".repeat(40);
 const approvedPlanDigest = "b".repeat(64);
@@ -17,7 +17,34 @@ const input = (
   checkpointDelivery: NativeTargetAuthOnlyPreviewDeliveryInput["checkpointDelivery"],
   assertCurrent: () => Promise<void>,
 ): NativeTargetAuthOnlyPreviewDeliveryInput => ({
+  approval: {
+    callId: "call-auth-only",
+    observedAt: "2026-11-06T12:00:00.000Z",
+    outcome: "approved",
+    planDigest: approvedPlanDigest,
+    publicSessionId: "session-1",
+    requestId: "request-auth-only",
+    responderPrincipalId: "owner-1",
+    sourceDigest: "c".repeat(64),
+  },
+  approvedPlanDigest,
+  assertCurrent,
   authority,
+  checkpointDelivery,
+  effectId: "auth-preview-delivery",
+  fenceGeneration: 4,
+  operationRef: "11111111-1111-4111-a111-111111111111",
+  plan: {
+    action: "prepare",
+    delivery: {
+      branch: "preview",
+      gitSha: sha,
+      projectId: "project-auth-only",
+      repoId: "repo-1",
+    },
+    effects: [{ id: "auth-preview-delivery", kind: "delivery" }],
+    stage: "app",
+  },
   target: {
     appId: "signup-pilot",
     branch: "preview",
@@ -28,33 +55,6 @@ const input = (
     scopeType: "team",
     sessionId: "session-1",
   },
-  approvedPlanDigest,
-  approval: {
-    requestId: "request-auth-only",
-    callId: "call-auth-only",
-    planDigest: approvedPlanDigest,
-    sourceDigest: "c".repeat(64),
-    responderPrincipalId: "owner-1",
-    publicSessionId: "session-1",
-    outcome: "approved",
-    observedAt: "2026-11-06T12:00:00.000Z",
-  },
-  operationRef: "11111111-1111-4111-a111-111111111111",
-  fenceGeneration: 4,
-  effectId: "auth-preview-delivery",
-  plan: {
-    action: "prepare",
-    stage: "app",
-    effects: [{ id: "auth-preview-delivery", kind: "delivery" }],
-    delivery: {
-      branch: "preview",
-      gitSha: sha,
-      projectId: "project-auth-only",
-      repoId: "repo-1",
-    },
-  },
-  checkpointDelivery,
-  assertCurrent,
 });
 
 it("reconciles a retained Auth-only Preview candidate using the exact approved digest and current fence", async () => {
@@ -68,44 +68,48 @@ it("reconciles a retained Auth-only Preview candidate using the exact approved d
       return Response.json({
         deployments: [
           {
-            uid: deploymentId,
             meta: {
               autograph_operator_effect: "auth-preview-delivery",
               autograph_operator_operation: "11111111-1111-4111-a111-111111111111",
               autograph_operator_plan: approvedPlanDigest,
             },
+            uid: deploymentId,
           },
         ],
       });
     }
     if (url.pathname === `/v13/deployments/${deploymentId}`) {
       return Response.json({
-        id: deploymentId,
-        projectId: "project-auth-only",
-        ownerId: "team-1",
-        readyState: "READY",
-        target: null,
-        url: "signup-pilot-preview.example.test",
         gitSource: { ref: "preview", repoId: "repo-1", sha, type: "github" },
+        id: deploymentId,
         meta: {
           autograph_operator_effect: "auth-preview-delivery",
           autograph_operator_operation: "11111111-1111-4111-a111-111111111111",
           autograph_operator_plan: approvedPlanDigest,
         },
+        ownerId: "team-1",
+        projectId: "project-auth-only",
+        readyState: "READY",
+        target: null,
+        url: "signup-pilot-preview.example.test",
       });
     }
     if (url.pathname === "/v9/projects/project-auth-only") {
       return Response.json({
-        id: "project-auth-only",
         accountId: "team-1",
+        id: "project-auth-only",
         link: { repoId: "repo-1", type: "github" },
         name: "signup-pilot",
       });
     }
-    if (url.pathname === "/v2/teams/team-1") return Response.json({ id: "team-1", slug: "team" });
+    if (url.pathname === "/v2/teams/team-1") {
+      return Response.json({ id: "team-1", slug: "team" });
+    }
     throw new Error(`Unexpected fake provider path: ${url.pathname}`);
   });
   const delivery = createNativeTargetAuthOnlyPreviewDelivery({
+    assertEnvironment: async () => {},
+    fetch: fetch as typeof globalThis.fetch,
     readCredential: async () => ({
       token: "fake-token",
       binding: {
@@ -119,15 +123,14 @@ it("reconciles a retained Auth-only Preview candidate using the exact approved d
         updatedAt: new Date("2026-11-06T00:00:00.000Z"),
       },
     }),
-    assertEnvironment: async () => {},
-    fetch: fetch as typeof globalThis.fetch,
   });
 
   const result = await delivery.deliver(input(checkpointDelivery, assertCurrent));
 
   expect(result.status).toBe("applied");
-  if (result.status !== "applied")
+  if (result.status !== "applied") {
     throw new Error("Expected the retained Preview candidate to reconcile as applied.");
+  }
   expect(result.selected.deploymentId).toBe(deploymentId);
   expect(result.selected.projectId).toBe("project-auth-only");
   expect(assertCurrent).toHaveBeenCalled();
@@ -143,6 +146,8 @@ it("reconciles a retained Auth-only Preview candidate using the exact approved d
 it("does not read or create a Preview deployment while the Auth-only approval is pending", async () => {
   const fetch = vi.fn(async () => Response.json({ deployments: [] }));
   const delivery = createNativeTargetAuthOnlyPreviewDelivery({
+    assertEnvironment: async () => {},
+    fetch: fetch as typeof globalThis.fetch,
     readCredential: async () => ({
       token: "fake-token",
       binding: {
@@ -156,8 +161,6 @@ it("does not read or create a Preview deployment while the Auth-only approval is
         updatedAt: new Date("2026-11-06T00:00:00.000Z"),
       },
     }),
-    assertEnvironment: async () => {},
-    fetch: fetch as typeof globalThis.fetch,
   });
   const pending = input(
     async () => {},

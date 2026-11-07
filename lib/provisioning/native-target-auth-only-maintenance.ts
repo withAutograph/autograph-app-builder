@@ -3,11 +3,11 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 
 import { hostedRuntimeTargetSchema } from "./hosted-runtime-journal";
-import { authResourceBootstrapPlanSchema } from "./hosted-operator-sandbox-launcher";
 import { createNativePreviewNeonPlanningAuthority } from "./hosted-operator-native-preview-authority";
 import { createPreviewNeonMcpReader } from "./hosted-operator-native-preview-neon-mcp";
 import type { PreviewNeonMcpDependencies } from "./hosted-operator-native-preview-neon-mcp";
-import { configurationSchema, scopeSchema } from "./hosted-operator-native-preview-neon";
+import { scopeSchema } from "./hosted-operator-native-preview-neon";
+import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "./native-target-auth-only-resource-plan-schema";
 import { nativeTargetAuthOnlyCredentialContextForPlan } from "./native-target-auth-only-credential-store";
 import { nativeTargetAuthOnlyApprovalSchema } from "./native-target-auth-only-dispatch";
 import type { NativeTargetAuthOnlyApproval } from "./native-target-auth-only-dispatch";
@@ -20,24 +20,16 @@ import { resolveNativeTargetResourceProfile } from "./native-target-resource-pro
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
 
-const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const digest = (value: Buffer) => createHash("sha256").update(value).digest("hex");
 const unavailable = () => new Error("Approved Auth-only maintenance credential is unavailable.");
 
-/** Bind the resource effect to retained app source, the registered Preview and private provider custody. */
-export const nativeTargetAuthOnlyResourceApprovalPlanSchema =
-  authResourceBootstrapPlanSchema.extend({
-    authOnlyPlanDigest: digestSchema,
-    target: hostedRuntimeTargetSchema,
-    nativeNeonConfiguration: configurationSchema.omit({ connectorInstallationId: true }),
-    authSchema: nativeTargetAuthOnlyPlanSchema.shape.authSchema.optional(),
-  });
+export { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "./native-target-auth-only-resource-plan-schema";
 
 const executionSchema = z.strictObject({
+  fenceGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  leaseId: z.uuid(),
   operationRef: z.uuid(),
   workerAttemptId: z.uuid(),
-  leaseId: z.uuid(),
-  fenceGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
 });
 export interface AuthOnlyMaintenanceAuthorityBinding {
   context: HostedOperatorContext;
@@ -93,22 +85,22 @@ export const createNativeTargetAuthOnlyMaintenanceReader = (input: {
   const resourceBytes = Buffer.from(input.approvedResourcePlanBytes);
   const resourcePlanDigest = digest(resourceBytes);
   const resourcePlan = nativeTargetAuthOnlyResourceApprovalPlanSchema.parse(
-    JSON.parse(resourceBytes.toString("utf8")),
+    JSON.parse(resourceBytes.toString("utf-8")),
   );
   const approval = nativeTargetAuthOnlyApprovalSchema.parse(input.approval);
   const execution = executionSchema.parse(input.execution);
-  const profileInput = { plan, configuration: input.configuration, environment: input.environment };
+  const profileInput = { configuration: input.configuration, environment: input.environment, plan };
   const credentialContext = nativeTargetAuthOnlyCredentialContextForPlan(profileInput);
   const profile = resolveNativeTargetResourceProfile({
-    base: input.configuration,
-    resourceProfileId: plan.authResource.profileId,
-    authority: plan.origin.authority,
     appId: plan.appId,
+    authority: plan.origin.authority,
+    base: input.configuration,
     environment: input.environment,
+    resourceProfileId: plan.authResource.profileId,
   });
   const native = structuredClone(profile.nativeNeon);
   const scope = scopeSchema.parse(native.scope);
-  const resource = credentialContext.resource;
+  const { resource } = credentialContext;
   const effect = resourcePlan.effects.filter((entry) => entry.kind === "resources");
   if (
     !isDeepStrictEqual(context.authority, plan.origin.authority) ||
@@ -143,24 +135,27 @@ export const createNativeTargetAuthOnlyMaintenanceReader = (input: {
     approval.sourceDigest !== resourcePlanDigest ||
     approval.publicSessionId !== plan.origin.publicSessionId ||
     approval.responderPrincipalId !== plan.origin.authority.ownerUserId
-  )
+  ) {
     throw unavailable();
+  }
 
   const binding = {
     context,
-    planDigest,
-    resourcePlanDigest,
-    execution,
     effectId: effect[0]!.id,
+    execution,
+    planDigest,
     resourceId: resource.resourceId,
+    resourcePlanDigest,
   };
 
   const assertOwner = input.assertCurrentOwner;
-  const assertCurrent = input.assertCurrent;
+  const { assertCurrent } = input;
   const readRetained = input.readRetainedResourceApproval;
   const currentBinding = () => structuredClone(binding);
   const guard = async (requested: HostedOperatorContext) => {
-    if (!isDeepStrictEqual(requested, context)) throw unavailable();
+    if (!isDeepStrictEqual(requested, context)) {
+      throw unavailable();
+    }
     await assertOwner(structuredClone(context));
     await assertCurrent(currentBinding());
     if (
@@ -168,59 +163,62 @@ export const createNativeTargetAuthOnlyMaintenanceReader = (input: {
         nativeTargetAuthOnlyCredentialContextForPlan(profileInput),
         credentialContext,
       )
-    )
+    ) {
       throw unavailable();
+    }
     const currentProfile = resolveNativeTargetResourceProfile({
-      base: input.configuration,
-      resourceProfileId: plan.authResource.profileId,
-      authority: plan.origin.authority,
       appId: plan.appId,
+      authority: plan.origin.authority,
+      base: input.configuration,
       environment: input.environment,
+      resourceProfileId: plan.authResource.profileId,
     });
     if (
       !isDeepStrictEqual(currentProfile.nativeNeon, native) ||
       currentProfile.sandbox.resourcesWorker.id !== resourcePlan.resourcesInstaller.reference ||
       currentProfile.sandbox.resourcesWorker.sha256 !== resourcePlan.resourcesInstaller.sha256
-    )
+    ) {
       throw unavailable();
+    }
     const retained = await readRetained(currentBinding());
     if (
       retained === undefined ||
       !isDeepStrictEqual(nativeTargetAuthOnlyPlanSchema.parse(retained.plan), plan) ||
       !Buffer.from(retained.approvedResourcePlanBytes).equals(resourceBytes) ||
       !isDeepStrictEqual(nativeTargetAuthOnlyApprovalSchema.parse(retained.approval), approval)
-    )
+    ) {
       throw unavailable();
+    }
     await assertCurrent(currentBinding());
     await assertOwner(structuredClone(context));
   };
   // Reuse only verified owner/native-store reads. Their planning scope grants no credential access.
   const owner = createNativePreviewNeonPlanningAuthority({
     context,
-    scope,
-    nativeStore: native.configuration.nativeStore,
     controlPlane: {
-      assertPlanningAuthorized: guard,
       assertCanonicalOwner: guard,
+      assertPlanningAuthorized: guard,
       readCredential: input.readCredential,
     },
-    fetch: input.fetch,
     diagnosticSink: input.diagnosticSink,
+    fetch: input.fetch,
+    nativeStore: native.configuration.nativeStore,
+    scope,
   });
   const reader = createPreviewNeonMcpReader({
-    configuration: native.configuration,
-    readCurrentOwnerNativeStore: owner.readCurrentOwnerNativeStore,
-    assertApprovedScope: async (requested, requestedScope) => {
-      if (!isDeepStrictEqual(requestedScope, scope)) throw unavailable();
-      await guard(requested);
-    },
     assertApprovedOwner: async (requested, requestedScope, store) => {
       await guard(requested);
       await owner.assertPlanningOwner(requested, requestedScope, store);
       await guard(requested);
     },
-    io: input.io,
+    assertApprovedScope: async (requested, requestedScope) => {
+      if (!isDeepStrictEqual(requestedScope, scope)) throw unavailable();
+      await guard(requested);
+    },
+    configuration: native.configuration,
     diagnosticSink: input.diagnosticSink,
+    io: input.io,
+    readCurrentOwnerNativeStore: owner.readCurrentOwnerNativeStore,
   });
   return {
     async withMaintenanceCredential<T>(consume: (material: Material) => Promise<T>): Promise<T> {

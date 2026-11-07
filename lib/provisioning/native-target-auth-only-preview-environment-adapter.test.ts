@@ -25,49 +25,49 @@ const target = {
   sessionId: plan.origin.publicSessionId,
 };
 const deliveryPlan = nativeTargetAuthOnlyDeliveryPlanSchema.parse({
-  version: 1,
-  kind: "native-target-auth-only-delivery",
   authOnlyPlanDigest: nativeTargetAuthOnlyPlanDigest(plan),
-  resourcePlanDigest: "b".repeat(64),
-  target,
-  source: {
-    branch: plan.branch,
-    gitSha: plan.publishedSource.gitSha,
-    repositoryId: plan.publishedSource.repositoryId,
+  delivery: {
+    action: "prepare",
+    delivery: {
+      branch: plan.branch,
+      gitSha: plan.publishedSource.gitSha,
+      projectId: target.projectId,
+      projectSettings: plan.project.projectSettings,
+      repoId: plan.publishedSource.repositoryId,
+    },
+    effects: [
+      { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
+      { id: "auth-only-app-preview", kind: "delivery" },
+    ],
+    gatewayDelivery: {
+      branch: "gateway-preview",
+      gitRef: "gateway-preview",
+      gitSha: "c".repeat(40),
+      projectId: "gateway-project",
+      repoId: "gateway-repo",
+    },
+    publicGateway: {
+      authBrowserOrigin: "https://pilot.example",
+      branch: "gateway-preview",
+      gatewayOrigin: "https://gateway-native.example",
+      origin: "https://pilot.example",
+      projectId: "gateway-project",
+    },
+    stage: "app",
   },
   effects: [
     { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
     { id: "auth-only-app-preview", kind: "delivery" },
   ],
-  delivery: {
-    action: "prepare",
-    stage: "app",
-    effects: [
-      { id: "auth-only-gateway-preview", kind: "gateway-delivery" },
-      { id: "auth-only-app-preview", kind: "delivery" },
-    ],
-    delivery: {
-      branch: plan.branch,
-      gitSha: plan.publishedSource.gitSha,
-      repoId: plan.publishedSource.repositoryId,
-      projectId: target.projectId,
-      projectSettings: plan.project.projectSettings,
-    },
-    gatewayDelivery: {
-      branch: "gateway-preview",
-      gitRef: "gateway-preview",
-      gitSha: "c".repeat(40),
-      repoId: "gateway-repo",
-      projectId: "gateway-project",
-    },
-    publicGateway: {
-      branch: "gateway-preview",
-      origin: "https://pilot.example",
-      gatewayOrigin: "https://gateway-native.example",
-      authBrowserOrigin: "https://pilot.example",
-      projectId: "gateway-project",
-    },
+  kind: "native-target-auth-only-delivery",
+  resourcePlanDigest: "b".repeat(64),
+  source: {
+    branch: plan.branch,
+    gitSha: plan.publishedSource.gitSha,
+    repositoryId: plan.publishedSource.repositoryId,
   },
+  target,
+  version: 1,
 });
 const approvedDeliveryDigest = nativeTargetAuthOnlyDeliveryPlanDigest(
   Buffer.from(JSON.stringify(deliveryPlan)),
@@ -76,20 +76,20 @@ const operationRef = "11111111-1111-4111-a111-111111111111";
 const senderKeys = ["AUTH_RECOVERY_RESEND_API_KEY", "AUTH_RECOVERY_EMAIL_FROM"];
 const gatewayValues: Record<string, string> = {
   AUTH_DATABASE_RESOURCE: '{"environment":"preview"}',
+  AUTH_RECOVERY_EMAIL_FROM: "pilot@example.test",
+  AUTH_REQUIRE_EMAIL_VERIFICATION: "true",
   PLATFORM_AUTH_DATABASE_URL:
     "postgresql://runtime:fixture@auth-preview.neon.tech/auth?sslmode=verify-full",
   PLATFORM_GATEWAY_PROJECT_BINDINGS: "{}",
   PLATFORM_GATEWAY_PROTECTED_APPLICATIONS: '["pilot"]',
   PLATFORM_REALM_OPERATOR_LINK_CONFIG: "{}",
-  AUTH_REQUIRE_EMAIL_VERIFICATION: "true",
-  AUTH_RECOVERY_EMAIL_FROM: "pilot@example.test",
 };
 const appValues = {
   PLATFORM_JWKS_URL: "https://gateway.example/_platform/jwks.json",
   PLATFORM_ORIGIN: "https://gateway.example",
   PLATFORM_PUBLIC_ORIGIN: "https://pilot.example",
 };
-type Row = {
+interface Row {
   id: string;
   key: string;
   value?: string;
@@ -103,7 +103,7 @@ type Row = {
   createdAt?: number;
   system?: boolean;
   customEnvironmentIds?: string[];
-};
+}
 const fixture = (
   effect: "gateway" | "app" = "gateway",
   physicalBranch: string | null = effect === "gateway" ? "gateway-preview" : target.branch,
@@ -113,6 +113,7 @@ const fixture = (
   const scope = (projectId: string) =>
     `auth-only-preview:${operationRef}:${approvedDeliveryDigest}:${projectId}`;
   const rows: Record<string, Row[]> = {
+    "app-project": [],
     "gateway-project": senderKeys.map((key, index) => ({
       id: `sender-${index}`,
       key,
@@ -123,21 +124,8 @@ const fixture = (
       gitBranch: effect === "gateway" ? physicalBranch : "gateway-preview",
       comment: "operator owned",
     })),
-    "app-project": [],
   };
   const projects: Record<string, unknown> = {
-    "gateway-project": {
-      id: "gateway-project",
-      accountId: target.scopeId,
-      framework: "services",
-      rootDirectory: ".",
-      link: {
-        type: "github",
-        repoId: "gateway-repo",
-        productionBranch:
-          effect === "gateway" && physicalBranch === null ? "gateway-preview" : "main",
-      },
-    },
     "app-project": {
       id: "app-project",
       accountId: target.scopeId,
@@ -150,6 +138,18 @@ const fixture = (
               repoId: plan.publishedSource.repositoryId,
               productionBranch: "production",
             },
+    },
+    "gateway-project": {
+      accountId: target.scopeId,
+      framework: "services",
+      id: "gateway-project",
+      link: {
+        productionBranch:
+          effect === "gateway" && physicalBranch === null ? "gateway-preview" : "main",
+        repoId: "gateway-repo",
+        type: "github",
+      },
+      rootDirectory: ".",
     },
   };
   const writes: { keys: string[]; target: string[]; gitBranch?: string; upsert: string | null }[] =
@@ -164,27 +164,32 @@ const fixture = (
     const path = url.pathname;
     calls.push({ method, path });
     beforeRequest?.(method, path);
-    if (rejectStatus !== undefined) return new Response(null, { status: rejectStatus });
+    if (rejectStatus !== undefined) {
+      return new Response(null, { status: rejectStatus });
+    }
     expect(url.searchParams.get("teamId")).toBe(target.scopeId);
     const parts = path.split("/");
-    const projectId = decodeURIComponent(parts[3]!);
-    if (method === "GET" && parts.length === 4)
+    const projectId = decodeURIComponent(parts[3]);
+    if (method === "GET" && parts.length === 4) {
       return Response.json({
         ...(projects[projectId] as object),
         env: [{ value: "discarded provider field" }],
       });
+    }
     if (method === "GET" && parts.length === 5) {
       expect(url.searchParams.get("decrypt")).toBe("false");
-      return Response.json({ envs: rows[projectId]!.map(({ value, ...metadata }) => metadata) });
+      return Response.json({ envs: rows[projectId].map(({ value, ...metadata }) => metadata) });
     }
     if (method === "GET" && parts.length === 6) {
-      const row = rows[projectId]!.find((row) => row.id === decodeURIComponent(parts[5]!));
+      const row = rows[projectId].find((row) => row.id === decodeURIComponent(parts[5]));
       expect(row?.key).not.toBe("AUTH_RECOVERY_RESEND_API_KEY");
       return row === undefined ? new Response(null, { status: 404 }) : Response.json(row);
     }
     if (method === "PATCH" && parts.length === 6) {
       const row = rows[projectId]?.find((entry) => entry.id === decodeURIComponent(parts[5] ?? ""));
-      if (row === undefined) return new Response(null, { status: 404 });
+      if (row === undefined) {
+        return new Response(null, { status: 404 });
+      }
       const input = JSON.parse(String(init?.body)) as { type: string; value: string };
       expect(Object.keys(input).toSorted()).toEqual(["type", "value"]);
       expect(input.type).toBe("encrypted");
@@ -195,109 +200,114 @@ const fixture = (
     if (method === "POST" && parts.length === 5) {
       const input = JSON.parse(String(init?.body)) as Row[];
       writes.push({
+        gitBranch: input[0].gitBranch as string | undefined,
         keys: input.map((row) => row.key),
-        target: input[0]!.target,
-        gitBranch: input[0]!.gitBranch as string | undefined,
+        target: input[0].target,
         upsert: url.searchParams.get("upsert"),
       });
-      for (const row of input)
-        rows[projectId]!.push({ ...row, id: `managed-${projectId}-${row.key}` });
+      for (const row of input) {
+        rows[projectId].push({ ...row, id: `managed-${projectId}-${row.key}` });
+      }
       afterWrite?.();
       return Response.json({ envs: [] });
     }
     throw new Error("unexpected fixture route");
   };
   const readCredential = vi.fn(async () => ({
-    token: "private-installation-fixture",
     binding: {
       active: true,
+      displayName: "Fixture",
       installationId: target.installationId,
+      plan: "pro",
       scopeId: target.scopeId,
       scopeType: "team" as const,
-      displayName: "Fixture",
-      plan: "pro",
       slug: "fixture",
       updatedAt: new Date("2026-11-06T00:00:00Z"),
     },
+    token: "private-installation-fixture",
   }));
   const adapter = createNativeTargetAuthOnlyPreviewEnvironmentAdapter({
-    readCredential,
     fetch: fetcher,
+    readCredential,
   });
   const manifest = {
-    version: 1 as const,
-    kind: "native-target-auth-only-preview-environment" as const,
-    authOnlyPlanDigest: nativeTargetAuthOnlyPlanDigest(plan),
-    deliveryPlanDigest: approvedDeliveryDigest,
-    resourcePlanDigest: deliveryPlan.resourcePlanDigest,
-    source: deliveryPlan.source,
-    gateway: {
-      projectId: "gateway-project",
-      branch: "gateway-preview",
-      physicalBranch: effect === "gateway" ? physicalBranch : "gateway-preview",
-      recoverySecret: {
-        id: "sender-0",
-        key: "AUTH_RECOVERY_RESEND_API_KEY" as const,
-        projectId: "gateway-project",
-        target: "preview" as const,
-        physicalBranch: effect === "gateway" ? physicalBranch : "gateway-preview",
-        type: "sensitive",
-        updatedAt: 1793966400000,
-      },
-      values: Object.entries(gatewayValues).map(([key, value]) => ({ key, sha256: hash(value) })),
-    },
     app: {
-      projectId: target.projectId,
       branch: target.branch,
       physicalBranch: effect === "app" ? physicalBranch : target.branch,
+      projectId: target.projectId,
       values: Object.entries(appValues).map(([key, value]) => ({
         key: key as keyof typeof appValues,
         sha256: hash(value),
       })),
     },
+    authOnlyPlanDigest: nativeTargetAuthOnlyPlanDigest(plan),
+    deliveryPlanDigest: approvedDeliveryDigest,
+    gateway: {
+      branch: "gateway-preview",
+      physicalBranch: effect === "gateway" ? physicalBranch : "gateway-preview",
+      projectId: "gateway-project",
+      recoverySecret: {
+        id: "sender-0",
+        key: "AUTH_RECOVERY_RESEND_API_KEY" as const,
+        physicalBranch: effect === "gateway" ? physicalBranch : "gateway-preview",
+        projectId: "gateway-project",
+        target: "preview" as const,
+        type: "sensitive",
+        updatedAt: 1793966400000,
+      },
+      values: Object.entries(gatewayValues).map(([key, value]) => ({ key, sha256: hash(value) })),
+    },
+    kind: "native-target-auth-only-preview-environment" as const,
+    resourcePlanDigest: deliveryPlan.resourcePlanDigest,
+    source: deliveryPlan.source,
+    version: 1 as const,
   };
   const input: NativeTargetAuthOnlyPreviewEnvironmentApplyInput = {
-    authority: plan.origin.authority,
-    target,
-    operationRef,
-    fenceGeneration: 2,
     approvedDeliveryDigest,
-    effect,
-    projectId: manifest[effect].projectId,
-    branch: manifest[effect].branch,
-    physicalBranch,
-    values: effect === "gateway" ? gatewayValues : appValues,
-    manifest,
     assertCurrent,
+    authority: plan.origin.authority,
+    branch: manifest[effect].branch,
+    effect,
+    fenceGeneration: 2,
+    manifest,
+    operationRef,
+    physicalBranch,
+    projectId: manifest[effect].projectId,
     signal: controller.signal,
+    target,
+    values: effect === "gateway" ? gatewayValues : appValues,
   };
   const metadataInput = {
-    authority: plan.origin.authority,
-    target,
-    plan,
-    deliveryPlan,
-    operationRef,
-    fenceGeneration: 2,
-    effect,
     approval: {
-      requestId: "approval",
       callId: "call",
-      planDigest: approvedDeliveryDigest,
-      sourceDigest: approvedDeliveryDigest,
-      responderPrincipalId: plan.origin.authority.ownerUserId,
-      publicSessionId: target.sessionId,
-      outcome: "approved" as const,
       observedAt: "2026-11-06T00:00:00Z",
+      outcome: "approved" as const,
+      planDigest: approvedDeliveryDigest,
+      publicSessionId: target.sessionId,
+      requestId: "approval",
+      responderPrincipalId: plan.origin.authority.ownerUserId,
+      sourceDigest: approvedDeliveryDigest,
     },
     assertCurrent,
+    authority: plan.origin.authority,
+    deliveryPlan,
+    effect,
+    fenceGeneration: 2,
+    operationRef,
+    plan,
     signal: controller.signal,
+    target,
   };
   return {
     adapter,
+    assertCurrent,
+    calls,
+    controller,
     input,
     metadataInput,
-    readSender: () => adapter.readRecoverySender(metadataInput),
-    readEnvironmentValues: (keys: readonly string[]) =>
+    projects,
+    readCredential,
+    readEnvironmentValues: async (keys: readonly string[]) =>
       adapter.readProjectEnvironmentValues(
         metadataInput,
         {
@@ -307,17 +317,13 @@ const fixture = (
         },
         keys,
       ),
+    readSender: async () => adapter.readRecoverySender(metadataInput),
     rows,
-    projects,
-    writes,
-    calls,
-    controller,
-    assertCurrent,
-    readCredential,
     scope,
-    setBeforeRequest: (hook: typeof beforeRequest) => (beforeRequest = hook),
     setAfterWrite: (hook: typeof afterWrite) => (afterWrite = hook),
+    setBeforeRequest: (hook: typeof beforeRequest) => (beforeRequest = hook),
     setRejectStatus: (status: number) => (rejectStatus = status),
+    writes,
   };
 };
 
@@ -325,11 +331,11 @@ it("reads Secret metadata and only decrypts the bare From address in the exact P
   const state = fixture();
   const result = await state.readSender();
   expect(result).toEqual({
-    provider: "resend",
-    environment: "preview",
-    ownerProjectId: "gateway-project",
-    from: gatewayValues.AUTH_RECOVERY_EMAIL_FROM,
     apiKey: state.input.manifest.gateway.recoverySecret,
+    environment: "preview",
+    from: gatewayValues.AUTH_RECOVERY_EMAIL_FROM,
+    ownerProjectId: "gateway-project",
+    provider: "resend",
   });
   expect(state.calls.filter(({ path }) => path.includes("/env/"))).toEqual([
     { method: "GET", path: "/v1/projects/gateway-project/env/sender-1" },
@@ -344,14 +350,14 @@ it("reads Secret metadata and only decrypts the bare From address in the exact P
 
 it("uses authoritative Secret visibility and allows omitted optional provider timestamps", async () => {
   const f = fixture();
-  const row = f.rows["gateway-project"]![0]!;
+  const row = f.rows["gateway-project"][0];
   row.visibility = "secret";
   row.type = "encrypted";
   delete row.updatedAt;
   expect((await f.readSender()).apiKey).toMatchObject({
     id: "sender-0",
-    visibility: "secret",
     type: "encrypted",
+    visibility: "secret",
   });
   row.visibility = "config";
   row.type = "sensitive";
@@ -361,7 +367,7 @@ it("uses authoritative Secret visibility and allows omitted optional provider ti
 
 it("rejects a From row stored as a legacy Secret before attempting a detail read", async () => {
   const f = fixture();
-  const row = f.rows["gateway-project"]![1]!;
+  const row = f.rows["gateway-project"][1];
   row.type = "sensitive";
   row.visibility = "config";
   await expect(f.readSender()).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -373,7 +379,7 @@ it("fails closed when the operator-owned sender is absent or scoped to a differe
   absent.rows["gateway-project"] = [];
   await expect(absent.readSender()).rejects.toMatchObject({ code: "resource_mismatch" });
   const wrongBranch = fixture();
-  wrongBranch.rows["gateway-project"] = wrongBranch.rows["gateway-project"]!.map((row) => ({
+  wrongBranch.rows["gateway-project"] = wrongBranch.rows["gateway-project"].map((row) => ({
     ...row,
     gitBranch: "another-preview",
   }));
@@ -395,11 +401,11 @@ it("creates only missing managed Gateway Preview rows and verifies operator-owne
   const f = fixture();
   await f.adapter.applyAndVerify(f.input);
   expect(f.writes).toHaveLength(1);
-  expect(f.writes[0]!.keys).toHaveLength(6);
-  expect(f.writes[0]!.keys.some((key) => senderKeys.includes(key))).toBe(false);
+  expect(f.writes[0].keys).toHaveLength(6);
+  expect(f.writes[0].keys.some((key) => senderKeys.includes(key))).toBe(false);
   expect(f.writes[0]).toMatchObject({
-    target: ["preview"],
     gitBranch: "gateway-preview",
+    target: ["preview"],
     upsert: "false",
   });
   await f.adapter.applyAndVerify(f.input);
@@ -411,9 +417,9 @@ it.each([target.branch, null])(
     const f = fixture("app", branch);
     expect(Object.keys(f.input.values).some((key) => senderKeys.includes(key))).toBe(false);
     await f.adapter.applyAndVerify(f.input);
-    expect(f.writes[0]!.keys.toSorted()).toEqual(Object.keys(appValues).toSorted());
-    expect(f.writes[0]!.gitBranch ?? null).toBe(branch);
-    expect(f.writes[0]!.target).toEqual(["preview"]);
+    expect(f.writes[0].keys.toSorted()).toEqual(Object.keys(appValues).toSorted());
+    expect(f.writes[0].gitBranch ?? null).toBe(branch);
+    expect(f.writes[0].target).toEqual(["preview"]);
   },
 );
 it.each([
@@ -430,18 +436,40 @@ it.each([
   "duplicate",
 ])("rejects %s sender readback before writing any managed key", async (kind) => {
   const f = fixture();
-  const row = f.rows["gateway-project"]![0]!;
-  if (kind === "missing") f.rows["gateway-project"]!.shift();
-  if (kind === "value") f.rows["gateway-project"]![1]!.value = "changed@example.test";
-  if (kind === "mixed-target") row.target.push("production");
-  if (kind === "other-branch") row.gitBranch = "other";
-  if (kind === "masked") delete f.rows["gateway-project"]![1]!.value;
-  if (kind === "integration") row.configurationId = "foreign";
-  if (kind === "config") row.visibility = "config";
-  if (kind === "updated") row.updatedAt = 1793966500000;
-  if (kind === "custom") row.customEnvironmentIds = ["custom-scope"];
-  if (kind === "system") row.system = true;
-  if (kind === "duplicate") f.rows["gateway-project"]!.push({ ...row, id: "different" });
+  const row = f.rows["gateway-project"][0];
+  if (kind === "missing") {
+    f.rows["gateway-project"].shift();
+  }
+  if (kind === "value") {
+    f.rows["gateway-project"][1].value = "changed@example.test";
+  }
+  if (kind === "mixed-target") {
+    row.target.push("production");
+  }
+  if (kind === "other-branch") {
+    row.gitBranch = "other";
+  }
+  if (kind === "masked") {
+    delete f.rows["gateway-project"][1].value;
+  }
+  if (kind === "integration") {
+    row.configurationId = "foreign";
+  }
+  if (kind === "config") {
+    row.visibility = "config";
+  }
+  if (kind === "updated") {
+    row.updatedAt = 1793966500000;
+  }
+  if (kind === "custom") {
+    row.customEnvironmentIds = ["custom-scope"];
+  }
+  if (kind === "system") {
+    row.system = true;
+  }
+  if (kind === "duplicate") {
+    f.rows["gateway-project"].push({ ...row, id: "different" });
+  }
   await expect(f.adapter.applyAndVerify(f.input)).rejects.toThrow("resource_mismatch");
   expect(f.writes).toHaveLength(0);
 });
@@ -450,18 +478,26 @@ it.each(["foreign", "value", "duplicate", "integration"])(
   async (kind) => {
     const f = fixture();
     const row: Row = {
+      comment: `App Builder runtime ${f.scope("gateway-project")}`,
+      gitBranch: "gateway-preview",
       id: "existing",
       key: "AUTH_REQUIRE_EMAIL_VERIFICATION",
-      value: "true",
       target: ["preview"],
-      gitBranch: "gateway-preview",
-      comment: `App Builder runtime ${f.scope("gateway-project")}`,
+      value: "true",
     };
-    if (kind === "foreign") row.comment = "other owner";
-    if (kind === "value") row.value = "false";
-    if (kind === "integration") row.configurationId = "foreign";
-    f.rows["gateway-project"]!.push(row);
-    if (kind === "duplicate") f.rows["gateway-project"]!.push({ ...row, id: "duplicate" });
+    if (kind === "foreign") {
+      row.comment = "other owner";
+    }
+    if (kind === "value") {
+      row.value = "false";
+    }
+    if (kind === "integration") {
+      row.configurationId = "foreign";
+    }
+    f.rows["gateway-project"].push(row);
+    if (kind === "duplicate") {
+      f.rows["gateway-project"].push({ ...row, id: "duplicate" });
+    }
     await expect(f.adapter.applyAndVerify(f.input)).rejects.toThrow("resource_mismatch");
     expect(f.writes).toHaveLength(0);
   },
@@ -480,7 +516,9 @@ it.each([401, 403, 404])(
 it("stops cancellation between preflight reads and write", async () => {
   const f = fixture();
   f.setBeforeRequest((method, path) => {
-    if (method === "GET" && path.includes("/env/sender-1")) f.controller.abort();
+    if (method === "GET" && path.includes("/env/sender-1")) {
+      f.controller.abort();
+    }
   });
   await expect(f.adapter.applyAndVerify(f.input)).rejects.toThrow();
   expect(f.writes).toHaveLength(0);
@@ -489,10 +527,11 @@ it("rechecks physical branch mapping immediately before POST", async () => {
   const f = fixture();
   let lists = 0;
   f.setBeforeRequest((method, path) => {
-    if (method === "GET" && path.endsWith("/env") && ++lists === 2)
+    if (method === "GET" && path.endsWith("/env") && ++lists === 2) {
       (
         f.projects["gateway-project"] as { link: { productionBranch: string } }
       ).link.productionBranch = "gateway-preview";
+    }
   });
   await expect(f.adapter.applyAndVerify(f.input)).rejects.toThrow();
   expect(f.writes).toHaveLength(0);
@@ -501,8 +540,8 @@ it("does not upsert a concurrently created key and rejects mismatched post-write
   const f = fixture();
   let lists = 0;
   f.setBeforeRequest((method, path) => {
-    if (method === "GET" && path.endsWith("/env") && ++lists === 2)
-      f.rows["gateway-project"]!.push({
+    if (method === "GET" && path.endsWith("/env") && ++lists === 2) {
+      f.rows["gateway-project"].push({
         id: "racing",
         key: "AUTH_REQUIRE_EMAIL_VERIFICATION",
         value: "false",
@@ -510,12 +549,13 @@ it("does not upsert a concurrently created key and rejects mismatched post-write
         gitBranch: "gateway-preview",
         comment: `App Builder runtime ${f.scope("gateway-project")}`,
       });
+    }
   });
   await expect(f.adapter.applyAndVerify(f.input)).rejects.toThrow();
   expect(f.writes).toHaveLength(0);
   const g = fixture();
   g.setAfterWrite(() => {
-    g.rows["gateway-project"]!.find((row) => row.key === "AUTH_REQUIRE_EMAIL_VERIFICATION")!.value =
+    g.rows["gateway-project"].find((row) => row.key === "AUTH_REQUIRE_EMAIL_VERIFICATION")!.value =
       "false";
   });
   await expect(g.adapter.applyAndVerify(g.input)).rejects.toThrow("resource_mismatch");
@@ -524,12 +564,18 @@ it("does not upsert a concurrently created key and rejects mismatched post-write
 it("fails wrong scope, manifest digest, sender-in-app and revoked installation before requests", async () => {
   for (const kind of ["production", "digest", "sender", "installation"]) {
     const f = fixture("app");
-    if (kind === "production")
+    if (kind === "production") {
       f.input.target = { ...f.input.target, environment: "production" } as never;
-    if (kind === "digest") f.input.approvedDeliveryDigest = "f".repeat(64);
-    if (kind === "sender")
+    }
+    if (kind === "digest") {
+      f.input.approvedDeliveryDigest = "f".repeat(64);
+    }
+    if (kind === "sender") {
       f.input.values = { ...f.input.values, AUTH_RECOVERY_RESEND_API_KEY: "fixture" };
-    if (kind === "installation") f.readCredential.mockResolvedValue(undefined as never);
+    }
+    if (kind === "installation") {
+      f.readCredential.mockResolvedValue(undefined);
+    }
     await expect(f.adapter.applyAndVerify(f.input)).rejects.toThrow();
     expect(f.calls).toHaveLength(0);
   }
@@ -541,8 +587,11 @@ it("rejects metadata from another team or repository", async () => {
       accountId: string;
       link: { repoId: string };
     };
-    if (kind === "team") project.accountId = "other-team";
-    else project.link.repoId = "other-repo";
+    if (kind === "team") {
+      project.accountId = "other-team";
+    } else {
+      project.link.repoId = "other-repo";
+    }
     await expect(f.adapter.readProjectMetadata(f.metadataInput)).rejects.toThrow(
       "resource_mismatch",
     );
@@ -553,20 +602,20 @@ it("rejects metadata from another team or repository", async () => {
 const projectionFixture = () => {
   const state = fixture();
   const source = {
-    projectId: "gateway-project",
-    ownerId: target.scopeId,
-    environment: "preview" as const,
-    publicOrigin: "https://pilot.example",
-    issuer: "https://oidc.vercel.com/team",
     audience: "https://vercel.com/team",
+    environment: "preview" as const,
+    issuer: "https://oidc.vercel.com/team",
+    ownerId: target.scopeId,
+    projectId: "gateway-project",
+    publicOrigin: "https://pilot.example",
     subject: "owner:team:project:gateway:environment:preview",
   };
   const siblingScope = {
-    projectId: "sibling-project",
-    ownerId: target.scopeId,
-    environment: "preview",
     deploymentId: "dpl-sibling",
     deploymentUrl: "https://sibling-immutable.vercel.app",
+    environment: "preview",
+    ownerId: target.scopeId,
+    projectId: "sibling-project",
     projectName: "sibling",
     scopeSlug: "team",
   };
@@ -576,12 +625,12 @@ const projectionFixture = () => {
     observation: { ...siblingScope, readyState: "READY" },
   };
   const row = {
+    comment: `App Builder runtime ${state.scope("gateway-project")}`,
+    gitBranch: "gateway-preview",
     id: "projection",
     key: "PLATFORM_GATEWAY_PROJECT_BINDINGS",
     target: ["preview"],
     type: "encrypted",
-    gitBranch: "gateway-preview",
-    comment: `App Builder runtime ${state.scope("gateway-project")}`,
     value: JSON.stringify({
       version: 1,
       provenance: "trusted-operator-published-provider-projection",
@@ -591,15 +640,15 @@ const projectionFixture = () => {
   };
   state.rows["gateway-project"]?.push(row);
   const appReceipt = {
-    readyState: "READY",
+    branch: target.branch,
     deploymentId: "dpl-pilot",
-    origin: "https://pilot-immutable.vercel.app",
     operationRef,
+    origin: "https://pilot-immutable.vercel.app",
     projectId: target.projectId,
     projectName: plan.project.name,
-    scopeSlug: "team",
-    branch: target.branch,
+    readyState: "READY",
     repoId: plan.publishedSource.repositoryId,
+    scopeSlug: "team",
   };
   const assertAuthorized = vi.fn(async () => {});
   const assertCatalogApp = vi.fn(async () => {});
@@ -607,13 +656,15 @@ const projectionFixture = () => {
     typeof import("./native-target-auth-only-preview-delivery").createNativeTargetAuthOnlyPreviewDelivery
   >["reconcile"];
   const reconcileApp = vi.fn<ReconcileApp>().mockResolvedValue({
-    status: "applied",
-    selected: appReceipt,
     candidates: [appReceipt],
+    selected: appReceipt,
+    status: "applied",
   });
   let intent: NativeTargetAuthOnlyGatewayProjectionIntent | undefined;
   const claim = vi.fn(async (next: NativeTargetAuthOnlyGatewayProjectionIntent) => {
-    if (intent !== undefined) return false;
+    if (intent !== undefined) {
+      return false;
+    }
     intent = next;
     return true;
   });
@@ -621,28 +672,28 @@ const projectionFixture = () => {
     {
       assertAuthorized,
       assertCatalogApp,
+      journal: { claim, read: async () => intent },
       readCredential: state.readCredential,
-      journal: { read: async () => intent, claim },
     },
     {
       openProjection: async (input) => await state.adapter.openGatewayProjection(input),
       reconcileApp,
     },
   );
-  const run = () => execute({ environment: state.metadataInput, appReceipt, source });
+  const run = async () => execute({ appReceipt, environment: state.metadataInput, source });
   const patches = () => state.calls.filter(({ method }) => method === "PATCH");
   return {
-    state,
-    source,
-    sibling,
-    row,
     appReceipt,
     assertAuthorized,
     assertCatalogApp,
-    reconcileApp,
     claim,
-    run,
     patches,
+    reconcileApp,
+    row,
+    run,
+    sibling,
+    source,
+    state,
   };
 };
 
@@ -662,7 +713,7 @@ it("merges exactly the current READY app into the owned projection and retains s
     { method: "PATCH", path: "/v9/projects/gateway-project/env/projection" },
   ]);
   expect(f.claim).toHaveBeenCalledWith(
-    expect.objectContaining({ priorSha256: hash(before), nextSha256: result.projectionDigest }),
+    expect.objectContaining({ nextSha256: result.projectionDigest, priorSha256: hash(before) }),
   );
   expect(
     f.state.rows["gateway-project"]
@@ -705,7 +756,9 @@ it("does not overwrite an unowned row, a changed source, or a different existing
 it("keeps an uncertain dispatch fenced when the provider row still has its prior bytes", async () => {
   const f = projectionFixture();
   f.state.setBeforeRequest((method) => {
-    if (method === "PATCH") throw new Error("lost request");
+    if (method === "PATCH") {
+      throw new Error("lost request");
+    }
   });
   await expect(f.run()).rejects.toThrow("reconciliation_required");
   f.state.setBeforeRequest(undefined);
@@ -716,7 +769,7 @@ it("keeps an uncertain dispatch fenced when the provider row still has its prior
 
 it("requires the exact READY provider candidate and reviewed catalog before a projection write", async () => {
   const f = projectionFixture();
-  f.reconcileApp.mockResolvedValueOnce({ status: "unknown", candidates: [] });
+  f.reconcileApp.mockResolvedValueOnce({ candidates: [], status: "unknown" });
   await expect(f.run()).rejects.toThrow("reconciliation_required");
   f.assertCatalogApp.mockRejectedValueOnce(new Error("catalog app missing"));
   await expect(f.run()).rejects.toThrow("catalog app missing");
@@ -727,7 +780,7 @@ it("requires the exact READY provider candidate and reviewed catalog before a pr
 it("rechecks sender Secret metadata after binding the managed Gateway environment", async () => {
   const f = fixture();
   f.setAfterWrite(() => {
-    f.rows["gateway-project"]![0]!.updatedAt = 1793966500000;
+    f.rows["gateway-project"][0].updatedAt = 1_793_966_500_000;
   });
   await expect(f.adapter.applyAndVerify(f.input)).rejects.toThrow("resource_mismatch");
   expect(f.writes).toHaveLength(1);

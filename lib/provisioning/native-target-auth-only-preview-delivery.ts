@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
-import type { HostedOperatorPlan } from "./hosted-operator-contract";
+import type { HostedOperatorPlan, OperatorDeploymentCandidate } from "./hosted-operator-contract";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import type { HostedOperatorDeploymentContext } from "./hosted-operator-service";
 import type { HostedRuntimeTarget } from "./hosted-runtime-journal";
@@ -9,7 +9,6 @@ import {
   createHostedOperatorDeploymentDelivery,
   type GatewayAliasDiagnostic,
 } from "./hosted-operator-deployment-delivery";
-import type { OperatorDeploymentCandidate } from "./hosted-operator-contract";
 import type { RetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
 import type { SharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import type { NativeTargetAuthOnlySchemaApproval } from "./hosted-operator-auth-only-runtime";
@@ -21,8 +20,7 @@ const id = z.string().min(1);
 /** The delivery fields the shared Preview engine actually reads; deliberately excludes appDatabase. */
 export const nativeTargetAuthOnlyPreviewDeliveryPlanSchema = z.strictObject({
   action: z.literal("prepare"),
-  stage: z.literal("app"),
-  effects: z.array(z.strictObject({ id, kind: z.enum(["delivery", "gateway-delivery"]) })).min(1),
+  appDeliveryReplacement: z.unknown().optional(),
   delivery: z
     .strictObject({
       branch: id,
@@ -32,6 +30,11 @@ export const nativeTargetAuthOnlyPreviewDeliveryPlanSchema = z.strictObject({
       repoId: id,
     })
     .optional(),
+  deploymentBoundary: z
+    .object({ app: z.object({ branch: id }).optional() })
+    .passthrough()
+    .optional(),
+  effects: z.array(z.strictObject({ id, kind: z.enum(["delivery", "gateway-delivery"]) })).min(1),
   gatewayDelivery: z
     .strictObject({
       branch: id,
@@ -41,10 +44,7 @@ export const nativeTargetAuthOnlyPreviewDeliveryPlanSchema = z.strictObject({
       repoId: id,
     })
     .optional(),
-  deploymentBoundary: z
-    .object({ app: z.object({ branch: id }).optional() })
-    .passthrough()
-    .optional(),
+  hostProtection: z.unknown().optional(),
   publicGateway: z
     .object({
       authBrowserOrigin: id,
@@ -55,14 +55,13 @@ export const nativeTargetAuthOnlyPreviewDeliveryPlanSchema = z.strictObject({
     })
     .passthrough()
     .optional(),
-  hostProtection: z.unknown().optional(),
-  appDeliveryReplacement: z.unknown().optional(),
+  stage: z.literal("app"),
 });
 export type NativeTargetAuthOnlyPreviewDeliveryPlan = z.infer<
   typeof nativeTargetAuthOnlyPreviewDeliveryPlanSchema
 >;
 
-export type NativeTargetAuthOnlyPreviewDeliveryInput = {
+export interface NativeTargetAuthOnlyPreviewDeliveryInput {
   authority: HostedOperatorDeploymentContext["authority"];
   target: HostedRuntimeTarget;
   /** Exact digest already settled by the Auth-only owner approval. */
@@ -82,7 +81,7 @@ export type NativeTargetAuthOnlyPreviewDeliveryInput = {
   /** Must re-read owner, approval, runtime lease, and current fence on every call. */
   assertCurrent: () => Promise<void>;
   signal?: AbortSignal;
-};
+}
 
 /**
  * Reuse the established Vercel candidate reconciliation, deployment readback,
@@ -145,8 +144,9 @@ export const createNativeTargetAuthOnlyPreviewDelivery = (deps: {
         sourceDelivery.branch !== expectedBranch ||
         !Number.isSafeInteger(input.fenceGeneration) ||
         input.fenceGeneration <= 0
-      )
+      ) {
         throw new HostedOperatorError("resource_mismatch");
+      }
 
       const legacyProjection = {
         ...plan,
@@ -209,8 +209,9 @@ export const createNativeTargetAuthOnlyPreviewDelivery = (deps: {
         sourceDelivery.branch !== expectedBranch ||
         !Number.isSafeInteger(input.fenceGeneration) ||
         input.fenceGeneration <= 0
-      )
+      ) {
         throw new HostedOperatorError("resource_mismatch");
+      }
       const context = {
         authority: structuredClone(input.authority),
         target: { ...input.target },

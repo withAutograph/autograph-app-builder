@@ -107,3 +107,11 @@ export const nativeTargetOnboardingPlanSchema = z
   });
 export type NativeTargetOnboardingPlan = z.infer<typeof nativeTargetOnboardingPlanSchema>;
 export type NativeTargetOnboardingOrigin = z.infer<typeof nativeTargetOnboardingOriginSchema>;
+
+/** Standard target approval input stays independent of Auth-only runtime composition. */
+export const nativeTargetPreparationRequestSchema = z.strictObject({
+  appId: nativeTargetOnboardingPlanSchema.shape.appId,
+  operationRef: z.uuid(),
+  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  plan: nativeTargetOnboardingPlanSchema,
+});

@@ -23,9 +23,8 @@ const password = z
 const credentialsSchema = z.strictObject({ migratorPassword: password, runtimePassword: password });
 
 export const authOnlyCredentialContextSchema = z.strictObject({
-  authority: hostedTenantAuthoritySchema,
   appId: id,
-  sessionId: id,
+  authority: hostedTenantAuthoritySchema,
   operationRef: z.uuid(),
   profile: z.strictObject({ id, authorityDigest: digest }),
   resource: z
@@ -46,27 +45,28 @@ export const authOnlyCredentialContextSchema = z.strictObject({
       }),
     })
     .refine((resource) => resource.migratorRole !== resource.runtimeRole),
+  sessionId: id,
 });
 export type AuthOnlyCredentialContext = z.infer<typeof authOnlyCredentialContextSchema>;
 
 export const authOnlyCredentialRecordSchema = z.strictObject({
-  version: z.literal(1),
-  kind: z.literal(purpose),
   context: authOnlyCredentialContextSchema,
+  kind: z.literal(purpose),
   privateState: z.strictObject({
     encryptedToken: id,
     tokenIv: id,
     tokenTag: id,
     keyVersion: id,
   }),
+  version: z.literal(1),
 });
 export type AuthOnlyCredentialRecord = z.infer<typeof authOnlyCredentialRecordSchema>;
 
 export const authOnlyCredentialRefSchema = z.strictObject({
-  version: z.literal(1),
-  kind: z.literal("auth-only-credentials"),
   contextDigest: digest,
+  kind: z.literal("auth-only-credentials"),
   recordDigest: digest,
+  version: z.literal(1),
 });
 export type AuthOnlyCredentialRef = z.infer<typeof authOnlyCredentialRefSchema>;
 export interface AuthOnlyCredentialStorageKey {
@@ -84,11 +84,11 @@ export interface AuthOnlyCredentialStore {
 export type AssertCurrentAuthOnlyCredentialAuthority = (
   context: AuthOnlyCredentialContext,
 ) => Promise<{ authorityDigest: string; resource: AuthOnlyCredentialContext["resource"] }>;
-type Access = {
+interface Access {
   context: AuthOnlyCredentialContext;
   /** Re-read the canonical owner, approved operation and profile; return its actual resource and recomputed authority digest. */
   assertCurrent: AssertCurrentAuthOnlyCredentialAuthority;
-};
+}
 
 const mismatch = () => new HostedOperatorError("resource_mismatch");
 const canonical = (value: unknown) => centralHostCanonicalBytes(z.json().parse(value));
@@ -96,21 +96,25 @@ const hash = (value: unknown) => createHash("sha256").update(canonical(value)).d
 export const authOnlyCredentialContextDigest = (context: AuthOnlyCredentialContext) =>
   hash(context);
 const associatedData = (context: AuthOnlyCredentialContext) =>
-  canonical({ purpose, context }).toString("utf-8");
+  canonical({ context, purpose }).toString("utf-8");
 const reference = (record: AuthOnlyCredentialRecord): AuthOnlyCredentialRef => ({
-  version: 1,
-  kind: "auth-only-credentials",
   contextDigest: authOnlyCredentialContextDigest(record.context),
+  kind: "auth-only-credentials",
   recordDigest: hash(record),
+  version: 1,
 });
 const parseContext = (value: AuthOnlyCredentialContext) => {
   const parsed = authOnlyCredentialContextSchema.safeParse(value);
-  if (!parsed.success) throw mismatch();
+  if (!parsed.success) {
+    throw mismatch();
+  }
   return parsed.data;
 };
 const parseCredentials = (value: z.input<typeof credentialsSchema>) => {
   const parsed = credentialsSchema.safeParse(value);
-  if (!parsed.success) throw mismatch();
+  if (!parsed.success) {
+    throw mismatch();
+  }
   return parsed.data;
 };
 
@@ -122,25 +126,28 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
   // Preserve the configured keyring while caller-owned buffers may change during storage awaits.
   const keyring = {
     ...deps.keyring,
-    tokenKey: Buffer.from(deps.keyring.tokenKey),
     previousTokenKeys: deps.keyring.previousTokenKeys?.map((entry) => ({
       ...entry,
       key: Buffer.from(entry.key),
     })),
+    tokenKey: Buffer.from(deps.keyring.tokenKey),
   };
   const assertCurrent = async (input: Access, context: AuthOnlyCredentialContext) => {
     let current: Awaited<ReturnType<AssertCurrentAuthOnlyCredentialAuthority>>;
     try {
       current = await input.assertCurrent(structuredClone(context));
     } catch (error) {
-      if (error instanceof HostedOperatorError) throw error;
+      if (error instanceof HostedOperatorError) {
+        throw error;
+      }
       throw new HostedOperatorError("authorization_required");
     }
     if (
       current?.authorityDigest !== context.profile.authorityDigest ||
       !isDeepStrictEqual(current.resource, context.resource)
-    )
+    ) {
       throw new HostedOperatorError("authorization_required");
+    }
   };
   const storageKey = (context: AuthOnlyCredentialContext): AuthOnlyCredentialStorageKey => ({
     context: structuredClone(context),
@@ -153,9 +160,13 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
     } catch {
       throw new HostedOperatorError("operator_unavailable");
     }
-    if (raw === undefined) return undefined;
+    if (raw === undefined) {
+      return undefined;
+    }
     const parsed = authOnlyCredentialRecordSchema.safeParse(raw);
-    if (!parsed.success || !isDeepStrictEqual(parsed.data.context, context)) throw mismatch();
+    if (!parsed.success || !isDeepStrictEqual(parsed.data.context, context)) {
+      throw mismatch();
+    }
     return parsed.data;
   };
   const decrypt = (record: AuthOnlyCredentialRecord, context: AuthOnlyCredentialContext) => {
@@ -164,14 +175,15 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
         JSON.parse(
           decryptVersionedVercelToken({
             ...record.privateState,
-            config: keyring,
             associatedData: associatedData(context),
+            config: keyring,
           }),
         ),
       );
     } catch (error) {
-      if (error instanceof VercelTokenDecryptionKeyError)
+      if (error instanceof VercelTokenDecryptionKeyError) {
         throw new HostedOperatorError("authorization_required");
+      }
       throw mismatch();
     }
   };
@@ -180,7 +192,9 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
     context: AuthOnlyCredentialContext,
     credentials: z.infer<typeof credentialsSchema>,
   ) => {
-    if (!isDeepStrictEqual(decrypt(record, context), credentials)) throw mismatch();
+    if (!isDeepStrictEqual(decrypt(record, context), credentials)) {
+      throw mismatch();
+    }
   };
   return {
     async findReference(input: Access): Promise<AuthOnlyCredentialRef | null> {
@@ -189,6 +203,56 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
       const record = await readRecord(context);
       await assertCurrent(input, context);
       return record === undefined ? null : reference(record);
+    },
+    async read(
+      input: Access & { reference: AuthOnlyCredentialRef; runtimeConnection?: "direct" | "pooled" },
+    ): Promise<{ migrationUrl: string; runtimeUrl: string }> {
+      const context = parseContext(input.context);
+      const parsedRef = authOnlyCredentialRefSchema.safeParse(input.reference);
+      if (
+        !parsedRef.success ||
+        parsedRef.data.contextDigest !== authOnlyCredentialContextDigest(context)
+      )
+        throw mismatch();
+      const expected = parsedRef.data;
+      const runtimeConnection = input.runtimeConnection ?? "direct";
+      if (runtimeConnection !== "direct" && runtimeConnection !== "pooled") throw mismatch();
+      await assertCurrent(input, context);
+      const record = await readRecord(context);
+      await assertCurrent(input, context);
+      if (record === undefined || !isDeepStrictEqual(reference(record), expected)) throw mismatch();
+      const credentials = decrypt(record, context);
+      const { resource } = context;
+      const directUrl = (role: string, secret: string) => {
+        const url = new URL(`postgresql://${resource.neon.hostname}:5432/`);
+        url.username = encodeURIComponent(role);
+        url.password = encodeURIComponent(secret);
+        url.pathname = `/${encodeURIComponent(resource.database)}`;
+        url.searchParams.set("sslmode", "verify-full");
+        return url;
+      };
+      const migration = directUrl(resource.migratorRole, credentials.migratorPassword);
+      const runtime = directUrl(resource.runtimeRole, credentials.runtimePassword);
+      const validationResource = {
+        version: 1 as const,
+        environment: "preview" as const,
+        hostname: resource.neon.hostname,
+        port: 5432 as const,
+        database: resource.database,
+        schema: "public" as const,
+        migratorRole: resource.migratorRole,
+        runtimeRole: resource.runtimeRole,
+        neon: { projectId: resource.neon.projectId, branchId: resource.neon.branchId },
+      };
+      assertAuthProposalMigrationUrl(migration.toString(), validationResource);
+      assertAuthProposalMigrationUrl(runtime.toString(), {
+        ...validationResource,
+        migratorRole: resource.runtimeRole,
+      });
+      if (runtimeConnection === "pooled")
+        runtime.hostname = resource.neon.hostname.replace(".", "-pooler.");
+      await assertCurrent(input, context);
+      return { migrationUrl: migration.toString(), runtimeUrl: runtime.toString() };
     },
     async readSecrets(
       input: Access & { reference: AuthOnlyCredentialRef },
@@ -258,56 +322,6 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
       }
       matchesCredentials(observed, context, credentials);
       return reference(observed);
-    },
-    async read(
-      input: Access & { reference: AuthOnlyCredentialRef; runtimeConnection?: "direct" | "pooled" },
-    ): Promise<{ migrationUrl: string; runtimeUrl: string }> {
-      const context = parseContext(input.context);
-      const parsedRef = authOnlyCredentialRefSchema.safeParse(input.reference);
-      if (
-        !parsedRef.success ||
-        parsedRef.data.contextDigest !== authOnlyCredentialContextDigest(context)
-      )
-        throw mismatch();
-      const expected = parsedRef.data;
-      const runtimeConnection = input.runtimeConnection ?? "direct";
-      if (runtimeConnection !== "direct" && runtimeConnection !== "pooled") throw mismatch();
-      await assertCurrent(input, context);
-      const record = await readRecord(context);
-      await assertCurrent(input, context);
-      if (record === undefined || !isDeepStrictEqual(reference(record), expected)) throw mismatch();
-      const credentials = decrypt(record, context);
-      const { resource } = context;
-      const directUrl = (role: string, secret: string) => {
-        const url = new URL(`postgresql://${resource.neon.hostname}:5432/`);
-        url.username = encodeURIComponent(role);
-        url.password = encodeURIComponent(secret);
-        url.pathname = `/${encodeURIComponent(resource.database)}`;
-        url.searchParams.set("sslmode", "verify-full");
-        return url;
-      };
-      const migration = directUrl(resource.migratorRole, credentials.migratorPassword);
-      const runtime = directUrl(resource.runtimeRole, credentials.runtimePassword);
-      const validationResource = {
-        version: 1 as const,
-        environment: "preview" as const,
-        hostname: resource.neon.hostname,
-        port: 5432 as const,
-        database: resource.database,
-        schema: "public" as const,
-        migratorRole: resource.migratorRole,
-        runtimeRole: resource.runtimeRole,
-        neon: { projectId: resource.neon.projectId, branchId: resource.neon.branchId },
-      };
-      assertAuthProposalMigrationUrl(migration.toString(), validationResource);
-      assertAuthProposalMigrationUrl(runtime.toString(), {
-        ...validationResource,
-        migratorRole: resource.runtimeRole,
-      });
-      if (runtimeConnection === "pooled")
-        runtime.hostname = resource.neon.hostname.replace(".", "-pooler.");
-      await assertCurrent(input, context);
-      return { migrationUrl: migration.toString(), runtimeUrl: runtime.toString() };
     },
   };
 };

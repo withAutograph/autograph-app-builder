@@ -6,8 +6,8 @@ import type { ToolContext, WorkflowToolContext } from "eve/tools";
 import planTool from "../../agent/tools/plan-app-native-target-auth-only-final-routing";
 import prepareTool from "../../agent/tools/prepare-app-native-target-auth-only-final-routing";
 import { operatorOwnerContextSchema } from "../provisioning/hosted-operator-contract";
-import { nativeTargetAuthOnlyFinalRoutingApprovalTool } from "../eve/private-native-target-auth-only-final-routing-approval";
 import {
+  nativeTargetAuthOnlyFinalRoutingApprovalTool,
   nativeTargetAuthOnlyFinalRoutingApprovalInputSchema,
   nativeTargetAuthOnlyFinalRoutingPlanInputSchema,
 } from "../eve/private-native-target-auth-only-final-routing-approval";
@@ -25,77 +25,68 @@ import type { NativeTargetOnboardingRuntimePorts } from "./native-target-onboard
 type Preparation = z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>;
 const fixture = () => {
   const authority = {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
+    workspaceId: "workspace",
   };
   const owner = operatorOwnerContextSchema.parse({
-    kind: "direct",
-    authority,
-    principal: { ...authority, scopes: ["autograph:start"] },
     adapterGeneration: 1,
     adapterSessionId: "adapter",
+    authority,
+    kind: "direct",
+    principal: { ...authority, scopes: ["autograph:start"] },
     sessionId: "saved-public-session",
   });
   const actor = {
-    authenticator: "mcp-oauth-jwks",
-    principalType: "user",
-    principalId: "owner",
-    subject: "owner",
-    issuer: authority.issuer,
     attributes: {},
+    authenticator: "mcp-oauth-jwks",
+    issuer: authority.issuer,
+    principalId: "owner",
+    principalType: "user",
+    subject: "owner",
   };
   const prep = nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse({
     appId: "pilot",
-    operationRef: "11111111-1111-4111-a111-111111111111",
     deliveryPlanDigest: "a".repeat(64),
+    operationRef: "11111111-1111-4111-a111-111111111111",
     routingOperationRef: "22222222-2222-4222-a222-222222222222",
     routingPlanDigest: "b".repeat(64),
   });
   const planInput = nativeTargetAuthOnlyFinalRoutingPlanInputSchema.parse({
     appId: prep.appId,
-    operationRef: prep.operationRef,
     deliveryPlanDigest: prep.deliveryPlanDigest,
+    operationRef: prep.operationRef,
   });
   const prepared = nativeTargetAuthOnlyFinalRoutingResultSchema.parse({
-    status: "prepared",
-    deliveryPlanDigest: prep.deliveryPlanDigest,
-    projectionDigest: "d".repeat(64),
-    gateway: {
-      readyState: "READY",
-      deploymentId: "dpl-refresh",
-      origin: "https://refresh.vercel.app",
-      operationRef: prep.routingOperationRef,
-      projectId: "gateway-project",
-      branch: "pilot",
-      repoId: "gateway-repo",
-    },
     app: {
-      readyState: "READY",
-      deploymentId: "dpl-app",
-      origin: "https://app.vercel.app",
-      operationRef: prep.operationRef,
-      projectId: "app-project",
       branch: "pilot",
+      deploymentId: "dpl-app",
+      operationRef: prep.operationRef,
+      origin: "https://app.vercel.app",
+      projectId: "app-project",
+      readyState: "READY",
       repoId: "app-repo",
     },
+    deliveryPlanDigest: prep.deliveryPlanDigest,
+    gateway: {
+      branch: "pilot",
+      deploymentId: "dpl-refresh",
+      operationRef: prep.routingOperationRef,
+      origin: "https://refresh.vercel.app",
+      projectId: "gateway-project",
+      readyState: "READY",
+      repoId: "gateway-repo",
+    },
+    projectionDigest: "d".repeat(64),
+    status: "prepared",
   });
   const ctx = {
-    session: { id: "adapter", auth: { current: actor, initiator: actor } },
-    callId: "current-call",
     abortSignal: new AbortController().signal,
+    callId: "current-call",
+    session: { auth: { current: actor, initiator: actor }, id: "adapter" },
   };
   const responseCtx: ApprovalResponseContext<Preparation> = {
-    responder: actor,
-    session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
-    request: {
-      requestId: "original-request",
-      callId: "original-call",
-      toolName: nativeTargetAuthOnlyFinalRoutingApprovalTool,
-      toolInput: prep,
-    },
-    response: { decision: "approve" },
     auth: {
       getToken: async () => {
         throw new Error("unused");
@@ -104,6 +95,15 @@ const fixture = () => {
         throw new Error("unused");
       },
     },
+    request: {
+      callId: "original-call",
+      requestId: "original-request",
+      toolInput: prep,
+      toolName: nativeTargetAuthOnlyFinalRoutingApprovalTool,
+    },
+    responder: actor,
+    response: { decision: "approve" },
+    session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
   };
   let output: unknown = prep;
   const sent: z.infer<typeof nativeTargetTransportRequestSchema>[] = [];
@@ -113,23 +113,23 @@ const fixture = () => {
   });
   const client = createNativeTargetOnboardingClient({
     endpoint: "https://operator.example",
+    fetch,
     ownerContext: owner,
     token: async () => "private-workload-token",
-    fetch,
   });
   return {
-    prep,
-    planInput,
-    prepared,
-    ctx,
-    responseCtx,
-    owner,
-    sent,
-    fetch,
     client,
+    ctx,
+    fetch,
     output(value: unknown) {
       output = value;
     },
+    owner,
+    planInput,
+    prep,
+    prepared,
+    responseCtx,
+    sent,
   };
 };
 
@@ -141,17 +141,17 @@ it("plans and executes only the retained final-routing references", async () => 
   expect(f.sent).toEqual([
     {
       action: "native-target-auth-only-final-routing-plan",
-      ownerContext: f.owner,
       adapterSessionId: "adapter",
       callId: "current-call",
       input: f.planInput,
+      ownerContext: f.owner,
     },
     {
       action: "native-target-auth-only-final-routing",
-      ownerContext: f.owner,
       adapterSessionId: "adapter",
       callId: "current-call",
       input: f.prep,
+      ownerContext: f.owner,
     },
   ]);
 });
@@ -161,9 +161,15 @@ it.each(["appId", "operationRef", "deliveryPlanDigest"] as const)(
   async (key) => {
     const f = fixture();
     const changed = { ...f.prep };
-    if (key === "appId") changed.appId = "another-app";
-    if (key === "operationRef") changed.operationRef = "33333333-3333-4333-a333-333333333333";
-    if (key === "deliveryPlanDigest") changed.deliveryPlanDigest = "c".repeat(64);
+    if (key === "appId") {
+      changed.appId = "another-app";
+    }
+    if (key === "operationRef") {
+      changed.operationRef = "33333333-3333-4333-a333-333333333333";
+    }
+    if (key === "deliveryPlanDigest") {
+      changed.deliveryPlanDigest = "c".repeat(64);
+    }
     f.output(changed);
     await expect(f.client.planAuthOnlyFinalRouting(f.planInput, f.ctx)).rejects.toThrow();
   },
@@ -179,11 +185,21 @@ it.each([
 ] as const)("rejects an invalid prepared %s", async (kind) => {
   const f = fixture();
   const changed = structuredClone(f.prepared);
-  if (kind === "deliveryPlanDigest") changed.deliveryPlanDigest = "c".repeat(64);
-  if (kind === "gateway-operation") changed.gateway.operationRef = f.prep.operationRef;
-  if (kind === "app-operation") changed.app.operationRef = f.prep.routingOperationRef;
-  if (kind === "shared-project") changed.gateway.projectId = changed.app.projectId;
-  if (kind === "shared-deployment") changed.gateway.deploymentId = changed.app.deploymentId;
+  if (kind === "deliveryPlanDigest") {
+    changed.deliveryPlanDigest = "c".repeat(64);
+  }
+  if (kind === "gateway-operation") {
+    changed.gateway.operationRef = f.prep.operationRef;
+  }
+  if (kind === "app-operation") {
+    changed.app.operationRef = f.prep.routingOperationRef;
+  }
+  if (kind === "shared-project") {
+    changed.gateway.projectId = changed.app.projectId;
+  }
+  if (kind === "shared-deployment") {
+    changed.gateway.deploymentId = changed.app.deploymentId;
+  }
   f.output(
     kind === "not-ready"
       ? { ...changed, gateway: { ...changed.gateway, readyState: "BUILDING" } }
@@ -224,15 +240,25 @@ it.each(["owner", "principal-type", "session", "tool", "malformed-intent"] as co
     const f = fixture();
     const ctx = {
       ...f.responseCtx,
+      request: { ...f.responseCtx.request, toolInput: { ...f.prep } },
       responder: { ...f.responseCtx.responder },
       session: { ...f.responseCtx.session },
-      request: { ...f.responseCtx.request, toolInput: { ...f.prep } },
     };
-    if (kind === "owner") ctx.responder.principalId = "other";
-    if (kind === "principal-type") ctx.responder.principalType = "service";
-    if (kind === "session") ctx.session.id = "other";
-    if (kind === "tool") ctx.request.toolName = "prepare-app-native-target-auth-only-delivery";
-    if (kind === "malformed-intent") ctx.request.toolInput.routingPlanDigest = "invalid";
+    if (kind === "owner") {
+      ctx.responder.principalId = "other";
+    }
+    if (kind === "principal-type") {
+      ctx.responder.principalType = "service";
+    }
+    if (kind === "session") {
+      ctx.session.id = "other";
+    }
+    if (kind === "tool") {
+      ctx.request.toolName = "prepare-app-native-target-auth-only-delivery";
+    }
+    if (kind === "malformed-intent") {
+      ctx.request.toolInput.routingPlanDigest = "invalid";
+    }
     await expect(f.client.authorizeAuthOnlyFinalRoutingApprovalResponse(ctx)).rejects.toThrow();
     expect(f.fetch).not.toHaveBeenCalled();
   },
@@ -258,10 +284,10 @@ it("rejects mismatched adapter ownership in the transport", () => {
   expect(() =>
     nativeTargetTransportRequestSchema.parse({
       action: "native-target-auth-only-final-routing",
-      ownerContext: f.owner,
       adapterSessionId: "another-adapter",
       callId: "call",
       input: f.prep,
+      ownerContext: f.owner,
     }),
   ).toThrow();
 });
@@ -287,10 +313,10 @@ it("stops cancelled requests before transport", async () => {
 it("routes through private ports and checks returned routing identity", async () => {
   const f = fixture();
   const ports = {
+    authorizeAuthOnlyFinalRoutingApprovalResponse: vi.fn(async () => undefined),
+    hasAuthOnlyFinalRoutingApproval: vi.fn(async () => true),
     planAuthOnlyFinalRouting: vi.fn(async () => f.prep),
     prepareAuthOnlyFinalRouting: vi.fn(async () => f.prepared),
-    hasAuthOnlyFinalRoutingApproval: vi.fn(async () => true),
-    authorizeAuthOnlyFinalRoutingApprovalResponse: vi.fn(async () => undefined),
   };
   const runtime = createNativeTargetOnboardingRuntime(
     z.custom<NativeTargetOnboardingRuntimePorts>().parse(ports),

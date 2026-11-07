@@ -50,10 +50,10 @@ const pgTools = [
   }
 });
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const source = {
   branch: "pilot",
@@ -64,71 +64,90 @@ const source = {
   reviewDigest: "f".repeat(64),
 };
 const plan = nativeTargetAuthOnlyPlanSchema.parse({
-  version: 1,
-  kind: "native-target-auth-only",
   appId: "signup-pilot",
-  origin: {
-    authority,
-    publicSessionId: "saved-session",
-    adapterSessionId: "native-session",
-    adapterGeneration: 1,
-    appSpecDigest: "a".repeat(64),
-    capturedDescription: { appId: "signup-pilot", kind: "static", sha256: "b".repeat(64) },
-  },
-  project: {
-    name: "signup-pilot",
-    teamId: "team-owner",
-    installationId: "icfg-owner",
-    projectSettings: { framework: "nextjs", rootDirectory: "apps/signup-pilot" },
-    protection: nativeTargetRequiredProjectProtection,
-  },
-  branch: "pilot",
-  publishedSource: source,
+  appRole: "pilot_user",
   authResource: {
-    profileId: "pilot-auth",
     authorityDigest: "b".repeat(64),
-    resourceId: "isolated-auth",
     database: "pilot_auth",
     endpointId: "ep-pilot",
     hostname: "ep-pilot.neon.tech",
+    profileId: "pilot-auth",
+    resourceId: "isolated-auth",
   },
   authSchema: {
     artifactRef: "auth-artifact",
+    installer: { reference: "auth-worker", sha256: "3".repeat(64) },
     planDigest: "1".repeat(64),
     targetDigest: "2".repeat(64),
-    installer: { reference: "auth-worker", sha256: "3".repeat(64) },
   },
-  appRole: "pilot_user",
-  signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
-  cost: { ownership: "current-owner", description: "Auth only" },
+  branch: "pilot",
+  cost: { description: "Auth only", ownership: "current-owner" },
+  kind: "native-target-auth-only",
+  origin: {
+    adapterGeneration: 1,
+    adapterSessionId: "native-session",
+    appSpecDigest: "a".repeat(64),
+    authority,
+    capturedDescription: { appId: "signup-pilot", kind: "static", sha256: "b".repeat(64) },
+    publicSessionId: "saved-session",
+  },
+  project: {
+    installationId: "icfg-owner",
+    name: "signup-pilot",
+    projectSettings: { framework: "nextjs", rootDirectory: "apps/signup-pilot" },
+    protection: nativeTargetRequiredProjectProtection,
+    teamId: "team-owner",
+  },
+  publishedSource: source,
   retention: { policy: "Explicit cleanup" },
+  signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
+  version: 1,
 });
 const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
 const approval = {
-  requestId: "approval",
   callId: "call",
-  planDigest,
-  sourceDigest: nativeTargetAuthOnlySchemaEffectDigest(plan, source),
-  responderPrincipalId: authority.ownerUserId,
-  publicSessionId: plan.origin.publicSessionId,
-  outcome: "approved" as const,
   observedAt: "2026-11-06T12:00:00.000Z",
+  outcome: "approved" as const,
+  planDigest,
+  publicSessionId: plan.origin.publicSessionId,
+  requestId: "approval",
+  responderPrincipalId: authority.ownerUserId,
+  sourceDigest: nativeTargetAuthOnlySchemaEffectDigest(plan, source),
 };
 const artifactContext = {
   authority,
   target: { appId: plan.appId, sessionId: plan.origin.publicSessionId },
 };
 const resource = {
-  resourceId: "isolated-auth",
   database: "pilot_auth",
   migratorRole: "pilot_migrator",
+  resourceId: "isolated-auth",
   runtimeRole: "pilot_runtime",
 };
 const resourceBytes = Buffer.from(
   JSON.stringify({
-    version: 1,
     action: "prepare",
+    authDatabase: resource,
     authOnlyPlanDigest: planDigest,
+    bootstrap: { endpointId: "ep-pilot", maintenanceDatabase: "neondb", role: "bootstrap_owner" },
+    effects: [{ id: "auth-resources", kind: "resources", resourceId: resource.resourceId }],
+    nativeNeonConfiguration: {
+      connector: "neon-owned",
+      nativeStore: {
+        configurationId: "icfg-neon",
+        resourceId: "neon-store",
+        sourceProjectId: "prj-anchor",
+      },
+      operator: {
+        audience: "https://vercel.com/owner",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/owner",
+        ownerId: "team-owner",
+        projectId: "prj-operator",
+      },
+    },
+    neon: { branchId: "pilot-branch", endpoint: "ep-pilot.neon.tech", projectId: "pilot-project" },
+    resourcesInstaller: { reference: "neon-resource-bootstrap-v1", sha256: "b".repeat(64) },
     target: {
       ...artifactContext.target,
       branch: "pilot",
@@ -138,26 +157,7 @@ const resourceBytes = Buffer.from(
       scopeId: "team-owner",
       scopeType: "team",
     },
-    nativeNeonConfiguration: {
-      connector: "neon-owned",
-      nativeStore: {
-        configurationId: "icfg-neon",
-        resourceId: "neon-store",
-        sourceProjectId: "prj-anchor",
-      },
-      operator: {
-        ownerId: "team-owner",
-        projectId: "prj-operator",
-        environment: "preview",
-        issuer: "https://oidc.vercel.com/owner",
-        audience: "https://vercel.com/owner",
-      },
-    },
-    authDatabase: resource,
-    bootstrap: { endpointId: "ep-pilot", maintenanceDatabase: "neondb", role: "bootstrap_owner" },
-    neon: { endpoint: "ep-pilot.neon.tech", projectId: "pilot-project", branchId: "pilot-branch" },
-    resourcesInstaller: { reference: "neon-resource-bootstrap-v1", sha256: "b".repeat(64) },
-    effects: [{ id: "auth-resources", kind: "resources", resourceId: resource.resourceId }],
+    version: 1,
   }),
 );
 const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
@@ -171,7 +171,9 @@ describe.skipIf(pgTools === undefined)(
   "Auth-only journals against actual PostgreSQL constraints",
   () => {
     beforeAll(async () => {
-      if (pgTools === undefined) throw new Error("Local PostgreSQL tools unavailable");
+      if (pgTools === undefined) {
+        throw new Error("Local PostgreSQL tools unavailable");
+      }
       root = await mkdtemp(path.join(tmpdir(), "auth-only-journal-pg-"));
       const data = path.join(root, "data");
       execFileSync(
@@ -195,12 +197,12 @@ describe.skipIf(pgTools === undefined)(
       );
       started = true;
       client = postgres({
-        host: root,
-        port: 54329,
         database: "postgres",
-        username: userInfo().username,
+        host: root,
         max: 3,
+        port: 54329,
         ssl: false,
+        username: userInfo().username,
       });
       database = drizzle(client, { schema: databaseSchema });
       const dialect = new PgDialect();
@@ -228,13 +230,16 @@ describe.skipIf(pgTools === undefined)(
     }, 30_000);
     afterAll(async () => {
       await client?.end({ timeout: 5 });
-      if (started && root !== undefined && pgTools !== undefined)
+      if (started && root !== undefined && pgTools !== undefined) {
         execFileSync(
           path.join(pgTools, "pg_ctl"),
           ["-D", path.join(root, "data"), "-m", "immediate", "-w", "stop"],
           { stdio: "pipe" },
         );
-      if (root !== undefined) await rm(root, { recursive: true, force: true });
+      }
+      if (root !== undefined) {
+        await rm(root, { recursive: true, force: true });
+      }
     });
     beforeEach(async () => {
       await client`TRUNCATE builder_provisioning_journal, prototype_artifact_chunk`;
@@ -246,75 +251,78 @@ describe.skipIf(pgTools === undefined)(
       await expect(insert("b".repeat(64), "pending")).rejects.toMatchObject({
         constraint_name: "builder_provisioning_journal_request_id_check",
       });
-      for (const stage of ["planned", "unknown", "retained", "sealed"])
+      for (const stage of ["planned", "unknown", "retained", "sealed"]) {
         await expect(insert("11111111-1111-4111-a111-111111111111", stage)).rejects.toMatchObject({
           constraint_name: "builder_provisioning_journal_state_check",
         });
+      }
     });
 
     it("retains an unknown project write and reconciles it without a second creation", async () => {
       const store = createPostgresNativeTargetAuthOnlyDispatchStore(database);
       let creates = 0;
       const service = createNativeTargetAuthOnlyDispatch({
-        store,
         authorize: async () => ({
           authority,
           ownerUserId: authority.ownerUserId,
           publicSessionId: plan.origin.publicSessionId,
         }),
-        readApproval: async () => approval,
-        revalidate: assertCurrentOwner,
-        observeProject: async ({ projectId }) => ({ status: "verified", projectId }),
         createProject: async ({ authorizeAttempt, acceptProjectId }) => {
           await authorizeAttempt();
           creates++;
           await acceptProjectId("prj-pilot");
           return { status: "uncertain", projectId: "prj-pilot" };
         },
+        observeProject: async ({ projectId }) => ({ status: "verified", projectId }),
+        readApproval: async () => approval,
+        revalidate: assertCurrentOwner,
+        store,
       });
       await service.approve("request", plan);
       await expect(service.dispatch("request", plan)).resolves.toMatchObject({ status: "unknown" });
-      const key = { authority, appId: plan.appId };
+      const key = { appId: plan.appId, authority };
       const unknown = await createPostgresNativeTargetAuthOnlyDispatchStore(database).read(key);
       expect(unknown?.state.stage).toBe("unknown");
       expect(
         (
           await client`select state, record->>'stage' as stage from builder_provisioning_journal`
         )[0],
-      ).toMatchObject({ state: "pending", stage: "unknown" });
+      ).toMatchObject({ stage: "unknown", state: "pending" });
       await expect(
         store.read({ ...key, authority: { ...authority, ownerUserId: "another-owner" } }),
       ).resolves.toBeUndefined();
-      if (unknown === undefined) throw new Error("Unknown project write was lost");
+      if (unknown === undefined) {
+        throw new Error("Unknown project write was lost");
+      }
       await expect(
         store.compareAndSet(key, unknown.revision - 1, unknown.state),
       ).resolves.toBeUndefined();
       await expect(service.dispatch("request", plan)).resolves.toEqual({
-        status: "created",
         projectId: "prj-pilot",
+        status: "created",
       });
       await expect(service.dispatch("request", plan)).resolves.toEqual({
-        status: "created",
         projectId: "prj-pilot",
+        status: "created",
       });
       expect(creates).toBe(1);
       expect(
         (
           await client`select state, record->>'stage' as stage from builder_provisioning_journal`
         )[0],
-      ).toMatchObject({ state: "settled", stage: "created" });
+      ).toMatchObject({ stage: "created", state: "settled" });
     });
 
     it("round-trips Auth runtime stages with UUID identity, CAS and session isolation", async () => {
       const store = createPostgresNativeTargetAuthOnlyRuntimeStore(database);
-      const key = { authority, appId: plan.appId, sessionId: plan.origin.publicSessionId };
+      const key = { appId: plan.appId, authority, sessionId: plan.origin.publicSessionId };
       const initial = {
         kind: "native-target-auth-only-runtime" as const,
-        version: 1 as const,
-        stage: "planned" as const,
         plan,
         planDigest,
         source,
+        stage: "planned" as const,
+        version: 1 as const,
       };
       let saved = await store.write(key, undefined, initial);
       expect(
@@ -327,15 +335,15 @@ describe.skipIf(pgTools === undefined)(
       await expect(store.read({ ...key, sessionId: "another-session" })).resolves.toBeUndefined();
       const approved = {
         ...initial,
-        stage: "approved" as const,
         approval,
         effectDigest: approval.sourceDigest,
+        stage: "approved" as const,
       };
       const attempt = {
         ...approved,
         attemptId: "11111111-1111-4111-a111-111111111111",
-        leaseId: "22222222-2222-4222-a222-222222222222",
         leaseExpiresAt: "2026-11-06T13:00:00.000Z",
+        leaseId: "22222222-2222-4222-a222-222222222222",
       };
       const states: Parameters<NativeTargetAuthOnlyRuntimeStore["write"]>[2][] = [
         approved,
@@ -343,13 +351,13 @@ describe.skipIf(pgTools === undefined)(
         { ...attempt, stage: "unknown" },
         {
           ...attempt,
-          stage: "prepared",
           authSchema: {
             artifactRef: plan.authSchema.artifactRef,
             planDigest: plan.authSchema.planDigest,
             targetDigest: plan.authSchema.targetDigest,
           },
           readiness: "ready",
+          stage: "prepared",
         },
       ];
       for (const next of states) {
@@ -358,8 +366,8 @@ describe.skipIf(pgTools === undefined)(
         const [row] =
           await client`select state, record->>'stage' as stage from builder_provisioning_journal`;
         expect(row).toMatchObject({
-          state: next.stage === "prepared" ? "settled" : "pending",
           stage: next.stage,
+          state: next.stage === "prepared" ? "settled" : "pending",
         });
       }
       expect(await store.read(key)).toEqual(saved);
@@ -367,10 +375,10 @@ describe.skipIf(pgTools === undefined)(
         await store.read({
           ...key,
           authority: {
-            ownerUserId: authority.ownerUserId,
-            workspaceId: authority.workspaceId,
             audience: authority.audience,
             issuer: authority.issuer,
+            ownerUserId: authority.ownerUserId,
+            workspaceId: authority.workspaceId,
           },
         }),
       ).toEqual(saved);
@@ -379,7 +387,7 @@ describe.skipIf(pgTools === undefined)(
     });
 
     it("retains resource plan bytes and independently binds both worker contexts", async () => {
-      const store = createNativeTargetAuthOnlyResourcePlanStore({ database, assertCurrentOwner });
+      const store = createNativeTargetAuthOnlyResourcePlanStore({ assertCurrentOwner, database });
       const first = await store.writeIfAbsent(artifactContext, planDigest, resourceBytes);
       expect(await store.writeIfAbsent(artifactContext, planDigest, resourceBytes)).toEqual(first);
       await store.bindWorkerContext(
@@ -398,7 +406,7 @@ describe.skipIf(pgTools === undefined)(
       );
       expect(
         (await store.read(artifactContext, planDigest, first.resourcePlanDigest))?.workerContexts,
-      ).toEqual({ resources: "4".repeat(64), auth: "5".repeat(64) });
+      ).toEqual({ auth: "5".repeat(64), resources: "4".repeat(64) });
       await expect(
         store.bindWorkerContext(
           artifactContext,
@@ -422,26 +430,26 @@ describe.skipIf(pgTools === undefined)(
         (
           await client`select state, record->>'stage' as stage from builder_provisioning_journal`
         )[0],
-      ).toMatchObject({ state: "settled", stage: "retained" });
+      ).toMatchObject({ stage: "retained", state: "settled" });
     });
 
     it("preserves encrypted credential custody and retry identity with a settled row", async () => {
       const context = authOnlyCredentialContextSchema.parse({
-        authority,
         appId: plan.appId,
-        sessionId: plan.origin.publicSessionId,
+        authority,
         operationRef: "33333333-3333-4333-a333-333333333333",
-        profile: { id: "pilot-auth", authorityDigest: "a".repeat(64) },
+        profile: { authorityDigest: "a".repeat(64), id: "pilot-auth" },
         resource: {
           ...resource,
           environment: "preview",
           neon: {
-            projectId: "pilot-project",
             branchId: "pilot-branch",
             endpointId: "ep-pilot",
             hostname: "ep-pilot.neon.tech",
+            projectId: "pilot-project",
           },
         },
+        sessionId: plan.origin.publicSessionId,
       });
       const keyring = { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture" };
       const makeCustody = () =>
@@ -453,7 +461,7 @@ describe.skipIf(pgTools === undefined)(
         authorityDigest: context.profile.authorityDigest,
         resource: context.resource,
       });
-      const access = { context, assertCurrent };
+      const access = { assertCurrent, context };
       const credentials = { migratorPassword: "m".repeat(32), runtimePassword: "r".repeat(32) };
       const reference = await makeCustody().seal({ ...access, credentials });
       expect(await makeCustody().seal({ ...access, credentials })).toEqual(reference);
@@ -462,8 +470,9 @@ describe.skipIf(pgTools === undefined)(
       expect(rows).toHaveLength(1);
       expect(rows[0]?.state).toBe("settled");
       expect(rows[0]?.record.stage).toBe("sealed");
-      for (const secret of Object.values(credentials))
+      for (const secret of Object.values(credentials)) {
         expect(JSON.stringify(rows)).not.toContain(secret);
+      }
       await expect(
         makeCustody().findReference({
           ...access,
@@ -473,7 +482,7 @@ describe.skipIf(pgTools === undefined)(
     });
 
     it("keeps native plan artifacts in their existing session-scoped artifact table", async () => {
-      const store = createNativeTargetAuthOnlyPlanStore({ database, assertCurrentOwner });
+      const store = createNativeTargetAuthOnlyPlanStore({ assertCurrentOwner, database });
       expect(await store.record(artifactContext, plan)).toEqual(plan);
       expect(await store.read(artifactContext, plan.origin.appSpecDigest, planDigest)).toEqual(
         plan,

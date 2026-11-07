@@ -34,23 +34,24 @@ import type {
   NativeTargetAuthOnlyAfterGatewayReadyInput,
 } from "./native-target-auth-only-delivery-runtime";
 import type { NativeTargetAuthOnlyPreviewDeliveryInput } from "./native-target-auth-only-preview-delivery";
+
 const mock = vi.hoisted(() => ({
-  readDispatch: vi.fn(),
-  readPlan: vi.fn(),
-  readResource: vi.fn(),
-  readApproval: vi.fn(),
-  resolveRegistered: vi.fn(),
-  readPublishedSource: vi.fn(),
-  readDescription: vi.fn(),
-  readRuntime: vi.fn(),
-  genericService: vi.fn(),
-  reconcile: vi.fn(),
   environment: vi.fn(),
   gate: vi.fn(),
+  genericService: vi.fn(),
+  readApproval: vi.fn(),
+  readDescription: vi.fn(),
+  readDispatch: vi.fn(),
   readEntryApproval: vi.fn(),
+  readPlan: vi.fn(),
+  readPublishedSource: vi.fn(),
+  readResource: vi.fn(),
   readRoutingApproval: vi.fn(),
-  runRouting: vi.fn(),
+  readRuntime: vi.fn(),
+  reconcile: vi.fn(),
+  resolveRegistered: vi.fn(),
   runOrganization: vi.fn(),
+  runRouting: vi.fn(),
   runSignupPolicy: vi.fn(),
 }));
 vi.mock("./native-target-auth-only-dispatch", async (original) => ({
@@ -112,38 +113,38 @@ vi.mock("./native-target-auth-only-preview-delivery", async (original) => ({
     target: string;
     assertEnvironment: () => Promise<void>;
   }) => ({
+    deliver: async () => {
+      throw new Error("unexpected provider create");
+    },
     reconcile: async (context: NativeTargetAuthOnlyPreviewDeliveryInput) => {
       await context.assertCurrent();
       await deps.assertEnvironment();
       return await mock.reconcile(deps.target, context);
     },
-    deliver: async () => {
-      throw new Error("unexpected provider create");
-    },
   }),
 }));
 vi.mock("../integrations/postgres-vercel-installation", () => ({
   readActiveVercelInstallationToken: async () => ({
+    binding: { active: true, scopeId: "team-fixture", scopeType: "team" },
     token: "fixture-token",
-    binding: { active: true, scopeType: "team", scopeId: "team-fixture" },
   }),
 }));
 vi.mock("./native-target-vercel-provider", () => ({
   observeNativeTargetVercelProject: async () => ({ status: "verified" }),
 }));
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-fixture",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner-fixture",
+  workspaceId: "workspace-fixture",
 };
 const historyOwner = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: 1,
+  adapterSessionId: "saved-adapter",
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: "saved-session",
-  adapterSessionId: "saved-adapter",
-  adapterGeneration: 1,
 });
 const appId = "signup-pilot";
 const teamId = "team-fixture";
@@ -163,36 +164,38 @@ const source = {
   reviewDigest: "f".repeat(64),
 };
 const authDatabase = {
-  resourceId: "isolated-auth",
   database: "pilot_auth",
   migratorRole: "pilot_migrator",
+  resourceId: "isolated-auth",
   runtimeRole: "pilot_runtime",
 };
 const authSchema = {
   artifactRef: "auth-artifact",
+  installer: { reference: "auth-worker", sha256: "4".repeat(64) },
   planDigest: "2".repeat(64),
   targetDigest: "3".repeat(64),
-  installer: { reference: "auth-worker", sha256: "4".repeat(64) },
 };
 const registration = {
-  projectId: "prj-created",
   branch: source.branch,
   ownerUserId: authority.ownerUserId,
+  projectId: "prj-created",
   sessionId: historyOwner.sessionId,
 };
 const profile = {
-  teamId,
   authDatabase,
   authOnlyApplications: { [appId]: { accessRoles: ["pilot_user"], registration } },
+  gateway: {
+    authBrowserOrigin: "https://auth.example",
+    branch: "preview-fixture",
+    environment: "preview",
+    gatewayOrigin: "https://gateway.example",
+    gitSha: "8".repeat(40),
+    projectId: "gateway-fixture",
+    publicOrigin: "https://apps.example",
+    repoId: "gateway-repo",
+    workload: { projectId: "gateway-fixture" },
+  },
   nativeNeon: {
-    scope: {
-      endpointId: "ep-pilot",
-      hostname: "ep-pilot.neon.tech",
-      projectId: "pilot-project",
-      branchId: "pilot-branch",
-      maintenanceDatabase: "neondb",
-      maintenanceRole: "bootstrap_owner",
-    },
     configuration: {
       connector: "neon-owned",
       nativeStore: {
@@ -201,132 +204,120 @@ const profile = {
         sourceProjectId: "prj-anchor",
       },
       operator: {
-        projectId: "prj-operator",
-        ownerId: teamId,
+        audience: "https://vercel.com/fixture",
         environment: "preview",
         issuer: "https://oidc.vercel.com/fixture",
-        audience: "https://vercel.com/fixture",
+        ownerId: teamId,
+        projectId: "prj-operator",
       },
     },
-  },
-  gateway: {
-    projectId: "gateway-fixture",
-    environment: "preview",
-    branch: "preview-fixture",
-    repoId: "gateway-repo",
-    gitSha: "8".repeat(40),
-    authBrowserOrigin: "https://auth.example",
-    gatewayOrigin: "https://gateway.example",
-    publicOrigin: "https://apps.example",
-    workload: { projectId: "gateway-fixture" },
+    scope: {
+      branchId: "pilot-branch",
+      endpointId: "ep-pilot",
+      hostname: "ep-pilot.neon.tech",
+      maintenanceDatabase: "neondb",
+      maintenanceRole: "bootstrap_owner",
+      projectId: "pilot-project",
+    },
   },
   operator: {
-    projectId: "operator-fixture",
     environment: "preview",
     origin: "https://operator.example",
+    projectId: "operator-fixture",
   },
   sandbox: {
     authWorker: { id: authSchema.installer.reference, sha256: authSchema.installer.sha256 },
     resourcesWorker: { id: "neon-resource-bootstrap-v1", sha256: "5".repeat(64) },
   },
+  teamId,
 };
 const selected = profile as unknown as HostedOperatorSourceConfiguration;
 const plan = planNativeTargetAuthOnly({
+  authAuthorityBinding: {
+    authDatabase,
+    gateway: profile.gateway,
+    nativeNeon: profile.nativeNeon,
+    operator: profile.operator,
+  },
+  authSchema,
+  capturedDescription: description,
+  configuredAppRoles: ["pilot_user"],
   owner: {
+    adapterGeneration: 1,
+    adapterSessionId: historyOwner.adapterSessionId,
     authority,
     publicSessionId: historyOwner.sessionId,
-    adapterSessionId: historyOwner.adapterSessionId,
-    adapterGeneration: 1,
   },
   proposal: {
     appId,
-    authProfileId: "pilot-auth",
-    branch: source.branch,
     appRole: "pilot_user",
     appSpecDigest: "a".repeat(64),
-    project: { name: appId, teamId, installationId: "install-fixture" },
+    authProfileId: "pilot-auth",
+    branch: source.branch,
+    project: { installationId: "install-fixture", name: appId, teamId },
   },
-  capturedDescription: description,
-  selectedProfile: { appId, id: "pilot-auth", authority, configuration: { authDatabase } },
+  publishedSource: source,
+  selectedPhysicalEndpointId: profile.nativeNeon.scope.endpointId,
+  selectedProfile: { appId, authority, configuration: { authDatabase }, id: "pilot-auth" },
   sharedAuthResourceId: "shared-auth",
   sharedPhysicalEndpointId: "shared-endpoint",
-  selectedPhysicalEndpointId: profile.nativeNeon.scope.endpointId,
-  authAuthorityBinding: {
-    authDatabase,
-    nativeNeon: profile.nativeNeon,
-    gateway: profile.gateway,
-    operator: profile.operator,
-  },
-  configuredAppRoles: ["pilot_user"],
-  publishedSource: source,
-  authSchema,
 });
 const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
 const operationRef = nativeTargetAuthOnlyCredentialOperationRef(plan);
-const resourceBytes = buildNativeTargetAuthOnlyResourcePlanBytes({ plan, selected, registration });
+const resourceBytes = buildNativeTargetAuthOnlyResourcePlanBytes({ plan, registration, selected });
 const resourcePlanDigest = nativeTargetAuthOnlyResourcePlanDigest(resourceBytes);
-const resourcePlan = JSON.parse(resourceBytes.toString("utf8"));
+const resourcePlan = JSON.parse(resourceBytes.toString("utf-8"));
 const schemaApproval = {
-  requestId: "schema-request",
   callId: "original-schema-call",
-  planDigest,
-  sourceDigest: nativeTargetAuthOnlySchemaEffectDigest(plan, source),
-  responderPrincipalId: authority.ownerUserId,
-  publicSessionId: historyOwner.sessionId,
-  outcome: "approved" as const,
   observedAt: "2026-11-06T12:00:00.000Z",
+  outcome: "approved" as const,
+  planDigest,
+  publicSessionId: historyOwner.sessionId,
+  requestId: "schema-request",
+  responderPrincipalId: authority.ownerUserId,
+  sourceDigest: nativeTargetAuthOnlySchemaEffectDigest(plan, source),
 };
 const common = {
-  ownerContext: historyOwner,
   adapterSessionId: historyOwner.adapterSessionId,
   callId: "different-retry-call",
+  ownerContext: historyOwner,
 };
 const verifyWorkload = vi.fn();
 const assertCanonicalAppOwner = vi.fn();
 
 const deliveryBytes = buildNativeTargetAuthOnlyDeliveryPlanBytes({
   plan,
-  selected,
   registration,
   resourcePlanBytes: resourceBytes,
   resourcePlanDigest,
+  selected,
 });
 const deliveryPlanDigest = nativeTargetAuthOnlyDeliveryPlanDigest(deliveryBytes);
 const deliveryInput = {
   appId,
+  deliveryPlan: JSON.parse(deliveryBytes.toString("utf8")),
+  deliveryPlanDigest,
   operationRef,
   planDigest,
   resourcePlanDigest,
-  deliveryPlanDigest,
-  deliveryPlan: JSON.parse(deliveryBytes.toString("utf8")),
 };
 const deliveryApproval = {
   ...schemaApproval,
-  requestId: "delivery-approval",
   callId: "original-delivery-call",
   planDigest: deliveryPlanDigest,
+  requestId: "delivery-approval",
   sourceDigest: deliveryPlanDigest,
 };
-type JournalRow = {
+interface JournalRow {
   requestId: string;
   requestDigest: string;
   revision: number;
   record: unknown;
   state: string;
-};
+}
 const rows = new Map<string, JournalRow>();
 const params = (where: SQL) => new PgDialect().sqlToQuery(where).params;
 const database = {
-  select: () => ({
-    from: () => ({
-      where: (where: SQL) => ({
-        limit: async () => {
-          const row = rows.get(String(params(where)[4]));
-          return row === undefined ? [] : [structuredClone(row)];
-        },
-      }),
-    }),
-  }),
   insert: () => ({
     values: (row: JournalRow) => ({
       onConflictDoNothing: async () => {
@@ -336,6 +327,16 @@ const database = {
         expect(["pending", "settled"]).toContain(row.state);
         if (!rows.has(row.requestId)) rows.set(row.requestId, structuredClone(row));
       },
+    }),
+  }),
+  select: () => ({
+    from: () => ({
+      where: (where: SQL) => ({
+        limit: async () => {
+          const row = rows.get(String(params(where)[4]));
+          return row === undefined ? [] : [structuredClone(row)];
+        },
+      }),
     }),
   }),
   update: () => ({
@@ -357,41 +358,41 @@ const database = {
 const routePlanBytes = (value: { gateway: unknown; app: { deploymentId: string } }) =>
   Buffer.from(
     JSON.stringify({
-      version: 1,
-      kind: "native-target-auth-only-final-routing",
-      operationRef: "33333333-3333-4333-a333-333333333333",
+      app: value.app,
+      bootstrap: value.gateway,
       deliveryOperationRef: operationRef,
       deliveryPlanDigest,
-      target: deliveryInput.deliveryPlan.target,
       gateway: {
-        projectId: selected.gateway.projectId,
-        repoId: selected.gateway.repoId,
         branch: selected.gateway.branch,
         gitRef: selected.gateway.branch,
         gitSha: selected.gateway.gitSha,
-        publicOrigin: selected.gateway.publicOrigin,
-      },
-      bootstrap: value.gateway,
-      app: value.app,
-      source: {
-        environment: "preview",
-        ownerId: teamId,
         projectId: selected.gateway.projectId,
-        audience: "https://vercel.com/fixture",
-        issuer: "https://oidc.vercel.com/fixture",
-        subject: "gateway",
         publicOrigin: selected.gateway.publicOrigin,
+        repoId: selected.gateway.repoId,
       },
+      kind: "native-target-auth-only-final-routing",
+      operationRef: "33333333-3333-4333-a333-333333333333",
       projection: {
-        operationRef,
+        appDeploymentId: value.app.deploymentId,
         deliveryPlanDigest,
         gatewayProjectId: selected.gateway.projectId,
-        physicalBranch: selected.gateway.branch,
-        rowId: "env-projection",
-        appDeploymentId: value.app.deploymentId,
-        priorSha256: "1".repeat(64),
         nextSha256: "2".repeat(64),
+        operationRef,
+        physicalBranch: selected.gateway.branch,
+        priorSha256: "1".repeat(64),
+        rowId: "env-projection",
       },
+      source: {
+        audience: "https://vercel.com/fixture",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/fixture",
+        ownerId: teamId,
+        projectId: selected.gateway.projectId,
+        publicOrigin: selected.gateway.publicOrigin,
+        subject: "gateway",
+      },
+      target: deliveryInput.deliveryPlan.target,
+      version: 1,
     }),
   );
 const request = async (
@@ -401,35 +402,35 @@ const request = async (
   authOnlyFinalRoutingAuthority?: NativeTargetAuthOnlyFinalRoutingAuthority,
 ) =>
   await createNativeTargetOnboardingDeployment({
-    database: database as never,
-    configuration: { applications: {} } as HostedOperatorSourceConfiguration,
-    environment: {},
-    owner: {
-      verifyWorkload,
-      assertCanonicalAppOwner,
-      assertNoStandardBuilderDestination: async () => {},
-    },
-    builderOrigin: "https://builder.example",
     authOnlyEntryAuthority,
     authOnlyFinalRoutingAuthority,
+    builderOrigin: "https://builder.example",
+    configuration: { applications: {} } as HostedOperatorSourceConfiguration,
+    database: database as never,
+    environment: {},
+    owner: {
+      assertCanonicalAppOwner,
+      assertNoStandardBuilderDestination: async () => {},
+      verifyWorkload,
+    },
     ...(ports
       ? {
-          authOnlyPrepareFinalRoutingPlan: async (value) => routePlanBytes(value),
+          authOnlyAfterGatewayReady: async (value: NativeTargetAuthOnlyAfterGatewayReadyInput) =>
+            await mock.gate(value),
           authOnlyDeliveryEnvironment: async (
             value: NativeTargetAuthOnlyDeliveryEnvironmentInput,
           ) => await mock.environment(value),
-          authOnlyAfterGatewayReady: async (value: NativeTargetAuthOnlyAfterGatewayReadyInput) =>
-            await mock.gate(value),
+          authOnlyPrepareFinalRoutingPlan: async (value) => routePlanBytes(value),
         }
       : {}),
   })(
     new Request("https://operator.example/v1/native-target", {
-      method: "POST",
       headers: { authorization: "Bearer workload-fixture" },
+      method: "POST",
     }),
     action,
   );
-const planRequest = () =>
+const planRequest = async () =>
   request({
     ...common,
     action: "native-target-auth-only-delivery-plan",
@@ -440,11 +441,11 @@ beforeEach(() => {
   rows.clear();
   mock.readDispatch.mockResolvedValue({
     state: {
-      stage: "created",
-      planDigest,
-      plan,
-      projectId: registration.projectId,
       approval: schemaApproval,
+      plan,
+      planDigest,
+      projectId: registration.projectId,
+      stage: "created",
     },
   });
   mock.readPlan.mockResolvedValue(plan);
@@ -454,14 +455,14 @@ beforeEach(() => {
   mock.readPublishedSource.mockResolvedValue(source);
   mock.readRuntime.mockResolvedValue({
     state: {
-      stage: "prepared",
-      planDigest,
-      plan,
       authSchema: {
         artifactRef: authSchema.artifactRef,
         planDigest: authSchema.planDigest,
         targetDigest: authSchema.targetDigest,
       },
+      plan,
+      planDigest,
+      stage: "prepared",
     },
   });
   mock.readApproval.mockImplementation(async (input) => {
@@ -469,24 +470,24 @@ beforeEach(() => {
     return deliveryApproval;
   });
   mock.gate.mockResolvedValue({
-    status: "ready",
     organizationId: "pilot-org",
     signupPolicyDigest: "f".repeat(64),
+    status: "ready",
   });
   mock.reconcile.mockImplementation(
     async (target: string, context: NativeTargetAuthOnlyPreviewDeliveryInput) => {
       const source = target === "gateway" ? context.plan.gatewayDelivery! : context.plan.delivery!;
       const selected = {
-        operationRef: context.operationRef,
-        projectId: source.projectId,
-        deploymentId: `dpl-${target}`,
         branch: source.branch,
-        repoId: source.repoId,
+        deploymentId: `dpl-${target}`,
+        operationRef: context.operationRef,
         origin: `https://${target}.example`,
+        projectId: source.projectId,
         readyState: "READY",
+        repoId: source.repoId,
       };
       await context.checkpointDelivery([selected]);
-      return { status: "applied", candidates: [selected], selected };
+      return { candidates: [selected], selected, status: "applied" };
     },
   );
 });
@@ -527,15 +528,15 @@ it("returns verified Gateway/app receipts after the real route preserves owner, 
     input: deliveryInput,
   });
   expect(await response.json()).toMatchObject({
-    status: "routing-required",
+    app: { projectId: registration.projectId, readyState: "READY" },
     deliveryPlanDigest,
     gateway: { projectId: selected.gateway.projectId, readyState: "READY" },
-    app: { projectId: registration.projectId, readyState: "READY" },
+    status: "routing-required",
   });
   expect(mock.environment.mock.calls.map(([value]) => value.effect)).toEqual(["gateway", "app"]);
   expect(mock.gate.mock.calls[0][0]).toMatchObject({
-    gateway: { readyState: "READY", projectId: selected.gateway.projectId },
     deliveryPlanDigest,
+    gateway: { projectId: selected.gateway.projectId, readyState: "READY" },
     operationRef,
   });
   expect(
@@ -547,9 +548,9 @@ it("returns verified Gateway/app receipts after the real route preserves owner, 
 it("publishes only owner-link fields and never enters app delivery before confirmation", async () => {
   await planRequest();
   const pending = {
-    status: "pending-owner",
     authIdentityLink: "https://gateway.example/confirm",
     authIdentityLinkExpiresAt: new Date(Date.now() + 60000).toISOString(),
+    status: "pending-owner",
   };
   mock.gate.mockResolvedValue(pending);
   expect(
@@ -563,9 +564,10 @@ it.each(["source", "registration", "resource", "runtime", "owner"])(
   "denies %s drift before provider delivery",
   async (kind) => {
     await planRequest();
-    if (kind === "source")
+    if (kind === "source") {
       mock.readPublishedSource.mockResolvedValue({ ...source, gitSha: "9".repeat(40) });
-    if (kind === "registration")
+    }
+    if (kind === "registration") {
       mock.resolveRegistered.mockResolvedValue({
         ...selected,
         authOnlyApplications: {
@@ -575,9 +577,16 @@ it.each(["source", "registration", "resource", "runtime", "owner"])(
           },
         },
       });
-    if (kind === "resource") mock.readResource.mockResolvedValue(undefined);
-    if (kind === "runtime") mock.readRuntime.mockResolvedValue({ state: { stage: "unknown" } });
-    if (kind === "owner") assertCanonicalAppOwner.mockRejectedValue(new Error("owner revoked"));
+    }
+    if (kind === "resource") {
+      mock.readResource.mockResolvedValue(undefined);
+    }
+    if (kind === "runtime") {
+      mock.readRuntime.mockResolvedValue({ state: { stage: "unknown" } });
+    }
+    if (kind === "owner") {
+      assertCanonicalAppOwner.mockRejectedValue(new Error("owner revoked"));
+    }
     await expect(
       request({ ...common, action: "native-target-auth-only-delivery", input: deliveryInput }),
     ).rejects.toThrow();
@@ -594,9 +603,9 @@ it("requires the retained delivery bytes even when supplied approval input looks
 const startOwnerPending = async () => {
   await planRequest();
   mock.gate.mockResolvedValue({
-    status: "pending-owner",
     authIdentityLink: "https://gateway.example/confirm",
     authIdentityLinkExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    status: "pending-owner",
   });
   await request({ ...common, action: "native-target-auth-only-delivery", input: deliveryInput });
 };
@@ -613,62 +622,58 @@ const childAuthority =
     const proof = "private-proof-fixture";
     const proofSha256 = createHash("sha256").update(proof).digest("hex");
     const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse({
-      authority,
-      target: value.target,
-      operationRef,
-      authOnlyPlanDigest: planDigest,
-      resourcePlanDigest,
-      gatewayDeliveryPlanDigest: deliveryPlanDigest,
-      gateway: value.gateway,
-      sender: {
-        issuer: "https://oidc.vercel.com/fixture",
-        audience: "https://vercel.com/fixture",
-        projectId: value.gateway.projectId,
-        ownerId: teamId,
-        subject: "owner:fixture:project:gateway:environment:preview",
-        environment: "preview",
-      },
-      browserOrigin: selected.gateway.authBrowserOrigin,
-      issuer: selected.gateway.publicOrigin,
       audience: selected.operator.origin,
+      authOnlyPlanDigest: planDigest,
       authResourceId: authDatabase.resourceId,
+      authority,
       bootstrapResource: {
         database: authDatabase.database,
-        runtimeRole: authDatabase.runtimeRole,
-        migratorRole: authDatabase.migratorRole,
-        version: 1,
         environment: "preview",
-        port: 5432,
-        schema: "public",
         hostname: profile.nativeNeon.scope.hostname,
+        migratorRole: authDatabase.migratorRole,
         neon: {
-          projectId: profile.nativeNeon.scope.projectId,
           branchId: profile.nativeNeon.scope.branchId,
+          projectId: profile.nativeNeon.scope.projectId,
         },
+        port: 5432,
+        runtimeRole: authDatabase.runtimeRole,
+        schema: "public",
+        version: 1,
       },
+      browserOrigin: selected.gateway.authBrowserOrigin,
+      gateway: value.gateway,
+      gatewayDeliveryPlanDigest: deliveryPlanDigest,
+      issuer: selected.gateway.publicOrigin,
+      operationRef,
+      resourcePlanDigest,
+      sender: {
+        audience: "https://vercel.com/fixture",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/fixture",
+        ownerId: teamId,
+        projectId: value.gateway.projectId,
+        subject: "owner:fixture:project:gateway:environment:preview",
+      },
+      target: value.target,
     });
     const captured = {
       audience: binding.audience,
-      issuer: binding.issuer,
       authResourceId: binding.authResourceId,
       bootstrapPlanDigest: resourcePlanDigest,
       browserOrigin: binding.browserOrigin,
+      consumedAt: schemaApproval.observedAt,
       endpointOrigin: value.gateway.origin,
+      expiresAt: schemaApproval.observedAt,
+      issuer: binding.issuer,
+      nonceSha256: "e".repeat(64),
       organizationId: null,
       ownerSessionId: binding.target.sessionId,
-      consumedAt: schemaApproval.observedAt,
-      expiresAt: schemaApproval.observedAt,
-      nonceSha256: "e".repeat(64),
       proofRef: "private-reference",
       proofSha256,
     };
     const identity = { actorId: "realm-owner", realmSessionId: "realm-session" };
     const jwksUrl = `${value.gateway.origin}/_platform/jwks.json`;
     return {
-      readReadyBinding: async () => ({
-        binding,
-        sandbox: { image: "fixture", teamId, projectId: "operator-fixture", workers: {} },
-      }),
       ownerLink: {
         prepare: async () => ({
           status: "linked",
@@ -677,13 +682,64 @@ const childAuthority =
         }),
         readCaptured: async () => (consumed ? captured : undefined),
       },
+      readCredentials: async () => ({ migrationUrl: "private-migrator" }),
       readCurrentOwnerProof: async () => ({
         ...identity,
         reference: captured.proofRef,
         proof,
         oidcToken: "private-oidc",
       }),
-      readCredentials: async () => ({ migrationUrl: "private-migrator" }),
+      readOrganizationPlan: async () =>
+        authOnlyOrganizationPlanSchema.parse({
+          version: 1,
+          action: "prepare",
+          authDatabase,
+          neon: { ...binding.bootstrapResource.neon, endpoint: binding.bootstrapResource.hostname },
+          selection: { sessionId: historyOwner.sessionId, workspaceId: authority.workspaceId },
+          deploymentBoundary: {
+            teamId,
+            operator: { projectId: "operator-fixture", environment: "preview" },
+            verification: {
+              publicOrigin: binding.issuer,
+              gatewayOrigin: value.gateway.origin,
+              jwksUrl,
+            },
+          },
+          authMembership: {
+            kind: "create-owned-organization",
+            name: "Pilot",
+            slug: "pilot",
+            organizationId: "pilot-org",
+            actorId: identity.actorId,
+            bootstrapPlanDigest: resourcePlanDigest,
+            identityCapture: {
+              capturedAt: captured.consumedAt,
+              realmSessionId: identity.realmSessionId,
+            },
+            identityNonceSha256: captured.nonceSha256,
+            identityProof: { reference: captured.proofRef, sha256: proofSha256 },
+            identityVerification: {
+              audience: binding.audience,
+              issuer: binding.issuer,
+              jwksUrl,
+              transportSource: {
+                audience: "https://vercel.com/fixture",
+                issuer: "https://oidc.vercel.com/fixture",
+                projectId: "operator-fixture",
+                ownerId: teamId,
+                environment: "preview",
+              },
+            },
+          },
+          effects: [
+            { kind: "auth-membership", id: "auth-membership", resourceId: authDatabase.resourceId },
+          ],
+          membershipInstaller: { reference: "auth-owned-organization-v1", sha256: "f".repeat(64) },
+        }),
+      readReadyBinding: async () => ({
+        binding,
+        sandbox: { image: "fixture", teamId, projectId: "operator-fixture", workers: {} },
+      }),
       readSignupPolicy: async () =>
         policyApplied() ? { status: "applied", policyDigest } : { status: "absent" },
       readSignupPolicyPlan: async (_scope, organizationId) =>
@@ -733,53 +789,6 @@ const childAuthority =
             sha256: "f".repeat(64),
           },
         }),
-      readOrganizationPlan: async () =>
-        authOnlyOrganizationPlanSchema.parse({
-          version: 1,
-          action: "prepare",
-          authDatabase,
-          neon: { ...binding.bootstrapResource.neon, endpoint: binding.bootstrapResource.hostname },
-          selection: { sessionId: historyOwner.sessionId, workspaceId: authority.workspaceId },
-          deploymentBoundary: {
-            teamId,
-            operator: { projectId: "operator-fixture", environment: "preview" },
-            verification: {
-              publicOrigin: binding.issuer,
-              gatewayOrigin: value.gateway.origin,
-              jwksUrl,
-            },
-          },
-          authMembership: {
-            kind: "create-owned-organization",
-            name: "Pilot",
-            slug: "pilot",
-            organizationId: "pilot-org",
-            actorId: identity.actorId,
-            bootstrapPlanDigest: resourcePlanDigest,
-            identityCapture: {
-              capturedAt: captured.consumedAt,
-              realmSessionId: identity.realmSessionId,
-            },
-            identityNonceSha256: captured.nonceSha256,
-            identityProof: { reference: captured.proofRef, sha256: proofSha256 },
-            identityVerification: {
-              audience: binding.audience,
-              issuer: binding.issuer,
-              jwksUrl,
-              transportSource: {
-                audience: "https://vercel.com/fixture",
-                issuer: "https://oidc.vercel.com/fixture",
-                projectId: "operator-fixture",
-                ownerId: teamId,
-                environment: "preview",
-              },
-            },
-          },
-          effects: [
-            { kind: "auth-membership", id: "auth-membership", resourceId: authDatabase.resourceId },
-          ],
-          membershipInstaller: { reference: "auth-owned-organization-v1", sha256: "f".repeat(64) },
-        }),
     };
   };
 const planChild = async (ports: NativeTargetAuthOnlyEntryAuthority) =>
@@ -821,8 +830,8 @@ it("returns the approved organization only after worker readback, with no signup
   const child = await planChild(ports);
   mock.readEntryApproval.mockResolvedValue({
     ...deliveryApproval,
-    requestId: "child-request",
     callId: "original-child-call",
+    requestId: "child-request",
     sourceDigest: child.childPlanDigest,
   });
   mock.runOrganization
@@ -835,10 +844,10 @@ it("returns the approved organization only after worker readback, with no signup
     ports,
   );
   expect(await response.json()).toEqual({
-    status: "prepared",
-    effect: child.effect,
     childOperationRef: child.childOperationRef,
     childPlanDigest: child.childPlanDigest,
+    effect: child.effect,
+    status: "prepared",
   });
   expect(mock.runOrganization.mock.calls.map(([, worker]) => worker.readbackOnly === true)).toEqual(
     [true, false, true],
@@ -865,11 +874,11 @@ it("requires the independently observed organization before the signup child can
   expect(JSON.stringify(signup)).not.toContain("private-pilot");
   mock.readEntryApproval.mockImplementation(async ({ approvalInput }) => ({
     ...deliveryApproval,
-    requestId: `request-${approvalInput.effect}`,
     callId: `call-${approvalInput.effect}`,
+    requestId: `request-${approvalInput.effect}`,
     sourceDigest: approvalInput.childPlanDigest,
   }));
-  const runSignup = () =>
+  const runSignup = async () =>
     request(
       {
         ...common,
@@ -894,16 +903,16 @@ it("requires the independently observed organization before the signup child can
     .digest("hex");
   mock.runSignupPolicy.mockImplementation(async (_sandbox, worker) => {
     if (worker.readbackOnly === true) {
-      return { status: "applied", readback_sha256: attestation };
+      return { readback_sha256: attestation, status: "applied" };
     }
     policyApplied = true;
     return null;
   });
   expect(await (await runSignup()).json()).toEqual({
-    status: "prepared",
-    effect: "signup-policy",
     childOperationRef: signup.childOperationRef,
     childPlanDigest: signup.childPlanDigest,
+    effect: "signup-policy",
+    status: "prepared",
   });
   expect(mock.runOrganization.mock.calls.every(([, worker]) => worker.readbackOnly === true)).toBe(
     true,
@@ -920,8 +929,8 @@ it("keeps a competing child request outside the saved delivery lease", async () 
   const child = await planChild(ports);
   mock.readEntryApproval.mockResolvedValue({
     ...deliveryApproval,
-    requestId: "child-request",
     callId: "original-child-call",
+    requestId: "child-request",
     sourceDigest: child.childPlanDigest,
   });
   const entered = Promise.withResolvers<void>();
@@ -931,7 +940,7 @@ it("keeps a competing child request outside the saved delivery lease", async () 
     await resume.promise;
     return { status: "applied" };
   });
-  const run = () =>
+  const run = async () =>
     request({ ...common, action: "native-target-auth-only-entry", input: child }, true, ports);
   const first = run();
   await entered.promise;
@@ -946,10 +955,10 @@ it("keeps a competing child request outside the saved delivery lease", async () 
 });
 
 const routingAuthority = (): NativeTargetAuthOnlyFinalRoutingAuthority => ({
-  preparePlan: async (value) => routePlanBytes(value),
   assertCatalogApp: async (value) => {
     await value.environment.assertCurrent();
   },
+  preparePlan: async (value) => routePlanBytes(value),
   withGatewayLease: async (value, run) => {
     await value.environment.assertCurrent();
     const snapshot = await value.readCurrentFence();
@@ -969,9 +978,9 @@ const approveRouting = () =>
     await input.assertOwner();
     return {
       ...deliveryApproval,
-      requestId: "routing-approval",
       callId: "routing-call",
       planDigest: input.approvalInput.routingPlanDigest,
+      requestId: "routing-approval",
       sourceDigest: input.approvalInput.routingPlanDigest,
     };
   });
@@ -984,12 +993,12 @@ const mountSuccessfulRouting = () =>
     await input.assertCurrent();
     const retained = await deps.store.read();
     const plan = JSON.parse(input.routingPlanBytes.toString());
-    expect(await deps.readRetainedParent()).toEqual({ bootstrap: plan.bootstrap, app: plan.app });
+    expect(await deps.readRetainedParent()).toEqual({ app: plan.app, bootstrap: plan.bootstrap });
     await deps.assertCatalogApp(input.projection);
     const gateway = {
       ...plan.bootstrap,
-      operationRef: plan.operationRef,
       deploymentId: "dpl-final-gateway",
+      operationRef: plan.operationRef,
       origin: "https://final-gateway.vercel.app",
     };
     await deps.store.compareAndSet(retained.revision, {
@@ -1001,10 +1010,10 @@ const mountSuccessfulRouting = () =>
     });
     await input.assertCurrent();
     return {
-      status: "prepared",
-      gateway,
       app: plan.app,
+      gateway,
       projectionDigest: plan.projection.nextSha256,
+      status: "prepared",
     };
   });
 it("normal delivery retains one digest-only routing invitation and final plan/approval reads never revisit bootstrap", async () => {
@@ -1018,7 +1027,7 @@ it("normal delivery retains one digest-only routing invitation and final plan/ap
     await request({
       ...common,
       action: "native-target-auth-only-final-routing-plan",
-      input: { appId, operationRef, deliveryPlanDigest },
+      input: { appId, deliveryPlanDigest, operationRef },
     })
   ).json();
   expect(plan).toEqual(initial.finalRoutingPlan);
@@ -1063,12 +1072,12 @@ it("mounts the separately approved routing coordinator, retains final receipt, a
     )
   ).json();
   expect(execute).toMatchObject({
-    status: "prepared",
     deliveryPlanDigest,
     gateway: {
       deploymentId: "dpl-final-gateway",
       operationRef: initial.finalRoutingPlan.routingOperationRef,
     },
+    status: "prepared",
   });
   expect((routingRecord().record as { phase: string }).phase).toBe("prepared");
   expect(
@@ -1120,11 +1129,12 @@ it.each(["unknown-final", "running-final"])(
     const row = routingRecord();
     const record = row.record as { phase: string; lease?: { id: string; expiresAt: string } };
     record.phase = phase;
-    if (phase === "running-final")
+    if (phase === "running-final") {
       record.lease = {
         id: "55555555-5555-4555-a555-555555555555",
         expiresAt: "2020-01-01T00:00:00.000Z",
       };
+    }
     mountSuccessfulRouting();
     expect(
       await (
@@ -1137,7 +1147,7 @@ it.each(["unknown-final", "running-final"])(
       ).json(),
     ).toMatchObject({ status: "prepared" });
     expect(mock.reconcile.mock.calls.map(([target]) => target)).toEqual(["gateway", "app"]);
-    const calls = mock.runRouting.mock.calls;
+    const { calls } = mock.runRouting.mock;
     expect(calls[0][1].routingPlanBytes.equals(calls[1][1].routingPlanBytes)).toBe(true);
     expect(calls[0][1].approval).toEqual(calls[1][1].approval);
   },
