@@ -16,6 +16,8 @@ import type { VercelTokenKeyringConfig } from "../integrations/vercel-installati
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const id = z.string().min(1);
+const recordKind = "public-release-runtime-configuration-v1";
+const normalizedHostname = (hostname: string) => hostname.replace(/-pooler(?=\.)/u, "");
 const origin = z
   .url()
   .refine((value) => new URL(value).protocol === "https:" && new URL(value).origin === value);
@@ -49,7 +51,7 @@ const sealedSchema = z.strictObject({
 });
 const valuesSchema = z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/u), z.string().min(1));
 const recordSchema = z.strictObject({
-  kind: z.literal("public-release-runtime-configuration-v1"),
+  kind: z.literal(recordKind),
   scope: publicReleaseRuntimeConfigurationScopeSchema,
   sealed: sealedSchema,
 });
@@ -57,12 +59,7 @@ const authResourceSchema = publicRealmResourceSchema.omit({ version: true });
 const unavailable = () => new Error("public_release_runtime_configuration_unavailable");
 const identity = (scope: PublicReleaseRuntimeConfigurationScope) => {
   const hash = createHash("sha256")
-    .update(
-      JSON.stringify([
-        "public-release-runtime-configuration-v1",
-        publicReleaseRuntimeConfigurationScopeSchema.parse(scope),
-      ]),
-    )
+    .update(JSON.stringify([recordKind, publicReleaseRuntimeConfigurationScopeSchema.parse(scope)]))
     .digest("hex");
   return {
     digest: hash,
@@ -92,7 +89,6 @@ export const createFreshPublicAuthValues = (input: {
   const production = /^(?<hostname>[a-z0-9.-]+\.neon\.tech)\/[^/]+$/u.exec(
     input.productionDatabaseIdentity,
   );
-  const normalized = (hostname: string) => hostname.replace(/-pooler(?=\.)/u, "");
   if (
     // oxlint-disable-next-line sonarjs/expression-complexity -- Dedicated restricted runtime and a different normalized production endpoint are mandatory together.
     resource.hostname !== runtime.hostname ||
@@ -100,7 +96,8 @@ export const createFreshPublicAuthValues = (input: {
     resource.runtimeRole !== decodeURIComponent(runtime.username) ||
     resource.runtimeRole === resource.migratorRole ||
     production === null ||
-    normalized(production.groups?.hostname ?? "") === normalized(runtime.hostname) ||
+    normalizedHostname(production.groups?.hostname ?? "") ===
+      normalizedHostname(runtime.hostname) ||
     !["postgres:", "postgresql:"].includes(runtime.protocol) ||
     !runtime.hostname.endsWith(".neon.tech") ||
     runtime.username === "" ||
@@ -155,7 +152,7 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
       eq(builderProvisioningJournals.workspaceId, scope.authority.workspaceId),
       eq(builderProvisioningJournals.ownerUserId, scope.authority.ownerUserId),
       eq(builderProvisioningJournals.requestId, identity(scope).ref),
-      sql`${builderProvisioningJournals.record}->>'kind' = 'public-release-runtime-configuration-v1'`,
+      sql`${builderProvisioningJournals.record}->>'kind' = ${recordKind}`,
     );
   const read = async (scopeInput: PublicReleaseRuntimeConfigurationScope) => {
     const scope = publicReleaseRuntimeConfigurationScopeSchema.parse(scopeInput);
@@ -225,7 +222,7 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
             ...scope.authority,
             createdAt: now,
             record: recordSchema.parse({
-              kind: "public-release-runtime-configuration-v1",
+              kind: recordKind,
               scope,
               sealed,
             }),

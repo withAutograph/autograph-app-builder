@@ -27,14 +27,13 @@ const event = (runId, slot, stepId, eventType = "step_completed", name = "turnSt
   eventType,
   runId,
 });
-const step = (runId, stepId, output, input) => ({
-  output,
-  runId,
-  status: "completed",
-  stepId,
-  stepName: "turnStep",
-  ...(input === undefined ? {} : { input: { args: [input] } }),
-});
+const step = (runId, stepId, output, input) => {
+  const result = { output, runId, status: "completed", stepId, stepName: "turnStep" };
+  if (input !== undefined) {
+    result.input = { args: [input] };
+  }
+  return result;
+};
 
 const fixture = () => {
   const runId = "prior-owner";
@@ -272,12 +271,13 @@ it("visits an older native handoff parent only after the receipt-bound run has n
   const f = fixture();
   f.steps.set("review", step(f.runId, "review", paired("validated")));
   const parent = "handoff-parent";
-  const older = event(parent, 1, "parent-review");
+  const parentReview = "parent-review";
+  const older = event(parent, 1, parentReview);
   const start = event(parent, 2, "parent-handoff", "step_started", "startSessionOwnerStep");
   f.events.push(older, start);
   f.steps.set(
-    "parent-review",
-    step(parent, "parent-review", paired("reviewed", { digest: "native-parent" })),
+    parentReview,
+    step(parent, parentReview, paired("reviewed", { digest: "native-parent" })),
   );
   f.options.visitPredecessors = async (visit) => {
     await visit({
