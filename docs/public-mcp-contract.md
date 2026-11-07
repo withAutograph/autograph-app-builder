@@ -39,6 +39,13 @@ setup and access; it does not itself grant consent. Unreadable setup input remai
 closed, and execution still requires the actual owner's settlement for the exact
 saved setup call.
 
+App access links retain the browser-requested public build handle after recovery.
+The authenticated web service resolves that build's verified lineage to its original
+app grant and current physical worker, never the owner's most recent unrelated
+build. Protected reads and commands keep that canonical grant/artifact scope;
+only the returned browser snapshot uses the requested public handle. The service
+rechecks ownership before returning the snapshot.
+
 App account linking is an ordinary browser sign-in, not an approval response.
 After approved Production setup requests identity, the public stream includes
 `auth_identity_invitation` with the safe sign-in URL and expiry. It exposes no
