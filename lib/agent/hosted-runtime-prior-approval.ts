@@ -210,19 +210,15 @@ export const createHostedRuntimePriorApprovalReader =
     ctx.abortSignal.throwIfAborted();
     await readOwned();
     if (shouldRestoreOriginalPlan(dependencies, current)) {
-      const restored = await operator.request(
-        {
-          action: "plan",
-          operation: "prepare",
-          selection,
-          ...(parsed.plan.normalActorProgram === undefined
-            ? {}
-            : {
-                normalActorProgram: parsed.plan.normalActorProgram,
-              }),
-        },
-        ctx.abortSignal,
-      );
+      const planInput: Parameters<typeof operator.request>[0] = {
+        action: "plan",
+        operation: "prepare",
+        selection,
+      };
+      if (parsed.plan.normalActorProgram !== undefined) {
+        planInput.normalActorProgram = parsed.plan.normalActorProgram;
+      }
+      const restored = await operator.request(planInput, ctx.abortSignal);
       ctx.abortSignal.throwIfAborted();
       await readOwned();
       if (!matchesRestoredApproval(restored, parsed)) {
@@ -250,7 +246,7 @@ type ApprovalStore = Pick<
   HostedEveStore,
   "getSession" | "recordPrivateApprovalReceipts" | "readCheckpointPage" | "readCurrentBuildSession"
 >;
-let deploymentStore: Promise<ApprovalStore> | undefined;
+let deploymentStore: Promise<ApprovalStore> | null = null;
 const openDeploymentStore = async (): Promise<ApprovalStore> => {
   const configuration = readHostedOperatorOwnerReaderConfiguration(process.env);
   const [{ openHostedPostgresDatabase }, { createPostgresHostedEveStore }] = await Promise.all([
@@ -269,7 +265,7 @@ export const openHostedRuntimeApprovalStore = async (): Promise<ApprovalStore> =
     store = await pendingStore;
   } catch (error) {
     if (deploymentStore === pendingStore) {
-      deploymentStore = undefined;
+      deploymentStore = null;
     }
     throw error;
   }
@@ -381,12 +377,15 @@ export const captureHostedRuntimeApproval = async (input: {
   const owner = operatorOwnerContextSchema.parse(input.ownerContext);
   const seed = await readApprovalCaptureSeed(input.store, owner, input.execution);
   input.signal.throwIfAborted();
-  const recorder = createPrivateHostedApprovalRecorder({
+  const recorderOptions: Parameters<typeof createPrivateHostedApprovalRecorder>[0] = {
     principal: owner.principal,
     sessionId: owner.sessionId,
     store: input.store,
-    ...(seed === null ? {} : { state: seed.capture }),
-  });
+  };
+  if (seed !== null) {
+    recorderOptions.state = seed.capture;
+  }
+  const recorder = createPrivateHostedApprovalRecorder(recorderOptions);
   const transport = createSameOriginEveTransport({
     config: { baseUrl: input.baseUrl },
     fetchImplementation: async (url, init) =>
@@ -419,8 +418,7 @@ export const captureHostedRuntimeApproval = async (input: {
   if (transport.observe === undefined) {
     throw new HostedOperatorError("operator_unavailable");
   }
-  await transport.observe({
-    ...(seed === null ? {} : { nativeObservationState: seed.native }),
+  const observationInput: Parameters<NonNullable<typeof transport.observe>>[0] = {
     adapterSessionId: owner.adapterSessionId,
     onEvent: () => {
       /* Only private approval events are captured here. */
@@ -429,7 +427,11 @@ export const captureHostedRuntimeApproval = async (input: {
     principal: owner.principal,
     readDeadline: true,
     sessionId: owner.sessionId,
-  });
+  };
+  if (seed !== null) {
+    observationInput.nativeObservationState = seed.native;
+  }
+  await transport.observe(observationInput);
   input.signal.throwIfAborted();
 };
 
