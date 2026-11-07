@@ -60,6 +60,14 @@ interface ProviderInput {
   fetch?: typeof fetch;
 }
 
+type CreateProjectBody = Pick<Project, "name"> &
+  Partial<
+    Pick<
+      Project,
+      "buildCommand" | "framework" | "oidcTokenConfig" | "rootDirectory" | "ssoProtection"
+    >
+  >;
+
 const queryFor = (installation: VercelInstallationBinding): string =>
   installation.scopeType === "team" ? `?teamId=${encodeURIComponent(installation.scopeId)}` : "";
 
@@ -170,19 +178,20 @@ export const createNativeTargetVercelProject = async (
   // Once dispatched, an exception or unreadable response is an unknown write.
   let response: Response;
   try {
+    const body: CreateProjectBody = { name: input.name };
+    body.framework = settings.framework;
+    body.rootDirectory = settings.rootDirectory;
+    // The create API rejects this update-only field. Independent readback below
+    // still requires its requested value before this project can be registered.
+    if (settings.buildCommand !== undefined) {
+      body.buildCommand = settings.buildCommand;
+    }
+    body.ssoProtection = protection.ssoProtection;
+    body.oidcTokenConfig = protection.oidcTokenConfig;
     response = await (input.fetch ?? fetch)(
       `https://api.vercel.com/v11/projects${queryFor(input.installation)}`,
       {
-        body: JSON.stringify({
-          name: input.name,
-          framework: settings.framework,
-          rootDirectory: settings.rootDirectory,
-          // The create API rejects this update-only field. Independent readback below
-          // still requires its requested value before this project can be registered.
-          ...(settings.buildCommand === undefined ? {} : { buildCommand: settings.buildCommand }),
-          ssoProtection: protection.ssoProtection,
-          oidcTokenConfig: protection.oidcTokenConfig,
-        }),
+        body: JSON.stringify(body),
         headers: {
           Accept: "application/json",
           Authorization: `Bearer ${input.token}`,

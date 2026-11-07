@@ -849,17 +849,18 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
               throw unavailable();
             }
             const gitBranch = await io.previewGitBranch();
+            interface EnvironmentScope {
+              comment: string;
+              gitBranch?: string;
+            }
+            const scope: EnvironmentScope = { comment: io.comment };
+            if (gitBranch !== null) {
+              scope.gitBranch = gitBranch;
+            }
             await io.request(
               `/v10/projects/${encodeURIComponent(io.target.projectId)}/env`,
               "POST",
-              {
-                comment: io.comment,
-                ...(gitBranch === null ? {} : { gitBranch }),
-                key,
-                target: ["preview"],
-                type: "encrypted",
-                value,
-              },
+              { ...scope, key, target: ["preview"], type: "encrypted", value },
             );
           }
           rows = await io.inspect(false, "readback");
