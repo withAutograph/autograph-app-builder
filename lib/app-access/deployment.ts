@@ -2,12 +2,14 @@ import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { openHostedPostgresDatabase } from "../db/hosted-postgres";
 import { createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
-import { toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
-import { operatorOwnerContextSchema } from "../provisioning/hosted-operator-contract";
+import { createHostedOperatorOwnerContextResolver } from "../provisioning/hosted-operator-owner-context";
+import { createPostgresBuilderHandoffStore } from "../handoff/postgres-store";
+import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
 import { AppAccessError, appAccessErrorStatus } from "./errors";
 import { createAppAccessOperatorClient } from "./operator-client";
 import { createAppAccessRouteHandler } from "./route";
+import { createAppAccessOwnerResolver } from "./owner";
 
 const createDeployment = (environment: NodeJS.ProcessEnv) => {
   const config = readPreviewOAuthRuntimeConfig(environment);
@@ -15,7 +17,19 @@ const createDeployment = (environment: NodeJS.ProcessEnv) => {
   if (endpoint === undefined || endpoint === "") {
     throw new AppAccessError("app_access_unavailable");
   }
-  const sessions = createPostgresHostedEveStore(openHostedPostgresDatabase(config.databaseUrl));
+  const database = openHostedPostgresDatabase(config.databaseUrl);
+  const sessions = createPostgresHostedEveStore(database);
+  const membership = createPostgresPreviewOrganizationAuthority(database, {
+    issuer: config.issuer,
+    audience: config.resource,
+  });
+  const resolveOwnerContext = createHostedOperatorOwnerContextResolver({
+    issuer: config.issuer,
+    audience: config.resource,
+    sessions,
+    handoffs: createPostgresBuilderHandoffStore(database),
+    isActiveMember: (authority) => membership.isActiveMember(authority),
+  });
   const operator = createAppAccessOperatorClient({
     endpoint,
     token: createVercelWorkloadIdentity().token,
@@ -23,49 +37,25 @@ const createDeployment = (environment: NodeJS.ProcessEnv) => {
   return createAppAccessRouteHandler({
     origin: new URL(config.issuer).origin,
     ...operator,
-    resolveOwner: async (request, sessionId) => {
-      const signedIn = await ensurePreviewOAuthDeploymentSessionOrganization({
-        headers: request.headers,
-        environment,
-      });
-      if (signedIn === null || signedIn === undefined) {
-        throw new AppAccessError("authentication_required");
-      }
-      const authority = {
-        issuer: config.issuer,
-        audience: config.resource,
-        ownerUserId: signedIn.user.id,
-        workspaceId: signedIn.organization.workspaceId,
-      };
-      const stored = await sessions.getSession(
-        { ...authority, scopes: ["autograph:session"] },
-        sessionId,
-      );
-      if (stored === null) {
-        throw new AppAccessError("app_access_denied");
-      }
-      const session = toDurableHostedSessionRecord(stored);
-      if (
-        session.appId === undefined ||
-        (["issuer", "audience", "ownerUserId", "workspaceId"] as const).some(
-          (key) => session.principal[key] !== authority[key],
-        )
-      ) {
-        throw new AppAccessError("app_access_denied");
-      }
-      // The operator independently reads this canonical session and checks current workspace authority.
-      const ownerContext = operatorOwnerContextSchema.parse({
-        authority,
-        principal: session.principal,
-        sessionId: session.sessionId,
-        adapterSessionId: session.adapterSessionId,
-        adapterGeneration: session.adapterGeneration,
-        ...(session.sourceHandoffId === undefined
-          ? { kind: "direct" }
-          : { kind: "handoff", sourceHandoffId: session.sourceHandoffId }),
-      });
-      return { appId: session.appId, sessionId: session.sessionId, ownerContext };
-    },
+    resolveOwner: createAppAccessOwnerResolver({
+      sessions,
+      resolveOwnerContext,
+      authenticate: async (request) => {
+        const signedIn = await ensurePreviewOAuthDeploymentSessionOrganization({
+          headers: request.headers,
+          environment,
+        });
+        if (signedIn === null || signedIn === undefined) {
+          return null;
+        }
+        return {
+          issuer: config.issuer,
+          audience: config.resource,
+          ownerUserId: signedIn.user.id,
+          workspaceId: signedIn.organization.workspaceId,
+        };
+      },
+    }),
   });
 };
 let handler: ReturnType<typeof createDeployment> | undefined;

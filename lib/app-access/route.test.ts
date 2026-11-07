@@ -29,6 +29,7 @@ const owner: AppAccessOwner = {
     principal: { ...authority, scopes: ["autograph:session"] },
   },
 };
+const routeOwner = { publicSessionId: owner.sessionId, operatorOwner: owner };
 const snapshot: AppAccessSnapshot = {
   sessionId: "session",
   appId: "expenses",
@@ -71,7 +72,7 @@ describe("session-owned app access route", () => {
     const execute = vi.fn(async () => snapshot);
     const handler = createAppAccessRouteHandler({
       origin,
-      resolveOwner: async () => owner,
+      resolveOwner: async () => routeOwner,
       read: vi.fn(),
       execute,
     });
@@ -84,7 +85,7 @@ describe("session-owned app access route", () => {
   it("does not disclose a response after owner access is revoked during a read", async () => {
     const resolveOwner = vi
       .fn()
-      .mockResolvedValueOnce(owner)
+      .mockResolvedValueOnce(routeOwner)
       .mockRejectedValueOnce(new AppAccessError("app_access_denied"));
     const handler = createAppAccessRouteHandler({
       origin,
@@ -103,7 +104,7 @@ describe("session-owned app access route", () => {
   it("rejects another app's response and never exposes provider diagnostics", async () => {
     const handler = createAppAccessRouteHandler({
       origin,
-      resolveOwner: async () => owner,
+      resolveOwner: async () => routeOwner,
       read: async () => ({ ...snapshot, appId: "other" }),
       execute: vi.fn(),
     });
@@ -114,7 +115,7 @@ describe("session-owned app access route", () => {
     expect(response.status).toBe(503);
     const failed = createAppAccessRouteHandler({
       origin,
-      resolveOwner: async () => owner,
+      resolveOwner: async () => routeOwner,
       read: async () => {
         throw new Error("postgres://secret@private");
       },
@@ -127,11 +128,26 @@ describe("session-owned app access route", () => {
     expect(await failedResponse.text()).not.toContain("secret");
   });
 
+  it("checks the canonical response before projecting a recovered public handle", async () => {
+    const handler = createAppAccessRouteHandler({
+      origin,
+      resolveOwner: async () => ({ publicSessionId: "child", operatorOwner: owner }),
+      read: async () => ({ ...snapshot, sessionId: "child" }),
+      execute: vi.fn(),
+    });
+    const response = await handler(
+      new Request(`${origin}/api/builder/sessions/child/access`),
+      "child",
+    );
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain("organizationName");
+  });
+
   it("streams a bounded command body even without a content-length header", async () => {
     const execute = vi.fn();
     const handler = createAppAccessRouteHandler({
       origin,
-      resolveOwner: async () => owner,
+      resolveOwner: async () => routeOwner,
       read: vi.fn(),
       execute,
     });
@@ -145,7 +161,7 @@ describe("session-owned app access route", () => {
     const execute = vi.fn();
     const handler = createAppAccessRouteHandler({
       origin,
-      resolveOwner: async () => owner,
+      resolveOwner: async () => routeOwner,
       read,
       execute,
     });

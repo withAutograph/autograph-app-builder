@@ -4,6 +4,12 @@ import type { AppAccessCommand, AppAccessSnapshot } from "./contracts";
 import type { AppAccessOwner } from "./operator-client";
 import { AppAccessError, appAccessErrorStatus } from "./errors";
 
+/** Public navigation remains separate from the canonical protected operator scope. */
+export interface AppAccessRouteOwner {
+  publicSessionId: string;
+  operatorOwner: AppAccessOwner;
+}
+
 const noStore = { "cache-control": "no-store" };
 
 // A bound on one untrusted HTTP command, not on app members or total operations.
@@ -43,7 +49,7 @@ const readCommand = async (request: Request): Promise<AppAccessCommand> => {
 export const createAppAccessRouteHandler =
   (input: {
     origin: string;
-    resolveOwner: (request: Request, sessionId: string) => Promise<AppAccessOwner>;
+    resolveOwner: (request: Request, sessionId: string) => Promise<AppAccessRouteOwner>;
     read: (owner: AppAccessOwner, cursor?: string) => Promise<AppAccessSnapshot>;
     execute: (owner: AppAccessOwner, command: AppAccessCommand) => Promise<AppAccessSnapshot>;
   }) =>
@@ -69,23 +75,27 @@ export const createAppAccessRouteHandler =
         }
         command = await readCommand(request);
       }
-      const owner = await input.resolveOwner(request, sessionId);
+      const resolved = await input.resolveOwner(request, sessionId);
+      if (resolved.publicSessionId !== sessionId) {
+        throw new AppAccessError("app_access_denied");
+      }
+      const owner = resolved.operatorOwner;
       const cursor = url.searchParams.get("cursor") ?? undefined;
       const snapshot = appAccessSnapshotSchema.parse(
         command === undefined
           ? await input.read(owner, cursor)
           : await input.execute(owner, command),
       );
-      if (snapshot.sessionId !== sessionId || snapshot.appId !== owner.appId) {
+      if (snapshot.sessionId !== owner.sessionId || snapshot.appId !== owner.appId) {
         throw new AppAccessError(
           command === undefined ? "app_access_unavailable" : "app_access_unknown",
         );
       }
       const current = await input.resolveOwner(request, sessionId);
-      if (!isDeepStrictEqual(current, owner)) {
+      if (!isDeepStrictEqual(current, resolved)) {
         throw new AppAccessError("app_access_denied");
       }
-      return Response.json(snapshot, { headers: noStore });
+      return Response.json({ ...snapshot, sessionId }, { headers: noStore });
     } catch (error) {
       const safe =
         error instanceof AppAccessError ? error : new AppAccessError("app_access_unavailable");

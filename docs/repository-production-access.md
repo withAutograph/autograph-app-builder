@@ -42,6 +42,11 @@ required. Every URL must match the configured direct endpoint, database, role
 and TLS policy; read-only SQL verifies the actual database and role before any
 worker receives credentials. Connection values and driver error details stay
 private. This path does not reuse a synthetic Preview connector or credential.
+Internal failure diagnostics distinguish authority, workload OIDC, each connection
+binding and SQL identity, encrypted credential decoding and Sandbox creation.
+They retain only fixed phase/code labels, allowlisted SQLSTATEs and numeric HTTP
+status. They never include connection values, exception text or causes, and
+cannot change authorization, retries, journal reconciliation or public responses.
 
 Production requires an explicit `authOperatorRole` distinct from the Auth schema
 owner (`authResource.migratorRole`) and runtime role. Its restricted permissions

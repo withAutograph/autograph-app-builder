@@ -3,6 +3,10 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
+  observeRepositoryProductionPhase,
+  reportRepositoryProductionFailure,
+} from "./repository-production-diagnostic";
+import {
   encryptVercelToken,
   decryptVersionedVercelToken,
 } from "../integrations/vercel-installation";
@@ -138,7 +142,9 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
           }),
         ),
       );
-    } catch {
+    } catch (error) {
+      reportRepositoryProductionFailure("credential_decode", "credentials_unavailable", error);
+      // oxlint-disable-next-line eslint/preserve-caught-error -- Keep the existing credential-safe exception without private parser or decryption causes.
       throw new Error("repository_production_credentials_unavailable");
     }
   };
@@ -160,8 +166,12 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       appRuntime: url(resource.runtimeRole, credentials.runtimePassword),
     };
   };
+  const assertCurrent = (context: RepositoryProductionEffectContext) =>
+    observeRepositoryProductionPhase("worker_authority", "authorization_unavailable", () =>
+      context.assertCurrent(),
+    );
   const creator = async (context: RepositoryProductionEffectContext) => {
-    await context.assertCurrent();
+    await assertCurrent(context);
     const proof = await deps.readCreator(context.row);
     if (
       "state" in proof ||
@@ -170,7 +180,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     ) {
       throw new Error("repository_production_identity_required");
     }
-    await context.assertCurrent();
+    await assertCurrent(context);
     return proof;
   };
   const run = async (
@@ -179,7 +189,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     readOnly: boolean,
     managedAccess?: { actorId: string; roles: string[]; active: boolean },
   ) => {
-    await context.assertCurrent();
+    await assertCurrent(context);
     const { row } = context;
     const { scope, intent, resource, lease } = row.record;
     if (!resource || !lease || intent.storage.kind !== "postgres") {
@@ -347,7 +357,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
         JSON.stringify({ token: connections.oidcToken }),
       );
     }
-    await context.assertCurrent();
+    await assertCurrent(context);
     return await (deps.runWorker ?? runRepositoryProductionFileSpool)(deps.profile.sandbox, {
       operation,
       worker,
@@ -394,7 +404,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     authAppAccess: z.infer<ReturnType<typeof z.json>>,
     readOnly: boolean,
   ) => {
-    await context.assertCurrent();
+    await assertCurrent(context);
     const { row } = context;
     const { scope, lease } = row.record;
     if (!lease) {

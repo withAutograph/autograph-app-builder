@@ -39,6 +39,13 @@ setup and access; it does not itself grant consent. Unreadable setup input remai
 closed, and execution still requires the actual owner's settlement for the exact
 saved setup call.
 
+App access links retain the browser-requested public build handle after recovery.
+The authenticated web service resolves that build's verified lineage to its original
+app grant and current physical worker, never the owner's most recent unrelated
+build. Protected reads and commands keep that canonical grant/artifact scope;
+only the returned browser snapshot uses the requested public handle. The service
+rechecks ownership before returning the snapshot.
+
 App account linking is an ordinary browser sign-in, not an approval response.
 After approved Production setup requests identity, the public stream includes
 `auth_identity_invitation` with the safe sign-in URL and expiry. It exposes no
@@ -150,6 +157,16 @@ then reports only fixed structural categories and counts. Inspection does not
 reserve recovery, stop or start execution, authorize approval, or settle the
 unknown response; duplicate observations may share diagnostic work. Local
 execution returns `session_recovery_unavailable` for this hosted-only mode.
+
+A recovered execution can fail before emitting its first event. The authenticated
+native stream may report `x-eve-native-recovery-boot-status: failed` only after
+verifying that exact physical recovery entry, its committed activation and the
+absence of a later turn or handoff. Builder accepts this fact only with a matching
+stream identity and a complete empty native tail. It reports `failed` without
+inventing events, changing cursors or clearing retained effects and history.
+Missing or unreadable native metadata never establishes terminal failure. The
+owner can then use ordinary terminal recovery without a `resumeMode`; the native
+collector must still verify the retained checkpoint and original authority.
 
 Failed hosted builds recover from authoritative native checkpoints and their
 actual retained delivery and tool results. Public conversation excerpts do not
