@@ -440,7 +440,9 @@ export function SignUp({
                                 ? localization.auth.hidePassword
                                 : localization.auth.showPassword
                             }
-                            onClick={() => setIsConfirmPasswordVisible((visible) => !visible)}
+                            onClick={() => {
+                              setIsConfirmPasswordVisible((visible) => !visible);
+                            }}
                           >
                             {isConfirmPasswordVisible ? <EyeOff /> : <Eye />}
                           </InputGroupButton>
