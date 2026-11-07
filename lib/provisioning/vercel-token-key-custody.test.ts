@@ -331,7 +331,7 @@ describe("private enrollment and HTTP boundary", () => {
       record: f.row().record,
       version: 1 as const,
     };
-    const owner = vi.fn(async () => {});
+    const owner = vi.fn<() => Promise<void>>().mockResolvedValue();
     await expect(
       enrollCustodyGrant({
         assertOriginalOwner: owner,
@@ -363,7 +363,7 @@ describe("private enrollment and HTTP boundary", () => {
       record: f.row().record,
       version: 1,
     });
-    const owner = vi.fn(async () => {});
+    const owner = vi.fn<() => Promise<void>>().mockResolvedValue();
     const physicalLease: CustodyPhysicalLease = async (leaseInput, run) => {
       expect(leaseInput.lockKeys).toEqual([custodySlotLockKey(request.record.plan)]);
       const snapshot = await leaseInput.readCurrentFence();
@@ -510,8 +510,8 @@ describe("private enrollment and HTTP boundary", () => {
       VERCEL_INTEGRATION_TOKEN_KEY: Buffer.alloc(32, 7).toString("base64"),
       VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "v1",
     };
-    const local = vi.fn(async () => {});
-    const owner = vi.fn(async () => {});
+    const local = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const owner = vi.fn<() => Promise<void>>().mockResolvedValue();
     const handler = createCustodySourceHandler(environment, {
       assertLocal: local,
       currentOwner: owner,
@@ -575,8 +575,8 @@ describe("private enrollment and HTTP boundary", () => {
       source: { origin: "https://builder.example", workload: sourceWorkload },
       version: 1 as const,
     };
-    const local = vi.fn(async () => {});
-    const owner = vi.fn(async () => {});
+    const local = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const owner = vi.fn<() => Promise<void>>().mockResolvedValue();
     const handler = createCustodyPossessionHandler(
       {
         DATABASE_URL: "postgresql://fixture:fixture@fixture-pooler.neon.tech/db?sslmode=require",
@@ -718,7 +718,7 @@ describe("fixed Vercel Secret wire port", () => {
   it("uses sensitive create-only, reads only VERSION Config plaintext, ignores unrelated layout and observes immutable receiver", async () => {
     const f = portFixture();
     expect(await f.port.inspect()).toBeUndefined();
-    const fence = vi.fn(async () => {});
+    const fence = vi.fn<() => Promise<void>>().mockResolvedValue();
     const metadata = await f.port.create(Buffer.alloc(32, 7), fence);
     expect(metadata.type).toBe("sensitive");
     expect(await f.port.inspect(metadata)).toEqual(metadata);
