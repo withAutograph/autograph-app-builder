@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DependencyAttemptResult } from "./checkout-dependencies";
-import startAppPreview from "../../agent/tools/start_app_preview";
+import { createStartAppPreview } from "../../agent/tools/start_app_preview";
 import {
   previewWorkingDirectorySchema,
   resolvePreviewWorkingDirectory,
@@ -66,7 +66,6 @@ vi.mock("./prepared-runtime-execution", () => ({
   resolvePreparedRuntimeExecution: mocks.runtime,
   resolveProtectedRuntimeBindings: mocks.nativeBindings,
 }));
-vi.mock("./native-working-preview", () => ({ nativeWorkingPreview: mocks.nativePreview }));
 vi.mock("./checkout-dependencies", () => ({
   ensureCheckoutDependencies: mocks.dependencies,
 }));
@@ -94,6 +93,8 @@ vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
   },
   prepareAppLocalPreview: mocks.prepare,
 }));
+
+const startAppPreview = createStartAppPreview({ nativePreview: mocks.nativePreview });
 
 const parseDirectory = (value?: string) => previewWorkingDirectorySchema.parse(value);
 

@@ -15,6 +15,26 @@ import {
 } from "./supported-template";
 import type { PreparedSandboxWorkspace } from "./supported-template";
 
+const unexpectedSandboxOperation = (): never => {
+  throw new Error("Unexpected sandbox operation in test fixture");
+};
+const sandboxDefaults = {
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: (sandboxPath: string) => sandboxPath,
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+} satisfies SandboxSession;
+const createSandbox = <T extends Partial<SandboxSession>>(overrides: T): SandboxSession & T => ({
+  ...sandboxDefaults,
+  ...overrides,
+});
+
 const roots: string[] = [];
 
 afterEach(() => {
@@ -52,11 +72,11 @@ describe("development Sandbox workspace verification", () => {
 
     await expect(
       inspectPreparedSandboxWorkspace(
-        {
+        createSandbox({
           id: "sandbox",
           readTextFile: vi.fn().mockResolvedValue(JSON.stringify(workspace)),
           run,
-        } as never,
+        }),
         "development-live",
       ),
     ).resolves.toEqual({ state: "prepared", workspace });
@@ -66,7 +86,7 @@ describe("development Sandbox workspace verification", () => {
     const workspace = record();
     await expect(
       inspectPreparedSandboxWorkspace(
-        {
+        createSandbox({
           id: "sandbox",
           readTextFile: vi.fn().mockResolvedValue(JSON.stringify(workspace)),
           run: vi.fn().mockResolvedValue({
@@ -79,7 +99,7 @@ describe("development Sandbox workspace verification", () => {
               workspaceRoot: "/workspace",
             }),
           }),
-        } as never,
+        }),
         "development-live",
       ),
     ).rejects.toThrow("escaped its sandbox boundary");
@@ -89,11 +109,11 @@ describe("development Sandbox workspace verification", () => {
     const workspace = record();
     await expect(
       inspectPreparedSandboxWorkspace(
-        {
+        createSandbox({
           id: "sandbox",
           readTextFile: vi.fn().mockResolvedValue(JSON.stringify(workspace)),
           run: vi.fn().mockResolvedValue({ exitCode: 1, stderr: "node failed", stdout: "" }),
-        } as never,
+        }),
         "development-live",
       ),
     ).rejects.toThrow("inspection command failed");
@@ -128,7 +148,7 @@ describe("development Sandbox workspace refresh", () => {
         return Promise.resolve();
       },
     );
-    const sandbox = {
+    const sandbox = createSandbox({
       id: "sandbox",
       readBinaryFile: vi.fn(({ path: target }: { path: string }) => {
         const value = files.get(target);
@@ -157,8 +177,8 @@ describe("development Sandbox workspace refresh", () => {
         }
         return Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
       }),
-      writeBinaryFile: vi.fn(({ content, path: target }) => {
-        files.set(target, content);
+      writeBinaryFile: vi.fn<SandboxSession["writeBinaryFile"]>(({ content, path: target }) => {
+        files.set(target, Buffer.from(content));
         return Promise.resolve();
       }),
       writeFile: vi.fn<SandboxSession["writeFile"]>(async ({ content, path: target }) => {
@@ -178,15 +198,15 @@ describe("development Sandbox workspace refresh", () => {
         files.set(target, content);
         return Promise.resolve();
       }),
-    };
+    });
 
-    await prepareDevelopmentSandboxWorkspace(source, sandbox as never, "first");
+    await prepareDevelopmentSandboxWorkspace(source, sandbox, "first");
     files.set("repository/apps/generated/page.tsx", "generated");
     const largeSourceFile = Buffer.alloc(2 * 1024 * 1024, 0x61);
     writeFileSync(path.join(source, "changed.txt"), largeSourceFile);
     rmSync(path.join(source, "deleted.txt"));
 
-    await prepareDevelopmentSandboxWorkspace(source, sandbox as never, "second");
+    await prepareDevelopmentSandboxWorkspace(source, sandbox, "second");
 
     expect(files.get("repository/changed.txt")).toEqual(largeSourceFile);
     expect(files.has("repository/deleted.txt")).toBe(false);
@@ -208,7 +228,7 @@ describe("development Sandbox workspace refresh", () => {
     });
     sandbox.writeTextFile.mockClear();
     await expect(
-      prepareDevelopmentSandboxWorkspace(source, sandbox as never, "corrupt-readback"),
+      prepareDevelopmentSandboxWorkspace(source, sandbox, "corrupt-readback"),
     ).rejects.toThrow("drifted or is missing");
     expect(
       sandbox.writeTextFile.mock.calls.some(([input]) =>
@@ -219,7 +239,7 @@ describe("development Sandbox workspace refresh", () => {
     sandbox.readBinaryFile.mockImplementation(readActual);
     files.set(".app-builder/source-files.json", "not json");
     writeFileSync(path.join(source, "changed.txt"), "after corrupt receipt");
-    await prepareDevelopmentSandboxWorkspace(source, sandbox as never, "third");
+    await prepareDevelopmentSandboxWorkspace(source, sandbox, "third");
 
     expect(files.get("repository/changed.txt")?.toString()).toBe("after corrupt receipt");
     expect(files.get("repository/apps/generated/page.tsx")).toBe("generated");
@@ -247,7 +267,7 @@ const legacyWorkspaceFixture = () => {
   });
   const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf-8" }).trim();
   const files = new Map<string, Buffer>();
-  const sandbox = {
+  const sandbox = createSandbox({
     id: "sandbox",
     readBinaryFile: vi.fn(({ path: target }: { path: string }) =>
       Promise.resolve(files.get(target) ?? null),
@@ -292,7 +312,7 @@ const legacyWorkspaceFixture = () => {
       files.set(target, Buffer.from(content));
       return Promise.resolve();
     }),
-  };
+  });
   return { files, sandbox, sha, source };
 };
 
@@ -305,7 +325,7 @@ describe("legacy writable Sandbox workspace", () => {
       source,
       sha,
       "e".repeat(64),
-      sandbox as never,
+      sandbox,
       "first",
     );
     expect(
@@ -325,23 +345,22 @@ describe("legacy writable Sandbox workspace", () => {
         source,
         sha,
         "f".repeat(64),
-        sandbox as never,
+        sandbox,
         "again",
         false,
         "planning",
       ),
     ).resolves.toEqual(prepared);
-    await expect(inspectPreparedSandboxWorkspace(sandbox as never, "legacy-live")).resolves.toEqual(
-      { state: "prepared", workspace: prepared },
-    );
+    await expect(inspectPreparedSandboxWorkspace(sandbox, "legacy-live")).resolves.toEqual({
+      state: "prepared",
+      workspace: prepared,
+    });
     expect(files.get("repository/app.txt")?.toString()).toBe("repaired");
     expect(files.get("repository/new.txt")?.toString()).toBe("new app file");
     expect(files.has("repository/scripts/check.cjs")).toBe(false);
     expect(sandbox.removePath).not.toHaveBeenCalled();
     expect(sandbox.writeFile).not.toHaveBeenCalled();
-    await expect(inspectPreparedSandboxWorkspace(sandbox as never)).rejects.toThrow(
-      "drifted or is missing",
-    );
+    await expect(inspectPreparedSandboxWorkspace(sandbox)).rejects.toThrow("drifted or is missing");
   });
 
   it("does not seal a failed initial transfer", async () => {
@@ -354,7 +373,7 @@ describe("legacy writable Sandbox workspace", () => {
       ),
     );
     await expect(
-      prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), sandbox as never, "first"),
+      prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), sandbox, "first"),
     ).rejects.toThrow("drifted or is missing");
     expect(
       sandbox.writeTextFile.mock.calls.some(([input]) =>
@@ -365,26 +384,15 @@ describe("legacy writable Sandbox workspace", () => {
 
   it("rejects a different Sandbox or selected source before replacing content", async () => {
     const { files, sandbox, sha, source } = legacyWorkspaceFixture();
-    await prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), sandbox as never, "first");
+    await prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), sandbox, "first");
     files.set("repository/app.txt", Buffer.from("keep repair"));
     sandbox.removePath.mockClear();
+    const otherSandbox = { ...sandbox, id: "other" };
     await expect(
-      prepareSupportedSandboxWorkspace(
-        source,
-        sha,
-        "e".repeat(64),
-        { ...sandbox, id: "other" } as never,
-        "again",
-      ),
+      prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), otherSandbox, "again"),
     ).rejects.toThrow("different workspace");
     await expect(
-      prepareSupportedSandboxWorkspace(
-        source,
-        "a".repeat(40),
-        "e".repeat(64),
-        sandbox as never,
-        "again",
-      ),
+      prepareSupportedSandboxWorkspace(source, "a".repeat(40), "e".repeat(64), sandbox, "again"),
     ).rejects.toThrow("Source SHA changed");
     expect(files.get("repository/app.txt")?.toString()).toBe("keep repair");
     expect(sandbox.removePath).not.toHaveBeenCalled();
@@ -392,7 +400,7 @@ describe("legacy writable Sandbox workspace", () => {
 
   it("rejects a realpath escape and damaged baseline provenance on live reads", async () => {
     const { files, sandbox, sha, source } = legacyWorkspaceFixture();
-    await prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), sandbox as never, "first");
+    await prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), sandbox, "first");
     sandbox.run.mockResolvedValueOnce({
       exitCode: 0,
       stderr: "",
@@ -403,11 +411,11 @@ describe("legacy writable Sandbox workspace", () => {
         workspaceRoot: "/workspace",
       }),
     });
-    await expect(inspectPreparedSandboxWorkspace(sandbox as never, "legacy-live")).rejects.toThrow(
+    await expect(inspectPreparedSandboxWorkspace(sandbox, "legacy-live")).rejects.toThrow(
       "escaped its sandbox boundary",
     );
     files.set(".app-builder/source-files.json", Buffer.from("[]"));
-    await expect(inspectPreparedSandboxWorkspace(sandbox as never, "legacy-live")).rejects.toThrow(
+    await expect(inspectPreparedSandboxWorkspace(sandbox, "legacy-live")).rejects.toThrow(
       "manifest is invalid",
     );
   });
@@ -430,12 +438,12 @@ describe("legacy writable Sandbox workspace", () => {
       fixture.source,
       sha,
       "e".repeat(64),
-      fixture.sandbox as never,
+      fixture.sandbox,
       "first",
     );
     fixture.files.set("repository/app.txt", Buffer.from("ordinary edit"));
     const input = {
-      sandbox: fixture.sandbox as never,
+      sandbox: fixture.sandbox,
       sourceSha: prepared.sourceSha,
       sourceTree: prepared.sourceTree,
       workspaceDigest: prepared.workspaceDigest,

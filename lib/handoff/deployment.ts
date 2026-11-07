@@ -10,6 +10,7 @@ import { deriveBuilderAppId } from "../provisioning/names";
 import { createPostgresBuilderProvisionJournalStore } from "../provisioning/postgres-journal";
 import type { BuilderProvisionJournalStore } from "../provisioning/journal";
 import { createPostgresBuilderHandoffStore } from "./postgres-store";
+import type { BuilderHandoffStore } from "./service";
 import { activeBuilderModelIdSchema } from "../integrations/active-model";
 import { builderHandoffDestinationSchema } from "./contracts";
 import type { BuilderHandoffIntent } from "./contracts";
@@ -296,17 +297,45 @@ export function createBuilderHandoffRenewRouteHandler(input: {
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 const deploymentDatabases = new Map<string, ReturnType<typeof openHostedPostgresDatabase>>();
 
+export interface BuilderHandoffPageDependencies {
+  databases: Map<string, ReturnType<typeof openHostedPostgresDatabase>>;
+  readConfig: (environment: Environment) => {
+    databaseUrl: string;
+    issuer: string;
+    resource: string;
+  };
+  openDatabase: typeof openHostedPostgresDatabase;
+  session: (input: {
+    environment: Environment;
+    headers: Headers;
+  }) => Promise<{ user: { id: string }; organization: { workspaceId: string } } | undefined>;
+  createStore: (database: ReturnType<typeof openHostedPostgresDatabase>) => BuilderHandoffStore;
+  loadCursorClient: () => Promise<
+    Pick<typeof import("../auth/cursor-client"), "isCursorClientReady">
+  >;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function deploymentContext(environment: Environment) {
-  const preview = readPreviewOAuthRuntimeConfig(environment);
-  let database = deploymentDatabases.get(preview.databaseUrl);
+function deploymentContext(
+  environment: Environment,
+  dependencies?: BuilderHandoffPageDependencies,
+) {
+  const preview = dependencies
+    ? dependencies.readConfig(environment)
+    : readPreviewOAuthRuntimeConfig(environment);
+  const databases = dependencies?.databases ?? deploymentDatabases;
+  let database = databases.get(preview.databaseUrl);
   if (!database) {
-    database = openHostedPostgresDatabase(preview.databaseUrl);
-    deploymentDatabases.set(preview.databaseUrl, database);
+    database = dependencies
+      ? dependencies.openDatabase(preview.databaseUrl)
+      : openHostedPostgresDatabase(preview.databaseUrl);
+    databases.set(preview.databaseUrl, database);
   }
   return {
     async authorityForHeaders(headers: Headers) {
-      const session = await ensurePreviewOAuthDeploymentSessionOrganization({
+      const session = await (
+        dependencies?.session ?? ensurePreviewOAuthDeploymentSessionOrganization
+      )({
         environment,
         headers,
       });
@@ -321,7 +350,9 @@ function deploymentContext(environment: Environment) {
     },
     database,
     handoffs: createBuilderHandoffService({
-      store: createPostgresBuilderHandoffStore(database),
+      store: dependencies
+        ? dependencies.createStore(database)
+        : createPostgresBuilderHandoffStore(database),
       validateSourceCandidate: createSourceCandidateValidator(database),
     }),
     preview,
@@ -329,12 +360,11 @@ function deploymentContext(environment: Environment) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function getBuilderHandoffPageData(input: {
-  environment: Environment;
-  headers: Headers;
-  handoffId: string;
-}): Promise<BuilderHandoffPageData | undefined> {
-  const context = deploymentContext(input.environment);
+export async function getBuilderHandoffPageData(
+  input: { environment: Environment; headers: Headers; handoffId: string },
+  dependencies?: BuilderHandoffPageDependencies,
+): Promise<BuilderHandoffPageData | undefined> {
+  const context = deploymentContext(input.environment, dependencies);
   const authority = await context.authorityForHeaders(input.headers);
   if (!authority) {
     return undefined;
@@ -349,7 +379,9 @@ export async function getBuilderHandoffPageData(input: {
         requestId: record.intent.provisioningRequestId,
       })
     : undefined;
-  const { isCursorClientReady } = await import("../auth/cursor-client");
+  const { isCursorClientReady } = dependencies
+    ? await dependencies.loadCursorClient()
+    : await import("../auth/cursor-client");
   return {
     cursorInstallReady: await isCursorClientReady(context.database, context.preview.resource),
     destination: record.intent.destination ?? "codex",
@@ -371,11 +403,11 @@ export async function getBuilderHandoffPageData(input: {
  * handoffs deliberately return users to a fresh builder.
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function findAuthenticatedPendingBuilderHandoff(input: {
-  environment: Environment;
-  headers: Headers;
-}): Promise<{ handoffId: string } | undefined> {
-  const context = deploymentContext(input.environment);
+export async function findAuthenticatedPendingBuilderHandoff(
+  input: { environment: Environment; headers: Headers },
+  dependencies?: BuilderHandoffPageDependencies,
+): Promise<{ handoffId: string } | undefined> {
+  const context = deploymentContext(input.environment, dependencies);
   const authority = await context.authorityForHeaders(input.headers);
   if (!authority) {
     return undefined;
@@ -385,14 +417,13 @@ export async function findAuthenticatedPendingBuilderHandoff(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function getBuilderHandoffStatusDeploymentHandler(environment: Environment) {
+export function getBuilderHandoffStatusDeploymentHandler(
+  environment: Environment,
+  dependencies?: BuilderHandoffPageDependencies,
+) {
   return createBuilderHandoffStatusRouteHandler({
     pageData: (request, handoffId) =>
-      getBuilderHandoffPageData({
-        environment,
-        handoffId,
-        headers: request.headers,
-      }),
+      getBuilderHandoffPageData({ environment, handoffId, headers: request.headers }, dependencies),
   });
 }
 
