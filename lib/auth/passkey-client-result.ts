@@ -5,7 +5,7 @@ interface PasskeyClientError {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function passkeyResultError(result: unknown): PasskeyClientError | null {
-  if (!result || typeof result !== "object" || !("error" in result)) {
+  if (result === null || typeof result !== "object" || !("error" in result)) {
     return null;
   }
 
