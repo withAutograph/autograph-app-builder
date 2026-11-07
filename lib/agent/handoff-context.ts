@@ -26,10 +26,11 @@ export function createPreparedHandoffReader(input: {
       throw new BuilderHandoffUnavailableError();
     }
     const record = builderHandoffRecordSchema.parse(stored);
+    const recordAuthority: Record<string, string> = record.authority;
     if (
       record.handoffId !== handoffId ||
       Object.entries(authority).some(
-        ([key, value]) => record.authority[key as keyof HostedSessionTenantAuthority] !== value,
+        ([key, value]) => recordAuthority[key] !== value,
       )
     ) {
       throw new BuilderHandoffUnavailableError();
