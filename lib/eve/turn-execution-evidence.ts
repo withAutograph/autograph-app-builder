@@ -360,23 +360,29 @@ export const summarizeNativeTurnExecution = (input: {
   }
   const attempts = [...selected.attempts.values()];
   const historical = historicalFailure(turns, selected);
-  return {
+  const selectedTurn: NativeTurnExecutionEvidence["selectedTurn"] = {
+    acceptedMessages: selected.messages,
+    attempts,
+    execution: disposition(attempts),
+    sequence: selected.sequence,
+    started: selected.started,
+    turnId: selected.turnId,
+  };
+  if (selected.boundary !== undefined) {
+    selectedTurn.boundary = selected.boundary;
+  }
+  const evidence: NativeTurnExecutionEvidence = {
     kind: "native-turn-execution-evidence-v1",
     nativeCursor: input.nativeCursor,
     ownerLineage: [...input.ownerLineage],
     selectedBy: selectionKind(input.selector),
-    selectedTurn: {
-      turnId: selected.turnId,
-      sequence: selected.sequence,
-      started: selected.started,
-      acceptedMessages: selected.messages,
-      ...(selected.boundary === undefined ? {} : { boundary: selected.boundary }),
-      attempts,
-      execution: disposition(attempts),
-    },
+    selectedTurn,
     sessionId: input.sessionId,
     unassociatedEvents,
     version: 1,
-    ...(historical === undefined ? {} : { lastHistoricalFailedExecution: historical }),
   };
+  if (historical !== undefined) {
+    evidence.lastHistoricalFailedExecution = historical;
+  }
+  return evidence;
 };
