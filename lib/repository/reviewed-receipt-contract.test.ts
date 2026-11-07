@@ -52,7 +52,8 @@ describe("review receipt producer and publication verifier", () => {
     const receipt = producedReceipt();
     const serialized = JSON.stringify(receipt);
     expect(() => {
-      assertExactReviewedChangeSet(JSON.parse(serialized));
+      const parsed: unknown = JSON.parse(serialized);
+      assertExactReviewedChangeSet(parsed);
     }).not.toThrow();
   });
   it("still rejects changed review authority and content digests", () => {
