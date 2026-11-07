@@ -162,7 +162,6 @@ export const createPublicationTargetResolver =
     return { kind: "ready", target: { destination: selected } };
   };
 
-// oxlint-disable-next-line eslint/complexity -- Canonical app destination checks preserve the existing fresh, revision, retained-review and access-selection branches.
 export const resolvePublicationTargetForTool = createPublicationTargetResolver<ToolContext>({
   readOwnedDestination: readBuilderPublicationDestinationForTool,
   resolveAccess: async (destination, ctx) =>
