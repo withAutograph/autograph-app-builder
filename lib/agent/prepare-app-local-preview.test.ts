@@ -20,6 +20,15 @@ const descriptor = (backend: z.infer<typeof appDescriptionSchema>["backend"]) =>
     validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
     version: 1,
   });
+const stream = (chunks: string[]) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(new TextEncoder().encode(chunk));
+      }
+      controller.close();
+    },
+  });
 const generated: z.infer<typeof appDescriptionSchema>["backend"] = {
   authorization: "declared-policy",
   kind: "generated-postgres",
@@ -216,15 +225,6 @@ describe("private local preview setup", () => {
     const run = vi
       .fn()
       .mockResolvedValue({ exitCode: 0, stderr: "", stdout: descriptor(generated) });
-    const stream = (chunks: string[]) =>
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          for (const chunk of chunks) {
-            controller.enqueue(new TextEncoder().encode(chunk));
-          }
-          controller.close();
-        },
-      });
     const spawn = vi.fn().mockResolvedValue({
       kill: async () => {},
       pid: 1,
