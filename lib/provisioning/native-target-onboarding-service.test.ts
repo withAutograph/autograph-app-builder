@@ -280,7 +280,7 @@ describe("protected native target onboarding service", () => {
       action: "native-target-prepare",
       input: { ...f.prepared, operationRef: planned.operationRef },
     });
-    expect(await denied.json()).toMatchObject({ status: "blocked", reason: "permission_denied" });
+    expect(await denied.json()).toMatchObject({ reason: "permission_denied", status: "blocked" });
     const retained = await f.store.read({ authority, appId: plan.appId });
     expect(retained?.record.stage).toBe("approved");
     expect(retained?.record.previousAttempts.at(-1)?.reason).toBe("provider_permission_denied");
@@ -414,7 +414,7 @@ describe("protected native target onboarding service", () => {
     const ready = await f.send({ ...f.common, action: "native-target-prepare", input: prepared });
     expect(
       nativeTargetTransportResponseSchemas["native-target-prepare"].parse(await ready.json()),
-    ).toMatchObject({ status: "ready", projectId: "project-id" });
+    ).toMatchObject({ projectId: "project-id", status: "ready" });
     expect(f.createProject).toHaveBeenCalledTimes(1);
     expect(f.events).toEqual([
       "workload",
@@ -925,7 +925,7 @@ describe("retired attempt preparation with immutable initial approval", () => {
         expect(result.status).toBe("ready");
         expect(f.createProject).toHaveBeenCalledTimes(1);
         expect(after?.record).toMatchObject({
-          approval: { requestId: "old-request", callId: "old-call" },
+          approval: { callId: "old-call", requestId: "old-request" },
         });
         await f.send({
           ...f.common,

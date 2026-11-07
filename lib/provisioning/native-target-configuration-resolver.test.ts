@@ -942,8 +942,8 @@ describe("fresh normal same-project runtime assembly", () => {
       subject: "explicitly-reviewed-production-gateway",
     });
     expect(result.applications["new-app"]).toMatchObject({
-      projectId: result.gateway.projectId,
       accessRoles: ["member"],
+      projectId: result.gateway.projectId,
       projectSettings: { framework: "services", rootDirectory: "." },
     });
     expect(result.applications.sibling).toBeUndefined();
@@ -1220,8 +1220,8 @@ describe("fresh normal same-project runtime assembly", () => {
       subject: "explicitly-reviewed-production-gateway",
     });
     expect(result.applications["new-app"]).toMatchObject({
-      projectId: result.gateway.projectId,
       accessRoles: ["member"],
+      projectId: result.gateway.projectId,
       projectSettings: { framework: "services", rootDirectory: "." },
     });
     expect(result.applications.sibling).toBeUndefined();

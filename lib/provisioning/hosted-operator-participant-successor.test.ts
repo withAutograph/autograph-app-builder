@@ -760,8 +760,8 @@ describe("approved additive capture participant state", () => {
     );
     expect(f.row.record.privateState).toEqual(before.privateState);
     expect(await f.journal.readCapture(context, f.reference)).toMatchObject({
-      proof: "verified-capture",
       normalCookie: { value: "actual-retained-cookie" },
+      proof: "verified-capture",
     });
     expect(() =>
       decryptNormalActorState({
@@ -1114,8 +1114,8 @@ describe("approved additive capture participant state", () => {
       };
       if (changed === "valid") {
         await expect(readApproval(input)).resolves.toMatchObject({
-          approved: true,
           approvalId: f.original.accountApprovalId,
+          approved: true,
         });
         await expect(
           readApproval({
@@ -1123,7 +1123,7 @@ describe("approved additive capture participant state", () => {
             callId: f.predecessor.approvedByCallId,
             planDigest: f.predecessor.operator.planDigest,
           }),
-        ).resolves.toMatchObject({ approved: true, approvalId: f.predecessor.operator.approvalId });
+        ).resolves.toMatchObject({ approvalId: f.predecessor.operator.approvalId, approved: true });
       } else {
         await expect(readApproval(input)).rejects.toMatchObject({ code: "authorization_required" });
       }

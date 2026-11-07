@@ -73,8 +73,8 @@ describe("closed Neon consent diagnostics", () => {
       ] as const) {
         report({ boundary: "builder", phase: "inline", stage, outcome: "operator_access_denied" });
         expect(log.mock.calls.at(-1)?.[1]).toMatchObject({
-          stage,
           outcome: "operator_access_denied",
+          stage,
         });
       }
       report(value);
@@ -100,7 +100,7 @@ describe("closed Neon consent diagnostics", () => {
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     for (const outcome of ["started", "verified"] as const) {
       report({ boundary: "builder", phase: "inline", stage: "owner_membership", outcome });
-      expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ stage: "owner_membership", outcome });
+      expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ outcome, stage: "owner_membership" });
     }
     await Promise.resolve();
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -490,9 +490,9 @@ describe("private operator planning stage observer", () => {
       ),
     ).rejects.toBe(rejection);
     expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-      stage: "journal_read",
       errorClass: "unexpected",
       sqlState,
+      stage: "journal_read",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -521,8 +521,8 @@ describe("private operator planning stage observer", () => {
           ),
         ).rejects.toBe(rejection);
         expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-          stage: "journal_read",
           errorClass: "unexpected",
+          stage: "journal_read",
         });
         expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
       }),
@@ -600,9 +600,9 @@ describe("private operator planning stage observer", () => {
           ),
         ).rejects.toBe(rejection);
         expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-          stage: "plan_composition",
-          errorClass: "operator_error",
           code,
+          errorClass: "operator_error",
+          stage: "plan_composition",
         });
         expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
       }),
@@ -621,8 +621,8 @@ describe("private operator planning stage observer", () => {
       ),
     ).rejects.toBe(rejection);
     expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-      stage: "plan_validation",
       errorClass: "operator_error",
+      stage: "plan_validation",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -797,8 +797,8 @@ describe("private operator planning stage observer", () => {
           ),
         ).rejects.toBe(rejection);
         expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-          stage: "plan_validation",
           errorClass,
+          stage: "plan_validation",
         });
         expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
       }),
@@ -1155,10 +1155,10 @@ it("preserves execution failures and redacts arbitrary error properties", async 
     ),
   ).rejects.toBe(error);
   expect(sink.mock.calls[0]?.[0].executionFailure).toMatchObject({
-    stage: "readback",
-    mode: "inspect",
     commandExit: "zero",
     errorClass: "unexpected",
+    mode: "inspect",
+    stage: "readback",
   });
   expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
 });
@@ -1226,8 +1226,8 @@ it("retains only a closed runtime readiness stage in execution diagnostics", () 
     },
   );
   expect(validSink.mock.calls[0]?.[0].executionFailure).toMatchObject({
-    stage: "final_runtime_readiness",
     runtimeReadinessStage: "runtime_credential",
+    stage: "final_runtime_readiness",
   });
   const invalidSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
   for (const field of ["runtimeReadinessStage"]) {
@@ -1269,7 +1269,7 @@ it.each([
       sink,
     ),
   ).rejects.toBe(error);
-  expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({ stage, errorClass: "type_error" });
+  expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({ errorClass: "type_error", stage });
   expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");
 });
@@ -1445,13 +1445,13 @@ describe("normal actor proof failure diagnostics", () => {
       sink,
     );
     expect(sink.mock.calls[0]?.[0].normalActorProofFailure).toEqual({
-      stage: "proof_response",
-      httpStatus: 401,
-      cookiePresent: true,
-      contentTypeValid: false,
-      redirected: false,
-      errorClass: "operator_error",
       code: "auth_identity_required",
+      contentTypeValid: false,
+      cookiePresent: true,
+      errorClass: "operator_error",
+      httpStatus: 401,
+      redirected: false,
+      stage: "proof_response",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -1471,8 +1471,8 @@ describe("normal actor proof failure diagnostics", () => {
     reportOperatorNormalActorProofFailure(secret, failure, new TypeError(secret), sink);
     expect(getter).not.toHaveBeenCalled();
     expect(sink.mock.calls[0]?.[0].normalActorProofFailure).toEqual({
-      stage: "proof_response",
       errorClass: "type_error",
+      stage: "proof_response",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -1499,8 +1499,8 @@ describe("normal actor proof failure diagnostics", () => {
     expect(sink).not.toHaveBeenCalled();
     reportOperatorNormalActorProofFailure(secret, { stage: "proof_request" }, revoked.proxy, sink);
     expect(sink.mock.calls[0]?.[0].normalActorProofFailure).toEqual({
-      stage: "proof_request",
       errorClass: "unexpected",
+      stage: "proof_request",
     });
     const hostileSink = () => {
       throw new Error(secret);
@@ -1747,9 +1747,9 @@ describe("closed normal actor journal-change execution marker", () => {
       ),
     ).rejects.toBe(error);
     expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
-      stage: "resource_lease",
       errorClass: "unexpected",
       journalFailure: "normal_actor_journal_changed",
+      stage: "resource_lease",
     });
     expect(getter).not.toHaveBeenCalled();
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -1844,8 +1844,8 @@ describe("continuity planning failure diagnostics", () => {
       expect(run).toHaveBeenCalledOnce();
       const diagnostic = sink.mock.calls[0]?.[0];
       expect(diagnostic?.continuityPlanningFailure).toEqual({
-        stage: "port_observation",
         errorClass,
+        stage: "port_observation",
       });
       expect(diagnostic?.sessionIdHash).toBe(
         `sha256:${createHash("sha256").update(secret).digest("hex")}`,
@@ -1881,10 +1881,10 @@ describe("continuity planning failure diagnostics", () => {
         ),
       ).rejects.toBe(error);
       expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
-        stage: "sandbox_resume",
         errorClass: "sandbox_api_error",
         httpStatus,
         signalAborted: false,
+        stage: "sandbox_resume",
       });
       expect(getter).not.toHaveBeenCalled();
       expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -1906,9 +1906,9 @@ describe("continuity planning failure diagnostics", () => {
       ),
     ).rejects.toBe(error);
     expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
-      stage: "sandbox_resume",
       errorClass: "abort_error",
       signalAborted: true,
+      stage: "sandbox_resume",
     });
     const unknown = new Error(secret);
     await expect(
@@ -1921,9 +1921,9 @@ describe("continuity planning failure diagnostics", () => {
       ),
     ).rejects.toBe(unknown);
     expect(sink.mock.calls[1]?.[0].continuityPlanningFailure).toEqual({
-      stage: "sandbox_resume",
       errorClass: "unexpected",
       signalAborted: true,
+      stage: "sandbox_resume",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -1960,8 +1960,8 @@ describe("continuity planning failure diagnostics", () => {
       reportContinuityPlanningFailure(secret, stage, new Error(secret), sink);
       expect(sink.mock.calls[0]?.[0].boundary).toBe("builder");
       expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
-        stage,
         errorClass: "unexpected",
+        stage,
       });
       expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     },
@@ -1988,8 +1988,8 @@ describe("continuity planning failure diagnostics", () => {
     ).rejects.toBe(error);
     expect(getter).not.toHaveBeenCalled();
     expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
-      stage: "prepared_runtime",
       errorClass: "unexpected",
+      stage: "prepared_runtime",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -2009,8 +2009,8 @@ describe("continuity planning failure diagnostics", () => {
       ),
     ).rejects.toBe(revoked.proxy);
     expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
-      stage: "dispatcher_planning",
       errorClass: "unexpected",
+      stage: "dispatcher_planning",
     });
     const error = new Error(secret);
     await expect(
@@ -2139,8 +2139,8 @@ describe("runtime identity failure diagnostics", () => {
       sink,
     );
     expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
-      stage: "identity",
       reason: "selected_organization_mismatch",
+      stage: "identity",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
