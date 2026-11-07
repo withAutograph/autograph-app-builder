@@ -114,18 +114,20 @@ describe("development Sandbox workspace refresh", () => {
     execFileSync("git", ["commit", "--quiet", "-m", "fixture"], { cwd: source });
 
     const files = new Map<string, string | Buffer>();
-    const removePath = vi.fn(({ path: target, recursive = false }) => {
-      if (recursive) {
-        for (const key of files.keys()) {
-          if (key === target || key.startsWith(`${target}/`)) {
-            files.delete(key);
+    const removePath = vi.fn<SandboxSession["removePath"]>(
+      ({ path: target, recursive = false }) => {
+        if (recursive) {
+          for (const key of files.keys()) {
+            if (key === target || key.startsWith(`${target}/`)) {
+              files.delete(key);
+            }
           }
+        } else {
+          files.delete(target);
         }
-      } else {
-        files.delete(target);
-      }
-      return Promise.resolve();
-    });
+        return Promise.resolve();
+      },
+    );
     const sandbox = {
       id: "sandbox",
       readBinaryFile: vi.fn(({ path: target }: { path: string }) => {
@@ -135,7 +137,7 @@ describe("development Sandbox workspace refresh", () => {
         }
         return Promise.resolve(Buffer.isBuffer(value) ? value : Buffer.from(value));
       }),
-      readTextFile: vi.fn(({ path: target }) => {
+      readTextFile: vi.fn<SandboxSession["readTextFile"]>(({ path: target }) => {
         const value = files.get(target);
         if (value === undefined) {
           return Promise.resolve(null);
@@ -143,7 +145,7 @@ describe("development Sandbox workspace refresh", () => {
         return Promise.resolve(Buffer.isBuffer(value) ? value.toString("utf-8") : value);
       }),
       removePath,
-      run: vi.fn(({ command }) => {
+      run: vi.fn<SandboxSession["run"]>(({ command }) => {
         if (command.includes("tar --extract")) {
           for (const name of ["changed.txt", "deleted.txt"]) {
             try {
@@ -172,7 +174,7 @@ describe("development Sandbox workspace refresh", () => {
         }
         files.set(target, Buffer.concat(chunks));
       }),
-      writeTextFile: vi.fn(({ content, path: target }) => {
+      writeTextFile: vi.fn<SandboxSession["writeTextFile"]>(({ content, path: target }) => {
         files.set(target, content);
         return Promise.resolve();
       }),

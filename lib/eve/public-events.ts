@@ -1301,7 +1301,7 @@ const productionIdentityEvents = (
   if (!isPrepare && result.toolName !== "get-app-production") {
     return [];
   }
-  let output = result.output;
+  let { output } = result;
   let expiresAt: string | undefined;
   if (isPrepare) {
     const prepared = z
