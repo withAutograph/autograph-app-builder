@@ -26,12 +26,7 @@ import {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function release(
   ctx: HookContext,
-  reason:
-    | "turn-completed"
-    | "turn-cancelled"
-    | "turn-failed"
-    | "session-completed"
-    | "session-failed",
+  reason: Parameters<typeof releaseHostedSandboxExecutionLease>[0]["reason"],
 ) {
   const environment = process.env;
   const hosted = isHostedSandboxExecutionEnabled(environment);
