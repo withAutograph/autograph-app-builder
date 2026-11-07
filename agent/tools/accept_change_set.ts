@@ -116,32 +116,50 @@ export const createChangeSetAcceptanceTool = (
       updateExactWorkflow({
         expected: state,
         operation: "destination change-set acceptance",
-        transition: () => ({
-          appSpec: state.appSpec,
-          ...(state.appBackendKind === undefined ? {} : { appBackendKind: state.appBackendKind }),
-          applyReceipt: state.applyReceipt,
-          artifacts: state.artifacts,
-          ...(state.publishedGitHubDraftProposalDigest === undefined
-            ? {}
-            : { publishedGitHubDraftProposalDigest: state.publishedGitHubDraftProposalDigest }),
-          dependencyReceipt: state.dependencyReceipt,
-          ...(state.githubSource === undefined ? {} : { githubSource: state.githubSource }),
-          ...(state.githubDestinationReview === undefined
-            ? {}
-            : { githubDestinationReview: state.githubDestinationReview }),
-          ...(state.githubDestinationReviewRead === undefined
-            ? {}
-            : { githubDestinationReviewRead: state.githubDestinationReviewRead }),
-          identityReceipt: state.identityReceipt,
-          phase: "reviewed",
-          preparedByCallId: state.preparedByCallId,
-          proposal: state.proposal,
-          reviewReceipt: receipt,
-          sourceReceipt: state.sourceReceipt,
-          validationReceipt: state.validationReceipt,
-          version: APP_BUILDER_WORKFLOW_VERSION,
-          workspace: state.workspace,
-        }),
+        transition: () => {
+          const app = { appSpec: state.appSpec };
+          const backend =
+            state.appBackendKind === undefined
+              ? app
+              : { ...app, appBackendKind: state.appBackendKind };
+          const applied = {
+            ...backend,
+            applyReceipt: state.applyReceipt,
+            artifacts: state.artifacts,
+          };
+          const published =
+            state.publishedGitHubDraftProposalDigest === undefined
+              ? applied
+              : {
+                  ...applied,
+                  publishedGitHubDraftProposalDigest: state.publishedGitHubDraftProposalDigest,
+                };
+          const dependencies = { ...published, dependencyReceipt: state.dependencyReceipt };
+          const source =
+            state.githubSource === undefined
+              ? dependencies
+              : { ...dependencies, githubSource: state.githubSource };
+          const destination =
+            state.githubDestinationReview === undefined
+              ? source
+              : { ...source, githubDestinationReview: state.githubDestinationReview };
+          const destinationRead =
+            state.githubDestinationReviewRead === undefined
+              ? destination
+              : { ...destination, githubDestinationReviewRead: state.githubDestinationReviewRead };
+          return {
+            ...destinationRead,
+            identityReceipt: state.identityReceipt,
+            phase: "reviewed",
+            preparedByCallId: state.preparedByCallId,
+            proposal: state.proposal,
+            reviewReceipt: receipt,
+            sourceReceipt: state.sourceReceipt,
+            validationReceipt: state.validationReceipt,
+            version: APP_BUILDER_WORKFLOW_VERSION,
+            workspace: state.workspace,
+          };
+        },
       });
       return checkedNativeToolResult(
         reviewedChangeSetSummary({
