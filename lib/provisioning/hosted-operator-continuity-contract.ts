@@ -15,6 +15,7 @@ import {
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const reconciliationRequired = "reconciliation-required";
 const origin = z.url().refine((value) => {
   const url = new URL(value);
   return url.protocol === "https:" && url.origin === value && !url.username && !url.password;
@@ -124,14 +125,7 @@ export const continuityIdentitySchema = z.strictObject({
 });
 export const continuityCurrentSchema = continuityIdentitySchema.extend({
   leaseExpiresAt: z.iso.datetime(),
-  state: z.enum([
-    "starting",
-    "ready",
-    "restarting",
-    "revoked",
-    "expired",
-    "reconciliation-required",
-  ]),
+  state: z.enum(["starting", "ready", "restarting", "revoked", "expired", reconciliationRequired]),
 });
 export type ContinuityCurrent = z.infer<typeof continuityCurrentSchema>;
 const providerTarget = z.strictObject({
@@ -233,7 +227,7 @@ export const continuityRecordSchema = z
       "revoking",
       "revoked",
       "settled",
-      "reconciliation-required",
+      reconciliationRequired,
     ]),
     suiteCommandId: id.optional(),
     suiteDispatched: z.boolean().optional(),
@@ -295,23 +289,30 @@ export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord)
   ].every(Boolean);
 };
 
-export const continuityStatus = (record: ContinuityRecord) => ({
-  intentId: record.requestId,
-  planRef: record.plan.planRef,
-  state: record.state,
-  ...(record.supersededBy === undefined ? {} : { supersededBy: record.supersededBy }),
-  ...(record.outcome === undefined ? {} : { outcome: record.outcome }),
-  ...(record.failure === undefined ? {} : { failure: record.failure }),
-  ...(record.current === undefined
-    ? {}
-    : {
-        runtime: {
-          leaseExpiresAt: record.current.leaseExpiresAt,
-          runtimeAttemptId: record.current.runtimeAttemptId,
-          state: record.current.state,
-        },
-      }),
-});
+export const continuityStatus = (record: ContinuityRecord) => {
+  const status: ContinuityStatus = {
+    intentId: record.requestId,
+    planRef: record.plan.planRef,
+    state: record.state,
+  };
+  if (record.supersededBy !== undefined) {
+    status.supersededBy = record.supersededBy;
+  }
+  if (record.outcome !== undefined) {
+    status.outcome = record.outcome;
+  }
+  if (record.failure !== undefined) {
+    status.failure = record.failure;
+  }
+  if (record.current !== undefined) {
+    status.runtime = {
+      leaseExpiresAt: record.current.leaseExpiresAt,
+      runtimeAttemptId: record.current.runtimeAttemptId,
+      state: record.current.state,
+    };
+  }
+  return status;
+};
 
 export const continuityStatusSchema = z.strictObject({
   failure: continuityRecordSchema.shape.failure,
@@ -328,6 +329,7 @@ export const continuityStatusSchema = z.strictObject({
   state: continuityRecordSchema.shape.state,
   supersededBy: z.uuid().optional(),
 });
+type ContinuityStatus = z.infer<typeof continuityStatusSchema>;
 export const continuityPlannedSchema = z.strictObject({
   plan: hostedContinuityPlanSchema,
   request: hostedContinuityRequestSchema,
