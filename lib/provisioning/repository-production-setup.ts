@@ -30,7 +30,7 @@ export type RepositoryProductionObservation =
   | { state: "unknown" };
 export type RepositoryProductionIdentity =
   | { state: "verified"; actorId: string }
-  | { state: "required"; signInUrl?: string };
+  | { state: "required"; signInUrl?: string; expiresAt?: string };
 export interface RepositoryProductionEffectContext {
   row: RepositoryProductionRow;
   effect: RepositoryProductionEffect;
@@ -69,6 +69,7 @@ export interface RepositoryProductionSetupResult {
   operationRef: string;
   state: "ready" | "setting-up-data" | "checking-access" | "identity-required" | "reconciling";
   signInUrl?: string;
+  expiresAt?: string;
 }
 const unfinished = (record: RepositoryProductionRecord) =>
   record.appAccessUpgrade?.state === "pending" ||
@@ -214,6 +215,7 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
               operationRef: row.operationRef,
               state: "identity-required",
               ...(identity.signInUrl === undefined ? {} : { signInUrl: identity.signInUrl }),
+              ...(identity.expiresAt === undefined ? {} : { expiresAt: identity.expiresAt }),
             };
           }
           if (
@@ -301,6 +303,7 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
           operationRef: row.operationRef,
           state: "identity-required",
           ...(identity.signInUrl === undefined ? {} : { signInUrl: identity.signInUrl }),
+          ...(identity.expiresAt === undefined ? {} : { expiresAt: identity.expiresAt }),
         };
       }
     }

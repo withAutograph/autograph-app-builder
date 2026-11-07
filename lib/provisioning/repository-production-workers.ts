@@ -93,7 +93,9 @@ export interface RepositoryProductionWorkerDependencies {
   /** The owner-bound, one-time Auth proof, never an email-based account lookup. */
   readCreator: (
     row: RepositoryProductionRow,
-  ) => Promise<RepositoryProductionCreatorProof | { state: "required"; signInUrl?: string }>;
+  ) => Promise<
+    RepositoryProductionCreatorProof | { state: "required"; signInUrl?: string; expiresAt?: string }
+  >;
   readGeneratedRelease: (row: RepositoryProductionRow) => Promise<GeneratedAppReleaseFiles>;
   /** Live connected-provider reads; returns credentials only inside this protected closure. */
   readConnections: (context: RepositoryProductionEffectContext) => Promise<{

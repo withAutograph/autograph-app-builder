@@ -1831,6 +1831,51 @@ describe("Production app identity invitation", () => {
     expect(reduceIdentityInvitations(finished, result(events)).invitations).toEqual([]);
   });
 
+  it("recovers a pending link after a pre-upgrade cursor using only an ordinary status read", () => {
+    const savedHistory = [
+      prepare(),
+      installedEvent({
+        type: "message.completed",
+        data: { turnId: "owner-turn", message: "Your app setup is saved." },
+      }),
+      installedEvent({ type: "session.waiting", data: {} }),
+    ];
+    // Before Production invitations were projected, these three native events produced
+    // progress, assistant text and waiting. The client saved the resulting cursor 3.
+    const savedCursor = 3;
+    const upgradePage = projectInstalledEveEvents(savedHistory).slice(savedCursor);
+    let state = reduceIdentityInvitations(undefined, result(upgradePage));
+    expect(state.invitations).toEqual([]);
+    const nextCursor = savedCursor + upgradePage.length;
+    const status = completed("get-app-production", "status-after-upgrade", {
+      operationRef,
+      state: "identity-required",
+      signInUrl: url,
+      expiresAt,
+      privateProof: "private-proof",
+    });
+    const delta = projectInstalledEveEvents([...savedHistory, status]).slice(nextCursor);
+    state = reduceIdentityInvitations(state, result(delta));
+    expect(state.invitations).toEqual([
+      { callId: "status-after-upgrade", operationRef, url, expiresAt },
+    ]);
+    expect(outstandingInstalledEveRequests([...savedHistory, status])).toEqual([]);
+    expect(JSON.stringify(delta)).not.toContain("private-proof");
+    expect(sessionAuthorizationRefreshKey(result(delta), state.invitations)).not.toBe("");
+    expect(reduceIdentityInvitations(state, result(delta))).toEqual(state);
+  });
+
+  it("never invents an expiry for a legacy pending status", () => {
+    const events = projectInstalledEveEvents([
+      completed("get-app-production", "legacy-status", {
+        operationRef,
+        state: "identity-required",
+        signInUrl: url,
+      }),
+    ]);
+    expect(events.filter((event) => event.type.startsWith("auth_identity_"))).toEqual([]);
+  });
+
   it("replaces a renewed invitation for the same setup without losing actual tool call identity", () => {
     const renewed = {
       ...output(),

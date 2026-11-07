@@ -59,7 +59,7 @@ export type RepositoryProductionManagedCreator =
       actorId: string;
       scopeDigest: string;
     }
-  | { state: "required"; signInUrl?: string };
+  | { state: "required"; signInUrl?: string; expiresAt?: string };
 
 export interface RepositoryProductionCreatorDependencies {
   builderOrigin: string;
@@ -380,7 +380,11 @@ export const createRepositoryProductionCreator = (
           scopeDigest: value.scopeDigest,
         };
       }
-      return { state: "required", signInUrl: signInUrl(row, frame) };
+      return {
+        state: "required",
+        signInUrl: signInUrl(row, frame),
+        expiresAt: value?.expiresAt ?? frame.renewal?.expiresAt ?? frame.expiresAt,
+      };
     },
     async describe(row: RepositoryProductionRow) {
       await deps.assertAuthorized(row);

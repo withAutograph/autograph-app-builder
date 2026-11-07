@@ -42,7 +42,10 @@ setup across prepare and read-status calls. A later successful ready result emit
 `auth_identity_invitation_resolved` for that operation, so an unrelated status
 result cannot dismiss the invitation. Legacy Preview invitations continue to
 correlate by their original `callId`. Cursor replay retains one current invitation
-per setup. The Auth callback resumes approved setup; the event itself neither
+per setup. A read-only Production status call also returns the pending link with
+its actual recorded expiry and projects a fresh invitation. This restores account
+linking when a saved cursor predates the invitation projection, without another
+setup approval or expiry extension. The Auth callback resumes approved setup; the event itself neither
 verifies identity nor grants access. The saved app's access page remains available
 for expiry renewal and app-scoped People controls.
 

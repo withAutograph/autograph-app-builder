@@ -98,7 +98,11 @@ const fixture = () => {
     readCreatorIdentity: async () =>
       identity
         ? { state: "verified", actorId: "creator" }
-        : { state: "required", signInUrl: "https://apps.test/sign-in" },
+        : {
+            state: "required",
+            signInUrl: "https://apps.test/sign-in",
+            expiresAt: "2026-11-07T15:10:00.000Z",
+          },
     reconcile: async ({ effect }): Promise<RepositoryProductionObservation> =>
       unknown
         ? { state: "unknown" }
@@ -274,6 +278,23 @@ describe("Builder-owned Production setup", () => {
       "bind-runtime",
     ]);
   });
+  it("returns the pending sign-in and recorded expiry on read-only status", async () => {
+    const f = fixture();
+    f.setIdentity(false);
+    const pending = await f.service.prepare(scope, intent);
+    const calls = [...f.calls];
+    const revision = f.read()?.revision;
+    const status = await f.service.status(scope, intent);
+    expect(status).toMatchObject({
+      operationRef: pending.operationRef,
+      state: "identity-required",
+      signInUrl: "https://apps.test/sign-in",
+      expiresAt: "2026-11-07T15:10:00.000Z",
+    });
+    expect(f.calls).toEqual(calls);
+    expect(f.read()?.revision).toBe(revision);
+  });
+
   it("reconciles interruption after allocation and reuses the exact same resource and credentials", async () => {
     const f = fixture();
     f.interrupt();

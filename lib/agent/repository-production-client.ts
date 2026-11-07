@@ -18,6 +18,7 @@ const setupSchema = z.object({
     "reconciling",
   ]),
   signInUrl: z.url().optional(),
+  expiresAt: z.iso.datetime({ offset: true }).optional(),
 });
 
 /** A failed read is not evidence that preparation ran or changed a resource. */

@@ -1289,6 +1289,7 @@ const productionSetupStatusSchema = z.object({
     "reconciling",
   ]),
   signInUrl: z.string().optional(),
+  expiresAt: z.iso.datetime({ offset: true }).optional(),
 });
 
 /** Only the ordinary account link and its setup correlation leave the protected result. */
@@ -1326,14 +1327,14 @@ const productionIdentityEvents = (
       { index, type: "auth_identity_invitation_resolved", callId: result.callId, operationRef },
     ];
   }
-  if (!isPrepare || status.data.state !== "identity-required") {
+  if (status.data.state !== "identity-required") {
     return [];
   }
   const invitation = publicIdentityInvitationSchema.safeParse({
     callId: result.callId,
     operationRef,
     url: status.data.signInUrl,
-    expiresAt,
+    expiresAt: status.data.expiresAt ?? expiresAt,
   });
   const text = invitation.success
     ? hostedIdentityInvitation({ authIdentityLink: invitation.data.url })
