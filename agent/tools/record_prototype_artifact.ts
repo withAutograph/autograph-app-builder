@@ -83,13 +83,19 @@ export default defineTool({
       }
       const db = openHostedPostgresDatabase(process.env.DATABASE_URL ?? "");
       await assertPrototypeChunkSchemaReady(db);
-      const recorded = await recordDurablePrototypeChunk({
-        appId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+      const artifactIdentity = { appId };
+      const revisionIdentity =
+        baseRevision === undefined ? artifactIdentity : { ...artifactIdentity, baseRevision };
+      const chunk = {
+        ...revisionIdentity,
         callId: ctx.callId,
         chunkIndex: chunkIndex ?? 0,
         content,
-        ...(existing && isPrototypeArtifactV2(existing) ? { current: existing } : {}),
+      };
+      const currentChunk =
+        existing && isPrototypeArtifactV2(existing) ? { ...chunk, current: existing } : chunk;
+      const recorded = await recordDurablePrototypeChunk({
+        ...currentChunk,
         expectedDigest: expectedDigest ?? singleCallDigest ?? "",
         finalChunk: finalChunk ?? true,
         mediaType,
@@ -113,12 +119,18 @@ export default defineTool({
             if (preservesAcceptedWorkflow(current)) {
               return { ...current, artifacts };
             }
-            return {
+            const prepared = {
               artifacts,
-              phase: "prepared",
+              phase: "prepared" as const,
               preparedByCallId: current.preparedByCallId,
               sourceReceipt: current.sourceReceipt,
-              ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+            };
+            const withSource =
+              current.githubSource === undefined
+                ? prepared
+                : { ...prepared, githubSource: current.githubSource };
+            return {
+              ...withSource,
               version: APP_BUILDER_WORKFLOW_VERSION,
               workspace: current.workspace,
             };
@@ -172,13 +184,14 @@ export default defineTool({
       if (chunkIndex === undefined || finalChunk === undefined) {
         throw new Error("Chunked prototype artifact writes require chunkIndex and finalChunk.");
       }
-      recorded = recordPrototypeArtifactChunk({
+      const chunkInput: Parameters<typeof recordPrototypeArtifactChunk>[0] = {
         ...artifactInput,
         chunkIndex,
         expectedDigest,
         finalChunk,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
-      });
+      };
+      if (baseRevision !== undefined) chunkInput.baseRevision = baseRevision;
+      recorded = recordPrototypeArtifactChunk(chunkInput);
       ({ complete } = recorded);
     }
     if (!recorded.reused) {
@@ -189,12 +202,18 @@ export default defineTool({
           if (preservesAcceptedWorkflow(current)) {
             return { ...current, artifacts: recorded.artifacts };
           }
-          return {
+          const prepared = {
             artifacts: recorded.artifacts,
-            phase: "prepared",
+            phase: "prepared" as const,
             preparedByCallId: current.preparedByCallId,
             sourceReceipt: current.sourceReceipt,
-            ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+          };
+          const withSource =
+            current.githubSource === undefined
+              ? prepared
+              : { ...prepared, githubSource: current.githubSource };
+          return {
+            ...withSource,
             version: APP_BUILDER_WORKFLOW_VERSION,
             workspace: current.workspace,
           };
@@ -223,16 +242,23 @@ export default defineTool({
         );
       });
     }
-    return {
+    const receipt: ReturnType<typeof prototypeArtifactReceipt> & {
+      complete: boolean;
+      reused: boolean;
+      nextChunkIndex?: unknown;
+      invalidated?: boolean;
+    } = {
       ...prototypeArtifactReceipt(recorded.artifact),
       complete,
       reused: recorded.reused,
-      ...("nextChunkIndex" in recorded ? { nextChunkIndex: recorded.nextChunkIndex } : {}),
-      ...(recorded.reused
-        ? {}
-        : { invalidated: !preservesAcceptedWorkflow(current) && current.phase !== "prepared" }),
-      ...planning,
     };
+    if ("nextChunkIndex" in recorded) {
+      receipt.nextChunkIndex = recorded.nextChunkIndex;
+    }
+    if (!recorded.reused) {
+      receipt.invalidated = !preservesAcceptedWorkflow(current) && current.phase !== "prepared";
+    }
+    return { ...receipt, ...planning };
   },
   inputSchema: z
     .object({
