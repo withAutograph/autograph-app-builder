@@ -22,6 +22,9 @@ import {
   recordPrototypeArtifactRevision,
 } from "../agent/prototype-artifacts";
 
+import { reduceIdentityInvitations } from "../mcp/session-app/identity-invitation";
+import { sessionAuthorizationRefreshKey } from "../mcp/session-app/automatic-refresh";
+
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
 
 describe("authorization completion projection", () => {
@@ -1747,5 +1750,169 @@ it("closes only the finished hosted identity tool invitation", () => {
     type: "auth_identity_invitation_resolved",
     callId: "prepare-call",
     index: 1,
+  });
+});
+
+describe("Production app identity invitation", () => {
+  const operationRef = "11111111-1111-4111-8111-111111111111";
+  const otherOperationRef = "22222222-2222-4222-8222-222222222222";
+  const url =
+    "https://apps.example.com/api/auth/platform/app-invitation/accept?invitationId=creator";
+  const expiresAt = "2099-01-01T00:00:00.000Z";
+  const output = () => ({
+    setup: { operationRef, state: "identity-required", signInUrl: url },
+    creator: { expiresAt, token: "private-token", actorId: "private-actor" },
+    members: [{ email: "private-email@example.com" }],
+    proof: "private-proof",
+  });
+  const completed = (toolName: string, callId: string, value: unknown, isError = false) =>
+    installedEvent({
+      type: "action.result",
+      data: {
+        turnId: "owner-turn",
+        status: "completed",
+        result: { kind: "tool-result", toolName, callId, output: value, isError },
+      },
+    });
+  const result = (events: ReturnType<typeof projectInstalledEveEvents>) => ({
+    sessionId: "original-session",
+    status: "waiting" as const,
+    cursor: events.at(-1)?.index ?? 0,
+    events,
+  });
+  const prepare = (value = output(), callId = "prepare-call") =>
+    completed("prepare-app-production", callId, value);
+
+  it("shows the ordinary sign-in link and enables return refresh without an approval response", () => {
+    const event = prepare();
+    const events = projectInstalledEveEvents([event]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "auth_identity_invitation",
+        callId: "prepare-call",
+        operationRef,
+        url,
+        expiresAt,
+      }),
+    );
+    const message = events.find((projected) => projected.type === "assistant_message");
+    expect(message?.text).toContain(url);
+    expect(JSON.stringify(events)).not.toContain("private-");
+    expect(outstandingInstalledEveRequests([event])).toEqual([]);
+    expect(projectInstalledEveEvents([event])).toEqual(events);
+    const response = result(events);
+    const state = reduceIdentityInvitations(undefined, response);
+    expect(sessionAuthorizationRefreshKey(response, state.invitations)).not.toBe("");
+    expect(reduceIdentityInvitations(state, response)).toEqual(state);
+  });
+
+  it("clears only the matching setup when a later status call confirms ready", () => {
+    const events = projectInstalledEveEvents([
+      prepare(),
+      completed("get-app-production", "other-status", {
+        operationRef: otherOperationRef,
+        state: "ready",
+      }),
+      completed("get-app-production", "failed-status", { operationRef, state: "ready" }, true),
+      completed("get-app-production", "ready-status", { operationRef, state: "ready" }),
+    ]);
+    const resolved = events.find(
+      (event) =>
+        event.type === "auth_identity_invitation_resolved" && event.operationRef === operationRef,
+    );
+    expect(resolved).toMatchObject({ callId: "ready-status" });
+    const prior = result(events.filter((event) => event !== resolved));
+    const state = reduceIdentityInvitations(undefined, prior);
+    expect(state.invitations).toHaveLength(1);
+    const ready = result(events.filter((event) => event === resolved));
+    const finished = reduceIdentityInvitations(state, ready);
+    expect(finished.invitations).toEqual([]);
+    expect(sessionAuthorizationRefreshKey(ready, finished.invitations)).toBe("");
+    expect(reduceIdentityInvitations(finished, result(events)).invitations).toEqual([]);
+  });
+
+  it("recovers a pending link after a pre-upgrade cursor using only an ordinary status read", () => {
+    const savedHistory = [
+      prepare(),
+      installedEvent({
+        type: "message.completed",
+        data: { turnId: "owner-turn", message: "Your app setup is saved." },
+      }),
+      installedEvent({ type: "session.waiting", data: {} }),
+    ];
+    // Before Production invitations were projected, these three native events produced
+    // progress, assistant text and waiting. The client saved the resulting cursor 3.
+    const savedCursor = 3;
+    const upgradePage = projectInstalledEveEvents(savedHistory).slice(savedCursor);
+    let state = reduceIdentityInvitations(undefined, result(upgradePage));
+    expect(state.invitations).toEqual([]);
+    const nextCursor = savedCursor + upgradePage.length;
+    const status = completed("get-app-production", "status-after-upgrade", {
+      operationRef,
+      state: "identity-required",
+      signInUrl: url,
+      expiresAt,
+      privateProof: "private-proof",
+    });
+    const delta = projectInstalledEveEvents([...savedHistory, status]).slice(nextCursor);
+    state = reduceIdentityInvitations(state, result(delta));
+    expect(state.invitations).toEqual([
+      { callId: "status-after-upgrade", operationRef, url, expiresAt },
+    ]);
+    expect(outstandingInstalledEveRequests([...savedHistory, status])).toEqual([]);
+    expect(JSON.stringify(delta)).not.toContain("private-proof");
+    expect(sessionAuthorizationRefreshKey(result(delta), state.invitations)).not.toBe("");
+    expect(reduceIdentityInvitations(state, result(delta))).toEqual(state);
+  });
+
+  it("never invents an expiry for a legacy pending status", () => {
+    const events = projectInstalledEveEvents([
+      completed("get-app-production", "legacy-status", {
+        operationRef,
+        state: "identity-required",
+        signInUrl: url,
+      }),
+    ]);
+    expect(events.filter((event) => event.type.startsWith("auth_identity_"))).toEqual([]);
+  });
+
+  it("replaces a renewed invitation for the same setup without losing actual tool call identity", () => {
+    const renewed = {
+      ...output(),
+      creator: { ...output().creator, expiresAt: "2099-02-01T00:00:00.000Z" },
+    };
+    const state = reduceIdentityInvitations(
+      undefined,
+      result(projectInstalledEveEvents([prepare(), prepare(renewed, "renewed-prepare-call")])),
+    );
+    expect(state.invitations).toEqual([
+      { callId: "renewed-prepare-call", operationRef, url, expiresAt: renewed.creator.expiresAt },
+    ]);
+  });
+
+  it.each([
+    {
+      setup: { operationRef, state: "identity-required", signInUrl: "http://apps.example.com" },
+      creator: { expiresAt },
+    },
+    {
+      setup: {
+        operationRef,
+        state: "identity-required",
+        signInUrl: "https://user:password@apps.example.com",
+      },
+      creator: { expiresAt },
+    },
+    {
+      setup: { operationRef, state: "identity-required", signInUrl: url },
+      creator: { expiresAt: "invalid" },
+    },
+    { setup: { operationRef: "invalid", state: "ready" } },
+    { setup: { operationRef, state: "checking-access", signInUrl: url }, creator: { expiresAt } },
+  ])("does not emit identity controls from malformed or non-identity setup output", (value) => {
+    const events = projectInstalledEveEvents([
+      completed("prepare-app-production", "prepare-call", value),
+    ]);
+    expect(events.filter((event) => event.type.startsWith("auth_identity_"))).toEqual([]);
   });
 });

@@ -231,6 +231,18 @@ describe("publication records actual source for its compiled app release", () =>
     hooks.candidate.publishedReconciliation = undefined;
   });
 
+  it("rejects a retained old initial proposal after a new publication proposal is selected", async () => {
+    hooks.state.githubDraftProposal = {
+      proposal: { ...hooks.state.githubDraftProposal.proposal, digest: "f".repeat(64) },
+    };
+    // SAFETY: The stale proposal guard runs before any framework context or publication adapter is consumed.
+    await expect(publishTool.execute(input, ctx as never)).rejects.toThrow(
+      "different draft-PR proposal",
+    );
+    expect(hooks.publish).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+  });
+
   for (const entry of tools) {
     it.each(["recorded", "not-required"])(
       `${entry.name} propagates recording status %s after verified publication`,

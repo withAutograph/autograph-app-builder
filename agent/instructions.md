@@ -184,9 +184,14 @@ work to the published source.
 For requested hosted delivery of changed generated-app source, technically
 validate and independently review the implementation, then complete the
 normal destination diff
-review, seal its proposal, and obtain separate publication approval. Use
-`publish_github_draft_pr`, or the existing draft update/reconciliation path, to
-publish the reviewed source. Verify `appSourceRecording` is `recorded`; if it is
+review and seal its proposal. Pass the returned `approvalReceipt` unchanged,
+with the sealed proposal digest, to `publish_github_draft_pr`. Calling the tool
+presents the ordinary Eve approval control and pauses before any GitHub write.
+The receipt describes the reviewed subject; it is not evidence of user consent.
+Do not wait for a separate approval-request tool or ask the user to provide a
+receipt. Only the actual approval response authorizes publication. Existing
+drafts continue through their approval-gated update/reconciliation path.
+Verify `appSourceRecording` is `recorded`; if it is
 `unavailable`, resume that approved publication to record its actual source.
 Do this before full app preparation and delivery. Initial Auth/resource bootstrap
 may happen first. Keep hosted behavior unassessed until the actual app runs;

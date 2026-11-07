@@ -311,7 +311,21 @@ describe("Production creator continuation", () => {
     expect(await h.bridge.readCreator(h.row())).toEqual({
       state: "required",
       signInUrl: `https://apps.example/api/auth/platform/app-invitation/accept?invitationId=${h.row().operationRef}`,
+      expiresAt: h.invitation()?.expiresAt,
     });
+  });
+
+  it("reads the retained invitation expiry without renewing or sending another link", async () => {
+    const h = harness();
+    await h.bridge.prepare(h.context());
+    const expiresAt = "2026-11-07T15:10:00.000Z";
+    h.patchInvitation({ expiresAt });
+    const before = [...h.requests];
+    h.advance();
+    expect(await h.bridge.readCreator(h.row())).toMatchObject({ state: "required", expiresAt });
+    expect(await h.bridge.describe(h.row())).toMatchObject({ expiresAt });
+    expect(h.requests).toEqual(before);
+    expect(h.resumes).toEqual([]);
   });
 
   it("reconciles a lost create response without allocating another invitation", async () => {

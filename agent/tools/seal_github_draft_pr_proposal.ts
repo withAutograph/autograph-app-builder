@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { approvalReceiptForDraftProposal } from "@/lib/agent/approval-receipt";
 import { z } from "zod";
 
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
@@ -13,7 +14,7 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 
 export default defineTool({
   description:
-    "After prepare_github_draft_review and accept_change_set, seal the initial draft pull-request proposal against that same immutable destination snapshot with freshly verified publication permissions. For a fresh-template app use expectedDestinationReviewDigest; an acquired GitHub source uses expectedGitHubSourceDigest. This performs no branch, push, pull-request, release-gate, or repository mutation.",
+    "After prepare_github_draft_review and accept_change_set, seal the initial draft pull-request proposal against that same immutable destination snapshot with freshly verified publication permissions. For a fresh-template app use expectedDestinationReviewDigest; an acquired GitHub source uses expectedGitHubSourceDigest. Returns the canonical approvalReceipt for the reviewed subject. Pass it unchanged with expectedProposalDigest to publish_github_draft_pr to present the ordinary approval control; the receipt itself is not user consent. This performs no branch, push, pull-request, release-gate, or repository mutation.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed") {
@@ -94,7 +95,7 @@ export default defineTool({
         };
       },
     });
-    return proposal;
+    return { ...proposal, approvalReceipt: approvalReceiptForDraftProposal(proposal) };
   },
   inputSchema: z
     .strictObject({

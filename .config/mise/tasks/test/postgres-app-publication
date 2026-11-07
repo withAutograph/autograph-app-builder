@@ -1,0 +1,7 @@
+#!/bin/sh
+#MISE description="Prove app publication destination persistence in disposable local PostgreSQL"
+set -eu
+postgres_bin=$(dirname "$(command -v initdb)")
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx \
+  .config/mise/scripts/repository/test-postgres-app-publication.mts "$postgres_bin"

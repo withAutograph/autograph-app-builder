@@ -333,7 +333,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    Each call uses the current session's saved cursor; `view: "read-progress"`
    reports optional inspection progress and continuation calls. Complete-side
    coverage is not an acceptance or publication prerequisite. Then call
-   `accept_change_set`, seal the proposal, and request ordinary publication approval.
+   `accept_change_set` and seal the proposal. Pass its returned `approvalReceipt`
+   unchanged with the proposal digest to `publish_github_draft_pr`; that invocation
+   presents the ordinary approval control and waits before any GitHub write.
+   The receipt is the reviewed subject, not user consent. Do not wait for a separate
+   approval-request tool or ask the user to create a receipt.
    Preserve the actual destination, source-content and approval protections.
    After initial publication, use `read_github_pr_delivery` when reporting the
    current pull request, required checks, or merge. Explain draft deferral as
@@ -673,9 +677,11 @@ behavior.
 - For requested protected hosted generated-app delivery, finish technical
   validation and independent source review, then use the existing destination
   diff review, `accept_change_set`, and `seal_github_draft_pr_proposal` workflow.
-  Obtain separate publication approval and use `publish_github_draft_pr`, or the
-  existing draft update/reconciliation path, before full app preparation and
-  delivery. Initial Auth/resource bootstrap may happen first. Hosted behavior
+  Invoke `publish_github_draft_pr` with the sealed proposal's returned
+  `approvalReceipt` to request separate publication approval; Eve waits for the
+  actual approval response before publishing. Existing drafts use their approved
+  update/reconciliation path. Do this before full app preparation and delivery.
+  Initial Auth/resource bootstrap may happen first. Hosted behavior
   remains unassessed until the actual app is exercised; do not wait for that
   behavior before publishing the source needed for its Preview.
   After publishing or updating the reviewed draft PR, check `appSourceRecording`.

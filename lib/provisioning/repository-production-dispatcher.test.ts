@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/require-await, unicorn/no-await-expression-member -- Async fixture ports retain rejection semantics; assertions inspect their awaited outcomes directly. */
 import type { z } from "zod";
+import { RepositoryProductionDestinationRequiredError } from "./repository-production-destination";
 import { describe, expect, it, vi } from "vitest";
 import {
   createRepositoryProductionHandler,
@@ -119,6 +120,19 @@ describe("protected repository Production dispatcher", () => {
         .status,
     ).toBe(200);
     expect(f.prepared).toHaveBeenCalledOnce();
+  });
+  it("reports missing saved destination without starting setup or hiding workload denial", async () => {
+    const f = fixture();
+    vi.mocked(f.deps.resolvePlan).mockRejectedValue(
+      new RepositoryProductionDestinationRequiredError(),
+    );
+    const request = { version: 1, ...owner, action: "plan" };
+    const response = await f.send(request);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ code: "app_setup_destination_required" });
+    expect(f.prepared).not.toHaveBeenCalled();
+    expect(f.deps.resolveSetup).not.toHaveBeenCalled();
+    expect((await f.send(request, "foreign-workload")).status).toBe(403);
   });
   it("keeps Auth callbacks independent of a creator's Builder session", async () => {
     const f = fixture();

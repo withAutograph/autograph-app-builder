@@ -18,7 +18,34 @@ const setupSchema = z.object({
     "reconciling",
   ]),
   signInUrl: z.url().optional(),
+  expiresAt: z.iso.datetime({ offset: true }).optional(),
 });
+
+/** A failed read is not evidence that preparation ran or changed a resource. */
+export const repositoryProductionResponseError = async (
+  response: Response,
+  action: "plan" | "prepare" | "setup-status",
+): Promise<Error> => {
+  let code = "";
+  try {
+    const failure = z.object({ code: z.string() }).safeParse(await response.json());
+    if (failure.success) {
+      code = failure.data.code;
+    }
+  } catch {
+    // A non-JSON transport failure retains the ordinary uncertainty message.
+  }
+  if (code === "app_setup_destination_required") {
+    return new Error(
+      "Builder could not read this app's saved repository destination. Continue its existing reviewed publication workflow in the same session, then check Production setup again. Keep the acquired app source unchanged.",
+    );
+  }
+  return new Error(
+    action === "prepare"
+      ? "Your app setup is saved. Builder could not confirm the latest result. Check its status before retrying."
+      : "Builder could not read this app's Production setup. This read did not start setup. Keep the same app and session while restoring access to its saved setup.",
+  );
+};
 
 /** Workload-authenticated calls retain the canonical Builder owner and session. */
 export const repositoryProductionClientForContext = async (ctx: WorkflowStepToolContext) => {
@@ -78,9 +105,7 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
     });
     ctx.abortSignal.throwIfAborted();
     if (!response.ok) {
-      throw new Error(
-        "Your app setup is saved. Builder could not confirm the latest result. Check its status before retrying.",
-      );
+      throw await repositoryProductionResponseError(response, action);
     }
     return schema.parse(await response.json());
   };

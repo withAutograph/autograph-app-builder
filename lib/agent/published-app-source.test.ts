@@ -106,6 +106,7 @@ describe("actual published app source recording", () => {
         adapterSessionId: session.adapterSessionId,
         appSpecDigest: digest,
         callId: initial.approvedByCallId,
+        initialPublication: true,
         publishedSource: publishedAppSourceFromResult(review, initial),
       }),
     );
@@ -116,6 +117,7 @@ describe("actual published app source recording", () => {
       .mockResolvedValue({ selection: selected, status: "recorded" });
     const root = "/workspace/.app-builder/candidate";
     await recordPublishedAppSourceForSession({ ...session, root, review, publication: updated });
+    expect(record.mock.calls[0]?.[0].initialPublication).toBeUndefined();
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
         callId: session.callId,

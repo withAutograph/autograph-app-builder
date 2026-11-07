@@ -36,6 +36,7 @@ import {
 } from "../provisioning/hosted-operator-artifact-selection";
 import type {
   CompiledOperatorReleaseSelection,
+  AppPublicationDestination,
   ExactCompiledOperatorReleaseLookup,
   PublishedAppSource,
   PublishedAppSourceLookup,
@@ -259,16 +260,32 @@ const openCompiledArtifactStorage = async (
 export const recordPublishedOperatorSourceForSession = async (
   input: CompiledOperatorArtifactSessionInput & {
     publishedSource: PublishedAppSource;
+    initialPublication?: true;
     backendKind?: AppDescription["backend"]["kind"];
   },
 ): Promise<
-  { status: "not-required" } | { status: "recorded"; selection: CompiledOperatorReleaseSelection }
+  | { status: "recorded"; destination: AppPublicationDestination }
+  | { status: "recorded"; selection: CompiledOperatorReleaseSelection }
 > => {
-  if (input.backendKind === "static") {
-    return { status: "not-required" };
-  }
   const binding = await resolveCompiledArtifactSession(input);
   const storage = await openCompiledArtifactStorage(binding);
+  if (input.backendKind === "static") {
+    if (storage.selections.recordDestination === undefined) {
+      throw operatorArtifactUnavailable();
+    }
+    const destination = await storage.selections.recordDestination(
+      binding.context,
+      input.callId,
+      {
+        version: 1,
+        appId: input.appId,
+        appSpecDigest: input.appSpecDigest,
+        publishedSource: input.publishedSource,
+      },
+      input.initialPublication === true ? "initial" : "current",
+    );
+    return { status: "recorded", destination };
+  }
   const selected = await storage.selections.read(binding.context, input.appSpecDigest);
   if (selected === undefined) {
     throw operatorArtifactUnavailable();
@@ -344,10 +361,24 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
   try {
     await binding.assertCurrentOwner(binding.context);
     const { release } = completion.compilation;
-    if (release.status === "not-required") {
-      return { status: "not-required" as const };
-    }
     const storage = await openCompiledArtifactStorage(binding);
+    if (release.status === "not-required") {
+      if (storage.selections.recordDestination === undefined) {
+        throw operatorArtifactUnavailable();
+      }
+      const destination = await storage.selections.recordDestination(
+        binding.context,
+        `draft-reconciliation:${completion.proposal.digest}`,
+        {
+          version: 1,
+          appId: completion.appId,
+          appSpecDigest: completion.appReview.appSpecDigest,
+          publishedSource: input.publishedSource,
+        },
+        "current",
+      );
+      return { status: "recorded" as const, destination };
+    }
     const retained = await readExactCompiledOperatorRelease({
       assertCurrentOwner: binding.assertCurrentOwner,
       context: binding.context,

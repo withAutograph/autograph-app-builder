@@ -169,21 +169,29 @@ it("native boot preserves exact checkpoint, grant, replay input and logical iden
     false,
   );
 });
-it("pre-activation cancellation runs no session or stream and releases claims", async () => {
-  const fixture = bootFixture();
-  const pending = bootTerminalRecoveryOwnerWithPorts(inputFor(), fixture.ports);
-  await delay(0);
-  fixture.cancel();
-  assert.equal(await pending, undefined);
-  assert.equal(
-    fixture.calls.some(([name]) => name === "writable"),
-    false,
-  );
-  assert.equal(
-    fixture.calls.some(([name]) => name === "dispose-inbox"),
-    true,
-  );
-});
+it.each([undefined, "await-input"])(
+  "pre-activation cancellation runs no session or stream and releases claims (%s)",
+  async (resumePhase) => {
+    const fixture = bootFixture();
+    const input = inputFor();
+    if (resumePhase === "await-input") {
+      input.provenance = { ...input.provenance, resumePhase };
+      input.replayInput = undefined;
+    }
+    const pending = bootTerminalRecoveryOwnerWithPorts(input, fixture.ports);
+    await delay(0);
+    fixture.cancel();
+    assert.equal(await pending, undefined);
+    assert.equal(
+      fixture.calls.some(([name]) => name === "writable"),
+      false,
+    );
+    assert.equal(
+      fixture.calls.some(([name]) => name === "dispose-inbox"),
+      true,
+    );
+  },
+);
 it("native boot rejects changed logical identity before any claim", async () => {
   const fixture = bootFixture();
   const cp = checkpoint();
@@ -758,6 +766,10 @@ it("an idle recovery owner enters the actual inbox wait without admitting a mode
   const { promise: parkedWait } = Promise.withResolvers();
   let claims = 0;
   let writableReads = 0;
+  const chunks = [];
+  const { emitTerminalRecoveryWaitingStep } = await import(
+    `${sdk}execution/session/terminal-recovery-waiting-step.js`
+  );
   const inbox = {
     claimSessionHooks: async () => {
       claims += 1;
@@ -776,9 +788,14 @@ it("an idle recovery owner enters the actual inbox wait without admitting a mode
     createSessionInbox: () => inbox,
     getWorkflowMetadata: () => ({ workflowRunId: "idle-successor" }),
     validateCheckpoint: vi.fn(() => Promise.resolve()),
+    emitIdleWaiting: emitTerminalRecoveryWaitingStep,
     getWritable: () => {
       writableReads += 1;
-      return new WritableStream();
+      return new WritableStream({
+        write: (chunk) => {
+          chunks.push(chunk);
+        },
+      });
     },
     createHook: () =>
       Object.assign(activation, { getConflict: () => Promise.resolve(), dispose: vi.fn() }),
@@ -794,6 +811,7 @@ it("an idle recovery owner enters the actual inbox wait without admitting a mode
   const pending = bootTerminalRecoveryOwnerWithPorts(input, ports);
   await Promise.resolve();
   assert.equal(writableReads, 0);
+  assert.deepEqual(chunks, []);
   activate({
     kind: "activate-terminal-recovery",
     operationId: descriptor.operationId,
@@ -811,6 +829,17 @@ it("an idle recovery owner enters the actual inbox wait without admitting a mode
     })(),
   ]);
   assert.equal(boot.session.awaitFirstMessage, true);
+  const events = chunks.map((chunk) => JSON.parse(new TextDecoder().decode(chunk)));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "session.waiting");
+  assert.equal(events[0].data.wait, "next-user-message");
+  assert.equal(events[0].data.continuationToken, checkpoint().sessionState.continuationToken);
+  assert.equal(
+    events.some((event) =>
+      ["turn.started", "message.received", "step.started"].includes(event.type),
+    ),
+    false,
+  );
   await assert.rejects(
     bootTerminalRecoveryOwnerWithPorts(
       {
@@ -822,4 +851,52 @@ it("an idle recovery owner enters the actual inbox wait without admitting a mode
     /pending work/u,
   );
   assert.equal(claims, 1);
+});
+
+it("keeps a brand-new prewarmed owner silent until its first message", async () => {
+  const { runPreparedSession } = await import(`${sdk}execution/session/program.js`);
+  const { promise: enteredWait, resolve: enterWait } = Promise.withResolvers();
+  const { promise: parkedWait } = Promise.withResolvers();
+  const chunks = [];
+  const cp = checkpoint();
+  const inbox = {
+    claimSessionHooks: vi.fn(() => Promise.resolve()),
+    onInterrupt: () => vi.fn(),
+    drain: () => [],
+    restore: vi.fn(),
+    hasPending: () => false,
+    next: () => {
+      enterWait();
+      return parkedWait;
+    },
+    dispose: vi.fn(() => Promise.resolve()),
+  };
+  const running = runPreparedSession(
+    {
+      anchor: { kind: "self" },
+      caller: undefined,
+      deploymentId: "initial-deployment",
+      streamRunId: "initial-owner",
+      initialInput: undefined,
+      awaitFirstMessage: true,
+      serializedContext: cp.serializedContext,
+      sessionId: cp.sessionState.sessionId,
+      sessionState: cp.sessionState,
+      sessionTimeoutMs: false,
+      sessionWritable: new WritableStream({
+        write: (chunk) => {
+          chunks.push(chunk);
+        },
+      }),
+    },
+    inbox,
+  );
+  await Promise.race([
+    enteredWait,
+    (async () => {
+      await running;
+      throw new Error("Prewarmed owner ended before receiving input.");
+    })(),
+  ]);
+  assert.deepEqual(chunks, []);
 });

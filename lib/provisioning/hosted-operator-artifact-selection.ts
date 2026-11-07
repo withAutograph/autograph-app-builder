@@ -28,6 +28,25 @@ export const publishedAppSourceSchema = z.object({
   reviewDigest: digest,
 });
 export type PublishedAppSource = z.infer<typeof publishedAppSourceSchema>;
+/** Destination evidence for every app backend, recorded only after trusted publication succeeds. */
+export const appPublicationDestinationSchema = z.object({
+  version: z.literal(1),
+  appId,
+  appSpecDigest: digest,
+  publishedSource: publishedAppSourceSchema,
+});
+export type AppPublicationDestination = z.infer<typeof appPublicationDestinationSchema>;
+export type AppPublicationSelectionMode = "initial" | "current";
+/** A retained initial result must not overwrite a later head on that same publication branch. */
+export const historicalAppPublication = (
+  mode: AppPublicationSelectionMode,
+  destination: AppPublicationDestination,
+  current: AppPublicationDestination | undefined,
+) =>
+  mode === "initial" &&
+  current?.publishedSource.repositoryId === destination.publishedSource.repositoryId &&
+  current.publishedSource.branch === destination.publishedSource.branch;
+
 export type PublishedAppSourceLookup = Pick<
   PublishedAppSource,
   "repositoryId" | "branch" | "gitSha" | "gitTree"
@@ -131,12 +150,15 @@ export const selectExactCompiledOperatorRelease = (
 };
 /** An exact recorded publication is usable across accepted specifications of the same owned app. */
 export const selectExactPublishedAppSource = (
-  selections: readonly CompiledOperatorReleaseSelection[],
+  selections: readonly (CompiledOperatorReleaseSelection | AppPublicationDestination)[],
   lookupInput: PublishedAppSourceLookup,
 ): PublishedAppSource | undefined => {
   const lookup = publishedAppSourceLookupSchema.parse(lookupInput);
   const parsed = selections.map((selection) =>
-    compiledOperatorReleaseSelectionSchema.parse(selection),
+    ("artifactRef" in selection
+      ? compiledOperatorReleaseSelectionSchema
+      : appPublicationDestinationSchema
+    ).parse(selection),
   );
   return parsed
     .map((selection) => selection.publishedSource)
@@ -173,6 +195,18 @@ export type PublishedSourceAssociationResult =
   | { status: "selection-changed" };
 
 export interface OperatorArtifactSelections {
+  readDestination?: (
+    context: OperatorArtifactContext,
+    appSpecDigest: string,
+  ) => Promise<AppPublicationDestination | undefined>;
+  recordDestination?: (
+    context: OperatorArtifactContext,
+    callId: string,
+    destination: AppPublicationDestination,
+    /** Initial results are scoped to the currently approved publication branch. */
+    selectionMode: AppPublicationSelectionMode,
+  ) => Promise<AppPublicationDestination>;
+
   read: (
     context: OperatorArtifactContext,
     appSpecDigest: string,
@@ -198,9 +232,13 @@ export interface OperatorArtifactSelections {
   ) => Promise<CompiledOperatorReleaseSelection>;
 }
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
-const scoped = (context: OperatorArtifactContext, appSpecDigest: string) => ({
+const scoped = (
+  context: OperatorArtifactContext,
+  appSpecDigest: string,
+  kind: "generated-release" | "app-publication" = "generated-release",
+) => ({
   ...hostedTenantAuthoritySchema.parse(context.authority),
-  path: `_protected-operator/selections/generated-release/${appId.parse(context.target.appId)}/${digest.parse(appSpecDigest)}`,
+  path: `_protected-operator/selections/${kind}/${appId.parse(context.target.appId)}/${digest.parse(appSpecDigest)}`,
   sessionId: z.string().min(1).parse(context.target.sessionId),
 });
 const predicate = (scope: ReturnType<typeof scoped>) =>
@@ -212,6 +250,13 @@ const predicate = (scope: ReturnType<typeof scoped>) =>
     eq(prototypeArtifactChunks.sessionId, scope.sessionId),
     eq(prototypeArtifactChunks.path, scope.path),
     eq(prototypeArtifactChunks.chunkIndex, 0),
+  );
+
+const selectedDestinationPredicate = (scope: ReturnType<typeof scoped>) =>
+  and(
+    predicate(scope),
+    // Other artifact rows contain HTML; SQL may evaluate AND terms in any order.
+    sql`(case when ${predicate(scope)} then ${prototypeArtifactChunks.content}::jsonb->>'historicalOnly' end) is distinct from 'true'`,
   );
 
 /** Completion markers are immutable per trusted tool call and written only after every release member is durably readable. */
@@ -241,6 +286,104 @@ export const createPostgresOperatorArtifactSelections = (input: {
   const nextCreatedAt = (scope: ReturnType<typeof scoped>) =>
     sql`greatest(clock_timestamp(), (select max(${prototypeArtifactChunks.createdAt}) + interval '1 microsecond' from ${prototypeArtifactChunks} where ${predicate(scope)}))`;
   return {
+    async readDestination(context, appSpecDigest) {
+      const scope = scoped(context, appSpecDigest, "app-publication");
+      await input.assertCurrentOwner(context);
+      const [row] = await input.database
+        .select({
+          content: prototypeArtifactChunks.content,
+          chunkDigest: prototypeArtifactChunks.chunkDigest,
+        })
+        .from(prototypeArtifactChunks)
+        .where(selectedDestinationPredicate(scope))
+        .orderBy(
+          desc(prototypeArtifactChunks.createdAt),
+          desc(prototypeArtifactChunks.transferDigest),
+        )
+        .limit(1);
+      await input.assertCurrentOwner(context);
+      if (row === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing owned destination is the optional store read result.
+        return undefined;
+      }
+      if (row.chunkDigest !== hash(row.content)) {
+        throw operatorArtifactUnavailable();
+      }
+      const destination = appPublicationDestinationSchema.parse(JSON.parse(row.content));
+      if (
+        destination.appId !== context.target.appId ||
+        destination.appSpecDigest !== appSpecDigest
+      ) {
+        throw operatorArtifactUnavailable();
+      }
+      return destination;
+    },
+    async recordDestination(context, callId, value, selectionMode) {
+      const destination = appPublicationDestinationSchema.parse(value);
+      if (destination.appId !== context.target.appId) {
+        throw operatorArtifactUnavailable();
+      }
+      const scope = scoped(context, destination.appSpecDigest, "app-publication");
+      const transferDigest = hash(z.string().min(1).parse(callId));
+      return await writeSelection(context, scope, async (database) => {
+        const [prior] = await database
+          .select({
+            content: prototypeArtifactChunks.content,
+            chunkDigest: prototypeArtifactChunks.chunkDigest,
+          })
+          .from(prototypeArtifactChunks)
+          .where(selectedDestinationPredicate(scope))
+          .orderBy(
+            desc(prototypeArtifactChunks.createdAt),
+            desc(prototypeArtifactChunks.transferDigest),
+          )
+          .limit(1);
+        if (prior !== undefined && prior.chunkDigest !== hash(prior.content)) {
+          throw operatorArtifactUnavailable();
+        }
+        const current =
+          prior === undefined
+            ? undefined
+            : appPublicationDestinationSchema.parse(JSON.parse(prior.content));
+        // A new currently selected proposal has its own sealed branch. Recovery
+        // can retain its initial receipt, but cannot undo a same-branch reconciliation.
+        const content = JSON.stringify({
+          ...destination,
+          ...(historicalAppPublication(selectionMode, destination, current)
+            ? { historicalOnly: true }
+            : {}),
+        });
+        await database
+          .insert(prototypeArtifactChunks)
+          .values({
+            ...scope,
+            chunkDigest: hash(content),
+            chunkIndex: 0,
+            content,
+            createdAt: nextCreatedAt(scope),
+            transferDigest,
+          })
+          .onConflictDoNothing();
+        const [row] = await database
+          .select({
+            content: prototypeArtifactChunks.content,
+            chunkDigest: prototypeArtifactChunks.chunkDigest,
+          })
+          .from(prototypeArtifactChunks)
+          .where(and(predicate(scope), eq(prototypeArtifactChunks.transferDigest, transferDigest)));
+        if (
+          row === undefined ||
+          row.chunkDigest !== hash(row.content) ||
+          !isDeepStrictEqual(
+            appPublicationDestinationSchema.parse(JSON.parse(row.content)),
+            destination,
+          )
+        ) {
+          throw operatorArtifactUnavailable();
+        }
+        return destination;
+      });
+    },
     async read(
       context: OperatorArtifactContext,
       appSpecDigest: string,
@@ -335,8 +478,10 @@ export const createPostgresOperatorArtifactSelections = (input: {
       const selectedApp = appId.parse(context.target.appId);
       const sessionId = z.string().min(1).parse(context.target.sessionId);
       const pathPrefix = `_protected-operator/selections/generated-release/${selectedApp}/`;
+      const destinationPrefix = `_protected-operator/selections/app-publication/${selectedApp}/`;
+      const ownedPath = sql`(left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix} or left(${prototypeArtifactChunks.path}, ${destinationPrefix.length}) = ${destinationPrefix})`;
       // SQL may reorder AND terms; unrelated prototype rows can contain HTML.
-      const publishedSource = sql`case when left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix} then ${prototypeArtifactChunks.content}::jsonb -> 'publishedSource' end`;
+      const publishedSource = sql`case when ${ownedPath} then ${prototypeArtifactChunks.content}::jsonb -> 'publishedSource' end`;
       await input.assertCurrentOwner(context);
       const rows = await input.database
         .select({
@@ -353,7 +498,7 @@ export const createPostgresOperatorArtifactSelections = (input: {
             eq(prototypeArtifactChunks.ownerUserId, authority.ownerUserId),
             eq(prototypeArtifactChunks.sessionId, sessionId),
             eq(prototypeArtifactChunks.chunkIndex, 0),
-            sql`left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix}`,
+            ownedPath,
             sql`(${publishedSource}) ->> 'repositoryId' = ${lookup.repositoryId}`,
             sql`(${publishedSource}) ->> 'branch' = ${lookup.branch}`,
             sql`(${publishedSource}) ->> 'gitSha' = ${lookup.gitSha}`,
@@ -365,10 +510,13 @@ export const createPostgresOperatorArtifactSelections = (input: {
         if (row.chunkDigest !== hash(row.content)) {
           throw operatorArtifactUnavailable();
         }
-        const selection = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(row.content));
+        const isDestination = row.path.startsWith(destinationPrefix);
+        const selection = (
+          isDestination ? appPublicationDestinationSchema : compiledOperatorReleaseSelectionSchema
+        ).parse(JSON.parse(row.content));
         if (
           selection.appId !== selectedApp ||
-          row.path !== `${pathPrefix}${selection.appSpecDigest}`
+          row.path !== `${isDestination ? destinationPrefix : pathPrefix}${selection.appSpecDigest}`
         ) {
           throw operatorArtifactUnavailable();
         }

@@ -63,8 +63,33 @@ Managed Connect also obtains the distinct configured operator role, never the
 Auth schema owner. Historical Preview configuration remains separate.
 
 The operator independently reads the canonical Builder owner and saved
-repository choice, including recovered session lineage. App descriptions and
-compiled releases come from owner-scoped captured artifacts. The normal plan
+repository choice, including recovered session lineage. An acquired repository
+and a publication destination are separate authorities: a new app built from a
+fresh template can use its owner/session/app/spec-bound compiled release's
+verified `publishedSource.repositoryId`. The operator resolves that identity
+through the exact configured workspace mapping. It does not change the acquired
+source. If an acquired repository is also present, both repository identities
+must agree. Missing, foreign, or ambiguous destinations do not authorize setup;
+a configured profile alone is insufficient. Frontend-only apps retain the same trusted publication destination through a
+generic owner/session/app/spec marker in the existing artifact store; they do
+not need a SQL release or source acquisition. Normal publication and retained
+reconciliation completion record the marker only after provider success. A
+historical static publication can resume that same approved completion to
+record its destination. An initial publication may return its retained success
+without re-reading the current GitHub head. Its receipt may select the current
+workflow's new publication branch, including recovery after a failed first marker
+write, but cannot replace a newer recorded head on that same branch. The
+publication tool already rejects proposals that no longer match its current
+reviewed workflow. A receipt for an already reconciled branch remains available
+for exact historical lookup without replacing the selected revision. Publication branches are bound to the sealed proposal's
+idempotency key; this does not inspect Git ancestry or select a deployment.
+Update and reconciliation completions use their existing fresh provider head
+observation to advance the selection. Replaying an already recorded call never
+promotes it. Both stores decide whether the receipt is historical inside their
+serialized marker write, including concurrent first recording.
+Acquired frontend-only apps also retain their existing repository path.
+
+App descriptions and compiled releases come from owner-scoped captured artifacts. The normal plan
 operation returns the app's resource and access intent; preparation reads the
 actual approval from Builder's private history. A caller-supplied approval ID
 alone is insufficient. Source hashes remain diagnostics; the reviewed resource,
@@ -92,6 +117,9 @@ Setup, access changes, and callbacks share one physical lock per repository and
 app. Worker effects carry a positive durable fencing generation and are
 checkpointed before dispatch. Interrupted writes are read back before retry;
 uncertain results remain pending. Revisions retain the database and credentials.
+A source-only commit change retains the same setup effects, status, and sign-in
+continuation; it does not reinstall the schema or rebind credentials. Setup still
+reconciles changed storage, schema, access, and owner-session bindings.
 After the initial creator grant finishes, setup never regrants it automatically:
 People-page revocations and role changes remain authoritative. When a new
 reviewed schema changes creator roles, an existing active creator is updated
@@ -131,3 +159,7 @@ description without provider writes. The preparation approval covers data and
 access setup. Code publication, Ready, and merge remain tied to the reviewed
 revision through the existing delivery flow. Setup status does not claim that
 the native deployment is active or that app behavior has been tested.
+
+A missing saved destination is reported explicitly. Failed plan and status reads
+do not claim that setup was started or saved by that read. An uncertain
+preparation still requires status reconciliation before any retry.

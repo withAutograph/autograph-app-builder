@@ -561,3 +561,10 @@ records GitHub writes in Builder's own storage. This flow has no dependency on
 a Preview app, a managed runtime journal, or synthetic app data. Actual runtime
 bindings are owned by the destination's Production setup. GitHub merge evidence
 and the provider's deployment result are reported separately.
+
+The initial proposal sealer returns its canonical `approvalReceipt` as reviewed
+subject metadata. Builder passes that receipt unchanged to
+`publish_github_draft_pr` to present Eve's ordinary approval control. Calling the
+tool does not publish before the user approves, and the receipt itself grants
+no consent. No separate approval-request tool or creator-supplied receipt is
+required. Denial and a changed sealed proposal continue to prevent publication.

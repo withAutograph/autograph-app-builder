@@ -16,6 +16,7 @@ import type {
   EveSessionStatus,
   PublicEveEvent,
   PublicInputRequest,
+  PublicIdentityInvitation,
   PublicPrototype,
   PublicPrototypeReference,
   PublicUiPreview,
@@ -43,8 +44,9 @@ export interface InternalEveEvent {
   status?: EveSessionStatus;
   requestIds?: string[];
   resolutionKind?: "authorization";
-  identityInvitation?: { callId: string; url: string; expiresAt: string };
+  identityInvitation?: PublicIdentityInvitation;
   callId?: string;
+  operationRef?: string;
 }
 
 const authorizationCoordinatesSchema = z.object({
@@ -1277,6 +1279,80 @@ const hostedIdentityInvitation = (value: unknown): string | undefined => {
   return `Sign in or create your app account: <${url.href}>. Builder sets up your access and continues automatically.`;
 };
 
+const productionSetupStatusSchema = z.object({
+  operationRef: z.uuid(),
+  state: z.enum([
+    "ready",
+    "identity-required",
+    "setting-up-data",
+    "checking-access",
+    "reconciling",
+  ]),
+  signInUrl: z.string().optional(),
+  expiresAt: z.iso.datetime({ offset: true }).optional(),
+});
+
+/** Only the ordinary account link and its setup correlation leave the protected result. */
+const productionIdentityEvents = (
+  result: { toolName: string; callId: string; output: unknown },
+  index: number,
+  turnId: string,
+): InternalEveEvent[] => {
+  const isPrepare = result.toolName === "prepare-app-production";
+  if (!isPrepare && result.toolName !== "get-app-production") {
+    return [];
+  }
+  let output = result.output;
+  let expiresAt: string | undefined;
+  if (isPrepare) {
+    const prepared = z
+      .object({
+        setup: productionSetupStatusSchema,
+        creator: z.object({ expiresAt: z.string().optional() }).optional(),
+      })
+      .safeParse(output);
+    if (!prepared.success) {
+      return [];
+    }
+    output = prepared.data.setup;
+    expiresAt = prepared.data.creator?.expiresAt;
+  }
+  const status = productionSetupStatusSchema.safeParse(output);
+  if (!status.success) {
+    return [];
+  }
+  const { operationRef } = status.data;
+  if (status.data.state === "ready") {
+    return [
+      { index, type: "auth_identity_invitation_resolved", callId: result.callId, operationRef },
+    ];
+  }
+  if (status.data.state !== "identity-required") {
+    return [];
+  }
+  const invitation = publicIdentityInvitationSchema.safeParse({
+    callId: result.callId,
+    operationRef,
+    url: status.data.signInUrl,
+    expiresAt: status.data.expiresAt ?? expiresAt,
+  });
+  const text = invitation.success
+    ? hostedIdentityInvitation({ authIdentityLink: invitation.data.url })
+    : undefined;
+  if (!invitation.success || text === undefined) {
+    return [];
+  }
+  return [
+    {
+      index,
+      text,
+      turnId: `${turnId}:identity-invitation:${result.callId}`,
+      type: "assistant.message",
+    },
+    { index, type: "auth_identity_invitation", identityInvitation: invitation.data },
+  ];
+};
+
 /** Converts only the installed Eve 0.68 events that belong in the public MCP projection. */
 export const projectInstalledEveEvent = (
   event: MessageStreamEvent,
@@ -1400,7 +1476,12 @@ export const projectInstalledEveEvent = (
             ...progress,
             { index, type: "auth_identity_invitation_resolved", callId: event.data.result.callId },
           ]
-        : progress;
+        : [
+            ...progress,
+            ...(event.data.status === "completed" && event.data.result.isError !== true
+              ? productionIdentityEvents(event.data.result, index, event.data.turnId)
+              : []),
+          ];
     }
     case "input.requested": {
       const projectedRequests = event.data.requests.map(inputRequest);
@@ -1679,8 +1760,11 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         : null;
     }
     case "auth_identity_invitation_resolved": {
-      return event.callId
-        ? { callId: event.callId, index: event.index, type: "auth_identity_invitation_resolved" }
+      const resolved = z
+        .object({ callId: z.string().min(1), operationRef: z.uuid().optional() })
+        .safeParse(event);
+      return resolved.success
+        ? { ...resolved.data, index: event.index, type: "auth_identity_invitation_resolved" }
         : null;
     }
     case "assistant.message": {

@@ -33,6 +33,22 @@ product answers and effect approvals continue through `autograph_send` and
 `autograph_respond` in the saved session. The five tools do not expose private
 stage forcing, nor does private build approval authorize deployment or publication.
 
+App account linking is an ordinary browser sign-in, not an approval response.
+After approved Production setup requests identity, the public stream includes
+`auth_identity_invitation` with the safe sign-in URL and expiry. It exposes no
+identity proof, provider credentials, or membership data. `callId` retains the
+actual emitting tool call; optional `operationRef` identifies the same Production
+setup across prepare and read-status calls. A later successful ready result emits
+`auth_identity_invitation_resolved` for that operation, so an unrelated status
+result cannot dismiss the invitation. Legacy Preview invitations continue to
+correlate by their original `callId`. Cursor replay retains one current invitation
+per setup. A read-only Production status call also returns the pending link with
+its actual recorded expiry and projects a fresh invitation. This restores account
+linking when a saved cursor predates the invitation projection, without another
+setup approval or expiry extension. The Auth callback resumes approved setup; the event itself neither
+verifies identity nor grants access. The saved app's access page remains available
+for expiry renewal and app-scoped People controls.
+
 `autograph_get` without `sessionId` or `clientRequestId` returns a tenant-scoped
 paginated recent session index. With `sessionId`, it retains absolute-cursor
 event pagination. With the original start's `clientRequestId`, it
@@ -95,16 +111,22 @@ unchanged and discovery still returns five tools. Admission requires the complet
 retained checkpoint and independently closed native effect steps across the entire
 verified handoff lineage. A source with pending approvals retains those exact
 requests. A separately proven idle source resumes into its inbox wait without
-starting a model turn or replaying an earlier response. The server derives this
-resume phase from native state and verifies it again after stopping the source;
+starting a model turn or replaying an earlier response. After activation, its new
+native stream publishes `session.waiting` so clients can observe that inbox wait;
+an unactivated candidate publishes nothing. The server derives this resume phase
+from native state and verifies it again after stopping the source;
 a public status or stale approval control cannot select it.
 Builder fences source mutations. A separate opaque read-only preflight may inspect
 running handoff ancestors using the retained activation, checkpoint and inbox
 proofs. It cannot boot a child. Builder proves effect closure across the complete
 verified lineage, stops each active owner from root to current inbox owner, and
 independently verifies an operation-bound native cancellation receipt for every
-stopped run. Completed ancestors are observed without stopping them. Exact retries
-reconstruct partial progress from those native receipts. A newly discovered
+stopped run. Ancestors confirmed terminal by the initial full-lineage preflight
+are observed without stopping them or repeating the entire history scan solely
+to skip their stop. A fresh full-lineage preflight still precedes every live stop,
+and the final full-lineage preflight rechecks all retained state before adoption.
+No retained history or effect checks are omitted. Exact retries reconstruct
+partial progress from those native receipts. A newly discovered
 handoff refuses adoption until the same operation rechecks and quiesces that
 lineage. Only terminal-only collection and reconciliation can boot a successor.
 Active, cancelled, or unproven failed effect steps cause refusal before stop or

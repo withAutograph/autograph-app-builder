@@ -1,3 +1,4 @@
+import { sameRepositoryProductionSetupEffects } from "./repository-production-intent";
 /* oxlint-disable sonarjs/no-nested-functions -- Request-scoped management factories share the held app lease without reacquiring it. */
 /* oxlint-disable eslint/no-nested-ternary, sonarjs/no-nested-conditional -- Progress projection retains the four distinct creator states and explicit removal status. */
 /* oxlint-disable sonarjs/expression-complexity, react-doctor/server-sequential-independent-await -- Owner authorization is re-read before examining the saved approval; the full configured destination must match. */
@@ -47,6 +48,7 @@ import type {
   RepositoryProductionRequestOwner,
 } from "./repository-production-dispatcher";
 import { readRepositoryProductionConfiguration } from "./repository-production-configuration";
+import { resolveRepositoryProductionDestination } from "./repository-production-destination";
 import {
   repositoryProductionApprovalInput,
   repositoryProductionApprovalDigest,
@@ -197,17 +199,8 @@ export const createRepositoryProductionNativeHandler =
         const decision = session.privateBuildDecision;
         const source = decision?.existingRepositorySource;
         const spec = decision?.currentSpec;
-        if (!source || !spec || spec.appId !== owner.appId) {
+        if (!spec || spec.appId !== owner.appId) {
           throw new Error("repository_production_source_unavailable");
-        }
-        const profile = configuration.repositories.find(
-          (item) =>
-            item.workspaceId === owner.ownerContext.authority.workspaceId &&
-            item.repositoryId === source.repository.repositoryId &&
-            item.repositoryFullName === `${source.repository.owner}/${source.repository.name}`,
-        );
-        if (!profile) {
-          throw new Error("repository_production_scope_denied");
         }
         const assertCurrentOwner = async () => {
           await readSession(owner);
@@ -220,7 +213,19 @@ export const createRepositoryProductionNativeHandler =
           database,
           assertCurrentOwner,
         });
-        const selection = await selections.read(artifactContext, spec.appSpecDigest);
+        const [selection, destination] = await Promise.all([
+          selections.read(artifactContext, spec.appSpecDigest),
+          selections.readDestination?.(artifactContext, spec.appSpecDigest),
+        ]);
+        const { profile, sourceSha } = resolveRepositoryProductionDestination({
+          workspaceId: owner.ownerContext.authority.workspaceId,
+          appId: owner.appId,
+          appSpecDigest: spec.appSpecDigest,
+          source,
+          selection,
+          destination,
+          repositories: configuration.repositories,
+        });
         const capture = selection
           ? await createOperatorArtifactPublication({
               store: createPostgresOperatorArtifactStore({ database, assertCurrentOwner }),
@@ -252,7 +257,7 @@ export const createRepositoryProductionNativeHandler =
         });
         const intent: RepositoryProductionIntent = {
           sessionId: owner.sessionId,
-          sourceSha: selection?.publishedSource?.gitSha ?? source.repository.headSha,
+          sourceSha,
           creatorRoles:
             description.backend.kind === "generated-postgres" ? description.backend.roles : [],
           storage:
@@ -818,12 +823,12 @@ export const createRepositoryProductionNativeHandler =
             (row.record.creatorRoleUpdate?.state === "pending" ||
               row.record.appAccessUpgrade?.state === "pending" ||
               Object.values(row.record.effects).some((effect) => effect.state === "pending")) &&
-            !isDeepStrictEqual(row.record.intent, found.intent)
+            !sameRepositoryProductionSetupEffects(row.record.intent, found.intent)
           ) {
             throw new Error("repository_production_reconciliation_required");
           }
           if (
-            !isDeepStrictEqual(row.record.intent, found.intent) &&
+            !sameRepositoryProductionSetupEffects(row.record.intent, found.intent) &&
             (await accessJournal.pending(found.scope)).length > 0
           ) {
             throw new Error("repository_production_access_reconciliation_required");
