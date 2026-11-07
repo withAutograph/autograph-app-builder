@@ -406,7 +406,7 @@ it("retains an active actor-bound organization on a previous release without req
 
 it("excludes only observed inactive or missing actor-bound organizations", async () => {
   const f = activeInstallationFixture();
-  f.reader.readActiveOrganization = vi.fn(async () => null);
+  f.reader.readActiveOrganization = vi.fn<() => Promise<null>>().mockResolvedValue(null);
   await expect(readActiveAppInstallationCustomerIds(f.input)).resolves.toEqual([]);
 });
 

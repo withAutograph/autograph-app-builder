@@ -43,7 +43,7 @@ const fixture = (existing = true) => {
     })),
   } as unknown as Pick<Sandbox, "delete" | "writeFiles" | "runCommand">;
   const createSandbox = vi.fn(async (_options: Parameters<typeof Sandbox.create>[0]) => sandbox);
-  const getOidc = vi.fn(async () => "owned-oidc");
+  const getOidc = vi.fn<() => Promise<string>>().mockResolvedValue("owned-oidc");
   const assertCurrentOwner = vi.fn(async () => {});
   return {
     sandbox,

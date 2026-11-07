@@ -3842,8 +3842,8 @@ it.each(["reconcile", "execute"] as const)(
     };
     const appCandidates = [appCandidate];
     const gatewayCandidates = [gatewayCandidate];
-    const checkpointApp = vi.fn(async () => {});
-    const checkpointGateway = vi.fn(async () => {});
+    const checkpointApp = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const checkpointGateway = vi.fn<() => Promise<void>>().mockResolvedValue();
     const verifyForDelivery = vi.fn(
       async (
         input: Parameters<
@@ -4024,7 +4024,7 @@ describe("approved historical organization inspection", () => {
         readback_sha256: "e".repeat(64),
       };
     });
-    const execute = vi.fn(async () => {});
+    const execute = vi.fn<() => Promise<void>>().mockResolvedValue();
     vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
       inspect,
       execute,

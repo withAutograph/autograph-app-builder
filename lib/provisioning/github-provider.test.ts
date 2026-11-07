@@ -57,8 +57,7 @@ const config = {
 function credentialStore(): GitHubUserCredentialStore {
   return {
     bind: vi.fn(),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    deactivate: vi.fn(async () => 1),
+    deactivate: vi.fn<() => Promise<number>>().mockResolvedValue(1),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     read: vi.fn(async () => ({
       active: true,

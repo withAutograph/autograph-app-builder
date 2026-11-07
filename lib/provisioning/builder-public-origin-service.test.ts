@@ -37,7 +37,7 @@ const input = {
 };
 const setup = () => {
   let choice: string | undefined;
-  const assertCurrent = vi.fn<() => Promise<void>>().mockImplementation(() => Promise.resolve());
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readOrigins = vi
     .fn<() => Promise<string[]>>()
     .mockResolvedValue(["https://first.example", "https://second.example"]);
