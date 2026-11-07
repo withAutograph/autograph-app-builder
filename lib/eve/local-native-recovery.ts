@@ -200,7 +200,6 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       owners.at(-2) !== descriptor.sourceOwnerRunId
     )
       throw unavailable();
-    return;
   };
   const ports: Ports = {
     authorize,
