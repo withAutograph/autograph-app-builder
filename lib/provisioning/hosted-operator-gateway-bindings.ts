@@ -126,6 +126,7 @@ const hasOnlyApprovedSourcePairs = (
 };
 
 const systemEnvironmentSlugs = new Set(["production", "preview", "development"]);
+const gatewayBindingsEffect = "gateway-bindings";
 const includesEnvironmentSet = (
   actual: z.infer<typeof trustedEnvironmentSet>,
   expected: z.infer<typeof trustedEnvironmentSet>,
@@ -380,7 +381,7 @@ const validGatewayInput = (input: GatewayManagedEnvironmentContext, readonlyCano
   }
   return [
     plan.action === "prepare",
-    ["gateway-bindings", "gateway-delivery"].includes(input.effect.kind) ||
+    [gatewayBindingsEffect, "gateway-delivery"].includes(input.effect.kind) ||
       (readonlyCanonical &&
         input.effect.kind === "resources" &&
         input.effect.resourceId === plan.authDatabase.resourceId),
@@ -489,51 +490,52 @@ export const createHostedOperatorGatewayBindings = (deps: {
       /* Diagnostics never change the existing binding or reconciliation outcome. */
     }
     let stage: OperatorGatewayBindingsDiagnostic["stage"] = "context";
-    let method: OperatorGatewayBindingsDiagnostic["method"];
-    let requestTarget: OperatorGatewayBindingsDiagnostic["requestTarget"];
+    let requestState: Pick<
+      OperatorGatewayBindingsDiagnostic,
+      "method" | "requestTarget" | "statusCategory" | "httpStatus"
+    > & { providerFailure?: ReturnType<typeof projectOperatorGatewayProviderFailure> } = {};
     let protection:
       | Pick<
           OperatorGatewayBindingsDiagnostic,
           "trustedSourcesVisibility" | "missingApprovedPairCount"
         >
       | undefined;
-    let statusCategory: OperatorGatewayBindingsDiagnostic["statusCategory"];
-    let httpStatus: OperatorGatewayBindingsDiagnostic["httpStatus"];
-    let providerFailure: ReturnType<typeof projectOperatorGatewayProviderFailure> | undefined;
     return {
       at(next: OperatorGatewayBindingsDiagnostic["stage"], preserveRequest = false) {
         stage = next;
         if (!preserveRequest) {
-          method = undefined;
-          requestTarget = undefined;
-          statusCategory = undefined;
-          httpStatus = undefined;
-          providerFailure = undefined;
+          requestState = {};
         }
       },
       finish(result: OperatorGatewayBindingsDiagnostic["result"]) {
+        const { method, requestTarget, statusCategory, httpStatus, providerFailure } = requestState;
+        let gatewayBindings: OperatorGatewayBindingsDiagnostic = { mode, result, stage };
+        if (method !== undefined) {
+          gatewayBindings.method = method;
+        }
+        if (result === "failed" || result === "unknown") {
+          if (requestTarget !== undefined) {
+            gatewayBindings.requestTarget = requestTarget;
+          }
+          gatewayBindings = { ...gatewayBindings, ...protection };
+        }
+        if (statusCategory !== undefined) {
+          gatewayBindings.statusCategory = statusCategory;
+        }
+        if (httpStatus !== undefined) {
+          gatewayBindings.httpStatus = httpStatus;
+        }
+        gatewayBindings = { ...gatewayBindings, ...providerFailure };
         report?.({
           boundary: "operator",
-          gatewayBindings: {
-            mode,
-            result,
-            stage,
-            ...(method === undefined ? {} : { method }),
-            ...((result === "failed" || result === "unknown") && requestTarget !== undefined
-              ? { requestTarget }
-              : {}),
-            ...(result === "failed" || result === "unknown" ? protection : {}),
-            ...(statusCategory === undefined ? {} : { statusCategory }),
-            ...(httpStatus === undefined ? {} : { httpStatus }),
-            ...providerFailure,
-          },
+          gatewayBindings,
           outcome: result === "failed" || result === "unknown" ? "setup_unavailable" : "verified",
           phase: "inline",
           stage: "operator_request",
         });
       },
       noResponse() {
-        statusCategory = "no_response";
+        requestState.statusCategory = "no_response";
       },
       protection(value?: typeof protection) {
         protection = value;
@@ -541,36 +543,36 @@ export const createHostedOperatorGatewayBindings = (deps: {
       providerFailure(
         failure: ReturnType<typeof projectOperatorGatewayProviderFailure> | undefined,
       ) {
-        providerFailure = failure;
+        requestState.providerFailure = failure;
       },
       request(
         next: NonNullable<OperatorGatewayBindingsDiagnostic["method"]>,
         target: NonNullable<OperatorGatewayBindingsDiagnostic["requestTarget"]>,
       ) {
-        method = next;
-        requestTarget = target;
+        requestState.method = next;
+        requestState.requestTarget = target;
       },
       response(status: number) {
         if (!Number.isFinite(status)) {
           return;
         }
         if (Number.isInteger(status) && status >= 100 && status <= 599) {
-          httpStatus = status;
+          requestState.httpStatus = status;
         }
         if (status >= 200 && status < 300) {
-          statusCategory = "success";
+          requestState.statusCategory = "success";
         } else if (status === 401 || status === 403) {
-          statusCategory = "auth_denied";
+          requestState.statusCategory = "auth_denied";
         } else if (status === 429) {
-          statusCategory = "rate_limited";
+          requestState.statusCategory = "rate_limited";
         } else if (status >= 400 && status < 500) {
-          statusCategory = "client_error";
+          requestState.statusCategory = "client_error";
         } else if (status >= 500 && status < 600) {
-          statusCategory = "server_error";
+          requestState.statusCategory = "server_error";
         } else if (status >= 300 && status < 400) {
-          statusCategory = "redirect";
+          requestState.statusCategory = "redirect";
         } else {
-          statusCategory = "other";
+          requestState.statusCategory = "other";
         }
       },
       get stage() {
@@ -617,7 +619,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         input.plan,
         input.operationRef,
         input.effect.id,
-        "gateway-bindings",
+        gatewayBindingsEffect,
       )
     ) {
       throw unavailable();
@@ -1382,21 +1384,23 @@ export const createHostedOperatorGatewayBindings = (deps: {
       if (renewal !== undefined && existing === undefined) {
         throw unavailable();
       }
-      const gitBranch = existing === undefined ? await newRowGitBranch() : undefined;
-      return await (existing
-        ? request(
-            `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(existing.id)}`,
-            "PATCH",
-            { type: "encrypted", value },
-          )
-        : request(`/v10/projects/${encodeURIComponent(projectId)}/env`, "POST", {
-            comment,
-            ...(gitBranch === null ? {} : { gitBranch }),
-            key,
-            target: ["preview"],
-            type: "encrypted",
-            value,
-          }));
+      if (existing !== undefined) {
+        return await request(
+          `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(existing.id)}`,
+          "PATCH",
+          { type: "encrypted", value },
+        );
+      }
+      const gitBranch = await newRowGitBranch();
+      const destination = gitBranch === null ? { comment } : { comment, gitBranch };
+      const payload = {
+        ...destination,
+        key,
+        target: ["preview"],
+        type: "encrypted" as const,
+        value,
+      };
+      return await request(`/v10/projects/${encodeURIComponent(projectId)}/env`, "POST", payload);
     };
     const prepareWrite = async (
       existing: ProviderRow | undefined,
