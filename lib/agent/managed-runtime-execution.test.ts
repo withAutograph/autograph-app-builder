@@ -269,8 +269,8 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
     domain: () => "https://controlled-sandbox.vercel.run",
     expiresAt,
     fs: {
-      chmod: vi.fn<ManagedRuntimeSandboxPort["fs"]["chmod"]>(async () => {}),
-      mkdir: vi.fn<ManagedRuntimeSandboxPort["fs"]["mkdir"]>(async () => {}),
+      chmod: vi.fn<ManagedRuntimeSandboxPort["fs"]["chmod"]>().mockResolvedValue(),
+      mkdir: vi.fn<ManagedRuntimeSandboxPort["fs"]["mkdir"]>().mockResolvedValue(),
       rename: vi.fn<ManagedRuntimeSandboxPort["fs"]["rename"]>(async (from, to) => {
         const bytes = files.get(from);
         if (bytes === undefined) {
@@ -307,7 +307,7 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
         return makeCommand("hash-command", "");
       }
       if (input.cmd === worker.executablePath) {
-        const inputPath = input.args[2];
+        const inputPath = input.args.at(2);
         const bytes = inputPath === undefined ? undefined : files.get(inputPath);
         if (bytes === undefined) {
           throw new Error("Missing controlled entry input");
@@ -343,7 +343,7 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
       }
       throw new Error("Unsupported controlled SDK command");
     }),
-    update: vi.fn<ManagedRuntimeSandboxPort["update"]>(async () => {}),
+    update: vi.fn<ManagedRuntimeSandboxPort["update"]>().mockResolvedValue(),
     writeFiles: vi.fn<ManagedRuntimeSandboxPort["writeFiles"]>(async (writes) => {
       for (const file of writes) {
         files.set(file.path, Buffer.from(file.content));
@@ -383,12 +383,12 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
   let sourceBytes: Buffer = workerBytes;
   let sourceCreates = 0;
   const source = {
-    delete: vi.fn(async () => {}),
+    delete: vi.fn<() => Promise<void>>().mockResolvedValue(),
     get name() {
       return sourceName;
     },
     readFileToBuffer: vi.fn(async () => sourceBytes),
-    stop: vi.fn(async () => {}),
+    stop: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
   const installer = {
     ...worker,
@@ -414,42 +414,47 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
     token: async () => "controlled-operator-host-oidc",
   });
   const deps: ManagedRuntimeExecutionDependencies = {
-    worker,
-    installWorkerAsset: vi.fn<ManagedRuntimeExecutionDependencies["installWorkerAsset"]>(
-      async (input) => {
-        await asset.install(input);
-      },
-    ),
+    assertSelectedSandbox: vi
+      .fn<ManagedRuntimeExecutionDependencies["assertSelectedSandbox"]>()
+      .mockResolvedValue(),
     disposeWorkerAsset: vi.fn<ManagedRuntimeExecutionDependencies["disposeWorkerAsset"]>(
       async (input) => {
         await input.checkpoint({ ...input.state, disposed: true });
       },
     ),
     getSandbox: vi.fn<ManagedRuntimeExecutionDependencies["getSandbox"]>(async () => provider),
-    assertSelectedSandbox: vi.fn<ManagedRuntimeExecutionDependencies["assertSelectedSandbox"]>(
-      async () => {},
+    installWorkerAsset: vi.fn<ManagedRuntimeExecutionDependencies["installWorkerAsset"]>(
+      async (input) => {
+        await asset.install(input);
+      },
     ),
     readExecution: vi.fn<ManagedRuntimeExecutionDependencies["readExecution"]>(
-      async (_context, _plan, includeActors) => ({
-        environment,
-        proof: {
-          actors: 1,
-          artifactHash: preparedPlan.release.sha256,
-          authenticatedBehavior: "unassessed",
-          releaseId: preparedPlan.release.id,
-          tenants: 1,
-        },
-        ...(includeActors === true ? { normalActors: actors } : {}),
-      }),
+      async (_context, _plan, includeActors) => {
+        const result: Awaited<ReturnType<ManagedRuntimeExecutionDependencies["readExecution"]>> = {
+          environment,
+          proof: {
+            actors: 1,
+            artifactHash: preparedPlan.release.sha256,
+            authenticatedBehavior: "unassessed" as const,
+            releaseId: preparedPlan.release.id,
+            tenants: 1,
+          },
+        };
+        if (includeActors === true) {
+          result.normalActors = actors;
+        }
+        return result;
+      },
     ),
     readPublicJwks: vi.fn<ManagedRuntimeExecutionDependencies["readPublicJwks"]>(async () => ({
       keys: profile.keys,
     })),
     // oxlint-disable-next-line unicorn/no-useless-undefined -- An absent AbortSignal is a supported SDK adapter input.
     signal: () => undefined,
+    worker,
   };
   const runtime = createManagedRuntimeExecution(deps);
-  const guard = vi.fn(async () => {});
+  const guard = vi.fn<() => Promise<void>>().mockResolvedValue();
   const checkpoint: Parameters<typeof runtime.start>[4] = async (patch) => {
     record = continuityRecordSchema.parse({ ...record, ...patch });
   };
@@ -1068,8 +1073,8 @@ describe("managed runtime execution through supported SDK ports", () => {
   });
 });
 
-// oxlint-disable-next-line typescript/strict-void-return -- Node execFile also returns its child handle alongside the documented completion callback.
-const executePortCommand = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const executePortCommand = promisifyExecFile(execFile);
 /* oxlint-disable promise/avoid-new -- Owned local listeners expose Node event-to-Promise interfaces. */
 const listenLocally = async (server: ReturnType<typeof createServer>, port: number) => {
   await new Promise<void>((resolve, reject) => {
