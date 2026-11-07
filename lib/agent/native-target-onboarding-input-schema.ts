@@ -21,7 +21,6 @@ export const nativeTargetPreparationRequestSchema = z.strictObject({
 export type NativeTargetPreparationRequest = z.infer<typeof nativeTargetPreparationRequestSchema>;
 export const nativeTargetOnboardingResultSchema = nativeTargetPreparationRequestSchema
   .extend({
-    status: z.enum(["planned", "pending", "ready", "cancelled", "approval-pending", "blocked"]),
     projectId: z.string().min(1).optional(),
     // Advisory same-credential GET evidence, never a project-creation grant.
     providerAuthorization: nativeTargetProviderAuthorizationSchema.optional(),
@@ -34,6 +33,7 @@ export const nativeTargetOnboardingResultSchema = nativeTargetPreparationRequest
         "rate_limited",
       ])
       .optional(),
+    status: z.enum(["planned", "pending", "ready", "cancelled", "approval-pending", "blocked"]),
   })
   .superRefine((result, context) => {
     if (result.status === "ready" && result.projectId === undefined) {
