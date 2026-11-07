@@ -1,7 +1,48 @@
 /* oxlint-disable eslint/no-await-in-loop, eslint/no-negated-condition, unicorn/no-negated-condition, unicorn/consistent-function-scoping, promise/prefer-await-to-then, unicorn/prefer-ternary -- isolated browser workflows run sequentially; all helpers remain inside the portable evaluator function. */
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 import { sanitizeEvidence } from "./self-reproduction-evidence";
-import type { Browser, Page } from "playwright";
+import type { Locator, Page, Request } from "playwright";
+
+type CandidateLocator = Pick<
+  Locator,
+  | "allTextContents"
+  | "blur"
+  | "click"
+  | "count"
+  | "fill"
+  | "getAttribute"
+  | "inputValue"
+  | "isVisible"
+  | "textContent"
+  | "waitFor"
+> & {
+  first: () => CandidateLocator;
+};
+
+interface CandidatePage {
+  getByRole: (
+    role: Parameters<Page["getByRole"]>[0],
+    options?: { name?: RegExp },
+  ) => CandidateLocator;
+  getByText: (text: RegExp) => CandidateLocator;
+  goBack: Page["goBack"];
+  goto: (...args: Parameters<Page["goto"]>) => Promise<{ ok: () => boolean } | null>;
+  locator: (selector: string) => CandidateLocator;
+  on: (event: "request", listener: (request: Pick<Request, "method" | "url">) => void) => void;
+  reload: Page["reload"];
+  request: { get: (url: string) => Promise<{ ok: () => boolean; text: () => Promise<string> }> };
+  setDefaultTimeout: Page["setDefaultTimeout"];
+  url: Page["url"];
+  waitForLoadState: Page["waitForLoadState"];
+  waitForTimeout: Page["waitForTimeout"];
+}
+
+interface CandidateBrowser {
+  newContext: () => Promise<{
+    close: () => Promise<void>;
+    newPage: () => Promise<CandidatePage>;
+  }>;
+}
 
 export interface CandidateWorkflowOutcome {
   requirementId: string;
@@ -13,7 +54,7 @@ export interface CandidateWorkflowOutcome {
 
 /** Evaluator-owned browser checks. Serialized into Sandbox, never supplied to generation. */
 export const exerciseCandidateBrowserWorkflows = async (
-  browser: Browser,
+  browser: CandidateBrowser,
   baseURL: string,
   retain: (outcomes: CandidateWorkflowOutcome[]) => Promise<void>,
 ) => {
@@ -40,7 +81,7 @@ export const exerciseCandidateBrowserWorkflows = async (
     const check = (id: string, passed: boolean | null, detail: string) =>
       assertions.push({ detail, id, passed });
     const button = (name: RegExp) => page.getByRole("button", { name }).first();
-    const exists = (locator: ReturnType<Page["locator"]>) => locator.isVisible().catch(() => false);
+    const exists = (locator: CandidateLocator) => locator.isVisible().catch(() => false);
     const text = () => page.locator("body").textContent();
     let outcome: CandidateWorkflowOutcome = {
       assertions: [],

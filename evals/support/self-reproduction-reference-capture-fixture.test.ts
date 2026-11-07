@@ -31,9 +31,9 @@ const page = {
 
 it("requires an owner-scoped durable readback and records no session credentials", async () => {
   fixture.query.mockResolvedValue([{ ...selfReproductionDraft, revision: 7 }]);
-  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(() =>
-    Promise.resolve(),
-  );
+  const recordReceipt = vi
+    .fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>()
+    .mockResolvedValue();
   await prepareReferenceCaptureFixture(page, {
     fixtureRoot: "/tmp/isolated-reference",
     recordReceipt,
@@ -52,9 +52,9 @@ it("requires an owner-scoped durable readback and records no session credentials
 
 it("records a blocker and rejects when emulated authentication fails", async () => {
   fixture.authenticate.mockRejectedValueOnce(new Error("sensitive diagnostic"));
-  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(() =>
-    Promise.resolve(),
-  );
+  const recordReceipt = vi
+    .fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>()
+    .mockResolvedValue();
   await expect(
     prepareReferenceCaptureFixture(page, {
       fixtureRoot: "/tmp/isolated-reference",
@@ -72,9 +72,9 @@ it("captures three restored contexts without waiting for a new write acknowledge
   const status = vi.fn(() => {
     throw new Error("Unchanged draft has no new acknowledgement");
   });
-  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(() =>
-    Promise.resolve(),
-  );
+  const recordReceipt = vi
+    .fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>()
+    .mockResolvedValue();
   for (const width of [1440, 1920, 1024]) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- Match the sequential desktop capture lifecycle.
     await prepareReferenceCaptureFixture(
