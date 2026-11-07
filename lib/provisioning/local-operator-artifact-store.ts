@@ -17,6 +17,7 @@ import type {
 import {
   compiledOperatorReleaseSelectionSchema,
   appPublicationDestinationSchema,
+  historicalAppPublication,
   exactCompiledOperatorReleaseLookupSchema,
   selectExactCompiledOperatorRelease,
   selectExactPublishedAppSource,
@@ -391,7 +392,7 @@ export const createLocalOperatorArtifactStorage = async (input: {
       const callDigest = hash(z.string().min(1).parse(callId));
       for (;;) {
         await input.assertCurrentOwner(context);
-        const { latest, matched } = await scanDestinations(owned, callDigest);
+        const { latest, matched, selected } = await scanDestinations(owned, callDigest);
         if (matched !== undefined) {
           if (!isDeepStrictEqual(matched.destination, destination)) {
             throw operatorArtifactUnavailable();
@@ -406,7 +407,7 @@ export const createLocalOperatorArtifactStorage = async (input: {
           destination,
           sequence,
           version: 1,
-          ...(selectionMode === "initialize" && latest !== undefined
+          ...(historicalAppPublication(selectionMode, destination, selected?.destination)
             ? { historicalOnly: true }
             : {}),
         });

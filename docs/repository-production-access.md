@@ -76,13 +76,17 @@ not need a SQL release or source acquisition. Normal publication and retained
 reconciliation completion record the marker only after provider success. A
 historical static publication can resume that same approved completion to
 record its destination. An initial publication may return its retained success
-without re-reading the current GitHub head, so it initializes the selection only
-when no destination is recorded. If its first marker write is recovered after a
-newer reconciliation, the old receipt is retained for exact historical lookup
-without replacing the selected revision. Update and reconciliation completions
-use their existing fresh provider head observation to advance the selection;
-replaying an already recorded call never promotes it. Both stores serialize this
-decision with the marker write, including concurrent first recording.
+without re-reading the current GitHub head. Its receipt may select the current
+workflow's new publication branch, including recovery after a failed first marker
+write, but cannot replace a newer recorded head on that same branch. The
+publication tool already rejects proposals that no longer match its current
+reviewed workflow. A receipt for an already reconciled branch remains available
+for exact historical lookup without replacing the selected revision. Publication branches are bound to the sealed proposal's
+idempotency key; this does not inspect Git ancestry or select a deployment.
+Update and reconciliation completions use their existing fresh provider head
+observation to advance the selection. Replaying an already recorded call never
+promotes it. Both stores decide whether the receipt is historical inside their
+serialized marker write, including concurrent first recording.
 Acquired frontend-only apps also retain their existing repository path.
 
 App descriptions and compiled releases come from owner-scoped captured artifacts. The normal plan

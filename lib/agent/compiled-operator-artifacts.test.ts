@@ -569,7 +569,7 @@ describe("owned compiled artifact workflow hook", () => {
         { authority, target: { appId: input.appId, sessionId: "durable-original" } },
         input.callId,
         expect.objectContaining({ publishedSource: historicalSource }),
-        initial ? "initialize" : "current",
+        initial ? "initial" : "current",
       );
       expect(mocks.readSelection).not.toHaveBeenCalled();
       expect(mocks.record).not.toHaveBeenCalled();

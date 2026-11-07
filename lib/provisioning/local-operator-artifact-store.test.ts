@@ -120,11 +120,11 @@ describe("published source selection persistence", () => {
         appSpecDigest: "a".repeat(64),
         publishedSource: source,
       };
-      await recordDestination(f.context, "publication-one", destination, "initialize");
+      await recordDestination(f.context, "publication-one", destination, "initial");
       expect(await readDestination(f.context, destination.appSpecDigest)).toEqual(destination);
       const updated = { ...destination, publishedSource: { ...source, gitSha: "f".repeat(40) } };
       await recordDestination(f.context, "publication-two", updated, "current");
-      await recordDestination(f.context, "publication-one", destination, "initialize");
+      await recordDestination(f.context, "publication-one", destination, "initial");
       const reopened = await createLocalOperatorArtifactStorage(f);
       expect(
         await reopened.selections.readDestination?.(f.context, destination.appSpecDigest),
@@ -135,7 +135,7 @@ describe("published source selection persistence", () => {
         await reopened.selections.readPublishedSource?.(f.context, updated.publishedSource),
       ).toEqual(updated.publishedSource);
       await expect(
-        recordDestination(f.context, "publication-one", updated, "initialize"),
+        recordDestination(f.context, "publication-one", updated, "initial"),
       ).rejects.toThrow();
       await expect(
         readDestination(
@@ -148,7 +148,7 @@ describe("published source selection persistence", () => {
           f.context,
           "foreign-app",
           { ...destination, appId: "other-app" },
-          "initialize",
+          "initial",
         ),
       ).rejects.toThrow();
     });
@@ -170,8 +170,8 @@ describe("published source selection persistence", () => {
       };
       const newer = { ...initial, publishedSource: { ...source, gitSha: "f".repeat(40) } };
       await recordDestination(f.context, "fresh-reconciliation", newer, "current");
-      await recordDestination(f.context, "late-first-initial-receipt", initial, "initialize");
-      await recordDestination(f.context, "late-first-initial-receipt", initial, "initialize");
+      await recordDestination(f.context, "late-first-initial-receipt", initial, "initial");
+      await recordDestination(f.context, "late-first-initial-receipt", initial, "initial");
       const reopened = await createLocalOperatorArtifactStorage(f);
       expect(await reopened.selections.readDestination?.(f.context, initial.appSpecDigest)).toEqual(
         newer,
@@ -182,8 +182,66 @@ describe("published source selection persistence", () => {
       ).toEqual(newer.publishedSource);
       const latest = { ...newer, publishedSource: { ...source, gitSha: "9".repeat(40) } };
       await recordDestination(f.context, "next-current-head", latest, "current");
-      await recordDestination(f.context, "late-first-initial-receipt", initial, "initialize");
+      await recordDestination(f.context, "late-first-initial-receipt", initial, "initial");
       expect(await readDestination(f.context, initial.appSpecDigest)).toEqual(latest);
+    });
+  });
+  it("selects new same-spec PR branches and recovers their missing first markers", async () => {
+    const f = await fixture();
+    await contextStorage.run(f.container, async () => {
+      const { selections } = await createLocalOperatorArtifactStorage(f);
+      const original = {
+        version: 1 as const,
+        appId: "fixture-app",
+        appSpecDigest: "a".repeat(64),
+        publishedSource: source,
+      };
+      await selections.recordDestination?.(f.context, "original-pr", original, "initial");
+      const next = {
+        ...original,
+        publishedSource: {
+          ...source,
+          branch: "app-builder/new-reviewed-pr",
+          gitSha: "f".repeat(40),
+        },
+      };
+      await selections.recordDestination?.(f.context, "new-pr", next, "initial");
+      expect(await selections.readDestination?.(f.context, original.appSpecDigest)).toEqual(next);
+      const recovered = {
+        ...original,
+        publishedSource: {
+          ...source,
+          branch: "app-builder/recovered-new-pr",
+          gitSha: "9".repeat(40),
+        },
+      };
+      // The provider receipt exists, but the failed first marker write left no local record.
+      expect(
+        await selections.readPublishedSource?.(f.context, recovered.publishedSource),
+      ).toBeUndefined();
+      await selections.recordDestination?.(
+        f.context,
+        "new-pr-marker-recovery",
+        recovered,
+        "initial",
+      );
+      await selections.recordDestination?.(
+        f.context,
+        "new-pr-marker-recovery",
+        recovered,
+        "initial",
+      );
+      const reopened = await createLocalOperatorArtifactStorage(f);
+      expect(
+        await reopened.selections.readDestination?.(f.context, original.appSpecDigest),
+      ).toEqual(recovered);
+      expect(
+        await reopened.selections.readPublishedSource?.(f.context, next.publishedSource),
+      ).toEqual(next.publishedSource);
+      await selections.recordDestination?.(f.context, "original-pr", original, "initial");
+      expect(await selections.readDestination?.(f.context, original.appSpecDigest)).toEqual(
+        recovered,
+      );
     });
   });
   it("keeps a current head selected when a missing initial receipt records concurrently", async () => {
@@ -198,7 +256,7 @@ describe("published source selection persistence", () => {
       };
       const newer = { ...initial, publishedSource: { ...source, gitSha: "f".repeat(40) } };
       await Promise.all([
-        selections.recordDestination?.(f.context, "initial", initial, "initialize"),
+        selections.recordDestination?.(f.context, "initial", initial, "initial"),
         selections.recordDestination?.(f.context, "reconciliation", newer, "current"),
       ]);
       expect(await selections.readDestination?.(f.context, initial.appSpecDigest)).toEqual(newer);

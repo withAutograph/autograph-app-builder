@@ -36,6 +36,16 @@ export const appPublicationDestinationSchema = z.object({
   publishedSource: publishedAppSourceSchema,
 });
 export type AppPublicationDestination = z.infer<typeof appPublicationDestinationSchema>;
+export type AppPublicationSelectionMode = "initial" | "current";
+/** A retained initial result must not overwrite a later head on that same publication branch. */
+export const historicalAppPublication = (
+  mode: AppPublicationSelectionMode,
+  destination: AppPublicationDestination,
+  current: AppPublicationDestination | undefined,
+) =>
+  mode === "initial" &&
+  current?.publishedSource.repositoryId === destination.publishedSource.repositoryId &&
+  current.publishedSource.branch === destination.publishedSource.branch;
 
 export type PublishedAppSourceLookup = Pick<
   PublishedAppSource,
@@ -193,8 +203,8 @@ export interface OperatorArtifactSelections {
     context: OperatorArtifactContext,
     callId: string,
     destination: AppPublicationDestination,
-    /** Retained initial receipts initialize only; fresh provider head observations may advance. */
-    selectionMode: "initialize" | "current",
+    /** Initial results are scoped to the currently approved publication branch. */
+    selectionMode: AppPublicationSelectionMode,
   ) => Promise<AppPublicationDestination>;
 
   read: (
@@ -242,6 +252,13 @@ const predicate = (scope: ReturnType<typeof scoped>) =>
     eq(prototypeArtifactChunks.chunkIndex, 0),
   );
 
+const selectedDestinationPredicate = (scope: ReturnType<typeof scoped>) =>
+  and(
+    predicate(scope),
+    // Other artifact rows contain HTML; SQL may evaluate AND terms in any order.
+    sql`(case when ${predicate(scope)} then ${prototypeArtifactChunks.content}::jsonb->>'historicalOnly' end) is distinct from 'true'`,
+  );
+
 /** Completion markers are immutable per trusted tool call and written only after every release member is durably readable. */
 export const createPostgresOperatorArtifactSelections = (input: {
   database: PostgresJsDatabase<typeof databaseSchema>;
@@ -278,12 +295,7 @@ export const createPostgresOperatorArtifactSelections = (input: {
           chunkDigest: prototypeArtifactChunks.chunkDigest,
         })
         .from(prototypeArtifactChunks)
-        .where(
-          and(
-            predicate(scope),
-            sql`${prototypeArtifactChunks.content}::jsonb->>'historicalOnly' is distinct from 'true'`,
-          ),
-        )
+        .where(selectedDestinationPredicate(scope))
         .orderBy(
           desc(prototypeArtifactChunks.createdAt),
           desc(prototypeArtifactChunks.transferDigest),
@@ -315,15 +327,29 @@ export const createPostgresOperatorArtifactSelections = (input: {
       const transferDigest = hash(z.string().min(1).parse(callId));
       return await writeSelection(context, scope, async (database) => {
         const [prior] = await database
-          .select({ transferDigest: prototypeArtifactChunks.transferDigest })
+          .select({
+            content: prototypeArtifactChunks.content,
+            chunkDigest: prototypeArtifactChunks.chunkDigest,
+          })
           .from(prototypeArtifactChunks)
-          .where(predicate(scope))
+          .where(selectedDestinationPredicate(scope))
+          .orderBy(
+            desc(prototypeArtifactChunks.createdAt),
+            desc(prototypeArtifactChunks.transferDigest),
+          )
           .limit(1);
-        // Initial publication may return an old durable success without re-reading the current head.
-        // Retain that evidence, but never replace a destination already selected by a later completion.
+        if (prior !== undefined && prior.chunkDigest !== hash(prior.content)) {
+          throw operatorArtifactUnavailable();
+        }
+        const current =
+          prior === undefined
+            ? undefined
+            : appPublicationDestinationSchema.parse(JSON.parse(prior.content));
+        // A new currently selected proposal has its own sealed branch. Recovery
+        // can retain its initial receipt, but cannot undo a same-branch reconciliation.
         const content = JSON.stringify({
           ...destination,
-          ...(selectionMode === "initialize" && prior !== undefined
+          ...(historicalAppPublication(selectionMode, destination, current)
             ? { historicalOnly: true }
             : {}),
         });

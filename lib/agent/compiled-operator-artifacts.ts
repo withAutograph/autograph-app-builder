@@ -282,7 +282,7 @@ export const recordPublishedOperatorSourceForSession = async (
         appSpecDigest: input.appSpecDigest,
         publishedSource: input.publishedSource,
       },
-      input.initialPublication === true ? "initialize" : "current",
+      input.initialPublication === true ? "initial" : "current",
     );
     return { status: "recorded", destination };
   }

@@ -1,6 +1,6 @@
 /* oxlint-disable promise/avoid-new, promise/prefer-await-to-callbacks -- Disposable loopback PostgreSQL uses the native socket callback API. */
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -101,6 +101,17 @@ try {
     },
     target: { appId: "frontend-app", sessionId: "original-session" },
   };
+  const previewHtml = "<!doctype html><title>Unrelated app preview</title>";
+  await database.insert(schema.prototypeArtifactChunks).values({
+    ...context.authority,
+    sessionId: context.target.sessionId,
+    path: "preview/index.html",
+    chunkIndex: 0,
+    content: previewHtml,
+    chunkDigest: createHash("sha256").update(previewHtml).digest("hex"),
+    transferDigest: "0".repeat(64),
+    createdAt: new Date(),
+  });
   const first = {
     version: 1 as const,
     appId: "frontend-app",
@@ -119,12 +130,12 @@ try {
     publishedSource: { ...first.publishedSource, gitSha: "f".repeat(40) },
   };
   await Promise.all([
-    recordDestination(context, "initial-publication", first, "initialize"),
-    recordDestination(context, "initial-publication", first, "initialize"),
+    recordDestination(context, "initial-publication", first, "initial"),
+    recordDestination(context, "initial-publication", first, "initial"),
   ]);
   assert.deepEqual(await readDestination(context, first.appSpecDigest), first);
   await recordDestination(context, "revision-publication", second, "current");
-  await recordDestination(context, "initial-publication", first, "initialize");
+  await recordDestination(context, "initial-publication", first, "initial");
   assert.deepEqual(await stores().readDestination?.(context, first.appSpecDigest), second);
   assert.deepEqual(
     await store.readPublishedSource(context, first.publishedSource),
@@ -139,7 +150,7 @@ try {
     undefined,
     "No compiled SQL release is manufactured",
   );
-  await assert.rejects(recordDestination(context, "initial-publication", second, "initialize"));
+  await assert.rejects(recordDestination(context, "initial-publication", second, "initial"));
   // Initial Git publication succeeded but its first marker write failed; a later
   // reconciliation was recorded before recovery returned that retained old receipt.
   const missingInitial = {
@@ -149,8 +160,8 @@ try {
   };
   const recordedReconciliation = { ...second, appSpecDigest: missingInitial.appSpecDigest };
   await recordDestination(context, "newer-before-old-marker", recordedReconciliation, "current");
-  await recordDestination(context, "late-first-initial-receipt", missingInitial, "initialize");
-  await recordDestination(context, "late-first-initial-receipt", missingInitial, "initialize");
+  await recordDestination(context, "late-first-initial-receipt", missingInitial, "initial");
+  await recordDestination(context, "late-first-initial-receipt", missingInitial, "initial");
   assert.deepEqual(
     await stores().readDestination?.(context, missingInitial.appSpecDigest),
     recordedReconciliation,
@@ -162,13 +173,53 @@ try {
   const concurrentInitial = { ...first, appSpecDigest: "8".repeat(64) };
   const concurrentCurrent = { ...second, appSpecDigest: concurrentInitial.appSpecDigest };
   await Promise.all([
-    recordDestination(context, "concurrent-initial", concurrentInitial, "initialize"),
+    recordDestination(context, "concurrent-initial", concurrentInitial, "initial"),
     recordDestination(context, "concurrent-current", concurrentCurrent, "current"),
   ]);
   assert.deepEqual(
     await stores().readDestination?.(context, concurrentInitial.appSpecDigest),
     concurrentCurrent,
   );
+  const newPullRequest = {
+    ...first,
+    publishedSource: {
+      ...first.publishedSource,
+      branch: "builder/new-reviewed-pr",
+      gitSha: "8".repeat(40),
+    },
+  };
+  await recordDestination(context, "new-initial-pr", newPullRequest, "initial");
+  assert.deepEqual(await readDestination(context, first.appSpecDigest), newPullRequest);
+  const recoveredNewPullRequest = {
+    ...first,
+    publishedSource: {
+      ...first.publishedSource,
+      branch: "builder/recovered-new-pr",
+      gitSha: "9".repeat(40),
+    },
+  };
+  assert.equal(
+    await store.readPublishedSource(context, recoveredNewPullRequest.publishedSource),
+    undefined,
+  );
+  await recordDestination(
+    context,
+    "new-pr-missing-first-marker",
+    recoveredNewPullRequest,
+    "initial",
+  );
+  await recordDestination(
+    context,
+    "new-pr-missing-first-marker",
+    recoveredNewPullRequest,
+    "initial",
+  );
+  assert.deepEqual(
+    await stores().readDestination?.(context, first.appSpecDigest),
+    recoveredNewPullRequest,
+  );
+  await recordDestination(context, "initial-publication", first, "initial");
+  assert.deepEqual(await readDestination(context, first.appSpecDigest), recoveredNewPullRequest);
   for (const foreign of [
     { ...context, authority: { ...context.authority, ownerUserId: "other-owner" } },
     { ...context, authority: { ...context.authority, workspaceId: "other-workspace" } },
@@ -180,13 +231,13 @@ try {
   }
   assert.equal(await readDestination(context, "9".repeat(64)), undefined);
   await assert.rejects(
-    recordDestination(context, "wrong-app", { ...first, appId: "other-app" }, "initialize"),
+    recordDestination(context, "wrong-app", { ...first, appId: "other-app" }, "initial"),
   );
   authorized = false;
   await assert.rejects(readDestination(context, first.appSpecDigest));
-  await assert.rejects(recordDestination(context, "revoked-write", first, "initialize"));
+  await assert.rejects(recordDestination(context, "revoked-write", first, "initial"));
   console.log(
-    "PASS: real PostgreSQL static publication destination, restart, concurrent replay, late first receipt recovery, concurrent selection, historical source and owner/workspace/session/app isolation. No hosted effects.",
+    "PASS: real PostgreSQL static publication destination, restart, concurrent replay, late first receipt recovery, concurrent selection, new PR marker recovery, historical source and owner/workspace/session/app isolation. No hosted effects.",
   );
 } finally {
   await client?.end({ timeout: 5 });
