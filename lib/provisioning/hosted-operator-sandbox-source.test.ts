@@ -98,7 +98,7 @@ describe("protected operator immutable Sandbox source", () => {
     const createSandbox = vi.fn<
       (options: Parameters<typeof Sandbox.create>[0]) => Promise<typeof sandbox>
     >(async () => sandbox);
-    const getOidc = vi.fn(async () => "synthetic-oidc-fixture");
+    const getOidc = vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-oidc-fixture");
     const propose = createHostedOperatorAuthProposal(configuration, { createSandbox, getOidc });
     const result = await propose({ assertCurrentOwner: vi.fn(async () => {}), resource });
     expect(result.planDigest).toBe("b".repeat(64));
