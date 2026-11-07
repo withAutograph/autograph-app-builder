@@ -248,7 +248,11 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     input: Parameters<SandboxExecutionLeaseStore["claimExpired"]>[0],
   ): Promise<readonly SandboxExecutionLease[]> {
     const claimed: SandboxExecutionLease[] = [];
-    for (const [key, current] of [...this.leases.entries()].toSorted()) {
+    for (const [key, current] of [...this.leases.entries()].toSorted(([left], [right]) => {
+      if (left < right) return -1;
+      if (left > right) return 1;
+      return 0;
+    })) {
       if (
         claimed.length >= input.limit ||
         current.state === "released" ||
