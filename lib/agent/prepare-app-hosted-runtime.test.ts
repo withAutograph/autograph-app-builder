@@ -540,7 +540,7 @@ it("reports execute-stage failure without changing the public blocked result or 
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         boundary: "builder",
-        preparationFailure: { stage: "operator_execute", errorClass: "type_error" },
+        preparationFailure: { errorClass: "type_error", stage: "operator_execute" },
       }),
     );
     expect(JSON.stringify(logs.mock.calls)).not.toContain(privateMessage);
@@ -580,15 +580,15 @@ it("reports actual approval evaluator entry and preserves its denied response", 
     expect(value).toMatchObject({ type: "denied" });
     expect(logs).toHaveBeenCalledWith(
       "[builder:hosted-neon-consent]",
-      expect.objectContaining({ preparationStage: "approval_evaluation", outcome: "started" }),
+      expect.objectContaining({ outcome: "started", preparationStage: "approval_evaluation" }),
     );
     expect(logs).toHaveBeenCalledWith(
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         preparationFailure: {
-          stage: "approval_evaluation",
-          errorClass: "operator_error",
           code: "resource_mismatch",
+          errorClass: "operator_error",
+          stage: "approval_evaluation",
         },
       }),
     );

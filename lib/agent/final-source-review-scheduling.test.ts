@@ -644,7 +644,7 @@ it("captures parent evidence and finalizes a private durable outcome without rer
         }),
       ).toMatchObject({ reviewCompleted: true });
       expect(await prepareAppliedProductSourceReview(input)).toMatchObject({
-        assessment: { reviewCompleted: true, invocation: { journalReuses: 1 } },
+        assessment: { invocation: { journalReuses: 1 }, reviewCompleted: true },
       });
       expect(
         await finalizeAppliedProductSourceReview({

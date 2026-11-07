@@ -127,12 +127,12 @@ it("directs a fresh app to its saved public destination setup before any reposit
   expect(
     await resolvePublicationTargetForTool({ ctx, appId: "app", sourceKind: "fresh-template" }),
   ).toMatchObject({
-    kind: "missing",
     guidance: {
       code: "builder_destination_required",
       destinationPath: "/builds/public-saved/destination",
       status: "blocked",
     },
+    kind: "missing",
   });
   expect(resolveRepositoryAccessForTool).not.toHaveBeenCalled();
 });

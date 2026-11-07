@@ -103,9 +103,9 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
     const created = await client.sessions.create({ message: "dynamic-initial" });
     const sessionId = created.session.state.sessionId;
     assert.deepEqual(await collect(created.response), {
+      count: 1,
       generation: "A",
       nonce: "dynamic-initial",
-      count: 1,
       sessionId,
     });
     const held = collect(await created.session.send("static-hold"));
@@ -129,13 +129,13 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
       { timeout: 60_000, interval: 50 },
     );
     await writeFile(path.join(first.root, "release"), "release");
-    assert.deepEqual(await held, { generation: "A", nonce: "static-hold", count: 2, sessionId });
+    assert.deepEqual(await held, { count: 2, generation: "A", nonce: "static-hold", sessionId });
     const next = await collect(await created.session.send("static-idle"));
-    assert.deepEqual(next, { generation: "B", nonce: "static-idle", count: 3, sessionId });
+    assert.deepEqual(next, { count: 3, generation: "B", nonce: "static-idle", sessionId });
     assert.deepEqual(await collect(await created.session.send("dynamic-idle")), {
+      count: 4,
       generation: "B",
       nonce: "dynamic-idle",
-      count: 4,
       sessionId,
     });
     await other.writeGeneration("C");
@@ -149,15 +149,15 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
     const resumed = await first.start(true);
     const same = resumed.sessions.attach(sessionId);
     assert.deepEqual(await collect(await same.send("static-restored")), {
+      count: 5,
       generation: "B",
       nonce: "static-restored",
-      count: 5,
       sessionId,
     });
     assert.deepEqual(await collect(await same.send("dynamic-restored")), {
+      count: 6,
       generation: "B",
       nonce: "dynamic-restored",
-      count: 6,
       sessionId,
     });
     const peer = await collect(await parallelCreated.session.send("static-peer-preserved"));
@@ -222,7 +222,7 @@ test("actual pending approval survives B activation and restore with its A execu
     const approved = await collect(
       await same.respond([{ requestId: pending.requestId, optionId: "approve" }]),
     );
-    assert.deepEqual(approved, { generation: "A", nonce: "static-approval", count: 1, sessionId });
+    assert.deepEqual(approved, { count: 1, generation: "A", nonce: "static-approval", sessionId });
     const afterApproval = await same.snapshot();
     const continuation = restored.sessions.attach(sessionId, {
       streamIndex: afterApproval.session.streamIndex,
@@ -242,9 +242,9 @@ test("actual pending approval survives B activation and restore with its A execu
     );
     assert.equal(writes.length, 1);
     assert.deepEqual(await collect(await continuation.send("static-after-approval")), {
+      count: 2,
       generation: "B",
       nonce: "static-after-approval",
-      count: 2,
       sessionId,
     });
   } finally {

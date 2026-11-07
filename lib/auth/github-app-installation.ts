@@ -220,9 +220,12 @@ const canonicalAuthority = (authority: HostedTenantAuthority) =>
 
 const authorityDigest = (authority: HostedTenantAuthority) => sha256(canonicalAuthority(authority));
 
+const invalidResponse = "invalid-response";
+const invalidToken = "invalid-token";
+
 const property = (value: unknown, key: string): unknown => {
   if (typeof value !== "object" || value === null || Array.isArray(value) || !(key in value)) {
-    throw new Error("invalid-response");
+    throw new Error(invalidResponse);
   }
   return (value as Record<string, unknown>)[key];
 };
@@ -235,13 +238,13 @@ const decimalProperty = (value: unknown, key: string): string => {
   if (typeof candidate === "string" && decimalSchema.safeParse(candidate).success) {
     return candidate;
   }
-  throw new Error("invalid-response");
+  throw new Error(invalidResponse);
 };
 
 const stringProperty = (value: unknown, key: string): string => {
   const candidate = property(value, key);
   if (typeof candidate !== "string") {
-    throw new TypeError("invalid-response");
+    throw new TypeError(invalidResponse);
   }
   return candidate;
 };
@@ -249,7 +252,7 @@ const stringProperty = (value: unknown, key: string): string => {
 const nullableStringProperty = (value: unknown, key: string): string | null => {
   const candidate = property(value, key);
   if (candidate !== null && typeof candidate !== "string") {
-    throw new Error("invalid-response");
+    throw new Error(invalidResponse);
   }
   return candidate;
 };
@@ -535,7 +538,7 @@ const normalizedUserTokens = (authentication: unknown, now: number) => {
   try {
     const accessToken = stringProperty(authentication, "token");
     if (accessToken.length < 20 || accessToken.length > 512 || /[\0\r\n]/u.test(accessToken)) {
-      throw new Error("invalid-token");
+      throw new Error(invalidToken);
     }
     const expiresAt =
       typeof propertyOrUndefined(authentication, "expiresAt") === "string"
@@ -564,7 +567,7 @@ const normalizedUserTokens = (authentication: unknown, now: number) => {
         Date.parse(expiresAt) <= now ||
         Date.parse(refreshTokenExpiresAt) <= now)
     ) {
-      throw new Error("invalid-token");
+      throw new Error(invalidToken);
     }
     if (expiring) {
       if (
@@ -572,7 +575,7 @@ const normalizedUserTokens = (authentication: unknown, now: number) => {
         refreshToken === undefined ||
         refreshTokenExpiresAt === undefined
       ) {
-        throw new Error("invalid-token");
+        throw new Error(invalidToken);
       }
       return { accessToken, accessTokenExpiresAt: expiresAt, refreshToken, refreshTokenExpiresAt };
     }

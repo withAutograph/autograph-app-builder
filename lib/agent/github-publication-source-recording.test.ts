@@ -296,7 +296,7 @@ describe("publication records actual source for its compiled app release", () =>
       const result = await entry.tool.execute(input, ctx as never);
       expect(result).toMatchObject({
         ...publication,
-        appSourceRecording: { status: "unavailable", recoveryRequired: true },
+        appSourceRecording: { recoveryRequired: true, status: "unavailable" },
       });
       expect(JSON.stringify(result)).not.toContain("private artifact detail");
       expect(entry.publish).toHaveBeenCalledTimes(1);
@@ -423,9 +423,9 @@ describe("publication records actual source for its compiled app release", () =>
         ctx as never,
       );
       expect(found).toMatchObject({
+        recoveries: [],
         status: "publication-recovery",
         verification: "unverified",
-        recoveries: [],
       });
       expect(hooks.applied).not.toHaveBeenCalled();
       expect(hooks.record).not.toHaveBeenCalled();
@@ -452,9 +452,9 @@ describe("publication records actual source for its compiled app release", () =>
     await expect(
       inspectReconciliation.execute({ kind: "publication-recovery" }, ctx as never),
     ).resolves.toMatchObject({
+      recoveries: [],
       status: "selection-changed",
       verification: "unverified",
-      recoveries: [],
     });
     expect(hooks.applied).not.toHaveBeenCalled();
     expect(hooks.record).not.toHaveBeenCalled();
@@ -474,8 +474,8 @@ describe("publication records actual source for its compiled app release", () =>
     await expect(
       reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never),
     ).resolves.toMatchObject({
-      headSha: "verified-existing-head",
       appSourceRecording: { status: "recorded" },
+      headSha: "verified-existing-head",
     });
     expect(hooks.record).toHaveBeenCalledWith(
       expect.objectContaining({ completion, recordCurrentEquivalentRelease: true }),

@@ -182,8 +182,8 @@ describe("accepted AppSpec resume", () => {
     expect(result).toMatchObject({
       frameworkUpgradePlan: {
         scope: "workspace",
-        versions: { next: "16.4.3" },
         sharedPaths: ["package.json", "bun.lock"],
+        versions: { next: "16.4.3" },
       },
     });
     expect(mocks.prepare).toHaveBeenCalledOnce();

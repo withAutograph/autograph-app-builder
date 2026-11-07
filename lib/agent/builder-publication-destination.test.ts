@@ -100,12 +100,12 @@ const fixture = (withoutDestination = false) => {
 it("selects the saved Builder-created destination without changing starter provenance or performing writes", async () => {
   const f = fixture();
   expect(await f.read()).toEqual({
-    publicSessionId: "saved-public-session",
     destination: {
       repository: "owner/saved-app",
       repositoryId: "123",
       selectedInstallationId: "456",
     },
+    publicSessionId: "saved-public-session",
   });
   expect(f.reads()).toBe(2);
 });

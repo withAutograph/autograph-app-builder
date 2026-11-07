@@ -89,9 +89,9 @@ describe("current frozen proposal inspection", () => {
       const state = fixture();
       const before = JSON.stringify(state);
       expect(inspectCurrentProposalSource(input(state), context)).toMatchObject({
+        availablePaths: ["apps/example/app/[...view]/page.tsx", "apps/example/removed.ts"],
         source: "current-proposal",
         status: "UNAPPLIED",
-        availablePaths: ["apps/example/app/[...view]/page.tsx", "apps/example/removed.ts"],
       });
       const result = inspectCurrentProposalSource(
         input(state, ["app/[...view]/page.tsx", "removed.ts", "not-in-plan.ts"]),

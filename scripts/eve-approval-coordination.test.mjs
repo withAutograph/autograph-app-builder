@@ -658,11 +658,11 @@ it.each([400, 503])(
       ),
     );
     assert.deepEqual(summary, {
-      nativeExecutions: 1,
       callCount: 2,
-      resultCount: 2,
-      pendingInputs: 0,
+      nativeExecutions: 1,
       pendingCoordination: false,
+      pendingInputs: 0,
+      resultCount: 2,
       terminal: statusCode === 400,
     });
     assert.equal(providerRequests, statusCode === 400 ? 1 : 3);

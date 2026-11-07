@@ -714,13 +714,13 @@ describe("private approval delta checkpoints", () => {
       coldReadProgress: true,
       event: "builder.hosted_approval_observation",
       inlineReceiptCount: 1,
-      nativeStatePresent: true,
       nativeNextIndex: 42,
       nativePendingCount: 1,
       nativePublicEventCount: 4,
+      nativeStatePresent: true,
       privateCapturePendingCount: 1,
-      privateCaptureReceiptCount: 1,
       privateCapturePresent: true,
+      privateCaptureReceiptCount: 1,
       publicPendingRequestCount: 1,
       publicPendingRequests: [
         {

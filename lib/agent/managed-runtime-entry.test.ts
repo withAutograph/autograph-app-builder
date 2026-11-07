@@ -327,8 +327,8 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       });
       expect(first.verified).toEqual({
         actorId: "fixture-actor",
-        organizationId: "fixture-organization",
         grants: [{ fenceGeneration: 1, role: "fixture_operator" }],
+        organizationId: "fixture-organization",
       });
       const terminal = await readJson(
         path.join(directory, "terminal.json"),

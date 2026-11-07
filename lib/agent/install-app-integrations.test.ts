@@ -98,9 +98,9 @@ describe("private app integrations installation", () => {
       }),
     );
     expect(result).toMatchObject({
-      status: "installed",
-      providers: ["quickbooks"],
       providerReadiness: "unverified",
+      providers: ["quickbooks"],
+      status: "installed",
     });
     expect(hooks.update).toHaveBeenCalled();
     expect(hooks.invalidate).toHaveBeenCalledWith("source-repair");
@@ -140,10 +140,10 @@ describe("private app integrations installation", () => {
       sandbox: hooks.sandbox,
     });
     expect(omitted).toMatchObject({
-      status: "omitted",
       capabilityState: "source-omitted",
       files: [],
       providerReadiness: "unverified",
+      status: "omitted",
     });
     hooks.sandbox.run.mockResolvedValueOnce({
       exitCode: 2,
@@ -175,10 +175,10 @@ describe("private app integrations installation", () => {
     });
     const result = await installTool.execute({}, context);
     expect(result).toMatchObject({
-      status: "omitted",
       capabilityState: "source-omitted",
-      providers: [],
       providerReadiness: "unverified",
+      providers: [],
+      status: "omitted",
     });
     const nextStep = z.object({ nextStep: z.string() }).parse(result).nextStep;
     expect(nextStep).toContain("normal app validation and delivery");

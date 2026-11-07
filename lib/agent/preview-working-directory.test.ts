@@ -259,8 +259,8 @@ describe("preview command working directory", () => {
       expect(verifyCurrent).toHaveBeenCalledBefore(mocks.start);
       expect(mocks.start).toHaveBeenCalledWith(
         expect.objectContaining({
-          cwd: "/workspace/repository",
           command: { args: ["run", "preview"], executable: "pnpm" },
+          cwd: "/workspace/repository",
         }),
       );
       expect(mocks.workflowState).toBe(saved);

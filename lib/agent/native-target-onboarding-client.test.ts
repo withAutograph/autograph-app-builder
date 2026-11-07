@@ -531,10 +531,10 @@ describe("native target protected client", () => {
       throw new Error("missing candidate");
     }
     expect(request.candidate).toMatchObject({
-      requestId: "native-request",
       callId: "call",
-      toolName: "prepare-app-native-target",
+      requestId: "native-request",
       responder: { principalId: "owner" },
+      toolName: "prepare-app-native-target",
     });
     expect(request.candidate.responder).not.toHaveProperty("attributes");
     expect(request).not.toHaveProperty("auth");

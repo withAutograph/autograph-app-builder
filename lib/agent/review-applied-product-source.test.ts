@@ -267,9 +267,9 @@ it("authorizes application journal reuse before returning completed evidence wit
   expect(assess).not.toHaveBeenCalled();
   expect(put).not.toHaveBeenCalled();
   expect(result).toMatchObject({
+    invocation: { journalReuses: 1, requestAttempts: 0 },
     reviewCompleted: true,
     status: "unassessed",
-    invocation: { journalReuses: 1, requestAttempts: 0 },
   });
   read.mockRejectedValueOnce(new Error("owner revoked"));
   await expect(reviewApplicationWithJournal(input, assess)).rejects.toThrow("owner revoked");
@@ -413,7 +413,7 @@ it("preserves validated baseline visibility and narrows missing optional metadat
   expect(fallback.omissions).toHaveLength(1);
   expect(
     applicationReviewVisibility({ ...input, unexposedReleasePrefixes: ["retained/later/"] }),
-  ).toEqual({ paths: ["app/page.ts", "shared/save.ts"], omissions: [] });
+  ).toEqual({ omissions: [], paths: ["app/page.ts", "shared/save.ts"] });
   expect(applicationReviewVisibility({ ...input, hasSelectedBaseline: false }).paths).toEqual(
     input.observedPaths,
   );

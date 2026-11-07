@@ -45,7 +45,7 @@ describe("reconciliation review metadata pages", () => {
       totalFiles: 3,
       appOwnedFiles: 1,
       nonAppFiles: 2,
-      counts: { added: 1, modified: 1, deleted: 1 },
+      counts: { added: 1, deleted: 1, modified: 1 },
       changes,
     });
   });
@@ -64,11 +64,11 @@ describe("reconciliation review metadata pages", () => {
     const first = summarizeReconciliationChanges(changes, "custom-app");
     expect(first.changes.length).toBeLessThan(changes.length);
     expect(first).toMatchObject({
-      cursor: 0,
-      totalFiles: 12_000,
       appOwnedFiles: 6000,
-      nonAppFiles: 6000,
       counts: { added: 4000, deleted: 4000, modified: 4000 },
+      cursor: 0,
+      nonAppFiles: 6000,
+      totalFiles: 12_000,
     });
     expect(readInventory(changes, "custom-app")).toEqual(changes);
   });
@@ -116,11 +116,11 @@ describe("reconciliation review metadata pages", () => {
       changes: [],
     });
     expect(summarizeReconciliationChanges([], "custom-app")).toMatchObject({
-      totalFiles: 0,
       appOwnedFiles: 0,
-      nonAppFiles: 0,
       changes: [],
       nextCursor: null,
+      nonAppFiles: 0,
+      totalFiles: 0,
     });
   });
 
