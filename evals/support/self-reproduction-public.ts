@@ -1,4 +1,3 @@
-/* eslint-disable eslint/no-await-in-loop -- Public session continuations and SSE chunks are ordered. */
 import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, chmodSync, existsSync } from "node:fs";
@@ -11,7 +10,6 @@ import {
 } from "../../lib/mcp/contracts";
 import type { EveSessionResult } from "../../lib/mcp/contracts";
 import type { z } from "zod";
-import { z as zod } from "zod";
 import { sanitizeEvidence } from "./self-reproduction-evidence";
 
 export type Responses = {
@@ -19,42 +17,6 @@ export type Responses = {
   response: { kind: "approve" | "deny" } | { kind: "answer"; value: string; optionId?: string };
 }[];
 export type PublicStartInput = z.infer<typeof eveStartInputSchema>;
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
-interface JsonObject {
-  [key: string]: JsonValue;
-}
-const jsonValueSchema: z.ZodType<JsonValue> = zod.lazy(() =>
-  zod.union([
-    zod.string(),
-    zod.number(),
-    zod.boolean(),
-    zod.null(),
-    zod.array(jsonValueSchema),
-    zod.record(zod.string(), jsonValueSchema),
-  ]),
-);
-const jsonObjectSchema: z.ZodType<JsonObject> = zod.record(zod.string(), jsonValueSchema);
-const previewReceiptFields = (receipt: EveSessionResult["workingPreview"]): JsonObject => {
-  if (receipt === undefined || receipt === null) {
-    return {};
-  }
-  return { expiresAt: receipt.expiresAt, verifiedAt: receipt.verifiedAt };
-};
-const toolCallResultSchema = zod.object({
-  content: zod.array(zod.object({ text: zod.string().optional(), type: zod.string() })).optional(),
-  isError: zod.boolean().optional(),
-  structuredContent: jsonValueSchema.optional(),
-});
-interface RpcEnvelope {
-  error?: JsonValue;
-  id?: number;
-  result?: JsonValue;
-}
-const rpcEnvelopeSchema: z.ZodType<RpcEnvelope> = zod.object({
-  error: jsonValueSchema.optional(),
-  id: zod.number().optional(),
-  result: jsonValueSchema.optional(),
-});
 export interface PublicState {
   version: 1;
   endpoint: string;
@@ -78,7 +40,7 @@ export interface PublicState {
   startRequestSha256?: string;
 }
 export interface PublicTransport {
-  call: (name: string, args: JsonObject) => Promise<JsonValue | undefined>;
+  call: (name: string, args: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Canonical public input is saved before dispatch and reused unchanged on every retry. */
@@ -91,10 +53,9 @@ export const originalPublicStart = (state: PublicState): PublicStartInput =>
 export const parsePublicStartFile = (contents: string): PublicStartInput =>
   eveStartInputSchema.parse(JSON.parse(contents));
 
-const redactObservationUrls = (entry: JsonValue): JsonValue => {
-  const parsedString = zod.string().safeParse(entry);
-  if (parsedString.success) {
-    return parsedString.data.replaceAll(/https?:\/\/[^\s"'<>`]+/giu, (value) => {
+const redactObservationUrls = (entry: unknown): unknown => {
+  if (typeof entry === "string") {
+    return entry.replaceAll(/https?:\/\/[^\s"'<>`]+/giu, (value) => {
       try {
         return `${new URL(value).origin}/[REDACTED URL]`;
       } catch {
@@ -105,21 +66,20 @@ const redactObservationUrls = (entry: JsonValue): JsonValue => {
   if (Array.isArray(entry)) {
     return entry.map(redactObservationUrls);
   }
-  const parsedObject = jsonObjectSchema.safeParse(entry);
-  if (parsedObject.success) {
+  if (entry && typeof entry === "object") {
     return Object.fromEntries(
-      Object.entries(parsedObject.data).map(([key, item]) => [key, redactObservationUrls(item)]),
+      Object.entries(entry).map(([key, item]) => [key, redactObservationUrls(item)]),
     );
   }
   return entry;
 };
 
 /** Public artifacts retain URL origins only; opaque capabilities can live in paths or queries. */
-export const sanitizePublicObservation = (value: JsonValue): JsonValue =>
+export const sanitizePublicObservation = (value: unknown): unknown =>
   redactObservationUrls(sanitizeEvidence(value));
 
 /** Preserve every original public response privately, separately from the shareable transcript. */
-export const recordPublicObservation = (outputDir: string, record: ObservationRecord) => {
+export const recordPublicObservation = (outputDir: string, record: unknown) => {
   const privatePath = path.join(outputDir, "transcript.private.jsonl");
   if (existsSync(privatePath)) {
     chmodSync(privatePath, 0o600);
@@ -127,7 +87,7 @@ export const recordPublicObservation = (outputDir: string, record: ObservationRe
   appendFileSync(privatePath, `${JSON.stringify(record)}\n`, { mode: 0o600 });
   appendFileSync(
     path.join(outputDir, "transcript.jsonl"),
-    `${JSON.stringify(sanitizePublicObservation(jsonObjectSchema.parse(record)))}\n`,
+    `${JSON.stringify(sanitizePublicObservation(record))}\n`,
     { mode: 0o600 },
   );
 };
@@ -135,8 +95,7 @@ export const recordPublicObservation = (outputDir: string, record: ObservationRe
 export const publicObservationReport = (state: PublicState, nowMs = Date.now()) => {
   const receipt = state.session?.workingPreview;
   const failed = state.session?.status === "failed" || state.session?.status === "cancelled";
-  type PreviewAvailability = "reported_ready" | "expired" | "unavailable" | "unassessed";
-  let availability: PreviewAvailability = "unassessed";
+  let availability: "reported_ready" | "expired" | "unavailable" | "unassessed" = "unassessed";
   let reason = "No working-app receipt was exposed by the public session.";
   if (failed || receipt === null) {
     availability = "unavailable";
@@ -172,7 +131,7 @@ export const publicObservationReport = (state: PublicState, nowMs = Date.now()) 
       workingApp: {
         availability,
         reason,
-        ...previewReceiptFields(receipt),
+        ...(receipt ? { expiresAt: receipt.expiresAt, verifiedAt: receipt.verifiedAt } : {}),
       },
     },
     redaction:
@@ -180,15 +139,16 @@ export const publicObservationReport = (state: PublicState, nowMs = Date.now()) 
   });
 };
 
-const isAllowedPublicProtocol = (url: URL): boolean =>
-  url.protocol === "https:" ||
-  (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname));
-
 export const validatePublicEndpoint = (endpoint: string) => {
   const url = new URL(endpoint);
-  const hasCredentials = url.username.length > 0 || url.password.length > 0;
-  const hasQueryOrFragment = url.search.length > 0 || url.hash.length > 0;
-  if (hasCredentials || hasQueryOrFragment || !isAllowedPublicProtocol(url)) {
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    (url.protocol !== "https:" &&
+      !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
+  ) {
     throw new Error(
       "Endpoint must be credential-free HTTPS or loopback HTTP without query or fragment.",
     );
@@ -196,21 +156,19 @@ export const validatePublicEndpoint = (endpoint: string) => {
   return url;
 };
 
-const redactTransportToken = (value: JsonValue, bearerToken: string | undefined): JsonValue => {
+const redactTransportToken = (value: unknown, bearerToken: string | undefined): unknown => {
   if (bearerToken === undefined) {
     return value;
   }
-  const parsedString = zod.string().safeParse(value);
-  if (parsedString.success) {
-    return parsedString.data.replaceAll(bearerToken, "[REDACTED TOKEN]");
+  if (typeof value === "string") {
+    return value.replaceAll(bearerToken, "[REDACTED TOKEN]");
   }
   if (Array.isArray(value)) {
     return value.map((entry) => redactTransportToken(entry, bearerToken));
   }
-  const parsedObject = jsonObjectSchema.safeParse(value);
-  if (parsedObject.success) {
+  if (value !== null && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(parsedObject.data).map(([key, entry]) => [
+      Object.entries(value).map(([key, entry]) => [
         key.replaceAll(bearerToken, "[REDACTED TOKEN]"),
         redactTransportToken(entry, bearerToken),
       ]),
@@ -242,66 +200,9 @@ const publicRequestHeaders = (
   return headers;
 };
 
-const readEventStreamEnvelope = async (response: Response, id: number): Promise<RpcEnvelope> => {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("Missing public MCP response body");
-  }
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let found: RpcEnvelope | undefined;
-  try {
-    while (!found) {
-      const chunk = await reader.read();
-      if (chunk.done) {
-        break;
-      }
-      buffer += decoder.decode(chunk.value, { stream: true }).replaceAll("\r\n", "\n");
-      let boundary = buffer.indexOf("\n\n");
-      while (boundary >= 0) {
-        const event = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        const data = event
-          .split("\n")
-          .filter((line) => line.startsWith("data:"))
-          .map((line) => line.slice(5).trimStart())
-          .join("\n");
-        if (data) {
-          const parsed = rpcEnvelopeSchema.parse(JSON.parse(data));
-          if (parsed.id === id) {
-            found = parsed;
-          }
-        }
-        boundary = buffer.indexOf("\n\n");
-      }
-    }
-  } finally {
-    await reader.cancel();
-  }
-  if (!found) {
-    throw new Error("Public MCP stream ended without response");
-  }
-  return found;
-};
-
-const transportErrorMessage = (error: Error | JsonValue): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  const parsedString = zod.string().safeParse(error);
-  if (parsedString.success) {
-    return parsedString.data;
-  }
-  try {
-    return JSON.stringify(error) ?? "Unknown transport error";
-  } catch {
-    return "Unknown transport error";
-  }
-};
-
 export const makePublicTransport = async (
   endpoint: string,
-  record: (value: ObservationRecord) => void,
+  record: (value: unknown) => void,
   timeoutMs: number,
   options: PublicTransportOptions = {},
 ): Promise<PublicTransport> => {
@@ -310,23 +211,20 @@ export const makePublicTransport = async (
   if (bearerToken !== undefined && (!bearerToken || /[\r\n]/u.test(bearerToken))) {
     throw new Error("The public MCP access token must be nonempty and contain no line breaks.");
   }
-  const recordSafely = (value: ObservationRecord) => {
-    const jsonValue = jsonValueSchema.parse(value);
-    record(jsonObjectSchema.parse(redactTransportToken(jsonValue, bearerToken)));
+  const recordSafely = (value: unknown) => {
+    record(redactTransportToken(value, bearerToken));
   };
   let session: string | undefined;
   let sequence = 0;
   const performRpc = async (
     method: string,
-    params: JsonObject,
+    params: unknown,
     notification = false,
-  ): Promise<JsonValue | undefined> => {
+  ): Promise<unknown> => {
     sequence += 1;
     const id = sequence;
     const response = await fetch(url, {
-      body: JSON.stringify(
-        notification ? { jsonrpc: "2.0", method, params } : { id, jsonrpc: "2.0", method, params },
-      ),
+      body: JSON.stringify({ jsonrpc: "2.0", ...(notification ? {} : { id }), method, params }),
       credentials: "omit",
       headers: publicRequestHeaders(session, bearerToken),
       method: "POST",
@@ -342,35 +240,65 @@ export const makePublicTransport = async (
       await response.body?.cancel();
       return undefined;
     }
-    const envelope =
-      response.headers.get("content-type")?.includes("text/event-stream") === true
-        ? await readEventStreamEnvelope(response, id)
-        : rpcEnvelopeSchema.parse(await response.json());
-    if (envelope.error !== undefined) {
+    let envelope: { id?: number; result?: unknown; error?: unknown };
+    if (response.headers.get("content-type")?.includes("text/event-stream")) {
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Missing public MCP response body");
+      }
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let found: typeof envelope | undefined;
+      try {
+        while (!found) {
+          const chunk = await reader.read();
+          if (chunk.done) {
+            break;
+          }
+          buffer += decoder.decode(chunk.value, { stream: true }).replaceAll("\r\n", "\n");
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary >= 0) {
+            const event = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const data = event
+              .split("\n")
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.slice(5).trimStart())
+              .join("\n");
+            if (data) {
+              const parsed = JSON.parse(data) as typeof envelope;
+              if (parsed.id === id) {
+                found = parsed;
+              }
+            }
+            boundary = buffer.indexOf("\n\n");
+          }
+        }
+      } finally {
+        await reader.cancel();
+      }
+      if (!found) {
+        throw new Error("Public MCP stream ended without response");
+      }
+      envelope = found;
+    } else {
+      envelope = (await response.json()) as typeof envelope;
+    }
+    if (envelope.error) {
       throw new Error(
         `Public MCP error: ${JSON.stringify(redactTransportToken(envelope.error, bearerToken))}`,
       );
     }
     return envelope.result;
   };
-  const rpc = async (
-    method: string,
-    params: JsonObject,
-    notification = false,
-  ): Promise<JsonValue | undefined> => {
+  const rpc = async (method: string, params: unknown, notification = false): Promise<unknown> => {
     try {
       return await performRpc(method, params, notification);
     } catch (error) {
-      // oxlint-disable-next-line eslint/preserve-caught-error -- A raw provider cause can echo credentials; only sanitized text leaves the transport boundary.
       throw new Error(
-        zod
-          .string()
-          .parse(
-            redactTransportToken(
-              transportErrorMessage(error instanceof Error ? error : jsonValueSchema.parse(error)),
-              bearerToken,
-            ),
-          ),
+        String(
+          redactTransportToken(error instanceof Error ? error.message : String(error), bearerToken),
+        ),
       );
     }
   };
@@ -394,20 +322,27 @@ export const makePublicTransport = async (
         throw new Error("Only public user lifecycle calls are permitted");
       }
       recordSafely({ arguments: args, at: new Date().toISOString(), direction: "request", name });
-      const rawResult = await rpc("tools/call", { arguments: args, name });
-      const result = toolCallResultSchema.parse(rawResult);
+      const result = (await rpc("tools/call", { arguments: args, name })) as {
+        isError?: boolean;
+        structuredContent?: unknown;
+        content?: { type: string; text?: string }[];
+      };
       recordSafely({ at: new Date().toISOString(), direction: "response", name, result });
-      if (
-        result.isError === true &&
-        !eveSessionResultSchema.safeParse(result.structuredContent).success
-      ) {
+      if (result.isError && !eveSessionResultSchema.safeParse(result.structuredContent).success) {
         throw new Error("Public App Builder tool returned an error; see transcript");
       }
-      const { structuredContent } = result;
-      const fallbackText = result.content?.find((item) => item.type === "text")?.text ?? "null";
-      const fallbackJson = zod.string().parse(redactTransportToken(fallbackText, bearerToken));
-      const value = structuredContent ?? jsonValueSchema.parse(JSON.parse(fallbackJson));
-      return redactTransportToken(value, bearerToken);
+      return redactTransportToken(
+        result.structuredContent ??
+          JSON.parse(
+            String(
+              redactTransportToken(
+                result.content?.find((item) => item.type === "text")?.text ?? "null",
+                bearerToken,
+              ),
+            ),
+          ),
+        bearerToken,
+      );
     },
   };
 };
@@ -459,7 +394,7 @@ const observeOriginalStart = async (
     observe(
       await transport.call("autograph_get", { clientRequestId: originalStart.clientRequestId }),
     );
-  if (state.startSubmitted === true) {
+  if (state.startSubmitted) {
     if (await recover()) {
       return true;
     }
@@ -484,7 +419,7 @@ const sendPendingMessage = async (options: SessionOptions, accept: AcceptSession
     if (!options.message.trim() || options.message.length > 32_000) {
       throw new Error("Message must contain 1 to 32000 characters");
     }
-    if (state.session?.status !== "waiting" || (state.session.inputRequests?.length ?? 0) > 0) {
+    if (state.session?.status !== "waiting" || state.session.inputRequests?.length) {
       throw new Error(
         "Ordinary messages require a waiting public conversation without structured input requests",
       );
@@ -513,16 +448,6 @@ const sendPendingMessage = async (options: SessionOptions, accept: AcceptSession
     save();
   }
 };
-const isSupportedAnswer = (
-  request: NonNullable<EveSessionResult["inputRequests"]>[number],
-  response: Extract<Responses[number]["response"], { kind: "answer" }>,
-): boolean => {
-  if (response.optionId === undefined) {
-    return request.allowFreeform;
-  }
-  return request.options?.some((option) => option.id === response.optionId) === true;
-};
-
 const validateResponses = (session: EveSessionResult, responses: Responses) => {
   const requests = session.inputRequests ?? [];
   eveRespondInputSchema.parse({
@@ -530,9 +455,8 @@ const validateResponses = (session: EveSessionResult, responses: Responses) => {
     responses,
     sessionId: session.sessionId,
   });
-  const requestById = new Map(requests.map((request) => [request.requestId, request]));
   for (const item of responses) {
-    const request = requestById.get(item.requestId);
+    const request = requests.find((entry) => entry.requestId === item.requestId);
     if (!request) {
       throw new Error("Unknown request");
     }
@@ -543,7 +467,11 @@ const validateResponses = (session: EveSessionResult, responses: Responses) => {
       throw new Error("Question requires an ordinary answer");
     }
     const { response } = item;
-    if (response.kind === "answer" && !isSupportedAnswer(request, response)) {
+    if (
+      response.kind === "answer" &&
+      ((!request.allowFreeform && !response.optionId) ||
+        (response.optionId && !request.options?.some((option) => option.id === response.optionId)))
+    ) {
       throw new Error("Answer must use a supported option");
     }
   }
@@ -564,10 +492,11 @@ const prepareResponse = (options: SessionOptions, session: EveSessionResult): bo
   }
   const { responses } = options;
   const requested = new Set(requests.map((request) => request.requestId));
-  const answered = new Set(state.answered);
   if (
     responses.length !== requests.length ||
-    responses.some((item) => !requested.has(item.requestId) || answered.has(item.requestId))
+    responses.some(
+      (item) => !requested.has(item.requestId) || state.answered.includes(item.requestId),
+    )
   ) {
     state.outcome = "input_required";
     save();
@@ -591,7 +520,7 @@ const submitResponse = async (options: SessionOptions, accept: AcceptSession) =>
   if (!pending || !state.session) {
     throw new Error("Missing pending response session");
   }
-  const { sessionId } = state.session;
+  const sessionId = state.session.sessionId;
   const result = eveSessionResultSchema.parse(
     await transport.call("autograph_respond", { ...pending, sessionId }),
   );
@@ -639,13 +568,13 @@ const reconcileMessageProgress = (state: PublicState, result: EveSessionResult) 
 const hasSettledWaitingSession = (state: PublicState) =>
   state.session?.status === "waiting" && state.awaitingMessageProgressAfterCursor === undefined;
 
-const validateSessionOptions = (options: SessionOptions) => {
-  const { state } = options;
+export const runPublicSession = async (options: SessionOptions) => {
+  const { state, transport, save } = options;
   if (state.session?.sessionId === "") {
     state.unresolvedStartResult = state.session;
     state.startSubmitted = true;
     delete state.session;
-    options.save();
+    save();
   }
   if (options.message !== undefined && !state.session) {
     throw new Error("An ordinary message requires an existing public session");
@@ -653,12 +582,8 @@ const validateSessionOptions = (options: SessionOptions) => {
   if (options.message !== undefined && (state.pendingResponse || options.responses)) {
     throw new Error("Send one complete response batch or one ordinary message at a time");
   }
-};
-
-const createSessionAcceptor =
-  (options: SessionOptions): AcceptSession =>
-  (raw) => {
-    const { state, save } = options;
+  const deadline = Date.now() + options.timeoutMs;
+  const accept = (raw: unknown) => {
     const result = eveSessionResultSchema.parse(raw);
     if (!result.sessionId) {
       throw new Error(
@@ -672,16 +597,15 @@ const createSessionAcceptor =
     save();
     options.onObservation?.(state);
   };
-
-const observeOrStartSession = async (
-  options: SessionOptions,
-  accept: AcceptSession,
-): Promise<boolean> => {
-  const { state, transport } = options;
-  if (!state.session) {
-    return await observeOriginalStart(options, accept);
+  if (state.pendingResponse) {
+    await observePendingResponse(options, accept);
+    return;
   }
-  if (!state.pendingMessage) {
+  if (!state.session) {
+    if (!(await observeOriginalStart(options, accept))) {
+      return;
+    }
+  } else if (!state.pendingMessage) {
     accept(
       await transport.call("autograph_get", {
         cursor: state.session.cursor,
@@ -689,15 +613,7 @@ const observeOrStartSession = async (
       }),
     );
   }
-  return true;
-};
-
-const continueSessionUntilDeadline = async (
-  options: SessionOptions,
-  accept: AcceptSession,
-  deadline: number,
-) => {
-  const { state, save } = options;
+  await sendPendingMessage(options, accept);
   while (Date.now() < deadline) {
     const { session } = state;
     if (!session) {
@@ -714,13 +630,16 @@ const continueSessionUntilDeadline = async (
       return;
     }
     if (session.status === "input_required") {
-      if (!prepareResponse(options, session) || !(await submitResponse(options, accept))) {
+      if (!prepareResponse(options, session)) {
+        return;
+      }
+      if (!(await submitResponse(options, accept))) {
         return;
       }
     } else {
       await (options.sleep ?? delay)(options.pollMs);
       accept(
-        await options.transport.call("autograph_get", {
+        await transport.call("autograph_get", {
           cursor: session.cursor,
           sessionId: session.sessionId,
         }),
@@ -729,20 +648,4 @@ const continueSessionUntilDeadline = async (
   }
   state.outcome = "paused_timeout";
   save();
-};
-
-export const runPublicSession = async (options: SessionOptions) => {
-  const { state } = options;
-  validateSessionOptions(options);
-  const deadline = Date.now() + options.timeoutMs;
-  const accept = createSessionAcceptor(options);
-  if (state.pendingResponse) {
-    await observePendingResponse(options, accept);
-    return;
-  }
-  if (!(await observeOrStartSession(options, accept))) {
-    return;
-  }
-  await sendPendingMessage(options, accept);
-  await continueSessionUntilDeadline(options, accept, deadline);
 };
