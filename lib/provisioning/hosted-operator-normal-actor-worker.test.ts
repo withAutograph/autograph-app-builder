@@ -621,7 +621,7 @@ describe("actual selected organization worker adapter", () => {
         change === "actor" &&
         historical.plan.authMembership?.kind === "create-owned-organizations"
       ) {
-        const organization = historical.plan.authMembership.organizations[0];
+        const [organization] = historical.plan.authMembership.organizations;
         if (organization === undefined) {
           throw new Error("fixture_missing_organization");
         }
