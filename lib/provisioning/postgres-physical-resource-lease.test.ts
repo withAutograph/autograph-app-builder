@@ -145,7 +145,7 @@ describe("physical resource transaction lease", () => {
 
   it("denies initialization when the backend has already changed", async () => {
     const test = fixture();
-    const initializeUnderLock = vi.fn(async () => {});
+    const initializeUnderLock = vi.fn<() => Promise<void>>().mockResolvedValue();
     const readCurrentFence = vi.fn(async () => ({ ...test.fence }));
     // Replace the synthetic backend immediately after the initial identity capture.
     const originalStart = test.backend.backend_start;
