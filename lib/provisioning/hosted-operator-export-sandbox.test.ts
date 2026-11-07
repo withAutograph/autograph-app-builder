@@ -35,9 +35,7 @@ const runCommand = vi.fn(
     }
     if (input.cmd === "node") {
       const args = input.args ?? [];
-      const script = args[1];
-      const target = args[2];
-      const content = args[3];
+      const [, script, target, content] = args;
       if (script === undefined || target === undefined || content === undefined) {
         throw new Error("Missing fixed metadata arguments");
       }

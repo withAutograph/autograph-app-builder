@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { readStandardBuilderPublicOrigin } from "./standard-builder-public-origin";
 
 const setup = () => ({
-  assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
   destination: { installationId: "installation", projectId: "actual-project", teamId: "team" },
   fetch: vi
     .fn()
@@ -78,9 +78,7 @@ describe("owned standard public origin", () => {
   });
   it("does not acknowledge a domain after destination or membership changes", async () => {
     const f = setup();
-    f.assertCurrent
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("owner changed"));
+    f.assertCurrent.mockResolvedValueOnce().mockRejectedValueOnce(new Error("owner changed"));
     await expect(readStandardBuilderPublicOrigin(f)).rejects.toThrow("owner changed");
   });
   it("rejects partial domain listings, malformed provider payloads and non-domain names without retaining payloads", async () => {
