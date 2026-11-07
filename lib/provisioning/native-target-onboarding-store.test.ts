@@ -127,7 +127,7 @@ const makeFixture = (
     }
     return structuredClone(currentOwner);
   });
-  const assertPlanOrigin = vi.fn(async () => {});
+  const assertPlanOrigin = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readApproval = vi.fn(async () => structuredClone(receipt));
   const ports = { assertPlanOrigin, authorize, now: () => clock, readApproval, store };
   const registry = createNativeTargetOnboardingRegistry(ports);

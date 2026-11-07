@@ -135,7 +135,7 @@ const fixture = (configuration = setup) => {
     sessionId: "browser-session",
     userId: "owner",
   }));
-  const assertOriginalOwner = vi.fn(async () => {});
+  const assertOriginalOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const read = vi.fn(async (): Promise<CustodyJournalRow | undefined> => ({ record, revision: 1 }));
   const effect = vi.fn(async () => Response.json({ operationRef, phase: "secret-confirmed" }));
   const sourceRequest = vi.fn(async (request: Request) => {
