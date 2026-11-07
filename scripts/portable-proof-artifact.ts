@@ -219,7 +219,9 @@ export async function verifyPortableProofArtifact(input: {
   if (!marketplaceAdapterBytes) {
     throw new Error(`Codex marketplace omitted ${marketplaceAdapterPath}.`);
   }
-  const marketplaceAdapter = JSON.parse(Buffer.from(marketplaceAdapterBytes).toString("utf-8"));
+  const marketplaceAdapter: unknown = JSON.parse(
+    Buffer.from(marketplaceAdapterBytes).toString("utf-8"),
+  );
   if (
     JSON.stringify(marketplaceAdapter) !==
     JSON.stringify({
