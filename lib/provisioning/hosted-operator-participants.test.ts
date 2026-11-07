@@ -677,12 +677,17 @@ const captureSuccessorFixture = () => {
         operationRef: "22222222-2222-4222-8222-222222222222",
         plan: appPlan,
         planDigest: operatorPlanDigest(appPlan),
-        receipts: appPlan.effects.map((effect) => ({
-          effectId: effect.id,
-          observedAt: "2026-10-14T12:00:00.000Z",
-          resourceVersion: "observed",
-          ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-        })),
+        receipts: appPlan.effects.map((effect) => {
+          const receipt = {
+            effectId: effect.id,
+            observedAt: "2026-10-14T12:00:00.000Z",
+            resourceVersion: "observed",
+          };
+          if (effect.kind === "access") {
+            return { ...receipt, fenceGeneration: 1 };
+          }
+          return receipt;
+        }),
       },
       privateState: {
         encryptedToken: "original-resources",
