@@ -27,6 +27,14 @@ export type HostedOperatorNativeFailureStage =
   | "native_plan_supersede"
   | "native_plan_dispatch";
 
+interface HostedOperatorNativeFailureDiagnostic {
+  errorClass: string;
+  event: "builder.hosted_operator_native_failure";
+  stage: HostedOperatorNativeFailureStage;
+  code?: string;
+  sqlState?: string;
+}
+
 const nativeFailureSqlState = z.enum([
   "28P01",
   "42501",
@@ -76,17 +84,18 @@ export const reportHostedOperatorNativeFailure = (
           : undefined;
       sqlState = nativeFailureSqlState.safeParse(causeCode);
     }
-    console.warn(
-      JSON.stringify({
-        errorClass,
-        event: "builder.hosted_operator_native_failure",
-        stage,
-        ...(error instanceof HostedOperatorError && publicCode.success
-          ? { code: publicCode.data }
-          : {}),
-        ...(sqlState.success ? { sqlState: sqlState.data } : {}),
-      }),
-    );
+    const diagnostic: HostedOperatorNativeFailureDiagnostic = {
+      errorClass,
+      event: "builder.hosted_operator_native_failure",
+      stage,
+    };
+    if (error instanceof HostedOperatorError && publicCode.success) {
+      diagnostic.code = publicCode.data;
+    }
+    if (sqlState.success) {
+      diagnostic.sqlState = sqlState.data;
+    }
+    console.warn(JSON.stringify(diagnostic));
   } catch {
     // Diagnostic failures must preserve the original response, error and cleanup.
   }
