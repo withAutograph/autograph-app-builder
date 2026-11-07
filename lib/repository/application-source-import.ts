@@ -2,6 +2,10 @@ import type { SandboxSession } from "eve/sandbox";
 import type { validateApplicationSourceArtifact } from "../handoff/application-source-bytes";
 import type { ApplicationSourceImportReceipt } from "../agent/application-source-import-state";
 
+const APPLICATION_SOURCE_IMPORT_PATH = "/workspace/repository";
+const APPLICATION_SOURCE_IMPORT_ERROR =
+  "Application source import cannot replace occupied or changed source.";
+const APPLICATION_WORKING_DIRECTORY = "/workspace";
 const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
 
 /** Only repository-owned file operations execute here. Uploaded source is never loaded. */
@@ -16,7 +20,7 @@ const input = JSON.parse(fs.readFileSync(${JSON.stringify(`${input.staging}/plan
 const root = ${JSON.stringify(input.root ?? "/workspace/repository")};
 const target = path.join(root, input.receipt.appRoot);
 const marker = path.join(root, '.app-builder', 'application-source-import-' + input.receipt.reference.appId + '.json');
-const reject = () => { throw new Error('Application source import cannot replace occupied or changed source.'); };
+const reject = () => { throw new Error(${JSON.stringify(APPLICATION_SOURCE_IMPORT_ERROR)}); };
 for (const dir of [root, path.join(root, 'apps'), path.join(root, '.app-builder')]) {
  if (fs.existsSync(dir) && (!fs.lstatSync(dir).isDirectory() || fs.lstatSync(dir).isSymbolicLink())) reject();
 }
@@ -55,12 +59,12 @@ export const materializeApplicationSource = async (input: {
 }) => {
   input.abortSignal?.throwIfAborted();
   await input.assertCurrent?.();
-  const markerPath = `/workspace/repository/.app-builder/application-source-import-${input.receipt.reference.appId}.json`;
-  const targetPath = `/workspace/repository/${input.receipt.appRoot}`;
+  const markerPath = `${APPLICATION_SOURCE_IMPORT_PATH}/.app-builder/application-source-import-${input.receipt.reference.appId}.json`;
+  const targetPath = `${APPLICATION_SOURCE_IMPORT_PATH}/${input.receipt.appRoot}`;
   const probeProgram = `const fs=require("node:fs");const marker=${JSON.stringify(markerPath)};const target=${JSON.stringify(targetPath)};if(!fs.existsSync(marker))process.exit(3);if(fs.lstatSync(marker).isSymbolicLink()||!fs.lstatSync(marker).isFile()||!fs.existsSync(target)||!fs.lstatSync(target).isDirectory()||fs.lstatSync(target).isSymbolicLink()||JSON.stringify(JSON.parse(fs.readFileSync(marker,"utf8")))!==${JSON.stringify(JSON.stringify(input.receipt))})process.exit(2);`;
   const probe = await input.sandbox.run({
     command: `node -e ${quote(probeProgram)}`,
-    workingDirectory: "/workspace",
+    workingDirectory: APPLICATION_WORKING_DIRECTORY,
   });
   if (probe.exitCode === 0) {
     input.abortSignal?.throwIfAborted();
@@ -77,7 +81,7 @@ export const materializeApplicationSource = async (input: {
   const preparationProgram = `const fs=require("node:fs"); for(const p of ["/workspace/.app-builder","/workspace/.app-builder/application-source-import",${JSON.stringify(staging)}]) { if(fs.existsSync(p) && (!fs.lstatSync(p).isDirectory() || fs.lstatSync(p).isSymbolicLink())) throw new Error("Unsafe source staging"); fs.mkdirSync(p,{recursive:true,mode:0o700}); } for(const entry of fs.readdirSync(${JSON.stringify(staging)})){ const p=${JSON.stringify(staging)}+"/"+entry; if(!fs.lstatSync(p).isFile() || fs.lstatSync(p).isSymbolicLink()) throw new Error("Unsafe source staging entry"); }`;
   const created = await input.sandbox.run({
     command: `node -e ${quote(preparationProgram)}`,
-    workingDirectory: "/workspace",
+    workingDirectory: APPLICATION_WORKING_DIRECTORY,
   });
   if (created.exitCode !== 0) {
     throw new Error("Application source staging unavailable.");
@@ -98,7 +102,7 @@ export const materializeApplicationSource = async (input: {
       // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Appending chunks to one file must preserve byte order.
       const result = await input.sandbox.run({
         command: `printf '%s' ${quote(chunk)} >> ${quote(encodedPath)}`,
-        workingDirectory: "/workspace",
+        workingDirectory: APPLICATION_WORKING_DIRECTORY,
       });
       if (result.exitCode !== 0) {
         throw new Error("Application source chunk staging failed.");
@@ -119,7 +123,7 @@ export const materializeApplicationSource = async (input: {
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Append the manifest in exact transport order.
     const result = await input.sandbox.run({
       command: `printf '%s' ${quote(plan.slice(offset, offset + 8192))} >> ${quote(manifestPath)}`,
-      workingDirectory: "/workspace",
+      workingDirectory: APPLICATION_WORKING_DIRECTORY,
     });
     if (result.exitCode !== 0) {
       throw new Error("Application source manifest staging failed.");
@@ -139,7 +143,7 @@ export const materializeApplicationSource = async (input: {
   const absoluteScriptPath = `/workspace/${scriptPath}`;
   const applied = await input.sandbox.run({
     command: `node ${quote(absoluteScriptPath)}`,
-    workingDirectory: "/workspace",
+    workingDirectory: APPLICATION_WORKING_DIRECTORY,
   });
   input.abortSignal?.throwIfAborted();
   await input.assertCurrent?.();
