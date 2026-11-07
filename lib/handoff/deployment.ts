@@ -79,11 +79,11 @@ export const builderHandoffCreateRequestSchema = z
     appName: z.string().trim().min(1).max(120),
     brief: z.string().trim().min(1).max(32_000),
     connections: z.array(z.string().trim().min(1).max(100)).max(50),
-    creationRequestId: z.string().uuid(),
+    creationRequestId: z.uuid(),
     destination: builderHandoffDestinationSchema.optional(),
     sourceCandidate: sourceCandidateReferenceSchema.optional(),
     modelId: activeBuilderModelIdSchema,
-    provisioningRequestId: z.string().uuid().optional(),
+    provisioningRequestId: z.uuid().optional(),
     repository: z
       .object({
         name: z
@@ -271,7 +271,7 @@ export function createBuilderHandoffRenewRouteHandler(input: {
         );
       }
       const body = z
-        .object({ creationRequestId: z.string().uuid() })
+        .object({ creationRequestId: z.uuid() })
         .strict()
         .parse(await readBoundedJson(request));
       const renewed = await input.handoffs.renew({

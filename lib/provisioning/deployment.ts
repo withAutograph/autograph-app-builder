@@ -54,10 +54,7 @@ export function createBuilderProvisioningRouteHandler(input: {
         );
       }
       if (request.method === "GET") {
-        const requestId = z
-          .string()
-          .uuid()
-          .parse(new URL(request.url).searchParams.get("requestId"));
+        const requestId = z.uuid().parse(new URL(request.url).searchParams.get("requestId"));
         if (new URL(request.url).searchParams.get("projection") === "1") {
           const row = await input.dependencies.journal.read({
             authority,
