@@ -92,7 +92,7 @@ describe("private public-release consent", () => {
     expect(cancelled.read()).toBeNull();
   });
   it("requires complete authenticated history and rechecks owner after reading", async () => {
-    const assertOwner = vi.fn(async () => {});
+    const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
     const readHistory = vi.fn(async (_start, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());

@@ -82,7 +82,7 @@ const fixture = (receiptRepositoryId = "100") => {
     headSha: receipt.branchSha,
     state: "open",
   };
-  const inspect = vi.fn(async () => observation);
+  const inspect = vi.fn().mockResolvedValue(observation);
   const unexpected = vi.fn(async () => {
     throw new Error("Unexpected publication operation");
   });
