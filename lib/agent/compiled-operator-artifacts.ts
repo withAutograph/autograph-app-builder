@@ -260,6 +260,7 @@ const openCompiledArtifactStorage = async (
 export const recordPublishedOperatorSourceForSession = async (
   input: CompiledOperatorArtifactSessionInput & {
     publishedSource: PublishedAppSource;
+    initialPublication?: true;
     backendKind?: AppDescription["backend"]["kind"];
   },
 ): Promise<
@@ -272,12 +273,17 @@ export const recordPublishedOperatorSourceForSession = async (
     if (storage.selections.recordDestination === undefined) {
       throw operatorArtifactUnavailable();
     }
-    const destination = await storage.selections.recordDestination(binding.context, input.callId, {
-      version: 1,
-      appId: input.appId,
-      appSpecDigest: input.appSpecDigest,
-      publishedSource: input.publishedSource,
-    });
+    const destination = await storage.selections.recordDestination(
+      binding.context,
+      input.callId,
+      {
+        version: 1,
+        appId: input.appId,
+        appSpecDigest: input.appSpecDigest,
+        publishedSource: input.publishedSource,
+      },
+      input.initialPublication === true ? "initialize" : "current",
+    );
     return { status: "recorded", destination };
   }
   const selected = await storage.selections.read(binding.context, input.appSpecDigest);
@@ -369,6 +375,7 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
           appSpecDigest: completion.appReview.appSpecDigest,
           publishedSource: input.publishedSource,
         },
+        "current",
       );
       return { status: "recorded" as const, destination };
     }

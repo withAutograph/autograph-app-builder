@@ -75,7 +75,14 @@ generic owner/session/app/spec marker in the existing artifact store; they do
 not need a SQL release or source acquisition. Normal publication and retained
 reconciliation completion record the marker only after provider success. A
 historical static publication can resume that same approved completion to
-record its destination. An old completion retry never replaces a newer marker.
+record its destination. An initial publication may return its retained success
+without re-reading the current GitHub head, so it initializes the selection only
+when no destination is recorded. If its first marker write is recovered after a
+newer reconciliation, the old receipt is retained for exact historical lookup
+without replacing the selected revision. Update and reconciliation completions
+use their existing fresh provider head observation to advance the selection;
+replaying an already recorded call never promotes it. Both stores serialize this
+decision with the marker write, including concurrent first recording.
 Acquired frontend-only apps also retain their existing repository path.
 
 App descriptions and compiled releases come from owner-scoped captured artifacts. The normal plan

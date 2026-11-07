@@ -159,15 +159,25 @@ const selectionFrameSchema = z.strictObject({
 });
 const destinationFrameSchema = selectionFrameSchema.omit({ selection: true }).extend({
   destination: appPublicationDestinationSchema,
+  historicalOnly: z.literal(true).optional(),
 });
+const newestFrame = <Frame extends { sequence: string }>(
+  candidate: Frame,
+  current: Frame | undefined,
+) =>
+  current === undefined || BigInt(candidate.sequence) > BigInt(current.sequence)
+    ? candidate
+    : current;
 const scanFrames = async <Frame extends { callDigest: string; sequence: string }>(
   directory: string,
   schema: z.ZodType<Frame>,
   callDigest?: string,
   includeHistory = false,
+  selectsCurrent: (frame: Frame) => boolean = () => true,
 ) => {
   const frames: Frame[] = [];
   let latest: Frame | undefined;
+  let selected: Frame | undefined;
   let matched: Frame | undefined;
   const entries = await opendir(directory);
   for await (const entry of entries) {
@@ -189,8 +199,9 @@ const scanFrames = async <Frame extends { callDigest: string; sequence: string }
     if (includeHistory) {
       frames.push(frame);
     }
-    if (latest === undefined || BigInt(frame.sequence) > BigInt(latest.sequence)) {
-      latest = frame;
+    latest = newestFrame(frame, latest);
+    if (selectsCurrent(frame)) {
+      selected = newestFrame(frame, selected);
     }
     if (frame.callDigest === callDigest) {
       if (matched !== undefined) {
@@ -199,13 +210,19 @@ const scanFrames = async <Frame extends { callDigest: string; sequence: string }
       matched = frame;
     }
   }
-  return { frames, latest, matched };
+  return { frames, latest, matched, selected };
 };
 
 const scanSelections = (directory: string, callDigest?: string, includeHistory = false) =>
   scanFrames(directory, selectionFrameSchema, callDigest, includeHistory);
 const scanDestinations = (directory: string, callDigest?: string, includeHistory = false) =>
-  scanFrames(directory, destinationFrameSchema, callDigest, includeHistory);
+  scanFrames(
+    directory,
+    destinationFrameSchema,
+    callDigest,
+    includeHistory,
+    (frame) => frame.historicalOnly !== true,
+  );
 
 /** Private owner/session/app filesystem state; the app Sandbox never receives this root. */
 export const createLocalOperatorArtifactStorage = async (input: {
@@ -353,19 +370,19 @@ export const createLocalOperatorArtifactStorage = async (input: {
   const selections: OperatorArtifactSelections = {
     async readDestination(context, appSpecDigest) {
       const owned = await destinationDirectory(context, appSpecDigest);
-      const { latest } = await scanDestinations(owned);
+      const { selected } = await scanDestinations(owned);
       await input.assertCurrentOwner(context);
-      if (latest === undefined) {
+      if (selected === undefined) {
         // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing owned destination is the optional store read result.
         return undefined;
       }
-      const value = latest.destination;
+      const value = selected.destination;
       if (value.appId !== context.target.appId || value.appSpecDigest !== appSpecDigest) {
         throw operatorArtifactUnavailable();
       }
       return value;
     },
-    async recordDestination(context, callId, value) {
+    async recordDestination(context, callId, value, selectionMode) {
       const destination = appPublicationDestinationSchema.parse(value);
       if (destination.appId !== context.target.appId) {
         throw operatorArtifactUnavailable();
@@ -384,7 +401,15 @@ export const createLocalOperatorArtifactStorage = async (input: {
         }
         // oxlint-disable-next-line unicorn/prefer-bigint-literals -- The repository TypeScript target cannot emit bigint literals.
         const sequence = (BigInt(latest?.sequence ?? "0") + BigInt(1)).toString();
-        const content = JSON.stringify({ callDigest, destination, sequence, version: 1 });
+        const content = JSON.stringify({
+          callDigest,
+          destination,
+          sequence,
+          version: 1,
+          ...(selectionMode === "initialize" && latest !== undefined
+            ? { historicalOnly: true }
+            : {}),
+        });
         if (await writeOnce(path.join(owned, `sequence-${sequence}.json`), content)) {
           await input.assertCurrentOwner(context);
           return destination;

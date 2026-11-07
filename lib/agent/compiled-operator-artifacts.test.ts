@@ -547,27 +547,36 @@ describe("owned compiled artifact workflow hook", () => {
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
-  it("records an owned static destination without requiring a SQL release", async () => {
-    const input = frame();
-    const result = await recordPublishedOperatorSourceForSession({
-      ...input,
-      backendKind: "static",
-      publishedSource: historicalSource,
-    });
-    expect(result).toMatchObject({
-      status: "recorded",
-      destination: { appId: input.appId, appSpecDigest: digest, publishedSource: historicalSource },
-    });
-    expect(mocks.recordDestination).toHaveBeenCalledWith(
-      { authority, target: { appId: input.appId, sessionId: "durable-original" } },
-      input.callId,
-      expect.objectContaining({ publishedSource: historicalSource }),
-    );
-    expect(mocks.readSelection).not.toHaveBeenCalled();
-    expect(mocks.record).not.toHaveBeenCalled();
-    expect(input.sandbox.run).not.toHaveBeenCalled();
-    expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
-  });
+  it.each([true, false])(
+    "records an owned static destination without requiring SQL (initial=%s)",
+    async (initial) => {
+      const input = frame();
+      const result = await recordPublishedOperatorSourceForSession({
+        ...input,
+        backendKind: "static",
+        publishedSource: historicalSource,
+        ...(initial ? { initialPublication: true as const } : {}),
+      });
+      expect(result).toMatchObject({
+        status: "recorded",
+        destination: {
+          appId: input.appId,
+          appSpecDigest: digest,
+          publishedSource: historicalSource,
+        },
+      });
+      expect(mocks.recordDestination).toHaveBeenCalledWith(
+        { authority, target: { appId: input.appId, sessionId: "durable-original" } },
+        input.callId,
+        expect.objectContaining({ publishedSource: historicalSource }),
+        initial ? "initialize" : "current",
+      );
+      expect(mocks.readSelection).not.toHaveBeenCalled();
+      expect(mocks.record).not.toHaveBeenCalled();
+      expect(input.sandbox.run).not.toHaveBeenCalled();
+      expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
+    },
+  );
   it("rejects a static publication from another app or unowned workflow before recording", async () => {
     mocks.state = null;
     await expect(
@@ -597,6 +606,7 @@ describe("owned compiled artifact workflow hook", () => {
       completion.compilation.context,
       `draft-reconciliation:${completion.proposal.digest}`,
       expect.objectContaining({ appSpecDigest: completion.appReview.appSpecDigest }),
+      "current",
     );
     expect(mocks.readExact).not.toHaveBeenCalled();
   });

@@ -120,10 +120,11 @@ describe("published source selection persistence", () => {
         appSpecDigest: "a".repeat(64),
         publishedSource: source,
       };
-      await recordDestination(f.context, "publication-one", destination);
+      await recordDestination(f.context, "publication-one", destination, "initialize");
+      expect(await readDestination(f.context, destination.appSpecDigest)).toEqual(destination);
       const updated = { ...destination, publishedSource: { ...source, gitSha: "f".repeat(40) } };
-      await recordDestination(f.context, "publication-two", updated);
-      await recordDestination(f.context, "publication-one", destination);
+      await recordDestination(f.context, "publication-two", updated, "current");
+      await recordDestination(f.context, "publication-one", destination, "initialize");
       const reopened = await createLocalOperatorArtifactStorage(f);
       expect(
         await reopened.selections.readDestination?.(f.context, destination.appSpecDigest),
@@ -133,7 +134,9 @@ describe("published source selection persistence", () => {
       expect(
         await reopened.selections.readPublishedSource?.(f.context, updated.publishedSource),
       ).toEqual(updated.publishedSource);
-      await expect(recordDestination(f.context, "publication-one", updated)).rejects.toThrow();
+      await expect(
+        recordDestination(f.context, "publication-one", updated, "initialize"),
+      ).rejects.toThrow();
       await expect(
         readDestination(
           { ...f.context, target: { ...f.context.target, sessionId: "other-session" } },
@@ -141,8 +144,65 @@ describe("published source selection persistence", () => {
         ),
       ).rejects.toThrow();
       await expect(
-        recordDestination(f.context, "foreign-app", { ...destination, appId: "other-app" }),
+        recordDestination(
+          f.context,
+          "foreign-app",
+          { ...destination, appId: "other-app" },
+          "initialize",
+        ),
       ).rejects.toThrow();
+    });
+  });
+  it("retains a missing initial receipt as history after a newer same-spec completion", async () => {
+    const f = await fixture();
+    await contextStorage.run(f.container, async () => {
+      const storage = await createLocalOperatorArtifactStorage(f);
+      const { recordDestination, readDestination } = storage.selections;
+      if (!recordDestination || !readDestination) {
+        throw new Error("destination ports unavailable");
+      }
+      // GitHub already succeeded, but the initial local recording never completed.
+      const initial = {
+        version: 1 as const,
+        appId: "fixture-app",
+        appSpecDigest: "a".repeat(64),
+        publishedSource: source,
+      };
+      const newer = { ...initial, publishedSource: { ...source, gitSha: "f".repeat(40) } };
+      await recordDestination(f.context, "fresh-reconciliation", newer, "current");
+      await recordDestination(f.context, "late-first-initial-receipt", initial, "initialize");
+      await recordDestination(f.context, "late-first-initial-receipt", initial, "initialize");
+      const reopened = await createLocalOperatorArtifactStorage(f);
+      expect(await reopened.selections.readDestination?.(f.context, initial.appSpecDigest)).toEqual(
+        newer,
+      );
+      expect(await reopened.selections.readPublishedSource?.(f.context, source)).toEqual(source);
+      expect(
+        await reopened.selections.readPublishedSource?.(f.context, newer.publishedSource),
+      ).toEqual(newer.publishedSource);
+      const latest = { ...newer, publishedSource: { ...source, gitSha: "9".repeat(40) } };
+      await recordDestination(f.context, "next-current-head", latest, "current");
+      await recordDestination(f.context, "late-first-initial-receipt", initial, "initialize");
+      expect(await readDestination(f.context, initial.appSpecDigest)).toEqual(latest);
+    });
+  });
+  it("keeps a current head selected when a missing initial receipt records concurrently", async () => {
+    const f = await fixture();
+    await contextStorage.run(f.container, async () => {
+      const { selections } = await createLocalOperatorArtifactStorage(f);
+      const initial = {
+        version: 1 as const,
+        appId: "fixture-app",
+        appSpecDigest: "a".repeat(64),
+        publishedSource: source,
+      };
+      const newer = { ...initial, publishedSource: { ...source, gitSha: "f".repeat(40) } };
+      await Promise.all([
+        selections.recordDestination?.(f.context, "initial", initial, "initialize"),
+        selections.recordDestination?.(f.context, "reconciliation", newer, "current"),
+      ]);
+      expect(await selections.readDestination?.(f.context, initial.appSpecDigest)).toEqual(newer);
+      expect(await selections.readPublishedSource?.(f.context, source)).toEqual(source);
     });
   });
   it("associates an equivalent recapture idempotently without promoting an older selection", async () => {

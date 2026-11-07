@@ -119,11 +119,12 @@ try {
     publishedSource: { ...first.publishedSource, gitSha: "f".repeat(40) },
   };
   await Promise.all([
-    recordDestination(context, "initial-publication", first),
-    recordDestination(context, "initial-publication", first),
+    recordDestination(context, "initial-publication", first, "initialize"),
+    recordDestination(context, "initial-publication", first, "initialize"),
   ]);
-  await recordDestination(context, "revision-publication", second);
-  await recordDestination(context, "initial-publication", first);
+  assert.deepEqual(await readDestination(context, first.appSpecDigest), first);
+  await recordDestination(context, "revision-publication", second, "current");
+  await recordDestination(context, "initial-publication", first, "initialize");
   assert.deepEqual(await stores().readDestination?.(context, first.appSpecDigest), second);
   assert.deepEqual(
     await store.readPublishedSource(context, first.publishedSource),
@@ -138,7 +139,36 @@ try {
     undefined,
     "No compiled SQL release is manufactured",
   );
-  await assert.rejects(recordDestination(context, "initial-publication", second));
+  await assert.rejects(recordDestination(context, "initial-publication", second, "initialize"));
+  // Initial Git publication succeeded but its first marker write failed; a later
+  // reconciliation was recorded before recovery returned that retained old receipt.
+  const missingInitial = {
+    ...first,
+    appSpecDigest: "7".repeat(64),
+    publishedSource: { ...first.publishedSource, gitSha: "7".repeat(40), gitTree: "8".repeat(40) },
+  };
+  const recordedReconciliation = { ...second, appSpecDigest: missingInitial.appSpecDigest };
+  await recordDestination(context, "newer-before-old-marker", recordedReconciliation, "current");
+  await recordDestination(context, "late-first-initial-receipt", missingInitial, "initialize");
+  await recordDestination(context, "late-first-initial-receipt", missingInitial, "initialize");
+  assert.deepEqual(
+    await stores().readDestination?.(context, missingInitial.appSpecDigest),
+    recordedReconciliation,
+  );
+  assert.deepEqual(
+    await store.readPublishedSource(context, missingInitial.publishedSource),
+    missingInitial.publishedSource,
+  );
+  const concurrentInitial = { ...first, appSpecDigest: "8".repeat(64) };
+  const concurrentCurrent = { ...second, appSpecDigest: concurrentInitial.appSpecDigest };
+  await Promise.all([
+    recordDestination(context, "concurrent-initial", concurrentInitial, "initialize"),
+    recordDestination(context, "concurrent-current", concurrentCurrent, "current"),
+  ]);
+  assert.deepEqual(
+    await stores().readDestination?.(context, concurrentInitial.appSpecDigest),
+    concurrentCurrent,
+  );
   for (const foreign of [
     { ...context, authority: { ...context.authority, ownerUserId: "other-owner" } },
     { ...context, authority: { ...context.authority, workspaceId: "other-workspace" } },
@@ -149,12 +179,14 @@ try {
     assert.equal(await readDestination(foreign, first.appSpecDigest), undefined);
   }
   assert.equal(await readDestination(context, "9".repeat(64)), undefined);
-  await assert.rejects(recordDestination(context, "wrong-app", { ...first, appId: "other-app" }));
+  await assert.rejects(
+    recordDestination(context, "wrong-app", { ...first, appId: "other-app" }, "initialize"),
+  );
   authorized = false;
   await assert.rejects(readDestination(context, first.appSpecDigest));
-  await assert.rejects(recordDestination(context, "revoked-write", first));
+  await assert.rejects(recordDestination(context, "revoked-write", first, "initialize"));
   console.log(
-    "PASS: real PostgreSQL static publication destination, restart, concurrent replay, old retry order, historical source and owner/workspace/session/app isolation. No hosted effects.",
+    "PASS: real PostgreSQL static publication destination, restart, concurrent replay, late first receipt recovery, concurrent selection, historical source and owner/workspace/session/app isolation. No hosted effects.",
   );
 } finally {
   await client?.end({ timeout: 5 });

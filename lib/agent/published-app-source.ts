@@ -60,6 +60,7 @@ export const recordPublishedAppSourceForSession = async (
     ...input,
     // A retained initial receipt must reuse its original marker instead of becoming a newer source on retry.
     callId: "kind" in input.publication ? input.publication.approvedByCallId : input.callId,
+    ...("kind" in input.publication ? { initialPublication: true as const } : {}),
     // The app review identifies the compiled app; the reconciliation review identifies the approved merged source.
     publishedSource:
       input.reconciliationReview === undefined

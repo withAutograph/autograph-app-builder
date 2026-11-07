@@ -193,6 +193,8 @@ export interface OperatorArtifactSelections {
     context: OperatorArtifactContext,
     callId: string,
     destination: AppPublicationDestination,
+    /** Retained initial receipts initialize only; fresh provider head observations may advance. */
+    selectionMode: "initialize" | "current",
   ) => Promise<AppPublicationDestination>;
 
   read: (
@@ -276,7 +278,12 @@ export const createPostgresOperatorArtifactSelections = (input: {
           chunkDigest: prototypeArtifactChunks.chunkDigest,
         })
         .from(prototypeArtifactChunks)
-        .where(predicate(scope))
+        .where(
+          and(
+            predicate(scope),
+            sql`${prototypeArtifactChunks.content}::jsonb->>'historicalOnly' is distinct from 'true'`,
+          ),
+        )
         .orderBy(
           desc(prototypeArtifactChunks.createdAt),
           desc(prototypeArtifactChunks.transferDigest),
@@ -299,15 +306,27 @@ export const createPostgresOperatorArtifactSelections = (input: {
       }
       return destination;
     },
-    async recordDestination(context, callId, value) {
+    async recordDestination(context, callId, value, selectionMode) {
       const destination = appPublicationDestinationSchema.parse(value);
       if (destination.appId !== context.target.appId) {
         throw operatorArtifactUnavailable();
       }
       const scope = scoped(context, destination.appSpecDigest, "app-publication");
-      const content = JSON.stringify(destination);
       const transferDigest = hash(z.string().min(1).parse(callId));
       return await writeSelection(context, scope, async (database) => {
+        const [prior] = await database
+          .select({ transferDigest: prototypeArtifactChunks.transferDigest })
+          .from(prototypeArtifactChunks)
+          .where(predicate(scope))
+          .limit(1);
+        // Initial publication may return an old durable success without re-reading the current head.
+        // Retain that evidence, but never replace a destination already selected by a later completion.
+        const content = JSON.stringify({
+          ...destination,
+          ...(selectionMode === "initialize" && prior !== undefined
+            ? { historicalOnly: true }
+            : {}),
+        });
         await database
           .insert(prototypeArtifactChunks)
           .values({
@@ -326,7 +345,14 @@ export const createPostgresOperatorArtifactSelections = (input: {
           })
           .from(prototypeArtifactChunks)
           .where(and(predicate(scope), eq(prototypeArtifactChunks.transferDigest, transferDigest)));
-        if (row?.content !== content || row.chunkDigest !== hash(content)) {
+        if (
+          row === undefined ||
+          row.chunkDigest !== hash(row.content) ||
+          !isDeepStrictEqual(
+            appPublicationDestinationSchema.parse(JSON.parse(row.content)),
+            destination,
+          )
+        ) {
           throw operatorArtifactUnavailable();
         }
         return destination;
