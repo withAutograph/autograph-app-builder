@@ -1,6 +1,10 @@
 import type { Readable, Writable } from "node:stream";
 import { finished } from "node:stream/promises";
 
+interface ProtocolRelayCallbacks {
+  processBuffered?: () => void;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function relayBoundedFrames(options: {
   source: Readable;
@@ -24,7 +28,6 @@ export async function relayBoundedFrames(options: {
     let settled = false;
     let sourceEnded = false;
     let waitingForDrain = false;
-    const callbacks: { processBuffered?: () => void } = {};
     const fail = (error: Error) => {
       if (settled) {
         return;
@@ -43,6 +46,7 @@ export async function relayBoundedFrames(options: {
       }
       options.target.end();
     };
+    const callbacks: ProtocolRelayCallbacks = {};
     const resumeAfterDrain = () => {
       waitingForDrain = false;
       callbacks.processBuffered?.();
