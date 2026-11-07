@@ -171,7 +171,7 @@ const fixture = (configurationId?: string | null) => {
   let failedPatchCode: string | undefined;
   let failedPatchTarget: "environment_row" | "project_settings" | undefined;
   let failedDeleteId: string | undefined;
-  const assertCurrent = vi.fn(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
   const checkpointManagedEnvironment = vi.fn(
     async (next: readonly ManagedOperatorEnvironmentRow[]) => {
       journal = structuredClone([...next]);
@@ -181,7 +181,7 @@ const fixture = (configurationId?: string | null) => {
   const input: HostedOperatorManagedEnvironmentContext = {
     assertCurrent,
     authority,
-    checkpoint: vi.fn(async () => {}),
+    checkpoint: vi.fn<() => Promise<void>>().mockResolvedValue(),
     checkpointManagedEnvironment,
     effect: plan.effects.find((item) => item.kind === "bindings")!,
     fenceGeneration: 1,
@@ -284,7 +284,7 @@ const fixture = (configurationId?: string | null) => {
     },
     token: "private-oauth",
   }));
-  const assertAuthorized = vi.fn(async () => {});
+  const assertAuthorized = vi.fn<() => Promise<void>>().mockResolvedValue();
   const diagnosticSink: HostedOperatorConsentDiagnosticSink = (diagnostic) => {
     diagnostics.push(diagnostic);
   };
@@ -641,7 +641,7 @@ it("cannot delete unjournaled current-operation rows", async () => {
 
 it("does not depend on checkpoint mutating the copied effect context", async () => {
   const f = fixture();
-  f.input.checkpointManagedEnvironment = vi.fn(async () => {});
+  f.input.checkpointManagedEnvironment = vi.fn<() => Promise<void>>().mockResolvedValue();
   const result = await f.writer.bind(f.input, values);
   expect(result.rows).toHaveLength(5);
   expect(f.input.managedEnvironment).toBeUndefined();
