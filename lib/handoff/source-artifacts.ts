@@ -200,18 +200,19 @@ export const createImmutableSourceArtifactStore = (storage: SourceArtifactChunkS
   };
 };
 
+const sourceArtifactChunkPredicate = (k: SourceArtifactChunkKey) =>
+  and(
+    eq(prototypeArtifactChunks.issuer, k.authority.issuer),
+    eq(prototypeArtifactChunks.audience, k.authority.audience),
+    eq(prototypeArtifactChunks.workspaceId, k.authority.workspaceId),
+    eq(prototypeArtifactChunks.ownerUserId, k.authority.ownerUserId),
+    eq(prototypeArtifactChunks.sessionId, `source-upload:v1:${k.uploadId}`),
+    eq(prototypeArtifactChunks.path, k.path),
+    eq(prototypeArtifactChunks.transferDigest, k.transferDigest),
+    eq(prototypeArtifactChunks.chunkIndex, k.chunkIndex),
+  );
+
 export const createSourceArtifactStore = (db: PostgresJsDatabase<typeof schema>) => {
-  const predicate = (k: SourceArtifactChunkKey) =>
-    and(
-      eq(prototypeArtifactChunks.issuer, k.authority.issuer),
-      eq(prototypeArtifactChunks.audience, k.authority.audience),
-      eq(prototypeArtifactChunks.workspaceId, k.authority.workspaceId),
-      eq(prototypeArtifactChunks.ownerUserId, k.authority.ownerUserId),
-      eq(prototypeArtifactChunks.sessionId, `source-upload:v1:${k.uploadId}`),
-      eq(prototypeArtifactChunks.path, k.path),
-      eq(prototypeArtifactChunks.transferDigest, k.transferDigest),
-      eq(prototypeArtifactChunks.chunkIndex, k.chunkIndex),
-    );
   const get = async (k: SourceArtifactChunkKey) => {
     const [row] = await db
       .select({
@@ -219,7 +220,7 @@ export const createSourceArtifactStore = (db: PostgresJsDatabase<typeof schema>)
         content: prototypeArtifactChunks.content,
       })
       .from(prototypeArtifactChunks)
-      .where(predicate(k));
+      .where(sourceArtifactChunkPredicate(k));
     if (row === undefined) {
       return globalThis.undefined;
     }
