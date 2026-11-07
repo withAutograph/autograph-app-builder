@@ -413,7 +413,7 @@ export const readHostedOperatorProviderInventory = async (input: {
           target: readTarget,
         },
         input.diagnosticSink,
-        async () => z.unknown().parse(await response.json()),
+        async (): Promise<unknown> => await response.json(),
       );
       try {
         return json.parse(body);
