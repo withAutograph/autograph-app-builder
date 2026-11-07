@@ -207,6 +207,23 @@ Target onboarding does not authorize database creation, actor grants or app
 publication. Ordinary app changes reuse the recorded target. Product roles come
 from the actual captured app description, including an empty role list; never
 invent roles or app-shape requirements to satisfy a check.
+For a static app that needs identity only, use `plan-app-native-target-auth-only`
+with the selected validated app, deployment-owned Auth profile and an existing
+app-scoped non-privileged role. This path captures the current static description
+from the same approved session, binds verified-email signup policy and the
+isolated Auth endpoint into its retained plan, and never creates an app database
+or installs generated release artifacts. Keep signup and sign-in separate from
+app-data access; protected product data remains unavailable without its own
+explicit plan and approval. Present the exact retained Auth-only plan for human
+approval, then call prepare-app-native-target-auth-only with its operation
+reference and digest. When that call returns `resource-approval-required`, pass
+its exact `resourceApprovalInput` to
+prepare-app-native-target-auth-only-resources for the separate Auth resource
+approval and preparation. Do not rewrite, reconstruct or omit any field from
+that retained input. If approval or execution is pending or uncertain, resume
+with the same plan and the same `resourceApprovalInput`; do not create another
+project, resource plan or approval request. Continue only after the private
+resource tool reports the Auth resource and verified-email schema as prepared.
 When authoring or revising generated app source, declare its current Vercel build
 profile in the app package's `autograph.deployment` metadata when the source
 supports one: explicit `framework`, `sourceFilesOutsideRootDirectory`, and an

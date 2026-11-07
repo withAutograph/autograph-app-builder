@@ -1,13 +1,28 @@
+import { nativeTargetAuthOnlyEntryApprovalInputSchema } from "../provisioning/native-target-auth-only-entry-plan-store";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { z } from "zod";
 import type { ApprovalResponseContext } from "eve/tools/approval";
+import { nativeTargetAuthOnlyDeliveryPreparationInputSchema } from "../eve/private-native-target-auth-only-delivery-approval";
+import { nativeTargetAuthOnlyFinalRoutingApprovalInputSchema, nativeTargetAuthOnlyFinalRoutingPlanInputSchema } from "../eve/private-native-target-auth-only-final-routing-approval";
+import { nativeTargetAuthOnlyFinalRoutingResultSchema } from "../provisioning/native-target-onboarding-transport";
+import { nativeTargetAuthOnlyEntryPlanInputSchema, nativeTargetAuthOnlyEntryResultSchema, nativeTargetAuthOnlyDeliveryPlanInputSchema, nativeTargetAuthOnlyDeliveryResultSchema } from "../provisioning/native-target-onboarding-transport";
+import { nativeTargetAuthOnlyResourcePreparationInputSchema } from "../eve/private-native-target-auth-only-resource-approval";
+import type { nativeTargetAuthOnlyResourceResultSchema } from "../provisioning/native-target-onboarding-transport";
 import type { AppDescription } from "../repository/app-description";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import {
+  nativeTargetAuthOnlyPlanRequestSchema,
+  nativeTargetAuthOnlyPlanResultSchema,
+  nativeTargetAuthOnlyPreparationRequestSchema,
   nativeTargetPlanRequestSchema,
   nativeTargetPreparationRequestSchema,
 } from "./native-target-onboarding-input-schema";
 import type {
+  NativeTargetAuthOnlyPlanRequest,
+  NativeTargetAuthOnlyPlanResult,
+  NativeTargetAuthOnlyPreparationRequest,
+  NativeTargetAuthOnlyDispatchResult,
   NativeTargetPlanRequest,
   NativeTargetPreparationRequest,
   NativeTargetOnboardingResult,
@@ -31,11 +46,15 @@ import type {
 } from "../provisioning/native-target-vercel-provider";
 
 export {
+  nativeTargetAuthOnlyPlanRequestSchema,
+  nativeTargetAuthOnlyPlanResultSchema,
   nativeTargetPlanRequestSchema,
   nativeTargetPreparationRequestSchema,
   nativeTargetOnboardingResultSchema,
 } from "./native-target-onboarding-input-schema";
 export type {
+  NativeTargetAuthOnlyPlanRequest,
+  NativeTargetAuthOnlyPlanResult,
   NativeTargetPlanRequest,
   NativeTargetPreparationRequest,
   NativeTargetOnboardingResult,
@@ -69,6 +88,69 @@ const nonCreationReason = {
   authorization_denied: "not_dispatched",
 } as const;
 export interface NativeTargetOnboardingRuntimePorts {
+  planAuthOnly?: (
+    input: NativeTargetAuthOnlyPlanRequest,
+    ctx: NativeTargetInvocation,
+    selectedApp: { appId: string; appSpecDigest: string },
+  ) => Promise<NativeTargetAuthOnlyPlanResult>;
+  prepareAuthOnly?: (
+    input: NativeTargetAuthOnlyPreparationRequest,
+    ctx: NativeTargetInvocation,
+  ) => Promise<NativeTargetAuthOnlyDispatchResult>;
+  hasAuthOnlyApproval?: (
+    input: NativeTargetAuthOnlyPreparationRequest,
+    ctx: NativeTargetInvocation,
+  ) => Promise<boolean>;
+  prepareAuthOnlyResources?: (
+    input: z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyResourceResultSchema>>;
+  hasAuthOnlyResourceApproval?: (
+    input: z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<boolean>;
+  planAuthOnlyEntry?: (
+    input: z.infer<typeof nativeTargetAuthOnlyEntryPlanInputSchema>, ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>>;
+  prepareAuthOnlyEntry?: (
+    input: z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>, ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyEntryResultSchema>>;
+  hasAuthOnlyEntryApproval?: (
+    input: z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>, ctx: NativeTargetInvocation,
+  ) => Promise<boolean>;
+  authorizeAuthOnlyEntryApprovalResponse?: (
+    ctx: ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>>,
+  ) => Promise<void>;
+  planAuthOnlyFinalRouting?: (
+    input: z.infer<typeof nativeTargetAuthOnlyFinalRoutingPlanInputSchema>, ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>>;
+  prepareAuthOnlyFinalRouting?: (
+    input: z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>, ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyFinalRoutingResultSchema>>;
+  hasAuthOnlyFinalRoutingApproval?: (
+    input: z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>, ctx: NativeTargetInvocation,
+  ) => Promise<boolean>;
+  authorizeAuthOnlyFinalRoutingApprovalResponse?: (
+    ctx: ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>>,
+  ) => Promise<void>;
+  planAuthOnlyDelivery?: (
+    input: z.infer<typeof nativeTargetAuthOnlyDeliveryPlanInputSchema>, ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>>;
+  prepareAuthOnlyDelivery?: (
+    input: z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>, ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyDeliveryResultSchema>>;
+  hasAuthOnlyDeliveryApproval?: (
+    input: z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>, ctx: NativeTargetInvocation,
+  ) => Promise<boolean>;
+  authorizeAuthOnlyDeliveryApprovalResponse?: (
+    ctx: ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>>,
+  ) => Promise<void>;
+  authorizeAuthOnlyResourceApprovalResponse?: (
+    ctx: ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>>,
+  ) => Promise<void>;
+  authorizeAuthOnlyApprovalResponse?: (
+    ctx: ApprovalResponseContext<NativeTargetAuthOnlyPreparationRequest>,
+  ) => Promise<void>;
   /** Reauthorizes current owner/app and reads captured immutable release metadata. */
   readCapturedRelease: (
     ctx: NativeTargetInvocation,
@@ -412,6 +494,183 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     );
   };
   return {
+    async planAuthOnly(
+      raw: NativeTargetAuthOnlyPlanRequest,
+      ctx: NativeTargetInvocation,
+      state: NativeTargetSelectedAppState,
+    ): Promise<NativeTargetAuthOnlyPlanResult> {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyPlanRequestSchema.parse(raw);
+      if (
+        state.appSpec === undefined ||
+        state.appSpec.appId !== proposal.appId ||
+        ports.planAuthOnly === undefined
+      ) {
+        throw invalid();
+      }
+      const result = await ports.planAuthOnly(proposal, ctx, {
+        appId: state.appSpec.appId,
+        appSpecDigest: state.appSpec.digest,
+      });
+      if (
+        result.plan.appId !== proposal.appId ||
+        result.plan.origin.appSpecDigest !== state.appSpec.digest
+      ) {
+        throw invalid();
+      }
+      return result;
+    },
+    async prepareAuthOnly(raw: NativeTargetAuthOnlyPreparationRequest, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyPreparationRequestSchema.parse(raw);
+      if (ports.prepareAuthOnly === undefined) throw invalid();
+      const result = await ports.prepareAuthOnly(proposal, ctx);
+      return result;
+    },
+    async hasAuthOnlyApproval(raw: NativeTargetAuthOnlyPreparationRequest, ctx: NativeTargetInvocation) {
+      const proposal = nativeTargetAuthOnlyPreparationRequestSchema.parse(raw);
+      if (ports.hasAuthOnlyApproval === undefined) throw invalid();
+      return await ports.hasAuthOnlyApproval(proposal, ctx);
+    },
+    async prepareAuthOnlyResources(raw: z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyResourcePreparationInputSchema.parse(raw);
+      if (ports.prepareAuthOnlyResources === undefined) throw invalid();
+      return await ports.prepareAuthOnlyResources(proposal, ctx);
+    },
+    async hasAuthOnlyResourceApproval(raw: z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>, ctx: NativeTargetInvocation) {
+      const proposal = nativeTargetAuthOnlyResourcePreparationInputSchema.parse(raw);
+      if (ports.hasAuthOnlyResourceApproval === undefined) throw invalid();
+      return await ports.hasAuthOnlyResourceApproval(proposal, ctx);
+    },
+    async planAuthOnlyEntry(raw: z.infer<typeof nativeTargetAuthOnlyEntryPlanInputSchema>, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyEntryPlanInputSchema.parse(raw);
+      if (ports.planAuthOnlyEntry === undefined) throw invalid();
+      const result = nativeTargetAuthOnlyEntryApprovalInputSchema.parse(await ports.planAuthOnlyEntry(proposal, ctx));
+      ctx.abortSignal.throwIfAborted();
+      if (
+        result.appId !== proposal.appId || result.deliveryOperationRef !== proposal.deliveryOperationRef ||
+        result.deliveryPlanDigest !== proposal.deliveryPlanDigest || result.effect !== proposal.effect
+      ) throw invalid();
+      return result;
+    },
+    async prepareAuthOnlyEntry(raw: z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyEntryApprovalInputSchema.parse(raw);
+      if (ports.prepareAuthOnlyEntry === undefined) throw invalid();
+      const result = nativeTargetAuthOnlyEntryResultSchema.parse(await ports.prepareAuthOnlyEntry(proposal, ctx));
+      ctx.abortSignal.throwIfAborted();
+      if (
+        result.effect !== proposal.effect || result.childOperationRef !== proposal.childOperationRef ||
+        result.childPlanDigest !== proposal.childPlanDigest
+      ) throw invalid();
+      return result;
+    },
+    async hasAuthOnlyEntryApproval(raw: z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyEntryApprovalInputSchema.parse(raw);
+      if (ports.hasAuthOnlyEntryApproval === undefined) throw invalid();
+      const result = await ports.hasAuthOnlyEntryApproval(proposal, ctx);
+      ctx.abortSignal.throwIfAborted();
+      return result;
+    },
+    async authorizeAuthOnlyEntryApprovalResponse(ctx: ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>>) {
+      if (ports.authorizeAuthOnlyEntryApprovalResponse === undefined) throw invalid();
+      await ports.authorizeAuthOnlyEntryApprovalResponse(ctx);
+    },
+    async planAuthOnlyFinalRouting(raw: z.infer<typeof nativeTargetAuthOnlyFinalRoutingPlanInputSchema>, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyFinalRoutingPlanInputSchema.parse(raw);
+      if (ports.planAuthOnlyFinalRouting === undefined) throw invalid();
+      const result = nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(await ports.planAuthOnlyFinalRouting(proposal, ctx));
+      ctx.abortSignal.throwIfAborted();
+      if (
+        result.appId !== proposal.appId || result.operationRef !== proposal.operationRef ||
+        result.deliveryPlanDigest !== proposal.deliveryPlanDigest
+      ) throw invalid();
+      return result;
+    },
+    async prepareAuthOnlyFinalRouting(raw: z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(raw);
+      if (ports.prepareAuthOnlyFinalRouting === undefined) throw invalid();
+      const result = nativeTargetAuthOnlyFinalRoutingResultSchema.parse(await ports.prepareAuthOnlyFinalRouting(proposal, ctx));
+      ctx.abortSignal.throwIfAborted();
+      if (
+        result.deliveryPlanDigest !== proposal.deliveryPlanDigest ||
+        result.gateway.operationRef !== proposal.routingOperationRef ||
+        result.app.operationRef !== proposal.operationRef ||
+        result.gateway.projectId === result.app.projectId ||
+        result.gateway.deploymentId === result.app.deploymentId
+      ) throw invalid();
+      return result;
+    },
+    async hasAuthOnlyFinalRoutingApproval(raw: z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(raw);
+      if (ports.hasAuthOnlyFinalRoutingApproval === undefined) throw invalid();
+      const result = await ports.hasAuthOnlyFinalRoutingApproval(proposal, ctx);
+      ctx.abortSignal.throwIfAborted();
+      return result;
+    },
+    async authorizeAuthOnlyFinalRoutingApprovalResponse(ctx: ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>>) {
+      if (ports.authorizeAuthOnlyFinalRoutingApprovalResponse === undefined) throw invalid();
+      await ports.authorizeAuthOnlyFinalRoutingApprovalResponse(ctx);
+    },
+    async planAuthOnlyDelivery(raw: z.infer<typeof nativeTargetAuthOnlyDeliveryPlanInputSchema>, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyDeliveryPlanInputSchema.parse(raw);
+      if (ports.planAuthOnlyDelivery === undefined) throw invalid();
+      const result = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(await ports.planAuthOnlyDelivery(proposal, ctx));
+      if (
+        result.appId !== proposal.appId || result.operationRef !== proposal.operationRef ||
+        result.planDigest !== proposal.planDigest || result.resourcePlanDigest !== proposal.resourcePlanDigest ||
+        result.deliveryPlan.target.appId !== proposal.appId || result.deliveryPlan.authOnlyPlanDigest !== proposal.planDigest ||
+        result.deliveryPlan.resourcePlanDigest !== proposal.resourcePlanDigest
+      ) throw invalid();
+      return result;
+    },
+    async prepareAuthOnlyDelivery(raw: z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(raw);
+      if (ports.prepareAuthOnlyDelivery === undefined) throw invalid();
+      const result = nativeTargetAuthOnlyDeliveryResultSchema.parse(await ports.prepareAuthOnlyDelivery(proposal, ctx));
+      if (result.deliveryPlanDigest !== proposal.deliveryPlanDigest) throw invalid();
+      if (
+        result.status === "routing-required" &&
+        (result.finalRoutingPlan.appId !== proposal.appId ||
+          result.finalRoutingPlan.operationRef !== proposal.operationRef ||
+          result.finalRoutingPlan.deliveryPlanDigest !== proposal.deliveryPlanDigest)
+      ) throw invalid();
+      if (result.status === "prepared" && result.finalRoutingPlan !== undefined) {
+        const routing = result.finalRoutingPlan;
+        if (
+          routing.appId !== proposal.appId || routing.operationRef !== proposal.operationRef ||
+          routing.deliveryPlanDigest !== proposal.deliveryPlanDigest || routing.routingOperationRef === proposal.operationRef ||
+          result.gateway.operationRef !== routing.routingOperationRef || result.app.operationRef !== proposal.operationRef
+        ) throw invalid();
+      }
+      return result;
+    },
+    async hasAuthOnlyDeliveryApproval(raw: z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>, ctx: NativeTargetInvocation) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(raw);
+      if (ports.hasAuthOnlyDeliveryApproval === undefined) throw invalid();
+      return await ports.hasAuthOnlyDeliveryApproval(proposal, ctx);
+    },
+    async authorizeAuthOnlyDeliveryApprovalResponse(ctx: ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>>) {
+      if (ports.authorizeAuthOnlyDeliveryApprovalResponse === undefined) throw invalid();
+      await ports.authorizeAuthOnlyDeliveryApprovalResponse(ctx);
+    },
+    async authorizeAuthOnlyResourceApprovalResponse(ctx: ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>>) {
+      if (ports.authorizeAuthOnlyResourceApprovalResponse === undefined) throw invalid();
+      await ports.authorizeAuthOnlyResourceApprovalResponse(ctx);
+    },
+    async authorizeAuthOnlyApprovalResponse(ctx: ApprovalResponseContext<NativeTargetAuthOnlyPreparationRequest>) {
+      if (ports.authorizeAuthOnlyApprovalResponse === undefined) throw invalid();
+      await ports.authorizeAuthOnlyApprovalResponse(ctx);
+    },
     async plan(
       raw: NativeTargetPlanRequest,
       ctx: NativeTargetInvocation,
@@ -572,7 +831,12 @@ export type NativeTargetOnboardingRuntime = ReturnType<typeof createNativeTarget
 /** Optional trusted embedding override; production resolves its protected client per invocation. */
 export type NativeTargetRuntimeResolutionContext =
   | Pick<NativeTargetInvocation, "session">
-  | ApprovalResponseContext<NativeTargetPreparationRequest>;
+  | ApprovalResponseContext<NativeTargetPreparationRequest>
+  | ApprovalResponseContext<NativeTargetAuthOnlyPreparationRequest>
+  | ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>>
+  | ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>>
+  | ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>>
+  | ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>>;
 export type NativeTargetOnboardingRuntimeResolver = (
   ctx: NativeTargetRuntimeResolutionContext,
 ) => Promise<NativeTargetOnboardingRuntime>;

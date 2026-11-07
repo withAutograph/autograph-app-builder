@@ -250,6 +250,8 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
   fetch?: typeof fetch;
   target?: "app" | "gateway";
   wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+  /** Auth-only callers supply the digest they already approved, without fabricating an app DB plan. */
+  approvedPlanDigest?: (input: HostedOperatorDeploymentContext) => string;
   observeAlias?: (diagnostic: GatewayAliasDiagnostic) => void | Promise<void>;
   beforeCreate?: (input: HostedOperatorDeploymentContext) => Promise<void>;
   beforeAliasWrite?: (
@@ -394,7 +396,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       throw new HostedOperatorError("resource_mismatch");
     }
     const gitRef = nativeDeliveryGitRef(input.plan, delivery, deps.target ?? "app");
-    const planDigest = operatorPlanDigest(input.plan);
+    const planDigest = deps.approvedPlanDigest?.(input) ?? operatorPlanDigest(input.plan);
     const expectedMeta = {
       autograph_operator_effect: input.effect.id,
       autograph_operator_operation: input.operationRef,

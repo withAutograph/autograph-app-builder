@@ -170,6 +170,38 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
     .optional(),
   /** Explicit deployment-owned topology; omitted configurations retain legacy behavior. */
 
+  /** Deployment-owned role catalog for static Auth-only apps; carries no product database. */
+  authOnlyApplications: z
+    .record(
+      id,
+      z.strictObject({
+        accessRoles: z.array(generatedAppRoleSchema).min(1),
+        /** Private owner/app-scoped initial signup gate; never copied to public tool input. */
+        entryPolicy: z.strictObject({
+          approvedEmail: z.email(),
+          appPath: z.string().regex(/^\/(?!\/)[^?#\\]*$/u),
+        }).optional(),
+        /** Runtime projection of an owner/session-bound Auth-only journal registration. */
+        registration: z.strictObject({
+          ownerUserId: id,
+          sessionId: id,
+          projectId: id,
+          branch: id,
+          projectSettings: hostedOperatorAppProjectSettingsSchema,
+          planDigest: digest,
+          authResource: z.strictObject({
+            profileId: id,
+            authorityDigest: digest,
+            resourceId: id,
+            database: id,
+            endpointId: id,
+            hostname: id,
+          }),
+          appRole: generatedAppRoleSchema,
+        }).optional(),
+      }),
+    )
+    .optional(),
   applications: z.record(
     id,
     z.strictObject({

@@ -1696,6 +1696,59 @@ describe("suspended hosted identity invitation", () => {
       turnId: projected[0].type === "assistant_message" ? projected[0].turnId : "",
     });
   });
+  const authOnlyTool = "prepare-app-native-target-auth-only-delivery";
+  const authOnlyLink = new URL("https://auth.example.com/api/auth/platform/operator-link");
+  authOnlyLink.search = new URLSearchParams({
+    nonce: "a".repeat(64),
+    ownerSessionId: "saved-session",
+    bootstrapPlanDigest: "b".repeat(64),
+    authResourceId: "isolated-auth",
+  }).toString();
+  const authOnlyExpiry = "2026-10-15T15:00:00Z";
+  it("publishes only the Auth-only browser invitation and expiry", () => {
+    const projected = projectInstalledEveEvents([
+      partial(
+        {
+          authIdentityLink: authOnlyLink.href,
+          authIdentityLinkExpiresAt: authOnlyExpiry,
+          proof: "private-proof",
+          sealedNonce: "private-nonce",
+          providerSecret: "private-key",
+        },
+        authOnlyTool,
+      ),
+    ]);
+    expect(projected).toHaveLength(2);
+    expect(projected[1]).toMatchObject({
+      type: "auth_identity_invitation",
+      callId: "prepare-call",
+      url: authOnlyLink.href,
+      expiresAt: authOnlyExpiry,
+    });
+    expect(JSON.stringify(projected)).not.toMatch(/private-/u);
+  });
+  it("rejects Auth-only output with an unexpected path, proof query, fragment, or no expiry", () => {
+    for (const invalid of [
+      authOnlyLink.href.replace("/operator-link", "/other-path"),
+      `${authOnlyLink.href}&proof=private-proof`,
+      `${authOnlyLink.href}#private-proof`,
+    ]) {
+      expect(
+        projectInstalledEveEvents([
+          partial(
+            {
+              authIdentityLink: invalid,
+              authIdentityLinkExpiresAt: authOnlyExpiry,
+            },
+            authOnlyTool,
+          ),
+        ]),
+      ).toEqual([]);
+    }
+    expect(
+      projectInstalledEveEvents([partial({ authIdentityLink: authOnlyLink.href }, authOnlyTool)]),
+    ).toEqual([]);
+  });
   it("keeps the invitation separate from the eventual assistant reply", () => {
     const projected = projectInstalledEveEvents([
       partial({ authIdentityLink: link }),
@@ -1725,27 +1778,30 @@ describe("suspended hosted identity invitation", () => {
   });
 });
 
-it("closes only the finished hosted identity tool invitation", () => {
-  const events = projectInstalledEveEvents([
-    installedEvent({
-      type: "action.result",
-      data: {
-        turnId: "owner-turn",
-        sequence: 9,
-        stepIndex: 2,
-        status: "completed",
-        result: {
-          kind: "tool-result",
-          toolName: "prepare-app-hosted-runtime",
-          callId: "prepare-call",
-          output: { status: "prepared" },
+it.each(["prepare-app-hosted-runtime", "prepare-app-native-target-auth-only-delivery"])(
+  "closes only the finished hosted identity tool invitation for %s",
+  (toolName) => {
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        type: "action.result",
+        data: {
+          turnId: "owner-turn",
+          sequence: 9,
+          stepIndex: 2,
+          status: "completed",
+          result: {
+            kind: "tool-result",
+            toolName,
+            callId: "prepare-call",
+            output: { status: "prepared" },
+          },
         },
-      },
-    }),
-  ]);
-  expect(events).toContainEqual({
-    type: "auth_identity_invitation_resolved",
-    callId: "prepare-call",
-    index: 1,
-  });
-});
+      }),
+    ]);
+    expect(events).toContainEqual({
+      type: "auth_identity_invitation_resolved",
+      callId: "prepare-call",
+      index: toolName === "prepare-app-hosted-runtime" ? 1 : 0,
+    });
+  },
+);

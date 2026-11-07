@@ -16,6 +16,13 @@ const profileSchema = z.strictObject({
   configuration: hostedOperatorSourceConfigurationSchema,
 });
 
+const authOnlyProfileSchema = profileSchema.refine(
+  (profile) =>
+    profile.configuration.authOnlyApplications?.[profile.appId] !== undefined &&
+    profile.configuration.applications[profile.appId] === undefined,
+  "Additive resource profiles must declare an Auth-only app without an application database.",
+);
+
 /** Select only a deployment-owned profile bound to the authenticated canonical app owner. */
 export const resolveNativeTargetResourceProfile = (input: {
   base: HostedOperatorSourceConfiguration;
@@ -30,11 +37,22 @@ export const resolveNativeTargetResourceProfile = (input: {
   const unavailable = () => new Error("Protected operator resource profile is unavailable.");
   try {
     const authority = hostedTenantAuthoritySchema.parse(input.authority);
-    const text = (input.environment ?? process.env).PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES;
-    if (text === undefined || text === "" || input.resourceProfileId === "") {
+    const environment = input.environment ?? process.env;
+    const sharedText = environment.PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES;
+    const authOnlyText = environment.PROTECTED_HOSTED_OPERATOR_AUTH_ONLY_RESOURCE_PROFILES;
+    if (input.resourceProfileId === "") {
       throw unavailable();
     }
-    const profiles = z.array(profileSchema).parse(JSON.parse(text));
+    // A separate private setting adds Auth-only custody without rewriting the shared inventory.
+    // Parse both inventories before selection: malformed input and duplicate IDs never grant fallback authority.
+    const profiles = [
+      ...(sharedText === undefined || sharedText === ""
+        ? []
+        : z.array(profileSchema).parse(JSON.parse(sharedText))),
+      ...(authOnlyText === undefined || authOnlyText === ""
+        ? []
+        : z.array(authOnlyProfileSchema).parse(JSON.parse(authOnlyText))),
+    ];
     const selected = profiles.filter((profile) => profile.id === input.resourceProfileId);
     if (selected.length !== 1) {
       throw unavailable();

@@ -7,11 +7,17 @@ import {
 import { appIntegrationCapabilityTransportRequestSchema } from "./app-integration-capability-transport";
 /* oxlint-disable eslint/require-await, typescript/no-non-null-assertion -- These async port fixtures intentionally resolve synchronously; required fixture records are asserted in the tested producer. */
 import { assembleStandardBuilderRuntimeConfiguration } from "./standard-builder-runtime-configuration";
-import { standardDevelopmentRuntimePolicySchema } from "./hosted-operator-source-configuration-schema";
+import { standardDevelopmentRuntimePolicySchema, validateHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
 /* oxlint-disable unicorn/no-useless-undefined -- Explicit absent optional registry rows and void mocks match the read ports. */
 import { describe, expect, it, vi } from "vitest";
 import { capturedGenericWorkerFixture } from "./operator-worker-source-capture.test-fixture";
-import { createNativeTargetConfigurationResolver } from "./native-target-configuration-resolver";
+import { createNativeTargetConfigurationResolver, resolveNativeTargetAuthOnlyRegistration } from "./native-target-configuration-resolver";
+import { createConfiguredPreviewTargetResolver } from "./hosted-operator-composition";
+import { nativeTargetAuthOnlyTestPlan } from "./native-target-auth-only-plan-schema.test";
+import { nativeTargetAuthOnlyAuthorityDigest } from "./native-target-auth-only-planner";
+import { resolveNativeTargetResourceProfile } from "./native-target-resource-profile";
+import { nativeTargetAuthOnlyPlanDigest, nativeTargetAuthOnlySchemaEffectDigest } from "./native-target-auth-only-plan-schema";
+import type { NativeTargetAuthOnlyDispatchState } from "./native-target-auth-only-dispatch";
 import type { NativeTargetConfigurationResources } from "./native-target-configuration-resolver";
 import type { NativeTargetReadyRegistration } from "./native-target-onboarding-contract";
 import {
@@ -1291,6 +1297,152 @@ describe("fresh normal same-project runtime assembly", () => {
       ),
     ).rejects.toMatchObject({ code: "builder_destination_configuration_required" });
     expect(f.resources.registry.read).not.toHaveBeenCalled();
+  });
+});
+describe("Auth-only created target registration lookup", () => {
+  it("projects a verified owner/session/app/profile registration without an app database", async () => {
+    const base = configuration();
+    const planSeed = nativeTargetAuthOnlyTestPlan();
+    let selected = structuredClone(base);
+    const nativeOperator = {
+      audience: workload.audience, issuer: workload.issuer, ownerId: base.teamId,
+      projectId: base.operator.projectId, environment: base.operator.environment,
+    };
+    base.nativeNeon.configuration.operator = nativeOperator;
+    selected.nativeNeon.configuration.operator = nativeOperator;
+    const profileAuthDatabase = { ...resource("auth_identity"), resourceId: "isolated-auth" };
+    selected.authDatabase = profileAuthDatabase;
+    selected.nativeNeon.scope.endpointId = "ep-auth-preview";
+    selected.nativeNeon.scope.hostname = "auth-preview.neon.tech";
+    selected.authOnlyApplications = { [planSeed.appId]: { accessRoles: ["pilot_user"] } };
+    selected = validateHostedOperatorSourceConfiguration(selected);
+    base.authOnlyApplications = { [planSeed.appId]: { accessRoles: ["pilot_user"] } };
+    const authorityBinding = {
+      authDatabase: selected.authDatabase,
+      nativeNeon: selected.nativeNeon,
+      gateway: {
+        projectId: selected.gateway.projectId, environment: selected.gateway.environment,
+        branch: selected.gateway.branch, authBrowserOrigin: selected.gateway.authBrowserOrigin,
+        gatewayOrigin: selected.gateway.gatewayOrigin, publicOrigin: selected.gateway.publicOrigin,
+        workload: selected.gateway.workload,
+      },
+      operator: { projectId: selected.operator.projectId, environment: selected.operator.environment, origin: selected.operator.origin },
+    };
+    const authResource = {
+      ...planSeed.authResource,
+      resourceId: profileAuthDatabase.resourceId,
+      database: profileAuthDatabase.database,
+      endpointId: selected.nativeNeon.scope.endpointId,
+      hostname: selected.nativeNeon.scope.hostname,
+      authorityDigest: nativeTargetAuthOnlyAuthorityDigest({
+        authority: planSeed.origin.authority, appId: planSeed.appId,
+        profileId: planSeed.authResource.profileId, authDatabase: selected.authDatabase,
+        roles: ["pilot_user"], authorityBinding,
+        physicalEndpointId: selected.nativeNeon.scope.endpointId,
+      }),
+    };
+    const plan = { ...planSeed, authResource };
+    const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
+    const resolvedProfile = resolveNativeTargetResourceProfile({
+      base, resourceProfileId: plan.authResource.profileId, authority: plan.origin.authority,
+      appId: plan.appId,
+      environment: { PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify([
+        { id: plan.authResource.profileId, authority: plan.origin.authority, appId: plan.appId, configuration: selected },
+      ]) },
+    });
+    expect(resolvedProfile.authDatabase.resourceId).toBe(plan.authResource.resourceId);
+    expect(resolvedProfile.authDatabase.database).toBe(plan.authResource.database);
+    expect(resolvedProfile.nativeNeon.scope.endpointId).toBe(plan.authResource.endpointId);
+    expect(resolvedProfile.nativeNeon.scope.hostname).toBe(plan.authResource.hostname);
+    expect(nativeTargetAuthOnlyAuthorityDigest({
+      authority: plan.origin.authority, appId: plan.appId, profileId: plan.authResource.profileId,
+      authDatabase: resolvedProfile.authDatabase, roles: resolvedProfile.authOnlyApplications?.[plan.appId]?.accessRoles ?? [],
+      authorityBinding: {
+        authDatabase: resolvedProfile.authDatabase, nativeNeon: resolvedProfile.nativeNeon,
+        gateway: { projectId: resolvedProfile.gateway.projectId, environment: resolvedProfile.gateway.environment, branch: resolvedProfile.gateway.branch, authBrowserOrigin: resolvedProfile.gateway.authBrowserOrigin, gatewayOrigin: resolvedProfile.gateway.gatewayOrigin, publicOrigin: resolvedProfile.gateway.publicOrigin, workload: resolvedProfile.gateway.workload },
+        operator: { projectId: resolvedProfile.operator.projectId, environment: resolvedProfile.operator.environment, origin: resolvedProfile.operator.origin },
+      },
+      physicalEndpointId: resolvedProfile.nativeNeon.scope.endpointId,
+    })).toBe(plan.authResource.authorityDigest);
+    const state: NativeTargetAuthOnlyDispatchState = {
+      kind: "native-target-auth-only-dispatch", version: 1, stage: "created",
+      plan, planDigest, approval: {
+        requestId: "approval_fixture", callId: "call_fixture", planDigest, sourceDigest: nativeTargetAuthOnlySchemaEffectDigest(plan, plan.publishedSource),
+        responderPrincipalId: plan.origin.authority.ownerUserId,
+        publicSessionId: plan.origin.publicSessionId, outcome: "approved",
+        observedAt: "2026-11-06T12:00:00.000Z",
+      }, projectId: "vercel_project_fixture",
+    };
+    const store = {
+      read: vi.fn(async (key: { authority: typeof plan.origin.authority; appId: string }) => {
+        expect(key).toEqual({ authority: plan.origin.authority, appId: plan.appId });
+        return { revision: 4, state };
+      }),
+    };
+    const effective = await resolveNativeTargetAuthOnlyRegistration({
+      configuration: base, store, authority: plan.origin.authority,
+      sessionId: plan.origin.publicSessionId, appId: plan.appId,
+      environment: { PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify([
+        { id: plan.authResource.profileId, authority: plan.origin.authority, appId: plan.appId, configuration: selected },
+      ]) },
+    });
+    const profileInventory = (configuration: typeof selected) => ({
+      PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify([
+        { id: plan.authResource.profileId, authority: plan.origin.authority, appId: plan.appId, configuration },
+      ]),
+    });
+    await expect(resolveNativeTargetAuthOnlyRegistration({
+      configuration: { ...base, authOnlyApplications: {} }, store, authority: plan.origin.authority,
+      sessionId: plan.origin.publicSessionId, appId: plan.appId, environment: profileInventory(selected),
+    })).rejects.toMatchObject({ code: "resource_mismatch" });
+    const profileWithoutRole = structuredClone(selected);
+    profileWithoutRole.authOnlyApplications![plan.appId]!.accessRoles = ["other_role"];
+    await expect(resolveNativeTargetAuthOnlyRegistration({
+      configuration: base, store, authority: plan.origin.authority,
+      sessionId: plan.origin.publicSessionId, appId: plan.appId, environment: profileInventory(profileWithoutRole),
+    })).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(effective?.authOnlyApplications?.[plan.appId]?.registration).toMatchObject({
+      ownerUserId: plan.origin.authority.ownerUserId,
+      sessionId: plan.origin.publicSessionId,
+      projectId: "vercel_project_fixture",
+      authResource: plan.authResource,
+    });
+    expect(effective?.authDatabase.resourceId).toBe(plan.authResource.resourceId);
+    expect(effective?.authDatabase.database).toBe(plan.authResource.database);
+    expect(effective?.nativeNeon.scope.endpointId).toBe(plan.authResource.endpointId);
+    expect(effective?.applications[plan.appId]).toBeUndefined();
+    expect(effective?.authOnlyApplications?.[plan.appId]?.registration).not.toHaveProperty("appDatabase");
+    const ownerContext = {
+      kind: "direct" as const,
+      authority: plan.origin.authority,
+      adapterGeneration: 1,
+      adapterSessionId: plan.origin.adapterSessionId,
+      sessionId: plan.origin.publicSessionId,
+      principal: {
+        audience: plan.origin.authority.audience, issuer: plan.origin.authority.issuer,
+        ownerUserId: plan.origin.authority.ownerUserId, workspaceId: plan.origin.authority.workspaceId,
+        scopes: ["autograph:operate"],
+      },
+    };
+    const authorize = vi.fn(async (_request, selection) => ({
+      authority: plan.origin.authority,
+      ownerContext,
+      target: { ...selection, scopeId: "team" },
+    }));
+    const resolveTarget = createConfiguredPreviewTargetResolver(
+      effective!,
+      { authorize: vi.fn(async () => ({ authority: plan.origin.authority, ownerContext })) } as never,
+      { authorize, assertPlanningAuthorized: vi.fn(async () => undefined) } as never,
+    );
+    const context = await resolveTarget(
+      new Request("https://operator.example/v1/runtime"),
+      { appId: plan.appId, sessionId: plan.origin.publicSessionId },
+      ownerContext,
+    );
+    expect(context.target).toMatchObject({
+      appId: plan.appId, branch: plan.branch, projectId: "vercel_project_fixture",
+      scopeId: base.teamId, environment: "preview",
+    });
   });
 });
 it("closed receipt ingress has no request-selected app or unbounded pre-authorization JSON parsing", async () => {

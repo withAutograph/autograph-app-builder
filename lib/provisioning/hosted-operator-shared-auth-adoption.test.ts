@@ -1015,6 +1015,7 @@ describe("native composition adoption boundary", () => {
         }),
     );
     const controlPlane: Awaited<ReturnType<typeof createHostedOperatorControlPlane>> = {
+      createNativeTargetAuthOnlyRealmCallbackPorts: unavailable,
       centralIntegrationHostRequest: unavailable,
       centralIntegrationDeploymentReceiptRequest: unavailable,
       continuityRequest: unavailable,

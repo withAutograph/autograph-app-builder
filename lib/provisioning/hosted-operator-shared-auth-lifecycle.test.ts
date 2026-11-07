@@ -383,6 +383,7 @@ const composed = (active = true) => {
     return preparedCredentials(input);
   });
   const controlPlane: ControlPlane = {
+    createNativeTargetAuthOnlyRealmCallbackPorts: unavailable,
     centralIntegrationHostRequest: unavailable,
     centralIntegrationDeploymentReceiptRequest: unavailable,
     continuityRequest: unavailable,

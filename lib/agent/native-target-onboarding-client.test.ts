@@ -10,6 +10,11 @@ import {
 } from "../provisioning/native-target-onboarding-contract";
 import { operatorOwnerContextSchema } from "../provisioning/hosted-operator-contract";
 import { nativeTargetTransportRequestSchema } from "../provisioning/native-target-onboarding-transport";
+import {
+  nativeTargetAuthOnlyPlanDigest,
+  nativeTargetAuthOnlyPlanSchema,
+} from "../provisioning/native-target-auth-only-plan-schema";
+import { nativeTargetAuthOnlyPlanRequestSchema as authOnlyRequestSchema } from "../provisioning/native-target-onboarding-transport";
 import type { NativeTargetTransportResponse } from "../provisioning/native-target-onboarding-transport";
 import type { NativeTargetPreparationRequest } from "./native-target-onboarding-runtime";
 import {
@@ -191,6 +196,99 @@ beforeEach(() => {
   ownerResolver.mockReset();
 });
 describe("native target protected client", () => {
+  it("requests a saved-source Auth-only plan through the hosted transport", async () => {
+    const f = fixture();
+    const authPlan = nativeTargetAuthOnlyPlanSchema.parse({
+      version: 1,
+      kind: "native-target-auth-only",
+      appId: "invoice-review",
+      origin: {
+        authority: f.owner.authority,
+        publicSessionId: f.owner.sessionId,
+        adapterSessionId: f.owner.adapterSessionId,
+        adapterGeneration: f.owner.adapterGeneration,
+        appSpecDigest: "e".repeat(64),
+        capturedDescription: {
+          appId: "invoice-review",
+          kind: "static",
+          sha256: "f".repeat(64),
+        },
+      },
+      publishedSource: {
+        branch: "preview",
+        changeSetDigest: "a".repeat(64),
+        gitSha: "b".repeat(40),
+        gitTree: "c".repeat(40),
+        repositoryId: "repository",
+        reviewDigest: "d".repeat(64),
+      },
+      project: {
+        name: "invoice-review",
+        teamId: "team",
+        installationId: "installation",
+        projectSettings: { framework: "nextjs", rootDirectory: "apps/invoice-review" },
+        protection: nativeTargetRequiredProjectProtection,
+      },
+      branch: "preview",
+      authResource: {
+        profileId: "invoice-auth-profile",
+        authorityDigest: "a".repeat(64),
+        resourceId: "isolated-auth",
+        database: "auth_identity",
+        endpointId: "isolated-endpoint",
+        hostname: "auth-preview.neon.tech",
+      },
+      authSchema: {
+        artifactRef: "private-auth-schema",
+        planDigest: "4".repeat(64),
+        targetDigest: "5".repeat(64),
+        installer: { reference: "auth-schema-v1", sha256: "6".repeat(64) },
+      },
+      appRole: "pilot_user",
+      signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
+      cost: { ownership: "current-owner", description: "Isolated Auth Preview" },
+      retention: { policy: "Retain until explicit cleanup" },
+    });
+    const request = vi.fn<typeof fetch>((_url, options) => {
+      const body = authOnlyRequestSchema.parse(JSON.parse(z.string().parse(options?.body)));
+      expect(body.input.appId).toBe("invoice-review");
+      expect(body.selectedApp.appSpecDigest).toBe("e".repeat(64));
+      expect(() => authOnlyRequestSchema.parse({ ...body, adapterSessionId: "another" })).toThrow();
+      expect(() =>
+        authOnlyRequestSchema.parse({
+          ...body,
+          selectedApp: { ...body.selectedApp, appId: "another-app" },
+        }),
+      ).toThrow();
+      return Promise.resolve(
+        Response.json({
+          status: "planned",
+          plan: authPlan,
+          planDigest: nativeTargetAuthOnlyPlanDigest(authPlan),
+        }),
+      );
+    });
+    const client = createNativeTargetOnboardingClient({
+      endpoint: "https://operator.example",
+      ownerContext: f.owner,
+      token: () => Promise.resolve("synthetic-oidc"),
+      fetch: request,
+    });
+    const result = await client.planAuthOnly(
+      {
+        appId: "invoice-review",
+        authProfileId: "invoice-auth-profile",
+        project: { name: "invoice-review", teamId: "team", installationId: "installation" },
+        branch: "preview",
+        appRole: "pilot_user",
+      },
+      f.ctx,
+      { phase: "planned", appSpec: { appId: "invoice-review", digest: "e".repeat(64) } },
+    );
+    expect(result.planDigest).toBe(nativeTargetAuthOnlyPlanDigest(authPlan));
+    expect(request).toHaveBeenCalledOnce();
+  });
+
   it("uses the existing target instruction without reserving another project", async () => {
     const f = fixture();
     f.request.mockResolvedValueOnce(

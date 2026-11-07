@@ -39,8 +39,14 @@ const snapshotSchema = z.object({
   }),
   role: z.string(),
 });
-type Input = HostedOperatorContext & {
-  plan: HostedOperatorPlan;
+type AuthReadinessPlan = Pick<
+  HostedOperatorPlan,
+  "authSchema" | "authDatabase" | "authAdoption"
+> & {
+  neon: Pick<HostedOperatorPlan["neon"], "endpoint" | "projectId" | "branchId">;
+};
+type Input<Plan extends AuthReadinessPlan> = HostedOperatorContext & {
+  plan: Plan;
   assertCurrent?: () => Promise<void>;
 };
 const readSnapshot = async (url: string) => {
@@ -64,13 +70,15 @@ const readSnapshot = async (url: string) => {
 };
 
 /** Fixed runtime catalog publication read. It proves schema/ACL metadata, never human login or app access. */
-export const createHostedOperatorAuthReadiness = (deps: {
-  assertAuthorized: (input: Input) => Promise<void>;
-  readRuntimeUrl: (input: Input) => Promise<string>;
-  readAuthPlan: (input: Input) => Promise<Buffer>;
+export const createHostedOperatorAuthReadiness = <
+  Plan extends AuthReadinessPlan = HostedOperatorPlan,
+>(deps: {
+  assertAuthorized: (input: Input<Plan>) => Promise<void>;
+  readRuntimeUrl: (input: Input<Plan>) => Promise<string>;
+  readAuthPlan: (input: Input<Plan>) => Promise<Buffer>;
   readSnapshot?: typeof readSnapshot;
 }) => {
-  const verify = async (supplied: Input, matchApprovedTarget: boolean) => {
+  const verify = async (supplied: Input<Plan>, matchApprovedTarget: boolean) => {
     try {
       const input = {
         ...supplied,
@@ -156,10 +164,13 @@ export const createHostedOperatorAuthReadiness = (deps: {
     }
   };
   return {
-    verify: async (input: Input) => await verify(input, true),
+    verify: async (input: Input<Plan>) => await verify(input, true),
     /** Actual current publication; this never claims the newly approved target is installed. */
-    verifyPublication: async (input: Input) => await verify(input, false),
-    async reconcileMigration(supplied: Input, repropose: (input: Input) => Promise<Buffer>) {
+    verifyPublication: async (input: Input<Plan>) => await verify(input, false),
+    async reconcileMigration(
+      supplied: Input<Plan>,
+      repropose: (input: Input<Plan>) => Promise<Buffer>,
+    ) {
       const input = {
         ...supplied,
         authority: structuredClone(supplied.authority),

@@ -317,7 +317,16 @@ const bindSignupPolicy = (
     origin: publicOrigin,
   };
 };
-type ControlPlane = Awaited<ReturnType<typeof createHostedOperatorControlPlane>> &
+type ControlPlane = Omit<
+  Awaited<ReturnType<typeof createHostedOperatorControlPlane>>,
+  "createNativeTargetAuthOnlyRealmCallbackPorts"
+> &
+  Partial<
+    Pick<
+      Awaited<ReturnType<typeof createHostedOperatorControlPlane>>,
+      "createNativeTargetAuthOnlyRealmCallbackPorts"
+    >
+  > &
   HostedOperatorNormalActorPorts & {
     readNormalActorRuntimeBindings: NonNullable<
       ProtectedHostedOperatorDependencies["normalActorRuntimeBindings"]
@@ -532,25 +541,36 @@ const selectedApplication = (
 /** Resolve configured metadata under the same live owner/provider authority used by planning. */
 export const createConfiguredPreviewTargetResolver =
   (
-    configuration: Pick<HostedOperatorSourceConfiguration, "applications" | "teamId">,
+    configuration: Pick<HostedOperatorSourceConfiguration, "applications" | "authOnlyApplications" | "teamId">,
     consentOwner: Pick<ReturnType<typeof createHostedOperatorConsentOwner>, "authorize">,
     controlPlane: Pick<ControlPlane, "authorize" | "assertPlanningAuthorized">,
   ): NonNullable<ProtectedHostedOperatorDependencies["resolvePreviewTarget"]> =>
   async (request, identity, ownerContext) => {
     const currentOwner = await consentOwner.authorize(request, identity.sessionId, ownerContext);
     const application = configuration.applications[identity.appId];
-    if (application === undefined) {
+    const authOnlyRegistration = configuration.authOnlyApplications?.[identity.appId]?.registration;
+    if (application === undefined && authOnlyRegistration === undefined) {
       throw new HostedOperatorError(RESOURCE_MISMATCH);
     }
+    if (
+      application === undefined &&
+      (authOnlyRegistration?.sessionId !== identity.sessionId ||
+        authOnlyRegistration.ownerUserId !== currentOwner.authority.ownerUserId)
+    ) throw new HostedOperatorError(RESOURCE_MISMATCH);
     const selection = operatorSelectionSchema.parse({
       appId: identity.appId,
-      branch: application.branch,
+      branch: application?.branch ?? authOnlyRegistration!.branch,
       environment: "preview",
-      projectId: application.projectId,
+      projectId: application?.projectId ?? authOnlyRegistration!.projectId,
       sessionId: identity.sessionId,
     });
     const context = await controlPlane.authorize(request, selection, currentOwner.ownerContext);
-    selectedApplication(configuration, context);
+    if (application !== undefined) selectedApplication(configuration, context);
+    else if (
+      context.target.projectId !== authOnlyRegistration?.projectId ||
+      context.target.branch !== authOnlyRegistration.branch ||
+      context.target.scopeId !== configuration.teamId
+    ) throw new HostedOperatorError(RESOURCE_MISMATCH);
     await controlPlane.assertPlanningAuthorized(context);
     return context;
   };

@@ -1167,6 +1167,7 @@ const unusedCompositionControlPlane = (): Parameters<
     reserveFenceGeneration: unexpectedPort,
   };
   return {
+    createNativeTargetAuthOnlyRealmCallbackPorts: unexpectedPort,
     centralIntegrationHostRequest: unexpectedPort,
     centralIntegrationDeploymentReceiptRequest: unexpectedPort,
     exportRequest: unexpectedPort,
@@ -5158,6 +5159,9 @@ it("forwards all additive native delivery contracts through the actual request-s
         expect(input.request).toBeInstanceOf(Request);
         return Promise.resolve({
           ...base,
+          createNativeTargetAuthOnlyRealmCallbackPorts: () => {
+            throw new Error("Unexpected callback reader in route delegation fixture");
+          },
           publicReleaseRequest: delegated,
           appIntegrationCapabilityRequest: delegated,
           centralIntegrationHostRequest: delegated,

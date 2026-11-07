@@ -50,7 +50,10 @@ import {
   createPostgresNativeTargetOnboardingStore,
 } from "./native-target-onboarding-store";
 import type { NativeTargetOnboardingStore } from "./native-target-onboarding-store";
+import { createPostgresNativeTargetAuthOnlyDispatchStore } from "./native-target-auth-only-dispatch";
+import type { NativeTargetAuthOnlyDispatchStore } from "./native-target-auth-only-dispatch";
 import { resolveNativeTargetEffectiveConfiguration } from "./native-target-effective-configuration";
+import { nativeTargetAuthOnlyAuthorityDigest } from "./native-target-auth-only-planner";
 import { readHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import {
@@ -95,6 +98,7 @@ interface RegistryInvocation {
 export interface NativeTargetConfigurationResources {
   owner: ReturnType<typeof createHostedOperatorAppOwnerAuthority>;
   registry: Pick<NativeTargetOnboardingStore, "read">;
+  authOnlyDispatch?: Pick<NativeTargetAuthOnlyDispatchStore, "read">;
   continuity: Pick<ContinuityJournalStore, "read">;
   exports: Pick<TenantExportJournalStore, "read">;
   readStandardDestination?: (
@@ -114,6 +118,94 @@ export interface NativeTargetConfigurationResources {
 
   close: () => Promise<void>;
 }
+
+/** Projects only a verified Auth-only target; it deliberately adds no application database. */
+export const resolveNativeTargetAuthOnlyRegistration = async (input: {
+  configuration: HostedOperatorSourceConfiguration;
+  store: Pick<NativeTargetAuthOnlyDispatchStore, "read">;
+  authority: OperatorOwnerContext["authority"];
+  sessionId: string;
+  appId: string;
+  environment: Readonly<Record<string, string | undefined>>;
+}) => {
+  const policy = input.configuration.authOnlyApplications?.[input.appId];
+  if (policy === undefined || input.configuration.applications[input.appId] !== undefined) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const row = await input.store.read({ authority: input.authority, appId: input.appId });
+  if (row?.state.stage !== "created") return undefined;
+  const { plan, projectId } = row.state;
+  if (
+    plan.appId !== input.appId ||
+    plan.origin.publicSessionId !== input.sessionId ||
+    !isDeepStrictEqual(plan.origin.authority, input.authority) ||
+    !policy.accessRoles.includes(plan.appRole)
+  ) throw new HostedOperatorError("resource_mismatch");
+  let selected: HostedOperatorSourceConfiguration;
+  try {
+    selected = resolveNativeTargetResourceProfile({
+      base: input.configuration,
+      resourceProfileId: plan.authResource.profileId,
+      authority: input.authority,
+      appId: input.appId,
+      environment: input.environment,
+    });
+  } catch {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const roles = selected.authOnlyApplications?.[input.appId]?.accessRoles;
+  if (roles === undefined || !roles.includes(plan.appRole)) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const binding = {
+    authDatabase: selected.authDatabase,
+    nativeNeon: selected.nativeNeon,
+    gateway: {
+      projectId: selected.gateway.projectId,
+      environment: selected.gateway.environment,
+      branch: selected.gateway.branch,
+      authBrowserOrigin: selected.gateway.authBrowserOrigin,
+      gatewayOrigin: selected.gateway.gatewayOrigin,
+      publicOrigin: selected.gateway.publicOrigin,
+      workload: selected.gateway.workload,
+    },
+    operator: {
+      projectId: selected.operator.projectId,
+      environment: selected.operator.environment,
+      origin: selected.operator.origin,
+    },
+  };
+  const authorityDigest = nativeTargetAuthOnlyAuthorityDigest({
+    authority: input.authority,
+    appId: input.appId,
+    profileId: plan.authResource.profileId,
+    authDatabase: selected.authDatabase,
+    roles,
+    authorityBinding: binding,
+    physicalEndpointId: selected.nativeNeon.scope.endpointId,
+  });
+  if (
+    selected.authDatabase.resourceId !== plan.authResource.resourceId ||
+    selected.authDatabase.database !== plan.authResource.database ||
+    selected.nativeNeon.scope.endpointId !== plan.authResource.endpointId ||
+    selected.nativeNeon.scope.hostname !== plan.authResource.hostname ||
+    authorityDigest !== plan.authResource.authorityDigest
+  ) throw new HostedOperatorError("resource_mismatch");
+  // Return the selected owner/app profile so downstream Auth runtime setup cannot
+  // fall back to base/shared Auth custody.
+  const effective = structuredClone(selected);
+  effective.authOnlyApplications![input.appId]!.registration = {
+    ownerUserId: input.authority.ownerUserId,
+    sessionId: input.sessionId,
+    projectId,
+    branch: plan.branch,
+    projectSettings: structuredClone(plan.project.projectSettings),
+    planDigest: row.state.planDigest,
+    authResource: structuredClone(plan.authResource),
+    appRole: plan.appRole,
+  };
+  return effective;
+};
 
 const selectedApp = async (
   input: ConfigurationRequest,
@@ -264,6 +356,37 @@ export const createNativeTargetConfigurationResolver =
         const ownerContext = parsed.data.ownerContext;
         if (ownerContext === undefined || ownerContext.sessionId !== selected.sessionId) {
           throw new HostedOperatorError("authorization_required");
+        }
+        const authOnlyRuntimeRequest =
+          parsed.data.action === "resolve-preview-target" ||
+          ("selection" in parsed.data &&
+            ["plan", "execute", "status", "bindings", "auth-identity-input"].includes(parsed.data.action));
+        if (
+          authOnlyRuntimeRequest &&
+          input.configuration.authOnlyApplications?.[selected.appId] !== undefined
+        ) {
+          await resources.owner.verifyWorkload(request);
+          const context = {
+            authority: ownerContext.authority,
+            ownerContext,
+            target: { appId: selected.appId, sessionId: selected.sessionId },
+          };
+          await resources.owner.assertCanonicalAppOwner(context);
+          const effective = await resolveNativeTargetAuthOnlyRegistration({
+            configuration: input.configuration,
+            store: resources.authOnlyDispatch ?? {
+              read: async () => { throw new HostedOperatorError("resource_mismatch"); },
+            },
+            authority: ownerContext.authority,
+            sessionId: selected.sessionId,
+            appId: selected.appId,
+            environment: input.environment ?? {},
+          });
+          if (effective === undefined) {
+            throw new HostedOperatorError("builder_destination_required");
+          }
+          await resources.owner.assertCanonicalAppOwner(context);
+          return effective;
         }
         if (
           input.environment?.PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES !== undefined ||
@@ -584,6 +707,7 @@ export const openNativeTargetConfigurationResources = async (
       },
 
       registry: createPostgresNativeTargetOnboardingStore(database),
+      authOnlyDispatch: createPostgresNativeTargetAuthOnlyDispatchStore(database),
       continuity: createPostgresContinuityJournalStore(database),
       exports: createPostgresTenantExportJournalStore(database),
       close: async () => {

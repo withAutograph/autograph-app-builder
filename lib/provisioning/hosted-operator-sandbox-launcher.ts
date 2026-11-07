@@ -3,6 +3,8 @@ import { isDeepStrictEqual } from "node:util";
 import { verifyOperatorWorkerSourceCapture } from "./operator-worker-source-capture";
 import type { OperatorWorkerSourceCapture } from "./operator-worker-source-capture";
 import { centralHostCanonicalBytes } from "./central-integration-host-contract";
+import { assertAuthProposalMigrationUrl } from "./hosted-operator-auth-proposal";
+import { privateMaintenanceUrl } from "./hosted-operator-native-preview-neon";
 /* oxlint-disable eslint/sort-keys, eslint/no-await-in-loop, eslint/complexity, sonarjs/cognitive-complexity, sonarjs/expression-complexity -- Rust context serialization order and per-frame authority/checkpoint relay order are protocol contracts. */
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -14,6 +16,8 @@ import { z } from "zod";
 
 import {
   HostedOperatorError,
+  hostedOperatorAuthSignupPolicySchema,
+  hostedOperatorOwnedOrganizationSpecSchema,
   hostedOperatorInstallationCustomerIds,
   operatorPlanDigest,
   selectHostedOperatorOwnedOrganizationSpec,
@@ -1322,9 +1326,22 @@ const runSandboxWorker = async (
 type SharedSpoolInput = Pick<SandboxWorkerInput, "signal" | "readbackOnly" | "fenceGeneration"> & {
   directDatabaseUrl?: string;
   legacyPlan?: HostedOperatorPlan;
+  authApprovedPlanBytes?: Buffer;
   legacyEffect?: SandboxWorkerInput["effect"];
   effectKind?: string;
   membershipProof?: PrivateSandboxWorkerInput["membershipProof"];
+  organization?: {
+    approvedPlanBytes: Buffer;
+    effectId: string;
+    resource: z.infer<typeof authResourceSchema>;
+    proof: string;
+    oidcToken: string;
+  };
+  signupPolicy?: {
+    approvedPlanBytes: Buffer;
+    effectId: string;
+    resource: z.infer<typeof authResourceSchema>;
+  };
   accessConnections?: PrivateSandboxWorkerInput["accessConnections"];
   startupFiles?: Readonly<Record<string, Buffer>>;
   /** Only the closed repository Production wrapper can supply these fixed worker files. */
@@ -1374,9 +1391,36 @@ const runPinnedFileSpoolTransport = async (
     generatedFiles,
     authPlanBytes,
   } = setup;
-  if (membership && !input.legacyPlan && !input.repositoryProduction) {
+  if (
+    membership &&
+    !input.legacyPlan &&
+    !input.repositoryProduction &&
+    !input.signupPolicy &&
+    !input.organization
+  ) {
     throw resourceMismatch();
   }
+  if (
+    input.signupPolicy &&
+    (input.organization !== undefined ||
+      !membership ||
+      input.legacyPlan !== undefined ||
+      input.membershipProof !== undefined ||
+      authPlanBytes !== undefined ||
+      worker.operationScope !== MEMBERSHIP_SCOPE ||
+      ![SIGNUP_POLICY_COMMAND, MEMBERSHIP_INSPECT_COMMAND].includes(worker.subcommand))
+  )
+    throw resourceMismatch();
+  if (
+    input.organization &&
+    (!membership ||
+      input.legacyPlan !== undefined ||
+      input.membershipProof !== undefined ||
+      authPlanBytes !== undefined ||
+      worker.operationScope !== MEMBERSHIP_SCOPE ||
+      ![MEMBERSHIP_COMMAND, MEMBERSHIP_INSPECT_COMMAND].includes(worker.subcommand))
+  )
+    throw resourceMismatch();
   const leaseAbort = new AbortController();
   const signal = input.signal
     ? AbortSignal.any([input.signal, leaseAbort.signal])
@@ -1793,6 +1837,52 @@ const runPinnedFileSpoolTransport = async (
         { signal },
       );
     }
+    const isolatedMembership = input.signupPolicy ?? input.organization;
+    if (isolatedMembership !== undefined) {
+      await sandbox.writeFiles(
+        [
+          {
+            path: path.posix.join(startup, "operator-plan.json"),
+            content: isolatedMembership.approvedPlanBytes,
+            mode: 0o600,
+          },
+          {
+            path: path.posix.join(startup, "membership-effect.json"),
+            content: Buffer.from(
+              JSON.stringify({
+                version: 1,
+                effectId: isolatedMembership.effectId,
+                kind: input.organization ? AUTH_MEMBERSHIP_EFFECT : AUTH_SIGNUP_POLICY_EFFECT,
+              }),
+            ),
+            mode: 0o600,
+          },
+          {
+            path: path.posix.join(startup, "auth-database-resource.json"),
+            content: Buffer.from(JSON.stringify(isolatedMembership.resource)),
+            mode: 0o600,
+          },
+        ],
+        { signal },
+      );
+    }
+    if (input.organization !== undefined) {
+      await sandbox.writeFiles(
+        [
+          {
+            path: path.posix.join(startup, "realm-identity-proof.json"),
+            content: Buffer.from(JSON.stringify({ proof: input.organization.proof })),
+            mode: 0o600,
+          },
+          {
+            path: path.posix.join(startup, "gateway-readback-oidc.json"),
+            content: Buffer.from(JSON.stringify({ token: input.organization.oidcToken })),
+            mode: 0o600,
+          },
+        ],
+        { signal },
+      );
+    }
     if (membership && input.membershipProof !== undefined) {
       const legacyPlan = input.legacyPlan;
       const legacyEffect = input.legacyEffect;
@@ -1867,14 +1957,18 @@ const runPinnedFileSpoolTransport = async (
       );
     }
     if (authPlanBytes !== undefined) {
-      const legacyPlan = input.legacyPlan;
-      if (legacyPlan === undefined) {
+      const approvedPlanBytes =
+        input.authApprovedPlanBytes ??
+        (input.legacyPlan === undefined
+          ? undefined
+          : Buffer.from(JSON.stringify(input.legacyPlan)));
+      if (approvedPlanBytes === undefined) {
         throw resourceMismatch();
       }
       await sandbox.writeFiles(
         [
           {
-            content: Buffer.from(JSON.stringify(legacyPlan)),
+            content: approvedPlanBytes,
             mode: 0o600,
             path: path.posix.join(startup, "operator-plan.json"),
           },
@@ -2109,7 +2203,759 @@ const runPinnedFileSpoolTransport = async (
   return null;
 };
 
-/** Runs a trusted already-approved fixed worker through the existing framed Sandbox transport. */
+const authResourceSqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
+/** Projection of the complete approved resource plan. Extra source/owner bindings remain covered by its byte digest. */
+export const authResourceBootstrapPlanSchema = z.object({
+  version: z.literal(1),
+  action: z.literal("prepare"),
+  authDatabase: resourceSchema.safeExtend({
+    database: authResourceSqlName,
+    migratorRole: authResourceSqlName,
+    runtimeRole: authResourceSqlName,
+  }),
+  bootstrap: z.object({
+    endpointId: z.string().min(1),
+    maintenanceDatabase: authResourceSqlName,
+    role: authResourceSqlName,
+  }),
+  neon: z.object({
+    endpoint: z
+      .string()
+      .min(1)
+      .max(253)
+      .regex(/^[a-z0-9.-]+\.neon\.tech$/u),
+    projectId: z.string().min(1),
+    branchId: z.string().min(1),
+  }),
+  resourcesInstaller: z.object({ reference: z.string().min(1), sha256: digestSchema }),
+  effects: z.array(
+    z.object({
+      id: z.string().min(1),
+      kind: z.string().min(1),
+      resourceId: z.string().min(1).optional(),
+    }),
+  ),
+});
+
+/** One approved Auth resource, with private credentials already acknowledged by the caller's durable journal. */
+export const runAuthResourceFileSpool = async (
+  configuration: HostedOperatorSandboxConfiguration,
+  input: {
+    approvedPlanBytes: Buffer;
+    approvalDigest: string;
+    effectId: string;
+    operationRef: string;
+    workerAttemptId: string;
+    fenceGeneration: number;
+    credentials: { maintenanceUrl: string; bytes: Buffer; sha256: string };
+    assertCredentialsCheckpointed: (binding: {
+      approvalDigest: string;
+      resourceId: string;
+      credentialsSha256: string;
+    }) => Promise<void>;
+    assertCurrent: () => Promise<void>;
+    signal?: AbortSignal;
+  } & (
+    | { readbackOnly: true; bindWorkerContext?: never }
+    | {
+        readbackOnly?: false;
+        bindWorkerContext: HostedOperatorWorkerEffectContext["bindWorkerContext"];
+      }
+  ),
+  dependencies: { createSandbox?: CreateSandbox } = {},
+) => {
+  const approvedPlanBytes = Buffer.from(input.approvedPlanBytes);
+  const approvalDigest = digestSchema.parse(input.approvalDigest);
+  if (sha256(approvedPlanBytes) !== approvalDigest) throw resourceMismatch();
+  const plan = authResourceBootstrapPlanSchema.parse(parseJsonBytes(approvedPlanBytes));
+  const parsedCredentials = z
+    .strictObject({
+      migratorPassword: z
+        .string()
+        .min(32)
+        .max(512)
+        .refine((value) => !/[\0\r\n]/u.test(value)),
+      runtimePassword: z
+        .string()
+        .min(32)
+        .max(512)
+        .refine((value) => !/[\0\r\n]/u.test(value)),
+    })
+    .parse(parseJsonBytes(Buffer.from(input.credentials.bytes)));
+  // Match the fixed worker's credential digest, independent of JSON whitespace or input property order.
+  const resourceCredentialBytes = Buffer.from(JSON.stringify(parsedCredentials));
+  const credentialsSha256 = sha256(resourceCredentialBytes);
+  const catalogWorker = configuration.resourcesWorker;
+  const worker = catalogWorker === undefined ? undefined : structuredClone(catalogWorker);
+  const resource = plan.authDatabase;
+  const effects = plan.effects.filter((effect) => effect.kind === "resources");
+  const selected = effects[0];
+  if (
+    worker === undefined ||
+    worker.id !== RESOURCES_SCOPE ||
+    worker.operationScope !== RESOURCES_SCOPE ||
+    worker.subcommand !== RESOURCES_COMMAND ||
+    worker.id !== plan.resourcesInstaller.reference ||
+    worker.sha256 !== plan.resourcesInstaller.sha256 ||
+    effects.length !== 1 ||
+    selected?.id !== input.effectId ||
+    selected?.resourceId !== resource.resourceId ||
+    plan.effects.filter((effect) => effect.id === input.effectId).length !== 1 ||
+    ["postgres", "neondb", plan.bootstrap.maintenanceDatabase].includes(resource.database) ||
+    new Set([resource.migratorRole, resource.runtimeRole, plan.bootstrap.role]).size !== 3 ||
+    credentialsSha256 !== input.credentials.sha256 ||
+    !Number.isSafeInteger(input.fenceGeneration) ||
+    input.fenceGeneration <= 0 ||
+    /[\0\r\n]/u.test(input.credentials.maintenanceUrl)
+  )
+    throw resourceMismatch();
+  const maintenanceUrl = privateMaintenanceUrl(input.credentials.maintenanceUrl, {
+    ...plan.neon,
+    hostname: plan.neon.endpoint,
+    endpointId: plan.bootstrap.endpointId,
+    maintenanceDatabase: plan.bootstrap.maintenanceDatabase,
+    maintenanceRole: plan.bootstrap.role,
+  });
+  const context: ResourceBootstrapContextWire = {
+    kind: "neon_resource_bootstrap",
+    version: 1,
+    operation: {
+      operation_id: workerRunIdSchema.parse(input.operationRef),
+      approval_digest: approvalDigest,
+      fence_generation: input.fenceGeneration,
+    },
+    app_id: "auth",
+    resource: {
+      scope: "auth_database",
+      resource_id: resource.resourceId,
+      environment: "preview",
+      hostname: plan.neon.endpoint,
+      port: 5432,
+      database: resource.database,
+      migrator_role: resource.migratorRole,
+      runtime_role: resource.runtimeRole,
+      maintenance_database: plan.bootstrap.maintenanceDatabase,
+      bootstrap_role: plan.bootstrap.role,
+      provider_project_id: plan.neon.projectId,
+      provider_branch_id: plan.neon.branchId,
+      provider_endpoint_id: plan.bootstrap.endpointId,
+      credentials_sha256: credentialsSha256,
+    },
+    release: { id: approvalDigest, sha256: approvalDigest },
+    installer: { id: worker.id, sha256: worker.sha256 },
+    tenant_targets: [],
+  };
+  const contextBytes = canonicalContextBytes(context);
+  if (contextBytes.length > MAX_PROTOCOL_FRAME_BYTES) throw resourceMismatch();
+  const contextDigest = sha256(contextBytes);
+  const runId = workerRunIdSchema.parse(input.workerAttemptId);
+  const readbackOnly = input.readbackOnly === true;
+  const assertCurrent = input.assertCurrent;
+  const assertCredentialsCheckpointed = input.assertCredentialsCheckpointed;
+  const bindWorkerContext = input.readbackOnly === true ? undefined : input.bindWorkerContext;
+  const signal = input.signal;
+  if (!readbackOnly && bindWorkerContext === undefined) throw resourceMismatch();
+  if (readbackOnly) worker.subcommand = RESOURCES_INSPECT_COMMAND;
+  signal?.throwIfAborted();
+  await assertCurrent();
+  await assertCredentialsCheckpointed({
+    approvalDigest,
+    resourceId: resource.resourceId,
+    credentialsSha256,
+  });
+  await assertCurrent();
+  const recordCheckpoint =
+    bindWorkerContext === undefined ? undefined : await bindWorkerContext({ contextDigest });
+  return await runPinnedFileSpoolTransport(
+    configuration,
+    dependencies.createSandbox ??
+      (async (options) =>
+        await Sandbox.create({
+          ...options,
+          token: await getVercelOidcToken({ project: options.projectId, team: options.teamId }),
+        })),
+    {
+      directDatabaseUrl: maintenanceUrl,
+      effectKind: "resources",
+      readbackOnly: readbackOnly ? true : undefined,
+      fenceGeneration: context.operation.fence_generation,
+      signal,
+    },
+    { stage: "sandbox_create", mode: readbackOnly ? "inspect" : "execute" },
+    {
+      context,
+      contextDigest,
+      worker,
+      runId,
+      assertCurrent,
+      allowedResources: new Set([resource.resourceId]),
+      allowedTenants: new Set(),
+      resourceCredentialBytes,
+      recordCheckpoint,
+      resources: true,
+      access: false,
+      membership: false,
+      installReadback: false,
+      generatedFiles: [],
+    },
+  );
+};
+
+const signupOrigin = z.url().refine((value) => {
+  const url = new URL(value);
+  return url.protocol === "https:" && url.origin === value && !url.username && !url.password;
+});
+const signupRole = authResourceSqlName.refine(
+  (role) => !/(?:^|[_-])(?:owner|admin|administrator)(?:[_-]|$)/u.test(role),
+);
+/** Closed signup-policy projection; full raw approved bytes retain all owner and source bindings. */
+export const authOnlySignupPolicyPlanSchema = z.object({
+  version: z.literal(1),
+  action: z.literal("prepare"),
+  appDatabase: z.never().optional(),
+  authMembership: z.never().optional(),
+  authDatabase: resourceSchema.safeExtend({
+    database: authResourceSqlName,
+    migratorRole: authResourceSqlName,
+    runtimeRole: authResourceSqlName,
+  }),
+  neon: z.object({
+    endpoint: z.string().endsWith(".neon.tech"),
+    projectId: z.string().min(1),
+    branchId: z.string().min(1),
+  }),
+  selection: z.object({ sessionId: z.string().min(1), workspaceId: z.string().min(1).optional() }),
+  authSignupPolicy: hostedOperatorAuthSignupPolicySchema.safeExtend({
+    eligibility: z.literal("approved-email"),
+    allowedEmails: z.array(z.email()).min(1),
+    appRoles: z.tuple([signupRole]),
+    appPath: hostedOperatorAuthSignupPolicySchema.shape.appPath.refine(
+      (value) => !/\s/u.test(value),
+    ),
+  }),
+  normalActorProgram: z.strictObject({
+    appId: z.string().min(1),
+    origin: signupOrigin,
+    organizations: z.tuple([z.strictObject({ organizationId: z.string().min(1) })]),
+    appAccess: z.tuple([
+      z.strictObject({
+        appId: z.string().min(1),
+        organizationId: z.string().min(1),
+        roles: z.tuple([signupRole]),
+      }),
+    ]),
+  }),
+  deploymentBoundary: z.object({
+    teamId: z.string().min(1),
+    operator: z.object({
+      projectId: z.string().min(1),
+      environment: z.enum(["preview", "production"]),
+    }),
+    verification: z.object({
+      publicOrigin: signupOrigin,
+      gatewayOrigin: signupOrigin,
+      jwksUrl: z.url(),
+    }),
+  }),
+  signupPolicyInstaller: z.object({
+    reference: z.literal("auth-owned-organization-v1"),
+    sha256: digestSchema,
+  }),
+  effects: z.tuple([
+    z.object({
+      id: z.string().min(1),
+      kind: z.literal(AUTH_SIGNUP_POLICY_EFFECT),
+      resourceId: z.string().min(1),
+    }),
+  ]),
+});
+
+/** Installs or reads only one approved signup policy in an existing organization, without membership or app-data effects. */
+export const runAuthSignupPolicyFileSpool = async (
+  configuration: HostedOperatorSandboxConfiguration,
+  input: {
+    approvedPlanBytes: Buffer;
+    approvalDigest: string;
+    effectId: string;
+    operationRef: string;
+    workerAttemptId: string;
+    fenceGeneration: number;
+    credentials: { migrationUrl: string };
+    assertCurrent: () => Promise<void>;
+    signal?: AbortSignal;
+  } & (
+    | { readbackOnly: true; bindWorkerContext?: never }
+    | {
+        readbackOnly?: false;
+        bindWorkerContext: HostedOperatorWorkerEffectContext["bindWorkerContext"];
+      }
+  ),
+  dependencies: { createSandbox?: CreateSandbox } = {},
+) => {
+  const approvedPlanBytes = Buffer.from(input.approvedPlanBytes);
+  const approvalDigest = digestSchema.parse(input.approvalDigest);
+  if (sha256(approvedPlanBytes) !== approvalDigest) throw resourceMismatch();
+  const plan = authOnlySignupPolicyPlanSchema.parse(parseJsonBytes(approvedPlanBytes));
+  const sandboxConfiguration = structuredClone(configuration);
+  const policy = plan.authSignupPolicy;
+  const program = plan.normalActorProgram;
+  const worker =
+    sandboxConfiguration.membershipWorker === undefined
+      ? undefined
+      : structuredClone(sandboxConfiguration.membershipWorker);
+  if (
+    worker === undefined ||
+    worker.id !== plan.signupPolicyInstaller.reference ||
+    worker.sha256 !== plan.signupPolicyInstaller.sha256 ||
+    worker.operationScope !== MEMBERSHIP_SCOPE ||
+    worker.subcommand !== MEMBERSHIP_COMMAND ||
+    policy.appId === "auth" ||
+    policy.authResourceId !== plan.authDatabase.resourceId ||
+    policy.origin !== plan.deploymentBoundary.verification.publicOrigin ||
+    plan.deploymentBoundary.verification.jwksUrl !==
+      `${plan.deploymentBoundary.verification.gatewayOrigin}/_platform/jwks.json` ||
+    plan.deploymentBoundary.teamId !== sandboxConfiguration.teamId ||
+    plan.deploymentBoundary.operator.projectId !== sandboxConfiguration.projectId ||
+    program.appId !== policy.appId ||
+    program.origin !== policy.origin ||
+    program.organizations[0].organizationId !== policy.organizationId ||
+    program.appAccess[0].organizationId !== policy.organizationId ||
+    program.appAccess[0].appId !== policy.appId ||
+    !isDeepStrictEqual(program.appAccess[0].roles, policy.appRoles) ||
+    plan.effects[0].id !== input.effectId ||
+    plan.effects[0].resourceId !== policy.authResourceId ||
+    ![AUTH_SIGNUP_POLICY_EFFECT, `${AUTH_SIGNUP_POLICY_EFFECT}:${policy.organizationId}`].includes(
+      input.effectId,
+    ) ||
+    !Number.isSafeInteger(input.fenceGeneration) ||
+    input.fenceGeneration <= 0
+  )
+    throw resourceMismatch();
+  const resource = authResourceSchema.parse({
+    version: 1,
+    environment: "preview",
+    hostname: plan.neon.endpoint,
+    port: 5432,
+    schema: "public",
+    database: plan.authDatabase.database,
+    migratorRole: plan.authDatabase.migratorRole,
+    runtimeRole: plan.authDatabase.runtimeRole,
+    neon: { projectId: plan.neon.projectId, branchId: plan.neon.branchId },
+  });
+  const migrationUrl = input.credentials.migrationUrl;
+  assertAuthProposalMigrationUrl(migrationUrl, resource);
+  const context: ProtectedInstallContextWire = {
+    version: 1,
+    operation: {
+      operation_id: workerRunIdSchema.parse(input.operationRef),
+      approval_digest: approvalDigest,
+      fence_generation: input.fenceGeneration,
+    },
+    app_id: "auth",
+    resource: {
+      resource_id: plan.authDatabase.resourceId,
+      environment: "preview",
+      hostname: resource.hostname,
+      port: 5432,
+      database: resource.database,
+      schema: "public",
+      migrator_role: resource.migratorRole,
+      runtime_role: resource.runtimeRole,
+      provider_project_id: resource.neon.projectId,
+      provider_branch_id: resource.neon.branchId,
+    },
+    release: { id: approvalDigest, sha256: approvalDigest },
+    installer: { id: worker.id, sha256: worker.sha256 },
+    tenant_targets: [],
+  };
+  const contextBytes = canonicalContextBytes(context);
+  if (contextBytes.length > MAX_PROTOCOL_FRAME_BYTES) throw resourceMismatch();
+  const contextDigest = sha256(contextBytes);
+  const runId = workerRunIdSchema.parse(input.workerAttemptId);
+  const assertCurrent = input.assertCurrent;
+  const signal = input.signal;
+  const readbackOnly = input.readbackOnly === true;
+  const bindWorkerContext = readbackOnly ? undefined : input.bindWorkerContext;
+  if (!readbackOnly && bindWorkerContext === undefined) throw resourceMismatch();
+  worker.subcommand = readbackOnly ? MEMBERSHIP_INSPECT_COMMAND : SIGNUP_POLICY_COMMAND;
+  signal?.throwIfAborted();
+  await assertCurrent();
+  const recordCheckpoint =
+    bindWorkerContext === undefined ? undefined : await bindWorkerContext({ contextDigest });
+  return await runPinnedFileSpoolTransport(
+    sandboxConfiguration,
+    dependencies.createSandbox ??
+      (async (options) =>
+        await Sandbox.create({
+          ...options,
+          token: await getVercelOidcToken({ project: options.projectId, team: options.teamId }),
+        })),
+    {
+      directDatabaseUrl: migrationUrl,
+      readbackOnly: readbackOnly ? true : undefined,
+      fenceGeneration: context.operation.fence_generation,
+      signal,
+      signupPolicy: { approvedPlanBytes, effectId: plan.effects[0].id, resource },
+    },
+    { stage: "sandbox_create", mode: readbackOnly ? "inspect" : "execute" },
+    {
+      context,
+      contextDigest,
+      worker,
+      runId,
+      assertCurrent,
+      allowedResources: new Set([plan.authDatabase.resourceId]),
+      allowedTenants: new Set(),
+      recordCheckpoint,
+      resources: false,
+      access: false,
+      membership: true,
+      installReadback: false,
+      generatedFiles: [],
+    },
+  );
+};
+
+/** One proof-backed organization creation; no membership join, policy, or app-data effects. */
+export const authOnlyOrganizationPlanSchema = authOnlySignupPolicyPlanSchema
+  .omit({
+    authMembership: true,
+    authSignupPolicy: true,
+    normalActorProgram: true,
+    signupPolicyInstaller: true,
+    effects: true,
+  })
+  .extend({
+    authMembership: hostedOperatorOwnedOrganizationSpecSchema.safeExtend({
+      name: z.string().min(1).max(120),
+      slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,118}[a-z0-9])?$/u),
+    }),
+    authSignupPolicy: z.never().optional(),
+    normalActorProgram: z.never().optional(),
+    membershipInstaller: z.object({
+      reference: z.literal("auth-owned-organization-v1"),
+      sha256: digestSchema,
+    }),
+    effects: z.tuple([
+      z.object({
+        id: z.string().min(1),
+        kind: z.literal(AUTH_MEMBERSHIP_EFFECT),
+        resourceId: z.string().min(1),
+      }),
+    ]),
+  });
+
+/** Every fence must revalidate this exact consumed owner proof, live same-realm session, and approval/lease. */
+export interface AuthOnlyOrganizationProofBinding {
+  approvalDigest: string;
+  operationRef: string;
+  fenceGeneration: number;
+  effectId: string;
+  ownerSessionId: string;
+  authResourceId: string;
+  resource: z.infer<typeof authResourceSchema>;
+  organization: z.infer<typeof authOnlyOrganizationPlanSchema>["authMembership"];
+}
+
+/** The pinned worker independently verifies Gateway signature/OIDC and locks the current Auth user/session before writing. */
+export const runAuthOrganizationFileSpool = async (
+  configuration: HostedOperatorSandboxConfiguration,
+  input: {
+    approvedPlanBytes: Buffer;
+    approvalDigest: string;
+    effectId: string;
+    operationRef: string;
+    workerAttemptId: string;
+    fenceGeneration: number;
+    credentials: { migrationUrl: string };
+    ownerProof: { reference: string; proof: string; oidcToken: string };
+    assertCurrentOwnerProof: (binding: AuthOnlyOrganizationProofBinding) => Promise<void>;
+    signal?: AbortSignal;
+  } & (
+    | { readbackOnly: true; bindWorkerContext?: never }
+    | {
+        readbackOnly?: false;
+        bindWorkerContext: HostedOperatorWorkerEffectContext["bindWorkerContext"];
+      }
+  ),
+  dependencies: { createSandbox?: CreateSandbox } = {},
+) => {
+  const approvedPlanBytes = Buffer.from(input.approvedPlanBytes);
+  const approvalDigest = digestSchema.parse(input.approvalDigest);
+  if (sha256(approvedPlanBytes) !== approvalDigest) throw resourceMismatch();
+  const plan = authOnlyOrganizationPlanSchema.parse(parseJsonBytes(approvedPlanBytes));
+  const sandboxConfiguration = structuredClone(configuration);
+  const worker = sandboxConfiguration.membershipWorker;
+  const organization = plan.authMembership;
+  const verification = organization.identityVerification;
+  const boundary = plan.deploymentBoundary;
+  const proof = z.string().min(1).max(16384).parse(input.ownerProof.proof);
+  const oidcToken = z.string().min(1).parse(input.ownerProof.oidcToken);
+  if (
+    worker === undefined ||
+    worker.id !== plan.membershipInstaller.reference ||
+    worker.sha256 !== plan.membershipInstaller.sha256 ||
+    worker.operationScope !== MEMBERSHIP_SCOPE ||
+    worker.subcommand !== MEMBERSHIP_COMMAND ||
+    boundary.teamId !== sandboxConfiguration.teamId ||
+    boundary.operator.projectId !== sandboxConfiguration.projectId ||
+    verification.issuer !== boundary.verification.publicOrigin ||
+    verification.jwksUrl !== boundary.verification.jwksUrl ||
+    verification.jwksUrl !== `${boundary.verification.gatewayOrigin}/_platform/jwks.json` ||
+    verification.transportSource.ownerId !== boundary.teamId ||
+    verification.transportSource.projectId !== boundary.operator.projectId ||
+    verification.transportSource.environment !== boundary.operator.environment ||
+    input.ownerProof.reference !== organization.identityProof.reference ||
+    sha256(Buffer.from(proof, "utf-8")) !== organization.identityProof.sha256 ||
+    Date.parse(organization.identityCapture.capturedAt) > Date.now() ||
+    plan.effects[0].id !== input.effectId ||
+    plan.effects[0].resourceId !== plan.authDatabase.resourceId ||
+    ![AUTH_MEMBERSHIP_EFFECT, `${AUTH_MEMBERSHIP_EFFECT}:${organization.organizationId}`].includes(
+      input.effectId,
+    ) ||
+    !Number.isSafeInteger(input.fenceGeneration) ||
+    input.fenceGeneration <= 0
+  )
+    throw resourceMismatch();
+  const resource = authResourceSchema.parse({
+    version: 1,
+    environment: "preview",
+    hostname: plan.neon.endpoint,
+    port: 5432,
+    schema: "public",
+    database: plan.authDatabase.database,
+    migratorRole: plan.authDatabase.migratorRole,
+    runtimeRole: plan.authDatabase.runtimeRole,
+    neon: { projectId: plan.neon.projectId, branchId: plan.neon.branchId },
+  });
+  const migrationUrl = input.credentials.migrationUrl;
+  assertAuthProposalMigrationUrl(migrationUrl, resource);
+  const context: ProtectedInstallContextWire = {
+    version: 1,
+    operation: {
+      operation_id: workerRunIdSchema.parse(input.operationRef),
+      approval_digest: approvalDigest,
+      fence_generation: input.fenceGeneration,
+    },
+    app_id: "auth",
+    resource: {
+      resource_id: plan.authDatabase.resourceId,
+      environment: "preview",
+      hostname: resource.hostname,
+      port: 5432,
+      database: resource.database,
+      schema: "public",
+      migrator_role: resource.migratorRole,
+      runtime_role: resource.runtimeRole,
+      provider_project_id: resource.neon.projectId,
+      provider_branch_id: resource.neon.branchId,
+    },
+    release: { id: approvalDigest, sha256: organization.identityProof.sha256 },
+    installer: { id: worker.id, sha256: worker.sha256 },
+    tenant_targets: [],
+  };
+  const contextBytes = canonicalContextBytes(context);
+  if (contextBytes.length > MAX_PROTOCOL_FRAME_BYTES) throw resourceMismatch();
+  const contextDigest = sha256(contextBytes);
+  const runId = workerRunIdSchema.parse(input.workerAttemptId);
+  const assertCurrentOwnerProof = input.assertCurrentOwnerProof;
+  const proofBinding: AuthOnlyOrganizationProofBinding = {
+    approvalDigest,
+    operationRef: context.operation.operation_id,
+    fenceGeneration: context.operation.fence_generation,
+    effectId: plan.effects[0].id,
+    ownerSessionId: plan.selection.sessionId,
+    authResourceId: plan.authDatabase.resourceId,
+    resource,
+    organization,
+  };
+  const assertCurrent = async () => {
+    await assertCurrentOwnerProof(structuredClone(proofBinding));
+  };
+  const signal = input.signal;
+  const readbackOnly = input.readbackOnly === true;
+  const bindWorkerContext = readbackOnly ? undefined : input.bindWorkerContext;
+  if (!readbackOnly && bindWorkerContext === undefined) throw resourceMismatch();
+  worker.subcommand = readbackOnly ? MEMBERSHIP_INSPECT_COMMAND : MEMBERSHIP_COMMAND;
+  signal?.throwIfAborted();
+  await assertCurrent();
+  const recordCheckpoint =
+    bindWorkerContext === undefined ? undefined : await bindWorkerContext({ contextDigest });
+  return await runPinnedFileSpoolTransport(
+    sandboxConfiguration,
+    dependencies.createSandbox ??
+      (async (options) =>
+        await Sandbox.create({
+          ...options,
+          token: await getVercelOidcToken({ project: options.projectId, team: options.teamId }),
+        })),
+    {
+      directDatabaseUrl: migrationUrl,
+      readbackOnly: readbackOnly ? true : undefined,
+      fenceGeneration: context.operation.fence_generation,
+      signal,
+      organization: { approvedPlanBytes, effectId: plan.effects[0].id, resource, proof, oidcToken },
+    },
+    { stage: "sandbox_create", mode: readbackOnly ? "inspect" : "execute" },
+    {
+      context,
+      contextDigest,
+      worker,
+      runId,
+      assertCurrent,
+      allowedResources: new Set([plan.authDatabase.resourceId]),
+      allowedTenants: new Set(),
+      recordCheckpoint,
+      resources: false,
+      access: false,
+      membership: true,
+      installReadback: false,
+      generatedFiles: [],
+    },
+  );
+};
+
+/** Auth-schema projection only; the complete approved bytes retain caller authority and source bindings. */
+const authSchemaOnlyPlanSchema = z.object({
+  version: z.literal(1),
+  action: z.literal("prepare"),
+  authDatabase: resourceSchema,
+  authSchema: z.object({
+    artifactRef: z.string().min(1),
+    planDigest: digestSchema,
+    targetDigest: digestSchema,
+    installer: z.object({ reference: z.string().min(1), sha256: digestSchema }),
+  }),
+  neon: z.object({
+    endpoint: z.string().min(1),
+    projectId: z.string().min(1),
+    branchId: z.string().min(1),
+  }),
+});
+
+/** Runs only the approved Auth schema effect. Approval, credentials and attempt custody stay with the caller. */
+export const runAuthSchemaFileSpool = async (
+  configuration: HostedOperatorSandboxConfiguration,
+  input: {
+    approvedPlanBytes: Buffer;
+    approvalDigest: string;
+    authSchemaPlan: { artifactRef: string; content: Buffer };
+    operationRef: string;
+    workerAttemptId: string;
+    fenceGeneration: number;
+    /** Private Auth credential port; the runtime URL is not needed by the schema worker. */
+    credentials: { migrationUrl: string };
+    assertCurrent: () => Promise<void>;
+    bindWorkerContext: HostedOperatorWorkerEffectContext["bindWorkerContext"];
+    signal?: AbortSignal;
+  },
+  dependencies: { createSandbox?: CreateSandbox } = {},
+) => {
+  // Freeze approved bytes and private inputs before the first asynchronous custody check.
+  const approvedPlanBytes = Buffer.from(input.approvedPlanBytes);
+  const authPlanBytes = Buffer.from(input.authSchemaPlan.content);
+  const migrationUrl = input.credentials.migrationUrl;
+  const approvalDigest = digestSchema.parse(input.approvalDigest);
+  if (sha256(approvedPlanBytes) !== approvalDigest) {
+    throw resourceMismatch();
+  }
+  const plan = authSchemaOnlyPlanSchema.parse(parseJsonBytes(approvedPlanBytes));
+  const proposal = authPlanFrameSchema.parse(parseJsonBytes(authPlanBytes));
+  const worker =
+    configuration.authWorker === undefined ? undefined : structuredClone(configuration.authWorker);
+  const { resource, schemaPlan } = proposal;
+  if (
+    worker === undefined ||
+    worker.id !== AUTH_SCOPE ||
+    worker.operationScope !== AUTH_SCOPE ||
+    worker.subcommand !== AUTH_COMMAND ||
+    worker.id !== plan.authSchema.installer.reference ||
+    worker.sha256 !== plan.authSchema.installer.sha256 ||
+    input.authSchemaPlan.artifactRef !== plan.authSchema.artifactRef ||
+    schemaPlan.planDigest !== plan.authSchema.planDigest ||
+    schemaPlan.targetDigest !== plan.authSchema.targetDigest ||
+    !isDeepStrictEqual(resource, schemaPlan.resource) ||
+    resource.hostname !== plan.neon.endpoint ||
+    resource.database !== plan.authDatabase.database ||
+    resource.runtimeRole !== plan.authDatabase.runtimeRole ||
+    resource.migratorRole !== plan.authDatabase.migratorRole ||
+    resource.neon.projectId !== plan.neon.projectId ||
+    resource.neon.branchId !== plan.neon.branchId ||
+    !Number.isSafeInteger(input.fenceGeneration) ||
+    input.fenceGeneration <= 0 ||
+    migrationUrl.length === 0 ||
+    /[\0\r\n]/u.test(migrationUrl)
+  ) {
+    throw resourceMismatch();
+  }
+  assertAuthProposalMigrationUrl(migrationUrl, resource);
+  const context: ProtectedInstallContextWire = {
+    version: 1,
+    operation: {
+      operation_id: workerRunIdSchema.parse(input.operationRef),
+      approval_digest: approvalDigest,
+      fence_generation: input.fenceGeneration,
+    },
+    app_id: "auth",
+    resource: {
+      resource_id: plan.authDatabase.resourceId,
+      environment: "preview",
+      hostname: resource.hostname,
+      port: 5432,
+      database: resource.database,
+      schema: "public",
+      migrator_role: resource.migratorRole,
+      runtime_role: resource.runtimeRole,
+      provider_project_id: resource.neon.projectId,
+      provider_branch_id: resource.neon.branchId,
+    },
+    release: { id: plan.authSchema.targetDigest, sha256: plan.authSchema.planDigest },
+    installer: { id: worker.id, sha256: worker.sha256 },
+    tenant_targets: [],
+  };
+  const contextBytes = canonicalContextBytes(context);
+  const contextDigest = sha256(contextBytes);
+  const runId = workerRunIdSchema.parse(input.workerAttemptId);
+  if (contextBytes.length > MAX_PROTOCOL_FRAME_BYTES) {
+    throw resourceMismatch();
+  }
+  input.signal?.throwIfAborted();
+  await input.assertCurrent();
+  const recordCheckpoint = await input.bindWorkerContext({ contextDigest });
+  return await runPinnedFileSpoolTransport(
+    configuration,
+    dependencies.createSandbox ??
+      (async (options) =>
+        await Sandbox.create({
+          ...options,
+          token: await getVercelOidcToken({ project: options.projectId, team: options.teamId }),
+        })),
+    {
+      directDatabaseUrl: migrationUrl,
+      authApprovedPlanBytes: approvedPlanBytes,
+      fenceGeneration: context.operation.fence_generation,
+      signal: input.signal,
+    },
+    { stage: "sandbox_create", mode: "execute" },
+    {
+      context,
+      contextDigest,
+      worker,
+      runId,
+      assertCurrent: input.assertCurrent,
+      allowedResources: new Set([context.resource.resource_id]),
+      allowedTenants: new Set(),
+      recordCheckpoint,
+      resources: false,
+      access: false,
+      membership: false,
+      installReadback: false,
+      generatedFiles: [],
+      authPlanBytes,
+    },
+  );
+};
+
 export const runAppIntegrationFileSpool = async (
   configuration: HostedOperatorSandboxConfiguration,
   input: {

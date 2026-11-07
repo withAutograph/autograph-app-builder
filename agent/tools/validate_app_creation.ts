@@ -77,7 +77,7 @@ const captureValidatedRelease = async (
   description: Awaited<ReturnType<typeof describeSelectedApp>> | undefined,
   input: Parameters<typeof publishCompiledOperatorArtifactsForSession>[0],
 ) => {
-  if (description?.backend.kind !== GENERATED_BACKEND) {
+  if (description === undefined) {
     return null;
   }
   try {

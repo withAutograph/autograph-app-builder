@@ -1262,8 +1262,18 @@ const inputRequest = (request: {
   };
 };
 
+const authOnlyIdentityInvitationTool = "prepare-app-native-target-auth-only-delivery";
+const identityInvitationTool = (name: string) =>
+  name === "prepare-app-hosted-runtime" || name === authOnlyIdentityInvitationTool;
+const authOnlyInvitationQuery = z.strictObject({
+  nonce: z.string().regex(/^[a-f0-9]{64}$/u),
+  ownerSessionId: z.string().min(1).max(200),
+  bootstrapPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  authResourceId: z.string().min(1).max(512),
+});
+
 /** Only the ordinary invitation is public; the rest of a suspended tool result stays private. */
-const hostedIdentityInvitation = (value: unknown): string | undefined => {
+const hostedIdentityInvitation = (value: unknown, authOnly: boolean): string | undefined => {
   const invitation = z
     .object({ authIdentityLink: z.url().startsWith("https://") })
     .safeParse(value);
@@ -1273,6 +1283,16 @@ const hostedIdentityInvitation = (value: unknown): string | undefined => {
   const url = new URL(invitation.data.authIdentityLink);
   if (url.username !== "" || url.password !== "" || /[\r\n<>]/u.test(url.href)) {
     return undefined;
+  }
+  if (authOnly) {
+    if (
+      url.pathname !== "/api/auth/platform/operator-link" ||
+      url.hash !== "" ||
+      url.searchParams.size !== 4 ||
+      !authOnlyInvitationQuery.safeParse(Object.fromEntries(url.searchParams)).success
+    )
+      return undefined;
+    return `Sign in or create your app account: <${url.href}>. Return to Builder to continue the same approved preparation.`;
   }
   return `Sign in or create your app account: <${url.href}>. Builder sets up your access and continues automatically.`;
 };
@@ -1336,20 +1356,19 @@ export const projectInstalledEveEvent = (
       const { result, turnId, sequence } = event.data;
       if (
         result.kind !== "tool-result" ||
-        result.toolName !== "prepare-app-hosted-runtime" ||
+        !identityInvitationTool(result.toolName) ||
         result.isError === true
       ) {
         return [];
       }
-      const text = hostedIdentityInvitation(result.output);
-      if (text === undefined) {
-        return [];
-      }
+      const authOnly = result.toolName === authOnlyIdentityInvitationTool;
+      const text = hostedIdentityInvitation(result.output, authOnly);
       const invitation = publicIdentityInvitationSchema.safeParse({
         callId: result.callId,
         url: recordStringField(result.output, "authIdentityLink"),
         expiresAt: recordStringField(result.output, "authIdentityLinkExpiresAt"),
       });
+      if (text === undefined || (authOnly && !invitation.success)) return [];
       return [
         {
           index,
@@ -1395,7 +1414,7 @@ export const projectInstalledEveEvent = (
                 type: "progress",
               },
             ];
-      return event.data.result.toolName === "prepare-app-hosted-runtime"
+      return identityInvitationTool(event.data.result.toolName)
         ? [
             ...progress,
             { index, type: "auth_identity_invitation_resolved", callId: event.data.result.callId },

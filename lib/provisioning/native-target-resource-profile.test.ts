@@ -215,6 +215,162 @@ describe("native target deployment resource profile", () => {
   );
 });
 
+describe("additive Auth-only resource profiles", () => {
+  const setup = () => {
+    const shared = fixture();
+    const authOnly = selectedConfig();
+    authOnly.authDatabase = resource("pilot_auth");
+    authOnly.nativeNeon.scope.endpointId = "ep-pilot";
+    authOnly.nativeNeon.scope.hostname = "ep-pilot.neon.tech";
+    authOnly.authOnlyApplications = { "signup-pilot": { accessRoles: ["pilot_user"] } };
+    const profile = {
+      id: "pilot-auth",
+      authority,
+      appId: "signup-pilot",
+      configuration: authOnly,
+    };
+    const input = {
+      base: shared.base,
+      authority,
+      appId: profile.appId,
+      resourceProfileId: profile.id,
+      environment: {
+        PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify([shared.profile]),
+        PROTECTED_HOSTED_OPERATOR_AUTH_ONLY_RESOURCE_PROFILES: JSON.stringify([profile]),
+      },
+    };
+    return { shared, profile, input };
+  };
+
+  it("selects either inventory without replacing the shared profile or changing base behavior", () => {
+    const { shared, profile, input } = setup();
+    expect(resolveNativeTargetResourceProfile(input)).toEqual(profile.configuration);
+    expect(
+      resolveNativeTargetResourceProfile({
+        ...input,
+        appId: shared.profile.appId,
+        resourceProfileId: shared.profile.id,
+      }),
+    ).toEqual(shared.selected);
+    expect(resolveNativeTargetResourceProfile({ ...input, resourceProfileId: undefined })).toBe(
+      shared.base,
+    );
+    expect(input.environment.PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES).toBe(
+      JSON.stringify([shared.profile]),
+    );
+  });
+
+  it.each([undefined, ""])(
+    "supports an additive inventory with an absent shared setting (%s)",
+    (sharedText) => {
+      const { profile, input } = setup();
+      expect(
+        resolveNativeTargetResourceProfile({
+          ...input,
+          environment: {
+            ...input.environment,
+            PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: sharedText,
+          },
+        }),
+      ).toEqual(profile.configuration);
+    },
+  );
+
+  it("rejects duplicate IDs across inventories and within the additive inventory", () => {
+    const { shared, profile, input } = setup();
+    for (const profiles of [
+      [{ ...profile, id: shared.profile.id }],
+      [
+        {
+          ...profile,
+          id: shared.profile.id,
+          authority: { ...authority, ownerUserId: "other-owner" },
+        },
+      ],
+      [profile, profile],
+    ]) {
+      expect(() =>
+        resolveNativeTargetResourceProfile({
+          ...input,
+          appId: profiles[0]!.id === shared.profile.id ? shared.profile.appId : profile.appId,
+          resourceProfileId: profiles[0]!.id,
+          environment: {
+            ...input.environment,
+            PROTECTED_HOSTED_OPERATOR_AUTH_ONLY_RESOURCE_PROFILES: JSON.stringify(profiles),
+          },
+        }),
+      ).toThrow("Protected operator resource profile is unavailable.");
+    }
+  });
+
+  it.each([
+    ["shared", "{"],
+    ["shared", "{}"],
+    ["auth-only", "{"],
+    ["auth-only", '[{"id":"pilot-auth"}]'],
+  ])("rejects malformed %s inventory without selecting the other inventory", (inventory, value) => {
+    const { shared, input } = setup();
+    const key =
+      inventory === "shared"
+        ? "PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES"
+        : "PROTECTED_HOSTED_OPERATOR_AUTH_ONLY_RESOURCE_PROFILES";
+    expect(() =>
+      resolveNativeTargetResourceProfile({
+        ...input,
+        ...(inventory === "auth-only"
+          ? { appId: shared.profile.appId, resourceProfileId: shared.profile.id }
+          : {}),
+        environment: { ...input.environment, [key]: value },
+      }),
+    ).toThrow("Protected operator resource profile is unavailable.");
+  });
+
+  it.each(["missing-auth-only-app", "application-database"])(
+    "rejects an additive profile with %s",
+    (kind) => {
+      const { shared, profile, input } = setup();
+      if (kind === "missing-auth-only-app") {
+        delete profile.configuration.authOnlyApplications;
+      } else {
+        profile.configuration.applications[profile.appId] = shared.selected.applications.sibling!;
+      }
+      expect(() =>
+        resolveNativeTargetResourceProfile({
+          ...input,
+          environment: {
+            ...input.environment,
+            PROTECTED_HOSTED_OPERATOR_AUTH_ONLY_RESOURCE_PROFILES: JSON.stringify([profile]),
+          },
+        }),
+      ).toThrow("Protected operator resource profile is unavailable.");
+    },
+  );
+
+  it("retains exact owner, app, selector and deployment-boundary validation", () => {
+    const { profile, input } = setup();
+    expect(() =>
+      resolveNativeTargetResourceProfile({
+        ...input,
+        authority: { ...authority, ownerUserId: "other-owner" },
+      }),
+    ).toThrow();
+    expect(() => resolveNativeTargetResourceProfile({ ...input, appId: "other-app" })).toThrow();
+    expect(() =>
+      resolveNativeTargetResourceProfile({ ...input, resourceProfileId: "missing" }),
+    ).toThrow();
+    profile.configuration.operator.origin = "https://other-operator.example";
+    expect(() =>
+      resolveNativeTargetResourceProfile({
+        ...input,
+        environment: {
+          ...input.environment,
+          PROTECTED_HOSTED_OPERATOR_AUTH_ONLY_RESOURCE_PROFILES: JSON.stringify([profile]),
+        },
+      }),
+    ).toThrow();
+  });
+});
+
 describe("native target resource profile authority digest", () => {
   it.each(["auth", "neon", "gateway", "capability"] as const)(
     "changes when %s resource authority changes",

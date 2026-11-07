@@ -4,6 +4,11 @@ import { isDeepStrictEqual } from "node:util";
 import { createHostedOperatorRealmLinkConfig } from "./hosted-operator-realm-link-config";
 import { z } from "zod";
 import {
+  mergeTrustedGatewayAppBinding,
+  trustedGatewayAppBindingSchema as appBinding,
+  trustedGatewayProjectProjectionSchema as projectionSchema,
+} from "./trusted-gateway-project-projection";
+import {
   resolveNativePreviewEnvironmentGitBranch,
   savedPreviewEnvironmentGitBranch,
   matchesPreviewEnvironmentGitBranch,
@@ -328,41 +333,6 @@ const authResource = (input: GatewayManagedEnvironmentContext) => {
   };
 };
 
-const projectionScope = {
-  environment: z.literal("preview"),
-  ownerId: z.string().min(1),
-  projectId: z.string().min(1),
-};
-const appBinding = z.strictObject({
-  appId: z.string().min(1),
-  approved: z.strictObject({
-    ...projectionScope,
-    deploymentId: z.string().min(1),
-    deploymentUrl: z.url(),
-    projectName: z.string().min(1),
-    scopeSlug: z.string().min(1),
-  }),
-  observation: z.strictObject({
-    ...projectionScope,
-    deploymentId: z.string().min(1),
-    deploymentUrl: z.url(),
-    projectName: z.string().min(1),
-    readyState: z.literal("READY"),
-    scopeSlug: z.string().min(1),
-  }),
-});
-const projectionSchema = z.strictObject({
-  bindings: z.array(appBinding),
-  provenance: z.literal("trusted-operator-published-provider-projection"),
-  source: z.strictObject({
-    ...projectionScope,
-    audience: z.url(),
-    issuer: z.url(),
-    publicOrigin: z.url(),
-    subject: z.string().min(1),
-  }),
-  version: z.literal(1),
-});
 const validGatewayInput = (input: GatewayManagedEnvironmentContext, readonlyCanonical = false) => {
   const { gateway, plan, target } = input;
   const {
@@ -1048,10 +1018,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           approved: targetScope,
           observation: { ...targetScope, readyState: "READY" },
         });
-        priorBindings = [
-          ...priorBindings.filter((binding) => binding.appId !== input.target.appId),
-          bound,
-        ];
+        priorBindings = mergeTrustedGatewayAppBinding(priorBindings, bound);
       }
       observation.at("desired_values");
       const projection = projectionSchema.parse({

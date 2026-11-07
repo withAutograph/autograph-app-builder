@@ -19,8 +19,11 @@ import { continuityTransportRequestSchema } from "./hosted-operator-continuity-t
 import type { ContinuityTransportRequest } from "./hosted-operator-continuity-transport";
 import { tenantExportTransportRequestSchema } from "./hosted-operator-export-transport";
 import type { TenantExportTransportRequest } from "./hosted-operator-export-transport";
-import { nativeTargetTransportRequestSchema } from "./native-target-onboarding-transport";
-import type { NativeTargetTransportRequest } from "./native-target-onboarding-transport";
+import {
+  nativeTargetAuthOnlyPlanRequestSchema,
+  nativeTargetTransportRequestSchema,
+} from "./native-target-onboarding-transport";
+import type { NativeTargetRequest } from "./native-target-onboarding-transport";
 import {
   OPERATOR_EXECUTION_OBSERVATION_HEADER,
   OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
@@ -274,10 +277,7 @@ export interface ProtectedHostedOperatorDependencies {
   centralIntegrationHostRequest?: (request: Request) => Promise<Response>;
   centralIntegrationDeploymentReceiptRequest?: (request: Request) => Promise<Response>;
   /** Dedicated pre-project native target dispatcher with current app-owner authority. */
-  nativeTargetRequest?: (
-    request: Request,
-    input: NativeTargetTransportRequest,
-  ) => Promise<Response>;
+  nativeTargetRequest?: (request: Request, input: NativeTargetRequest) => Promise<Response>;
   /** Separate approved continuity dispatcher; the original verified request owns workload custody. */
   continuityRequest?: (request: Request, input: ContinuityTransportRequest) => Promise<Response>;
   /** Explicit separate export dispatcher; never enters preparation/cleanup state. */
@@ -1956,9 +1956,11 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         .object({
           action: z.enum([
             "native-target-plan",
+            "native-target-auth-only-plan",
             "native-target-prepare",
             "native-target-approval-read",
             "native-target-approval-candidate",
+            "native-target-auth-only-prepare",
           ]),
         })
         .safeParse(body);
@@ -1968,7 +1970,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         }
         return await deps.nativeTargetRequest(
           request,
-          nativeTargetTransportRequestSchema.parse(body),
+          nativeTargetAction.data.action === "native-target-auth-only-plan"
+            ? nativeTargetAuthOnlyPlanRequestSchema.parse(body)
+            : nativeTargetTransportRequestSchema.parse(body),
         );
       }
       const input = operatorRequestSchema.parse(body);
