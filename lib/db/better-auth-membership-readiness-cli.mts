@@ -63,7 +63,7 @@ try {
       )
       ORDER BY issuer, audience, "workspaceId", "userId"
     `;
-    const [counts] = await transaction<
+    const countRows = await transaction<
       {
         inactiveLegacyCount: number;
         pendingInvitationCount: number;
@@ -92,7 +92,8 @@ try {
                 AND member.user_id = auth_session.user_id
             )) AS "orphanedActiveSessionCount"
     `;
-    if (!counts) {
+    const counts = countRows.at(0);
+    if (counts === undefined) {
       throw new Error("Better Auth membership counts were not readable.");
     }
     return {
