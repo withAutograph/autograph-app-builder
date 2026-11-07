@@ -36,13 +36,7 @@ export const inspectCanonicalAppSpec = async (input: {
     }
     currentLine = "";
   };
-  for (let index = 0; index < input.artifact.chunkCount; index += 1) {
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Manifest order is part of the accepted digest.
-    const chunk = await input.readChunk(index);
-    if (chunk === undefined) {
-      throw new Error(`The AppSpec is missing chunk ${index}.`);
-    }
-    hash.update(chunk, "utf-8");
+  const consumeChunk = (chunk: string) => {
     for (const character of chunk) {
       if (character === "\r") {
         consumeLine();
@@ -57,6 +51,15 @@ export const inspectCanonicalAppSpec = async (input: {
         currentLine += character;
       }
     }
+  };
+  for (let index = 0; index < input.artifact.chunkCount; index += 1) {
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Manifest order is part of the accepted digest.
+    const chunk = await input.readChunk(index);
+    if (chunk === undefined) {
+      throw new Error(`The AppSpec is missing chunk ${index}.`);
+    }
+    hash.update(chunk, "utf-8");
+    consumeChunk(chunk);
   }
   if (currentLine !== "") {
     consumeLine();
