@@ -593,7 +593,7 @@ describe("fresh authenticated normal actor runtime bindings", () => {
       result.actors.find(
         (entry) => entry.actorKey === "owner" && entry.organizationId === "org-one",
       ),
-    ).toMatchObject({ actorId: "id-owner", membershipRole: "owner", appRoles: ["owner"] });
+    ).toMatchObject({ actorId: "id-owner", appRoles: ["owner"], membershipRole: "owner" });
     const publicText = JSON.stringify(result);
     expect(publicText).not.toContain("storageState");
     expect(publicText).not.toContain("cookie");
@@ -746,7 +746,7 @@ describe("closed runtime identity refusal diagnostics", () => {
       const f = await fixture(fault);
       await denied(f.runtime(f.input), "auth_identity_required");
       expect(sink).toHaveBeenCalledTimes(1);
-      expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({ stage, reason });
+      expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({ reason, stage });
     },
   );
   it.each(["journal", "transport"] as const)(
@@ -763,8 +763,8 @@ describe("closed runtime identity refusal diagnostics", () => {
       }
       await expect(f.runtime(f.input)).rejects.toBe(error);
       expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
-        stage,
         reason: "read_failed",
+        stage,
       });
       expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     },
@@ -793,8 +793,8 @@ describe("closed runtime identity refusal diagnostics", () => {
       }
       await expect(f.runtime(f.input)).rejects.toBeDefined();
       expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
-        stage,
         reason: stage === "preparation" ? "scope_mismatch" : "read_failed",
+        stage,
       });
       expect(f.requests).toHaveLength(stage === "final_authority" ? 11 : 0);
     },
@@ -829,8 +829,8 @@ describe("closed runtime identity refusal diagnostics", () => {
     );
     await expect(f.runtime(f.input)).rejects.toBe(shared);
     expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
-      stage: "get_session",
       reason: "read_failed",
+      stage: "get_session",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(shared.message);
   });

@@ -236,9 +236,9 @@ test("owned process replacement retains launch environment and idempotent comman
     expect(ready.state).toBe("ready");
     const raw: unknown = JSON.parse(await readFile(f.observation, "utf-8"));
     expect(raw).toMatchObject({
-      value: "same-approved-environment",
-      revision: "two",
       pid: ready.process?.pid,
+      revision: "two",
+      value: "same-approved-environment",
     });
     await expect(f.supervisor.execute({ operation: "stop-and-wait", commandId })).rejects.toThrow();
     const current = await f.supervisor.execute({ operation: "status" });

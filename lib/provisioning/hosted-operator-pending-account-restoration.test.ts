@@ -516,9 +516,9 @@ it("restores through ordinary planner then satisfies idle account/capture author
     }),
   );
   expect(await response.json()).toMatchObject({
-    status: "planned",
     operationRef: accountOperationRef,
     plan: f.accountPlan,
+    status: "planned",
   });
   const owner = vi.fn(async () => {});
   const captureAuthority = createNormalActorJournalAuthority({
@@ -759,22 +759,22 @@ it("reports a closed authorized candidate before a nonparticipant proposal silen
       ),
     ).resolves.toBeNull();
     expect(logs).toHaveBeenCalledWith("[builder:pending-account-restoration]", {
-      proposalIsOriginalAccountPlan: false,
-      proposalStage: "auth-bootstrap",
-      lease: "absent",
-      hasLeaseExpiry: false,
-      hasPendingEffect: false,
-      hasPendingAttempt: false,
       allPlanEffectsReceipted: true,
-      missingEffectKinds: [],
-      executionState: "absent",
-      linkScope: "absent",
-      wait: "absent",
       continuation: "absent",
+      continuationAcceptanceReceiptPresent: false,
       continuationArchiveable: false,
       currentExecutionAcknowledged: false,
-      continuationAcceptanceReceiptPresent: false,
+      executionState: "absent",
+      hasLeaseExpiry: false,
+      hasPendingAttempt: false,
+      hasPendingEffect: false,
+      lease: "absent",
+      linkScope: "absent",
+      missingEffectKinds: [],
       ownerRestrictedCapabilityPresent: false,
+      proposalIsOriginalAccountPlan: false,
+      proposalStage: "auth-bootstrap",
+      wait: "absent",
     });
     expect(f.row.record).toEqual(original);
     expect(f.ports.readApproval).not.toHaveBeenCalled();
@@ -991,13 +991,13 @@ it("projects pending record facts and only the presence of restricted owner capa
     expect(logs).toHaveBeenCalledWith(
       "[builder:pending-account-restoration]",
       expect.objectContaining({
-        lease: "active",
-        hasLeaseExpiry: true,
-        hasPendingEffect: true,
-        hasPendingAttempt: true,
         allPlanEffectsReceipted: false,
-        missingEffectKinds: ["gateway-delivery"],
         executionState: "running",
+        hasLeaseExpiry: true,
+        hasPendingAttempt: true,
+        hasPendingEffect: true,
+        lease: "active",
+        missingEffectKinds: ["gateway-delivery"],
         ownerRestrictedCapabilityPresent: true,
       }),
     );
@@ -1017,8 +1017,8 @@ it("does not change an authorized restoration when its advisory logger throws", 
   });
   try {
     await expect(f.run()).resolves.toMatchObject({
-      status: "planned",
       operationRef: accountOperationRef,
+      status: "planned",
     });
     expect(f.ports.store.compareAndSet).toHaveBeenCalledOnce();
   } finally {
@@ -1081,8 +1081,8 @@ it.each(["past", "absent", "account"] as const)(
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       await expect(f.run()).resolves.toMatchObject({
-        status: "planned",
         operationRef: accountOperationRef,
+        status: "planned",
       });
       expect(f.row.record.realmContinuation).toBeUndefined();
       expect(f.row.record.realmIdentityWait).toBeUndefined();
@@ -1100,9 +1100,9 @@ it.each(["past", "absent", "account"] as const)(
         "[builder:pending-account-restoration]",
         expect.objectContaining({
           continuation: "current-accepted",
+          continuationAcceptanceReceiptPresent: true,
           continuationArchiveable: true,
           currentExecutionAcknowledged: true,
-          continuationAcceptanceReceiptPresent: true,
         }),
       );
     } finally {

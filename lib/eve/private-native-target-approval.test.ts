@@ -212,7 +212,7 @@ describe("private native target terminal approval", () => {
       reader.observe(requested({ requestId: "request-two", callId: "call-two" }));
       reader.observe(settled("approved", authority.ownerUserId, "request-one"));
     }
-    expect(first.read()).toMatchObject({ requestId: "request-one", outcome: "approved" });
+    expect(first.read()).toMatchObject({ outcome: "approved", requestId: "request-one" });
     expect(second.read()).toBeNull();
   });
 
@@ -234,7 +234,7 @@ describe("private native target terminal approval", () => {
       state: all.snapshot(),
       terminals: all.terminalSnapshot(),
     });
-    expect(current.read()).toMatchObject({ requestId: "request-two", callId: "call-two" });
+    expect(current.read()).toMatchObject({ callId: "call-two", requestId: "request-two" });
     expect(current.snapshot().entries).toHaveLength(2);
   });
 
@@ -245,9 +245,9 @@ describe("private native target terminal approval", () => {
     current.observe(requested({ requestId: "request-two", callId: "call-two" }));
     current.observe(settled("approved", authority.ownerUserId, "request-two"));
     expect(current.read()).toMatchObject({
-      requestId: "request-one",
       callId: "call-one",
       outcome: "cancelled",
+      requestId: "request-one",
     });
   });
 
@@ -311,9 +311,9 @@ describe("private native target terminal approval", () => {
     reader.observe(settled("cancelled"));
     reader.observe(settled("approved"));
     expect(reader.read()).toMatchObject({
-      requestId: "human-request",
-      outcome: "cancelled",
       observedAt: "2026-10-21T15:00:01.000Z",
+      outcome: "cancelled",
+      requestId: "human-request",
     });
   });
 
@@ -364,8 +364,8 @@ describe("private native target terminal approval", () => {
       ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
       expect(state?.terminals).toMatchObject([
         {
-          requestId: "human-request",
           observedAt: "2026-10-21T15:00:01.000Z",
+          requestId: "human-request",
         },
       ]);
       expect(state?.native.capture.entries).toMatchObject([
@@ -382,8 +382,8 @@ describe("private native target terminal approval", () => {
         },
       });
       expect(result).toMatchObject({
+        proof: { observedAt: "2026-10-21T15:00:01.000Z", outcome, requestId: "human-request" },
         status: outcome,
-        proof: { requestId: "human-request", outcome, observedAt: "2026-10-21T15:00:01.000Z" },
       });
     },
   );

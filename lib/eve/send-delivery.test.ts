@@ -253,13 +253,13 @@ describe("canonical SEND delivery acknowledgement", () => {
   it("acknowledges saved queued SEND and keeps GET working until exact native start without replay", async () => {
     const f = await queuedFixture();
     const submitted = await f.create().send(f.request);
-    expect(submitted).toMatchObject({ status: "working", events: [] });
+    expect(submitted).toMatchObject({ events: [], status: "working" });
     expect(submitted.error).toBeUndefined();
     expect(f.observe).toHaveBeenCalledTimes(2);
     expect(f.accepted).toHaveBeenCalledOnce();
     expect(await f.operation()).toMatchObject({
-      state: "submission_unknown",
       sendDelivery: { deliveryId: "ack" },
+      state: "submission_unknown",
     });
     expect(JSON.stringify(await f.operation())).not.toContain("cancellationRevisionAtDispatch");
     const saved = await f.store.getSession(principal, f.request.sessionId);
@@ -387,8 +387,8 @@ describe("canonical SEND delivery acknowledgement", () => {
     }));
     await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(await f.operation()).toMatchObject({
-      state: "submission_unknown",
       sendDelivery: { deliveryId: "ack" },
+      state: "submission_unknown",
     });
     expect(f.accepted).toHaveBeenCalledOnce();
     expect(f.observe).toHaveBeenCalledTimes(2);
@@ -727,11 +727,11 @@ describe("canonical SEND delivery acknowledgement", () => {
             currentTurnPresent: true,
             nativeReadObserved: true,
             nativeRead: {
-              nativeStartIndex: 1,
+              currentTurnPresent: true,
               nativeNextIndex: 1,
+              nativeStartIndex: 1,
               nativeTailIndex: 0,
               observationComplete: true,
-              currentTurnPresent: true,
             },
           },
         }),
@@ -740,8 +740,8 @@ describe("canonical SEND delivery acknowledgement", () => {
       expect(f.adapter.sendAccepted).toHaveBeenCalledOnce();
       expect(f.send).not.toHaveBeenCalled();
       expect(await f.operation()).toMatchObject({
-        state: "submission_unknown",
         sendDelivery: { deliveryId: "ack" },
+        state: "submission_unknown",
       });
       expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("unrelated-active-turn");
       expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("unrelated-delivery");
@@ -940,16 +940,16 @@ describe("canonical SEND delivery acknowledgement", () => {
         phase: "send_delivery_boundary",
         sendDeliveryObservation: {
           ackObserved: true,
-          sameAdapterSession: true,
-          sameAdapterGeneration: true,
-          nativeDeliveryStatePresent: true,
-          nativeTurnCount: 1,
-          deliveryTurnMatchCount: 0,
-          startedStampMatchCount: 0,
           boundaryStampMatchCount: 0,
-          startedOrBoundaryMatch: false,
           currentTurnPresent: false,
+          deliveryTurnMatchCount: 0,
+          nativeDeliveryStatePresent: true,
           nativeReadObserved: false,
+          nativeTurnCount: 1,
+          sameAdapterGeneration: true,
+          sameAdapterSession: true,
+          startedOrBoundaryMatch: false,
+          startedStampMatchCount: 0,
         },
       }),
     );
@@ -960,8 +960,8 @@ describe("canonical SEND delivery acknowledgement", () => {
     const result = await f.create().send(f.request);
     expect(result.status).toBe("working");
     expect(await f.operation()).toMatchObject({
-      state: "succeeded",
       result: { status: "working" },
+      state: "succeeded",
     });
     expect(await f.create().send(f.request)).toEqual(result);
     expect(f.send).toHaveBeenCalledOnce();
@@ -996,7 +996,7 @@ describe("canonical SEND delivery acknowledgement", () => {
     if (settled?.state !== "succeeded") {
       throw new Error("The recovered SEND did not settle in its canonical operation.");
     }
-    expect(settled).toMatchObject({ state: "succeeded", result: { cursor: 100 } });
+    expect(settled).toMatchObject({ result: { cursor: 100 }, state: "succeeded" });
     expect(settled?.requestDigest).toBe(
       digest({ kind: "send", request: f.request, sessionId: f.request.sessionId }),
     );
@@ -1085,16 +1085,16 @@ describe("canonical SEND delivery acknowledgement", () => {
       expect.objectContaining({
         sendDeliveryObservation: {
           ackObserved: true,
-          sameAdapterSession: true,
-          sameAdapterGeneration: true,
-          nativeDeliveryStatePresent: true,
-          nativeTurnCount: 1,
-          deliveryTurnMatchCount: 1,
-          startedStampMatchCount: 0,
           boundaryStampMatchCount: 0,
-          startedOrBoundaryMatch: false,
           currentTurnPresent: true,
+          deliveryTurnMatchCount: 1,
+          nativeDeliveryStatePresent: true,
           nativeReadObserved: false,
+          nativeTurnCount: 1,
+          sameAdapterGeneration: true,
+          sameAdapterSession: true,
+          startedOrBoundaryMatch: false,
+          startedStampMatchCount: 0,
         },
       }),
     );
