@@ -7,15 +7,15 @@ export type AppAccessErrorCode =
   | "request_id_conflict";
 
 const messages: Record<AppAccessErrorCode, string> = {
-  authentication_required: "Sign in to Builder to continue.",
   app_access_denied: "You do not have permission to manage access to this app.",
   app_access_unavailable:
     "Builder could not finish setting up access. Your app and progress are saved.",
   app_access_unknown:
     "Builder is checking the previous request. Retry that request before starting another.",
-  request_invalid: "Refresh this app’s access settings and try again.",
+  authentication_required: "Sign in to Builder to continue.",
   request_id_conflict:
     "This request was already used for a different change. Refresh before continuing.",
+  request_invalid: "Refresh this app’s access settings and try again.",
 };
 
 export class AppAccessError extends Error {
