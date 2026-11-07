@@ -1221,8 +1221,7 @@ const inputRequest = (request: {
       const { scope, intent } = setup.data;
       description = `Set up ${scope.appId} in ${scope.repositoryFullName}. ${intent.storage.kind === "postgres" ? "Builder prepares the app’s database and keeps it for future updates. " : "This app does not need a database. "}Connect your app account once to receive access. Other people get access only when invited.`;
     }
-  }
-  if (request.kind === "tool-approval" && toolName === "apply_app_creation") {
+  } else if (request.kind === "tool-approval" && toolName === "apply_app_creation") {
     // Use the standard card copy when the optional summary does not fit the card.
     description =
       z

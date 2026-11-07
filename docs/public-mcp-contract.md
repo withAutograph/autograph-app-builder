@@ -33,6 +33,12 @@ product answers and effect approvals continue through `autograph_send` and
 `autograph_respond` in the saved session. The five tools do not expose private
 stage forcing, nor does private build approval authorize deployment or publication.
 
+Production setup projects an ordinary approval card for both database-backed
+and frontend-only apps. The card describes the selected app, repository, data
+setup and access; it does not itself grant consent. Unreadable setup input remains
+closed, and execution still requires the actual owner's settlement for the exact
+saved setup call.
+
 App account linking is an ordinary browser sign-in, not an approval response.
 After approved Production setup requests identity, the public stream includes
 `auth_identity_invitation` with the safe sign-in URL and expiry. It exposes no
