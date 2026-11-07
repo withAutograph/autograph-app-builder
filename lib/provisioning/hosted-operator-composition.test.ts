@@ -1839,7 +1839,7 @@ describe("retained APP Gateway source planning continuation", () => {
     const row = { record, revision: 7 };
     f.configuration.gateway.gitSha = "e".repeat(40);
     const read = vi.fn(async () => row);
-    const assertCanonicalOwner = vi.fn(async () => {});
+    const assertCanonicalOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
     const readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(async () => ({
       action: "prepare",
       approved: true,
@@ -2218,7 +2218,7 @@ describe("existing populated Auth workflow planning", () => {
       {} as ReturnType<typeof nativePlanning.createNativePreviewNeonPlanningAuthority>,
     );
     vi.spyOn(neonReader, "createPreviewNeonMcpReader").mockReturnValue({
-      inspectPlanningTarget: vi.fn(async () => {}),
+      inspectPlanningTarget: vi.fn<() => Promise<void>>().mockResolvedValue(),
     } as unknown as ReturnType<typeof neonReader.createPreviewNeonMcpReader>);
     vi.spyOn(providerInventory, "readHostedOperatorProviderInventory").mockResolvedValue({
       app: {
@@ -2260,7 +2260,7 @@ describe("existing populated Auth workflow planning", () => {
     });
     const controlPlane = {
       ...f.controlPlane,
-      assertPlanningAuthorized: vi.fn(async () => {}),
+      assertPlanningAuthorized: vi.fn<() => Promise<void>>().mockResolvedValue(),
       store: {
         read: vi.fn(async (input: HostedOperatorContext) =>
           input.target.appId === "source"
@@ -2274,7 +2274,7 @@ describe("existing populated Auth workflow planning", () => {
       readActiveSharedAuth: vi.fn(async () => undefined),
       readSharedAuthAdoption: vi.fn(async () => adopted),
       readResourceBindings,
-      publishAuthPlan: vi.fn(async () => "new-observed-artifact"),
+      publishAuthPlan: vi.fn<() => Promise<string>>().mockResolvedValue("new-observed-artifact"),
     };
     const dependencies = composeHostedOperatorDependencies(
       f.configuration,
@@ -2312,7 +2312,7 @@ describe("existing populated Auth workflow planning", () => {
       },
     };
     const readSnapshot = vi.fn(async () => snapshot);
-    const assertAuthorized = vi.fn(async () => {});
+    const assertAuthorized = vi.fn<() => Promise<void>>().mockResolvedValue();
     const createReadiness = authReadiness.createHostedOperatorAuthReadiness;
     vi.spyOn(authReadiness, "createHostedOperatorAuthReadiness").mockImplementation((ports) =>
       createReadiness({ ...ports, assertAuthorized, readSnapshot }),
@@ -2524,7 +2524,7 @@ describe("existing populated Auth workflow planning", () => {
         };
       },
     );
-    const assertCanonicalOwner = vi.fn(async () => {});
+    const assertCanonicalOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
     f.readResourceBindings.mockImplementation(async (input) => {
       const authorized = requireFinalResourceBindingPhase(
         selectAuthPlanningResourceBindingRow(f.row, input.plan),
@@ -2633,7 +2633,7 @@ describe("existing populated Auth workflow planning", () => {
         reviewDigest: "c".repeat(64),
       },
     };
-    const assertCurrent = vi.fn(async () => {});
+    const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
     readSelection.mockResolvedValue({
       currentSpec: {
         appId: context.target.appId,
