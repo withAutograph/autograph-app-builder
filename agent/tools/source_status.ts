@@ -31,7 +31,7 @@ export default defineTool({
       } else if (input.sourceKind === "fresh-template") {
         const receipt = await acquireCanonicalArrustedTemplate({
           callId: ctx.callId,
-          sandbox: async () => ctx.getSandbox(),
+          sandbox: async () => await ctx.getSandbox(),
           sessionId: ctx.session.id,
         });
         sourceWorkflowState.update(() => ({

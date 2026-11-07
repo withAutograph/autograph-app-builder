@@ -485,11 +485,11 @@ export const createProvisioningEventsChannel = (
     routes: [
       POST(
         "/eve/v1/internal/hosted-operator/realm-continuation",
-        async (request, { attachSession }) => handlers.dispatch(request, attachSession),
+        async (request, { attachSession }) => await handlers.dispatch(request, attachSession),
       ),
       POST(
         "/eve/v1/internal/hosted-operator/realm-continuation/reconcile",
-        async (request, { attachSession }) => handlers.reconcile(request, attachSession),
+        async (request, { attachSession }) => await handlers.reconcile(request, attachSession),
       ),
     ],
   });
