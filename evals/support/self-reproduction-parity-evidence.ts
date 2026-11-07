@@ -12,7 +12,7 @@ import {
 import type { Observation, ParityEvidence } from "./self-reproduction-parity";
 
 const side = z.enum(sides);
-const requirementIds: [string, ...string[]] = [];
+const requirementIds: string[] = [];
 const runtimeRequirementIds = new Set<string>();
 for (const row of requirements) {
   requirementIds.push(row.id);
