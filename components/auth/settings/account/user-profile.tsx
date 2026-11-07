@@ -38,44 +38,34 @@ export function UserProfile({ className }: UserProfileProps) {
   });
 
   const [fieldErrors, setFieldErrors] = useState<{
-    name: string | null;
-  }>({ name: null });
+    name?: string;
+  }>({});
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
 
     const formData = new FormData(e.currentTarget);
-    const nameEntry = formData.get("name");
-    const name = nameEntry instanceof File ? "" : (nameEntry ?? "");
+    const name = formData.get("name") as string;
 
-    const additionalFieldValues: Record<string, AdditionalFieldValue | null> = {};
+    const additionalFieldValues: Record<string, unknown> = {};
 
-    const fieldsToValidate = (additionalFields ?? []).filter(
-      (field) => field.profile !== false && field.readOnly !== true,
-    );
-    const parsedValues = fieldsToValidate.map((field) => {
-      const entry = formData.get(field.name);
-      return {
-        field,
-        value: parseAdditionalFieldValue(field, entry instanceof File ? null : entry),
-      };
-    });
+    for (const field of additionalFields ?? []) {
+      if (field.profile === false || field.readOnly) {
+        continue;
+      }
+      const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
-    try {
-      await Promise.all(
-        parsedValues.map(async ({ field, value }) => {
-          if (field.validate) {
-            await field.validate(value);
-          }
-        }),
-      );
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-      return;
-    }
+      if (field.validate) {
+        try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+          await field.validate(value);
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : String(error));
+          return;
+        }
+      }
 
-    for (const { field, value } of parsedValues) {
       // `null` = explicit clear (forward to backend); `undefined` = omitted.
       if (value !== undefined) {
         additionalFieldValues[field.name] = value;
@@ -92,23 +82,15 @@ export function UserProfile({ className }: UserProfileProps) {
     <div>
       <h2 className="text-sm font-semibold mb-3">{localization.settings.userProfile}</h2>
 
-      <form
-        onSubmit={(event) => {
-          void handleSubmit(event);
-        }}
-      >
+      <form onSubmit={handleSubmit}>
         <Card className={cn(className)}>
           <CardContent className="flex flex-col gap-6">
             <ChangeAvatar />
 
-            <Field data-invalid={fieldErrors.name !== null && fieldErrors.name !== ""}>
+            <Field data-invalid={!!fieldErrors.name}>
               <FieldLabel htmlFor="name">{localization.auth.name}</FieldLabel>
 
-              {session === null ? (
-                <Skeleton>
-                  <Input className="invisible" />
-                </Skeleton>
-              ) : (
+              {session ? (
                 <Input
                   key={session?.user.name}
                   id="name"
@@ -121,7 +103,7 @@ export function UserProfile({ className }: UserProfileProps) {
                   onChange={() => {
                     setFieldErrors((prev) => ({
                       ...prev,
-                      name: null,
+                      name: undefined,
                     }));
                   }}
                   onInvalid={(e) => {
@@ -129,11 +111,15 @@ export function UserProfile({ className }: UserProfileProps) {
 
                     setFieldErrors((prev) => ({
                       ...prev,
-                      name: e.currentTarget.validationMessage,
+                      name: (e.target as HTMLInputElement).validationMessage,
                     }));
                   }}
-                  aria-invalid={fieldErrors.name !== null && fieldErrors.name !== ""}
+                  aria-invalid={!!fieldErrors.name}
                 />
+              ) : (
+                <Skeleton>
+                  <Input className="invisible" />
+                </Skeleton>
               )}
 
               <FieldError>{fieldErrors.name}</FieldError>
@@ -144,7 +130,7 @@ export function UserProfile({ className }: UserProfileProps) {
                 return null;
               }
 
-              if (session === null) {
+              if (!session) {
                 if (field.inputType === "hidden") {
                   return null;
                 }
@@ -156,21 +142,13 @@ export function UserProfile({ className }: UserProfileProps) {
                 );
               }
 
-              const sessionValue = parseAdditionalFieldValue(
-                field,
-                String(session.user[field.name] ?? ""),
-              );
-              const value = sessionValue;
+              const value = (session.user as Record<string, unknown>)[field.name];
 
               // Re-mount when the session value loads so the field's
               // uncontrolled `defaultValue` reflects the latest data.
-              let keyValue = "";
-              if (value instanceof Date) {
-                keyValue = value.toISOString();
-              } else if (value !== null && value !== undefined) {
-                keyValue = String(value);
-              }
-              const key = `${field.name}:${keyValue}`;
+              const key = `${field.name}:${
+                value instanceof Date ? value.toISOString() : String(value ?? "")
+              }`;
 
               return (
                 <AdditionalField
@@ -180,7 +158,7 @@ export function UserProfile({ className }: UserProfileProps) {
                     ...field,
                     // `defaultValue` is sign-up-only; on the profile we
                     // always seed from the session.
-                    defaultValue: value === undefined ? null : value,
+                    defaultValue: value as AdditionalFieldValue | null,
                   }}
                   isPending={isPending}
                 />
