@@ -63,9 +63,9 @@ const progress = (complete: boolean) => ({
   version: 1 as const,
 });
 const fixture = () => {
-  const assertOwner = vi.fn(async () => {});
-  const persistPartial = vi.fn(async () => true);
-  const publishVerified = vi.fn(async () => true);
+  const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const persistPartial = vi.fn().mockResolvedValue(true);
+  const publishVerified = vi.fn().mockResolvedValue(true);
   return {
     assertOwner,
     binding,
