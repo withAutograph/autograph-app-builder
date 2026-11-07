@@ -154,7 +154,7 @@ const fixture = () => {
     async (_url, read) => await read(reader),
   );
   const deps = {
-    assertAuthorized: vi.fn(async () => {}),
+    assertAuthorized: vi.fn<() => Promise<void>>().mockResolvedValue(),
     readReleaseManifest: vi.fn(async () => manifest),
     readRuntimeSnapshot,
     readRuntimeUrl: vi.fn(
@@ -165,7 +165,12 @@ const fixture = () => {
   return {
     deps,
     identity,
-    input: { assertCurrent: vi.fn(async () => {}), authority, plan, target },
+    input: {
+      assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      authority,
+      plan,
+      target,
+    },
     observation,
     reader,
     scopes,
@@ -382,7 +387,7 @@ const activeInstallationFixture = () => {
   const readActiveOrganization = vi.fn(async (_scope: OperatorAppMetadataScope) => f.observation);
   f.reader.readActiveOrganization = readActiveOrganization;
   const input = {
-    assertCurrent: vi.fn(async () => {}),
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
     plan,
     readRuntimeSnapshot: f.deps.readRuntimeSnapshot,
     runtimeUrl:
@@ -406,7 +411,7 @@ it("retains an active actor-bound organization on a previous release without req
 
 it("excludes only observed inactive or missing actor-bound organizations", async () => {
   const f = activeInstallationFixture();
-  f.reader.readActiveOrganization = vi.fn(async () => null);
+  f.reader.readActiveOrganization = vi.fn<() => Promise<null>>().mockResolvedValue(null);
   await expect(readActiveAppInstallationCustomerIds(f.input)).resolves.toEqual([]);
 });
 
