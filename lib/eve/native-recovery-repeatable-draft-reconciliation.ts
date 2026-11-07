@@ -19,6 +19,7 @@ import type {
 const workflowKey = "autograph-app-builder.workflow.v17";
 const candidateKey = "autograph-app-builder.draft-reconciliation.v1";
 const completionsKey = "autograph-app-builder.draft-reconciliation-completions.v1";
+const inputRequestedEventType = "input.requested";
 const part = z.looseObject({
   approvalId: z.string().optional(),
   approved: z.boolean().optional(),
@@ -95,7 +96,7 @@ const readRecoveryHistory = (
       return undefined;
     }
     if (
-      parsed.type === "input.requested" ||
+      parsed.type === inputRequestedEventType ||
       parsed.type === "approval.settled" ||
       parsed.type === "action.result"
     ) {
@@ -130,14 +131,15 @@ const uniqueHistoryApproval = (parts: Part[], callId: string): boolean => {
   const requests = parts.filter(
     (value) => value.type === "tool-approval-request" && value.toolCallId === callId,
   );
+  const [request] = requests;
   if (
     requests.length !== 1 ||
-    requests[0].approvalId === undefined ||
-    requests[0].approvalId.length === 0
+    request?.approvalId === undefined ||
+    request.approvalId.length === 0
   ) {
     return false;
   }
-  const { approvalId } = requests[0];
+  const { approvalId } = request;
   const responses = parts.filter(
     (value) => value.type === "tool-approval-response" && value.approvalId === approvalId,
   );
@@ -153,7 +155,7 @@ const uniqueHistoryApproval = (parts: Part[], callId: string): boolean => {
 /** Native server frames, not a model/history approval response, establish the human decision. */
 const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: string): boolean => {
   const requests = events.flatMap((value, index) => {
-    if (value.type !== "input.requested") {
+    if (value.type !== inputRequestedEventType) {
       return [];
     }
     const parsed = z.object({ requests: z.array(z.unknown()) }).safeParse(value.data).data;
@@ -167,12 +169,13 @@ const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: s
       return [{ index, request }];
     });
   });
-  if (requests.length !== 1 || requests[0].request === undefined) {
+  const [candidate] = requests;
+  if (requests.length !== 1 || candidate?.request === undefined) {
     return false;
   }
-  const { request, index } = requests[0];
+  const { request, index } = candidate;
   const requestIdMatches = events.flatMap((value) => {
-    if (value.type !== "input.requested") {
+    if (value.type !== inputRequestedEventType) {
       return [];
     }
     const parsed = z.object({ requests: z.array(z.unknown()) }).safeParse(value.data).data;
