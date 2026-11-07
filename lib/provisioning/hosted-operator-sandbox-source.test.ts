@@ -91,16 +91,19 @@ describe("protected operator immutable Sandbox source", () => {
     }));
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The injected fixture implements only the SDK methods this proposal path calls; no provider object is narrowed.
     const sandbox = {
-      delete: vi.fn(async () => {}),
+      delete: vi.fn<() => Promise<void>>().mockResolvedValue(),
       runCommand,
-      writeFiles: vi.fn(async () => {}),
+      writeFiles: vi.fn<() => Promise<void>>().mockResolvedValue(),
     } as unknown as Pick<Sandbox, "delete" | "runCommand" | "writeFiles">;
     const createSandbox = vi.fn<
       (options: Parameters<typeof Sandbox.create>[0]) => Promise<typeof sandbox>
     >(async () => sandbox);
-    const getOidc = vi.fn(async () => "synthetic-oidc-fixture");
+    const getOidc = vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-oidc-fixture");
     const propose = createHostedOperatorAuthProposal(configuration, { createSandbox, getOidc });
-    const result = await propose({ assertCurrentOwner: vi.fn(async () => {}), resource });
+    const result = await propose({
+      assertCurrentOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      resource,
+    });
     expect(result.planDigest).toBe("b".repeat(64));
     expect(getOidc).toHaveBeenCalledWith({ project: "owned-project", team: "owned-team" });
     expect(createSandbox.mock.calls[0]?.[0]).toMatchObject({
