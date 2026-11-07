@@ -15,6 +15,9 @@ const { sessionCommandHookToken, sessionInboxHookToken } = await import(
   `${sdk}execution/session-inbox/address.js`
 );
 
+const HOOK_NOT_FOUND = "hook-not-found";
+const TERMINAL_RECOVERY = "terminal-recovery";
+
 let sequence = 0;
 const fixture = () => {
   sequence += 1;
@@ -62,10 +65,14 @@ const fixture = () => {
       sessionState: { sessionId: descriptor.logicalSessionId },
     },
     descriptor: holderDescriptor,
-    kind: "terminal-recovery",
+    kind: TERMINAL_RECOVERY,
   };
-  let onRead = async () => {};
-  let onBinding = async () => {};
+  let onRead = async () => {
+    // No read intervention unless a test installs one.
+  };
+  let onBinding = async () => {
+    // No binding intervention unless a test installs one.
+  };
   const facts = {
     committedChildMatches: false,
     descriptorMatches: true,
@@ -92,11 +99,11 @@ const fixture = () => {
       seen.tokens.push(requestedToken);
       assert.equal(requestedToken, token);
       if (hook === undefined) {
-        throw new Error("hook-not-found");
+        throw new Error(HOOK_NOT_FOUND);
       }
       return hook;
     },
-    isHookNotFound: (error) => error?.message === "hook-not-found",
+    isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND,
     now: () => 1,
     async readRunEntry(runId) {
       seen.reads.push(runId);
@@ -179,7 +186,7 @@ it("observes a real occupied logical inbox held by a distinct physical owner wit
     f.seen.bindings.every((binding) => binding.holderOwnerRunId === f.holderOwnerRunId),
     true,
   );
-  const summary = f.summaries[0];
+  const [summary] = f.summaries;
   assert.equal(summary.event, "eve.terminal_recovery_inbox_holder");
   assert.equal(summary.outcome, "observed");
   assert.equal(summary.entryKind, "terminal-recovery");
@@ -209,7 +216,7 @@ it("reports a matching committed holder and a missing canonical receipt distinct
       sessionState: { sessionId: committed.descriptor.logicalSessionId },
     },
     descriptor: committed.descriptor,
-    kind: "terminal-recovery",
+    kind: TERMINAL_RECOVERY,
   });
   committed.facts.operationReserved = false;
   committed.facts.operationSucceeded = true;
@@ -298,7 +305,7 @@ it("a missing holder stays read only and cannot emit stale absence after a new c
   changed.deps.getHook = async () => {
     lookups += 1;
     if (lookups === 1) {
-      throw new Error("hook-not-found");
+      throw new Error(HOOK_NOT_FOUND);
     }
     return {
       metadata: Promise.resolve({ sessionId: changed.descriptor.logicalSessionId }),
