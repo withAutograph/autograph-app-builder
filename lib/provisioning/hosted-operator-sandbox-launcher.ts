@@ -11,6 +11,10 @@ import { Sandbox } from "@vercel/sandbox";
 import type { Command } from "@vercel/sandbox";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
+import {
+  observeRepositoryProductionPhase,
+  reportRepositoryProductionFailure,
+} from "./repository-production-diagnostic";
 
 import {
   HostedOperatorError,
@@ -2304,6 +2308,10 @@ export const runRepositoryProductionFileSpool = async (
   },
   dependencies: { createSandbox?: CreateSandbox } = {},
 ) => {
+  const invalidContext = () => {
+    reportRepositoryProductionFailure("worker_transport_validation", "scope_mismatch");
+    return resourceMismatch();
+  };
   const modes = {
     storage: {
       scope: RESOURCES_SCOPE,
@@ -2351,7 +2359,7 @@ export const runRepositoryProductionFileSpool = async (
     /[\0\r\n]/u.test(input.directDatabaseUrl) ||
     (input.readOnly ? input.recordCheckpoint !== undefined : input.recordCheckpoint === undefined)
   ) {
-    throw resourceMismatch();
+    throw invalidContext();
   }
   if (
     input.operation === "storage" &&
@@ -2361,10 +2369,10 @@ export const runRepositoryProductionFileSpool = async (
       input.resourceCredentialBytes === undefined ||
       sha256(input.resourceCredentialBytes) !== context.resource.credentials_sha256)
   ) {
-    throw resourceMismatch();
+    throw invalidContext();
   }
   if (input.operation !== "storage" && "kind" in context) {
-    throw resourceMismatch();
+    throw invalidContext();
   }
   let required: string[];
   if (input.operation === "membership") {
@@ -2390,18 +2398,18 @@ export const runRepositoryProductionFileSpool = async (
     required.some((name) => input.startupFiles[name] === undefined) ||
     Object.keys(input.startupFiles).some((name) => !allowed.has(name))
   ) {
-    throw resourceMismatch();
+    throw invalidContext();
   }
   const release = input.generatedRelease;
   let generatedMetadata: GeneratedAppReleaseMetadata | undefined;
   let generatedFiles: { member: string; content: Buffer }[] = [];
   if (input.operation === "schema" || input.operation === "access") {
     if (!release || GENERATED_RELEASE_MEMBERS.some((name) => !Buffer.isBuffer(release[name]))) {
-      throw resourceMismatch();
+      throw invalidContext();
     }
     const manifest = sha256(release["release-manifest.json"]);
     if (manifest !== context.release.sha256) {
-      throw resourceMismatch();
+      throw invalidContext();
     }
     generatedMetadata = {
       version: 1,
@@ -2418,17 +2426,36 @@ export const runRepositoryProductionFileSpool = async (
   }
   const bytes = canonicalContextBytes(context);
   if (bytes.length > MAX_PROTOCOL_FRAME_BYTES) {
-    throw resourceMismatch();
+    throw invalidContext();
   }
-  await input.assertCurrent();
+  const assertCurrent = () =>
+    observeRepositoryProductionPhase(
+      "worker_authority",
+      "authorization_unavailable",
+      input.assertCurrent,
+    );
+  const createSandbox: CreateSandbox = async (options) => {
+    const injectedCreate = dependencies.createSandbox;
+    if (injectedCreate !== undefined) {
+      return await observeRepositoryProductionPhase("sandbox_create", "provider_unavailable", () =>
+        injectedCreate(options),
+      );
+    }
+    const token = await observeRepositoryProductionPhase(
+      "sandbox_oidc_acquire",
+      "workload_unavailable",
+      () => getVercelOidcToken({ project: options.projectId, team: options.teamId }),
+    );
+    return await observeRepositoryProductionPhase("sandbox_create", "provider_unavailable", () =>
+      Sandbox.create({ ...options, token }),
+    );
+  };
+  await observeRepositoryProductionPhase("worker_authority", "authorization_unavailable", () =>
+    input.assertCurrent(),
+  );
   return await runPinnedFileSpoolTransport(
     configuration,
-    dependencies.createSandbox ??
-      (async (options) =>
-        await Sandbox.create({
-          ...options,
-          token: await getVercelOidcToken({ project: options.projectId, team: options.teamId }),
-        })),
+    createSandbox,
     {
       directDatabaseUrl: input.directDatabaseUrl,
       readbackOnly: input.readOnly ? true : undefined,
@@ -2443,7 +2470,7 @@ export const runRepositoryProductionFileSpool = async (
       contextDigest: sha256(bytes),
       worker,
       runId: workerRunIdSchema.parse(input.runId),
-      assertCurrent: input.assertCurrent,
+      assertCurrent,
       allowedResources: new Set([context.resource.resource_id]),
       allowedTenants: new Set(context.tenant_targets),
       recordCheckpoint: input.recordCheckpoint,

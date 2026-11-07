@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/require-await -- Fixture ports preserve the asynchronous production boundary. */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRepositoryProductionConnectionReader } from "./repository-production-connections";
 import type { RepositoryProductionConnectionProfile } from "./repository-production-connections";
 import { repositoryProductionSecretConnectionSchema } from "./repository-production-configuration";
@@ -99,6 +99,76 @@ const fixture = (
 };
 
 describe("Production repository connection bindings", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    ["getOidc", "workload_oidc_acquire"],
+    ["verifyOidc", "workload_oidc_verify"],
+  ] as const)(
+    "identifies %s failure without leaking its private exception",
+    async (method, phase) => {
+      const h = fixture();
+      const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const original = new Error("private workload token and request body");
+      h.io[method].mockRejectedValue(original);
+      await expect(h.read()).rejects.toBe(original);
+      expect(h.io.readIdentity).not.toHaveBeenCalled();
+      expect(log.mock.calls.flat().join("")).toContain(`"phase":"${phase}"`);
+      expect(log.mock.calls.flat().join("")).not.toContain(original.message);
+    },
+  );
+
+  it("reports missing and invalid binding phases before credentials reach SQL", async () => {
+    const h = fixture();
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    h.environment.APP_PRODUCTION_AUTH_OPERATOR = undefined;
+    await expect(h.read()).rejects.toThrow("repository_production_connection_binding_unavailable");
+    expect(log.mock.calls.flat().join("")).toContain('"phase":"auth_operator_binding"');
+    expect(log.mock.calls.flat().join("")).toContain('"code":"binding_unavailable"');
+    h.environment.APP_PRODUCTION_AUTH_OPERATOR = uri("auth", "private_wrong_role");
+    await expect(h.read()).rejects.toThrow("repository_production_provider_scope_mismatch");
+    expect(log.mock.calls.flat().join("")).not.toContain("private_wrong_role");
+    expect(h.io.readIdentity).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["maintenance", "maintenance_identity"],
+    ["auth_operator", "auth_operator_identity"],
+    ["auth_runtime", "auth_runtime_identity"],
+  ] as const)(
+    "identifies the failed %s SQL identity without connection details",
+    async (role, phase) => {
+      const h = fixture();
+      const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const original = Object.assign(new Error(uri("auth", role)), { code: "28P01" });
+      h.io.readIdentity.mockImplementation(async (value) => {
+        const url = new URL(value);
+        if (url.username === role) {
+          throw original;
+        }
+        return { database: url.pathname.slice(1), role: url.username };
+      });
+      await expect(h.read()).rejects.toThrow(/^repository_production_provider_unavailable$/u);
+      const output = log.mock.calls.flat().join("");
+      expect(output).toContain(`"phase":"${phase}"`);
+      expect(output).toContain('"sqlState":"28P01"');
+      expect(output).not.toContain("postgresql:");
+      expect(output).not.toContain("private-fixture-password");
+      expect(h.io.getToken).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps authorization failure authoritative even when failure logging throws", async () => {
+    const h = fixture();
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("logger unavailable");
+    });
+    const original = new Error("authorization revoked");
+    h.assertCurrent.mockRejectedValue(original);
+    await expect(h.read()).rejects.toBe(original);
+    expect(h.io.getOidc).not.toHaveBeenCalled();
+    expect(h.io.readIdentity).not.toHaveBeenCalled();
+  });
   it("reads exact deployment-managed credentials under current Production OIDC and verifies SQL identities", async () => {
     const h = fixture();
     const result = await h.read();

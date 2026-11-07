@@ -1,7 +1,7 @@
 /* oxlint-disable eslint/require-await, unicorn/no-await-expression-member -- Async fixture ports retain rejection semantics; assertions inspect their awaited outcomes directly. */
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRepositoryProductionWorkers } from "./repository-production-workers";
 import type { RepositoryProductionWorkerDependencies } from "./repository-production-workers";
 import {
@@ -210,6 +210,34 @@ const fixture = async (staticApp = false) => {
   };
 };
 describe("concrete protected Production worker composition", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("identifies unavailable encrypted credentials without exposing or replacing private state", async () => {
+    const f = await fixture();
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const privateState = { encryptedToken: "private-sealed-credential-fixture" };
+    f.context.row.record.privateState = privateState;
+    f.context.effect = "allocate-storage";
+    await expect(f.workers.apply(f.context)).rejects.toThrow(
+      /^repository_production_credentials_unavailable$/u,
+    );
+    expect(f.calls).toEqual([]);
+    expect(f.context.row.record.privateState).toBe(privateState);
+    const output = log.mock.calls.flat().join("");
+    expect(output).toContain('"phase":"credential_decode"');
+    expect(output).not.toContain("private-sealed-credential-fixture");
+    expect(output).not.toContain("encryptedToken");
+  });
+
+  it("retains a revoked worker authority without dispatch when diagnostics fail", async () => {
+    const f = await fixture();
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("logger unavailable");
+    });
+    f.revoke();
+    await expect(f.workers.apply(f.context)).rejects.toThrow("revoked");
+    expect(f.calls).toEqual([]);
+  });
   it("binds the restricted Auth role into approval without changing resource identity or passing the owner credential", async () => {
     const f = await fixture();
     await f.workers.apply(f.context);
