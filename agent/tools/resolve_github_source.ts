@@ -336,7 +336,7 @@ export default defineTool({
       // server-owned context while `getSandbox()` creates the provider
       // session, so Vercel performs the Git clone itself.
       repository: input.repository,
-      sandbox: async () => ctx.getSandbox(),
+      sandbox: async () => await ctx.getSandbox(),
       selectedInstallationId: input.selectedInstallationId,
       sessionId: ctx.session.id,
     };
