@@ -12,6 +12,9 @@ import type {
 import { suffixedProviderName } from "./names";
 import { runSequentiallyUntilAsync } from "../async-sequential.ts";
 
+const PROTECTED_DEPLOYMENT_TYPE = "prod_deployment_urls_and_all_previews";
+const PUBLIC_APP = "public-app";
+
 const projectSchema = z
   .object({
     framework: z.literal("services"),
@@ -253,9 +256,9 @@ export async function provisionVercelProject(input: {
               framework: "services",
               name: candidate,
               rootDirectory: ".",
-              ...(input.deploymentAccess === "public-app"
+              ...(input.deploymentAccess === PUBLIC_APP
                 ? {
-                    ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
+                    ssoProtection: { deploymentType: PROTECTED_DEPLOYMENT_TYPE },
                     oidcTokenConfig: { enabled: true, issuerMode: "team" },
                   }
                 : {}),
@@ -319,12 +322,12 @@ export async function provisionVercelProject(input: {
         if (
           project.name !== candidate ||
           project.rootDirectory !== "." ||
-          (input.deploymentAccess === "public-app" &&
-            (project.ssoProtection?.deploymentType !== "prod_deployment_urls_and_all_previews" ||
+          (input.deploymentAccess === PUBLIC_APP &&
+            (project.ssoProtection?.deploymentType !== PROTECTED_DEPLOYMENT_TYPE ||
               project.oidcTokenConfig?.enabled !== true ||
               project.oidcTokenConfig?.issuerMode !== "team")) ||
-          (input.deploymentAccess === "public-app" &&
-            (project.ssoProtection?.deploymentType !== "prod_deployment_urls_and_all_previews" ||
+          (input.deploymentAccess === PUBLIC_APP &&
+            (project.ssoProtection?.deploymentType !== PROTECTED_DEPLOYMENT_TYPE ||
               project.oidcTokenConfig?.enabled !== true ||
               project.oidcTokenConfig?.issuerMode !== "team")) ||
           (linkedRepository !== undefined &&

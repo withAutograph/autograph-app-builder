@@ -17,6 +17,9 @@ import type {
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
+const SCOPE_SELECTION_REQUIRED = "scope-selection-required";
+const AUTHORIZATION_REQUIRED = "authorization-required";
+const PROVIDER_UNAVAILABLE = "provider-unavailable";
 const repositoryPart = z
   .string()
   .min(1)
@@ -124,7 +127,7 @@ export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
     .object({
       repository: repositoryReferenceResultSchema,
       scopes: z.array(scopeSchema).min(2),
-      status: z.literal("scope-selection-required"),
+      status: z.literal(SCOPE_SELECTION_REQUIRED),
     })
     .strict(),
   z
@@ -132,13 +135,13 @@ export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
       action: z.enum(["connect", "update"]),
       repository: repositoryReferenceResultSchema,
       scopes: z.array(scopeSchema),
-      status: z.literal("authorization-required"),
+      status: z.literal(AUTHORIZATION_REQUIRED),
     })
     .strict(),
   z
     .object({
       repository: repositoryReferenceResultSchema,
-      status: z.literal("provider-unavailable"),
+      status: z.literal(PROVIDER_UNAVAILABLE),
     })
     .strict(),
 ]);
@@ -237,7 +240,7 @@ export async function classifyGitHubRepositoryAccess(input: {
       action: anyActive ? "update" : "connect",
       repository,
       scopes: publicScopes,
-      status: "authorization-required",
+      status: AUTHORIZATION_REQUIRED,
     });
   }
 
@@ -290,7 +293,7 @@ export async function classifyGitHubRepositoryAccess(input: {
     return repositoryAccessResultSchema.parse({
       repository,
       scopes: matches.map(({ binding }) => scope(binding)),
-      status: "scope-selection-required",
+      status: SCOPE_SELECTION_REQUIRED,
     });
   }
   const [match] = matches;
@@ -313,14 +316,14 @@ export async function classifyGitHubRepositoryAccess(input: {
   if (providerFailures === active.length) {
     return repositoryAccessResultSchema.parse({
       repository,
-      status: "provider-unavailable",
+      status: PROVIDER_UNAVAILABLE,
     });
   }
   return repositoryAccessResultSchema.parse({
     action: "update",
     repository,
     scopes: publicScopes,
-    status: "authorization-required",
+    status: AUTHORIZATION_REQUIRED,
   });
 }
 
@@ -352,7 +355,7 @@ export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
       action: allActive.length > 0 ? "update" : "connect",
       repository,
       scopes: [],
-      status: "authorization-required",
+      status: AUTHORIZATION_REQUIRED,
     });
   }
   const matches: ReadyRepositoryAccess[] = [];
@@ -409,19 +412,19 @@ export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
     return repositoryAccessResultSchema.parse({
       repository,
       scopes: matches.map((match) => match.scope),
-      status: "scope-selection-required",
+      status: SCOPE_SELECTION_REQUIRED,
     });
   }
   if (matches[0]) {
     return matches[0];
   }
   if (providerFailures === active.length) {
-    return repositoryAccessResultSchema.parse({ repository, status: "provider-unavailable" });
+    return repositoryAccessResultSchema.parse({ repository, status: PROVIDER_UNAVAILABLE });
   }
   return repositoryAccessResultSchema.parse({
     action: "update",
     repository,
     scopes: active.map(scope),
-    status: "authorization-required",
+    status: AUTHORIZATION_REQUIRED,
   });
 }
