@@ -111,8 +111,10 @@ unchanged and discovery still returns five tools. Admission requires the complet
 retained checkpoint and independently closed native effect steps across the entire
 verified handoff lineage. A source with pending approvals retains those exact
 requests. A separately proven idle source resumes into its inbox wait without
-starting a model turn or replaying an earlier response. The server derives this
-resume phase from native state and verifies it again after stopping the source;
+starting a model turn or replaying an earlier response. After activation, its new
+native stream publishes `session.waiting` so clients can observe that inbox wait;
+an unactivated candidate publishes nothing. The server derives this resume phase
+from native state and verifies it again after stopping the source;
 a public status or stale approval control cannot select it.
 Builder fences source mutations. A separate opaque read-only preflight may inspect
 running handoff ancestors using the retained activation, checkpoint and inbox
