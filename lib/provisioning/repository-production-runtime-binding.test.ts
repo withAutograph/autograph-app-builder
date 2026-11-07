@@ -10,41 +10,41 @@ import type { RepositoryProductionScope } from "./repository-production-contract
 import type { RepositoryProductionEffectContext } from "./repository-production-setup";
 
 const scope: RepositoryProductionScope = {
+  appId: "requests",
   authority: {
-    issuer: "https://builder.test/api/auth",
     audience: "https://builder.test/mcp",
+    issuer: "https://builder.test/api/auth",
     ownerUserId: "owner",
     workspaceId: "workspace",
   },
-  appId: "requests",
-  repositoryId: "repo",
-  repositoryFullName: "example/repo",
-  projectId: "app-project",
-  organizationId: "org",
-  publicOrigin: "https://apps.test",
   environment: "production",
+  organizationId: "org",
+  projectId: "app-project",
+  publicOrigin: "https://apps.test",
+  repositoryFullName: "example/repo",
+  repositoryId: "repo",
 };
 const runtimeUrl = "postgresql://app_role:private@ep-test.neon.tech/app_db?sslmode=verify-full";
 const fixture = () => {
   const record = initialRepositoryProductionRecord(scope, {
+    creatorRoles: ["user"],
     sessionId: "session",
     sourceSha: "a".repeat(40),
-    creatorRoles: ["user"],
     storage: {
-      kind: "postgres",
       artifactRef: "artifact",
-      releaseId: "release",
-      manifestSha256: "b".repeat(64),
       databaseEnvironment: "REQUESTS_DATABASE_URL",
+      kind: "postgres",
+      manifestSha256: "b".repeat(64),
+      releaseId: "release",
     },
   });
   const context: RepositoryProductionEffectContext = {
-    row: { operationRef: repositoryProductionOperationRef(scope), revision: 1, record },
-    effect: "bind-runtime",
     assertCurrent: async () => {},
     checkpoint: async (value) => {
       record.workerCheckpoints.push(value);
     },
+    effect: "bind-runtime",
+    row: { operationRef: repositoryProductionOperationRef(scope), record, revision: 1 },
   };
   let row: Record<string, string | string[]> | undefined;
   let loseResponse = false;
@@ -69,20 +69,20 @@ const fixture = () => {
   };
   return {
     context,
-    writes: () => writes,
-    row: () => row,
     loseResponse: () => {
       loseResponse = true;
     },
     replaceRow: (value?: Record<string, string | string[]>) => {
       row = value;
     },
+    row: () => row,
     service: createRepositoryProductionRuntimeBinding({
-      teamId: "team",
-      signal: new AbortController().signal,
-      readCredential: async () => "provider-token",
       fetch: fetcher,
+      readCredential: async () => "provider-token",
+      signal: new AbortController().signal,
+      teamId: "team",
     }),
+    writes: () => writes,
   };
 };
 describe("Production runtime credential binding", () => {
@@ -93,9 +93,9 @@ describe("Production runtime credential binding", () => {
     await f.service.apply(f.context, runtimeUrl);
     expect(f.writes()).toBe(1);
     expect(f.row()).toMatchObject({
+      key: "REQUESTS_DATABASE_URL",
       target: ["production"],
       type: "encrypted",
-      key: "REQUESTS_DATABASE_URL",
     });
   });
   it("reconciles a lost creation response from owned provider readback without duplicate writes", async () => {
@@ -111,8 +111,8 @@ describe("Production runtime credential binding", () => {
     f.replaceRow({
       id: "foreign",
       key: "REQUESTS_DATABASE_URL",
-      type: "encrypted",
       target: ["production"],
+      type: "encrypted",
       value: "foreign",
     });
     await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow("binding_conflict");
