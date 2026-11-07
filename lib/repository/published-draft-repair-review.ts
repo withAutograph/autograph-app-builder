@@ -15,30 +15,30 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const file = z.strictObject({ digest, mode: z.enum(["644", "755"]) });
 const change = z.strictObject({
-  after: file.optional(),
-  before: file.optional(),
   kind: z.enum(["added", "modified", "deleted"]),
   path: z.string().refine(safeSourcePath),
+  before: file.optional(),
+  after: file.optional(),
 });
 const schema = z.strictObject({
+  kind: z.literal("published-draft-repair"),
+  version: z.literal(1),
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
   appSpecDigest: digest,
-  approvedPaths: z.array(z.string()),
-  changeSetDigest: digest,
-  changedContentDigest: digest,
-  changes: z.array(change),
-  digest,
-  headSha: objectId,
-  headTree: objectId,
-  kind: z.literal("published-draft-repair"),
-  originReviewDigest: digest,
   originSourceReceiptDigest: digest,
+  originReviewDigest: digest,
   publicationDigest: digest,
   repairSourceDigest: digest,
+  headSha: objectId,
+  headTree: objectId,
   resolvedTree: objectId,
-  reviewedByCallId: z.string().min(1),
   validationDigest: digest,
-  version: z.literal(1),
+  changes: z.array(change),
+  approvedPaths: z.array(z.string()),
+  changedContentDigest: digest,
+  changeSetDigest: digest,
+  reviewedByCallId: z.string().min(1),
+  digest,
 });
 
 /** Actual validated app-only Git delta against the owned draft head, not a fresh-source apply receipt. */
@@ -63,12 +63,12 @@ type Input = Omit<
 };
 
 const inputSchema = schema.omit({
+  kind: true,
+  version: true,
+  digest: true,
   approvedPaths: true,
   changeSetDigest: true,
   changedContentDigest: true,
-  digest: true,
-  kind: true,
-  version: true,
 });
 
 const canonicalChanges = (changes: readonly OverlayChange[]) =>
