@@ -2,7 +2,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function abortReason(signal: AbortSignal | undefined) {
-  return signal?.reason ?? new Error("Development MCP readiness was aborted.");
+  const reason: unknown = signal?.reason;
+  return reason ?? new Error("Development MCP readiness was aborted.");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -21,7 +22,16 @@ function jsonRpcBody(text: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function mcpRequest(input: {
   endpoint: string;
-  body: Record<string, unknown>;
+  body: {
+    id?: number;
+    jsonrpc: "2.0";
+    method: string;
+    params?: {
+      capabilities?: Record<string, never>;
+      clientInfo?: { name: string; version: string };
+      protocolVersion?: string;
+    };
+  };
   sessionId?: string;
   fetcher: typeof fetch;
   signal?: AbortSignal;
@@ -109,7 +119,7 @@ export async function waitForDevelopmentMcp(input: {
   const started = Date.now();
   let lastError: unknown;
   while (Date.now() - started < timeoutMs) {
-    if (input.signal?.aborted) {
+    if (input.signal?.aborted === true) {
       throw abortReason(input.signal);
     }
     try {
