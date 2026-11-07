@@ -365,7 +365,7 @@ describe("retained membership inspection provenance", () => {
     };
     operator.plan = plan;
     operator.planDigest = operatorPlanDigest(plan);
-    const candidate = retainedMembershipInspectionProvenance(record, plan, "org_second")[0];
+    const [candidate] = retainedMembershipInspectionProvenance(record, plan, "org_second");
     expect(candidate?.effect.id).toBe("auth-membership:org_second");
     expect(candidate?.operator.plan).toBe(prior);
   });
@@ -376,7 +376,7 @@ describe("retained membership inspection provenance", () => {
     if (plan.authMembership?.kind !== "create-owned-organizations") {
       throw new Error("Expected participant organizations");
     }
-    const current = plan.authMembership.organizations[0];
+    const [current] = plan.authMembership.organizations;
     if (current === undefined) {
       throw new Error("Expected owner organization");
     }
@@ -388,11 +388,8 @@ describe("retained membership inspection provenance", () => {
     operator.plan = hostedOperatorPlanSchema.parse(plan);
     operator.planDigest = operatorPlanDigest(operator.plan);
     original.operator.receipts = [];
-    const candidate = retainedMembershipInspectionProvenance(
-      record,
-      operator.plan,
-      "org_fixture",
-    )[0];
+    const candidates = retainedMembershipInspectionProvenance(record, operator.plan, "org_fixture");
+    const [candidate] = candidates;
     expect(candidate?.operator.plan.authMembership).toEqual(originalPlan.authMembership);
   });
 
@@ -711,7 +708,7 @@ describe("retained membership inspection provenance", () => {
     [
       "actual ownership readback",
       ({ original }) => {
-        const receipt = original.operator.receipts[0];
+        const [receipt] = original.operator.receipts;
         if (receipt === undefined) {
           throw new Error("Expected the original ownership receipt");
         }
