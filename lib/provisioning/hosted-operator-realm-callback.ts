@@ -313,11 +313,10 @@ const reportPrivateStageFailure = (
   error: unknown,
   jwks?: JwksResponseObservation,
 ) => {
-  const failure: PrivateStageFailure = {
-    errorClass: "unknown",
-    stage,
-    ...(stage === "proof_verification" && jwks !== undefined ? { jwks } : {}),
-  };
+  const failure: PrivateStageFailure = { errorClass: "unknown", stage };
+  if (stage === "proof_verification" && jwks !== undefined) {
+    failure.jwks = jwks;
+  }
   try {
     // Read only an own data descriptor; a hostile code getter is never invoked.
     const code: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
@@ -737,8 +736,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
                 resources: privateResources,
               });
               resources = await openHostedOperatorConfigurationResources(canonical, environment);
-              configuration = resources.configuration;
-              controlPlane = resources.controlPlane;
+              ({ configuration, controlPlane } = resources);
             } finally {
               await privateResources.close();
             }
@@ -746,8 +744,9 @@ export const createRealmIdentityCallbackDeploymentHandler =
         }
         const pending = await controlPlane.readPendingRealmIdentityLinkForStaging(selector);
         selectedNonceSha256 = selector.nonceSha256;
-        selectedEndpointOrigin = pending.link.endpointOrigin;
-        selectedPublicRealm = pending.publicRealm;
+        const { link, publicRealm } = pending;
+        selectedEndpointOrigin = link.endpointOrigin;
+        selectedPublicRealm = publicRealm;
         return pending;
       };
       const assertCurrent = async (context: HostedOperatorContext) => {
@@ -762,13 +761,14 @@ export const createRealmIdentityCallbackDeploymentHandler =
 
       const stageArtifacts = createPostgresOperatorArtifactStore({
         assertCurrentOwner: async (artifactContext) => {
-          const context = await controlPlane.resolveRealmIdentityCallbackContext({
-            authority: hostedTenantAuthoritySchema.parse(artifactContext.authority),
-            ownerSessionId: artifactContext.target.sessionId,
-            // The exact pending nonce is selected by the verified routing ticket or private POST below.
+          const { authority, target } = artifactContext;
+          const selector = {
+            authority: hostedTenantAuthoritySchema.parse(authority),
             nonceSha256: selectedNonceSha256 ?? "",
-          });
-          if (context.target.appId !== artifactContext.target.appId) {
+            ownerSessionId: target.sessionId,
+          };
+          const context = await controlPlane.resolveRealmIdentityCallbackContext(selector);
+          if (context.target.appId !== target.appId) {
             throw new Error("realm_callback_scope");
           }
           await controlPlane.assertPlanningAuthorized(context);
@@ -825,7 +825,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
           const payload = z
             .object({ keys: z.array(z.record(z.string(), z.unknown())) })
             .parse(await response.json());
-          const pinned = selectedPublicRealm.publicJwk;
+          const { publicJwk: pinned } = selectedPublicRealm;
           if (
             !payload.keys.some((key) =>
               [
