@@ -181,7 +181,7 @@ describe("framework upgrade planning and apply", () => {
     ).rejects.toThrow();
   });
   it("auto-plans concrete versions for new apps and supports version-only existing app plans", async () => {
-    const resolver = vi.fn(async () => versions);
+    const resolver = vi.fn().mockResolvedValue(versions);
     let existing = false;
     const sandbox = sandboxFixture({
       readBinaryFile: async () => null,
