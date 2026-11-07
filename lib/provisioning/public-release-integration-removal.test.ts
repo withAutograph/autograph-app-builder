@@ -11,7 +11,7 @@ const fixture = () => {
   const ports: PublicReleaseIntegrationRemovalPorts = {
     readPreflight: vi.fn(async () => structuredClone(removal)),
     reconcile: vi.fn<PublicReleaseIntegrationRemovalPorts["reconcile"]>(async () => "unknown"),
-    apply: vi.fn(async () => {}),
+    apply: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
   return {
     ports,
@@ -22,7 +22,7 @@ const fixture = () => {
       signal: new AbortController().signal,
     },
     sourceCapability,
-    assertCurrent: vi.fn(async () => {}),
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
 };
 test("explicit removal plan preserves two rows without adding integration writes or readiness", () => {

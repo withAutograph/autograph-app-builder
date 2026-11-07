@@ -444,7 +444,7 @@ describe("dedicated-session protected resource lease", () => {
       waiting.resolve(null);
       await release.promise;
     });
-    const callback = vi.fn(async () => "must not run");
+    const callback = vi.fn<() => Promise<string>>().mockResolvedValue("must not run");
     const pending = test.lease(test.input, callback);
     await waiting.promise;
     const row = test.rows.get(keyFor(context));

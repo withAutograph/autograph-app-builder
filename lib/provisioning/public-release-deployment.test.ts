@@ -33,8 +33,8 @@ const fixture = () => {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The deliberately partial read-only database fixture exercises the real HTTP prerequisite path.
   const database = { select } as unknown as ReturnType<typeof openHostedPostgresDatabase>;
   const owner = {
-    verifyWorkload: vi.fn(() => Promise.resolve()),
-    assertCanonicalAppOwner: vi.fn(() => Promise.resolve()),
+    verifyWorkload: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    assertCanonicalAppOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
     readStandardDestination: vi.fn<
       Parameters<typeof createPublicReleaseDeployment>[0]["owner"]["readStandardDestination"]
     >(() => Promise.resolve({ ...plan.project })),
