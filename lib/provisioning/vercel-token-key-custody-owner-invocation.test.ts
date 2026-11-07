@@ -435,20 +435,20 @@ describe("closed owner key custody invocation", () => {
     const productionPlan = custodyPlanSchema.parse({
       ...plan,
       action: "transfer-active-vercel-token-key-to-operator-production",
-      operationRef: productionRef,
       destination: { ...plan.destination, environment: "production" },
+      operationRef: productionRef,
     });
     const productionGrant = {
       ...setupGrant,
-      operationRef: productionRef,
       approvedPlanDigest: custodyPlanDigest(productionPlan),
+      operationRef: productionRef,
     };
     const productionRecord = custodyRecordSchema.parse({
       ...record,
+      grantDigest: custodyGrantDigest(productionGrant),
       plan: productionPlan,
       planDigest: custodyPlanDigest(productionPlan),
       setupGrant: productionGrant,
-      grantDigest: custodyGrantDigest(productionGrant),
     });
     const profiles = {
       PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION: JSON.stringify(setup),

@@ -85,9 +85,9 @@ require("node:fs").appendFileSync(process.env.FIXTURE_ROOT+"/waits.jsonl",proces
       env: {
         EXPECTED_ENVIRONMENT: "Production",
         EXPECTED_SHA: sha,
+        EXPECTED_VERCEL_PROJECT: "autograph-app-builder",
         FIXTURE_ROOT: directory,
         GITHUB_REPOSITORY: "example/builder",
-        EXPECTED_VERCEL_PROJECT: "autograph-app-builder",
         PATH: `${directory}:${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
       },
     });
