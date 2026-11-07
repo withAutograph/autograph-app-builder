@@ -45,7 +45,6 @@ import {
   validationOutputExcerpt,
 } from "@/lib/repository/target-validation";
 import { ValidationLogWriter } from "@/lib/repository/validation-log";
-import type { ValidationLogStore } from "@/lib/repository/validation-log";
 import { validationLogStoreForSession } from "@/lib/agent/validation-log-store-for-session";
 
 const publishCandidateArtifacts = async (
@@ -227,7 +226,6 @@ const runCandidateCommandWithLogs = async <
     unique: randomUUID(),
   };
   let attemptDigest: string | undefined;
-  let store: ValidationLogStore | undefined;
   let writers:
     | {
         stderr: ValidationLogWriter;
@@ -242,7 +240,7 @@ const runCandidateCommandWithLogs = async <
   }
   try {
     if (attemptDigest !== undefined) {
-      store = await validationLogStoreForSession({
+      const store = await validationLogStoreForSession({
         sessionAuth: input.sessionAuth,
         sessionId: input.sessionId,
       });
@@ -272,8 +270,7 @@ const runCandidateCommandWithLogs = async <
       }
     }
   } catch {
-    store = undefined;
-    writers = undefined;
+    // Capture setup is best effort and cannot prevent the command from running.
   }
   const logs: CandidateValidationAttempt["logs"] = {};
   const finish = async (completion: "complete" | "interrupted", exitCode: number | null) => {
@@ -704,8 +701,12 @@ const runIncrementalValidation = async (
       };
     } else if (step.kind === "capture") {
       try {
-        const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
-        compilation = captured.compilation;
+        const { compilation: capturedCompilation } = await publishCandidateArtifacts(
+          ctx,
+          candidate,
+          sandbox,
+        );
+        compilation = capturedCompilation;
       } catch {
         ctx.abortSignal?.throwIfAborted();
         return {
