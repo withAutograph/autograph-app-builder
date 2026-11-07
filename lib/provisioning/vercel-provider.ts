@@ -25,7 +25,7 @@ const projectSchema = z
         repo: z.string().min(1),
         type: z.literal("github"),
       })
-      .passthrough()
+      .loose()
       .optional(),
     name: z.string().min(1),
     rootDirectory: z.string().min(1),
@@ -35,7 +35,7 @@ const projectSchema = z
       .nullable()
       .optional(),
   })
-  .passthrough();
+  .loose();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function suffix() {

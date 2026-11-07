@@ -26,12 +26,10 @@ const repositoryPart = z
   .max(100)
   .regex(/^[A-Za-z0-9_.-]+$/u);
 
-const repositoryReferenceInputSchema = z
-  .object({
-    name: repositoryPart,
-    owner: repositoryPart,
-  })
-  .strict();
+const repositoryReferenceInputSchema = z.strictObject({
+  name: repositoryPart,
+  owner: repositoryPart,
+});
 
 export const repositoryReferenceSchema = repositoryReferenceInputSchema.transform((value) => ({
   ...value,
@@ -39,12 +37,11 @@ export const repositoryReferenceSchema = repositoryReferenceInputSchema.transfor
 }));
 
 const repositoryReferenceResultSchema = z
-  .object({
+  .strictObject({
     fullName: z.string().min(3).max(201),
     name: repositoryPart,
     owner: repositoryPart,
   })
-  .strict()
   .refine((value) => value.fullName === `${value.owner}/${value.name}`, {
     message: "repository-full-name-mismatch",
   });
@@ -66,84 +63,68 @@ export function parseRepositoryReference(value: string): RepositoryReference {
   });
 }
 
-const readPermissionsSchema = z
-  .object({
-    administration: z.literal("none"),
-    contents: z.literal("read"),
-    metadata: z.literal("read"),
-    pullRequests: z.literal("none"),
-    variables: z.literal("read"),
-    workflows: z.literal("none"),
-  })
-  .strict();
+const readPermissionsSchema = z.strictObject({
+  administration: z.literal("none"),
+  contents: z.literal("read"),
+  metadata: z.literal("read"),
+  pullRequests: z.literal("none"),
+  variables: z.literal("read"),
+  workflows: z.literal("none"),
+});
 
-const installationReadBackSchema = z
-  .object({
-    accountId: decimal,
-    accountLogin: z.string().min(1).max(100),
-    accountType: z.enum(["Organization", "User"]),
-    grantedPermissions: readPermissionsSchema,
-    installationId: decimal,
-    repositorySelection: z.enum(["all", "selected"]),
-    selectedRepositoryIds: z.array(decimal),
-  })
-  .strict();
+const installationReadBackSchema = z.strictObject({
+  accountId: decimal,
+  accountLogin: z.string().min(1).max(100),
+  accountType: z.enum(["Organization", "User"]),
+  grantedPermissions: readPermissionsSchema,
+  installationId: decimal,
+  repositorySelection: z.enum(["all", "selected"]),
+  selectedRepositoryIds: z.array(decimal),
+});
 
-export const repositoryAccessSnapshotSchema = z
-  .object({
-    archived: z.literal(false),
-    defaultBranch: z.string().min(1).max(255),
-    headSha: objectId,
-    headTree: objectId,
-    name: repositoryPart,
-    owner: repositoryPart,
-    repositoryId: decimal,
-    repositoryVariableNames: z.array(z.string().min(1).max(255)),
-    visibility: z.literal("private"),
-  })
-  .strict();
+export const repositoryAccessSnapshotSchema = z.strictObject({
+  archived: z.literal(false),
+  defaultBranch: z.string().min(1).max(255),
+  headSha: objectId,
+  headTree: objectId,
+  name: repositoryPart,
+  owner: repositoryPart,
+  repositoryId: decimal,
+  repositoryVariableNames: z.array(z.string().min(1).max(255)),
+  visibility: z.literal("private"),
+});
 
 export type RepositoryAccessSnapshot = z.infer<typeof repositoryAccessSnapshotSchema>;
 
-const scopeSchema = z
-  .object({
-    accountLogin: z.string().min(1).max(100),
-    accountType: z.enum(["Organization", "User"]),
-    installationId: decimal,
-  })
-  .strict();
+const scopeSchema = z.strictObject({
+  accountLogin: z.string().min(1).max(100),
+  accountType: z.enum(["Organization", "User"]),
+  installationId: decimal,
+});
 
 export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
-  z
-    .object({
-      accessDigest: digest,
-      repository: repositoryAccessSnapshotSchema,
-      scope: scopeSchema,
-      status: z.literal("ready"),
-      targetProof: githubTargetAccessProofSchema.optional(),
-    })
-    .strict(),
-  z
-    .object({
-      repository: repositoryReferenceResultSchema,
-      scopes: z.array(scopeSchema).min(2),
-      status: z.literal(SCOPE_SELECTION_REQUIRED),
-    })
-    .strict(),
-  z
-    .object({
-      action: z.enum(["connect", "update"]),
-      repository: repositoryReferenceResultSchema,
-      scopes: z.array(scopeSchema),
-      status: z.literal(AUTHORIZATION_REQUIRED),
-    })
-    .strict(),
-  z
-    .object({
-      repository: repositoryReferenceResultSchema,
-      status: z.literal(PROVIDER_UNAVAILABLE),
-    })
-    .strict(),
+  z.strictObject({
+    accessDigest: digest,
+    repository: repositoryAccessSnapshotSchema,
+    scope: scopeSchema,
+    status: z.literal("ready"),
+    targetProof: githubTargetAccessProofSchema.optional(),
+  }),
+  z.strictObject({
+    repository: repositoryReferenceResultSchema,
+    scopes: z.array(scopeSchema).min(2),
+    status: z.literal(SCOPE_SELECTION_REQUIRED),
+  }),
+  z.strictObject({
+    action: z.enum(["connect", "update"]),
+    repository: repositoryReferenceResultSchema,
+    scopes: z.array(scopeSchema),
+    status: z.literal(AUTHORIZATION_REQUIRED),
+  }),
+  z.strictObject({
+    repository: repositoryReferenceResultSchema,
+    status: z.literal(PROVIDER_UNAVAILABLE),
+  }),
 ]);
 
 export type RepositoryAccessResult = z.infer<typeof repositoryAccessResultSchema>;

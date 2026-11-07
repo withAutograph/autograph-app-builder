@@ -86,11 +86,10 @@ const SESSION_COMPLETED = "session.completed";
 const SESSION_FAILED = "session.failed";
 
 const sameOriginConfigSchema = z
-  .object({
-    baseUrl: z.string().url().startsWith("https://"),
+  .strictObject({
+    baseUrl: z.url().startsWith("https://"),
     timeoutMs: z.number().int().min(1).max(30_000).default(DEFAULT_TIMEOUT_MS),
   })
-  .strict()
   .transform((config, context) => {
     const baseUrl = new URL(config.baseUrl);
     if (
@@ -110,36 +109,33 @@ const sameOriginConfigSchema = z
     return { ...config, baseUrl: baseUrl.origin };
   });
 
-const acceptedTurnSchema = z
-  .object({
-    deliveryId: z.string().min(1).max(500).optional(),
+const acceptedTurnSchema = z.strictObject({
+  deliveryId: z.string().min(1).max(500).optional(),
+  ok: z.literal(true),
+  sessionId: z.string().min(1).max(500),
+  status: z.literal("accepted"),
+  recoveryBinding: nativeRecoveryBindingSchema.optional(),
+});
+
+const sourceInspectionAcceptedSchema = acceptedTurnSchema.extend({
+  sourceDiagnostic: z.unknown().optional(),
+});
+
+const cancelResponseSchema = z.discriminatedUnion("status", [
+  z.strictObject({
     ok: z.literal(true),
     sessionId: z.string().min(1).max(500),
     status: z.literal("accepted"),
-    recoveryBinding: nativeRecoveryBindingSchema.optional(),
-  })
-  .strict();
-
-const sourceInspectionAcceptedSchema = acceptedTurnSchema
-  .extend({ sourceDiagnostic: z.unknown().optional() })
-  .strict();
-
-const cancelResponseSchema = z.discriminatedUnion("status", [
-  z
-    .object({
-      ok: z.literal(true),
-      sessionId: z.string().min(1).max(500),
-      status: z.literal("accepted"),
-    })
-    .strict(),
-  z.object({ ok: z.literal(true), status: z.literal("no_active_turn") }).strict(),
+  }),
+  z.strictObject({ ok: z.literal(true), status: z.literal("no_active_turn") }),
 ]);
 
-const errorResponseSchema = z.object({ code: z.string().min(1).max(100) }).passthrough();
+const errorResponseSchema = z.looseObject({ code: z.string().min(1).max(100) });
 
-const streamEnvelopeSchema = z
-  .object({ data: z.record(z.string(), z.unknown()), type: z.string().min(1) })
-  .passthrough();
+const streamEnvelopeSchema = z.looseObject({
+  data: z.record(z.string(), z.unknown()),
+  type: z.string().min(1),
+});
 
 export interface HostedWorkloadIdentity {
   token: () => Promise<string>;
@@ -175,7 +171,7 @@ function forwardedPrincipal(principalInput: HostedPrincipal, sourceHandoffId?: s
         ...(sourceHandoffId === undefined
           ? {}
           : {
-              "autograph:source-handoff-id": z.string().uuid().parse(sourceHandoffId),
+              "autograph:source-handoff-id": z.uuid().parse(sourceHandoffId),
             }),
       },
       authenticator: "mcp-oauth-jwks",
@@ -542,12 +538,10 @@ const artifactTools = new Set([
 ]);
 const markdownPrototypePath =
   /^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/(?:app-spec|decisions)\.md$/u;
-const markdownPrototypeInputSchema = z
-  .object({
-    mediaType: z.string().optional(),
-    path: z.string().regex(markdownPrototypePath),
-  })
-  .passthrough();
+const markdownPrototypeInputSchema = z.looseObject({
+  mediaType: z.string().optional(),
+  path: z.string().regex(markdownPrototypePath),
+});
 
 const v2ReadRequestSchema = z.object({
   digest: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -665,16 +659,14 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
       }
       if (result.toolName === "record_prototype_artifact") {
         const chunk = z
-          .object({
+          .looseObject({
             expectedDigest: z.string().regex(/^[a-f0-9]{64}$/u),
             finalChunk: z.literal(false),
             path: z.string(),
           })
-          .passthrough()
           .safeParse(request.input);
         const incomplete = z
-          .object({ complete: z.literal(false), path: z.string(), version: z.literal(2) })
-          .passthrough()
+          .looseObject({ complete: z.literal(false), path: z.string(), version: z.literal(2) })
           .safeParse(result.output);
         if (chunk.success && incomplete.success && chunk.data.path === incomplete.data.path) {
           incompleteArtifacts.add(chunk.data.path);
@@ -682,10 +674,9 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
         }
       }
       if (result.toolName === "record_ui_preview") {
-        const preview = z.object({ appId: z.string() }).passthrough().safeParse(request.input);
+        const preview = z.looseObject({ appId: z.string() }).safeParse(request.input);
         const incomplete = z
-          .object({ complete: z.literal(false), transferId: z.string() })
-          .passthrough()
+          .looseObject({ complete: z.literal(false), transferId: z.string() })
           .safeParse(result.output);
         if (preview.success && incomplete.success) {
           incompleteUiPreviews.add(preview.data.appId);
@@ -693,8 +684,7 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
         }
       }
       const output = z
-        .object({ complete: z.literal(true), version: z.literal(2) })
-        .passthrough()
+        .looseObject({ complete: z.literal(true), version: z.literal(2) })
         .safeParse(result.output);
       if (
         !output.success ||
@@ -1244,9 +1234,7 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
 }
 
 const endsTurn = (event: MessageStreamEvent, turnId: string): boolean =>
-  (event.type === TURN_COMPLETED ||
-    event.type === TURN_FAILED ||
-    event.type === TURN_CANCELLED) &&
+  (event.type === TURN_COMPLETED || event.type === TURN_FAILED || event.type === TURN_CANCELLED) &&
   event.data.turnId === turnId;
 
 const isSessionBoundary = (event: MessageStreamEvent): boolean =>
