@@ -14,44 +14,44 @@ import type { AppAccessOwner } from "./operator-client";
 import type { AppAccessCommand } from "./contracts";
 
 const scope: RepositoryProductionScope = {
+  appId: "test-app",
   authority: {
-    issuer: "https://builder.test/api/auth",
     audience: "https://builder.test/mcp",
+    issuer: "https://builder.test/api/auth",
     ownerUserId: "owner",
     workspaceId: "workspace",
   },
-  appId: "test-app",
-  repositoryId: "repo",
-  repositoryFullName: "team/apps",
-  projectId: "project",
-  organizationId: "org",
-  publicOrigin: "https://apps.test",
   environment: "production",
+  organizationId: "org",
+  projectId: "project",
+  publicOrigin: "https://apps.test",
+  repositoryFullName: "team/apps",
+  repositoryId: "repo",
 };
 const owner: AppAccessOwner = {
   appId: scope.appId,
-  sessionId: "session",
   ownerContext: {
-    kind: "direct",
+    adapterGeneration: 1,
+    adapterSessionId: "adapter",
     authority: scope.authority,
+    kind: "direct",
     principal: { ...scope.authority, scopes: ["autograph:session"] },
     sessionId: "session",
-    adapterSessionId: "adapter",
-    adapterGeneration: 1,
   },
+  sessionId: "session",
 };
 const invitationSchema = z.object({
-  id: z.uuid(),
   appId: z.string(),
-  organizationId: z.string(),
+  deliveryAttemptId: z.string().nullable(),
+  deliveryStatus: z.enum(["ready", "sending", "sent", "unknown"]),
   email: z.email(),
+  expiresAt: z.string(),
+  id: z.uuid(),
+  organizationId: z.string(),
   roles: z.array(z.string()),
   scopeDigest: z.string(),
-  expiresAt: z.string(),
   status: z.enum(["pending", "verified", "accepted", "cancelled"]),
   verifiedActorId: z.string().nullable(),
-  deliveryStatus: z.enum(["ready", "sending", "sent", "unknown"]),
-  deliveryAttemptId: z.string().nullable(),
 });
 type Invitation = z.infer<typeof invitationSchema>;
 const harness = (roleless = false, generated = false) => {
@@ -71,46 +71,46 @@ const harness = (roleless = false, generated = false) => {
   const admissionInspections: boolean[] = [];
   const setup = {
     operationRef: repositoryProductionOperationRef(scope),
-    revision: 1,
     record: {
       ...initialRepositoryProductionRecord(scope, {
+        creatorRoles: roleless ? [] : ["reader", "editor"],
         sessionId: "session",
         sourceSha: "a".repeat(40),
-        creatorRoles: roleless ? [] : ["reader", "editor"],
         storage: generated
           ? {
-              kind: "postgres",
-              releaseId: "release",
               artifactRef: "artifact",
-              manifestSha256: "b".repeat(64),
               databaseEnvironment: "APP_DATABASE_URL",
+              kind: "postgres",
+              manifestSha256: "b".repeat(64),
+              releaseId: "release",
             }
           : { kind: "none" },
       }),
-      lease: { leaseId: randomUUID(), fenceGeneration: 1 },
+      lease: { fenceGeneration: 1, leaseId: randomUUID() },
     },
+    revision: 1,
   };
   const invitation = (id: string = randomUUID()): Invitation => ({
-    id,
     appId: scope.appId,
-    organizationId: scope.organizationId,
+    deliveryAttemptId: randomUUID(),
+    deliveryStatus: "sent",
     email: "guest@example.test",
+    expiresAt: "2099-01-01T00:00:00Z",
+    id,
+    organizationId: scope.organizationId,
     roles: roleless ? [] : ["reader"],
     scopeDigest: "b".repeat(64),
-    expiresAt: "2099-01-01T00:00:00Z",
     status: "pending",
     verifiedActorId: null,
-    deliveryStatus: "sent",
-    deliveryAttemptId: randomUUID(),
   });
   const writeAccess = (change: { actorId: string; roles: string[]; active: boolean }) => {
     accessWrites.push(change);
     const existing = people.get(change.actorId);
     if (change.active) {
       people.set(change.actorId, {
+        email: "guest@example.test",
         id: change.actorId,
         name: "Guest",
-        email: "guest@example.test",
         roles: [...new Set([...(existing?.roles ?? []), ...change.roles])],
       });
     } else if (existing !== undefined) {
@@ -125,29 +125,13 @@ const harness = (roleless = false, generated = false) => {
     }
   };
   const deps: RepositoryProductionManagementDependencies = {
-    builderOrigin: "https://builder.test",
-    realm: () => ({}),
     appUrl: async () => "https://apps.test/test-app",
-    roles: async () => (roleless ? [] : ["reader", "editor"]),
-    readSetup: async () => setup,
-    resolve: async () => ({
-      scope,
-      appName: "Test app",
-      organizationName: "Team",
-      creator: { status: "ready" },
-      canManage: true,
-      roles: (roleless ? [] : ["reader", "editor"]).map((id) => ({ id, label: id })),
-    }),
     assertAuthorized: async () => {},
-    withLease: async (_scope, run) => await run(async () => {}),
-    retrySetup: async () => {},
-    renewSignIn: async () => {},
+    builderOrigin: "https://builder.test",
     journal: {
-      reserve: async (record) => {
-        const id = record.command.clientRequestId;
-        const current = rows.get(id) ?? structuredClone({ record, revision: 1 });
-        rows.set(id, current);
-        return structuredClone(current);
+      findInvitation: async (id) => {
+        const row = rows.get(id);
+        return row === undefined ? undefined : structuredClone(row);
       },
       pending: async () =>
         [...rows.values()]
@@ -155,6 +139,12 @@ const harness = (roleless = false, generated = false) => {
             (row) => row.record.state === "pending" || row.record.enrollment?.state === "pending",
           )
           .map((row) => structuredClone(row)),
+      reserve: async (record) => {
+        const id = record.command.clientRequestId;
+        const current = rows.get(id) ?? structuredClone({ record, revision: 1 });
+        rows.set(id, current);
+        return structuredClone(current);
+      },
       update: async (row, record) => {
         const id = record.command.clientRequestId;
         if (rows.get(id)?.revision !== row.revision) {
@@ -165,30 +155,56 @@ const harness = (roleless = false, generated = false) => {
         rows.set(id, next);
         return next;
       },
-      findInvitation: async (id) => {
-        const row = rows.get(id);
-        return row === undefined ? undefined : structuredClone(row);
-      },
     },
+    readSetup: async () => setup,
+    realm: () => ({}),
+    renewSignIn: async () => {},
+    resolve: async () => ({
+      appName: "Test app",
+      canManage: true,
+      creator: { status: "ready" },
+      organizationName: "Team",
+      roles: (roleless ? [] : ["reader", "editor"]).map((id) => ({ id, label: id })),
+      scope,
+    }),
+    retrySetup: async () => {},
+    roles: async () => (roleless ? [] : ["reader", "editor"]),
+    withLease: async (_scope, run) => await run(async () => {}),
     workers: () => ({
+      inspectAppAccess: async (_context, access) => {
+        if (!generated) {
+          throw new Error("frontend must not use generated storage");
+        }
+        const roles = new Set(people.get(access.actorId)?.roles);
+        let matches: boolean;
+        if (access.roles.length === 0) {
+          admissionInspections.push(access.active);
+          matches = admissionActive === access.active;
+        } else {
+          matches = access.active
+            ? access.roles.every((role) => roles.has(role))
+            : access.roles.every((role) => !roles.has(role));
+        }
+        return matches ? { receipt: {}, state: "applied" } : { state: "not-applied" };
+      },
       invokeAuthManagement: async (context, input) => {
         const { request } = z
           .object({
             request: z.object({
               action: z.string(),
-              invitationId: z.string().optional(),
+              active: z.boolean().optional(),
+              actorId: z.string().optional(),
+              expiresAt: z.string().optional(),
               invitation: z
                 .object({
-                  id: z.string(),
                   email: z.string(),
-                  roles: z.array(z.string()),
                   expiresAt: z.string(),
+                  id: z.string(),
+                  roles: z.array(z.string()),
                 })
                 .optional(),
-              expiresAt: z.string().optional(),
-              actorId: z.string().optional(),
+              invitationId: z.string().optional(),
               roles: z.array(z.string()).optional(),
-              active: z.boolean().optional(),
             }),
           })
           .parse(input);
@@ -212,8 +228,8 @@ const harness = (roleless = false, generated = false) => {
           invites.set(value.id, {
             ...invitation(value.id),
             ...value,
-            deliveryStatus: "ready",
             deliveryAttemptId: null,
+            deliveryStatus: "ready",
           });
         }
         if (request.action === "renew" && found !== undefined) {
@@ -241,18 +257,18 @@ const harness = (roleless = false, generated = false) => {
         }
         if (request.action === "set-access") {
           const change = z
-            .object({ actorId: z.string(), roles: z.array(z.string()), active: z.boolean() })
+            .object({ active: z.boolean(), actorId: z.string(), roles: z.array(z.string()) })
             .parse(request);
           writeAccess(change);
         }
         return {
-          version: 1 as const,
-          operation_id: context.row.operationRef,
           context_digest: "a".repeat(64),
           fence_generation: 1,
-          status: "applied" as const,
+          operation_id: context.row.operationRef,
           readback_sha256: "b".repeat(64),
           result,
+          status: "applied" as const,
+          version: 1 as const,
         };
       },
       mutateAppAccess: async (_context, access) => {
@@ -268,67 +284,51 @@ const harness = (roleless = false, generated = false) => {
           throw new Error("lost grant response");
         }
       },
-      inspectAppAccess: async (_context, access) => {
-        if (!generated) {
-          throw new Error("frontend must not use generated storage");
-        }
-        const roles = new Set(people.get(access.actorId)?.roles);
-        let matches: boolean;
-        if (access.roles.length === 0) {
-          admissionInspections.push(access.active);
-          matches = admissionActive === access.active;
-        } else {
-          matches = access.active
-            ? access.roles.every((role) => roles.has(role))
-            : access.roles.every((role) => !roles.has(role));
-        }
-        return matches ? { state: "applied", receipt: {} } : { state: "not-applied" };
-      },
     }),
   };
   const service = createRepositoryProductionManagement(deps);
   return {
-    service,
-    rows,
-    invites,
-    people,
-    sends,
-    cancellations,
     accessWrites,
-    invitation,
-    admissionInspections,
     admissionActive: () => admissionActive,
-    setAdmission: () => {
-      admissionActive = true;
+    admissionInspections,
+    cancellations,
+    invitation,
+    invites,
+    loseCancel: () => {
+      loseAfterCancel = true;
     },
     loseGrant: () => {
       loseAfterGrant = true;
     },
-    renewCount: () => renewCount,
     loseRevoke: () => {
       loseAfterRevoke = true;
-    },
-    loseCancel: () => {
-      loseAfterCancel = true;
     },
     loseSend: (state: "sent" | "unknown" | "sending") => {
       loseAfterSend = true;
       deliveryState = state;
     },
+    people,
+    renewCount: () => renewCount,
+    rows,
     seedDispatched: (command: AppAccessCommand) =>
       rows.set(command.clientRequestId, {
-        revision: 1,
         record: {
-          kind: "app-access-operation-v1",
           command,
-          scope,
-          ownerContext: owner.ownerContext,
-          state: "pending",
-          dispatched: true,
           createdAt: new Date().toISOString(),
+          dispatched: true,
+          kind: "app-access-operation-v1",
+          ownerContext: owner.ownerContext,
+          scope,
+          state: "pending",
           workerCheckpoints: [],
         },
+        revision: 1,
       }),
+    sends,
+    service,
+    setAdmission: () => {
+      admissionActive = true;
+    },
   };
 };
 
@@ -339,8 +339,8 @@ describe("native app access recovery", () => {
     h.invites.set(invite.id, invite);
     const command = {
       action: "resend" as const,
-      invitationId: invite.id,
       clientRequestId: randomUUID(),
+      invitationId: invite.id,
     };
     h.seedDispatched(command);
     await h.service.execute(owner, command);
@@ -359,8 +359,8 @@ describe("native app access recovery", () => {
       h.loseSend(state);
       const command = {
         action: "resend" as const,
-        invitationId: invite.id,
         clientRequestId: randomUUID(),
+        invitationId: invite.id,
       };
       await expect(h.service.execute(owner, command)).rejects.toMatchObject({
         code: "app_access_unknown",
@@ -375,26 +375,26 @@ describe("native app access recovery", () => {
   it("reuses the original member preimage after a partial role change removed the visible member", async () => {
     const h = harness();
     h.people.set("guest", {
+      email: "guest@example.test",
       id: "guest",
       name: "Guest",
-      email: "guest@example.test",
       roles: ["reader"],
     });
     h.loseRevoke();
     const command = {
       action: "change-role" as const,
+      clientRequestId: randomUUID(),
       memberId: "guest",
       roles: ["editor"],
-      clientRequestId: randomUUID(),
     };
     await expect(h.service.execute(owner, command)).rejects.toMatchObject({
       code: "app_access_unknown",
     });
     expect(h.people.has("guest")).toBe(false);
     expect(h.rows.get(command.clientRequestId)?.record.workerCheckpoints).toContainEqual({
-      kind: "access-member-preimage",
-      id: "guest",
       email: "guest@example.test",
+      id: "guest",
+      kind: "access-member-preimage",
       roles: ["reader"],
     });
     await h.service.execute(owner, command);
@@ -404,26 +404,26 @@ describe("native app access recovery", () => {
 
   it("removes role-less frontend app membership without using a generated database", async () => {
     const h = harness(true);
-    h.people.set("guest", { id: "guest", name: "Guest", email: "guest@example.test", roles: [] });
+    h.people.set("guest", { email: "guest@example.test", id: "guest", name: "Guest", roles: [] });
     await h.service.execute(owner, {
       action: "remove",
-      memberId: "guest",
       clientRequestId: randomUUID(),
+      memberId: "guest",
     });
     expect(h.people.has("guest")).toBe(false);
-    expect(h.accessWrites).toEqual([{ actorId: "guest", roles: [], active: false }]);
+    expect(h.accessWrites).toEqual([{ active: false, actorId: "guest", roles: [] }]);
   });
 
   it("closes generated app admission before adding named roles and reconciles its closure after a lost grant reply", async () => {
     const h = harness(false, true);
-    h.people.set("guest", { id: "guest", name: "Guest", email: "guest@example.test", roles: [] });
+    h.people.set("guest", { email: "guest@example.test", id: "guest", name: "Guest", roles: [] });
     h.setAdmission();
     h.loseGrant();
     const command = {
       action: "change-role" as const,
+      clientRequestId: randomUUID(),
       memberId: "guest",
       roles: ["reader"],
-      clientRequestId: randomUUID(),
     };
     await expect(h.service.execute(owner, command)).rejects.toMatchObject({
       code: "app_access_unknown",
@@ -432,32 +432,32 @@ describe("native app access recovery", () => {
     expect(h.people.get("guest")?.roles).toEqual(["reader"]);
     await h.service.execute(owner, command);
     expect(h.accessWrites).toEqual([
-      { actorId: "guest", roles: [], active: false },
-      { actorId: "guest", roles: ["reader"], active: true },
+      { active: false, actorId: "guest", roles: [] },
+      { active: true, actorId: "guest", roles: ["reader"] },
     ]);
     expect(h.admissionInspections).toContain(false);
   });
 
   it("does not revoke and regrant unchanged role-less generated app admission", async () => {
     const h = harness(true, true);
-    h.people.set("guest", { id: "guest", name: "Guest", email: "guest@example.test", roles: [] });
+    h.people.set("guest", { email: "guest@example.test", id: "guest", name: "Guest", roles: [] });
     h.setAdmission();
     await h.service.execute(owner, {
       action: "change-role",
+      clientRequestId: randomUUID(),
       memberId: "guest",
       roles: [],
-      clientRequestId: randomUUID(),
     });
     expect(h.admissionActive()).toBe(true);
-    expect(h.accessWrites).toEqual([{ actorId: "guest", roles: [], active: true }]);
+    expect(h.accessWrites).toEqual([{ active: true, actorId: "guest", roles: [] }]);
   });
 
   it("cancels outstanding same-app invitations before removing a member, and permits a new later invitation", async () => {
     const h = harness();
     h.people.set("guest", {
+      email: "guest@example.test",
       id: "guest",
       name: "Guest",
-      email: "guest@example.test",
       roles: ["reader"],
     });
     const oldInvite = {
@@ -479,8 +479,8 @@ describe("native app access recovery", () => {
     h.invites.set(unrelated.id, unrelated);
     await h.service.execute(owner, {
       action: "remove",
-      memberId: "guest",
       clientRequestId: randomUUID(),
+      memberId: "guest",
     });
     expect(h.people.has("guest")).toBe(false);
     expect(verified.status).toBe("cancelled");
@@ -497,9 +497,9 @@ describe("native app access recovery", () => {
   it("reuses the captured cancellation list after a lost response and never leaves an old invitation active", async () => {
     const h = harness();
     h.people.set("guest", {
+      email: "guest@example.test",
       id: "guest",
       name: "Guest",
-      email: "guest@example.test",
       roles: ["reader"],
     });
     const first = h.invitation();
@@ -507,18 +507,18 @@ describe("native app access recovery", () => {
     h.invites.set(first.id, first);
     h.invites.set(second.id, second);
     h.loseCancel();
-    const command = { action: "remove" as const, memberId: "guest", clientRequestId: randomUUID() };
+    const command = { action: "remove" as const, clientRequestId: randomUUID(), memberId: "guest" };
     await expect(h.service.execute(owner, command)).rejects.toMatchObject({
       code: "app_access_unknown",
     });
     expect(h.people.has("guest")).toBe(true);
     expect(h.rows.get(command.clientRequestId)?.record.workerCheckpoints).toContainEqual({
-      kind: "access-member-invitation-cancellations",
-      memberId: "guest",
       invitations: [
         { id: first.id, scopeDigest: first.scopeDigest },
         { id: second.id, scopeDigest: second.scopeDigest },
       ],
+      kind: "access-member-invitation-cancellations",
+      memberId: "guest",
     });
     await h.service.execute(owner, command);
     expect(first.status).toBe("cancelled");
@@ -536,8 +536,8 @@ describe("native app access recovery", () => {
     await expect(
       h.service.execute(owner, {
         action: "cancel",
-        invitationId: creator.id,
         clientRequestId: randomUUID(),
+        invitationId: creator.id,
       }),
     ).rejects.toMatchObject({ code: "app_access_denied" });
     expect(h.invites.get(creator.id)?.status).toBe("pending");

@@ -24,24 +24,26 @@ describe("safe MCP tool errors", () => {
     const accessUrl = "https://builder.example.com/builds/session-one/access";
     const result = toolResult(
       {
-        sessionId: "session-one",
         appAccessUrl: accessUrl,
-        status: "working" as const,
         cursor: 1,
         events: [
           {
-            type: "auth_identity_invitation" as const,
-            index: 1,
             callId: "call",
-            url: "https://apps.example.com/sign-in",
             expiresAt: "2099-01-01T00:00:00Z",
+            index: 1,
+            type: "auth_identity_invitation" as const,
+            url: "https://apps.example.com/sign-in",
           },
         ],
+        sessionId: "session-one",
+        status: "working" as const,
       },
       "Setting up your app",
     );
     expect(result.content[0].text).toContain(accessUrl);
-    expect(result._meta?.ui.resourceUri).toBe("ui://autograph-app-builder/session.html");
+    expect(result._meta).toMatchObject({
+      ui: { resourceUri: "ui://autograph-app-builder/session.html" },
+    });
   });
   it.each([
     [new AdapterNotConfiguredError(), "adapter_not_configured"],
