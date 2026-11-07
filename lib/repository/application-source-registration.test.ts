@@ -8,7 +8,7 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
 describe("imported application registration planning", () => {
   it("uses only the acquired platform pure planner without executing app source", async () => {
     const proposedBytes = '{"applications":{"invoice-app":{}}}';
-    const run = vi.fn<SandboxSession["run"]>(async () => ({
+    const run = vi.fn<SandboxSession["run"]>().mockResolvedValue({
       exitCode: 0,
       stderr: "",
       stdout: JSON.stringify({
@@ -18,7 +18,7 @@ describe("imported application registration planning", () => {
         projectName: "invoice-app",
         proposedBytes,
       }),
-    }));
+    });
     // SAFETY: The planner only invokes run; fixtures never exercise dependency recovery.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Deliberately bounded Sandbox fixture.
     const sandbox = { run } as unknown as SandboxSession;
@@ -30,7 +30,7 @@ describe("imported application registration planning", () => {
     expect(run.mock.calls[0]?.[0].command).not.toContain("apps/invoice-app/");
   });
   it("rejects substituted registration output and invalid app identities", async () => {
-    const run = vi.fn<SandboxSession["run"]>(async () => ({
+    const run = vi.fn<SandboxSession["run"]>().mockResolvedValue({
       exitCode: 0,
       stderr: "",
       stdout: JSON.stringify({
@@ -40,7 +40,7 @@ describe("imported application registration planning", () => {
         projectName: "other-app",
         proposedBytes: "{}",
       }),
-    }));
+    });
     // SAFETY: The planner only invokes run; fixtures never exercise dependency recovery.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Deliberately bounded Sandbox fixture.
     const sandbox = { run } as unknown as SandboxSession;
