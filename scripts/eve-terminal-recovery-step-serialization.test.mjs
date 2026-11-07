@@ -8,6 +8,9 @@ import { pathToFileURL } from "node:url";
 import { it } from "vitest";
 
 const require = createRequire(import.meta.url);
+const SYNTHETIC_WORKFLOW_RUN_ID = "wrun-synthetic";
+const LOGICAL_SESSION_ID = "logical-fixture";
+const SERIALIZATION_RECEIVER_FIELD = ".thisVal.createHook";
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`);
 const runtimeUrl = new URL("compiled/@workflow/core/runtime.js", sdk);
 const runtimeSource = await readFile(runtimeUrl, "utf-8");
@@ -34,7 +37,7 @@ const checkpoint = {
   capabilities: { requestInput: true },
   serializedContext: {
     "eve.capabilities": { requestInput: true },
-    "eve.sessionId": "logical-fixture",
+    "eve.sessionId": LOGICAL_SESSION_ID,
   },
   sessionState: createDurableSessionState({
     session: {
@@ -42,7 +45,7 @@ const checkpoint = {
       compaction: {},
       continuationToken: "fixture-continuation",
       history: [],
-      sessionId: "logical-fixture",
+      sessionId: LOGICAL_SESSION_ID,
       state: { approval: "retained-fixture" },
     },
   }),
@@ -50,7 +53,7 @@ const checkpoint = {
   version: 9,
 };
 const descriptor = {
-  logicalSessionId: "logical-fixture",
+  logicalSessionId: LOGICAL_SESSION_ID,
   operationId: "fixture-recovery",
   originalAuthoritySessionId: "fixture-source",
   parentCancellationRevision: 0,
@@ -118,8 +121,9 @@ it("reproduces the member-step receiver failure through the real compiled Workfl
   const input = f.queuedArguments();
   assert.equal(input.thisVal, f.ports);
   await assert.rejects(
-    dehydrateStepArguments(input, "wrun-synthetic", undefined),
-    (error) => error.name === "SerializationError" && error.message.includes(".thisVal.createHook"),
+    dehydrateStepArguments(input, SYNTHETIC_WORKFLOW_RUN_ID, undefined),
+    (error) =>
+      error.name === "SerializationError" && error.message.includes(SERIALIZATION_RECEIVER_FIELD),
   );
   assert.deepEqual(f.calls, []);
 });
@@ -139,8 +143,8 @@ it("serializes the actual terminal boot validation step without its function-bea
   );
   assert.ok(suspended instanceof Promise);
   const input = f.queuedArguments();
-  const encoded = await dehydrateStepArguments(input, "wrun-synthetic", undefined);
-  const decoded = await hydrateStepArguments(encoded, "wrun-synthetic", undefined);
+  const encoded = await dehydrateStepArguments(input, SYNTHETIC_WORKFLOW_RUN_ID, undefined);
+  const decoded = await hydrateStepArguments(encoded, SYNTHETIC_WORKFLOW_RUN_ID, undefined);
   assert.equal(input.thisVal, undefined);
   assert.equal(decoded.thisVal, undefined);
   assert.deepEqual(decoded.args, [{ checkpoint }]);
