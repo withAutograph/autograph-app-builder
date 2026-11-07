@@ -537,14 +537,14 @@ it.each(["/actual-catalog-route", null, undefined])(
       return;
     }
     expect(result.status).toBe("passed");
+    const baseEnvironment = { APP_TEST_BASE_URL: "https://public-owned.example" };
+    const expectedEnvironment =
+      browserTestEntryPath === undefined
+        ? baseEnvironment
+        : { ...baseEnvironment, APP_TEST_ENTRY_PATH: browserTestEntryPath };
     expect(runTask).toHaveBeenCalledWith(
       expect.objectContaining({
-        environment: {
-          APP_TEST_BASE_URL: "https://public-owned.example",
-          ...(browserTestEntryPath === undefined
-            ? {}
-            : { APP_TEST_ENTRY_PATH: browserTestEntryPath }),
-        },
+        environment: expectedEnvironment,
       }),
     );
     expect(runtime.prepareAuthenticatedOrigin).not.toHaveBeenCalled();
