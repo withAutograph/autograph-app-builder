@@ -38,7 +38,7 @@ describe("hosted continuity planning", () => {
       callId: "continuity-call",
       getSandbox: vi.fn().mockResolvedValue({
         id: "selected-sandbox",
-        readTextFile: async () => null,
+        readTextFile: vi.fn().mockResolvedValue(null),
       }),
       getToken: vi.fn(),
       requireAuth: (): never => {

@@ -120,7 +120,7 @@ describe("preview command working directory", () => {
         callId: "hosted-preview",
         getSandbox: vi.fn().mockResolvedValue({
           id: "sandbox_replacement",
-          readTextFile: async () => "{}",
+          readTextFile: vi.fn().mockResolvedValue("{}"),
         }),
         getToken: vi.fn(),
         requireAuth: (): never => {
@@ -287,7 +287,10 @@ describe("preview command working directory", () => {
     await startAppPreview.execute(input, {
       abortSignal: new AbortController().signal,
       callId: "call",
-      getSandbox: vi.fn().mockResolvedValue({ id: "sandbox", readTextFile: async () => null }),
+      getSandbox: vi.fn().mockResolvedValue({
+        id: "sandbox",
+        readTextFile: vi.fn().mockResolvedValue(null),
+      }),
       getToken: vi.fn(),
       requireAuth: (): never => {
         throw new Error("Unexpected auth request in preview test");
