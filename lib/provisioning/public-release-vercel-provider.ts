@@ -7,7 +7,7 @@ import type { PublicReleasePlan, PublicReleaseObservation } from "./public-relea
 import { publicReleaseRequiresNativeGitEvent } from "./public-release-contract";
 import type { PublicReleaseInvocation, PublicReleaseEffectContext } from "./public-release-handler";
 
-import { vercelProvisionDiagnosticSchema } from "./contracts";
+import { vercelProvisionDiagnosticSchema } from "./contracts-schema";
 import { PublicReleaseProviderError } from "./public-release-provider-error";
 
 const id = z.string().min(1);
@@ -48,6 +48,8 @@ const assertSnapshotCurrent = async (signal: AbortSignal, assertCurrent: () => P
 };
 const marker = (operationRef: string) => `autograph:public-app-release:${operationRef}`;
 const fail = () => new Error("public_release_provider_mismatch");
+const VERCEL_API_ORIGIN = "https://api.vercel.com";
+const VERCEL_REQUEST_ID_HEADER = "x-vercel-id";
 
 /** Private server ports. No secret value, credential or provider body is returned or journaled. */
 export interface PublicReleaseVercelDependencies {
@@ -161,24 +163,27 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     ) {
       throw fail();
     }
-    const url = new URL(route, "https://api.vercel.com");
-    if (url.origin !== "https://api.vercel.com") {
+    const url = new URL(route, VERCEL_API_ORIGIN);
+    if (url.origin !== VERCEL_API_ORIGIN) {
       throw fail();
     }
     url.searchParams.set("teamId", plan.project.teamId);
-    const response = await (deps.fetch ?? fetch)(url, {
-      method,
+    const init: RequestInit = {
       headers: { authorization: `Bearer ${credential.token}`, "content-type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      method,
       redirect: "error",
       signal: invocation.signal,
-    });
+    };
+    if (body !== undefined) {
+      init.body = JSON.stringify(body);
+    }
+    const response = await (deps.fetch ?? fetch)(url, init);
     await check(invocation, plan, approval);
     if (!response.ok) {
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
-        response.headers.get("x-vercel-id"),
+        response.headers.get(VERCEL_REQUEST_ID_HEADER),
       );
-      let code: string | undefined;
+      let code: z.output<typeof vercelProvisionDiagnosticSchema>["code"];
       try {
         // Error bodies are untrusted diagnostic input; read only a bounded projection.
         const errorBody = await boundedJson(response, invocation.signal, 16_384);
@@ -186,18 +191,26 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
           .object({ error: z.object({ code: vercelProvisionDiagnosticSchema.shape.code }) })
           .safeParse(errorBody);
         if (parsed.success) {
-          code = parsed.data.error.code;
+          const {
+            error: { code: parsedCode },
+          } = parsed.data;
+          code = parsedCode;
         }
       } catch {
         invocation.signal.throwIfAborted();
         // Non-JSON, oversized and malformed errors still preserve safe HTTP facts.
       }
       await check(invocation, plan, approval);
-      const diagnostic = vercelProvisionDiagnosticSchema.parse({
+      const diagnosticInput: z.input<typeof vercelProvisionDiagnosticSchema> = {
         statusCode: response.status,
-        ...(code === undefined ? {} : { code }),
-        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
-      });
+      };
+      if (code !== undefined) {
+        diagnosticInput.code = code;
+      }
+      if (requestRef.success) {
+        diagnosticInput.requestRef = requestRef.data;
+      }
+      const diagnostic = vercelProvisionDiagnosticSchema.parse(diagnosticInput);
       throw new PublicReleaseProviderError(diagnostic);
     }
     const result = await boundedJson(response, invocation.signal);
@@ -253,7 +266,7 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing provider state is a distinct reconciliation observation.
       return undefined;
     }
-    const row = matches[0];
+    const [row] = matches;
     const entry = context.plan.environment.find((item) => item.key === key);
     const owned =
       row.comment === marker(context.operationRef) ||
@@ -595,7 +608,7 @@ export const createPublicReleaseVercelBindingSnapshot =
       ) {
         throw fail();
       }
-      const url = new URL(route, "https://api.vercel.com");
+      const url = new URL(route, VERCEL_API_ORIGIN);
       url.searchParams.set("teamId", scope.teamId);
       const response = await (deps.fetch ?? fetch)(url, {
         headers: { authorization: `Bearer ${credential.token}` },
@@ -643,7 +656,7 @@ export const createPublicReleaseVercelBindingSnapshot =
       if (rows.length !== 1) {
         throw fail();
       }
-      const row = rows[0];
+      const [row] = rows;
       const markerMatch = /^autograph:public-app-release:(?<operationRef>[0-9a-f-]{36})$/u.exec(
         row.comment ?? "",
       );
