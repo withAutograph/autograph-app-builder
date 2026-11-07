@@ -71,7 +71,7 @@ export function readTwoFactorMethods(): TwoFactorMethod[] {
 
   try {
     const stored = sessionStorage.getItem(TWO_FACTOR_METHODS_STORAGE_KEY);
-    if (!stored) {
+    if (stored === null || stored === "") {
       return TWO_FACTOR_METHODS;
     }
 
