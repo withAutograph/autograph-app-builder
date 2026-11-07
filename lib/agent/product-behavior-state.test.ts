@@ -14,11 +14,11 @@ import {
 import type { ProductBehaviorEvidence } from "./product-behavior-state";
 
 vi.mock("eve/context", () => ({
-  defineState: (_name: string, initial: () => unknown) => {
+  defineState: <T>(_name: string, initial: () => T) => {
     let value = initial();
     return {
       get: () => value,
-      update: (change: (current: unknown) => unknown) => {
+      update: (change: (current: T) => T) => {
         value = change(value);
       },
     };
