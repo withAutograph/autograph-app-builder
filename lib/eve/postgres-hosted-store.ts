@@ -39,10 +39,9 @@ import {
 import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
 import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
 import { and, asc, count, desc, eq, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { agentOperations, agentSessions, builderProvisioningJournals } from "../db/schema";
 import {
   nativeTargetOnboardingRegistryId,
@@ -61,7 +60,7 @@ import { mergePrivateHostedApprovalReceipts } from "./private-hosted-approval";
 import type { PrivateResourceApprovalReceipt } from "./private-hosted-approval";
 import { createPostgresHostedCheckpointHistory } from "./postgres-hosted-checkpoint-history";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 const SESSION_NOT_FOUND = "Hosted session was not found.";
 const OPERATION_CANNOT_SETTLE = "Hosted operation cannot settle at this digest.";

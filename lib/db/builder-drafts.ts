@@ -1,5 +1,4 @@
 import { and, eq, lt, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { builderDraftRecordSchema, builderDraftStatusSchema } from "../builder-drafts/contracts";
 import type {
@@ -8,28 +7,29 @@ import type {
   BuilderDraftStore,
 } from "../builder-drafts/service";
 import { hostedTenantAuthoritySchema } from "./hosted-admin";
-import * as schema from "./schema";
+import type { HostedDatabase } from "./hosted-postgres";
+import { builderDrafts } from "./schema";
 
-type Database = PostgresJsDatabase<typeof schema>;
+type Database = HostedDatabase;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function authorityPredicate(authorityInput: BuilderDraftAuthority) {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   return and(
-    eq(schema.builderDrafts.issuer, authority.issuer),
-    eq(schema.builderDrafts.audience, authority.audience),
-    eq(schema.builderDrafts.workspaceId, authority.workspaceId),
-    eq(schema.builderDrafts.ownerUserId, authority.ownerUserId),
+    eq(builderDrafts.issuer, authority.issuer),
+    eq(builderDrafts.audience, authority.audience),
+    eq(builderDrafts.workspaceId, authority.workspaceId),
+    eq(builderDrafts.ownerUserId, authority.ownerUserId),
   );
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function rowPredicate(authority: BuilderDraftAuthority, draftId: string) {
-  return and(authorityPredicate(authority), eq(schema.builderDrafts.draftId, draftId));
+  return and(authorityPredicate(authority), eq(builderDrafts.draftId, draftId));
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function parseRow(row: typeof schema.builderDrafts.$inferSelect): BuilderDraftRow {
+function parseRow(row: typeof builderDrafts.$inferSelect): BuilderDraftRow {
   return {
     authority: hostedTenantAuthoritySchema.parse({
       audience: row.audience,
@@ -59,7 +59,7 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
   const read: BuilderDraftStore["read"] = async ({ authority, draftId }) => {
     const rows = await database
       .select()
-      .from(schema.builderDrafts)
+      .from(builderDrafts)
       .where(rowPredicate(authority, draftId))
       .limit(1);
     return rows[0] ? parseRow(rows[0]) : undefined;
@@ -68,8 +68,8 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
   const readActive: BuilderDraftStore["readActive"] = async ({ authority }) => {
     const rows = await database
       .select()
-      .from(schema.builderDrafts)
-      .where(and(authorityPredicate(authority), eq(schema.builderDrafts.status, "active")))
+      .from(builderDrafts)
+      .where(and(authorityPredicate(authority), eq(builderDrafts.status, "active")))
       .limit(1);
     return rows[0] ? parseRow(rows[0]) : undefined;
   };
@@ -77,31 +77,26 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
   return {
     async archive({ authority, draftId, now, expectedRevision }) {
       const rows = await database
-        .update(schema.builderDrafts)
+        .update(builderDrafts)
         .set({ status: "archived", updatedAt: now })
         .where(
           and(
             rowPredicate(authority, draftId),
-            eq(schema.builderDrafts.status, "active"),
+            eq(builderDrafts.status, "active"),
             expectedRevision === undefined
               ? undefined
-              : eq(schema.builderDrafts.revision, expectedRevision),
+              : eq(builderDrafts.revision, expectedRevision),
           ),
         )
-        .returning({ draftId: schema.builderDrafts.draftId });
+        .returning({ draftId: builderDrafts.draftId });
       return rows.length > 0;
     },
     async deleteInactiveSince({ now, maxAgeMs }) {
       const cutoff = new Date(now.getTime() - (maxAgeMs ?? 30 * 24 * 60 * 60 * 1000));
       const rows = await database
-        .delete(schema.builderDrafts)
-        .where(
-          and(
-            eq(schema.builderDrafts.status, "active"),
-            lt(schema.builderDrafts.updatedAt, cutoff),
-          ),
-        )
-        .returning({ draftId: schema.builderDrafts.draftId });
+        .delete(builderDrafts)
+        .where(and(eq(builderDrafts.status, "active"), lt(builderDrafts.updatedAt, cutoff)))
+        .returning({ draftId: builderDrafts.draftId });
       return rows.length;
     },
     read,
@@ -128,7 +123,7 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
           }
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const rows = await database
-            .update(schema.builderDrafts)
+            .update(builderDrafts)
             .set({
               lastClientMutationId: input.clientMutationId,
               record,
@@ -138,8 +133,8 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
             .where(
               and(
                 rowPredicate(authority, current.draftId),
-                eq(schema.builderDrafts.status, "active"),
-                eq(schema.builderDrafts.revision, current.revision),
+                eq(builderDrafts.status, "active"),
+                eq(builderDrafts.revision, current.revision),
               ),
             )
             .returning();
@@ -156,7 +151,7 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
         try {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const rows = await database
-            .insert(schema.builderDrafts)
+            .insert(builderDrafts)
             .values({
               ...authority,
               createdAt: input.now,

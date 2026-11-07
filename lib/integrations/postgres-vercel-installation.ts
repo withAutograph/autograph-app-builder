@@ -1,9 +1,8 @@
 import { and, asc, eq, gt, isNull } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { parseProviderConnectionReturn } from "./provider-connection-return";
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { hostedVercelInstallations, vercelInstallationAuthorizationStates } from "../db/schema";
 import {
   decryptVersionedVercelInstallationToken,
@@ -19,7 +18,7 @@ import type {
   VercelInstallationStore,
 } from "./vercel-installation";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tenant(table: typeof hostedVercelInstallations, authorityInput: unknown) {
