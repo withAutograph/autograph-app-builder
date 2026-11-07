@@ -57,6 +57,57 @@ describe("Production destination authority", () => {
     });
     expect(request).not.toHaveProperty("source");
   });
+  it("resolves a fresh frontend-only app from its owned publication without a SQL selection", () => {
+    const publishedSource = selection.publishedSource;
+    if (publishedSource === undefined) {
+      throw new Error("fixture publication missing");
+    }
+    expect(
+      resolveRepositoryProductionDestination({
+        ...input(),
+        selection: undefined,
+        destination: {
+          version: 1,
+          appId: "requests",
+          appSpecDigest: selection.appSpecDigest,
+          publishedSource,
+        },
+      }),
+    ).toEqual({ profile, sourceSha: publishedSource.gitSha });
+  });
+  it("rejects a foreign generic destination and contradictory publication evidence", () => {
+    const publishedSource = selection.publishedSource;
+    if (publishedSource === undefined) {
+      throw new Error("fixture publication missing");
+    }
+    const destination = {
+      version: 1 as const,
+      appId: "requests",
+      appSpecDigest: selection.appSpecDigest,
+      publishedSource,
+    };
+    expect(() =>
+      resolveRepositoryProductionDestination({
+        ...input(),
+        destination: { ...destination, appId: "foreign-app" },
+      }),
+    ).toThrow("repository_production_capture_unavailable");
+    expect(() =>
+      resolveRepositoryProductionDestination({
+        ...input(),
+        destination: { ...destination, appSpecDigest: "9".repeat(64) },
+      }),
+    ).toThrow("repository_production_capture_unavailable");
+    expect(() =>
+      resolveRepositoryProductionDestination({
+        ...input(),
+        destination: {
+          ...destination,
+          publishedSource: { ...publishedSource, repositoryId: "999" },
+        },
+      }),
+    ).toThrow("repository_production_scope_denied");
+  });
   it("retains acquired-repository setup, including frontend-only apps with no SQL selection", () => {
     expect(
       resolveRepositoryProductionDestination({ ...input(), selection: undefined, source }),

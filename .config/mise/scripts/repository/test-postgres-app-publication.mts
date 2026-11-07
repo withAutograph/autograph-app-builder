@@ -1,0 +1,165 @@
+/* oxlint-disable promise/avoid-new, promise/prefer-await-to-callbacks -- Disposable loopback PostgreSQL uses the native socket callback API. */
+import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { createServer } from "node:net";
+import path from "node:path";
+import postgres from "postgres";
+import { z } from "zod";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Exercise the real owned Drizzle schema and migration.
+import * as schema from "../../../../lib/db/schema";
+import { createPostgresOperatorArtifactSelections } from "../../../../lib/provisioning/hosted-operator-artifact-selection";
+import type { OperatorArtifactContext } from "../../../../lib/provisioning/hosted-operator-artifact-store";
+
+// Never consumes deployment credentials or a caller-supplied database URL.
+const postgresBin = process.argv[2];
+assert.ok(postgresBin && path.isAbsolute(postgresBin));
+const port = await new Promise<number>((resolve, reject) => {
+  const server = createServer();
+  server.once("error", reject);
+  server.listen(0, "127.0.0.1", () => {
+    const address = z.object({ port: z.number().int().positive() }).parse(server.address());
+    server.close((error) => {
+      if (error === undefined) {
+        resolve(address.port);
+      } else {
+        reject(error);
+      }
+    });
+  });
+});
+const scratch = await mkdtemp(path.join(tmpdir(), "app-publication-pg-"));
+const data = path.join(scratch, "postgres");
+const password = randomBytes(24).toString("hex");
+const passwordFile = path.join(scratch, "password");
+const command = (name: string, args: string[]) => {
+  const result = spawnSync(path.join(postgresBin, name), args, {
+    encoding: "utf-8",
+    env: { PATH: process.env.PATH, NODE_ENV: "test", LANG: "C", LC_ALL: "C" },
+  });
+  assert.equal(result.status, 0, `Owned PostgreSQL ${name} failed`);
+};
+let started = false;
+let client: ReturnType<typeof postgres> | undefined;
+try {
+  await writeFile(passwordFile, password, { mode: 0o600 });
+  command("initdb", [
+    "-D",
+    data,
+    "--username=fixture_admin",
+    "--auth=scram-sha-256",
+    `--pwfile=${passwordFile}`,
+    "--no-locale",
+  ]);
+  command("pg_ctl", [
+    "-D",
+    data,
+    "-l",
+    path.join(scratch, "postgres.log"),
+    "-o",
+    `-h 127.0.0.1 -p ${port} -k ${scratch}`,
+    "-w",
+    "start",
+  ]);
+  started = true;
+  client = postgres({
+    host: "127.0.0.1",
+    port,
+    database: "postgres",
+    username: "fixture_admin",
+    password,
+    max: 5,
+    onnotice: (notice) => {
+      assert.ok(notice.message !== undefined);
+    },
+  });
+  const database = drizzle(client, { schema });
+  await migrate(database, {
+    migrationsFolder: path.resolve(import.meta.dirname, "../../../../drizzle"),
+  });
+  let authorized = true;
+  const assertCurrentOwner = async () => {
+    await Promise.resolve();
+    if (!authorized) {
+      throw new Error("owner revoked");
+    }
+  };
+  const stores = () => createPostgresOperatorArtifactSelections({ database, assertCurrentOwner });
+  const store = stores();
+  const { recordDestination, readDestination } = store;
+  assert.ok(recordDestination && readDestination && store.readPublishedSource);
+  const context: OperatorArtifactContext = {
+    authority: {
+      issuer: "https://builder.example/api/auth",
+      audience: "https://builder.example/mcp",
+      workspaceId: "workspace",
+      ownerUserId: "owner",
+    },
+    target: { appId: "frontend-app", sessionId: "original-session" },
+  };
+  const first = {
+    version: 1 as const,
+    appId: "frontend-app",
+    appSpecDigest: "a".repeat(64),
+    publishedSource: {
+      repositoryId: "123",
+      branch: "builder/frontend-app",
+      gitSha: "b".repeat(40),
+      gitTree: "c".repeat(40),
+      reviewDigest: "d".repeat(64),
+      changeSetDigest: "e".repeat(64),
+    },
+  };
+  const second = {
+    ...first,
+    publishedSource: { ...first.publishedSource, gitSha: "f".repeat(40) },
+  };
+  await Promise.all([
+    recordDestination(context, "initial-publication", first),
+    recordDestination(context, "initial-publication", first),
+  ]);
+  await recordDestination(context, "revision-publication", second);
+  await recordDestination(context, "initial-publication", first);
+  assert.deepEqual(await stores().readDestination?.(context, first.appSpecDigest), second);
+  assert.deepEqual(
+    await store.readPublishedSource(context, first.publishedSource),
+    first.publishedSource,
+  );
+  assert.deepEqual(
+    await store.readPublishedSource(context, second.publishedSource),
+    second.publishedSource,
+  );
+  assert.equal(
+    await store.read(context, first.appSpecDigest),
+    undefined,
+    "No compiled SQL release is manufactured",
+  );
+  await assert.rejects(recordDestination(context, "initial-publication", second));
+  for (const foreign of [
+    { ...context, authority: { ...context.authority, ownerUserId: "other-owner" } },
+    { ...context, authority: { ...context.authority, workspaceId: "other-workspace" } },
+    { ...context, target: { ...context.target, sessionId: "other-session" } },
+    { ...context, target: { ...context.target, appId: "other-app" } },
+  ]) {
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Separate scope denials exercise actual persisted predicates.
+    assert.equal(await readDestination(foreign, first.appSpecDigest), undefined);
+  }
+  assert.equal(await readDestination(context, "9".repeat(64)), undefined);
+  await assert.rejects(recordDestination(context, "wrong-app", { ...first, appId: "other-app" }));
+  authorized = false;
+  await assert.rejects(readDestination(context, first.appSpecDigest));
+  await assert.rejects(recordDestination(context, "revoked-write", first));
+  console.log(
+    "PASS: real PostgreSQL static publication destination, restart, concurrent replay, old retry order, historical source and owner/workspace/session/app isolation. No hosted effects.",
+  );
+} finally {
+  await client?.end({ timeout: 5 });
+  if (started) {
+    command("pg_ctl", ["-D", data, "-m", "immediate", "-w", "stop"]);
+  }
+  await rm(scratch, { recursive: true, force: true });
+}

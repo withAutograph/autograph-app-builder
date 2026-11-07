@@ -106,6 +106,45 @@ describe("published source selection persistence", () => {
     changeSetDigest: "e".repeat(64),
     reviewDigest: "f".repeat(64),
   };
+  it("retains static destinations across reopen and idempotent retries without a compiled release", async () => {
+    const f = await fixture();
+    await contextStorage.run(f.container, async () => {
+      const storage = await createLocalOperatorArtifactStorage(f);
+      const { recordDestination, readDestination } = storage.selections;
+      if (!recordDestination || !readDestination) {
+        throw new Error("destination ports unavailable");
+      }
+      const destination = {
+        version: 1 as const,
+        appId: "fixture-app",
+        appSpecDigest: "a".repeat(64),
+        publishedSource: source,
+      };
+      await recordDestination(f.context, "publication-one", destination);
+      const updated = { ...destination, publishedSource: { ...source, gitSha: "f".repeat(40) } };
+      await recordDestination(f.context, "publication-two", updated);
+      await recordDestination(f.context, "publication-one", destination);
+      const reopened = await createLocalOperatorArtifactStorage(f);
+      expect(
+        await reopened.selections.readDestination?.(f.context, destination.appSpecDigest),
+      ).toEqual(updated);
+      expect(await storage.selections.read(f.context, destination.appSpecDigest)).toBeUndefined();
+      expect(await reopened.selections.readPublishedSource?.(f.context, source)).toEqual(source);
+      expect(
+        await reopened.selections.readPublishedSource?.(f.context, updated.publishedSource),
+      ).toEqual(updated.publishedSource);
+      await expect(recordDestination(f.context, "publication-one", updated)).rejects.toThrow();
+      await expect(
+        readDestination(
+          { ...f.context, target: { ...f.context.target, sessionId: "other-session" } },
+          destination.appSpecDigest,
+        ),
+      ).rejects.toThrow();
+      await expect(
+        recordDestination(f.context, "foreign-app", { ...destination, appId: "other-app" }),
+      ).rejects.toThrow();
+    });
+  });
   it("associates an equivalent recapture idempotently without promoting an older selection", async () => {
     const f = await fixture();
     await contextStorage.run(f.container, async () => {

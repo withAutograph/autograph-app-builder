@@ -1,5 +1,8 @@
 import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
-import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
+import type {
+  AppPublicationDestination,
+  CompiledOperatorReleaseSelection,
+} from "./hosted-operator-artifact-selection";
 import type { RepositoryProductionRepository } from "./repository-production-configuration";
 
 export class RepositoryProductionDestinationRequiredError extends Error {
@@ -16,6 +19,18 @@ type DestinationProfile = Pick<
   "workspaceId" | "repositoryId" | "repositoryFullName"
 >;
 
+const assertAppSpecification = (
+  expected: Pick<AppPublicationDestination, "appId" | "appSpecDigest">,
+  value: Pick<AppPublicationDestination, "appId" | "appSpecDigest"> | undefined,
+) => {
+  if (
+    value !== undefined &&
+    (value.appId !== expected.appId || value.appSpecDigest !== expected.appSpecDigest)
+  ) {
+    throw new Error("repository_production_capture_unavailable");
+  }
+};
+
 /** Source acquisition and reviewed publication are separate, independently owned authorities. */
 export const resolveRepositoryProductionDestination = <Profile extends DestinationProfile>(input: {
   workspaceId: string;
@@ -23,16 +38,20 @@ export const resolveRepositoryProductionDestination = <Profile extends Destinati
   appSpecDigest: string;
   source?: ApprovedBuildDecision["existingRepositorySource"];
   selection?: CompiledOperatorReleaseSelection;
+  destination?: AppPublicationDestination;
   repositories: readonly Profile[];
 }) => {
-  const { source, selection } = input;
+  const { source, selection, destination } = input;
+  assertAppSpecification(input, selection);
+  assertAppSpecification(input, destination);
   if (
-    selection !== undefined &&
-    (selection.appId !== input.appId || selection.appSpecDigest !== input.appSpecDigest)
+    selection?.publishedSource !== undefined &&
+    destination !== undefined &&
+    selection.publishedSource.repositoryId !== destination.publishedSource.repositoryId
   ) {
-    throw new Error("repository_production_capture_unavailable");
+    throw new Error("repository_production_scope_denied");
   }
-  const published = selection?.publishedSource;
+  const published = selection?.publishedSource ?? destination?.publishedSource;
   if (
     source !== undefined &&
     published !== undefined &&

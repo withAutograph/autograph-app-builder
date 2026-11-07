@@ -70,10 +70,13 @@ verified `publishedSource.repositoryId`. The operator resolves that identity
 through the exact configured workspace mapping. It does not change the acquired
 source. If an acquired repository is also present, both repository identities
 must agree. Missing, foreign, or ambiguous destinations do not authorize setup;
-a configured profile alone is insufficient. Acquired frontend-only apps retain
-their existing repository path without requiring a compiled SQL release. Fresh
-frontend-only apps still need a separately retained publication destination;
-this compiled-release fallback does not invent one.
+a configured profile alone is insufficient. Frontend-only apps retain the same trusted publication destination through a
+generic owner/session/app/spec marker in the existing artifact store; they do
+not need a SQL release or source acquisition. Normal publication and retained
+reconciliation completion record the marker only after provider success. A
+historical static publication can resume that same approved completion to
+record its destination. An old completion retry never replaces a newer marker.
+Acquired frontend-only apps also retain their existing repository path.
 
 App descriptions and compiled releases come from owner-scoped captured artifacts. The normal plan
 operation returns the app's resource and access intent; preparation reads the

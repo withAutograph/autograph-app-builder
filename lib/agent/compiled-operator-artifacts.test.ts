@@ -62,6 +62,7 @@ const mocks = vi.hoisted(() => ({
   onRead: vi.fn<(index: number) => void | Promise<void>>(),
   owner: null as Record<string, unknown> | null,
   record: vi.fn(),
+  recordDestination: vi.fn<NonNullable<OperatorArtifactSelections["recordDestination"]>>(),
   readSelection: vi.fn(),
   publishedSourceLookupAvailable: true,
   readPublishedSource:
@@ -122,6 +123,7 @@ vi.mock("../provisioning/hosted-operator-artifact-selection", async (importOrigi
       ? { readPublishedSource: mocks.readPublishedSource }
       : {}),
     record: mocks.record,
+    recordDestination: mocks.recordDestination,
     ...(mocks.associationAvailable ? { associatePublishedSource: mocks.associate } : {}),
   }),
 }));
@@ -217,6 +219,7 @@ describe("owned compiled artifact workflow hook", () => {
       sessionId: "durable-original",
     };
     mocks.resolve.mockImplementation(async () => mocks.owner);
+    mocks.recordDestination.mockImplementation(async (_context, _call, destination) => destination);
     mocks.record.mockImplementation(
       async (
         _context: OperatorArtifactContext,
@@ -544,29 +547,58 @@ describe("owned compiled artifact workflow hook", () => {
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
-  it("returns the static no-op without compiled workflow markers or hosted storage", async () => {
+  it("records an owned static destination without requiring a SQL release", async () => {
     const input = frame();
-    mocks.state = null;
     const result = await recordPublishedOperatorSourceForSession({
       ...input,
       backendKind: "static",
-      root: "/private/static-preview",
-      appSpecDigest: "f".repeat(64),
-      publishedSource: {
-        branch: "reviewed-static",
-        changeSetDigest: digest,
-        gitSha: "a".repeat(40),
-        gitTree: "b".repeat(40),
-        repositoryId: "4242",
-        reviewDigest: digest,
-      },
+      publishedSource: historicalSource,
     });
-    expect(result.status).toBe("not-required");
-    expect(mocks.resolve).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: "recorded",
+      destination: { appId: input.appId, appSpecDigest: digest, publishedSource: historicalSource },
+    });
+    expect(mocks.recordDestination).toHaveBeenCalledWith(
+      { authority, target: { appId: input.appId, sessionId: "durable-original" } },
+      input.callId,
+      expect.objectContaining({ publishedSource: historicalSource }),
+    );
     expect(mocks.readSelection).not.toHaveBeenCalled();
     expect(mocks.record).not.toHaveBeenCalled();
     expect(input.sandbox.run).not.toHaveBeenCalled();
     expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
+  });
+  it("rejects a static publication from another app or unowned workflow before recording", async () => {
+    mocks.state = null;
+    await expect(
+      recordPublishedOperatorSourceForSession({
+        ...frame(),
+        backendKind: "static",
+        publishedSource: historicalSource,
+      }),
+    ).rejects.toThrow();
+    expect(mocks.recordDestination).not.toHaveBeenCalled();
+  });
+  it("recovers a retained static reconciliation into the original owner destination", async () => {
+    const completion = await captureCompletion();
+    completion.compilation.release = { status: "not-required" };
+    mocks.state = null;
+    const result = await recordPublishedReconciliationSourceForSession({
+      completion,
+      adapterSessionId: "adapter",
+      sessionAuth: frame().sessionAuth,
+      publishedSource: historicalSource,
+    });
+    expect(result).toMatchObject({
+      status: "recorded",
+      destination: { appId: completion.appId, publishedSource: historicalSource },
+    });
+    expect(mocks.recordDestination).toHaveBeenCalledWith(
+      completion.compilation.context,
+      `draft-reconciliation:${completion.proposal.digest}`,
+      expect.objectContaining({ appSpecDigest: completion.appReview.appSpecDigest }),
+    );
+    expect(mocks.readExact).not.toHaveBeenCalled();
   });
   const requiredOrUnknownBackends: (AppDescription["backend"]["kind"] | undefined)[] = [
     "generated-postgres",

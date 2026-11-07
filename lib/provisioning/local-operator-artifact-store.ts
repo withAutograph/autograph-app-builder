@@ -16,6 +16,7 @@ import type {
 } from "./hosted-operator-artifact-store";
 import {
   compiledOperatorReleaseSelectionSchema,
+  appPublicationDestinationSchema,
   exactCompiledOperatorReleaseLookupSchema,
   selectExactCompiledOperatorRelease,
   selectExactPublishedAppSource,
@@ -25,6 +26,7 @@ import {
 } from "./hosted-operator-artifact-selection";
 import type {
   CompiledOperatorReleaseSelection,
+  AppPublicationDestination,
   OperatorArtifactSelections,
 } from "./hosted-operator-artifact-selection";
 
@@ -155,10 +157,18 @@ const selectionFrameSchema = z.strictObject({
   sequence: z.string().regex(/^[1-9][0-9]*$/u),
   version: z.literal(1),
 });
-const scanSelections = async (directory: string, callDigest?: string, includeHistory = false) => {
-  const frames: z.infer<typeof selectionFrameSchema>[] = [];
-  let latest: z.infer<typeof selectionFrameSchema> | undefined;
-  let matched: z.infer<typeof selectionFrameSchema> | undefined;
+const destinationFrameSchema = selectionFrameSchema.omit({ selection: true }).extend({
+  destination: appPublicationDestinationSchema,
+});
+const scanFrames = async <Frame extends { callDigest: string; sequence: string }>(
+  directory: string,
+  schema: z.ZodType<Frame>,
+  callDigest?: string,
+  includeHistory = false,
+) => {
+  const frames: Frame[] = [];
+  let latest: Frame | undefined;
+  let matched: Frame | undefined;
   const entries = await opendir(directory);
   for await (const entry of entries) {
     if (entry.name.startsWith(".") && entry.name.endsWith(".tmp")) {
@@ -172,7 +182,7 @@ const scanSelections = async (directory: string, callDigest?: string, includeHis
     if (content === undefined) {
       throw operatorArtifactUnavailable();
     }
-    const frame = selectionFrameSchema.parse(JSON.parse(content));
+    const frame = schema.parse(JSON.parse(content));
     if (frame.sequence !== ordinal) {
       throw operatorArtifactUnavailable();
     }
@@ -191,6 +201,11 @@ const scanSelections = async (directory: string, callDigest?: string, includeHis
   }
   return { frames, latest, matched };
 };
+
+const scanSelections = (directory: string, callDigest?: string, includeHistory = false) =>
+  scanFrames(directory, selectionFrameSchema, callDigest, includeHistory);
+const scanDestinations = (directory: string, callDigest?: string, includeHistory = false) =>
+  scanFrames(directory, destinationFrameSchema, callDigest, includeHistory);
 
 /** Private owner/session/app filesystem state; the app Sandbox never receives this root. */
 export const createLocalOperatorArtifactStorage = async (input: {
@@ -297,7 +312,85 @@ export const createLocalOperatorArtifactStorage = async (input: {
     await input.assertCurrentOwner(context);
     return candidates;
   };
+  const readRetainedDestinations = async (context: OperatorArtifactContext) => {
+    const owned = await directory(context);
+    const candidates: AppPublicationDestination[] = [];
+    const entries = await opendir(owned);
+    for await (const entry of entries) {
+      const spec = /^publication-(?<digest>[a-f0-9]{64})$/u.exec(entry.name)?.groups?.digest;
+      if (spec === undefined) {
+        continue;
+      }
+      const selected = path.join(owned, entry.name);
+      await assertDirectory(selected);
+      const { frames } = await scanDestinations(selected, undefined, true);
+      for (const frame of frames) {
+        if (
+          frame.destination.appId !== context.target.appId ||
+          frame.destination.appSpecDigest !== spec
+        ) {
+          throw operatorArtifactUnavailable();
+        }
+        candidates.push(frame.destination);
+      }
+      await input.assertCurrentOwner(context);
+    }
+    await input.assertCurrentOwner(context);
+    return candidates;
+  };
+  const destinationDirectory = async (context: OperatorArtifactContext, appSpecDigest: string) => {
+    const owned = await directory(context);
+    const selected = path.join(
+      owned,
+      `publication-${z
+        .string()
+        .regex(/^[a-f0-9]{64}$/u)
+        .parse(appSpecDigest)}`,
+    );
+    await ensureDirectory(selected);
+    return selected;
+  };
   const selections: OperatorArtifactSelections = {
+    async readDestination(context, appSpecDigest) {
+      const owned = await destinationDirectory(context, appSpecDigest);
+      const { latest } = await scanDestinations(owned);
+      await input.assertCurrentOwner(context);
+      if (latest === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing owned destination is the optional store read result.
+        return undefined;
+      }
+      const value = latest.destination;
+      if (value.appId !== context.target.appId || value.appSpecDigest !== appSpecDigest) {
+        throw operatorArtifactUnavailable();
+      }
+      return value;
+    },
+    async recordDestination(context, callId, value) {
+      const destination = appPublicationDestinationSchema.parse(value);
+      if (destination.appId !== context.target.appId) {
+        throw operatorArtifactUnavailable();
+      }
+      const owned = await destinationDirectory(context, destination.appSpecDigest);
+      const callDigest = hash(z.string().min(1).parse(callId));
+      for (;;) {
+        await input.assertCurrentOwner(context);
+        const { latest, matched } = await scanDestinations(owned, callDigest);
+        if (matched !== undefined) {
+          if (!isDeepStrictEqual(matched.destination, destination)) {
+            throw operatorArtifactUnavailable();
+          }
+          await input.assertCurrentOwner(context);
+          return destination;
+        }
+        // oxlint-disable-next-line unicorn/prefer-bigint-literals -- The repository TypeScript target cannot emit bigint literals.
+        const sequence = (BigInt(latest?.sequence ?? "0") + BigInt(1)).toString();
+        const content = JSON.stringify({ callDigest, destination, sequence, version: 1 });
+        if (await writeOnce(path.join(owned, `sequence-${sequence}.json`), content)) {
+          await input.assertCurrentOwner(context);
+          return destination;
+        }
+      }
+    },
     async read(context, appSpecDigest): Promise<CompiledOperatorReleaseSelection | undefined> {
       const owned = await selectionDirectory(context, appSpecDigest);
       const { latest } = await scanSelections(owned);
@@ -328,8 +421,11 @@ export const createLocalOperatorArtifactStorage = async (input: {
     },
     async readPublishedSource(context, lookupInput) {
       const lookup = publishedAppSourceLookupSchema.parse(lookupInput);
-      const candidates = await readRetainedSelections(context);
-      return selectExactPublishedAppSource(candidates, lookup);
+      const [compiled, destinations] = await Promise.all([
+        readRetainedSelections(context),
+        readRetainedDestinations(context),
+      ]);
+      return selectExactPublishedAppSource([...compiled, ...destinations], lookup);
     },
     async associatePublishedSource(context, association) {
       const approved = compiledOperatorReleaseSelectionSchema.parse(association.approvedSelection);

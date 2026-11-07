@@ -213,13 +213,17 @@ export const createRepositoryProductionNativeHandler =
           database,
           assertCurrentOwner,
         });
-        const selection = await selections.read(artifactContext, spec.appSpecDigest);
+        const [selection, destination] = await Promise.all([
+          selections.read(artifactContext, spec.appSpecDigest),
+          selections.readDestination?.(artifactContext, spec.appSpecDigest),
+        ]);
         const { profile, sourceSha } = resolveRepositoryProductionDestination({
           workspaceId: owner.ownerContext.authority.workspaceId,
           appId: owner.appId,
           appSpecDigest: spec.appSpecDigest,
           source,
           selection,
+          destination,
           repositories: configuration.repositories,
         });
         const capture = selection
