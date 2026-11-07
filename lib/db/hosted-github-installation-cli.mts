@@ -3,6 +3,7 @@ import nodePath from "node:path";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import type { ZodType } from "zod";
 
 import {
   bindHostedGitHubInstallation,
@@ -16,8 +17,14 @@ import { createPostgresHostedGitHubInstallationStore } from "../repository/postg
 
 const MAX_REQUEST_BYTES = 16 * 1024;
 
+const hasValidApplyArguments = (argv: string[]) =>
+  argv.length === 5 &&
+  argv[1] === "--database-url-fd" &&
+  argv[2] === "0" &&
+  argv[3] === "--request-file";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function readOwnerOnlyRequest(path: string): Promise<unknown> {
+async function readOwnerOnlyRequest<T>(path: string, schema: ZodType<T>): Promise<T> {
   if (!nodePath.isAbsolute(path)) {
     throw new Error("Request path must be absolute.");
   }
@@ -31,12 +38,14 @@ async function readOwnerOnlyRequest(path: string): Promise<unknown> {
     metadata.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (metadata.mode & 0o077) !== 0 ||
-    metadata.size === 0 ||
-    metadata.size > MAX_REQUEST_BYTES
+    metadata.size === 0
   ) {
     throw new Error("Request must be an owner-only nonempty regular file.");
   }
-  return JSON.parse(await readFile(path, "utf-8"));
+  if (metadata.size > MAX_REQUEST_BYTES) {
+    throw new Error("Request must be an owner-only nonempty regular file.");
+  }
+  return schema.parse(JSON.parse(await readFile(path, "utf-8")));
 }
 
 const argv = process.argv.slice(2);
@@ -44,22 +53,13 @@ if (argv[0] === "plan") {
   if (argv.length !== 3 || argv[1] !== "--request-file") {
     throw new Error("Plan requires --request-file PATH.");
   }
-  const request = hostedGitHubInstallationPlanRequestSchema.parse(
-    await readOwnerOnlyRequest(argv[2]),
-  );
+  const request = await readOwnerOnlyRequest(argv[2], hostedGitHubInstallationPlanRequestSchema);
   process.stdout.write(`${JSON.stringify(planHostedGitHubInstallation(request))}\n`);
 } else if (argv[0] === "apply") {
-  if (
-    argv.length !== 5 ||
-    argv[1] !== "--database-url-fd" ||
-    argv[2] !== "0" ||
-    argv[3] !== "--request-file"
-  ) {
+  if (!hasValidApplyArguments(argv)) {
     throw new Error("Apply arguments were invalid.");
   }
-  const request = hostedGitHubInstallationApplyRequestSchema.parse(
-    await readOwnerOnlyRequest(argv[4]),
-  );
+  const request = await readOwnerOnlyRequest(argv[4], hostedGitHubInstallationApplyRequestSchema);
   const client = postgres(readPrivateDatabaseUrl(0), hostedTaskPostgresOptions);
   try {
     const receipt = await bindHostedGitHubInstallation({
