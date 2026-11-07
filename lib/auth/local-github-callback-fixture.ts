@@ -24,10 +24,10 @@ const fixtures = {
 export type LocalGitHubCallbackFixture = keyof typeof fixtures;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function cookieValue(request: Request, name: string) {
+function cookieValue(request: Request, name: string): string | undefined {
   const cookie = request.headers.get("cookie");
-  if (!cookie) {
-    return;
+  if (cookie === null || cookie === "") {
+    return undefined;
   }
 
   for (const part of cookie.split(";")) {
@@ -36,6 +36,7 @@ function cookieValue(request: Request, name: string) {
       return decodeURIComponent(value.join("="));
     }
   }
+  return undefined;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -53,7 +54,7 @@ export function applyLocalGitHubCallbackFixture(request: Request, environment: N
   }
 
   const fixture = cookieValue(request, localGitHubCallbackFixtureCookie);
-  if (!fixture || !(fixture in fixtures)) {
+  if (fixture === undefined || fixture === "" || !(fixture in fixtures)) {
     return { applied: false, request };
   }
 
