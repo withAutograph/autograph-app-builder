@@ -15,6 +15,8 @@ import { createNativeRecoveryBinding } from "../lib/eve/native-recovery-binding.
 import { createSameOriginEveTransport } from "../lib/eve/same-origin-http.ts";
 import { hostedEveOperationScopes } from "../lib/eve/hosted-auth.ts";
 
+const logicalSessionId = "logical-original";
+
 const require = createRequire(import.meta.url);
 const sdk = path.dirname(require.resolve("eve/package.json"));
 const { handleTerminalRecoveryRequest } = await import(
@@ -129,7 +131,7 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
     },
     start: async (request) =>
       request.recovery === undefined
-        ? { adapterSessionId: "logical-original", snapshot: failed }
+        ? { adapterSessionId: logicalSessionId, snapshot: failed }
         : await http.start(request),
   };
   const service = () =>
@@ -147,12 +149,12 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
     appId: "fixture-app",
     appSpecDigest: "a".repeat(64),
     proposalDigest: "b".repeat(64),
-    sessionId: "logical-original",
+    sessionId: logicalSessionId,
     workspaceId: "private-workspace",
   };
   await store.recordPrivateBuildDecision({
     decision: {
-      adapterSessionId: "logical-original",
+      adapterSessionId: logicalSessionId,
       decision: "waiting-input",
       scope: protection,
       turnId: "original-turn",
@@ -175,7 +177,7 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
   assert.equal(child.adapterSessionId, oldReceipt.ownerRunId);
   assert.equal(child.parentSessionId, original.sessionId);
   assert.equal(child.nativeRecoveryBinding.originalAuthoritySessionId, original.sessionId);
-  assert.equal(child.nativeRecoveryBinding.logicalSessionId, "logical-original");
+  assert.equal(child.nativeRecoveryBinding.logicalSessionId, logicalSessionId);
   assert.deepEqual(child.privateBuildDecision.scope, protection);
   assert.equal(child.privateBuildDecision.adapterSessionId, oldReceipt.ownerRunId);
   assert.equal(collectedOwners.length, 0);
@@ -198,12 +200,10 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
   assert.equal(next.state, reconciliationKind === "uncertain" ? "submission_unknown" : "rejected");
   assert.equal(next.nativeRecovery.sourcePublicSessionId, adopted.sessionId);
   assert.equal(next.nativeRecovery.sourceOwnerRunId, oldReceipt.ownerRunId);
-  assert.equal(next.nativeRecovery.logicalSessionId, "logical-original");
+  assert.equal(next.nativeRecovery.logicalSessionId, logicalSessionId);
   assert.equal(next.nativeRecovery.originalAuthoritySessionId, original.sessionId);
   assert.equal(next.nativeRecoveryReceipt, undefined);
-  assert.deepEqual(collectedOwners, [
-    { logicalSessionId: "logical-original", ownerRunId: oldReceipt.ownerRunId },
-  ]);
+  assert.deepEqual(collectedOwners, [{ logicalSessionId, ownerRunId: oldReceipt.ownerRunId }]);
   assert.deepEqual(reconciled, [frontier]);
   // An exact retry checks this same operation; it never substitutes a fresh owner
   // or converts uncertain native reconciliation into a pre-dispatch rejection.

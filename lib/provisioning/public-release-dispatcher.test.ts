@@ -38,7 +38,7 @@ const fixture = () => {
   const ports: PublicReleasePorts = {
     applyEffect: vi.fn(),
     assertApproved: vi.fn().mockRejectedValue(new Error("pending")),
-    assertAuthorized: vi.fn().mockResolvedValue(undefined),
+    assertAuthorized: vi.fn<() => Promise<void>>().mockResolvedValue(),
     observe: vi.fn(),
     reconcileEffect: vi.fn(),
     resolve: vi.fn().mockResolvedValue(plan),
@@ -50,8 +50,8 @@ const fixture = () => {
     withTargetLease: vi.fn(),
   };
   const owner = {
-    assertCanonicalAppOwner: vi.fn().mockResolvedValue(undefined),
-    verifyWorkload: vi.fn().mockResolvedValue(undefined),
+    assertCanonicalAppOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    verifyWorkload: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
   const createPorts = vi.fn().mockResolvedValue(ports);
   return {
