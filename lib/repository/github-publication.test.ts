@@ -68,14 +68,11 @@ const branchSha = "3".repeat(40);
 const branchTree = "4".repeat(40);
 const reviewedBytes = new TextEncoder().encode("export default 'demo';\n");
 const reviewedBytesDigest = createHash("sha256").update(reviewedBytes).digest("hex");
-const reviewedAfter = (): { mode: "644"; digest: string } =>
-  Object.fromEntries([
-    ["mode", "644"],
-    ["digest", reviewedBytesDigest],
-  ]) as {
-    mode: "644";
-    digest: string;
-  };
+const reviewedAfter = () =>
+  ({
+    mode: "644",
+    digest: reviewedBytesDigest,
+  }) satisfies NonNullable<NormalizedChangeSet["changes"][number]["after"]>;
 const reviewedChange = (
   change: NormalizedChangeSet["changes"][number],
 ): NormalizedChangeSet["changes"][number] => {

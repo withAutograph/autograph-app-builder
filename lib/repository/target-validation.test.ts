@@ -32,6 +32,24 @@ import {
   sanitizeValidationDiagnosticText,
 } from "./target-validation";
 
+const unexpectedSandboxOperation = () =>
+  Promise.reject(new Error("Unexpected sandbox operation in validation fixture"));
+const createSandbox = (overrides: Partial<SandboxSession>): SandboxSession => ({
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: () => {
+    throw new Error("Unexpected sandbox operation in validation fixture");
+  },
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+  ...overrides,
+});
+
 const digest = (value: string) => value.repeat(64).slice(0, 64);
 
 const apply: TargetApplyReceipt = {
@@ -91,10 +109,12 @@ function sandboxFixture() {
     run,
     sandbox: {
       id: "sandbox",
-      run,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      writeTextFile: vi.fn(async () => {}),
-    } as unknown as SandboxSession,
+      ...createSandbox({
+        run,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        writeTextFile: vi.fn(async () => {}),
+      }),
+    },
   };
 }
 
@@ -1022,7 +1042,7 @@ describe("target validation", () => {
         stderr: "Formatting issues found",
         stdout: "",
       }));
-      const sandbox = { run } as unknown as SandboxSession;
+      const sandbox = createSandbox({ run });
 
       const result = await sandboxValidationCommandExecutor({ alreadyCompiled })({
         appId: "example",
@@ -1138,7 +1158,7 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
                 return Promise.resolve();
               }
             : undefined,
-          sandbox: { run, spawn } as unknown as SandboxSession,
+          sandbox: createSandbox({ run, spawn }),
           validationRoot: directory,
         });
         expect(result.exitCode).toBe(0);
@@ -1290,7 +1310,7 @@ exit 134
       })({
         appId: "example",
         command,
-        sandbox: { run } as unknown as SandboxSession,
+        sandbox: createSandbox({ run }),
         validationRoot: directory,
       });
       expect(run).toHaveBeenCalledOnce();
@@ -1357,7 +1377,7 @@ exit 99
       const result = await sandboxValidationCommandExecutor()({
         appId: "example",
         command: repositoryDeliveryBuildCommand("example"),
-        sandbox: { run } as unknown as SandboxSession,
+        sandbox: createSandbox({ run }),
         validationRoot: directory,
       });
       expect(result.exitCode).toBe(13);
@@ -1401,7 +1421,7 @@ exit 99
       const result = await sandboxValidationCommandExecutor()({
         appId: "example",
         command: "mise run --no-deps --skip-tools app:test example 1/1",
-        sandbox: { run } as unknown as SandboxSession,
+        sandbox: createSandbox({ run }),
         validationRoot: directory,
       });
       expect(result.exitCode).toBe(17);
