@@ -1,5 +1,7 @@
 import type { UiPreviewInput } from "../agent/ui-preview";
 
+const componentSource = "@autograph/components";
+
 export const renewalReviewDesignPrompt =
   "Create a component-backed renewal review UI for customer-success managers deciding which upcoming renewals need intervention. The workflow is not settled yet.";
 
@@ -66,10 +68,10 @@ export default function RenewalReview() {
       },
     ],
     productionComponents: [
-      { name: "Button", source: "@autograph/components" },
-      { name: "PageHeader", source: "@autograph/components" },
-      { name: "PageTabs", source: "@autograph/components" },
-      { name: "StatusPill", source: "@autograph/components" },
+      { name: "Button", source: componentSource },
+      { name: "PageHeader", source: componentSource },
+      { name: "PageTabs", source: componentSource },
+      { name: "StatusPill", source: componentSource },
     ],
     productionCompositions: [{ name: "DataTableComposition", source: "@autograph/compositions" }],
     productionIcons: [],
