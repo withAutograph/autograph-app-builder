@@ -417,9 +417,7 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   });
   const readCurrentPlanningOwner = vi.fn<
     Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCurrentPlanningOwner"]
-  >(() =>
-    Promise.resolve({ session: structuredClone(planningSession), target: context.target }),
-  );
+  >(() => Promise.resolve({ session: structuredClone(planningSession), target: context.target }));
   const controlPlane = {
     assertPlanningAuthorized: unexpectedPort,
     readCapturedRealmIdentity,
@@ -1522,9 +1520,7 @@ describe("participant plan resolution", () => {
       if (effect === undefined) {
         throw new Error("Fixture signup policy effect missing");
       }
-      const full = vi.fn<HostedOperatorEffectContext["assertCurrent"]>(async () =>
-        {},
-      );
+      const full = vi.fn<HostedOperatorEffectContext["assertCurrent"]>(async () => {});
       const observation = vi.fn<
         NonNullable<HostedOperatorEffectContext["assertCurrentObservation"]>
       >(async () => {});
@@ -1535,9 +1531,7 @@ describe("participant plan resolution", () => {
         bindWorkerContext: vi
           .fn<HostedOperatorWorkerEffectContext["bindWorkerContext"]>()
           .mockResolvedValue(async () => {}),
-        checkpoint: vi.fn<HostedOperatorWorkerEffectContext["checkpoint"]>(async () =>
-          {},
-        ),
+        checkpoint: vi.fn<HostedOperatorWorkerEffectContext["checkpoint"]>(async () => {}),
         effect,
         fenceGeneration: 1,
         operationRef: "11111111-1111-4111-8111-111111111111",
@@ -5162,7 +5156,7 @@ it("forwards all additive native delivery contracts through the actual request-s
     createRequestDependencies: createRequestScopedHostedOperatorDependencies({
       openControlPlane: async (input) => {
         expect(input.request).toBeInstanceOf(Request);
-        return ({
+        return {
           ...base,
           createNativeTargetAuthOnlyRealmCallbackPorts: () => {
             throw new Error("Unexpected callback reader in route delegation fixture");
@@ -5172,7 +5166,7 @@ it("forwards all additive native delivery contracts through the actual request-s
           centralIntegrationHostRequest: delegated,
           centralIntegrationDeploymentReceiptRequest: delegated,
           close: () => Promise.resolve(),
-        });
+        };
       },
       resolveConfiguration: async () => f.configuration,
     }),

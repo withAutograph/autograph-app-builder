@@ -871,7 +871,9 @@ export const createRealmIdentityCallbackDeploymentHandler =
         builderOrigin: configuration.builderCallbackOrigin,
         consume: async (input) => {
           if (selectedAuthOnly !== undefined) {
-            if (authOnlyPorts === undefined) {throw new Error("realm_callback_configuration");}
+            if (authOnlyPorts === undefined) {
+              throw new Error("realm_callback_configuration");
+            }
             await assertCurrent(input.context);
             await authOnlyPorts.ownerLink.consume({
               binding: selectedAuthOnly.binding,
@@ -887,7 +889,9 @@ export const createRealmIdentityCallbackDeploymentHandler =
           if (selectedEndpointOrigin === undefined) {
             throw new Error("realm_callback_configuration");
           }
-          if (selectedAuthOnly !== undefined) {await assertCurrent(selectedAuthOnly.context);}
+          if (selectedAuthOnly !== undefined) {
+            await assertCurrent(selectedAuthOnly.context);
+          }
           const response = await createHostedOperatorRealmHttpTransport(
             selectedAuthOnly?.configuration ?? configuration,
             "builder",

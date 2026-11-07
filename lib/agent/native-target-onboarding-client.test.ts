@@ -155,10 +155,12 @@ const fixture = () => {
       options,
       url: url instanceof Request ? url.url : url.toString(),
     });
-    return Promise.resolve(Response.json(output, {
+    return Promise.resolve(
+      Response.json(output, {
         headers: { "content-type": "application/json" },
         status: 200,
-      }));
+      }),
+    );
   });
   const client = createNativeTargetOnboardingClient({
     endpoint: "https://operator.example",
@@ -260,11 +262,13 @@ describe("native target protected client", () => {
           selectedApp: { ...body.selectedApp, appId: "another-app" },
         }),
       ).toThrow();
-      return Promise.resolve(Response.json({
+      return Promise.resolve(
+        Response.json({
           plan: authPlan,
           planDigest: nativeTargetAuthOnlyPlanDigest(authPlan),
           status: "planned",
-        }));
+        }),
+      );
     });
     const client = createNativeTargetOnboardingClient({
       endpoint: "https://operator.example",

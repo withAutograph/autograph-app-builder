@@ -43,11 +43,12 @@ export const nativeTargetAuthOnlyPreparationRequestSchema = z
       input.appId !== input.plan.appId ||
       input.operationRef !== input.planDigest ||
       nativeTargetAuthOnlyPlanDigest(input.plan) !== input.planDigest
-    )
-      {context.addIssue({
+    ) {
+      context.addIssue({
         code: "custom",
         message: "Auth-only preparation must echo its exact plan digest.",
-      });}
+      });
+    }
   });
 export type NativeTargetAuthOnlyPreparationRequest = z.infer<
   typeof nativeTargetAuthOnlyPreparationRequestSchema
