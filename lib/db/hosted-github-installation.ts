@@ -8,22 +8,18 @@ import type { HostedGitHubInstallationStore } from "../repository/postgres-githu
 const sha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
 const instantSchema = z.string().datetime({ offset: true });
 
-const planSchema = z
-  .object({
-    action: z.literal("github-installation.bind"),
-    authority: hostedTenantAuthoritySchema,
-    installation: z
-      .object({
-        accountId: z.string().regex(/^[1-9][0-9]*$/u),
-        accountLogin: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
-        accountType: z.enum(["Organization", "User"]),
-        installationId: z.string().regex(/^[1-9][0-9]*$/u),
-      })
-      .strict(),
-    requestedAt: instantSchema,
-    version: z.literal(1),
-  })
-  .strict();
+const planSchema = z.strictObject({
+  action: z.literal("github-installation.bind"),
+  authority: hostedTenantAuthoritySchema,
+  installation: z.strictObject({
+    accountId: z.string().regex(/^[1-9][0-9]*$/u),
+    accountLogin: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
+    accountType: z.enum(["Organization", "User"]),
+    installationId: z.string().regex(/^[1-9][0-9]*$/u),
+  }),
+  requestedAt: instantSchema,
+  version: z.literal(1),
+});
 
 export const hostedGitHubInstallationPlanRequestSchema = planSchema;
 export const hostedGitHubInstallationApplyRequestSchema = planSchema

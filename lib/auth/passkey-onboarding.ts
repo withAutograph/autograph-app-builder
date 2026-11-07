@@ -15,17 +15,15 @@ const TOKEN_VERSION = 1;
 const TOKEN_TTL_SECONDS = 5 * 60;
 const INTERNAL_EMAIL_DOMAIN = "passkey.autograph.invalid";
 
-const tokenPayloadSchema = z
-  .object({
-    deploymentId: z.string().min(1).max(256),
-    expiresAt: z.number().int().positive(),
-    nonce: z.string().uuid(),
-    origin: z.string().url(),
-    rpId: z.string().min(1).max(253),
-    userHandle: z.string().uuid(),
-    version: z.literal(TOKEN_VERSION),
-  })
-  .strict();
+const tokenPayloadSchema = z.strictObject({
+  deploymentId: z.string().min(1).max(256),
+  expiresAt: z.number().int().positive(),
+  nonce: z.uuid(),
+  origin: z.url(),
+  rpId: z.string().min(1).max(253),
+  userHandle: z.uuid(),
+  version: z.literal(TOKEN_VERSION),
+});
 
 export interface PasskeyOnboardingConfig {
   origin: string;
@@ -327,7 +325,7 @@ export function createPasskeyOnboardingPlugin(input: {
       createPasskeyOnboardingContext: createAuthEndpoint(
         "/passkey/onboarding-context",
         {
-          body: z.object({}).strict(),
+          body: z.strictObject({}),
           metadata: { noStore: true },
           method: "POST",
         },

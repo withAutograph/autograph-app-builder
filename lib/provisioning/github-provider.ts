@@ -15,14 +15,12 @@ const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 
-const configSchema = z
-  .object({
-    appId: decimal,
-    clientId: z.string().min(1),
-    clientSecret: z.string().min(20),
-    privateKey: z.string().min(1).max(32_768),
-  })
-  .strict();
+const configSchema = z.strictObject({
+  appId: decimal,
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(20),
+  privateKey: z.string().min(1).max(32_768),
+});
 
 export type GitHubProvisioningConfig = z.infer<typeof configSchema>;
 

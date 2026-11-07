@@ -2,23 +2,21 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
-export const sandboxExecutionPolicySchema = z
-  .object({
-    lease: z.object({
-      cleanupTimeoutMs: z.literal(2000),
-      heartbeatMs: z.literal(60_000),
-      ttlMs: z.literal(900_000),
-    }),
-    provider: z.object({
-      memoryBytes: z.literal(4_294_967_296),
-      networkPolicy: z.literal("allow-all"),
-      ports: z.tuple([]),
-      timeoutMs: z.literal(900_000),
-      vcpus: z.literal(2),
-    }),
-    version: z.literal(1),
-  })
-  .strict();
+export const sandboxExecutionPolicySchema = z.strictObject({
+  lease: z.object({
+    cleanupTimeoutMs: z.literal(2000),
+    heartbeatMs: z.literal(60_000),
+    ttlMs: z.literal(900_000),
+  }),
+  provider: z.object({
+    memoryBytes: z.literal(4_294_967_296),
+    networkPolicy: z.literal("allow-all"),
+    ports: z.tuple([]),
+    timeoutMs: z.literal(900_000),
+    vcpus: z.literal(2),
+  }),
+  version: z.literal(1),
+});
 
 export type SandboxExecutionPolicy = z.infer<typeof sandboxExecutionPolicySchema>;
 

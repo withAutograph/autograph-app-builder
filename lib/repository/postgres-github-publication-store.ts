@@ -28,15 +28,13 @@ export interface GitHubPublicationProposalStore {
   save: (proposal: GitHubPublicationProposal) => Promise<GitHubPublicationProposal>;
 }
 
-const proposalRowSchema = z
-  .object({
-    createdAt: z.date(),
-    idempotencyKey: z.string(),
-    kind: z.enum(["fresh-repository", "draft-pull-request"]),
-    proposal: z.unknown(),
-    proposalDigest: z.string(),
-  })
-  .strict();
+const proposalRowSchema = z.strictObject({
+  createdAt: z.date(),
+  idempotencyKey: z.string(),
+  kind: z.enum(["fresh-repository", "draft-pull-request"]),
+  proposal: z.unknown(),
+  proposalDigest: z.string(),
+});
 
 // Project exactly the closed receipt fields. The database row also contains
 // tenant columns used by the SQL predicate, but those are not proposal data.
@@ -57,9 +55,10 @@ function proposalKind(
     : "draft-pull-request";
 }
 
-const releaseGateSchema = z
-  .object({ configured: z.boolean(), name: z.literal("REPOSITORY_RELEASE_ENABLED") })
-  .strict();
+const releaseGateSchema = z.strictObject({
+  configured: z.boolean(),
+  name: z.literal("REPOSITORY_RELEASE_ENABLED"),
+});
 
 const hasExactStoredKeys = (value: GitHubPublicationProposal, keys: readonly string[]): boolean =>
   JSON.stringify(Object.keys(value).toSorted()) === JSON.stringify([...keys].toSorted());

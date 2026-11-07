@@ -2,28 +2,24 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
-const migrationRowSchema = z
-  .object({
-    audience: z.string().min(1),
-    issuer: z.string().min(1),
-    userId: z.string().min(1),
-    workspaceId: z.string().min(1),
-  })
-  .strict();
+const migrationRowSchema = z.strictObject({
+  audience: z.string().min(1),
+  issuer: z.string().min(1),
+  userId: z.string().min(1),
+  workspaceId: z.string().min(1),
+});
 
 const migratedRowSchema = migrationRowSchema.extend({ role: z.literal("owner") }).strict();
 
-export const betterAuthMembershipReadBackSchema = z
-  .object({
-    activeLegacyRows: z.array(migrationRowSchema),
-    inactiveLegacyCount: z.number().int().nonnegative(),
-    migratedRows: z.array(migratedRowSchema),
-    nativeOrganizationCount: z.number().int().nonnegative(),
-    orphanedActiveSessionCount: z.literal(0),
-    pendingInvitationCount: z.number().int().nonnegative(),
-    transactionReadOnly: z.literal(true),
-  })
-  .strict();
+export const betterAuthMembershipReadBackSchema = z.strictObject({
+  activeLegacyRows: z.array(migrationRowSchema),
+  inactiveLegacyCount: z.number().int().nonnegative(),
+  migratedRows: z.array(migratedRowSchema),
+  nativeOrganizationCount: z.number().int().nonnegative(),
+  orphanedActiveSessionCount: z.literal(0),
+  pendingInvitationCount: z.number().int().nonnegative(),
+  transactionReadOnly: z.literal(true),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalRows(rows: z.infer<typeof migrationRowSchema>[]) {

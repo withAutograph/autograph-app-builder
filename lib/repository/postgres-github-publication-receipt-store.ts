@@ -17,18 +17,16 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 const freshRepositoryKind = "fresh-repository" as const;
 const draftPullRequestKind = "draft-pull-request" as const;
 
-const journalRowSchema = z
-  .object({
-    createdAt: z.date(),
-    idempotencyKey: z.string().regex(/^[0-9a-f]{64}$/u),
-    kind: z.enum([freshRepositoryKind, draftPullRequestKind]),
-    proposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    receiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    record: z.unknown(),
-    status: z.enum(["pending", "failed", "succeeded"]),
-    updatedAt: z.date(),
-  })
-  .strict();
+const journalRowSchema = z.strictObject({
+  createdAt: z.date(),
+  idempotencyKey: z.string().regex(/^[0-9a-f]{64}$/u),
+  kind: z.enum([freshRepositoryKind, draftPullRequestKind]),
+  proposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+  receiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+  record: z.unknown(),
+  status: z.enum(["pending", "failed", "succeeded"]),
+  updatedAt: z.date(),
+});
 
 const journalRowSelection = {
   createdAt: hostedGitHubPublicationJournals.createdAt,

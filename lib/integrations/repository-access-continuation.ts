@@ -11,27 +11,23 @@ const VERCEL_PROTECTION_BYPASS_QUERY = "x-vercel-protection-bypass";
 const continuationIdSchema = z.string().uuid();
 const opaqueRuntimeId = z.string().min(1).max(255);
 
-export const repositoryAccessContinuationSchema = z
-  .object({
-    authority: hostedTenantAuthoritySchema,
-    authorizedAt: z.date().optional(),
-    callbackUrl: z.string().url().max(4096),
-    consumedAt: z.date().optional(),
-    continuationDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    createdAt: z.date(),
-    expiresAt: z.date(),
-    repository: z
-      .object({
-        fullName: z.string().min(3).max(201),
-        name: z.string().min(1).max(100),
-        owner: z.string().min(1).max(100),
-      })
-      .strict(),
-    requestId: opaqueRuntimeId,
-    selectedInstallationId: decimal.optional(),
-    sessionId: opaqueRuntimeId,
-  })
-  .strict();
+export const repositoryAccessContinuationSchema = z.strictObject({
+  authority: hostedTenantAuthoritySchema,
+  authorizedAt: z.date().optional(),
+  callbackUrl: z.string().url().max(4096),
+  consumedAt: z.date().optional(),
+  continuationDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+  createdAt: z.date(),
+  expiresAt: z.date(),
+  repository: z.strictObject({
+    fullName: z.string().min(3).max(201),
+    name: z.string().min(1).max(100),
+    owner: z.string().min(1).max(100),
+  }),
+  requestId: opaqueRuntimeId,
+  selectedInstallationId: decimal.optional(),
+  sessionId: opaqueRuntimeId,
+});
 
 export type RepositoryAccessContinuation = z.infer<typeof repositoryAccessContinuationSchema>;
 

@@ -79,47 +79,43 @@ const replayReceiptsMatchCapture = (
   );
 };
 
-const sessionRowSchema = z
-  .object({
-    adapterGeneration: z.number().int().nullable(),
-    adapterSessionId: z.string(),
-    audience: z.string(),
-    checkpointDigest: z.string().nullable(),
-    checkpointId: z.string().nullable(),
-    checkpointProgressDigest: z.string().nullable(),
-    createdAt: z.date(),
-    issuer: z.string(),
-    lastProgressAt: z.date().nullable(),
-    ownerUserId: z.string(),
-    parentSessionId: z.string().nullable(),
-    record: z.unknown(),
-    resumabilityState: z.string().nullable(),
-    sessionId: z.string(),
-    stage: z.string().nullable(),
-    title: z.string().nullable(),
-    updatedAt: z.date(),
-    workspaceId: z.string(),
-  })
-  .strict();
+const sessionRowSchema = z.strictObject({
+  adapterGeneration: z.number().int().nullable(),
+  adapterSessionId: z.string(),
+  audience: z.string(),
+  checkpointDigest: z.string().nullable(),
+  checkpointId: z.string().nullable(),
+  checkpointProgressDigest: z.string().nullable(),
+  createdAt: z.date(),
+  issuer: z.string(),
+  lastProgressAt: z.date().nullable(),
+  ownerUserId: z.string(),
+  parentSessionId: z.string().nullable(),
+  record: z.unknown(),
+  resumabilityState: z.string().nullable(),
+  sessionId: z.string(),
+  stage: z.string().nullable(),
+  title: z.string().nullable(),
+  updatedAt: z.date(),
+  workspaceId: z.string(),
+});
 
-const operationRowSchema = z
-  .object({
-    audience: z.string(),
-    clientRequestId: z.string(),
-    createdAt: z.date(),
-    issuer: z.string(),
-    kind: z.string(),
-    operationId: z.string(),
-    ownerUserId: z.string(),
-    record: z.unknown(),
-    requestDigest: z.string(),
-    sendCancellationRevisionAtDispatch: z.number().int().nonnegative().nullable(),
-    sessionId: z.string().nullable(),
-    state: z.string(),
-    updatedAt: z.date(),
-    workspaceId: z.string(),
-  })
-  .strict();
+const operationRowSchema = z.strictObject({
+  audience: z.string(),
+  clientRequestId: z.string(),
+  createdAt: z.date(),
+  issuer: z.string(),
+  kind: z.string(),
+  operationId: z.string(),
+  ownerUserId: z.string(),
+  record: z.unknown(),
+  requestDigest: z.string(),
+  sendCancellationRevisionAtDispatch: z.number().int().nonnegative().nullable(),
+  sessionId: z.string().nullable(),
+  state: z.string(),
+  updatedAt: z.date(),
+  workspaceId: z.string(),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tenantPredicate(principal: HostedPrincipal) {

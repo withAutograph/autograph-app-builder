@@ -18,17 +18,15 @@ import {
 } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
 
-const hostedSnapshotSchema = z
-  .object({
-    events: z.array(z.unknown()),
-    nativeDeliveryState: nativeDeliveryStateSchema.optional(),
-    privateInputState: privateInputStateSchema.optional(),
-    prototype: publicPrototypeSchema.optional(),
-    status: sessionStatusSchema,
-    uiPreview: publicUiPreviewSchema.optional(),
-    workingPreview: publicWorkingPreviewSchema.nullable().optional(),
-  })
-  .strict();
+const hostedSnapshotSchema = z.strictObject({
+  events: z.array(z.unknown()),
+  nativeDeliveryState: nativeDeliveryStateSchema.optional(),
+  privateInputState: privateInputStateSchema.optional(),
+  prototype: publicPrototypeSchema.optional(),
+  status: sessionStatusSchema,
+  uiPreview: publicUiPreviewSchema.optional(),
+  workingPreview: publicWorkingPreviewSchema.nullable().optional(),
+});
 
 export type HostedEngineSnapshot = z.infer<typeof hostedSnapshotSchema>;
 

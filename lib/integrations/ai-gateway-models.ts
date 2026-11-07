@@ -17,9 +17,9 @@ const gatewayModelSchema = z
     // oxlint-disable-next-line promise/prefer-await-to-then
     zdr: z.enum(["all", "some", "none"]).catch("none"),
   })
-  .passthrough();
+  .loose();
 
-const responseSchema = z.object({ data: z.array(gatewayModelSchema).max(1000) }).passthrough();
+const responseSchema = z.object({ data: z.array(gatewayModelSchema).max(1000) }).loose();
 
 type ModelState = BuilderIntegrationState["models"];
 // Availability fallback only, never a freshness cache. The Next adapter owns TTL.

@@ -10,7 +10,7 @@ import type { SandboxExecutionPolicy } from "./execution-policy";
 const sha256Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 
 export const sandboxExecutionLeaseSchema = z
-  .object({
+  .strictObject({
     acquiredAtEpochMs: z.number().int().nonnegative(),
     adapterSessionId: hostedIdentifierSchema,
     epoch: z.number().int().positive(),
@@ -34,7 +34,6 @@ export const sandboxExecutionLeaseSchema = z
     state: z.enum(["active", "released", "orphaned"]),
     version: z.literal(1),
   })
-  .strict()
   .superRefine((lease, context) => {
     if (
       lease.acquiredAtEpochMs > lease.heartbeatAtEpochMs ||

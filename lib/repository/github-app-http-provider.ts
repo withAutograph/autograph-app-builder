@@ -82,13 +82,11 @@ const decimal = z.string().regex(/^[1-9]\d*$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const name = z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/u);
 
-const configSchema = z
-  .object({
-    appId: decimal,
-    installationId: decimal,
-    privateKey: z.string().min(1).max(32_768),
-  })
-  .strict();
+const configSchema = z.strictObject({
+  appId: decimal,
+  installationId: decimal,
+  privateKey: z.string().min(1).max(32_768),
+});
 
 export type GitHubAppHttpProviderConfig = z.infer<typeof configSchema>;
 

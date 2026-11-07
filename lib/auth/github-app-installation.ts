@@ -99,7 +99,7 @@ const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const githubLoginSchema = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u);
 
 const configSchema = z
-  .object({
+  .strictObject({
     appId: decimalSchema,
     appSlug: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u),
     clientId: z
@@ -112,15 +112,14 @@ const configSchema = z
       .min(20)
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
-    issuer: z.string().url().startsWith("https://"),
-    resource: z.string().url().startsWith("https://"),
+    issuer: z.url().startsWith("https://"),
+    resource: z.url().startsWith("https://"),
     stateSecret: z
       .string()
       .min(32)
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
   })
-  .strict()
   .superRefine((value, context) => {
     const issuer = new URL(value.issuer);
     const resource = new URL(value.resource);
@@ -302,22 +301,20 @@ const signedState = (input: {
   };
 };
 
-const statePayloadSchema = z
-  .object({
-    authorityDigest: digestSchema,
-    expiresAt: z.number().int().positive(),
-    installationId: decimalSchema.optional(),
-    issuedAt: z.number().int().nonnegative(),
-    nonce: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/u),
-    phase: z.enum(["install", "authorize"]),
-    resumeKey: z.string().uuid().optional(),
-    returnTo: providerConnectionReturnToSchema,
-    setupAction: z.enum(["install", "update"]).optional(),
-    targetAccountLogin: githubLoginSchema.optional(),
-    version: z.literal(1),
-    via: z.enum(["existing", "installation"]).optional(),
-  })
-  .strict();
+const statePayloadSchema = z.strictObject({
+  authorityDigest: digestSchema,
+  expiresAt: z.number().int().positive(),
+  installationId: decimalSchema.optional(),
+  issuedAt: z.number().int().nonnegative(),
+  nonce: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/u),
+  phase: z.enum(["install", "authorize"]),
+  resumeKey: z.uuid().optional(),
+  returnTo: providerConnectionReturnToSchema,
+  setupAction: z.enum(["install", "update"]).optional(),
+  targetAccountLogin: githubLoginSchema.optional(),
+  version: z.literal(1),
+  via: z.enum(["existing", "installation"]).optional(),
+});
 
 const verifyState = (input: {
   state: string;

@@ -3,20 +3,18 @@ import { z } from "zod";
 
 import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
 
-const hostedForwarderConfigSchema = z
-  .object({
-    projectName: z
-      .string()
-      .min(1)
-      .max(100)
-      .refine((value) => !/[*:]/u.test(value)),
-    teamSlug: z
-      .string()
-      .min(1)
-      .max(100)
-      .refine((value) => !/[*:]/u.test(value)),
-  })
-  .strict();
+const hostedForwarderConfigSchema = z.strictObject({
+  projectName: z
+    .string()
+    .min(1)
+    .max(100)
+    .refine((value) => !/[*:]/u.test(value)),
+  teamSlug: z
+    .string()
+    .min(1)
+    .max(100)
+    .refine((value) => !/[*:]/u.test(value)),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readHostedForwarderSubject(

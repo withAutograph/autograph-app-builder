@@ -100,7 +100,7 @@ export function readPreviewProviderEmulation(
   }
 
   const parsed = z
-    .object({
+    .strictObject({
       branch: branchSchema,
       githubClientId: z.string().min(1).max(255),
       githubClientSecret: z.string().min(20).max(512),
@@ -112,7 +112,6 @@ export function readPreviewProviderEmulation(
       vercelClientId: z.string().min(1).max(255),
       vercelClientSecret: z.string().min(20).max(512),
     })
-    .strict()
     .parse({
       branch: environment.VERCEL_GIT_COMMIT_REF,
       githubClientId: environment.EMULATE_PREVIEW_GITHUB_CLIENT_ID,
@@ -159,7 +158,7 @@ export function readLocalProviderEmulation(
     throw new Error("Local provider emulation is unavailable.");
   }
   const parsed = z
-    .object({
+    .strictObject({
       canonicalOrigin: z.string().url(),
       githubClientId: z.string().min(1).max(255),
       githubClientSecret: z.string().min(20).max(512),
@@ -171,7 +170,6 @@ export function readLocalProviderEmulation(
       vercelClientSecret: z.string().min(20).max(512),
       vercelOrigin: localOrigin,
     })
-    .strict()
     .parse({
       canonicalOrigin: new URL(environment.BETTER_AUTH_URL ?? "").origin,
       githubClientId: environment.GITHUB_CLIENT_ID,

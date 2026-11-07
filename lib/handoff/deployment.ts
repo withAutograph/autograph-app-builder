@@ -75,30 +75,26 @@ async function readBoundedJson(request: Request) {
   }
 }
 
-export const builderHandoffCreateRequestSchema = z
-  .object({
-    appName: z.string().trim().min(1).max(120),
-    brief: z.string().trim().min(1).max(32_000),
-    connections: z.array(z.string().trim().min(1).max(100)).max(50),
-    creationRequestId: z.uuid(),
-    destination: builderHandoffDestinationSchema.optional(),
-    sourceCandidate: sourceCandidateReferenceSchema.optional(),
-    modelId: activeBuilderModelIdSchema,
-    provisioningRequestId: z.uuid().optional(),
-    repository: z
-      .object({
-        name: z
-          .string()
-          .trim()
-          .min(1)
-          .max(100)
-          .regex(/^[A-Za-z0-9._-]+$/u),
-        private: z.boolean(),
-      })
-      .strict(),
-    version: z.literal(1),
-  })
-  .strict();
+export const builderHandoffCreateRequestSchema = z.strictObject({
+  appName: z.string().trim().min(1).max(120),
+  brief: z.string().trim().min(1).max(32_000),
+  connections: z.array(z.string().trim().min(1).max(100)).max(50),
+  creationRequestId: z.uuid(),
+  destination: builderHandoffDestinationSchema.optional(),
+  sourceCandidate: sourceCandidateReferenceSchema.optional(),
+  modelId: activeBuilderModelIdSchema,
+  provisioningRequestId: z.uuid().optional(),
+  repository: z.strictObject({
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .regex(/^[A-Za-z0-9._-]+$/u),
+    private: z.boolean(),
+  }),
+  version: z.literal(1),
+});
 
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 type HandoffService = ReturnType<typeof createBuilderHandoffService>;
@@ -272,8 +268,7 @@ export function createBuilderHandoffRenewRouteHandler(input: {
         );
       }
       const body = z
-        .object({ creationRequestId: z.uuid() })
-        .strict()
+        .strictObject({ creationRequestId: z.uuid() })
         .parse(await readBoundedJson(request));
       const renewed = await input.handoffs.renew({
         authority,

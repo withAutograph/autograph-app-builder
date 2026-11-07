@@ -207,14 +207,14 @@ const webhookSchema = z
       .object({
         configuration: z
           .object({ id: z.string().min(1) })
-          .passthrough()
+          .loose()
           .optional(),
         configurationId: z.string().min(1).optional(),
       })
-      .passthrough(),
+      .loose(),
     type: z.string(),
   })
-  .passthrough();
+  .loose();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelWebhookDeploymentHandler(

@@ -9,16 +9,15 @@ export type LocalOAuthProvider = z.infer<typeof localOAuthProviderSchema>;
 
 const scalar = z.string().min(1).max(2048);
 const authorizationSchema = z
-  .object({
+  .strictObject({
     client_id: scalar,
     code_challenge: z.string().min(20).max(256).optional(),
     code_challenge_method: z.literal("S256").optional(),
-    redirect_uri: z.string().url().max(2048),
+    redirect_uri: z.url().max(2048),
     response_type: z.literal("code"),
     scope: z.string().max(1024).default(""),
     state: z.string().min(20).max(512),
   })
-  .strict()
   .superRefine((value, context) => {
     if (Boolean(value.code_challenge) !== Boolean(value.code_challenge_method)) {
       context.addIssue({
@@ -30,14 +29,12 @@ const authorizationSchema = z
 
 export type LocalOAuthAuthorization = z.infer<typeof authorizationSchema>;
 
-const approvalRelaySchema = z
-  .object({
-    authorization: authorizationSchema,
-    expiresAt: z.number().int().positive(),
-    origin: z.string().url(),
-    provider: localOAuthProviderSchema,
-  })
-  .strict();
+const approvalRelaySchema = z.strictObject({
+  authorization: authorizationSchema,
+  expiresAt: z.number().int().positive(),
+  origin: z.url(),
+  provider: localOAuthProviderSchema,
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function signLocalOAuthApproval(input: z.infer<typeof approvalRelaySchema>, secret: string) {

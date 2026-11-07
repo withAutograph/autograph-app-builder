@@ -3,11 +3,10 @@ import type { McpOptions } from "@better-auth/mcp";
 import { z } from "zod";
 
 const previewOAuthConfigSchema = z
-  .object({
-    issuer: z.string().url(),
-    resource: z.string().url(),
+  .strictObject({
+    issuer: z.url(),
+    resource: z.url(),
   })
-  .strict()
   .superRefine((config, context) => {
     const issuer = new URL(config.issuer);
     const resource = new URL(config.resource);
