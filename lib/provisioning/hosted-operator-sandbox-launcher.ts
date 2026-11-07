@@ -350,6 +350,24 @@ const removalReadbackSchema = z.strictObject({
     .optional(),
   readback_sha256: digestSchema.optional(),
 });
+const readbackSchemaForWorker = (
+  worker: Pick<ProtectedInstallerWorkerDescriptor, "operationScope" | "subcommand">,
+) => {
+  if (worker.subcommand === INTEGRATION_FENCE_APP_AUTHORITY_READBACK_COMMAND) {
+    return removalReadbackSchema;
+  }
+  if (
+    [APP_INTEGRATION_BOOTSTRAP_SCOPE, CENTRAL_INTEGRATION_BOOTSTRAP_SCOPE].includes(
+      worker.operationScope,
+    )
+  ) {
+    return accessReadbackSchema.extend({ receipt: z.unknown() });
+  }
+  if (worker.operationScope === AUTH_APP_ACCESS_SCOPE) {
+    return accessReadbackSchema.extend({ result: z.json() });
+  }
+  return accessReadbackSchema;
+};
 const resourceReadbackSchema = z
   .strictObject({
     version: z.literal(1),
@@ -2032,18 +2050,7 @@ const runPinnedFileSpoolTransport = async (
     ) {
       await assertCurrent();
       const raw = await readSpoolJson(sandbox, path.posix.join(spool, "readback.json"), signal);
-      /* oxlint-disable eslint/no-nested-ternary, sonarjs/no-nested-conditional -- Preserve the existing wire-protocol readback selections. */
-      const schema =
-        worker.subcommand === INTEGRATION_FENCE_APP_AUTHORITY_READBACK_COMMAND
-          ? removalReadbackSchema
-          : [APP_INTEGRATION_BOOTSTRAP_SCOPE, CENTRAL_INTEGRATION_BOOTSTRAP_SCOPE].includes(
-                worker.operationScope,
-              )
-            ? accessReadbackSchema.extend({ receipt: z.unknown() })
-            : worker.operationScope === AUTH_APP_ACCESS_SCOPE
-              ? accessReadbackSchema.extend({ result: z.json() })
-              : accessReadbackSchema;
-      /* oxlint-enable eslint/no-nested-ternary, sonarjs/no-nested-conditional */
+      const schema = readbackSchemaForWorker(worker);
       const observed = schema.parse(raw);
       if (
         observed.operation_id !== context.operation.operation_id ||
