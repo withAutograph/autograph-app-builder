@@ -10,29 +10,31 @@ export const hostedIdentifierSchema = z
  * Closed projection produced only after an adapter has verified the token's
  * signature, expiry, not-before time, and issuer key material.
  */
-export const verifiedHostedClaimsSchema = z
-  .object({
-    audience: z.string().min(1).max(300),
-    issuer: z.string().url(),
-    scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
-    subject: hostedIdentifierSchema,
-    workspaceId: hostedIdentifierSchema,
-  })
-  .strict();
+export const verifiedHostedClaimsSchema = z.strictObject({
+  audience: z.string().min(1).max(300),
+  issuer: z.url(),
+  scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
+  subject: hostedIdentifierSchema,
+  workspaceId: hostedIdentifierSchema,
+});
 
 export type VerifiedHostedClaims = z.infer<typeof verifiedHostedClaimsSchema>;
 
-export const hostedPrincipalSchema = z
-  .object({
-    audience: z.string().min(1).max(300),
-    issuer: z.string().url(),
-    ownerUserId: hostedIdentifierSchema,
-    scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
-    workspaceId: hostedIdentifierSchema,
-  })
-  .strict();
+export const hostedPrincipalSchema = z.strictObject({
+  audience: z.string().min(1).max(300),
+  issuer: z.url(),
+  ownerUserId: hostedIdentifierSchema,
+  scopes: z.array(z.string().min(1).max(100)).min(1).max(50),
+  workspaceId: hostedIdentifierSchema,
+});
 
 export type HostedPrincipal = z.infer<typeof hostedPrincipalSchema>;
+
+type HostedAuthorizationErrorCode =
+  | "invalid_claims"
+  | "issuer_mismatch"
+  | "audience_mismatch"
+  | "insufficient_scope";
 
 export const hostedEveOperationScopes = {
   cancel: "autograph:cancel",
@@ -45,9 +47,9 @@ export const hostedEveOperationScopes = {
 export type HostedEveOperation = keyof typeof hostedEveOperationScopes;
 
 export class HostedAuthorizationError extends Error {
-  readonly code: "invalid_claims" | "issuer_mismatch" | "audience_mismatch" | "insufficient_scope";
+  readonly code: HostedAuthorizationErrorCode;
 
-  constructor(code: HostedAuthorizationError["code"]) {
+  constructor(code: HostedAuthorizationErrorCode) {
     super("The hosted Eve request is not authorized.");
     this.name = "HostedAuthorizationError";
     this.code = code;
@@ -74,7 +76,8 @@ export function authorizeHostedPrincipal(input: {
     throw new HostedAuthorizationError("audience_mismatch");
   }
   const scopes = [...new Set(claims.scopes)].toSorted();
-  if (input.requiredScopes.some((scope) => !scopes.includes(scope))) {
+  const grantedScopes = new Set(scopes);
+  if (input.requiredScopes.some((scope) => !grantedScopes.has(scope))) {
     throw new HostedAuthorizationError("insufficient_scope");
   }
 
