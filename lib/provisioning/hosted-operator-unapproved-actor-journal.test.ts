@@ -19,6 +19,8 @@ import {
 } from "./hosted-operator-unapproved-app-successor.test-support";
 import type { HostedRuntimeJournalRow } from "./hosted-runtime-journal";
 
+const now = () => Date.parse("2026-10-20T12:00:00Z");
+
 describe("unapproved app capture continuity", () => {
   it("carries the original actor and checks both approved prerequisites", async () => {
     const { record, added: baseAdded } = captureFixture();
@@ -37,12 +39,14 @@ describe("unapproved app capture continuity", () => {
     gateway.plan = previous.plan;
     gateway.planDigest = operatorPlanDigest(gateway.plan);
     gateway.fenceGeneration = 1;
-    gateway.receipts = gateway.plan.effects.map((effect) => ({
-      effectId: effect.id,
-      observedAt,
-      resourceVersion: "actual-readback",
-      ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-    }));
+    gateway.receipts = gateway.plan.effects.map((effect) => {
+      const receipt = {
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      };
+      return effect.kind === "access" ? { ...receipt, fenceGeneration: 1 } : receipt;
+    });
     const gatewayCandidate = {
       ...requiredFixture(previous.gatewayDeliveryCandidates?.[0]),
       deploymentId: "separate-gateway",
@@ -74,7 +78,6 @@ describe("unapproved app capture continuity", () => {
       program: account.program,
       state: original,
     });
-    const now = () => Date.parse("2026-10-20T12:00:00Z");
     const candidate = requiredFixture(
       inspectUnapprovedAppSuccessor(record, context.target, added, now()),
     );
