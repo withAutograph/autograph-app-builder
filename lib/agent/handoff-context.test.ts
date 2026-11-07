@@ -67,8 +67,7 @@ describe("prepared session context", () => {
     const record = await fixture();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const read = vi.fn(async () => record);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const isActiveMember = vi.fn(async () => true);
+    const isActiveMember = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const result = await createPreparedHandoffReader({ isActiveMember, read })(sessionAuth);
     expect(result).toEqual(record.intent);
     expect(read).toHaveBeenCalledWith({ authority, handoffId });
