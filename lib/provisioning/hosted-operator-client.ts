@@ -69,13 +69,19 @@ import {
 } from "./hosted-operator-contract";
 
 /** Match the protected operator's function duration without changing unrelated fetches. */
-export const createHostedOperatorDispatcher = (factory?: Agent.Options["factory"]) =>
-  new Agent({
+export const createHostedOperatorDispatcher = (factory?: Agent.Options["factory"]) => {
+  const options: Agent.Options = {
     bodyTimeout: 1_800_000,
     headersTimeout: 1_800_000,
-    ...(factory === undefined ? {} : { factory }),
-  });
+  };
+  if (factory !== undefined) {
+    options.factory = factory;
+  }
+  return new Agent(options);
+};
 const operatorDispatcher = createHostedOperatorDispatcher();
+const OPERATOR_UNAVAILABLE = "operator_unavailable";
+const OPERATOR_RUNTIME_PATH = "/v1/runtime";
 
 const bindingSchema = z.strictObject({
   environment: z.record(z.string(), z.string()),
@@ -110,12 +116,17 @@ const operatorResponseDiagnostic = (
 } => {
   const blocked = operatorPublicResultSchema.safeParse(value);
   if (blocked.success && blocked.data.status === "blocked") {
-    return {
+    const diagnostic: Pick<HostedOperatorConsentMetadata, "operatorResponse" | "operatorCode"> & {
+      accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>;
+    } = {
       accessClass:
         blocked.data.code === "authorization_required" ? "application_auth_denied" : "other_failed",
       operatorResponse: "blocked",
-      ...(blocked.data.code === undefined ? {} : { operatorCode: blocked.data.code }),
     };
+    if (blocked.data.code !== undefined) {
+      diagnostic.operatorCode = blocked.data.code;
+    }
+    return diagnostic;
   }
   if (operatorSuccessSchemas[action].safeParse(value).success) {
     return { accessClass: "ok" };
@@ -188,27 +199,31 @@ export const createHostedOperatorClient = (input: {
       stage: "operator_request",
     });
     const token = await input.token();
+    const requestBody = JSON.stringify(body);
+    const baseHeaders = {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "x-vercel-trusted-oidc-idp-token": token,
+    };
+    const headers =
+      body.action === "status" || body.action === "execute"
+        ? {
+            ...baseHeaders,
+            [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+            [OPERATOR_PREPARATION_PROGRESS_HEADER]: OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
+          }
+        : baseHeaders;
     const options: RequestInit & { dispatcher: Agent } = {
-      body: JSON.stringify(body),
+      body: requestBody,
       dispatcher: operatorDispatcher,
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        "x-vercel-trusted-oidc-idp-token": token,
-        ...(body.action === "status" || body.action === "execute"
-          ? {
-              [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
-              [OPERATOR_PREPARATION_PROGRESS_HEADER]: OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
-            }
-          : {}),
-      },
+      headers,
       method: "POST",
       redirect: "error",
       signal,
     };
     let response: Response;
     try {
-      response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+      response = await (input.fetch ?? fetch)(new URL(OPERATOR_RUNTIME_PATH, url), options);
     } catch (error) {
       if (
         (body.action === "execute" || body.action === "status") &&
@@ -266,13 +281,13 @@ export const createHostedOperatorClient = (input: {
           sessionId: diagnosticSessionId,
           signal,
           token,
-          url: new URL("/v1/runtime", url),
+          url: new URL(OPERATOR_RUNTIME_PATH, url),
         });
       }
       throw new HostedOperatorError(
         response.status === 401 || response.status === 403
           ? "authorization_required"
-          : "operator_unavailable",
+          : OPERATOR_UNAVAILABLE,
       );
     }
     let value: unknown;
@@ -313,7 +328,7 @@ export const createHostedOperatorClient = (input: {
     };
     let result: Response;
     try {
-      result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+      result = await (input.fetch ?? fetch)(new URL(OPERATOR_RUNTIME_PATH, url), options);
     } catch (error) {
       if (body.action === "export" && !isCancellation(error, signal)) {
         throw new HostedOperatorTransportUnknown(error);
@@ -321,7 +336,7 @@ export const createHostedOperatorClient = (input: {
       throw error;
     }
     if (!result.ok) {
-      throw new HostedOperatorError("operator_unavailable");
+      throw new HostedOperatorError(OPERATOR_UNAVAILABLE);
     }
     let value: unknown;
     try {
@@ -334,7 +349,7 @@ export const createHostedOperatorClient = (input: {
     }
     const blocked = operatorPublicResultSchema.safeParse(value);
     if (blocked.success) {
-      throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+      throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE);
     }
     return value;
   };
@@ -365,7 +380,7 @@ export const createHostedOperatorClient = (input: {
       let result: Response;
       stage = "client_transport";
       try {
-        result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+        result = await (input.fetch ?? fetch)(new URL(OPERATOR_RUNTIME_PATH, url), options);
       } catch (error) {
         if (body.action === "continuity" && !isCancellation(error, signal)) {
           throw new HostedOperatorTransportUnknown(error);
@@ -378,9 +393,9 @@ export const createHostedOperatorClient = (input: {
           throw new HostedOperatorError("authorization_required");
         }
         if (body.action === "continuity") {
-          throw new HostedOperatorTransportUnknown(new HostedOperatorError("operator_unavailable"));
+          throw new HostedOperatorTransportUnknown(new HostedOperatorError(OPERATOR_UNAVAILABLE));
         }
-        throw new HostedOperatorError("operator_unavailable");
+        throw new HostedOperatorError(OPERATOR_UNAVAILABLE);
       }
       stage = "client_response_decode";
       let value: unknown;
@@ -395,7 +410,7 @@ export const createHostedOperatorClient = (input: {
       stage = "client_response_validation";
       const blocked = operatorPublicResultSchema.safeParse(value);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable", {
+        throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE, {
           continuityReadStage:
             body.action === "continuity-read" || body.action === "continuity-binding-read"
               ? "operator_response"
@@ -462,7 +477,7 @@ export const createHostedOperatorClient = (input: {
       const raw = await send(request, signal);
       const blocked = operatorPublicResultSchema.safeParse(raw);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+        throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE);
       }
       const value = operatorAuthIdentityInputSchema.parse(raw);
       if (
@@ -480,7 +495,7 @@ export const createHostedOperatorClient = (input: {
       const raw = await send(request, signal);
       const blocked = operatorPublicResultSchema.safeParse(raw);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+        throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE);
       }
       const value = bindingSchema.parse(raw);
       if (
@@ -562,14 +577,14 @@ export const createHostedOperatorClient = (input: {
         const raw = await send(request, signal);
         const blocked = operatorPublicResultSchema.safeParse(raw);
         if (blocked.success) {
-          throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+          throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE);
         }
         return neonAuthorizationResultSchema.parse(raw);
       } catch (error) {
         if (error instanceof HostedOperatorError) {
           throw error;
         }
-        throw new HostedOperatorError("operator_unavailable");
+        throw new HostedOperatorError(OPERATOR_UNAVAILABLE);
       }
     },
     ownerContext: input.ownerContext,
@@ -584,10 +599,10 @@ export const createHostedOperatorClient = (input: {
         {
           action: "continuity-plan",
           ...recovery,
-          selection,
-          runtime,
           idempotencyKey,
           ownerContext: exportOwner(),
+          runtime,
+          selection,
         },
         continuityPlannedSchema,
         signal,
@@ -705,7 +720,7 @@ export const createHostedOperatorClient = (input: {
       const raw = await send(request, signal);
       const blocked = operatorPublicResultSchema.safeParse(raw);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+        throw new HostedOperatorError(blocked.data.code ?? OPERATOR_UNAVAILABLE);
       }
       const selection = operatorSelectionSchema.parse(raw);
       if (selection.appId !== request.appId || selection.sessionId !== request.sessionId) {
