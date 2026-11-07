@@ -21,19 +21,24 @@ import type {
   HostedOperatorContext,
 } from "./hosted-operator-service";
 
+const continuityReadAction = "continuity-read";
+const continuityApprovalAction = "continuity-approval";
+const continuityPlanAction = "continuity-plan";
+const continuityStatusAction = "continuity-status";
+
 export const continuityTransportRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({
-    action: z.literal("continuity-read"),
+    action: z.literal(continuityReadAction),
     intentId: z.uuid(),
     ownerContext: operatorOwnerContextSchema,
   }),
   z.strictObject({
     ...hostedContinuityRequestSchema.shape,
-    action: z.literal("continuity-approval"),
+    action: z.literal(continuityApprovalAction),
     ownerContext: operatorOwnerContextSchema,
   }),
   z.strictObject({
-    action: z.literal("continuity-plan"),
+    action: z.literal(continuityPlanAction),
     idempotencyKey: z.string().min(1),
     ownerContext: operatorOwnerContextSchema,
     predecessorIntentId: z.uuid().optional(),
@@ -41,7 +46,7 @@ export const continuityTransportRequestSchema = z.discriminatedUnion("action", [
     selection: operatorSelectionSchema,
   }),
   z.strictObject({
-    action: z.literal("continuity-status"),
+    action: z.literal(continuityStatusAction),
     intentId: z.uuid(),
     ownerContext: operatorOwnerContextSchema,
   }),
@@ -86,11 +91,11 @@ export const createContinuityDispatcher =
       await dependencies.verifyWorkload(frozenWorkloadRequest);
       let selected: z.infer<typeof operatorSelectionSchema>;
       let savedContext: HostedOperatorContext | undefined;
-      if (parsed.action === "continuity-plan") {
+      if (parsed.action === continuityPlanAction) {
         selected = parsed.selection;
       } else {
         const intentId =
-          parsed.action === "continuity-status" || parsed.action === "continuity-read"
+          parsed.action === continuityStatusAction || parsed.action === continuityReadAction
             ? parsed.intentId
             : z.uuid().parse(parsed.planRef.split("/").at(-1));
         const saved = await dependencies.store.read({
@@ -108,9 +113,11 @@ export const createContinuityDispatcher =
         };
       }
       stage = "dispatcher_owner_authorization";
-      const artifactRead = ["continuity-status", "continuity-read", "continuity-approval"].includes(
-        parsed.action,
-      );
+      const artifactRead = [
+        continuityStatusAction,
+        continuityReadAction,
+        continuityApprovalAction,
+      ].includes(parsed.action);
       const context =
         artifactRead && savedContext !== undefined
           ? await dependencies.authorizeRead(frozenWorkloadRequest, savedContext)
@@ -123,7 +130,7 @@ export const createContinuityDispatcher =
       const { operations } = dependencies;
       let result;
       switch (parsed.action) {
-        case "continuity-plan": {
+        case continuityPlanAction: {
           result = await operations.plan(
             context,
             parsed.runtime,
@@ -134,15 +141,15 @@ export const createContinuityDispatcher =
           );
           break;
         }
-        case "continuity-read": {
+        case continuityReadAction: {
           result = await operations.readPlan(context, parsed.intentId);
           break;
         }
-        case "continuity-status": {
+        case continuityStatusAction: {
           result = await operations.status(context, parsed.intentId);
           break;
         }
-        case "continuity-approval": {
+        case continuityApprovalAction: {
           result = await operations.approval(context, {
             action: "continuity",
             idempotencyKey: parsed.idempotencyKey,
@@ -172,7 +179,7 @@ export const createContinuityDispatcher =
       return Response.json(result, { headers: { "cache-control": "private, no-store" } });
     } catch (error) {
       try {
-        if (parsed.action === "continuity-plan") {
+        if (parsed.action === continuityPlanAction) {
           reportContinuityPlanningFailure(parsed.selection.sessionId, stage, error);
         }
       } catch {
