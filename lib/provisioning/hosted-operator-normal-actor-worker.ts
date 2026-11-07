@@ -61,6 +61,7 @@ interface TestDependencies {
 }
 const mismatch = () => new HostedOperatorError("resource_mismatch");
 const unavailable = () => new HostedOperatorError("operator_unavailable");
+const AUTH_MEMBERSHIP = "auth-membership";
 const privateOperation = async <T>(operation: () => Promise<T>): Promise<T> => {
   try {
     return await operation();
@@ -79,8 +80,8 @@ const selectedSpec = (input: OrganizationWorkerInput) => {
   }
   if (
     ![
-      effect.effect.kind === "auth-membership",
-      effect.effect.id === `auth-membership:${input.organizationId}`,
+      effect.effect.kind === AUTH_MEMBERSHIP,
+      effect.effect.id === `${AUTH_MEMBERSHIP}:${input.organizationId}`,
       effect.plan.stage === "app",
       sameOperatorSelection(effect.plan.selection, effect.target),
     ].every(Boolean)
@@ -207,8 +208,8 @@ const assertHistoricalInspection = (
   );
   const matches = [
     captured,
-    historical.effect.kind === "auth-membership",
-    ["auth-membership", `auth-membership:${input.organizationId}`].includes(historical.effect.id),
+    historical.effect.kind === AUTH_MEMBERSHIP,
+    [AUTH_MEMBERSHIP, `${AUTH_MEMBERSHIP}:${input.organizationId}`].includes(historical.effect.id),
     spec.actorId === input.owner.actorId,
     spec.identityProof.reference ===
       `_protected-operator/artifacts/realm-identity-proof/${input.effect.target.appId}/${spec.identityProof.sha256}`,
@@ -302,16 +303,21 @@ export const createNormalActorOrganizationWorkers = (
             assertHistoricalInspection(input, historical, original);
           }
           await assertCurrent(input);
-          const observed = await launcher.inspect({
+          const baseInspection = {
             ...input.effect,
             ...prepared,
-            ...(historical === undefined || original === undefined
-              ? {}
+          };
+          const inspection =
+            historical === undefined || original === undefined
+              ? baseInspection
               : {
+                  ...baseInspection,
                   effect: historical.effect,
                   membershipProof: { ...prepared.membershipProof, proof: original.proof },
                   plan: historical.plan,
-                }),
+                };
+          const observed = await launcher.inspect({
+            ...inspection,
             // Only the observed marker uses historical plan bytes. Authority and
             // every execution fence still belong to the current approved effect.
             assertCurrent: currentFence,
