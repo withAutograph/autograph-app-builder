@@ -71,18 +71,26 @@ export const createPostgresHostedRuntimeJournalStore = (
         .values({
           ...authority,
           createdAt: input.now,
-          record: hostedRuntimeJournalRecordSchema.parse({
-            approvedByCallId: input.approvedByCallId,
-            ...(input.environmentGitBranch === undefined
-              ? {}
-              : { environmentGitBranch: input.environmentGitBranch }),
-            kind: "app-runtime",
-            operator: input.operator,
-            request: input.target,
-            status: "pending",
-            step: "reserved",
-            version: 1,
-          }),
+          record: hostedRuntimeJournalRecordSchema.parse(
+            (() => {
+              const base = {
+                approvedByCallId: input.approvedByCallId,
+              };
+              const record =
+                input.environmentGitBranch === undefined
+                  ? base
+                  : { ...base, environmentGitBranch: input.environmentGitBranch };
+              return {
+                ...record,
+                kind: "app-runtime",
+                operator: input.operator,
+                request: input.target,
+                status: "pending",
+                step: "reserved",
+                version: 1,
+              };
+            })(),
+          ),
           requestDigest: identity.digest,
           requestId: identity.requestId,
           revision: 1,
