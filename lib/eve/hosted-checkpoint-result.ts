@@ -14,21 +14,28 @@ export function resultFromHostedCheckpoint(
   const effectiveCursor = Math.max(cursor, offset);
   const start = effectiveCursor - offset;
   const events = checkpoint.events.slice(start, start + limit);
-  return eveSessionResultSchema.parse({
+  const result: EveSessionResult = {
     cursor: Math.min(effectiveCursor + events.length, offset + checkpoint.events.length),
     events,
     sessionId,
     status: checkpoint.status === "working" ? "waiting" : checkpoint.status,
-    ...(checkpoint.inputRequests === undefined ? {} : { inputRequests: checkpoint.inputRequests }),
-    ...(checkpoint.prototype === undefined ? {} : { prototype: checkpoint.prototype }),
-    ...(checkpoint.uiPreview === undefined ? {} : { uiPreview: checkpoint.uiPreview }),
-    ...(checkpoint.workingPreview === undefined
-      ? {}
-      : {
-          workingPreview:
-            checkpoint.status === "cancelled" || checkpoint.status === "failed"
-              ? null
-              : currentWorkingPreview(checkpoint.workingPreview),
-        }),
-  });
+  };
+
+  if (checkpoint.inputRequests !== undefined) {
+    result.inputRequests = checkpoint.inputRequests;
+  }
+  if (checkpoint.prototype !== undefined) {
+    result.prototype = checkpoint.prototype;
+  }
+  if (checkpoint.uiPreview !== undefined) {
+    result.uiPreview = checkpoint.uiPreview;
+  }
+  if (checkpoint.workingPreview !== undefined) {
+    result.workingPreview =
+      checkpoint.status === "cancelled" || checkpoint.status === "failed"
+        ? null
+        : currentWorkingPreview(checkpoint.workingPreview);
+  }
+
+  return eveSessionResultSchema.parse(result);
 }
