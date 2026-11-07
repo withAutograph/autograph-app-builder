@@ -76,9 +76,7 @@ const fixture = async () => {
     throw new Error("beforeRead must stay fenced");
   });
   const assertNativeRecoveryOwner = vi.fn(async () => {
-    ownerAllowed
-      ? await Promise.resolve()
-      : await Promise.reject(new Error("Current owner revoked"));
+    await (ownerAllowed ? Promise.resolve() : Promise.reject(new Error("Current owner revoked")));
   });
   const activateRecovery = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(async () => {
     throw new Error("Native activation HTTP 503");
@@ -138,10 +136,10 @@ const fixture = async () => {
   const transport: HostedEveTransport = {
     activateRecovery,
     cancel: vi.fn(async () => ({ events: [], status: "cancelled" as const })),
-    get: vi.fn(async () => working),
+    get: vi.fn().mockResolvedValue(working),
     observe,
-    respond: vi.fn(async () => working),
-    send: vi.fn(async () => working),
+    respond: vi.fn().mockResolvedValue(working),
+    send: vi.fn().mockResolvedValue(working),
     start,
   };
   const seed = createHostedEveSessionService({

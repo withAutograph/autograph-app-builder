@@ -331,7 +331,10 @@ describe.skipIf(tools === undefined)(
         store.select({
           assertCurrent: async () => {
             checks += 1;
-            checks === 2 ? await Promise.reject(new Error("revoked")) : await Promise.resolve();
+            if (checks === 2) {
+              await Promise.reject(new Error("revoked"));
+            }
+            await Promise.resolve();
           },
           authority,
           expectedPublicOrigin: null,
