@@ -70,7 +70,7 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
   if (rows.length !== 1) {
     throw fail();
   }
-  const row = rows[0];
+  const [row] = rows;
   const record: PublicReleaseRecord = publicReleaseRecordSchema.parse(row.record);
   const { plan } = record;
   if (
@@ -111,19 +111,22 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
   ) {
     throw fail();
   }
-  const binding = publicRuntimeBindingSchema.parse({
+  const bindingInput: z.input<typeof publicRuntimeBindingSchema> = {
+    deploymentId: observed.deploymentId,
+    environment: observed.environment,
     kind: "public-application-runtime-v1",
     operationRef: row.requestId,
     planDigest: row.requestDigest,
+    projectId: observed.projectId,
+    publicOrigin: observed.publicOrigin,
+    releaseId: observed.releaseId,
     runtimeOperationRef: input.operationRef,
     runtimePlanDigest: operatorPlanDigest(input.plan),
-    projectId: observed.projectId,
-    environment: observed.environment,
-    publicOrigin: observed.publicOrigin,
-    ...(input.appEntryPath === undefined ? {} : { appEntryPath: input.appEntryPath }),
-    deploymentId: observed.deploymentId,
-    releaseId: observed.releaseId,
-  });
+  };
+  if (input.appEntryPath !== undefined) {
+    bindingInput.appEntryPath = input.appEntryPath;
+  }
+  const binding = publicRuntimeBindingSchema.parse(bindingInput);
   assertPublicRuntimeBinding(binding, input.plan, input.operationRef);
   return binding;
 };

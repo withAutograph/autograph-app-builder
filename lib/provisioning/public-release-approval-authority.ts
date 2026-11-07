@@ -173,7 +173,7 @@ export const createPublicReleaseApprovalAuthority =
       plan,
     });
     const state = await checkpoint.read();
-    const transport = createNativeTargetApprovalHistoryTransport({
+    const transportInput: Parameters<typeof createNativeTargetApprovalHistoryTransport>[0] = {
       appId: plan.selection.appId,
       assertCanonicalAppOwner: input.authority.assertCanonicalAppOwner,
       builderOrigin: input.builderOrigin,
@@ -188,16 +188,21 @@ export const createPublicReleaseApprovalAuthority =
         authorization: input.request.headers.get("authorization"),
         signal: input.request.signal,
       },
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-    });
+    };
+    if (input.fetch !== undefined) {
+      transportInput.fetch = input.fetch;
+    }
+    const transport = createNativeTargetApprovalHistoryTransport(transportInput);
     const observe = transport.observePrivateHistory;
     if (!observe) {
       throw unavailable();
     }
+    const observation =
+      state === undefined ? { save: checkpoint.save } : { save: checkpoint.save, state };
     const approval = await readPrivatePublicReleaseApproval({
       assertOwner: input.assertCurrentOwner,
       callId,
-      observation: { ...(state === undefined ? {} : { state }), save: checkpoint.save },
+      observation,
       owner: input.owner,
       plan,
       readHistory: async (startIndex, onEvent) =>

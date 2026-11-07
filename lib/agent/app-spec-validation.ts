@@ -34,12 +34,8 @@ export type AppSpecValidationResult =
 const declaredReadiness = (lines: readonly string[]): boolean | undefined => {
   try {
     const parsed: unknown = JSON.parse(lines.join("\n"));
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed) &&
-      Object.hasOwn(parsed, "status")
-    ) {
+    const object = z.record(z.string(), z.unknown()).safeParse(parsed);
+    if (object.success && Object.hasOwn(object.data, "status")) {
       return buildReadyHandoffSchema.safeParse(parsed).success;
     }
   } catch {
@@ -50,14 +46,14 @@ const declaredReadiness = (lines: readonly string[]): boolean | undefined => {
 
 /** Share explicit intent recognition between inline and streamed artifacts. */
 export const createBuildReadyAppSpecScanner = () => {
-  let fence: { marker: string; json: boolean } | undefined;
+  let fence: { marker: string; json: boolean } | null = null;
   let body: string[] = [];
   let ready = false;
   return {
     consumeLine(rawLine: string) {
       const line = rawLine.replace(/\r$/u, "");
       const marker = /^[ \t]*(?<marker>`{3,}|~{3,})(?<info>.*)$/u.exec(line)?.groups;
-      if (fence === undefined) {
+      if (fence === null) {
         if (marker?.marker !== undefined) {
           fence = { json: marker.info?.trim().toLowerCase() === "json", marker: marker.marker };
         }
@@ -74,7 +70,7 @@ export const createBuildReadyAppSpecScanner = () => {
           ready = declaredReadiness(body) ?? ready;
         }
         body = [];
-        fence = undefined;
+        fence = null;
         return;
       }
       if (fence.json) body.push(line);
