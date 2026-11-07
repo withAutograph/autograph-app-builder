@@ -19,6 +19,22 @@ export interface PublicReleaseRequestAuthority {
 }
 export type PublicReleaseRequest = z.infer<typeof publicReleaseTransportRequestSchema>;
 
+type PublicReleaseResponseBody =
+  | { code: string }
+  | {
+      operationRef: string;
+      plan: Awaited<ReturnType<PublicReleasePorts["resolve"]>>;
+      planDigest: string;
+    }
+  | Awaited<ReturnType<ReturnType<typeof createPublicReleaseHandler>["observe"]>>
+  | Awaited<ReturnType<ReturnType<typeof createPublicReleaseHandler>["release"]>>;
+
+const response = (value: PublicReleaseResponseBody, status = 200) =>
+  Response.json(value, {
+    headers: { "cache-control": "no-store" },
+    status,
+  });
+
 /** A separate Production exposure contract; never cast into a frozen Preview selection. */
 export const createPublicReleaseDispatcher =
   (dependencies: {
@@ -30,12 +46,6 @@ export const createPublicReleaseDispatcher =
     }) => Promise<PublicReleasePorts>;
   }) =>
   async (request: Request): Promise<Response> => {
-    // oxlint-disable-next-line anti-slop/no-object-parameters -- The HTTP JSON boundary serializes only closed parsed plan/results or bounded codes.
-    const response = (value: object, status = 200) =>
-      Response.json(value, {
-        headers: { "cache-control": "no-store" },
-        status,
-      });
     if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/public-release") {
       return response({ code: "not_found" }, 404);
     }
