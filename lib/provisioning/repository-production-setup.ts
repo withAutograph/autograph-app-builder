@@ -1,3 +1,4 @@
+import { sameRepositoryProductionSetupEffects } from "./repository-production-intent";
 /* oxlint-disable sonarjs/cognitive-complexity, sonarjs/no-nested-functions, sonarjs/max-union-size, react-doctor/js-cache-property-access -- Ordered recovery re-reads the mutable journal after every awaited write and retains the closed progress states. */
 /* oxlint-disable eslint/no-await-in-loop, eslint/no-loop-func, eslint/complexity -- Ordered effects share one fenced row; every awaited callback completes before advancing the journal. */
 import { randomUUID } from "node:crypto";
@@ -109,7 +110,7 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         }
         row = next;
       };
-      if (!isDeepStrictEqual(row.record.intent, intent)) {
+      if (!sameRepositoryProductionSetupEffects(row.record.intent, intent)) {
         if (unfinished(row.record)) {
           return { operationRef: row.operationRef, state: "reconciling" };
         }
@@ -293,7 +294,10 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         state: intent.storage.kind === "none" ? "checking-access" : "setting-up-data",
       };
     }
-    if (unfinished(row.record) || !isDeepStrictEqual(row.record.intent, intent)) {
+    if (
+      unfinished(row.record) ||
+      !sameRepositoryProductionSetupEffects(row.record.intent, intent)
+    ) {
       return { operationRef: row.operationRef, state: "reconciling" };
     }
     if (row.record.effects["creator-access"].state !== "applied") {

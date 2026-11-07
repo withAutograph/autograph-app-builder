@@ -103,6 +103,9 @@ Setup, access changes, and callbacks share one physical lock per repository and
 app. Worker effects carry a positive durable fencing generation and are
 checkpointed before dispatch. Interrupted writes are read back before retry;
 uncertain results remain pending. Revisions retain the database and credentials.
+A source-only commit change retains the same setup effects, status, and sign-in
+continuation; it does not reinstall the schema or rebind credentials. Setup still
+reconciles changed storage, schema, access, and owner-session bindings.
 After the initial creator grant finishes, setup never regrants it automatically:
 People-page revocations and role changes remain authoritative. When a new
 reviewed schema changes creator roles, an existing active creator is updated

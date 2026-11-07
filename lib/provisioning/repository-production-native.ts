@@ -1,3 +1,4 @@
+import { sameRepositoryProductionSetupEffects } from "./repository-production-intent";
 /* oxlint-disable sonarjs/no-nested-functions -- Request-scoped management factories share the held app lease without reacquiring it. */
 /* oxlint-disable eslint/no-nested-ternary, sonarjs/no-nested-conditional -- Progress projection retains the four distinct creator states and explicit removal status. */
 /* oxlint-disable sonarjs/expression-complexity, react-doctor/server-sequential-independent-await -- Owner authorization is re-read before examining the saved approval; the full configured destination must match. */
@@ -818,12 +819,12 @@ export const createRepositoryProductionNativeHandler =
             (row.record.creatorRoleUpdate?.state === "pending" ||
               row.record.appAccessUpgrade?.state === "pending" ||
               Object.values(row.record.effects).some((effect) => effect.state === "pending")) &&
-            !isDeepStrictEqual(row.record.intent, found.intent)
+            !sameRepositoryProductionSetupEffects(row.record.intent, found.intent)
           ) {
             throw new Error("repository_production_reconciliation_required");
           }
           if (
-            !isDeepStrictEqual(row.record.intent, found.intent) &&
+            !sameRepositoryProductionSetupEffects(row.record.intent, found.intent) &&
             (await accessJournal.pending(found.scope)).length > 0
           ) {
             throw new Error("repository_production_access_reconciliation_required");

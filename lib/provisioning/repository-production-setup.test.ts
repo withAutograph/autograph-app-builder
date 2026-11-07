@@ -226,9 +226,9 @@ describe("Builder-owned Production setup", () => {
         pendingCommandIds: [],
       });
     }).toThrow();
-    expect((await f.service.prepare(scope, { ...revised, sourceSha: "c".repeat(40) })).state).toBe(
-      "reconciling",
-    );
+    expect(
+      (await f.service.prepare(scope, { ...revised, creatorRoles: ["requester"] })).state,
+    ).toBe("reconciling");
     members.push({ id: "later-member", roles: [] });
     const restarted = createRepositoryProductionSetup(f.ports);
     expect((await restarted.prepare(scope, revised)).state).toBe("ready");
@@ -314,6 +314,60 @@ describe("Builder-owned Production setup", () => {
     expect(results.every((result) => result.state === "ready")).toBe(true);
     expect(f.calls.filter((call) => call === "allocate-storage")).toHaveLength(1);
     expect(f.calls.filter((call) => call === "creator-access")).toHaveLength(1);
+  });
+  it.each(["postgres", "none"] as const)(
+    "keeps a completed %s setup ready across a source-only revision without repeating effects",
+    async (kind) => {
+      const f = fixture();
+      const selected = kind === "none" ? { ...intent, storage: { kind: "none" as const } } : intent;
+      await f.service.prepare(scope, selected);
+      const before = structuredClone(f.read());
+      const calls = [...f.calls];
+      const revised = { ...selected, sourceSha: "c".repeat(40) };
+      expect((await f.service.status(scope, revised)).state).toBe("ready");
+      expect((await f.service.prepare(scope, revised)).state).toBe("ready");
+      expect(f.calls).toEqual(calls);
+      expect(f.read()?.record.resource).toEqual(before?.record.resource);
+    },
+  );
+  it("keeps the original sign-in continuation across a source-only revision", async () => {
+    const f = fixture();
+    f.setIdentity(false);
+    const original = await f.service.prepare(scope, intent);
+    expect(original.state).toBe("identity-required");
+    const calls = [...f.calls];
+    const revised = { ...intent, sourceSha: "c".repeat(40) };
+    expect(await f.service.status(scope, revised)).toEqual(original);
+    expect(await f.service.prepare(scope, revised)).toEqual(original);
+    expect(f.calls).toEqual(calls);
+  });
+  it("reconciles the same interrupted write after a source-only revision without allocating twice", async () => {
+    const f = fixture();
+    f.interrupt();
+    await expect(f.service.prepare(scope, intent)).rejects.toThrow("connection lost");
+    expect((await f.service.prepare(scope, { ...intent, sourceSha: "c".repeat(40) })).state).toBe(
+      "ready",
+    );
+    expect(f.calls.filter((call) => call === "allocate-storage")).toHaveLength(1);
+    expect(f.calls.filter((call) => call === "credentials")).toHaveLength(1);
+  });
+  it("still reconciles actual schema and access changes", async () => {
+    const f = fixture();
+    await f.service.prepare(scope, intent);
+    expect((await f.service.status(scope, { ...intent, creatorRoles: ["approver"] })).state).toBe(
+      "reconciling",
+    );
+    if (intent.storage.kind !== "postgres") {
+      throw new Error("Expected the database fixture");
+    }
+    expect(
+      (
+        await f.service.status(scope, {
+          ...intent,
+          storage: { ...intent.storage, manifestSha256: "c".repeat(64) },
+        })
+      ).state,
+    ).toBe("reconciling");
   });
   it("keeps resources across revision and never restores deliberately revoked creator access", async () => {
     const f = fixture();
