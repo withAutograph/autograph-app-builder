@@ -245,6 +245,7 @@ describe("private app integrations installation", () => {
       sandbox: hooks.sandbox,
     });
     expect(failed).toMatchObject({ exitCode: 2, status: "failed", stderr: "" });
+    if (failed.status !== "failed") throw new Error("Expected integration installation to fail");
     expect(failed.problem).toContain("Integration server host is unavailable");
     expect(JSON.stringify(failed)).not.toContain("secret-access-token");
     expect(JSON.stringify(failed)).not.toContain("private-source-payload");
@@ -266,6 +267,7 @@ describe("private app integrations installation", () => {
       sandbox: hooks.sandbox,
     });
     expect(failed).toMatchObject({ exitCode: 2, status: "failed" });
+    if (failed.status !== "failed") throw new Error("Expected integration installation to fail");
     expect(failed.problem).toContain("The app integration installer failed");
     expect(failed.problem).not.toContain("foreign diagnosis");
     expect(failed.problem).not.toContain("false success");
