@@ -378,9 +378,9 @@ describe("approval history binding and cancellation", () => {
     expect(result).toBeNull();
     expect(checkpoint?.capture.entries).toHaveLength(1);
     expect(checkpoint?.capture.entries[0]).toMatchObject({
-      requestId: "human-request",
       cancelled: true,
       completedCancelled: true,
+      requestId: "human-request",
     });
   });
   it.each([false, true])(

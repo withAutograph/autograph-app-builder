@@ -263,8 +263,8 @@ describe("normal Auth client", () => {
     });
     expect(state.cookies.find((cookie) => cookie.name === "parent")).toMatchObject({
       domain: ".example.com",
-      path: "/api/auth",
       expires: -1,
+      path: "/api/auth",
       sameSite: "Strict",
     });
     const resumed = createHostedOperatorNormalAuthClient({
@@ -311,7 +311,7 @@ describe("normal Auth client", () => {
     expect(url.pathname).toBe("/api/auth/organization/list-members");
     expect(url.searchParams.get("organizationId")).toBe("https://evil.example/?secret=1");
     expect(url.searchParams.get("filterValue")).toBe("user&private=1");
-    expect(init).toMatchObject({ redirect: "error", cache: "no-store", method: "GET" });
+    expect(init).toMatchObject({ cache: "no-store", method: "GET", redirect: "error" });
     expect(init?.signal).toBeInstanceOf(AbortSignal);
     expect(new Headers(init?.headers).get("origin")).toBe(origin);
   });

@@ -99,12 +99,12 @@ process.stdout.write(JSON.stringify(readHostedManagedSeedFiles().map(file => ({p
   expect(JSON.parse(loaded)).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
-        path: "$HOME/.agents/skills/create-app/SKILL.md",
         content: "Updated synthetic instruction.",
+        path: "$HOME/.agents/skills/create-app/SKILL.md",
       }),
       expect.objectContaining({
-        path: "$HOME/.agents/skills/additional/references/new.md",
         content: "Additional synthetic reference.",
+        path: "$HOME/.agents/skills/additional/references/new.md",
       }),
     ]),
   );

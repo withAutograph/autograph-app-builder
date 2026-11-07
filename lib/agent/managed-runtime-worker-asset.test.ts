@@ -295,7 +295,7 @@ it("reads the target first, restores executable mode and avoids a source VM when
   expect(f.stats.creates).toBe(0);
   expect(f.stats.tokens).toBe(0);
   expect(f.stats.writes).toBe(1);
-  expect(f.state).toEqual({ installed: true, disposed: true });
+  expect(f.state).toEqual({ disposed: true, installed: true });
 });
 
 it.each(["wrong", "missing"])(
@@ -418,7 +418,7 @@ it("accepts authoritative owned deletion after stop uncertainty and repairs agai
   await f.install();
   expect(f.stats.creates).toBe(2);
   expect(f.targetBytes).toEqual(binary);
-  expect(f.state).toMatchObject({ installed: true, disposed: true });
+  expect(f.state).toMatchObject({ disposed: true, installed: true });
 });
 
 it("disposes a retained named source without target access or another create", async () => {

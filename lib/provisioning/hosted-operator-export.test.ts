@@ -631,8 +631,8 @@ describe("existing operator transport export dispatch", () => {
         );
         // oxlint-disable-next-line eslint/no-await-in-loop -- Read only this controlled rejection response.
         expect(await response.json()).toMatchObject({
-          status: "blocked",
           code: "authorization_required",
+          status: "blocked",
         });
       }
       expect(read).not.toHaveBeenCalled();

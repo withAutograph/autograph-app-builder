@@ -341,8 +341,8 @@ it("final acceptance permits absent or incomplete destination inspection coverag
     ]);
     expect(model.doGenerateCalls).toHaveLength(0);
     expect(appBuilderWorkflowState.get()).toMatchObject({
-      phase: "validated",
       appBackendKind: "static",
+      phase: "validated",
     });
     const installation = createGitHubInstallationIdentity({
       accountId: "20",
@@ -384,8 +384,8 @@ it("final acceptance permits absent or incomplete destination inspection coverag
     }).toThrow("changed concurrently");
     const first = await tool.execute({ runSourceReview: true }, context("final-first"));
     expect(appBuilderWorkflowState.get()).toMatchObject({
-      phase: "reviewed",
       appBackendKind: "static",
+      phase: "reviewed",
     });
     expect(first).toMatchObject({
       sourceAssessment: { reviewCompleted: true, status: "unassessed" },
@@ -548,8 +548,8 @@ it("prepared review resumes in the original acceptance context without a second 
     });
     expect({ directCalls, preparedCalls, finalizedCalls }).toEqual({
       directCalls: 0,
-      preparedCalls: 0,
       finalizedCalls: 0,
+      preparedCalls: 0,
     });
     const pending = await tool.execute({ runSourceReview: true }, context("prepare-review"));
     expect(pending).toMatchObject({ status: "source_review_pending", sourceReview: reference });
@@ -561,8 +561,8 @@ it("prepared review resumes in the original acceptance context without a second 
     expect(appBuilderWorkflowState.get().phase).toBe("reviewed");
     expect({ directCalls, preparedCalls, finalizedCalls }).toEqual({
       directCalls: 0,
-      preparedCalls: 1,
       finalizedCalls: 1,
+      preparedCalls: 1,
     });
   });
 });

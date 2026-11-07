@@ -156,8 +156,8 @@ describe("private app integrations installation", () => {
       sandbox: hooks.sandbox,
     });
     expect(failed).toMatchObject({
-      status: "failed",
       exitCode: 2,
+      status: "failed",
       stderr: "provider recipe unavailable",
     });
   });
@@ -240,7 +240,7 @@ describe("private app integrations installation", () => {
       root: "/private/approved-checkout",
       sandbox: hooks.sandbox,
     });
-    expect(failed).toMatchObject({ status: "failed", exitCode: 2, stderr: "" });
+    expect(failed).toMatchObject({ exitCode: 2, status: "failed", stderr: "" });
     expect(failed.problem).toContain("Integration server host is unavailable");
     expect(JSON.stringify(failed)).not.toContain("secret-access-token");
     expect(JSON.stringify(failed)).not.toContain("private-source-payload");
@@ -261,7 +261,7 @@ describe("private app integrations installation", () => {
       root: "/private/approved-checkout",
       sandbox: hooks.sandbox,
     });
-    expect(failed).toMatchObject({ status: "failed", exitCode: 2 });
+    expect(failed).toMatchObject({ exitCode: 2, status: "failed" });
     expect(failed.problem).toContain("The app integration installer failed");
     expect(failed.problem).not.toContain("foreign diagnosis");
     expect(failed.problem).not.toContain("false success");

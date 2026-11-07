@@ -113,8 +113,8 @@ describe("candidate-bound same-version dependency catalog", () => {
     const receipt = JSON.parse(result.stdout);
     expect(receipt).toMatchObject({
       dependency: "fixture-tool",
-      version: "1.2.3",
       lockGenerated: true,
+      version: "1.2.3",
     });
     expect(f.read("package.json")).toMatchObject({
       catalog: { "fixture-tool": "1.2.3" },
@@ -157,7 +157,7 @@ describe("candidate-bound same-version dependency catalog", () => {
     const result = f.run({ CATALOG_LOCK_FAIL: "1" });
     expect(result.status).toBe(0);
     const receipt = JSON.parse(result.stdout);
-    expect(receipt).toMatchObject({ lockGenerated: false, lockExitCode: 7 });
+    expect(receipt).toMatchObject({ lockExitCode: 7, lockGenerated: false });
     expect(receipt.files.some((file: { path: string }) => file.path === "bun.lock")).toBe(false);
     const retry = f.run();
     expect(retry.status).toBe(0);

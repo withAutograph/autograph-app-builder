@@ -107,7 +107,7 @@ describe("approved private compute transition", () => {
     const f = fixture();
     await expect(activatePrivateComputeProfile(f.input, f.ports)).resolves.toBe(f.native);
     expect(f.effects).toEqual(["stop", "update", "resume"]);
-    expect(f.native.currentSession()).toEqual({ vcpus: 8, memory: 16_384 });
+    expect(f.native.currentSession()).toEqual({ memory: 16_384, vcpus: 8 });
     expect(f.record).toMatchObject({ phase: "ready", proposalDigest: f.input.proposalDigest });
     await activatePrivateComputeProfile({ ...f.input, proposalDigest: "2".repeat(64) }, f.ports);
     expect(f.effects).toEqual(["stop", "update", "resume"]);

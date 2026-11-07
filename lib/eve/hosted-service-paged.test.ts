@@ -413,9 +413,9 @@ describe("unchanged paged observation reuse", () => {
     expect(result.events.map((event) => event.index)).toEqual([3]);
     const stored = await f.getSession(principal, f.sessionId);
     expect(stored).toMatchObject({
-      status: "input_required",
-      resumability: "live",
       adapterSessionId: "adapter_1",
+      resumability: "live",
+      status: "input_required",
     });
     expect(f.adapter.start).not.toHaveBeenCalled();
     expect(f.adapter.send).not.toHaveBeenCalled();

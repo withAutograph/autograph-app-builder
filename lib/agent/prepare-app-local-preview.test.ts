@@ -96,7 +96,7 @@ describe("private local preview setup", () => {
       root: "/workspace/repository",
       sandbox: { run },
     });
-    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(result).toMatchObject({ exitCode: 1, status: "failed" });
     expect(result.problem).toContain("CUE authorization roles and model/operation grants");
     expect(result.problem).toContain("ordinary implementation repair");
     expect(run).toHaveBeenLastCalledWith({
@@ -119,7 +119,7 @@ describe("private local preview setup", () => {
       root: "/workspace/repository",
       sandbox: { run },
     });
-    expect(result).toMatchObject({ status: "prepared", exitCode: 0 });
+    expect(result).toMatchObject({ exitCode: 0, status: "prepared" });
     expect(run).toHaveBeenLastCalledWith({
       command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
       workingDirectory: "/workspace/repository",
@@ -241,7 +241,7 @@ describe("private local preview setup", () => {
       sandbox: { run, spawn },
       expectedPreviousAuthOrigin: "http://localhost:3000",
     });
-    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(result).toMatchObject({ exitCode: 1, status: "failed" });
     expect(result.stderr).toContain("The recorded Auth origin cannot change");
     expect(JSON.stringify(result)).not.toContain("split-secret");
     expect(JSON.stringify(result)).not.toContain("postgres://");

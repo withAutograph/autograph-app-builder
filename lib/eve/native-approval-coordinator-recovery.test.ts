@@ -166,7 +166,7 @@ describe("native approval coordinator recovery", () => {
       authorization.resolve({ status: "allowed" });
       const result = await pending;
       expect(approvals.getApprovalAuditState(result.session.state).settlements).toEqual([
-        expect.objectContaining({ requestId: "pending-request", outcome: "allowed" }),
+        expect.objectContaining({ outcome: "allowed", requestId: "pending-request" }),
       ]);
     } finally {
       vi.useRealTimers();

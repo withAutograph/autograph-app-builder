@@ -59,7 +59,7 @@ describe("hosted continuity planning", () => {
     await expect(planAppHostedRuntime.execute(input, context)).resolves.toEqual(planned);
     expect(mocks.plan).toHaveBeenCalledWith(
       target,
-      { sandboxId: "selected-sandbox", root: "/workspace/repository" },
+      { root: "/workspace/repository", sandboxId: "selected-sandbox" },
       "continuity-call",
       signal,
       undefined,

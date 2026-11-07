@@ -99,10 +99,10 @@ describe("local execution evidence read path", () => {
       { client: f.client },
     );
     expect(output).toMatchObject({
-      sessionId: "wrun_owned",
-      ownerLineage: ["wrun_owned"],
       nativeCursor: 2,
-      selectedTurn: { turnId: "turn_1", execution: "unexercised" },
+      ownerLineage: ["wrun_owned"],
+      selectedTurn: { execution: "unexercised", turnId: "turn_1" },
+      sessionId: "wrun_owned",
     });
     expect(f.snapshot).toHaveBeenCalledTimes(1);
     expect(f.send).not.toHaveBeenCalled();

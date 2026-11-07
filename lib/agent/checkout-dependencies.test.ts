@@ -613,8 +613,8 @@ describe("authored workspace preview dependencies", () => {
     expect(attempts).toHaveLength(1);
     expect(attempts[0]).toMatchObject({
       command: "dependency-install",
-      exitCode: 1,
       completion: "complete",
+      exitCode: 1,
     });
   });
 

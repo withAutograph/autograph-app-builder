@@ -695,8 +695,8 @@ it("persists generic managed scope before an unknown POST and recovers it after 
   };
   f.setLosePostResponse(true);
   expect(await prepareHostedRuntime(input)).toMatchObject({
-    status: "blocked",
     code: "provider_unavailable",
+    status: "blocked",
   });
   expect(posts.length).toBeGreaterThan(0);
   const pending = await store.read({ authority, target });
@@ -745,7 +745,7 @@ it("rejects a foreign generic managed row in preflight before reservation or dat
       store,
       target,
     }),
-  ).toMatchObject({ status: "blocked", code: "resource_mismatch" });
+  ).toMatchObject({ code: "resource_mismatch", status: "blocked" });
   expect(executor.run).not.toHaveBeenCalled();
   expect(await store.read({ authority, target })).toBeUndefined();
   expect(f.request.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);

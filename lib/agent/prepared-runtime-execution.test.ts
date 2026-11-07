@@ -1030,9 +1030,9 @@ it("reports the failed description command stage without exposing its output", a
   });
   await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
   await expect(result).rejects.toMatchObject({
-    name: "HostedRuntimeProviderError",
     code: "resource_mismatch",
     message: "resource_mismatch: runtime restore app-description-command (exit 23)",
+    name: "HostedRuntimeProviderError",
   });
   expect(stdout).not.toHaveBeenCalled();
 });
@@ -1094,9 +1094,9 @@ it("reports a selected project mismatch before restoring provider state", async 
   const result = resolvePreparedRuntimeExecution(context, selection, mocks);
   await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
   await expect(result).rejects.toMatchObject({
-    name: "HostedRuntimeProviderError",
     code: "resource_mismatch",
     message: "resource_mismatch: runtime restore project-identity",
+    name: "HostedRuntimeProviderError",
   });
   expect(mocks.getProvider).not.toHaveBeenCalled();
 });

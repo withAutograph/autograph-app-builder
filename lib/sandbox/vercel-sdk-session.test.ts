@@ -647,9 +647,9 @@ it("reapplies configured toolchain environment to commands on a replacement nati
     expect.objectContaining({
       env: {
         CARGO_HOME: "/private/cargo",
+        EXPLICIT: "retained",
         MISE_DATA_DIR: "/private/mise",
         PATH: "/private/bin:/usr/bin",
-        EXPLICIT: "retained",
       },
     }),
   );
@@ -695,9 +695,9 @@ it("reapplies configured toolchain environment to commands on a replacement nati
     expect.objectContaining({
       env: {
         CARGO_HOME: "/private/cargo",
+        EXPLICIT: "retained",
         MISE_DATA_DIR: "/private/mise",
         PATH: "/private/bin:/usr/bin",
-        EXPLICIT: "retained",
       },
     }),
   );

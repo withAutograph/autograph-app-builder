@@ -1611,10 +1611,10 @@ it("durably records a definite alias rejection and permits a later corrected app
   );
   expect(f.input.deliveryCandidates?.[0]?.gatewayAliasAttempted).toBe(false);
   expect(f.observeAlias).toHaveBeenCalledWith({
-    stage: "assignment",
-    method: "POST",
-    httpStatus: 400,
     category: "rejected",
+    httpStatus: 400,
+    method: "POST",
+    stage: "assignment",
   });
   expect(JSON.stringify(f.observeAlias.mock.calls)).not.toContain("credential/body");
   f.aliasState.rejectStatus = 0;

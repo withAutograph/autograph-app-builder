@@ -106,11 +106,11 @@ describe("durable application reviewer fallback", () => {
       testModels: { terra: primary, sol: fallback },
     });
     expect(result).toMatchObject({
-      reviewCompleted: false,
-      status: "failed",
       modelId: "terra",
       reasoningEffort: "low",
+      reviewCompleted: false,
       reviewPolicyId: "test-terra-sol",
+      status: "failed",
     });
     expect(primary.doGenerateCalls).toHaveLength(2);
     expect(fallback.doGenerateCalls).toHaveLength(2);
@@ -135,9 +135,9 @@ describe("durable application reviewer fallback", () => {
       round = await assessApplicationSourceRound(input, evidence, options, round.continuation);
     }
     expect(round.assessment).toMatchObject({
+      modelId: "terra",
       reviewCompleted: false,
       status: "failed",
-      modelId: "terra",
     });
     expect(round.assessment?.findings).toHaveLength(1);
     expect(round.continuation.priorReviewerEvidence?.reviewer.modelId).toBe("terra");
@@ -164,7 +164,7 @@ describe("durable application reviewer fallback", () => {
       policy,
       testModels: { terra: primary, sol: fallback },
     });
-    expect(result).toMatchObject({ reviewCompleted: false, status: "failed", modelId: "multiple" });
+    expect(result).toMatchObject({ modelId: "multiple", reviewCompleted: false, status: "failed" });
     expect(result.findings).toHaveLength(2);
     expect(result.evidenceNote).toContain("terra and sol");
   });
@@ -183,7 +183,7 @@ describe("durable application reviewer fallback", () => {
       policy,
       testModels: { terra: primary, sol: fallback },
     });
-    expect(result).toMatchObject({ reviewCompleted: true, modelId: "sol" });
+    expect(result).toMatchObject({ modelId: "sol", reviewCompleted: true });
     expect(result.remainingRuntimeChecks).toContain("Verify server persistence.");
     expect(result.evidenceNote).toContain("from terra");
   });
@@ -202,7 +202,7 @@ describe("durable application reviewer fallback", () => {
       policy,
       testModels: { terra: primary, sol: fallback },
     });
-    expect(result).toMatchObject({ reviewCompleted: false, status: "blocked", modelId: "terra" });
+    expect(result).toMatchObject({ modelId: "terra", reviewCompleted: false, status: "blocked" });
     expect(result.remainingRuntimeChecks).toContain("Verify server persistence.");
   });
   it("preserves prior findings when fallback evidence access fails", async () => {
@@ -216,7 +216,7 @@ describe("durable application reviewer fallback", () => {
       policy,
       testModels: { terra: primary, sol: fallback },
     });
-    expect(result).toMatchObject({ reviewCompleted: false, status: "failed", modelId: "terra" });
+    expect(result).toMatchObject({ modelId: "terra", reviewCompleted: false, status: "failed" });
     expect(result.findings).toHaveLength(1);
   });
   it("does not fall back after completed primary review", async () => {
@@ -227,9 +227,9 @@ describe("durable application reviewer fallback", () => {
       testModels: { terra: primary, sol: fallback },
     });
     expect(result).toMatchObject({
-      reviewCompleted: true,
       modelId: "terra",
       reasoningEffort: "low",
+      reviewCompleted: true,
     });
     expect(fallback.doGenerateCalls).toHaveLength(0);
   });
@@ -240,7 +240,7 @@ describe("durable application reviewer fallback", () => {
       policy,
       testModels: { terra: primary, sol: fallback },
     });
-    expect(result).toMatchObject({ reviewCompleted: false, status: "blocked", modelId: "sol" });
+    expect(result).toMatchObject({ modelId: "sol", reviewCompleted: false, status: "blocked" });
     expect(fallback.doGenerateCalls).toHaveLength(1);
   });
   it("keeps primary findings separate if fallback also fails", async () => {
@@ -251,9 +251,9 @@ describe("durable application reviewer fallback", () => {
       testModels: { terra: primary, sol: fallback },
     });
     expect(result).toMatchObject({
+      modelId: "terra",
       reviewCompleted: false,
       status: "failed",
-      modelId: "terra",
     });
     expect(result.reason).toContain("unavailable");
     expect(JSON.stringify(result)).not.toContain(file);
@@ -336,8 +336,8 @@ describe("durable application reviewer fallback", () => {
     );
     expect(result.assessment).toMatchObject({
       modelId: "openai/gpt-6.1-sol",
-      reviewPolicyId: "legacy-sol",
       reviewCompleted: true,
+      reviewPolicyId: "legacy-sol",
     });
     expect(primary.doGenerateCalls).toHaveLength(0);
   });

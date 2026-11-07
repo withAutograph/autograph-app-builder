@@ -204,8 +204,8 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.authorizeAttempt.mockRejectedValueOnce(new Error("lease lost"));
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "rejected",
       reason: "authorization_denied",
+      status: "rejected",
     });
     expect(f.request).not.toHaveBeenCalled();
     expect(f.acceptProjectId).not.toHaveBeenCalled();
@@ -235,8 +235,8 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.request.mockRejectedValueOnce(new Error("connection lost"));
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "uncertain",
       reason: "unknown_write",
+      status: "uncertain",
     });
     expect(f.request).toHaveBeenCalledTimes(1);
     expect(f.acceptProjectId).not.toHaveBeenCalled();
@@ -249,8 +249,8 @@ describe("native target Vercel project provider", () => {
     const f = fixture();
     f.request.mockResolvedValueOnce(response);
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
-      status: "uncertain",
       reason: "unknown_write",
+      status: "uncertain",
     });
     expect(f.request).toHaveBeenCalledTimes(1);
     expect(f.acceptProjectId).not.toHaveBeenCalled();

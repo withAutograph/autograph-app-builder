@@ -461,8 +461,8 @@ test("provider grant and per-key accepted IDs stay in the same row and cannot be
     afterSha256: "b".repeat(64),
   });
   expect(before.runtimeBindings?.[original.environment[0].key]).toMatchObject({
-    state: "applied",
     acceptedEnvId: "accepted-env-id",
+    state: "applied",
   });
   const binding = before.runtimeBindings?.[original.environment[0].key];
   if (binding?.state !== "applied") {

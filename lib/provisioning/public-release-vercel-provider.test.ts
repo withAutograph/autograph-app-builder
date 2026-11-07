@@ -204,7 +204,7 @@ const fixture = () => {
 it("persists a per-key dispatch before creating and independently reading an encrypted Production binding", async () => {
   const f = fixture();
   await f.provider.bindRuntime(f.context);
-  expect(f.states.INVOICE_APP_DATABASE_URL).toEqual({ state: "applied", acceptedEnvId: "new-env" });
+  expect(f.states.INVOICE_APP_DATABASE_URL).toEqual({ acceptedEnvId: "new-env", state: "applied" });
   expect(await f.provider.reconcileBindings({ ...f.context, priorPhase: "applied" })).toBe(
     "applied",
   );
@@ -611,8 +611,8 @@ it("can reuse the provider active deployment when every approved runtime value i
     },
   }));
   expect(await f.provider.observe(f.invocation, f.plan)).toMatchObject({
-    status: "ready",
     deploymentId: "active-deployment",
+    status: "ready",
   });
 });
 it("requires a newly reviewed snapshot for changed-runtime plans with no retained activation fence", async () => {

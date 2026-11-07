@@ -347,7 +347,7 @@ describe("hosted runtime Auth identity handoff", () => {
         vi.fn<(selection: PreparedRuntimeSelection) => void>(),
         contract,
       );
-      expect(value.result).toMatchObject({ status: "blocked", code: "auth_identity_required" });
+      expect(value.result).toMatchObject({ code: "auth_identity_required", status: "blocked" });
       expect(value.identityInput).toEqual(identityLink);
       expect(operator.authIdentityInput).toHaveBeenCalledWith(
         { action: "auth-identity-input", operationRef, selection: participantPlan.selection },
@@ -439,7 +439,7 @@ describe("hosted runtime Auth identity handoff", () => {
       contract,
     );
     expect(value.identityInput).toBeNull();
-    expect(value.result).toMatchObject({ status: "blocked", code: "auth_identity_required" });
+    expect(value.result).toMatchObject({ code: "auth_identity_required", status: "blocked" });
     expect(operator.authIdentityInput).toHaveBeenCalledTimes(1);
   });
   it("does not request participant sign-in for an unrelated authority denial", async () => {
@@ -451,7 +451,7 @@ describe("hosted runtime Auth identity handoff", () => {
       () => {},
       contract,
     );
-    expect(value.result).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(value.result).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(operator.authIdentityInput).not.toHaveBeenCalled();
   });
   it("resumes the same approved workflow input and call after the human answers normal sign-in", async () => {
@@ -472,7 +472,7 @@ describe("hosted runtime Auth identity handoff", () => {
       value.context,
       stepMocks.step,
     );
-    expect(result).toMatchObject({ status: "participants-prepared", identityResponse: "answered" });
+    expect(result).toMatchObject({ identityResponse: "answered", status: "participants-prepared" });
     expect(value.ask).toHaveBeenCalledWith(participantIdentityInputQuestion(identityLink));
     expect(stepMocks.step.mock.calls).toEqual([
       [participantInput, value.context],
@@ -515,9 +515,9 @@ describe("hosted runtime Auth identity handoff", () => {
       stepMocks.step,
     );
     expect(result).toMatchObject({
-      status: "blocked",
       code: "auth_identity_required",
       identityResponse: "dismissed",
+      status: "blocked",
     });
     expect(stepMocks.step).toHaveBeenCalledTimes(2);
     expect(value.ask).toHaveBeenCalledTimes(2);
@@ -535,7 +535,7 @@ it("reports execute-stage failure without changing the public blocked result or 
         reportRuntimePreparationFailure(ctx.session.id, stage, caught);
       },
     });
-    expect(value.result).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+    expect(value.result).toMatchObject({ code: "operator_unavailable", status: "blocked" });
     expect(logs).toHaveBeenCalledWith(
       "[builder:hosted-neon-consent]",
       expect.objectContaining({

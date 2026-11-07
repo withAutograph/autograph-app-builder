@@ -156,8 +156,8 @@ describe("closed outbound operator action diagnostics", () => {
       expect(logs).toHaveBeenCalledWith(
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          operatorResponse: "schema_invalid",
           accessClass: "other_failed",
+          operatorResponse: "schema_invalid",
         }),
       );
       expect(JSON.stringify(logs.mock.calls)).not.toContain("private");
@@ -183,8 +183,8 @@ describe("closed outbound operator action diagnostics", () => {
       expect(logs).toHaveBeenCalledWith(
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          httpStatus: 200,
           accessClass: "other_failed",
+          httpStatus: 200,
           operatorResponse: "decode_failed",
         }),
       );
@@ -216,8 +216,8 @@ describe("closed outbound operator action diagnostics", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           httpStatus: 200,
-          operatorResponse: "blocked",
           operatorCode: "operation_in_progress",
+          operatorResponse: "blocked",
         }),
       );
     } finally {
@@ -307,7 +307,7 @@ describe("operator request transport", () => {
       .intercept({ path: "/v1/runtime", method: "POST" })
       .reply(200, pending);
     const dispatcher = createHostedOperatorDispatcher((origin, options) => {
-      expect(options).toMatchObject({ headersTimeout: 1_800_000, bodyTimeout: 1_800_000 });
+      expect(options).toMatchObject({ bodyTimeout: 1_800_000, headersTimeout: 1_800_000 });
       return mock.get(origin.toString());
     });
     try {
@@ -481,9 +481,9 @@ describe("operator request transport", () => {
       expect(logs).toHaveBeenCalledWith(
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
+          accessClass: "other_failed",
           operatorAction: "execute",
           operatorResponse: "schema_invalid",
-          accessClass: "other_failed",
         }),
       );
       expect(JSON.stringify(logs.mock.calls)).not.toContain("private");

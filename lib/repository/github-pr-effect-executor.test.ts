@@ -163,8 +163,8 @@ it("records a definitive provider rejection without treating it as an uncertain 
   const { execute, provider, reconcile } = fixture(passed);
   provider.merge.mockRejectedValueOnce(new GitHubPrEffectRejectedError("provider-rejected"));
   await expect(execute(mergeIntent)).resolves.toMatchObject({
-    status: "failed",
     code: "provider-rejected",
+    status: "failed",
   });
   await expect(reconcile(mergeIntent)).resolves.toMatchObject({ status: "failed" });
   expect(provider.inspect).toHaveBeenCalledTimes(1);

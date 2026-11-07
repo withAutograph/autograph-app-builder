@@ -935,7 +935,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         baseBranch: "main",
       });
       await (repositoryId === 100
-        ? expect(result).resolves.toMatchObject({ state: "open", checks: "pending" })
+        ? expect(result).resolves.toMatchObject({ checks: "pending", state: "open" })
         : expect(result).rejects.toThrow("repository-identity-changed"));
       expect(tokenRequests).toEqual([
         {

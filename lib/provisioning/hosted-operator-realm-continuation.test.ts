@@ -287,8 +287,8 @@ describe("Realm continuation observation", () => {
       now: Date.parse("2026-10-15"),
     });
     expect(result?.reason).toEqual({
-      kind: "expired-technical-wait",
       expiresAt: "2026-10-14T00:00:00.000Z",
+      kind: "expired-technical-wait",
     });
   });
   it("retains real consumed proof provenance even after the link expires", () => {

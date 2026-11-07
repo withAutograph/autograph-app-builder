@@ -495,7 +495,7 @@ describe("publication records actual source for its compiled app release", () =>
     await expect(
       reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never),
     ).resolves.toMatchObject({
-      appSourceRecording: { status: "selection-changed", recoveryRequired: true },
+      appSourceRecording: { recoveryRequired: true, status: "selection-changed" },
     });
     expect(hooks.reconcile).not.toHaveBeenCalled();
     expect(hooks.inspect).not.toHaveBeenCalled();

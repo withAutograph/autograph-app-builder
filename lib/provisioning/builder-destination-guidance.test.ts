@@ -7,9 +7,9 @@ it("offers the existing session's ordinary destination page without granting an 
     "saved/session?fragment#",
   );
   expect(result).toMatchObject({
-    status: "blocked",
     code: "builder_destination_required",
     destinationPath: "/builds/saved%2Fsession%3Ffragment%23/destination",
+    status: "blocked",
   });
   expect(result).toHaveProperty("nextAction", expect.stringContaining("does not approve"));
 });

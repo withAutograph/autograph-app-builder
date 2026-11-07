@@ -68,7 +68,7 @@ describe("reconciliation review metadata pages", () => {
       totalFiles: 12_000,
       appOwnedFiles: 6000,
       nonAppFiles: 6000,
-      counts: { added: 4000, modified: 4000, deleted: 4000 },
+      counts: { added: 4000, deleted: 4000, modified: 4000 },
     });
     expect(readInventory(changes, "custom-app")).toEqual(changes);
   });

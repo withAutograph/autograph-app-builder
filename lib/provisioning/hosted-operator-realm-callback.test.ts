@@ -464,8 +464,8 @@ describe("native private Realm identity handoff", () => {
     expect((await f.nativePost()).status).toBe(401);
     expect(readCode).not.toHaveBeenCalled();
     expect(log.mock.calls).toEqual([
-      ["realm_identity_callback_failure", { stage: "canonical_pending", errorClass: "unknown" }],
-      ["realm_identity_callback_failure", { stage: "canonical_pending", errorClass: "unknown" }],
+      ["realm_identity_callback_failure", { errorClass: "unknown", stage: "canonical_pending" }],
+      ["realm_identity_callback_failure", { errorClass: "unknown", stage: "canonical_pending" }],
     ]);
   });
   it("preserves the denial when the diagnostic sink throws", async () => {

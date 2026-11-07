@@ -224,9 +224,9 @@ describe("behavior evidence invalidation during validation repair", () => {
       } as never,
     );
     expect(result).toMatchObject({
-      status: "needs_repair",
-      reason: "validation-tooling-prerequisite",
       failureClass: "private-compute-check-policy",
+      reason: "validation-tooling-prerequisite",
+      status: "needs_repair",
     });
     expect(getSandbox).not.toHaveBeenCalled();
     expect(mocks.state.update).not.toHaveBeenCalled();
@@ -854,7 +854,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       } as never);
       expect(getSandbox).toHaveBeenCalledOnce();
       expect(mocks.execute).toHaveBeenCalledOnce();
-      expect(result).toMatchObject({ status: "validated", reused: false });
+      expect(result).toMatchObject({ reused: false, status: "validated" });
       expect(mocks.state.current).not.toHaveProperty("validationFailure");
     },
   );
@@ -877,7 +877,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     } as never);
     expect(writeTextFile).toHaveBeenCalledOnce();
     expect(mocks.execute).toHaveBeenCalledOnce();
-    expect(result).toMatchObject({ status: "validated", reused: false });
+    expect(result).toMatchObject({ reused: false, status: "validated" });
   });
   it("returns exact reviewed task guidance only to the bound approved repair without source effects", async () => {
     await contextStorage.run(new ContextContainer(), async () => {

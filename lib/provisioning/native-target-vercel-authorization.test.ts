@@ -27,14 +27,14 @@ describe("read-only installation authorization metadata", () => {
   it("uses only the scoped configuration GET and projects structural metadata", async () => {
     const f = fixture();
     expect(await f.run()).toEqual({
-      status: "observed",
-      statusCode: 200,
-      installationMatches: true,
-      teamMatches: true,
-      ownerMatches: true,
-      projectWriteConfigured: true,
       allProjectsConfigured: true,
       disabled: false,
+      installationMatches: true,
+      ownerMatches: true,
+      projectWriteConfigured: true,
+      status: "observed",
+      statusCode: 200,
+      teamMatches: true,
     });
     expect(f.fetch).toHaveBeenCalledTimes(1);
     const call = f.fetch.mock.calls.at(0);
@@ -72,7 +72,7 @@ describe("read-only installation authorization metadata", () => {
   it("accepts nullable inactive disabled metadata", async () => {
     expect(
       await fixture(Response.json({ ...metadata(), disabledAt: null, disabledReason: null })).run(),
-    ).toMatchObject({ status: "observed", disabled: false });
+    ).toMatchObject({ disabled: false, status: "observed" });
   });
   it("observes disabled and restricted configuration", async () => {
     expect(
@@ -85,9 +85,9 @@ describe("read-only installation authorization metadata", () => {
         }),
       ).run(),
     ).toMatchObject({
+      allProjectsConfigured: false,
       disabled: true,
       projectWriteConfigured: false,
-      allProjectsConfigured: false,
     });
   });
   it.each([
@@ -117,22 +117,22 @@ describe("read-only installation authorization metadata", () => {
     { ...metadata(), projectSelection: "unknown" },
   ])("rejects malformed configuration", async (value) => {
     expect(await fixture(Response.json(value)).run()).toEqual({
-      status: "unavailable",
       failure: "invalid_response",
+      status: "unavailable",
       statusCode: 200,
     });
   });
   it("bounds the response without exposing its content", async () => {
     expect(await fixture(new Response("private".repeat(20_000))).run()).toEqual({
-      status: "unavailable",
       failure: "invalid_response",
+      status: "unavailable",
       statusCode: 200,
     });
   });
   it("does not read credentials or fetch after cancellation", async () => {
     const f = fixture();
     f.controller.abort();
-    expect(await f.run()).toEqual({ status: "unavailable", failure: "cancelled" });
+    expect(await f.run()).toEqual({ failure: "cancelled", status: "unavailable" });
     expect(f.input.readInstallationToken).not.toHaveBeenCalled();
     expect(f.fetch).not.toHaveBeenCalled();
   });
@@ -155,14 +155,14 @@ describe("read-only installation authorization metadata", () => {
     const result = f.run();
     await started;
     f.controller.abort();
-    expect(await result).toEqual({ status: "unavailable", failure: "cancelled", statusCode: 200 });
+    expect(await result).toEqual({ failure: "cancelled", status: "unavailable", statusCode: 200 });
     expect(cancel).toHaveBeenCalled();
   });
   it("sanitizes transport and credential failures", async () => {
     const f = fixture();
     f.fetch.mockRejectedValue(new Error("private provider body"));
-    expect(await f.run()).toEqual({ status: "unavailable", failure: "request_failed" });
+    expect(await f.run()).toEqual({ failure: "request_failed", status: "unavailable" });
     f.input.readInstallationToken.mockRejectedValue(new Error("private credential"));
-    expect(await f.run()).toEqual({ status: "unavailable", failure: "request_failed" });
+    expect(await f.run()).toEqual({ failure: "request_failed", status: "unavailable" });
   });
 });

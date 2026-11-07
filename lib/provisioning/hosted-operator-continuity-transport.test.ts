@@ -677,8 +677,8 @@ it.each(["initial", "owner-checked"] as const)(
     reads.mockRejectedValueOnce(new Error("private journal detail"));
     await expect(f.client.readContinuity(planned.plan.intentId)).rejects.toMatchObject({
       code: "operator_unavailable",
-      recoveryStage: "canonical_read",
       message: "operator_unavailable",
+      recoveryStage: "canonical_read",
     });
     expect(f.record).toEqual(before);
     expect(f.stats.reservations).toBe(1);

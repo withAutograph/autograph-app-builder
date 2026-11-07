@@ -636,8 +636,8 @@ describe("Builder-local approval capture before execution", () => {
     });
     const stored = await f.store.getSession(principal, f.saved.sessionId);
     expect(stored?.version === 2 && stored.privateApprovalReceipts?.[0]).toMatchObject({
-      requestId: "original-request",
       outcome: "approved",
+      requestId: "original-request",
     });
     expect(stored?.version === 2 && stored.checkpointRef).toEqual(seed.ref);
     expect(seed.metadata.nativeObservationState.nextNativeIndex).toBe(1);

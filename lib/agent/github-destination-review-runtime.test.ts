@@ -307,7 +307,7 @@ describe("initial draft destination runtime", () => {
       readable: true,
       side: "after",
     });
-    expect(bothRead).toMatchObject({ beforeComplete: true, afterComplete: true });
+    expect(bothRead).toMatchObject({ afterComplete: true, beforeComplete: true });
     const proposal = await f.runtime.sealDraftPullRequestProposal({
       destinationReview: destination,
       githubSource: source,

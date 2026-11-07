@@ -527,7 +527,7 @@ it("restores the owned fresh review across a previously committed idle recovery"
     nativeRecoveryReceipt: {
       ownerRunId: owner,
       executionTransfer: { kind: "idle-checkpoint" },
-      provenance: { sourceStepId: "step-prior-cutoff", sourceSlot: 2 },
+      provenance: { sourceSlot: 2, sourceStepId: "step-prior-cutoff" },
     },
   });
   const predecessor = await f.native.world.events.list({ runId: "physical-ancestor" });

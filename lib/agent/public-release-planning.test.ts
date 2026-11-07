@@ -18,10 +18,10 @@ it("returns the canonical saved session destination control after public plannin
   };
   const result = await planPublicAppWithGuidance(client, "invoice-app");
   expect(result).toMatchObject({
-    status: "blocked",
-    code: "builder_destination_required",
     authenticatedBehavior: "unassessed",
+    code: "builder_destination_required",
     destinationPath: "/builds/saved%2Fpublic%3Fsession/destination",
+    status: "blocked",
   });
   expect(result).toHaveProperty("nextAction", expect.stringContaining("does not approve"));
   expect(client.plan).toHaveBeenCalledExactlyOnceWith("invoice-app");
@@ -34,7 +34,7 @@ it("keeps a runtime prerequisite on the same app without offering another destin
       .mockRejectedValue(new PublicReleasePrerequisiteError("prepared_runtime_required")),
   };
   const result = await planPublicAppWithGuidance(client, "invoice-app");
-  expect(result).toMatchObject({ status: "blocked", code: "prepared_runtime_required" });
+  expect(result).toMatchObject({ code: "prepared_runtime_required", status: "blocked" });
   expect(result).not.toHaveProperty("destinationPath");
 });
 it("preserves successful plans and unexpected failures without repeating the request", async () => {

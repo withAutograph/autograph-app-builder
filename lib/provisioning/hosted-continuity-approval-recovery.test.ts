@@ -200,8 +200,8 @@ it("recovers the original native approval after a paginated interruption, then d
   c.setPageSize(1);
   await expect(c.client().continuityApproval(c.saved.request)).rejects.toMatchObject({
     code: "operator_unavailable",
-    recoveryStage: "native_history",
     recoveryProgressAdvanced: true,
+    recoveryStage: "native_history",
   });
   expect(c.f.rows.get(c.saved.plan.intentId)?.approvalObservation?.nextNativeIndex).toBe(1);
   expect(c.f.events).toEqual([]);

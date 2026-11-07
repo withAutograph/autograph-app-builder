@@ -1947,10 +1947,10 @@ cp.spawn = (command, args, options) => {
     writeFileSync(path.join(privateRoot, "owner-record"), "private retained bytes\n");
     const result = await retire(f, [referenced]);
     expect(result).toMatchObject({
-      status: "complete",
-      retired: 1,
+      reasons: { private_state: 1, referenced: 1 },
       retained: 2,
-      reasons: { referenced: 1, private_state: 1 },
+      retired: 1,
+      status: "complete",
     });
     expect(existsSync(f.retiredRoot)).toBe(false);
     expect(existsSync(referenced)).toBe(true);
@@ -1969,10 +1969,10 @@ cp.spawn = (command, args, options) => {
       "",
       `fs.statfsSync = () => ({ bsize: 4096n, blocks: 1024n, bavail: 0n, files: 512n, ffree: 0n });`,
     );
-    expect(result).toMatchObject({ status: "complete", retired: 1, retained: 0 });
+    expect(result).toMatchObject({ retained: 0, retired: 1, status: "complete" });
     expect(result.capacity?.before).toEqual({
-      bytes: { total: "4194304", available: "0" },
-      inodes: { total: "512", free: "0" },
+      bytes: { available: "0", total: "4194304" },
+      inodes: { free: "0", total: "512" },
     });
     expect(result.capacity?.after).toEqual(result.capacity?.before);
   });
@@ -1988,10 +1988,10 @@ cp.spawn = (command, args, options) => {
           ? `fs.statfsSync = () => ({ bsize: 4096n, blocks: 1024n, bavail: 7n, files: 0n, ffree: 0n });`
           : `fs.statfsSync = () => { throw Error("private statfs details"); };`,
       );
-      expect(result).toMatchObject({ status: "complete", retired: 1, retained: 0 });
+      expect(result).toMatchObject({ retained: 0, retired: 1, status: "complete" });
       expect(result.capacity?.before?.inodes).toBeUndefined();
       if (kind === "unsupported inodes") {
-        expect(result.capacity?.before?.bytes).toEqual({ total: "4194304", available: "28672" });
+        expect(result.capacity?.before?.bytes).toEqual({ available: "28672", total: "4194304" });
       } else {
         expect(result.capacity?.before?.bytes).toBeUndefined();
       }
@@ -2007,10 +2007,10 @@ cp.spawn = (command, args, options) => {
       `if (args.includes("status")) return original(process.execPath, ["-e", "process.exit(1)"], options);`,
     );
     expect(result).toMatchObject({
-      status: "partial",
-      retired: 0,
-      retained: 1,
       reasons: { inspection_unavailable: 1 },
+      retained: 1,
+      retired: 0,
+      status: "partial",
     });
     expect(existsSync(f.retiredRoot)).toBe(true);
     expect(git(f.retiredRoot, "rev-parse", "HEAD")).toBe(f.headSha);
@@ -2039,7 +2039,7 @@ cp.spawn = (command, args, options) => {
     async (response) => {
       const run = vi.fn<SandboxSession["run"]>().mockResolvedValue(response);
       const result = await retireUnusedDraftWorktrees({ sandbox: { run }, retainedRoots: [] });
-      expect(result).toEqual({ status: "unavailable", retired: 0, retained: 0, reasons: {} });
+      expect(result).toEqual({ reasons: {}, retained: 0, retired: 0, status: "unavailable" });
       expect(run).toHaveBeenCalledOnce();
       expect(JSON.stringify(result)).not.toContain("private");
     },

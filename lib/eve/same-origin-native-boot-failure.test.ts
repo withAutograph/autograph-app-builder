@@ -55,14 +55,14 @@ describe("verified native recovery boot failure", () => {
       },
     );
     expect(observed).toMatchObject({
-      status: "failed",
-      observationComplete: true,
       installedEventCount: 0,
-      nextNativeIndex: 0,
-      publicEventCount: 0,
-      nativeTailIndex: -1,
-      pendingRequests: [],
       nativeObservationState: { boundary: "failed", nextNativeIndex: 0, publicEventCount: 0 },
+      nativeTailIndex: -1,
+      nextNativeIndex: 0,
+      observationComplete: true,
+      pendingRequests: [],
+      publicEventCount: 0,
+      status: "failed",
     });
     expect(events).toEqual([]);
     const transport = createSameOriginEveTransport({
@@ -223,10 +223,10 @@ describe("verified native recovery boot failure", () => {
     expect(start).toHaveBeenCalledTimes(2);
     failureReported = true;
     const observed = await service.get({ sessionId: child.sessionId, cursor: 0, limit: 100 });
-    expect(observed).toMatchObject({ status: "failed", cursor: 0, events: [] });
+    expect(observed).toMatchObject({ cursor: 0, events: [], status: "failed" });
     expect(await store.getSession(principal, child.sessionId)).toMatchObject({
-      status: "failed",
       resumability: "terminal",
+      status: "failed",
     });
     const resume = { clientRequestId: "boot-resume", resumeSessionId: child.sessionId };
     const recovered = await service.start(resume);

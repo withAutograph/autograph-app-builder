@@ -220,7 +220,7 @@ describe("native approval history reads", () => {
         deadline.abort();
       },
     });
-    expect(first).toEqual({ complete: false, nextNativeIndex: 1, nativeTailIndex: 1 });
+    expect(first).toEqual({ complete: false, nativeTailIndex: 1, nextNativeIndex: 1 });
     const tail = new Response(`${JSON.stringify({ data: {}, type: "session.waiting" })}\n`, {
       headers: stream().headers,
     });
@@ -232,7 +232,7 @@ describe("native approval history reads", () => {
         events.push(event.type);
       },
     });
-    expect(next).toEqual({ complete: true, nextNativeIndex: 2, nativeTailIndex: 1 });
+    expect(next).toEqual({ complete: true, nativeTailIndex: 1, nextNativeIndex: 2 });
     expect(events).toEqual(["session.started", "session.waiting"]);
     const resumedResource = f.fetchImplementation.mock.calls[1]?.[0];
     const resumedUrl = resumedResource instanceof Request ? resumedResource.url : resumedResource;

@@ -129,9 +129,9 @@ it("directs a fresh app to its saved public destination setup before any reposit
   ).toMatchObject({
     kind: "missing",
     guidance: {
-      status: "blocked",
       code: "builder_destination_required",
       destinationPath: "/builds/public-saved/destination",
+      status: "blocked",
     },
   });
   expect(resolveRepositoryAccessForTool).not.toHaveBeenCalled();

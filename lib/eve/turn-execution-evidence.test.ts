@@ -92,20 +92,20 @@ describe("per-turn native execution evidence", () => {
       nativeCursor: events.length,
       ownerLineage: ["wrun_original", "wrun_recovered"],
       selectedTurn: {
-        turnId: "turn_17",
-        sequence: 17,
-        execution: "unexercised",
-        acceptedMessages: [{ nativeIndex: 5, deliveryIds: ["delivery_current"] }],
+        acceptedMessages: [{ deliveryIds: ["delivery_current"], nativeIndex: 5 }],
         attempts: [
           { callId: "call_status", category: "status-read", result: { status: "completed" } },
         ],
+        execution: "unexercised",
+        sequence: 17,
+        turnId: "turn_17",
       },
       lastHistoricalFailedExecution: {
-        turnId: "turn_16",
         callId: "call_old",
+        commandReferences: [{ commandId: "cmd_old", nativeIndex: 2 }],
         requested: { nativeIndex: 1 },
         result: { nativeIndex: 2, status: "failed" },
-        commandReferences: [{ commandId: "cmd_old", nativeIndex: 2 }],
+        turnId: "turn_16",
       },
     });
     expect(evidence.selectedTurn.attempts).toHaveLength(1);
@@ -131,14 +131,14 @@ describe("per-turn native execution evidence", () => {
       request("turn_1", "call_pending", "apply_app_creation"),
     ];
     expect(summarize(events).selectedTurn).toMatchObject({
-      execution: "requested",
       attempts: [{ callId: "call_pending" }],
+      execution: "requested",
     });
     expect(summarize(events).selectedTurn.attempts[0].result).toBeUndefined();
     events.push(result("turn_1", "call_pending", "apply_app_creation", "rejected"));
     expect(summarize(events).selectedTurn).toMatchObject({
-      execution: "result-observed",
       attempts: [{ result: { status: "rejected" } }],
+      execution: "result-observed",
     });
   });
   it("keeps an unclassified dynamic tool unassessed and a result without request unproven", () => {
@@ -162,8 +162,8 @@ describe("per-turn native execution evidence", () => {
       result("turn_old", "call_old", "prepare_workspace", "failed"),
     ];
     expect(summarize(events, { deliveryId: "new" })).toMatchObject({
-      selectedTurn: { turnId: "turn_new", execution: "unexercised", attempts: [] },
-      lastHistoricalFailedExecution: { turnId: "turn_old", callId: "call_old" },
+      lastHistoricalFailedExecution: { callId: "call_old", turnId: "turn_old" },
+      selectedTurn: { attempts: [], execution: "unexercised", turnId: "turn_new" },
     });
   });
   it("does not inspect private inputs, outputs, errors or assistant wording", () => {

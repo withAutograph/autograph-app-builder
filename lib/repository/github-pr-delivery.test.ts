@@ -147,8 +147,8 @@ describe("GitHub pull request delivery", () => {
   it("recognizes only the bound PR's current ready-cycle Check and guards the merge by SHA", async () => {
     const { effects, provider } = harness();
     await expect(provider.inspect(ref)).resolves.toMatchObject({
-      checks: "passed",
       checkRunId: 11,
+      checks: "passed",
     });
     await expect(provider.merge(ref, readyAt)).resolves.toMatchObject({
       state: "merged",
@@ -205,8 +205,8 @@ describe("GitHub pull request delivery", () => {
 
   it("marks a bound draft ready once and reads back the result", async () => {
     const { effects, provider } = harness({ draft: true });
-    await expect(provider.markReady(ref)).resolves.toMatchObject({ state: "open", draft: false });
-    await expect(provider.markReady(ref)).resolves.toMatchObject({ state: "open", draft: false });
+    await expect(provider.markReady(ref)).resolves.toMatchObject({ draft: false, state: "open" });
+    await expect(provider.markReady(ref)).resolves.toMatchObject({ draft: false, state: "open" });
     expect(effects).toHaveLength(1);
   });
 });

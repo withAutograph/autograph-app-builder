@@ -444,8 +444,8 @@ describe("native target protected client", () => {
         }),
       );
       await expect(f.client.prepare(f.input, f.ctx)).rejects.toMatchObject({
-        name: "HostedOperatorError",
         code: "resource_mismatch",
+        name: "HostedOperatorError",
       });
       expect(f.request).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls).toEqual([

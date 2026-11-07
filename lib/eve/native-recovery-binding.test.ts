@@ -251,7 +251,7 @@ describe("read-only native source observation authority", () => {
     };
     await expect(
       binding.authorizeSourceObservation({ auth: getOnlyAuth, source: coordinates }),
-    ).resolves.toEqual({ ownerRunId: "run_parent", logicalSessionId: "run_parent" });
+    ).resolves.toEqual({ logicalSessionId: "run_parent", ownerRunId: "run_parent" });
     for (const changed of [
       { ...coordinates, sourceAdapterGeneration: 2 },
       { ...coordinates, cancellationRevision: 1 },

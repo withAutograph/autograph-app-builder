@@ -363,9 +363,9 @@ describe("private read-only operator provider inventory", () => {
       readHostedOperatorProviderInventory({ ...owner.input, diagnosticSink: ownerSink }),
     ).rejects.toThrow("operator_unavailable");
     expect(ownerSink.mock.calls[0]?.[0].inventoryReadFailure).toMatchObject({
-      target: "inventory",
       operation: "owner",
       phase: "owner",
+      target: "inventory",
     });
     expect(owner.fetcher).not.toHaveBeenCalled();
 
@@ -376,9 +376,9 @@ describe("private read-only operator provider inventory", () => {
       readHostedOperatorProviderInventory({ ...credential.input, diagnosticSink: credentialSink }),
     ).rejects.toThrow("operator_unavailable");
     expect(credentialSink.mock.calls[0]?.[0].inventoryReadFailure).toMatchObject({
-      target: "inventory",
       operation: "credential",
       phase: "credential",
+      target: "inventory",
     });
     expect(credential.fetcher).not.toHaveBeenCalled();
 
@@ -439,8 +439,8 @@ describe("private read-only operator provider inventory", () => {
     expect(observed).toHaveLength(2);
     expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ target: "app", operation: "project", phase: "schema" }),
-        expect.objectContaining({ target: "gateway", operation: "project", phase: "schema" }),
+        expect.objectContaining({ operation: "project", phase: "schema", target: "app" }),
+        expect.objectContaining({ operation: "project", phase: "schema", target: "gateway" }),
       ]),
     );
     const projectReads = f.fetcher.mock.calls

@@ -597,8 +597,8 @@ describe("target validation", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected a missing task prerequisite");
     expect(result.receipt).toMatchObject({
+      commandFailure: { exitCode: 1, failureClass: "missing-app-task", name: "check-build" },
       reason: "tooling-prerequisite",
-      commandFailure: { name: "check-build", exitCode: 1, failureClass: "missing-app-task" },
     });
     expect(result.receipt.commandFailure?.hint).toContain("executable mode");
     // SAFETY: Project the precise trusted workflow fields consumed by the classifier;
@@ -623,7 +623,7 @@ describe("target validation", () => {
       }),
     ).toMatchObject({
       decision: "blocked",
-      validation: { reason: "tooling-prerequisite", failureClass: "missing-app-task" },
+      validation: { failureClass: "missing-app-task", reason: "tooling-prerequisite" },
     });
   });
   it("retains complete repair diagnostics while redacting common credentials", () => {
@@ -868,7 +868,7 @@ describe("target validation", () => {
     });
     expect(result).toMatchObject({
       ok: false,
-      receipt: { reason: "command-failed", commandFailure: { exitCode: 134 } },
+      receipt: { commandFailure: { exitCode: 134 }, reason: "command-failed" },
     });
   });
   it("identifies a provider failure before the first validation command returns", async () => {

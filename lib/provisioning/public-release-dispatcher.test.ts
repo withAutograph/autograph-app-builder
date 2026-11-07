@@ -88,9 +88,9 @@ describe("public release HTTP authority boundary", () => {
     );
     expect(result.status).toBe(409);
     expect(await result.json()).toMatchObject({
-      status: "blocked",
-      code: "same_project_auth_required",
       authenticatedBehavior: "unassessed",
+      code: "same_project_auth_required",
+      status: "blocked",
     });
     expect(f.ports.applyEffect).not.toHaveBeenCalled();
   });

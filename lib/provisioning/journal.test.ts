@@ -157,7 +157,7 @@ describe("builder provisioning journal", () => {
       request: selected,
       dependencies,
     });
-    expect(retry.vercel).toMatchObject({ status: "failed", code: "reconciliation_uncertain" });
+    expect(retry.vercel).toMatchObject({ code: "reconciliation_uncertain", status: "failed" });
     const projection = await readBuilderProvisioning({
       authority,
       journal: store,
@@ -166,9 +166,9 @@ describe("builder provisioning journal", () => {
     expect(
       projection?.diagnostics?.find((value) => value.provider === "vercel")?.lastProviderDiagnostic,
     ).toEqual({
-      statusCode: 403,
       code: "integration_configuration_disabled",
       requestRef: "iad1::denied_123",
+      statusCode: 403,
     });
     expect(postCount).toBe(1);
     const saved = await store.read({ authority, requestId: selected.requestId });
@@ -249,7 +249,7 @@ describe("builder provisioning journal", () => {
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately bounded terminal-port fixture; runtime schemas and journal replay checks remain real.
       dependencies: dependencies as never,
     });
-    expect(retry.vercel).toMatchObject({ status: "failed", code: "reconciliation_uncertain" });
+    expect(retry.vercel).toMatchObject({ code: "reconciliation_uncertain", status: "failed" });
     const projection = await readBuilderProvisioning({
       authority,
       journal: store,
@@ -258,9 +258,9 @@ describe("builder provisioning journal", () => {
     expect(
       projection?.diagnostics?.find((value) => value.provider === "vercel")?.lastProviderDiagnostic,
     ).toEqual({
-      statusCode: 403,
       code: "integration_configuration_disabled",
       requestRef: "iad1::denied_123",
+      statusCode: 403,
     });
     expect(postCount).toBe(1);
     const saved = await store.read({ authority, requestId: selected.requestId });

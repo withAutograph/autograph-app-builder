@@ -259,8 +259,8 @@ describe("failed public session native recovery", () => {
           expect(activatedReceipts.size).toBe(0);
           expect(adapter.start).toHaveBeenCalledTimes(2);
           expect(await readOriginal(principal, committed.sessionId)).toMatchObject({
-            status: "cancelled",
             cancellationRevision: 1,
+            status: "cancelled",
           });
           return;
         }

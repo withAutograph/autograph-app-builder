@@ -297,8 +297,8 @@ describe("recovered child terminal read after activation transport failure", () 
     expect(result.status).toBe("working");
     expect(f.beforeRead).toHaveBeenCalledOnce();
     expect(await f.base.getSession(principal, f.originalSessionId)).toMatchObject({
-      status: "failed",
       resumability: "terminal",
+      status: "failed",
     });
     expect(f.observeSessionPaged).toHaveBeenCalledOnce();
   });

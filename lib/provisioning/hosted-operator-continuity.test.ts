@@ -334,16 +334,16 @@ it("projects retained checkpoints for the owner without resuming an uncertain at
   const result = await f.operations.readPlan(context, planned.plan.intentId);
   expect(result.status).not.toHaveProperty("checkpoints");
   expect(continuityCheckpointSchema.parse(continuityCheckpoints(retained)).checkpoints).toEqual({
+    environmentWrite: "unrecorded",
+    outcome: "unrecorded",
     pendingStage: "runtime",
-    runtimeLocator: "recorded",
-    runtimeDispatch: "unrecorded",
-    runtimeCommand: "unrecorded",
     publicationAttempt: "unrecorded",
     publicationCandidate: "unrecorded",
-    environmentWrite: "unrecorded",
-    suiteDispatch: "unrecorded",
+    runtimeCommand: "unrecorded",
+    runtimeDispatch: "unrecorded",
+    runtimeLocator: "recorded",
     suiteCommand: "unrecorded",
-    outcome: "unrecorded",
+    suiteDispatch: "unrecorded",
   });
   expect(f.read()).toEqual(retained);
   expect(f.events).toEqual(eventsBefore);
@@ -370,12 +370,12 @@ it("projects recorded dispatch markers without revealing private command or capa
   );
   const status = continuityCheckpointSchema.parse(continuityCheckpoints(retained));
   expect(status.checkpoints).toMatchObject({
-    runtimeDispatch: "recorded",
-    runtimeCommand: "recorded",
-    publicationAttempt: "recorded",
-    suiteDispatch: "recorded",
-    suiteCommand: "recorded",
     outcome: "unrecorded",
+    publicationAttempt: "recorded",
+    runtimeCommand: "recorded",
+    runtimeDispatch: "recorded",
+    suiteCommand: "recorded",
+    suiteDispatch: "recorded",
   });
   expect(JSON.stringify(status)).not.toContain("private-runtime-command");
   expect(JSON.stringify(status)).not.toContain("private-suite-command");

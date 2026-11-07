@@ -303,8 +303,8 @@ describe("public continuity consent and exact private authority", () => {
     const projected = projectInstalledEveEvent(event, 3);
     expect(projected).toHaveLength(1);
     expect(projected[0]).toMatchObject({
-      type: "input.requested",
       request: { kind: "approval", requestId: "human-request" },
+      type: "input.requested",
     });
     expect(projected[0]).not.toHaveProperty("code", "confirmation_unavailable");
     const reader = capture();

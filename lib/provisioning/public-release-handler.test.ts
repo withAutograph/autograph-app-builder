@@ -105,8 +105,8 @@ describe("public app release lifecycle", () => {
       selected.planDigest,
     );
     expect(result).toMatchObject({
-      purpose: "auth-bootstrap",
       authenticatedBehavior: "unassessed",
+      purpose: "auth-bootstrap",
     });
   });
 
@@ -117,7 +117,7 @@ describe("public app release lifecycle", () => {
     expect(selected.plan.project.projectId).toBe(plan.project.projectId);
     expect(f.writes).toEqual([]);
     const first = await f.handler.release(ctx, selected.operationRef, selected.planDigest);
-    expect(first).toMatchObject({ status: "ready", authenticatedBehavior: "unassessed" });
+    expect(first).toMatchObject({ authenticatedBehavior: "unassessed", status: "ready" });
     expect(f.writes).toEqual(["bind-production-runtime", "publish-release-source"]);
     await f.handler.release(ctx, selected.operationRef, selected.planDigest);
     expect(f.writes).toHaveLength(2);
@@ -136,11 +136,11 @@ describe("public app release lifecycle", () => {
     const followup = { ...ctx, callId: "later-read" };
     expect(
       await f.handler.observe(followup, selected.operationRef, selected.planDigest),
-    ).toMatchObject({ status: "ready", authenticatedBehavior: "unassessed" });
+    ).toMatchObject({ authenticatedBehavior: "unassessed", status: "ready" });
     const readyRow = await f.store.read(authority, selected.operationRef);
     expect(readyRow?.record.observation).toMatchObject({
-      status: "ready",
       deploymentId: "active-native-deployment",
+      status: "ready",
     });
     expect(f.ports.assertApproved).not.toHaveBeenCalled();
     expect(f.ports.reconcileEffect).not.toHaveBeenCalled();
@@ -168,7 +168,7 @@ describe("public app release lifecycle", () => {
         selected.operationRef,
         selected.planDigest,
       ),
-    ).toMatchObject({ status: "reconciliation-required", effect: "bind-production-runtime" });
+    ).toMatchObject({ effect: "bind-production-runtime", status: "reconciliation-required" });
     expect(f.ports.observe).not.toHaveBeenCalled();
     f.ports.reconcileEffect = vi.fn().mockResolvedValue("unknown");
     expect(await f.handler.release(ctx, selected.operationRef, selected.planDigest)).toMatchObject({
@@ -197,8 +197,8 @@ describe("public app release lifecycle", () => {
     ).rejects.toThrow("interrupted after receipt");
     const saved = await f.store.read(authority, selected.operationRef);
     expect(saved?.record.bindings.INVOICE_APP_DATABASE_URL).toEqual({
-      state: "pending",
       acceptedEnvId: "env-accepted",
+      state: "pending",
     });
     const normalReconcile = f.ports.reconcileEffect;
     f.ports.reconcileEffect = async (context) => {

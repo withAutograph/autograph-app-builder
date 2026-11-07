@@ -299,9 +299,9 @@ describe("closed export tool pre-dispatch diagnostics", () => {
       toolCtx,
     );
     expect(result).toMatchObject({
-      status: "blocked",
       code: "export_customer_selection_required",
       nextAction: "Name the organization to export. No export was planned or data extracted.",
+      status: "blocked",
     });
   });
   it("preserves successful dispatch and produces no failure diagnostic", async () => {

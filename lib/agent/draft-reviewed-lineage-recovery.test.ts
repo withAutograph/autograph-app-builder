@@ -454,7 +454,7 @@ describe("same-session draft review lineage with real shared state and draft byt
         f.setFailure(failure);
         const pending = validateCreation.execute({ implementationFiles: [] }, f.context());
         await (failure === "startup"
-          ? expect(pending).resolves.toMatchObject({ status: "needs_repair", exitCode: 134 })
+          ? expect(pending).resolves.toMatchObject({ exitCode: 134, status: "needs_repair" })
           : expect(pending).rejects.toThrow("controlled external transport interruption"));
         expect(appBuilderWorkflowState.get()).toEqual(f.reviewed);
         expect(candidateValidationAttemptHistory.get().some((entry) => entry.exitCode !== 0)).toBe(

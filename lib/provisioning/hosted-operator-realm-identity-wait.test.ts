@@ -321,10 +321,10 @@ describe("approved Realm identity wait registration", () => {
   it("uses the protected server clock for the next check instead of the browser link expiry", async () => {
     const f = fixture();
     const state = await f.run.register(context, f.registration);
-    expect(state).toEqual({ status: "waiting", checkAfter: "2026-10-15T00:00:05.000Z" });
+    expect(state).toEqual({ checkAfter: "2026-10-15T00:00:05.000Z", status: "waiting" });
     f.setTime("2026-10-15T00:02:00.000Z");
     const replayed = await f.run.register(context, f.registration);
-    expect(replayed).toEqual({ status: "waiting", checkAfter: "2026-10-15T00:02:05.000Z" });
+    expect(replayed).toEqual({ checkAfter: "2026-10-15T00:02:05.000Z", status: "waiting" });
     expect(f.row().record.operator?.identityLink?.expiresAt).toBe(
       f.registration.identityInput.expiresAt,
     );

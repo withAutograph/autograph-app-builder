@@ -318,7 +318,7 @@ describe("canonical execution observation", () => {
       OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
     );
     const result = operatorPublicResultSchema.parse(await response.json());
-    expect(result).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(result).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(result.preparationProgress).toBeUndefined();
     expect(f.executeEffect).not.toHaveBeenCalled();
   });
@@ -440,8 +440,8 @@ describe("canonical execution observation", () => {
       f.gate.resolve(undefined);
       const response = await execution;
       expect(await response.json()).toMatchObject({
-        status: "blocked",
         code: "authorization_required",
+        status: "blocked",
       });
       expect(f.executeEffect).toHaveBeenCalledOnce();
       expect(f.record.leaseId).toBeUndefined();
@@ -477,8 +477,8 @@ describe("canonical execution observation", () => {
       f.gate.resolve(undefined);
       const response = await execution;
       expect(await response.json()).toMatchObject({
-        status: "blocked",
         code: "authorization_required",
+        status: "blocked",
       });
     } finally {
       f.gate.resolve(undefined);

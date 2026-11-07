@@ -672,7 +672,7 @@ describe("Gateway source repair", () => {
       f.row = row;
       expect(
         await f.client.request({ action: "plan", operation: "prepare", selection }),
-      ).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+      ).toMatchObject({ code: "operation_in_progress", status: "blocked" });
       expect(f.row?.record.operator?.operationRef).toBe(original.operationRef);
       expect(f.row?.record.operator?.planDigest).toBe(original.planDigest);
     },
@@ -1733,8 +1733,8 @@ describe("APP Gateway source continuation", () => {
       throw new HostedOperatorError("reconciliation_required");
     };
     expect(await f.client.request(original)).toMatchObject({
-      status: "blocked",
       code: "reconciliation_required",
+      status: "blocked",
     });
     const previous = structuredClone(f.row);
     if (previous?.record.operator === undefined) {
@@ -1872,8 +1872,8 @@ describe("APP Gateway source continuation", () => {
     });
     expect(revisionAdvanced).toBe(true);
     expect(await f.client.request(successor)).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
     f.deps.readApproval = readApproval;

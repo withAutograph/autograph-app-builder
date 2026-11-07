@@ -118,8 +118,8 @@ const fixture = () => {
 it("mints only for the current owner's selected installation and exact repository", async () => {
   const f = fixture();
   expect(await f.reader(f.invocation, f.plan)).toMatchObject({
-    repositoryId: "123",
     installationId: "456",
+    repositoryId: "123",
   });
   expect(f.mint).toHaveBeenCalledOnce();
 });

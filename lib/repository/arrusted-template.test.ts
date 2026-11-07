@@ -132,9 +132,9 @@ describe("canonical Arrusted source preparation", () => {
     });
     expect(materializeGitSource).toHaveBeenCalledOnce();
     expect(materializeGitSource).toHaveBeenCalledWith({
+      revision: "main",
       token: "test-token",
       url: "https://github.com/withAutograph/arrusted-development.git",
-      revision: "main",
     });
   });
 

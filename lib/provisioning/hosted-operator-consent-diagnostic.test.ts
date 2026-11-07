@@ -1947,8 +1947,8 @@ describe("continuity planning failure diagnostics", () => {
       controller.signal,
     );
     expect(sink.mock.calls.map(([diagnostic]) => diagnostic.continuityPlanningFailure)).toEqual([
-      { stage: "dispatcher_planning", errorClass: "unexpected" },
-      { stage: "port_observation", errorClass: "unexpected" },
+      { errorClass: "unexpected", stage: "dispatcher_planning" },
+      { errorClass: "unexpected", stage: "port_observation" },
     ]);
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });

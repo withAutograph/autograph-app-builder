@@ -477,10 +477,10 @@ it("reports a bounded Git-reference rejection without exposing provider details"
   await Promise.resolve();
   const failure = f.diagnostics[0]?.hostedEnvironmentBindingFailure;
   expect(failure).toEqual({
-    stage: "create_post",
-    reason: "git_reference_rejection",
-    providerCode: "other",
     httpStatus: 400,
+    providerCode: "other",
+    reason: "git_reference_rejection",
+    stage: "create_post",
   });
   expect(JSON.stringify(f.diagnostics)).not.toContain("private repository details");
   expect(JSON.stringify(f.diagnostics)).not.toContain("private-oauth");
@@ -491,10 +491,10 @@ it("bounds a stalled provider error body and still reports the HTTP rejection", 
   f.setSlowProviderErrorPost();
   await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
   expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
-    stage: "create_post",
-    reason: "provider_rejected",
-    providerCode: "other",
     httpStatus: 400,
+    providerCode: "other",
+    reason: "provider_rejected",
+    stage: "create_post",
   });
 }, 2000);
 it.each(["integration", "foreign", "duplicate"])(
@@ -1161,11 +1161,11 @@ it("retains current app policy coverage when a later checkpoint fails without a 
   f.checkpointManagedEnvironment.mockRejectedValue(new Error("private checkpoint failure"));
   expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
   expect(f.diagnostics.at(-1)?.hostedEnvironmentBindingFailure).toMatchObject({
-    stage: "checkpoint",
-    reason: "checkpoint_failed",
-    trustedSourcesVisibility: "present",
-    approvedSourcePresent: true,
     approvedPairCovered: true,
+    approvedSourcePresent: true,
+    reason: "checkpoint_failed",
+    stage: "checkpoint",
+    trustedSourcesVisibility: "present",
   });
   expect(appPolicyWrites(f)).toEqual([]);
 });
@@ -1475,9 +1475,9 @@ it("clears the PATCH target when the subsequent readback request fails", async (
   });
   await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
   expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
-    stage: "readback",
-    reason: "provider_rejected",
-    providerCode: "other",
     httpStatus: 500,
+    providerCode: "other",
+    reason: "provider_rejected",
+    stage: "readback",
   });
 });

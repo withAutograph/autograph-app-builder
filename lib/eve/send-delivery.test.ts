@@ -438,8 +438,8 @@ describe("canonical SEND delivery acknowledgement", () => {
     ).toMatchObject({ status: "working" });
     expect(await f.operation()).toMatchObject({ state: "succeeded" });
     expect(await f.store.getPrivateOperation(principal, operationId("second-send"))).toMatchObject({
-      state: "submission_unknown",
       sendDelivery: { deliveryId: "ack-2" },
+      state: "submission_unknown",
     });
     expect(f.accepted).toHaveBeenCalledTimes(2);
   });

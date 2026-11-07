@@ -87,11 +87,11 @@ describe("Production setup consent", () => {
       const projected = projectInstalledEveEvent(pending, 0);
       expect(projected).toMatchObject([
         {
-          type: "input.requested",
           request: {
             kind: "approval",
             requestId: "request",
           },
+          type: "input.requested",
         },
       ]);
       const publicRequest = outstandingInstalledEveRequests([pending])[0];
@@ -129,8 +129,8 @@ describe("Production setup consent", () => {
     }
     approval.action.input = invalidPlan;
     expect(projectInstalledEveEvent(pending, 0)).toMatchObject([
-      { type: "error.public", code: "confirmation_unavailable" },
-      { type: "status", status: "failed" },
+      { code: "confirmation_unavailable", type: "error.public" },
+      { status: "failed", type: "status" },
     ]);
     expect(outstandingInstalledEveRequests([pending])).toEqual([]);
     expect(deriveInstalledEveStatus([pending])).toBe("failed");

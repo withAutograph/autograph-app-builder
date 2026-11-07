@@ -313,7 +313,7 @@ describe("participant proposal identity continuity", () => {
       });
     f.deps.readApproval = async () => null;
     const result = await f.client.request({ action: "plan", operation: "prepare", selection });
-    expect(result).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(result).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.row().record).toEqual(f.original);
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });

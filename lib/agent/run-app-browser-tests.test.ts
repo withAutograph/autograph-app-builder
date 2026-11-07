@@ -90,8 +90,8 @@ describe("private app browser tests", () => {
           expect(run.mock.calls[1]?.[0].command).toBe(appBrowserTestCommand(appId));
         } else {
           expect(result).toMatchObject({
-            reason: "private-preview-refresh-required",
             exitCode: null,
+            reason: "private-preview-refresh-required",
             stdout: "",
           });
           expect(run).toHaveBeenCalledTimes(1);
@@ -141,7 +141,7 @@ describe("private app browser tests", () => {
           verifyCurrent,
         },
       });
-      expect(result).toMatchObject({ reason: "private-preview-refresh-required", exitCode: null });
+      expect(result).toMatchObject({ exitCode: null, reason: "private-preview-refresh-required" });
       expect(run).not.toHaveBeenCalled();
       expect(verifyCurrent).not.toHaveBeenCalled();
     } finally {
@@ -192,7 +192,7 @@ describe("private app browser tests", () => {
       sandbox: { run },
       selection: { testName: "@acceptance", workers: 1 },
     });
-    expect(result).toMatchObject({ status: "passed", exitCode: 0 });
+    expect(result).toMatchObject({ exitCode: 0, status: "passed" });
     expect(run).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         command:

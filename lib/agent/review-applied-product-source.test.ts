@@ -269,7 +269,7 @@ it("authorizes application journal reuse before returning completed evidence wit
   expect(result).toMatchObject({
     reviewCompleted: true,
     status: "unassessed",
-    invocation: { requestAttempts: 0, journalReuses: 1 },
+    invocation: { journalReuses: 1, requestAttempts: 0 },
   });
   read.mockRejectedValueOnce(new Error("owner revoked"));
   await expect(reviewApplicationWithJournal(input, assess)).rejects.toThrow("owner revoked");

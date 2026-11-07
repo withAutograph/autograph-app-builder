@@ -90,9 +90,9 @@ it("retains only closed operator failure facts in deferred errors", async () => 
       new AbortController().signal,
     ),
   ).rejects.toMatchObject({
-    name: "RetryableError",
     message:
       "Continuity approval reconciliation must retry at journal: operation_in_progress. Preserve the same intent and native approval.",
+    name: "RetryableError",
   });
 });
 

@@ -85,7 +85,7 @@ it("persists the exact intent before writes and resumes it after loss without ab
   });
   await expect(
     normalizeCatalog.execute({ dependency: "fixture-tool" }, context),
-  ).resolves.toMatchObject({ status: "lock_generation_failed", lockExitCode: 7 });
+  ).resolves.toMatchObject({ lockExitCode: 7, status: "lock_generation_failed" });
   expect(mocks.plan).toHaveBeenCalledOnce();
   expect(mocks.inspect).toHaveBeenCalledOnce();
   expect(mocks.candidate?.dependencyCatalogPending).toBeUndefined();
