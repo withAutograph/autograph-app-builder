@@ -10,6 +10,11 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderAppIdSchema } from "./names";
 
+const prepareControlDatabaseEffect = "prepare-control-database";
+const installControlSchemaEffect = "install-control-schema";
+const bindServiceMembershipsEffect = "bind-service-memberships";
+const registerCentralAppEffect = "register-central-app";
+const prepareProviderDestinationEffect = "prepare-provider-destination";
 const id = z.string().min(1).max(256);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
@@ -34,11 +39,11 @@ export const integrationCapabilityMembershipSchema = z.strictObject({
   role: sqlName,
 });
 export const integrationCapabilityEffectSchema = z.enum([
-  "prepare-control-database",
-  "install-control-schema",
-  "bind-service-memberships",
-  "register-central-app",
-  "prepare-provider-destination",
+  prepareControlDatabaseEffect,
+  installControlSchemaEffect,
+  bindServiceMembershipsEffect,
+  registerCentralAppEffect,
+  prepareProviderDestinationEffect,
 ]);
 export type IntegrationCapabilityEffect = z.infer<typeof integrationCapabilityEffectSchema>;
 export const appIntegrationCapabilityPlanSchema = z
@@ -74,17 +79,17 @@ export const appIntegrationCapabilityPlanSchema = z
     }),
     effects: z.union([
       z.tuple([
-        z.literal("prepare-control-database"),
-        z.literal("install-control-schema"),
-        z.literal("bind-service-memberships"),
-        z.literal("register-central-app"),
+        z.literal(prepareControlDatabaseEffect),
+        z.literal(installControlSchemaEffect),
+        z.literal(bindServiceMembershipsEffect),
+        z.literal(registerCentralAppEffect),
       ]),
       z.tuple([
-        z.literal("prepare-control-database"),
-        z.literal("install-control-schema"),
-        z.literal("bind-service-memberships"),
-        z.literal("prepare-provider-destination"),
-        z.literal("register-central-app"),
+        z.literal(prepareControlDatabaseEffect),
+        z.literal(installControlSchemaEffect),
+        z.literal(bindServiceMembershipsEffect),
+        z.literal(prepareProviderDestinationEffect),
+        z.literal(registerCentralAppEffect),
       ]),
     ]),
     kind: z.enum([
@@ -285,7 +290,7 @@ export const appIntegrationCapabilityOperationRef = (plan: AppIntegrationCapabil
 };
 export const integrationProviderDestinationReceiptSchema = z.strictObject({
   destinationId: id,
-  effect: z.literal("prepare-provider-destination"),
+  effect: z.literal(prepareProviderDestinationEffect),
   name: id,
   secretRef: z.uuid(),
   secretSha256: digest,
@@ -297,19 +302,19 @@ export const integrationCapabilityReceiptSchema = z.discriminatedUnion("effect",
   integrationProviderDestinationReceiptSchema,
   z.strictObject({
     database: sqlName,
-    effect: z.literal("prepare-control-database"),
+    effect: z.literal(prepareControlDatabaseEffect),
     migratorRole: role,
     resourceId: id,
     resourceVersion: id,
     runtimeRole: role,
   }),
   z.strictObject({
-    effect: z.literal("install-control-schema"),
+    effect: z.literal(installControlSchemaEffect),
     resourceVersion: id,
     schemaSha256: digest,
   }),
   z.strictObject({
-    effect: z.literal("bind-service-memberships"),
+    effect: z.literal(bindServiceMembershipsEffect),
     memberships: z
       .array(
         integrationCapabilityMembershipSchema.extend({
@@ -321,7 +326,7 @@ export const integrationCapabilityReceiptSchema = z.discriminatedUnion("effect",
   }),
   z.strictObject({
     appId: builderAppIdSchema,
-    effect: z.literal("register-central-app"),
+    effect: z.literal(registerCentralAppEffect),
     principalGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     registrationDigest: digest,
     registrationRef: z.uuid(),
@@ -413,11 +418,11 @@ export const appIntegrationCapabilityRecordSchema = z
   .strictObject({
     approvalReceipts: z.array(z.strictObject({ approvalId: id, approvedByCallId: id })).default([]),
     effects: z.strictObject({
-      "bind-service-memberships": effectState,
-      "install-control-schema": effectState,
-      "prepare-control-database": effectState,
-      "prepare-provider-destination": effectState.optional(),
-      "register-central-app": effectState,
+      [bindServiceMembershipsEffect]: effectState,
+      [installControlSchemaEffect]: effectState,
+      [prepareControlDatabaseEffect]: effectState,
+      [prepareProviderDestinationEffect]: effectState.optional(),
+      [registerCentralAppEffect]: effectState,
     }),
     executionLease: z
       .strictObject({
@@ -434,7 +439,7 @@ export const appIntegrationCapabilityRecordSchema = z
   .superRefine((record, context) => {
     const invalid = [
       record.planDigest !== appIntegrationCapabilityPlanDigest(record.plan),
-      record.plan.version === 1 && record.effects["prepare-provider-destination"] !== undefined,
+      record.plan.version === 1 && record.effects[prepareProviderDestinationEffect] !== undefined,
       record.plan.effects.some((effect) => {
         const state = record.effects[effect];
         return (
