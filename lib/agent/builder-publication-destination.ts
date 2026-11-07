@@ -14,6 +14,7 @@ import type { BuilderSessionDestination } from "../provisioning/builder-session-
 import type { PublicationDestinationSelector } from "./github-publication-destination";
 
 type OwnedDestination = PublicationDestinationSelector & { repositoryId: string };
+const UNAVAILABLE_DESTINATION = "The saved Builder app destination is unavailable for publication.";
 interface Selection {
   authority: BuilderProvisionAuthority;
   appId: string;
@@ -48,10 +49,10 @@ export const createBuilderPublicationDestinationReader =
       response.vercel.status !== "succeeded" ||
       response.github.fullName !== response.vercel.linkedGitHubRepository
     ) {
-      throw new Error("The saved Builder app destination is unavailable for publication.");
+      throw new Error(UNAVAILABLE_DESTINATION);
     }
     if (response.github.fullName !== response.vercel.linkedGitHubRepository) {
-      throw new Error("The saved Builder app destination is unavailable for publication.");
+      throw new Error(UNAVAILABLE_DESTINATION);
     }
     const current = await deps.readSelection();
     const latest = await deps.readProvisioning({
@@ -100,7 +101,7 @@ export const readBuilderPublicationDestinationForTool = async (
   });
   const config = readPreviewOAuthRuntimeConfig(process.env);
   if (authority.issuer !== config.issuer || authority.audience !== config.resource) {
-    throw new Error("The saved Builder app destination is unavailable for publication.");
+    throw new Error(UNAVAILABLE_DESTINATION);
   }
   const database = openHostedPostgresDatabase(config.databaseUrl);
   const sessions = createPostgresHostedEveStore(database);
