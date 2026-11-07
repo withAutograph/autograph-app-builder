@@ -6,7 +6,8 @@ import { promisify } from "node:util";
 import { z } from "zod";
 import type { Observation } from "./self-reproduction-parity";
 
-const execute = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execute = promisifyExecFile(execFile);
 const directTitle =
   "/auth/sign-in?callbackURL=%2F streams its meaningful production shell and resolves";
 const clientTitle = "real Sign In Link uses a prefetched production destination";

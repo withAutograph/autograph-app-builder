@@ -4,11 +4,8 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { ARRUSTED_TEMPLATE_REPOSITORY } from "../../lib/repository/source-receipt";
 
-const execute = promisify(execFile) as (
-  file: string,
-  args: string[],
-  options: { cwd?: string; maxBuffer?: number },
-) => Promise<{ stdout: string }>;
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execute = promisifyExecFile(execFile);
 type Git = (args: string[], cwd?: string) => Promise<string>;
 const git: Git = async (args, cwd) => {
   const result = await execute("git", args, { cwd, maxBuffer: 1024 * 1024 });
