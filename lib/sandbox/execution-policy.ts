@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 export const sandboxExecutionPolicySchema = z
-  .object({
+  .strictObject({
     lease: z.object({
       cleanupTimeoutMs: z.literal(2000),
       heartbeatMs: z.literal(60_000),
@@ -17,8 +17,7 @@ export const sandboxExecutionPolicySchema = z
       vcpus: z.literal(2),
     }),
     version: z.literal(1),
-  })
-  .strict();
+  });
 
 export type SandboxExecutionPolicy = z.infer<typeof sandboxExecutionPolicySchema>;
 
