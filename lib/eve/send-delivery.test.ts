@@ -141,10 +141,11 @@ class PagedSendDiagnosticStore extends InMemoryHostedEveStore {
     ) {
       return owned;
     }
-    return {
-      ...this.paged,
-      ...(owned.version === 2 ? { cancellationRevision: owned.cancellationRevision } : {}),
-    };
+    const paged = { ...this.paged };
+    if (owned.version === 2) {
+      Object.assign(paged, { cancellationRevision: owned.cancellationRevision });
+    }
+    return paged;
   }
   observeSessionPaged: NonNullable<HostedEveStore["observeSessionPaged"]> = async (input) => {
     const current = await this.getSession(input.principal, input.sessionId);
@@ -231,7 +232,7 @@ const attachPagedTransport = (f: Awaited<ReturnType<typeof fixture>>) => {
         onEvent: input.onEvent,
         onPrivateEvent: input.onPrivateEvent,
         sessionId: input.adapterSessionId,
-        workloadIdentity: { token: async () => "synthetic-oidc" },
+        workloadIdentity: { token: vi.fn().mockResolvedValue("synthetic-oidc") },
       }),
   );
   f.adapter.observe = observe;
@@ -1229,8 +1230,7 @@ describe("canonical SEND delivery acknowledgement", () => {
       fetchImplementation,
       onEvent: vi.fn(),
       sessionId: "native",
-      // oxlint-disable-next-line eslint/require-await -- The synthetic workload identity has the asynchronous token contract.
-      workloadIdentity: { token: async () => "synthetic-oidc" },
+      workloadIdentity: { token: vi.fn().mockResolvedValue("synthetic-oidc") },
     };
     const first = await observeSameOriginEveStream(common);
     const marker = {
@@ -1307,7 +1307,7 @@ describe("canonical SEND delivery acknowledgement", () => {
           }),
         onEvent: () => {},
         sessionId: "native",
-        workloadIdentity: { token: async () => "synthetic-oidc" },
+        workloadIdentity: { token: vi.fn().mockResolvedValue("synthetic-oidc") },
       });
       expect(result.status).toBe(expected);
     },
@@ -1364,8 +1364,7 @@ describe("canonical SEND delivery acknowledgement", () => {
         config: { baseUrl: "https://builder.example.test" },
         fetchImplementation,
         onSubmissionDiagnostic: diagnostics,
-        // oxlint-disable-next-line eslint/require-await -- The synthetic workload identity has the asynchronous token contract.
-        workloadIdentity: { token: async () => "synthetic-oidc" },
+        workloadIdentity: { token: vi.fn().mockResolvedValue("synthetic-oidc") },
       });
       const input = {
         adapterSessionId: "native",
