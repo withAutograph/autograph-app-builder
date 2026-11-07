@@ -156,10 +156,13 @@ export const inspectNativeTargetVercelAuthorization = async (input: {
       teamMatches: value.teamId === input.expectedTeamId,
     };
   } catch {
-    return {
+    const result = {
       failure: input.signal.aborted ? "cancelled" : "request_failed",
       status: "unavailable",
-      ...(statusCode === undefined ? {} : { statusCode }),
-    };
+    } as const;
+    if (statusCode !== undefined) {
+      return { ...result, statusCode };
+    }
+    return result;
   }
 };

@@ -28,8 +28,8 @@ export function publicationContentSourceForReviewedWorkflow(input: {
 }): GitHubPublicationContentSource {
   const relativeRoot = input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
   let applyFiles: Promise<Map<string, { path: string; mode: string; digest: string }>> | undefined;
-  const observeApplyFiles = async () =>
-    await (applyFiles ??= (async () => {
+  const observeApplyFiles = async () => {
+    applyFiles ??= (async () => {
       const observed = hasTestCapability("simulated-target")
         ? await inspectFixtureApplyOverlay(
             input.sandbox,
@@ -50,7 +50,9 @@ export function publicationContentSourceForReviewedWorkflow(input: {
         );
       }
       return new Map(observed.files.map((file) => [file.path, file]));
-    })());
+    })();
+    return await applyFiles;
+  };
   return {
     async readFile(path) {
       const files = await observeApplyFiles();
