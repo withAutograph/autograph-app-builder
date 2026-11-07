@@ -19,27 +19,27 @@ const continuation =
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const snapshot: AppAccessSnapshot = {
-  sessionId: "saved-app-session",
   appId: "request-log",
   appName: "Request log",
-  organizationName: "Team",
   appUrl: "https://apps.example.com/request-log",
   canManage: true,
+  creator: { status: "ready" },
+  invitations: [
+    {
+      email: "guest@example.com",
+      expiresAt: "2099-01-01T00:00:00Z",
+      id: "invite-one",
+      roles: ["reader"],
+      status: "pending",
+    },
+  ],
+  members: [{ email: "creator@example.com", id: "creator", name: "Creator", roles: ["editor"] }],
+  organizationName: "Team",
   roles: [
     { id: "reader", label: "Reader" },
     { id: "editor", label: "Editor" },
   ],
-  members: [{ id: "creator", email: "creator@example.com", name: "Creator", roles: ["editor"] }],
-  invitations: [
-    {
-      id: "invite-one",
-      email: "guest@example.com",
-      roles: ["reader"],
-      status: "pending",
-      expiresAt: "2099-01-01T00:00:00Z",
-    },
-  ],
-  creator: { status: "ready" },
+  sessionId: "saved-app-session",
 };
 const roots: ReturnType<typeof createRoot>[] = [];
 const render = async (node: ReactNode) => {
@@ -84,13 +84,13 @@ describe("Builder app access", () => {
       <AppAccessView
         data={{
           ...snapshot,
-          creator: {
-            status: "sign_in_required",
-            signInUrl: "https://apps.example.com/connect",
-            recoveryUrl: "https://apps.example.com/auth/forgot-password",
-            expiresAt: "2099-01-01T00:00:00Z",
-          },
           canManage: false,
+          creator: {
+            expiresAt: "2099-01-01T00:00:00Z",
+            recoveryUrl: "https://apps.example.com/auth/forgot-password",
+            signInUrl: "https://apps.example.com/connect",
+            status: "sign_in_required",
+          },
         }}
         disabled={false}
         onAction={onAction}
@@ -113,9 +113,9 @@ describe("Builder app access", () => {
         data={{
           ...snapshot,
           creator: {
-            status: "sign_in_required",
-            signInUrl: "https://apps.example.com/stale",
             expiresAt: "2000-01-01T00:00:00Z",
+            signInUrl: "https://apps.example.com/stale",
+            status: "sign_in_required",
           },
         }}
         disabled={false}
@@ -205,7 +205,7 @@ describe("Builder app access", () => {
     continuation.mockImplementation(async (_previous, input) => {
       await Promise.resolve();
       requests.push(z.object({ command: appAccessCommandSchema }).parse(input).command);
-      return { status: "ready", snapshot };
+      return { snapshot, status: "ready" };
     });
     const container = await render(
       <AppAccessPage sessionId={snapshot.sessionId} continueAction={continuation} />,
@@ -229,7 +229,7 @@ describe("Builder app access", () => {
       if (attempts === 1) {
         throw new TypeError("Connection interrupted");
       }
-      return { status: "ready", snapshot };
+      return { snapshot, status: "ready" };
     });
     const container = await render(
       <AppAccessPage sessionId={snapshot.sessionId} continueAction={continuation} />,
@@ -259,7 +259,7 @@ describe("Builder app access", () => {
             ? {
                 ...snapshot,
                 members: [
-                  { id: "guest", name: "Guest", email: "guest@example.com", roles: ["reader"] },
+                  { email: "guest@example.com", id: "guest", name: "Guest", roles: ["reader"] },
                 ],
               }
             : { ...snapshot, nextCursor: "page-two" },
@@ -293,7 +293,7 @@ describe("Builder app access", () => {
     );
     expect(cancel?.disabled).toBe(true);
     await act(async () => {
-      completion.resolve({ status: "ready", snapshot });
+      completion.resolve({ snapshot, status: "ready" });
       await completion.promise;
     });
     expect(container.querySelector("main")?.getAttribute("aria-busy")).toBe("false");
@@ -306,8 +306,8 @@ describe("Builder app access", () => {
       <AppAccessView
         data={{
           ...snapshot,
+          members: [{ email: "creator@example.com", id: "creator", name: "Creator", roles: [] }],
           roles: [],
-          members: [{ id: "creator", name: "Creator", email: "creator@example.com", roles: [] }],
         }}
         disabled={false}
         onAction={vi.fn<() => void>()}
