@@ -15,9 +15,9 @@ type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pageData(
   row: Awaited<ReturnType<ReturnType<typeof createBuilderDraftService>["readActive"]>>,
-) {
+): ReturnType<typeof builderDraftPageDataSchema.parse> | undefined {
   if (!row) {
-    return;
+    return undefined;
   }
   return builderDraftPageDataSchema.parse({
     draftId: row.draftId,
@@ -31,13 +31,24 @@ function pageData(
 export async function getAuthenticatedBuilderDraftContext(input: {
   environment: Environment;
   headers: Headers;
-}) {
+}): Promise<
+  | {
+      authority: {
+        audience: string;
+        issuer: string;
+        ownerUserId: string;
+        workspaceId: string;
+      };
+      drafts: ReturnType<typeof createBuilderDraftService>;
+    }
+  | undefined
+> {
   const session = await ensurePreviewOAuthDeploymentSessionOrganization({
     environment: input.environment,
     headers: input.headers,
   });
   if (!session) {
-    return;
+    return undefined;
   }
   const preview = readPreviewOAuthRuntimeConfig(input.environment);
   return {
@@ -58,10 +69,10 @@ export async function getAuthenticatedBuilderDraftContext(input: {
 export async function readAuthenticatedActiveBuilderDraft(input: {
   environment: Environment;
   headers: Headers;
-}) {
+}): Promise<ReturnType<typeof pageData>> {
   const context = await getAuthenticatedBuilderDraftContext(input);
   if (!context) {
-    return;
+    return undefined;
   }
   return pageData(await context.drafts.readActive(context.authority));
 }
@@ -71,10 +82,10 @@ export async function readAuthenticatedBuilderDraft(input: {
   environment: Environment;
   headers: Headers;
   draftId: string;
-}) {
+}): Promise<ReturnType<typeof pageData>> {
   const context = await getAuthenticatedBuilderDraftContext(input);
   if (!context) {
-    return;
+    return undefined;
   }
   const row = await context.drafts.read(context.authority, input.draftId);
   // An opaque, tenant-authorized draft ID is used for provider-return
@@ -122,7 +133,11 @@ export function createBuilderDraftRouteHandler(input: {
         return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
       }
       const length = request.headers.get("content-length");
-      if (length && (!/^\d+$/u.test(length) || Number(length) > maximumRequestBytes)) {
+      if (
+        length !== null &&
+        length !== "" &&
+        (!/^\d+$/u.test(length) || Number(length) > maximumRequestBytes)
+      ) {
         return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
       }
       const authority = await input.authorityForRequest(request);
