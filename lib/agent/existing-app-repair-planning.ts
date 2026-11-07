@@ -35,6 +35,12 @@ interface RepairHistoryEntry {
   approvedBase: Settled;
   suspendedWorkflow?: Extract<AppBuilderWorkflowState, { phase: "planned" }>;
 }
+interface RepairInspection {
+  approvedBase?: Settled;
+  assertCurrent: () => void;
+  requestDigest: string;
+  reuse: boolean;
+}
 /** Separate linear history; workflow snapshots never recursively include this key. */
 export const existingAppRepairHistory = defineState<readonly RepairHistoryEntry[]>(
   "autograph-app-builder.existing-app-repair-history.v1",
@@ -100,7 +106,7 @@ const approvedRepairHistory = (proposalDigest: string, sessionId: string): Repai
       "This proposal has no retained approved predecessor. Reuse the current plan with prepare_app_creation without options. To implement that proposal, use apply_app_creation with the selected compute profile and implementation files. Its normal approval policy presents or reuses Build approval for the exact current proposal. Preserve the saved work if the approval cannot be reconciled.",
     );
   }
-  const entry = matches[0];
+  const [entry] = matches;
   if (matches.length !== 1 || entry?.sessionId !== sessionId || !settled(entry.approvedBase)) {
     throw new Error(
       "The approved build history is unavailable for this session and repair proposal.",
@@ -141,26 +147,39 @@ export const resumeApprovedAppBuild = async (
   updateExactWorkflow({
     expected: current,
     operation: "resume the approved build",
-    transition: () => ({
-      appSpec: base.appSpec,
-      applyReceipt: base.applyReceipt,
-      artifacts: current.artifacts,
-      ...(checkoutDependencyAttempts.size === 0
-        ? {}
-        : { checkoutDependencyAttempts: [...checkoutDependencyAttempts.values()] }),
-      dependencyReceipt: base.dependencyReceipt,
-      ...(base.githubSource === undefined ? {} : { githubSource: base.githubSource }),
-      identityReceipt: base.identityReceipt,
-      phase: "applied",
-      preparedByCallId: base.preparedByCallId,
-      proposal: base.proposal,
-      ...(publishedGitHubDraftProposalDigest === undefined
-        ? {}
-        : { publishedGitHubDraftProposalDigest }),
-      sourceReceipt: base.sourceReceipt,
-      version: base.version,
-      workspace: base.workspace,
-    }),
+    transition: () => {
+      const ordered = {
+        appSpec: base.appSpec,
+        applyReceipt: base.applyReceipt,
+        artifacts: current.artifacts,
+      };
+      const withAttempts =
+        checkoutDependencyAttempts.size > 0
+          ? { ...ordered, checkoutDependencyAttempts: [...checkoutDependencyAttempts.values()] }
+          : ordered;
+      const withDependencies = { ...withAttempts, dependencyReceipt: base.dependencyReceipt };
+      const withSource =
+        base.githubSource === undefined
+          ? withDependencies
+          : { ...withDependencies, githubSource: base.githubSource };
+      const withProposal = {
+        ...withSource,
+        identityReceipt: base.identityReceipt,
+        phase: "applied" as const,
+        preparedByCallId: base.preparedByCallId,
+        proposal: base.proposal,
+      };
+      const withPublishedProposal =
+        publishedGitHubDraftProposalDigest === undefined
+          ? withProposal
+          : { ...withProposal, publishedGitHubDraftProposalDigest };
+      return {
+        ...withPublishedProposal,
+        sourceReceipt: base.sourceReceipt,
+        version: base.version,
+        workspace: base.workspace,
+      };
+    },
   });
   existingAppRepairHistory.update((history) =>
     history.map((record) =>
@@ -257,7 +276,7 @@ const inspectUnapprovedPlan = (
   sandbox: SandboxSession,
   ctx: Pick<ToolContext, "callId" | "abortSignal" | "session">,
   requestDigest: string,
-) => {
+): RepairInspection => {
   if (
     !("operation" in current.proposal.target) ||
     current.proposal.target.operation !== "iterate-existing-app" ||
