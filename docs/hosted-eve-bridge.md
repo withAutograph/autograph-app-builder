@@ -210,6 +210,23 @@ their serializable input; workflow port objects remain outside the step receiver
 This preserves the recovered session, continuation token and approval history
 without starting a model turn or another app lifecycle.
 
+If a recovery owner fails after validating and activating its retained checkpoint
+but before an authored turn or handoff, ordinary terminal recovery can use that
+same checkpoint as `validated-recovery-input`. The framework verifies the exact
+physical owner, logical session, completed validation input and retained
+activation event. The original app state, owner, proposal and approval history
+remain intact; the existing native effect and inbox reconciliation still runs.
+An unvalidated or unactivated entry, a later unknown step, or an unresolved
+carried inbox cannot authorize another execution. Repeated requests adopt the
+existing canonical receipt. A recovered idle checkpoint parks for input again.
+
+For an authenticated empty stream only, the framework may report
+`x-eve-native-recovery-boot-status: failed` after the same read-only boot proof.
+It checks native status metadata before reading failed-run input. Missing or
+ambiguous evidence leaves the event-based status unchanged. The header adds no
+stream event, cursor, approval or provider action; it lets Builder expose the
+real failed boot and use its normal recovery operation.
+
 ### Recovery of approved publication readback
 
 An interrupted native turn can retain a human-approved `reconcile_github_draft_pr`

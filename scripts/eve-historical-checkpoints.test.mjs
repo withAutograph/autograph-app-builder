@@ -340,3 +340,63 @@ it("refuses legacy fallback ordering when another review competes", async () => 
   );
   await assert.rejects(run(f), /input order is ambiguous/u);
 });
+
+it("crosses a receipt-bound validated recovery boot to the earlier committed review", async () => {
+  const f = fixture();
+  const boot = "failed-recovery-owner";
+  const bootStep = "boot-validation";
+  f.events.push(
+    event(boot, 1, bootStep, "step_completed", "validateTerminalRecoveryCheckpointStep"),
+  );
+  f.steps.set(bootStep, {
+    ...step(boot, bootStep, undefined, { checkpoint: paired("validated") }),
+    stepName: "step//eve@0.68.0//validateTerminalRecoveryCheckpointStep",
+  });
+  const priorVisit = f.options.visitPredecessors;
+  f.options.visitPredecessors = async (visit) => {
+    const action = await visit({
+      ownerRunId: boot,
+      logicalSessionId: logical,
+      cutoff: {
+        ...f.cutoff,
+        kind: "validated-recovery-input",
+        checkpointOwnerRunId: boot,
+        sourceStepId: bootStep,
+        sourceEventId: eventId(1),
+        sourceSlot: 1,
+      },
+      authorizeRead: f.options.authorizeCurrent,
+    });
+    assert.equal(action, "continue");
+    await priorVisit(visit);
+  };
+  const values = await run(f);
+  assert.equal(values.at(-1).value.digest, "original");
+  assert.equal(values.at(-1).runIndex, 2);
+  assert.ok(f.reads.some(([kind, id]) => kind === "step" && id === boot));
+});
+
+it.each(["failed", "foreign", "wrong-step", "wrong-event"])(
+  "rejects %s boot predecessor checkpoints before older history",
+  async (invalid) => {
+    const f = fixture();
+    f.cutoff.kind = "validated-recovery-input";
+    const cp = paired("validated");
+    if (invalid === "foreign") {
+      cp.serializedContext["eve.sessionId"] = "foreign";
+    }
+    f.steps.set("cutoff", {
+      ...step(f.runId, "cutoff", undefined, { checkpoint: cp }),
+      stepName: invalid === "wrong-step" ? "turnStep" : "validateTerminalRecoveryCheckpointStep",
+      status: invalid === "failed" ? "failed" : "completed",
+    });
+    if (invalid === "wrong-event") {
+      f.events[1].eventType = "step_created";
+    }
+    await assert.rejects(run(f), /validated recovery cutoff unavailable|logical identity differs/u);
+    assert.equal(
+      f.reads.some(([kind]) => kind === "page"),
+      false,
+    );
+  },
+);

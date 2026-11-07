@@ -267,6 +267,7 @@ const fixture = async function fixture(options = {}) {
       calls.push(["key"]);
       return key;
     },
+    hydrateWorkflowArguments: serialization.hydrateWorkflowArguments,
     hydrateStepArguments: async (...args) => {
       calls.push(["hydrate-input"]);
       return serialization.hydrateStepArguments(...args);
