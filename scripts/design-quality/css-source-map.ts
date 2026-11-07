@@ -46,11 +46,7 @@ export function originalCssSource(
   generatedLine: number,
   generatedColumn: number,
 ) {
-  if (
-    map.version !== 3 ||
-    generatedLine < 0 ||
-    generatedColumn < 0
-  ) {
+  if (map.version !== 3 || generatedLine < 0 || generatedColumn < 0) {
     return;
   }
   if (
@@ -94,23 +90,23 @@ export function originalCssSource(
         if (line === generatedLine && generated <= generatedColumn) {
           candidate = undefined;
         }
-        continue;
-      }
-      if (fields.length !== 4 && fields.length !== 5) {
-        return;
-      }
-      if (
-        sourceDelta === undefined ||
-        originalLineDelta === undefined ||
-        originalColumnDelta === undefined
-      ) {
-        return;
-      }
-      source += sourceDelta;
-      originalLine += originalLineDelta;
-      originalColumn += originalColumnDelta;
-      if (line === generatedLine && generated <= generatedColumn) {
-        candidate = { originalColumn, originalLine, source };
+      } else {
+        if (fields.length !== 4 && fields.length !== 5) {
+          return;
+        }
+        if (
+          sourceDelta === undefined ||
+          originalLineDelta === undefined ||
+          originalColumnDelta === undefined
+        ) {
+          return;
+        }
+        source += sourceDelta;
+        originalLine += originalLineDelta;
+        originalColumn += originalColumnDelta;
+        if (line === generatedLine && generated <= generatedColumn) {
+          candidate = { originalColumn, originalLine, source };
+        }
       }
     }
     if (line === generatedLine && candidate) {
@@ -121,9 +117,10 @@ export function originalCssSource(
       return {
         column: candidate.originalColumn + 1,
         line: candidate.originalLine + 1,
-        path: map.sourceRoot !== undefined && map.sourceRoot !== ""
-          ? `${map.sourceRoot.replace(/\/$/u, "")}/${path.replace(/^\//u, "")}`
-          : path,
+        path:
+          map.sourceRoot !== undefined && map.sourceRoot !== ""
+            ? `${map.sourceRoot.replace(/\/$/u, "")}/${path.replace(/^\//u, "")}`
+            : path,
         sourceIndex: candidate.source,
       };
     }
