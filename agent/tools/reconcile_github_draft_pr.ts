@@ -101,13 +101,13 @@ export default defineTool({
         proposal: candidate.proposal,
         review: candidate.review,
         root: candidate.root,
-        ...(candidate.publishedOrigin === undefined
-          ? {}
-          : { publishedOrigin: candidate.publishedOrigin }),
-        ...(candidate.publicationScope === undefined
-          ? {}
-          : { publicationScope: candidate.publicationScope }),
       };
+      if (candidate.publishedOrigin !== undefined) {
+        completion.publishedOrigin = candidate.publishedOrigin;
+      }
+      if (candidate.publicationScope !== undefined) {
+        completion.publicationScope = candidate.publicationScope;
+      }
     }
     const { proposal, review } = completion;
     assertApprovalReceipt({
@@ -148,13 +148,15 @@ export default defineTool({
       publication: Parameters<typeof recordPublishedReconciliationForSession>[0]["publication"],
     ) => {
       try {
-        const recording = await recordPublishedReconciliationForSession({
+        const recordingBase = {
           ...session,
           publication,
-          ...(input.recordCurrentEquivalentRelease === true
-            ? { recordCurrentEquivalentRelease: true as const }
-            : {}),
-        });
+        };
+        const recordingInput =
+          input.recordCurrentEquivalentRelease === true
+            ? { ...recordingBase, recordCurrentEquivalentRelease: true as const }
+            : recordingBase;
+        const recording = await recordPublishedReconciliationForSession(recordingInput);
         if (recording.status === "selection-changed") {
           return {
             ...publication,
