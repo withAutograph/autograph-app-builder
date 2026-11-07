@@ -100,8 +100,9 @@ export const resolveNativeTargetEffectiveConfiguration = async <Invocation>(inpu
   const existing = configuration.applications[input.appId];
   // Retain optional static publication/policy metadata only for the same actual target.
   const sameTarget = existing?.projectId === observed.projectId && existing.branch === plan.branch;
+  const retainedConfiguration = sameTarget ? existing : undefined;
   configuration.applications[input.appId] = {
-    ...(sameTarget ? existing : {}),
+    ...retainedConfiguration,
     accessRoles: structuredClone(plan.productRoles),
     appDatabase: structuredClone(plan.appDatabase),
     branch: plan.branch,
