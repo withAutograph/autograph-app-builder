@@ -65,7 +65,7 @@ const fixture = async () => {
     "session"
   >;
   await recordLocalAuthoringDecision(ctx, decision);
-  const assertCurrent = vi.fn(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
   return { assertCurrent, ctx, decision, root };
 };
 describe("private local drafting reservation", () => {
@@ -130,7 +130,7 @@ describe("private local drafting reservation", () => {
   });
   it("rechecks current owner and pending proposal boundary before dispatch", async () => {
     await fixture();
-    const dispatch = vi.fn(async () => {});
+    const dispatch = vi.fn<() => Promise<void>>().mockResolvedValue();
     const assertCurrent = vi.fn(async () => {
       throw new Error("new proposal");
     });
@@ -148,7 +148,7 @@ describe("private local drafting reservation", () => {
   });
   it("refuses active/pending calls without reserving or dispatching", async () => {
     const f = await fixture();
-    const dispatch = vi.fn(async () => {});
+    const dispatch = vi.fn<() => Promise<void>>().mockResolvedValue();
     for (const flags of [
       { active: true, pendingInput: false },
       { active: false, pendingInput: true },
