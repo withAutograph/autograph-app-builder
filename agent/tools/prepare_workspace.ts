@@ -160,15 +160,19 @@ export default defineTool({
         expected: current,
         operation: "workspace preparation",
         transition: (latest) =>
-          workspacePreparationTransition(latest, () => ({
-            artifacts: [],
-            ...(githubSource === undefined ? {} : { githubSource }),
-            phase: "prepared",
-            preparedByCallId: ctx.callId,
-            sourceReceipt: currentReceipt,
-            version: APP_BUILDER_WORKFLOW_VERSION,
-            workspace,
-          })),
+          workspacePreparationTransition(latest, () => {
+            const prepared = { artifacts: [] };
+            const withSource =
+              githubSource === undefined ? prepared : { ...prepared, githubSource };
+            return {
+              ...withSource,
+              phase: "prepared",
+              preparedByCallId: ctx.callId,
+              sourceReceipt: currentReceipt,
+              version: APP_BUILDER_WORKFLOW_VERSION,
+              workspace,
+            };
+          }),
       });
       return workspace;
     } catch (error) {
