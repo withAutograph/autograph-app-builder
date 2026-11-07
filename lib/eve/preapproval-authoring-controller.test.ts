@@ -106,8 +106,8 @@ describe("canonical preapproval authoring", () => {
     let operationId = "";
     let message = "";
     f.sendAccepted.mockImplementation(async (request) => {
-      operationId = request.operationId;
-      message = request.message;
+      ({ operationId } = request);
+      ({ message } = request);
       throw new Error("lost ack");
     });
     expect((await continueHostedPreapprovalAuthoring(f)).error?.code).toBe(
