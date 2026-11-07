@@ -57,7 +57,7 @@ const context: HostedOperatorConsentOwner = {
 };
 const fixture = () => {
   const diagnosticSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
-  const assertCurrentOwner = vi.fn(async () => {});
+  const assertCurrentOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const io = {
     getOidc: vi.fn<() => Promise<string>>().mockResolvedValue("private-operator-oidc"),
     getTokenResponse: vi.fn(async () => ({
@@ -71,7 +71,7 @@ const fixture = () => {
       url: "https://vercel.com/connect/authorize?request=opaque",
       verifier: "private-verifier",
     })),
-    verifyOidc: vi.fn(async () => {}),
+    verifyOidc: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
   return {
     assertCurrentOwner,
