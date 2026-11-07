@@ -40,8 +40,8 @@ const storedRecordSchema = authOnlyCredentialRecordSchema.extend({ stage: z.lite
 /** Map a context digest to a stable RFC 4122 UUID for the shared journal primary key. */
 const requestIdFor = (contextDigest: string) => {
   const bytes = Buffer.from(createHash("sha256").update(contextDigest).digest().subarray(0, 16));
-  bytes[6] = (bytes[6]! & 0x0f) | 0x50;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  bytes[6] = (bytes[6] % 16) + 0x50;
+  bytes[8] = (bytes[8] % 64) + 0x80;
   const hex = bytes.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
@@ -75,7 +75,13 @@ export const createPostgresNativeTargetAuthOnlyCredentialStore = (
     );
   };
   const parseRow = (row: typeof builderProvisioningJournals.$inferSelect) => {
-    const { stage: _stage, ...record } = storedRecordSchema.parse(row.record);
+    const stored = storedRecordSchema.parse(row.record);
+    const record = {
+      context: stored.context,
+      kind: stored.kind,
+      privateState: stored.privateState,
+      version: stored.version,
+    };
     const selected = validateKey({
       context: record.context,
       contextDigest: authOnlyCredentialContextDigest(record.context),
@@ -255,9 +261,10 @@ export const createNativeTargetAuthOnlyCredentialAuthority =
       throw new Error("native_target_auth_only_credential_plan_changed");
     }
     const approval = nativeTargetAuthOnlyApprovalSchema.parse(await input.readApproval());
+    if (approval.outcome !== "approved" || approval.planDigest !== planDigest) {
+      throw new Error("native_target_auth_only_credential_approval_required");
+    }
     if (
-      approval.outcome !== "approved" ||
-      approval.planDigest !== planDigest ||
       approval.sourceDigest !==
         nativeTargetAuthOnlySchemaEffectDigest(plan, plan.publishedSource) ||
       approval.publicSessionId !== plan.origin.publicSessionId ||

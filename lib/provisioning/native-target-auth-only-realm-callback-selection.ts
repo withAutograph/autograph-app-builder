@@ -51,7 +51,7 @@ export const selectNativeTargetAuthOnlyRealmCallback = async (
   const pending = await ports.ownerLink.readPending(selector);
   // A lookup miss allows the established legacy lookup. A matched invalid record always fails closed.
   if (pending === undefined) {
-    return undefined;
+    return pending;
   }
   const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse(pending.binding);
   if (
@@ -69,46 +69,55 @@ export const selectNativeTargetAuthOnlyRealmCallback = async (
   const owner = operatorOwnerContextSchema.parse(context.ownerContext);
   const { scope } = configuration.nativeNeon;
   const resource = binding.bootstrapResource;
-  if (
-    !isDeepStrictEqual(context.authority, binding.authority) ||
-    !isDeepStrictEqual(context.target, binding.target) ||
-    !isDeepStrictEqual(owner.authority, binding.authority) ||
-    owner.sessionId !== binding.target.sessionId ||
-    configuration.builderCallbackOrigin !== builderOrigin ||
-    configuration.teamId !== binding.target.scopeId ||
-    configuration.operator.origin !== binding.audience ||
-    configuration.operator.environment !== "preview" ||
-    configuration.gateway.environment !== "preview" ||
-    configuration.gateway.projectId !== binding.gateway.projectId ||
-    configuration.gateway.branch !== binding.gateway.branch ||
-    configuration.gateway.authBrowserOrigin !== binding.browserOrigin ||
-    configuration.gateway.publicOrigin !== binding.issuer ||
-    !isDeepStrictEqual(configuration.gateway.workload, binding.sender) ||
-    !isDeepStrictEqual(ready.gateway, binding.gateway) ||
-    configuration.authDatabase.resourceId !== binding.authResourceId ||
-    configuration.authDatabase.database !== resource.database ||
-    configuration.authDatabase.migratorRole !== resource.migratorRole ||
-    configuration.authDatabase.runtimeRole !== resource.runtimeRole ||
-    scope.hostname !== resource.hostname ||
-    scope.projectId !== resource.neon.projectId ||
-    scope.branchId !== resource.neon.branchId ||
-    !isDeepStrictEqual(pending.bootstrapResource, resource) ||
-    !isDeepStrictEqual(pending.sender, binding.sender) ||
-    pending.link.ownerSessionId !== binding.target.sessionId ||
-    pending.link.authResourceId !== binding.authResourceId ||
-    pending.link.bootstrapPlanDigest !== binding.resourcePlanDigest ||
-    pending.link.endpointOrigin !== binding.gateway.origin ||
-    pending.link.browserOrigin !== binding.browserOrigin ||
-    pending.link.issuer !== binding.issuer ||
-    pending.link.audience !== binding.audience ||
-    pending.link.organizationId !== null ||
-    pending.jwksUrl !== new URL("/_platform/jwks.json", binding.gateway.origin).href ||
-    readiness.authOnlyPlanDigest !== binding.authOnlyPlanDigest ||
-    readiness.resourcePlanDigest !== binding.resourcePlanDigest ||
-    readiness.gatewayDeliveryPlanDigest !== binding.gatewayDeliveryPlanDigest ||
-    readiness.authResourceId !== binding.authResourceId ||
-    !digest.safeParse(readiness.catalogFingerprint).success
-  ) {
+  const exactOwner = [
+    isDeepStrictEqual(context.authority, binding.authority),
+    isDeepStrictEqual(context.target, binding.target),
+    isDeepStrictEqual(owner.authority, binding.authority),
+    owner.sessionId === binding.target.sessionId,
+    configuration.builderCallbackOrigin === builderOrigin,
+    configuration.teamId === binding.target.scopeId,
+    configuration.operator.origin === binding.audience,
+    configuration.operator.environment === "preview",
+  ].every(Boolean);
+  const exactGateway = [
+    configuration.gateway.environment === "preview",
+    configuration.gateway.projectId === binding.gateway.projectId,
+    configuration.gateway.branch === binding.gateway.branch,
+    configuration.gateway.authBrowserOrigin === binding.browserOrigin,
+    configuration.gateway.publicOrigin === binding.issuer,
+    isDeepStrictEqual(configuration.gateway.workload, binding.sender),
+    isDeepStrictEqual(ready.gateway, binding.gateway),
+  ].every(Boolean);
+  const exactResource = [
+    configuration.authDatabase.resourceId === binding.authResourceId,
+    configuration.authDatabase.database === resource.database,
+    configuration.authDatabase.migratorRole === resource.migratorRole,
+    configuration.authDatabase.runtimeRole === resource.runtimeRole,
+    scope.hostname === resource.hostname,
+    scope.projectId === resource.neon.projectId,
+    scope.branchId === resource.neon.branchId,
+    isDeepStrictEqual(pending.bootstrapResource, resource),
+  ].every(Boolean);
+  const exactPending = [
+    isDeepStrictEqual(pending.sender, binding.sender),
+    pending.link.ownerSessionId === binding.target.sessionId,
+    pending.link.authResourceId === binding.authResourceId,
+    pending.link.bootstrapPlanDigest === binding.resourcePlanDigest,
+    pending.link.endpointOrigin === binding.gateway.origin,
+    pending.link.browserOrigin === binding.browserOrigin,
+    pending.link.issuer === binding.issuer,
+    pending.link.audience === binding.audience,
+    pending.link.organizationId === null,
+    pending.jwksUrl === new URL("/_platform/jwks.json", binding.gateway.origin).href,
+  ].every(Boolean);
+  const exactReadiness = [
+    readiness.authOnlyPlanDigest === binding.authOnlyPlanDigest,
+    readiness.resourcePlanDigest === binding.resourcePlanDigest,
+    readiness.gatewayDeliveryPlanDigest === binding.gatewayDeliveryPlanDigest,
+    readiness.authResourceId === binding.authResourceId,
+    digest.safeParse(readiness.catalogFingerprint).success,
+  ].every(Boolean);
+  if (![exactOwner, exactGateway, exactResource, exactPending, exactReadiness].every(Boolean)) {
     throw denied();
   }
   return {

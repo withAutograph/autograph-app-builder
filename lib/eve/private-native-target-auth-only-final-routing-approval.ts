@@ -40,6 +40,9 @@ export const nativeTargetAuthOnlyFinalRoutingApprovalInputSchema = z.strictObjec
   routingOperationRef: z.uuid(),
   routingPlanDigest: digest,
 });
+export type NativeTargetAuthOnlyFinalRoutingApprovalInput = z.infer<
+  typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema
+>;
 export const nativeTargetAuthOnlyFinalRoutingPlanInputSchema =
   nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.pick({
     appId: true,
@@ -71,30 +74,85 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
   );
   if (
     nativeTargetAuthOnlyFinalRoutingPlanDigest(bytes) !== expected.routingPlanDigest ||
-    !isDeepStrictEqual(historyOwner.authority, owner.authority) ||
-    historyOwner.sessionId !== owner.publicSessionId ||
-    historyOwner.adapterSessionId !== owner.adapterSessionId ||
-    historyOwner.adapterGeneration !== owner.adapterGeneration ||
-    plan.target.appId !== expected.appId ||
-    plan.target.sessionId !== owner.publicSessionId ||
-    plan.operationRef !== expected.routingOperationRef ||
-    plan.deliveryOperationRef !== expected.operationRef ||
-    plan.operationRef === plan.deliveryOperationRef ||
-    plan.deliveryPlanDigest !== expected.deliveryPlanDigest ||
-    plan.source.ownerId !== plan.target.scopeId ||
-    plan.source.projectId !== plan.gateway.projectId ||
-    plan.source.publicOrigin !== plan.gateway.publicOrigin ||
-    plan.bootstrap.operationRef !== expected.operationRef ||
-    plan.bootstrap.projectId !== plan.gateway.projectId ||
-    plan.bootstrap.branch !== plan.gateway.branch ||
-    plan.bootstrap.repoId !== plan.gateway.repoId ||
-    plan.app.operationRef !== expected.operationRef ||
-    plan.app.projectId !== plan.target.projectId ||
-    plan.app.branch !== plan.target.branch ||
-    plan.projection.operationRef !== expected.operationRef ||
-    plan.projection.deliveryPlanDigest !== expected.deliveryPlanDigest ||
-    plan.projection.gatewayProjectId !== plan.gateway.projectId ||
-    plan.projection.appDeploymentId !== plan.app.deploymentId
+    plan.operationRef === plan.deliveryOperationRef
+  ) {
+    throw denied();
+  }
+  const selectedOwner = {
+    authority: historyOwner.authority,
+    sessionId: historyOwner.sessionId,
+    adapterSessionId: historyOwner.adapterSessionId,
+    adapterGeneration: historyOwner.adapterGeneration,
+  };
+  if (
+    !isDeepStrictEqual(selectedOwner, {
+      authority: owner.authority,
+      sessionId: owner.publicSessionId,
+      adapterSessionId: owner.adapterSessionId,
+      adapterGeneration: owner.adapterGeneration,
+    })
+  ) {
+    throw denied();
+  }
+  const selectedRouting = {
+    appId: plan.target.appId,
+    sessionId: plan.target.sessionId,
+    operationRef: plan.operationRef,
+    deliveryOperationRef: plan.deliveryOperationRef,
+    deliveryPlanDigest: plan.deliveryPlanDigest,
+    source: {
+      ownerId: plan.source.ownerId,
+      projectId: plan.source.projectId,
+      publicOrigin: plan.source.publicOrigin,
+    },
+    bootstrap: {
+      operationRef: plan.bootstrap.operationRef,
+      projectId: plan.bootstrap.projectId,
+      branch: plan.bootstrap.branch,
+      repoId: plan.bootstrap.repoId,
+    },
+    app: {
+      operationRef: plan.app.operationRef,
+      projectId: plan.app.projectId,
+      branch: plan.app.branch,
+    },
+    projection: {
+      operationRef: plan.projection.operationRef,
+      deliveryPlanDigest: plan.projection.deliveryPlanDigest,
+      gatewayProjectId: plan.projection.gatewayProjectId,
+      appDeploymentId: plan.projection.appDeploymentId,
+    },
+  };
+  if (
+    !isDeepStrictEqual(selectedRouting, {
+      appId: expected.appId,
+      sessionId: owner.publicSessionId,
+      operationRef: expected.routingOperationRef,
+      deliveryOperationRef: expected.operationRef,
+      deliveryPlanDigest: expected.deliveryPlanDigest,
+      source: {
+        ownerId: plan.target.scopeId,
+        projectId: plan.gateway.projectId,
+        publicOrigin: plan.gateway.publicOrigin,
+      },
+      bootstrap: {
+        operationRef: expected.operationRef,
+        projectId: plan.gateway.projectId,
+        branch: plan.gateway.branch,
+        repoId: plan.gateway.repoId,
+      },
+      app: {
+        operationRef: expected.operationRef,
+        projectId: plan.target.projectId,
+        branch: plan.target.branch,
+      },
+      projection: {
+        operationRef: expected.operationRef,
+        deliveryPlanDigest: expected.deliveryPlanDigest,
+        gatewayProjectId: plan.gateway.projectId,
+        appDeploymentId: plan.app.deploymentId,
+      },
+    })
   ) {
     throw denied();
   }
@@ -104,10 +162,20 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
       : nativeTargetAuthOnlyApprovalSchema.parse(input.retainedApproval);
   if (
     retained !== undefined &&
-    (retained.planDigest !== expected.routingPlanDigest ||
-      retained.sourceDigest !== expected.routingPlanDigest ||
-      retained.publicSessionId !== owner.publicSessionId ||
-      retained.responderPrincipalId !== owner.authority.ownerUserId)
+    !isDeepStrictEqual(
+      {
+        planDigest: retained.planDigest,
+        sourceDigest: retained.sourceDigest,
+        publicSessionId: retained.publicSessionId,
+        responderPrincipalId: retained.responderPrincipalId,
+      },
+      {
+        planDigest: expected.routingPlanDigest,
+        sourceDigest: expected.routingPlanDigest,
+        publicSessionId: owner.publicSessionId,
+        responderPrincipalId: owner.authority.ownerUserId,
+      },
+    )
   ) {
     throw denied();
   }
@@ -160,8 +228,10 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
       }
       const proofFor = (entry: PrivateOperatorApprovalCapture["entries"][number]) => {
         const terminal = terminals.get(entry.requestId);
+        if (terminal === undefined) {
+          throw denied();
+        }
         if (
-          terminal === undefined ||
           terminal.callId !== entry.callId ||
           terminal.responderPrincipalId !== owner.authority.ownerUserId ||
           terminal.outcome !== (entry.cancelled ? "cancelled" : "approved")
@@ -197,11 +267,15 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
             }
             return;
           }
-          if (event.type !== "approval.settled") return;
+          if (event.type !== "approval.settled") {
+            return;
+          }
           const entry = capture
             .snapshot()
             .entries.find((item) => item.requestId === event.data.requestId);
-          if (entry === undefined) return;
+          if (entry === undefined) {
+            return;
+          }
           capture.settle(event);
           const outcome = event.data.outcome === "approved" ? "approved" : "cancelled";
           const previous = terminals.get(entry.requestId);
@@ -222,15 +296,23 @@ export const readPrivateNativeTargetAuthOnlyFinalRoutingApproval = async (input:
         read() {
           const entries = capture.snapshot().entries;
           const cancelled = entries.filter((entry) => entry.cancelled);
-          if (cancelled.length > 1) throw denied();
-          if (cancelled[0] !== undefined) return proofFor(cancelled[0]);
+          if (cancelled.length > 1) {
+            throw denied();
+          }
+          if (cancelled[0] !== undefined) {
+            return proofFor(cancelled[0]);
+          }
           const receipt = capture.read();
           if (receipt === null) {
-            if (retained !== undefined) throw denied();
+            if (retained !== undefined) {
+              throw denied();
+            }
             return null;
           }
           const entry = entries.find((item) => item.requestId === receipt.approvalId);
-          if (entry === undefined) throw denied();
+          if (entry === undefined) {
+            throw denied();
+          }
           return proofFor(entry);
         },
         snapshot: capture.snapshot,

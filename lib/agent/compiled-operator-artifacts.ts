@@ -293,15 +293,17 @@ export const recordPublishedOperatorSourceForSession = async (
       throw operatorArtifactUnavailable();
     }
     const source = publishedAppSourceSchema.parse(input.publishedSource);
-    const path = `_protected-operator/static-published-source/${input.appId}/${input.appSpecDigest}`;
-    const { prototypeArtifactChunks } = await import("../db/schema");
-    const { and, desc, eq } = await import("drizzle-orm");
-    const { createHash } = await import("node:crypto");
-    const db = await openArtifactDatabase();
+    const artifactPath = `_protected-operator/static-published-source/${input.appId}/${input.appSpecDigest}`;
+    const [{ prototypeArtifactChunks }, { and, eq }, { createHash }, db] = await Promise.all([
+      import("../db/schema"),
+      import("drizzle-orm"),
+      import("node:crypto"),
+      openArtifactDatabase(),
+    ]);
     const key = {
       ...hostedTenantAuthoritySchema.parse(binding.context.authority),
       chunkIndex: 0,
-      path,
+      path: artifactPath,
       sessionId: binding.context.target.sessionId,
     };
     const scope = and(
@@ -372,10 +374,12 @@ export const readPublishedStaticAppSourceForSession = async (
   if (description === undefined || description.backend.kind !== "static") {
     return undefined;
   }
-  const { prototypeArtifactChunks } = await import("../db/schema");
-  const { and, desc, eq } = await import("drizzle-orm");
-  const { createHash } = await import("node:crypto");
-  const db = await openArtifactDatabase();
+  const [{ prototypeArtifactChunks }, { and, desc, eq }, { createHash }, db] = await Promise.all([
+    import("../db/schema"),
+    import("drizzle-orm"),
+    import("node:crypto"),
+    openArtifactDatabase(),
+  ]);
   const scope = and(
     eq(
       prototypeArtifactChunks.issuer,
@@ -416,14 +420,13 @@ export const readPublishedStaticAppSourceForSession = async (
     return undefined;
   }
   const value = z
-    .object({
+    .strictObject({
       appId: z.string(),
       appSpecDigest: z.string(),
       descriptionSha256: z.string().regex(/^[a-f0-9]{64}$/u),
       source: publishedAppSourceSchema,
       version: z.literal(1),
     })
-    .strict()
     .safeParse(JSON.parse(row.content));
   if (
     !value.success ||

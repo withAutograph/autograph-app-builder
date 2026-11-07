@@ -417,7 +417,7 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   });
   const readCurrentPlanningOwner = vi.fn<
     Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCurrentPlanningOwner"]
-  >(async () =>
+  >(() =>
     Promise.resolve({ session: structuredClone(planningSession), target: context.target }),
   );
   const controlPlane = {
@@ -540,10 +540,10 @@ describe("final verifier entry diagnostics", () => {
     async (stage) => {
       const f = publicationFixture();
       const error = new TypeError("private-preflight-error");
-      const assertAuthorized = vi.fn(async () =>
+      const assertAuthorized = vi.fn(() =>
         stage === "final_owner_authorization" ? Promise.reject(error) : Promise.resolve(),
       );
-      const read = vi.fn(async () => Promise.reject(error));
+      const read = vi.fn(() => Promise.reject(error));
       const controlPlane = { ...f.controlPlane, assertAuthorized, store: { read } };
       const dependencies = composeHostedOperatorDependencies(
         f.configuration,
@@ -1523,20 +1523,20 @@ describe("participant plan resolution", () => {
         throw new Error("Fixture signup policy effect missing");
       }
       const full = vi.fn<HostedOperatorEffectContext["assertCurrent"]>(async () =>
-        Promise.resolve(),
+        {},
       );
       const observation = vi.fn<
         NonNullable<HostedOperatorEffectContext["assertCurrentObservation"]>
-      >(async () => Promise.resolve());
+      >(async () => {});
       const input: HostedOperatorWorkerEffectContext = {
         ...context,
         assertCurrent: full,
         assertCurrentObservation: observation,
         bindWorkerContext: vi
           .fn<HostedOperatorWorkerEffectContext["bindWorkerContext"]>()
-          .mockResolvedValue(async () => Promise.resolve()),
+          .mockResolvedValue(async () => {}),
         checkpoint: vi.fn<HostedOperatorWorkerEffectContext["checkpoint"]>(async () =>
-          Promise.resolve(),
+          {},
         ),
         effect,
         fenceGeneration: 1,
@@ -1549,11 +1549,11 @@ describe("participant plan resolution", () => {
       const stop = new Error("controlled execute transport stop");
       type Launcher = ReturnType<typeof membershipLauncher.createHostedOperatorSandboxLauncher>;
       vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
-        execute: vi.fn<Launcher["execute"]>(async (current) => {
+        execute: vi.fn<Launcher["execute"]>((current) => {
           worker = current;
           return Promise.reject(stop);
         }),
-        inspect: vi.fn<Launcher["inspect"]>(async (current) => {
+        inspect: vi.fn<Launcher["inspect"]>((current) => {
           worker = current;
           const readback: Awaited<ReturnType<Launcher["inspect"]>> = {
             version: 1,
@@ -1572,11 +1572,11 @@ describe("participant plan resolution", () => {
       );
       const dependencies = composeHostedOperatorDependencies(f.configuration, {
         ...unusedCompositionControlPlane(),
-        assertAuthorized: vi.fn(async () => Promise.resolve()),
+        assertAuthorized: vi.fn(async () => {}),
         assertPlanningAuthorized: f.ports.assertPlanningAuthorized,
         readNormalActorOrganizationProofs: f.ports.readNormalActorOrganizationProofs,
         readNormalActorPreparation: f.ports.readNormalActorPreparation,
-        readResourceBindings: vi.fn(async () =>
+        readResourceBindings: vi.fn(() =>
           Promise.resolve({
             authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
             appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
@@ -1601,7 +1601,7 @@ describe("participant plan resolution", () => {
       expect(base).toHaveBeenCalledTimes(2);
       expect(unused).not.toHaveBeenCalled();
       base
-        .mockImplementationOnce(async () => Promise.resolve())
+        .mockImplementationOnce(async () => {})
         .mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
       await expect(guard()).rejects.toMatchObject({ code: "authorization_required" });
       const organization = f.state.organizations[0];
@@ -5100,7 +5100,7 @@ it("plans same-project resource preparation without Preview effects or an enviro
   f.configuration.gateway.workload.projectId = context.target.projectId;
   const authorizedControlPlane = {
     ...f.controlPlane,
-    assertPlanningAuthorized: async () => Promise.resolve(),
+    assertPlanningAuthorized: async () => {},
   };
   const original = bootstrapWithGatewayOrigin("https://apps.example");
   if (original.deploymentBoundary === undefined || original.publicGateway === undefined) {
@@ -5162,7 +5162,7 @@ it("forwards all additive native delivery contracts through the actual request-s
     createRequestDependencies: createRequestScopedHostedOperatorDependencies({
       openControlPlane: async (input) => {
         expect(input.request).toBeInstanceOf(Request);
-        return Promise.resolve({
+        return ({
           ...base,
           createNativeTargetAuthOnlyRealmCallbackPorts: () => {
             throw new Error("Unexpected callback reader in route delegation fixture");
@@ -5171,10 +5171,10 @@ it("forwards all additive native delivery contracts through the actual request-s
           appIntegrationCapabilityRequest: delegated,
           centralIntegrationHostRequest: delegated,
           centralIntegrationDeploymentReceiptRequest: delegated,
-          close: async () => Promise.resolve(),
+          close: () => Promise.resolve(),
         });
       },
-      resolveConfiguration: async () => Promise.resolve(f.configuration),
+      resolveConfiguration: async () => f.configuration,
     }),
   });
   await Promise.all(

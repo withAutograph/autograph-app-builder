@@ -69,7 +69,12 @@ export const nativeTargetAuthOnlyOwnerLinkBindingSchema = z
     if (
       binding.gateway.projectId === binding.target.projectId ||
       binding.gateway.projectId !== binding.sender.projectId ||
-      binding.target.scopeId !== binding.sender.ownerId ||
+      binding.target.scopeId !== binding.sender.ownerId
+    ) {
+      context.addIssue({ code: "custom", message: "The Preview identity boundaries disagree." });
+      return;
+    }
+    if (
       binding.audience === binding.gateway.origin ||
       binding.audience === binding.browserOrigin ||
       binding.audience === binding.issuer
@@ -100,9 +105,9 @@ interface Row {
 }
 
 export interface NativeTargetAuthOnlyOwnerLinkStore {
-  read(binding: NativeTargetAuthOnlyOwnerLinkBinding): Promise<Row | undefined>;
-  lookup(selector: Selector): Promise<Row | undefined>;
-  compareAndSet(record: Record, expectedRevision: number | undefined): Promise<Row | undefined>;
+  read: (binding: NativeTargetAuthOnlyOwnerLinkBinding) => Promise<Row | undefined>;
+  lookup: (selector: Selector) => Promise<Row | undefined>;
+  compareAndSet: (record: Record, expectedRevision: number | undefined) => Promise<Row | undefined>;
 }
 
 const denied = () => new HostedOperatorError("auth_identity_required");
@@ -131,12 +136,23 @@ const linkScope = (binding: NativeTargetAuthOnlyOwnerLinkBinding) => ({
   organizationId: null,
   ownerSessionId: binding.target.sessionId,
 });
-const validateRecord = (value: unknown): Record => {
-  const record = recordSchema.parse(value);
+const validateRecord = (record: Record): Record => {
   const { link } = record;
   const scope = linkScope(record.binding);
   if (
-    Object.entries(scope).some(([key, expected]) => link[key as keyof typeof scope] !== expected) ||
+    !isDeepStrictEqual(
+      {
+        audience: link.audience,
+        authResourceId: link.authResourceId,
+        bootstrapPlanDigest: link.bootstrapPlanDigest,
+        browserOrigin: link.browserOrigin,
+        endpointOrigin: link.endpointOrigin,
+        issuer: link.issuer,
+        organizationId: link.organizationId,
+        ownerSessionId: link.ownerSessionId,
+      },
+      scope,
+    ) ||
     link.publicRelease !== undefined ||
     link.browserSession !== undefined ||
     (link.consumedAt === undefined) !== (link.sealedNonce !== undefined)
@@ -163,15 +179,17 @@ export const createPostgresNativeTargetAuthOnlyOwnerLinkStore = (
       kind,
     );
   const parseRow = (row: typeof builderProvisioningJournals.$inferSelect): Row => {
-    const record = validateRecord(row.record);
+    const record = validateRecord(recordSchema.parse(row.record));
     const authority = hostedTenantAuthoritySchema.parse({
       audience: row.audience,
       issuer: row.issuer,
       ownerUserId: row.ownerUserId,
       workspaceId: row.workspaceId,
     });
+    if (!isDeepStrictEqual(authority, record.binding.authority)) {
+      throw denied();
+    }
     if (
-      !isDeepStrictEqual(authority, record.binding.authority) ||
       row.requestId !== requestIdFor(record.binding) ||
       row.requestDigest !== bindingDigest(record.binding) ||
       row.state !== (record.link.consumedAt === undefined ? "pending" : "settled")
@@ -182,7 +200,7 @@ export const createPostgresNativeTargetAuthOnlyOwnerLinkStore = (
   };
   return {
     async compareAndSet(rawRecord, expectedRevision) {
-      const record = validateRecord(rawRecord);
+      const record = validateRecord(recordSchema.parse(rawRecord));
       const { binding, link } = record;
       const requestDigest = bindingDigest(binding);
       const state = link.consumedAt === undefined ? "pending" : "settled";
@@ -229,7 +247,9 @@ export const createPostgresNativeTargetAuthOnlyOwnerLinkStore = (
         )
         .limit(2);
       const [row] = rows;
-      if (rows.length > 1) throw denied();
+      if (rows.length > 1) {
+        throw denied();
+      }
       return row === undefined ? undefined : parseRow(row);
     },
     async read(binding) {
@@ -262,7 +282,10 @@ export const createNativeTargetAuthOnlyOwnerLink = (ports: {
     await ports.assertCurrent(binding);
     const row = await ports.store.read(binding);
     await ports.assertCurrent(binding);
-    if (row !== undefined && !isDeepStrictEqual(validateRecord(row.record).binding, binding)) {
+    if (
+      row !== undefined &&
+      !isDeepStrictEqual(validateRecord(recordSchema.parse(row.record)).binding, binding)
+    ) {
       throw denied();
     }
     return row;
@@ -284,10 +307,13 @@ export const createNativeTargetAuthOnlyOwnerLink = (ports: {
         digest.parse(input.nonceSha256) !== current.record.link.nonceSha256 ||
         input.proofRef !==
           `_protected-operator/artifacts/realm-identity-proof/${binding.target.appId}/${digest.parse(input.proofSha256)}`
-      )
+      ) {
         throw denied();
+      }
       const proof = await ports.readPublishedProof(binding, input.proofRef);
-      if (proof === undefined || sha256(proof) !== input.proofSha256) throw denied();
+      if (proof === undefined || sha256(proof) !== input.proofSha256) {
+        throw denied();
+      }
       const link = operatorRealmIdentityLinkSchema.parse({
         ...projectPendingRealmIdentityLink(current.record.link),
         consumedAt: new Date(now()).toISOString(),
@@ -295,14 +321,20 @@ export const createNativeTargetAuthOnlyOwnerLink = (ports: {
         proofSha256: input.proofSha256,
       });
       await ports.assertCurrent(binding);
-      if (!pending(current.record.link)) throw denied();
+      if (!pending(current.record.link)) {
+        throw denied();
+      }
       const saved = await ports.store.compareAndSet({ ...current.record, link }, current.revision);
       if (
         saved === undefined ||
         saved.revision !== current.revision + 1 ||
-        !isDeepStrictEqual(validateRecord(saved.record), { ...current.record, link })
-      )
+        !isDeepStrictEqual(validateRecord(recordSchema.parse(saved.record)), {
+          ...current.record,
+          link,
+        })
+      ) {
         throw denied();
+      }
       await ports.assertCurrent(binding);
     },
     async prepare(rawBinding: NativeTargetAuthOnlyOwnerLinkBinding) {
@@ -333,9 +365,13 @@ export const createNativeTargetAuthOnlyOwnerLink = (ports: {
             current?.revision,
           )) ?? (await read(binding));
       }
-      if (current === undefined) throw denied();
-      const { link, binding: retainedBinding } = validateRecord(current.record);
-      if (!isDeepStrictEqual(retainedBinding, binding)) throw denied();
+      if (current === undefined) {
+        throw denied();
+      }
+      const { link, binding: retainedBinding } = validateRecord(recordSchema.parse(current.record));
+      if (!isDeepStrictEqual(retainedBinding, binding)) {
+        throw denied();
+      }
       await ports.assertCurrent(binding);
       if (link.consumedAt !== undefined) {
         return {
@@ -344,7 +380,9 @@ export const createNativeTargetAuthOnlyOwnerLink = (ports: {
           sessionId: binding.target.sessionId,
         };
       }
-      if (!pending(link) || link.sealedNonce === undefined) throw denied();
+      if (!pending(link) || link.sealedNonce === undefined) {
+        throw denied();
+      }
       const nonce = decryptVersionedVercelToken({
         ...link.sealedNonce,
         associatedData: associatedData(binding),
@@ -362,9 +400,14 @@ export const createNativeTargetAuthOnlyOwnerLink = (ports: {
       const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse(rawBinding);
       const current = await read(binding);
       const link = current?.record.link;
-      if (link?.consumedAt === undefined || link.proofRef === undefined) return undefined;
+      if (link?.consumedAt === undefined || link.proofRef === undefined) {
+        const notCaptured = undefined;
+        return notCaptured;
+      }
       const proof = await ports.readPublishedProof(binding, link.proofRef);
-      if (proof === undefined || sha256(proof) !== link.proofSha256) throw denied();
+      if (proof === undefined || sha256(proof) !== link.proofSha256) {
+        throw denied();
+      }
       await ports.assertCurrent(binding);
       return projectPendingRealmIdentityLink(link);
     },
@@ -372,23 +415,27 @@ export const createNativeTargetAuthOnlyOwnerLink = (ports: {
     async readPending(rawSelector: Selector) {
       const selector = selectorSchema.parse(rawSelector);
       const row = await ports.store.lookup(selector);
-      if (row === undefined) return undefined;
-      const { binding, link } = validateRecord(row.record);
+      if (row === undefined) {
+        return row;
+      }
+      const { binding, link } = validateRecord(recordSchema.parse(row.record));
       if (
         binding.target.sessionId !== selector.ownerSessionId ||
         link.nonceSha256 !== selector.nonceSha256 ||
         (selector.authority !== undefined &&
           !isDeepStrictEqual(selector.authority, binding.authority))
-      )
+      ) {
         throw denied();
+      }
       const current = await read(binding);
       if (
         current === undefined ||
         current.revision !== row.revision ||
         !isDeepStrictEqual(current.record.link, link) ||
         !pending(link)
-      )
+      ) {
         throw denied();
+      }
       return {
         binding,
         link: projectPendingRealmIdentityLink(link),

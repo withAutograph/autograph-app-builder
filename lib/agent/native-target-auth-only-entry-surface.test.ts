@@ -20,6 +20,10 @@ import {
 } from "./native-target-onboarding-runtime";
 import type { NativeTargetOnboardingRuntimePorts } from "./native-target-onboarding-runtime";
 
+// Planned responses retain their schema type; malformed response cases remain JSON transport values.
+type TransportResponseFixture =
+  | Preparation
+  | Record<string, z.infer<ReturnType<typeof z.json>> | undefined>;
 type Preparation = z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>;
 const fixture = (effect: Preparation["effect"] = "organization") => {
   const authority = {
@@ -88,7 +92,7 @@ const fixture = (effect: Preparation["effect"] = "organization") => {
     response: { decision: "approve" },
     session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
   };
-  let output: unknown = prep;
+  let output: TransportResponseFixture = prep;
   const sent: z.infer<typeof nativeTargetTransportRequestSchema>[] = [];
   const fetch = vi.fn<typeof globalThis.fetch>(async (_url, init) => {
     sent.push(nativeTargetTransportRequestSchema.parse(JSON.parse(z.string().parse(init?.body))));
@@ -104,7 +108,7 @@ const fixture = (effect: Preparation["effect"] = "organization") => {
     client,
     ctx,
     fetch,
-    output(value: unknown) {
+    output(value: TransportResponseFixture) {
       output = value;
     },
     owner,
@@ -288,7 +292,7 @@ it("stops cancelled requests before transport", async () => {
 it("routes through private ports and checks returned child identity", async () => {
   const f = fixture();
   const ports = {
-    authorizeAuthOnlyEntryApprovalResponse: vi.fn(async () => undefined),
+    authorizeAuthOnlyEntryApprovalResponse: vi.fn(async () => {}),
     hasAuthOnlyEntryApproval: vi.fn(async () => true),
     planAuthOnlyEntry: vi.fn(async () => f.prep),
     prepareAuthOnlyEntry: vi.fn(async () => f.prepared),

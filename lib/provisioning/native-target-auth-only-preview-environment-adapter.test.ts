@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
+import { z } from "zod";
+import type { createNativeTargetAuthOnlyPreviewDelivery } from "./native-target-auth-only-preview-delivery";
 import { nativeTargetAuthOnlyTestPlan } from "./native-target-auth-only-plan-schema.test";
 import { nativeTargetAuthOnlyPlanDigest } from "./native-target-auth-only-plan-schema";
 import {
@@ -74,7 +76,7 @@ const approvedDeliveryDigest = nativeTargetAuthOnlyDeliveryPlanDigest(
 );
 const operationRef = "11111111-1111-4111-a111-111111111111";
 const senderKeys = ["AUTH_RECOVERY_RESEND_API_KEY", "AUTH_RECOVERY_EMAIL_FROM"];
-const gatewayValues: Record<string, string> = {
+const gatewayValues = {
   AUTH_DATABASE_RESOURCE: '{"environment":"preview"}',
   AUTH_RECOVERY_EMAIL_FROM: "pilot@example.test",
   AUTH_REQUIRE_EMAIL_VERIFICATION: "true",
@@ -89,6 +91,14 @@ const appValues = {
   PLATFORM_ORIGIN: "https://gateway.example",
   PLATFORM_PUBLIC_ORIGIN: "https://pilot.example",
 };
+const environmentWriteSchema = z.object({
+  key: z.string(),
+  value: z.string(),
+  target: z.array(z.string()),
+  gitBranch: z.string().nullable().optional(),
+  comment: z.string().optional(),
+  type: z.string().optional(),
+});
 interface Row {
   id: string;
   key: string;
@@ -112,20 +122,21 @@ const fixture = (
   const assertCurrent = vi.fn(async () => {});
   const scope = (projectId: string) =>
     `auth-only-preview:${operationRef}:${approvedDeliveryDigest}:${projectId}`;
-  const rows: Record<string, Row[]> = {
+  const rows: Record<"app-project" | "gateway-project", Row[]> = {
     "app-project": [],
     "gateway-project": senderKeys.map((key, index) => ({
       id: `sender-${index}`,
       key,
-      value: gatewayValues[key],
+      value:
+        key === "AUTH_RECOVERY_EMAIL_FROM" ? gatewayValues.AUTH_RECOVERY_EMAIL_FROM : undefined,
       type: index === 0 ? "sensitive" : "encrypted",
-      updatedAt: 1793966400000,
+      updatedAt: 1_793_966_400_000,
       target: ["preview"],
       gitBranch: effect === "gateway" ? physicalBranch : "gateway-preview",
       comment: "operator owned",
     })),
   };
-  const projects: Record<string, unknown> = {
+  const projects = {
     "app-project": {
       id: "app-project",
       accountId: target.scopeId,
@@ -152,13 +163,37 @@ const fixture = (
       rootDirectory: ".",
     },
   };
-  const writes: { keys: string[]; target: string[]; gitBranch?: string; upsert: string | null }[] =
-    [];
+  const writes: {
+    keys: string[];
+    target: string[];
+    gitBranch?: string | null;
+    upsert: string | null;
+  }[] = [];
   const calls: { method: string; path: string }[] = [];
   let beforeRequest: ((method: string, path: string) => void) | undefined;
   let afterWrite: (() => void) | undefined;
   let rejectStatus: number | undefined;
-  const fetcher: typeof fetch = async (raw, init) => {
+  const readResponse = (projectId: keyof typeof projects, parts: string[], url: URL) => {
+    if (parts.length === 4) {
+      return Response.json({
+        ...projects[projectId],
+        env: [{ value: "discarded provider field" }],
+      });
+    }
+    if (parts.length === 5) {
+      expect(url.searchParams.get("decrypt")).toBe("false");
+      return Response.json({
+        envs: rows[projectId].map(({ value: _value, ...metadata }) => metadata),
+      });
+    }
+    if (parts.length === 6) {
+      const row = rows[projectId].find((entry) => entry.id === decodeURIComponent(parts[5]));
+      expect(row?.key).not.toBe("AUTH_RECOVERY_RESEND_API_KEY");
+      return row === undefined ? new Response(null, { status: 404 }) : Response.json(row);
+    }
+    throw new Error("Unexpected fixture read route");
+  };
+  const respond = (raw: Parameters<typeof fetch>[0], init: RequestInit | undefined) => {
     const url = new URL(raw instanceof Request ? raw.url : String(raw));
     const method = init?.method ?? "GET";
     const path = url.pathname;
@@ -170,27 +205,20 @@ const fixture = (
     expect(url.searchParams.get("teamId")).toBe(target.scopeId);
     const parts = path.split("/");
     const projectId = decodeURIComponent(parts[3]);
-    if (method === "GET" && parts.length === 4) {
-      return Response.json({
-        ...(projects[projectId] as object),
-        env: [{ value: "discarded provider field" }],
-      });
+    if (projectId !== "app-project" && projectId !== "gateway-project") {
+      throw new Error("Unexpected fixture project");
     }
-    if (method === "GET" && parts.length === 5) {
-      expect(url.searchParams.get("decrypt")).toBe("false");
-      return Response.json({ envs: rows[projectId].map(({ value, ...metadata }) => metadata) });
-    }
-    if (method === "GET" && parts.length === 6) {
-      const row = rows[projectId].find((row) => row.id === decodeURIComponent(parts[5]));
-      expect(row?.key).not.toBe("AUTH_RECOVERY_RESEND_API_KEY");
-      return row === undefined ? new Response(null, { status: 404 }) : Response.json(row);
+    if (method === "GET") {
+      return readResponse(projectId, parts, url);
     }
     if (method === "PATCH" && parts.length === 6) {
       const row = rows[projectId]?.find((entry) => entry.id === decodeURIComponent(parts[5] ?? ""));
       if (row === undefined) {
         return new Response(null, { status: 404 });
       }
-      const input = JSON.parse(String(init?.body)) as { type: string; value: string };
+      const input = z
+        .strictObject({ type: z.string(), value: z.string() })
+        .parse(JSON.parse(z.string().parse(init?.body)));
       expect(Object.keys(input).toSorted()).toEqual(["type", "value"]);
       expect(input.type).toBe("encrypted");
       row.value = input.value;
@@ -198,9 +226,9 @@ const fixture = (
       return Response.json({});
     }
     if (method === "POST" && parts.length === 5) {
-      const input = JSON.parse(String(init?.body)) as Row[];
+      const input = environmentWriteSchema.array().parse(JSON.parse(z.string().parse(init?.body)));
       writes.push({
-        gitBranch: input[0].gitBranch as string | undefined,
+        gitBranch: input[0].gitBranch,
         keys: input.map((row) => row.key),
         target: input[0].target,
         upsert: url.searchParams.get("upsert"),
@@ -213,19 +241,32 @@ const fixture = (
     }
     throw new Error("unexpected fixture route");
   };
-  const readCredential = vi.fn(async () => ({
-    binding: {
-      active: true,
-      displayName: "Fixture",
-      installationId: target.installationId,
-      plan: "pro",
-      scopeId: target.scopeId,
-      scopeType: "team" as const,
-      slug: "fixture",
-      updatedAt: new Date("2026-11-06T00:00:00Z"),
-    },
-    token: "private-installation-fixture",
-  }));
+  const fetcher: typeof fetch = (raw, init) => {
+    try {
+      return Promise.resolve(respond(raw, init));
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error ? error : new Error("Fixture request failed", { cause: error }),
+      );
+    }
+  };
+  const readCredential = vi.fn<
+    Parameters<typeof createNativeTargetAuthOnlyPreviewEnvironmentAdapter>[0]["readCredential"]
+  >(() =>
+    Promise.resolve({
+      binding: {
+        active: true,
+        displayName: "Fixture",
+        installationId: target.installationId,
+        plan: "pro",
+        scopeId: target.scopeId,
+        scopeType: "team" as const,
+        slug: "fixture",
+        updatedAt: new Date("2026-11-06T00:00:00Z"),
+      },
+      token: "private-installation-fixture",
+    }),
+  );
   const adapter = createNativeTargetAuthOnlyPreviewEnvironmentAdapter({
     fetch: fetcher,
     readCredential,
@@ -236,7 +277,7 @@ const fixture = (
       physicalBranch: effect === "app" ? physicalBranch : target.branch,
       projectId: target.projectId,
       values: Object.entries(appValues).map(([key, value]) => ({
-        key: key as keyof typeof appValues,
+        key: z.enum(["PLATFORM_JWKS_URL", "PLATFORM_ORIGIN", "PLATFORM_PUBLIC_ORIGIN"]).parse(key),
         sha256: hash(value),
       })),
     },
@@ -253,7 +294,7 @@ const fixture = (
         projectId: "gateway-project",
         target: "preview" as const,
         type: "sensitive",
-        updatedAt: 1793966400000,
+        updatedAt: 1_793_966_400_000,
       },
       values: Object.entries(gatewayValues).map(([key, value]) => ({ key, sha256: hash(value) })),
     },
@@ -307,7 +348,7 @@ const fixture = (
     metadataInput,
     projects,
     readCredential,
-    readEnvironmentValues: async (keys: readonly string[]) =>
+    readEnvironmentValues: (keys: readonly string[]) =>
       adapter.readProjectEnvironmentValues(
         metadataInput,
         {
@@ -317,7 +358,7 @@ const fixture = (
         },
         keys,
       ),
-    readSender: async () => adapter.readRecoverySender(metadataInput),
+    readSender: () => adapter.readRecoverySender(metadataInput),
     rows,
     scope,
     setAfterWrite: (hook: typeof afterWrite) => (afterWrite = hook),
@@ -354,7 +395,8 @@ it("uses authoritative Secret visibility and allows omitted optional provider ti
   row.visibility = "secret";
   row.type = "encrypted";
   delete row.updatedAt;
-  expect((await f.readSender()).apiKey).toMatchObject({
+  const sender = await f.readSender();
+  expect(sender.apiKey).toMatchObject({
     id: "sender-0",
     type: "encrypted",
     visibility: "secret",
@@ -459,7 +501,7 @@ it.each([
     row.visibility = "config";
   }
   if (kind === "updated") {
-    row.updatedAt = 1793966500000;
+    row.updatedAt = 1_793_966_500_000;
   }
   if (kind === "custom") {
     row.customEnvironmentIds = ["custom-scope"];
@@ -527,10 +569,11 @@ it("rechecks physical branch mapping immediately before POST", async () => {
   const f = fixture();
   let lists = 0;
   f.setBeforeRequest((method, path) => {
-    if (method === "GET" && path.endsWith("/env") && ++lists === 2) {
-      (
-        f.projects["gateway-project"] as { link: { productionBranch: string } }
-      ).link.productionBranch = "gateway-preview";
+    if (method === "GET" && path.endsWith("/env")) {
+      lists += 1;
+    }
+    if (method === "GET" && path.endsWith("/env") && lists === 2) {
+      f.projects["gateway-project"].link.productionBranch = "gateway-preview";
     }
   });
   await expect(f.adapter.applyAndVerify(f.input)).rejects.toThrow();
@@ -540,7 +583,10 @@ it("does not upsert a concurrently created key and rejects mismatched post-write
   const f = fixture();
   let lists = 0;
   f.setBeforeRequest((method, path) => {
-    if (method === "GET" && path.endsWith("/env") && ++lists === 2) {
+    if (method === "GET" && path.endsWith("/env")) {
+      lists += 1;
+    }
+    if (method === "GET" && path.endsWith("/env") && lists === 2) {
       f.rows["gateway-project"].push({
         id: "racing",
         key: "AUTH_REQUIRE_EMAIL_VERIFICATION",
@@ -555,17 +601,24 @@ it("does not upsert a concurrently created key and rejects mismatched post-write
   expect(f.writes).toHaveLength(0);
   const g = fixture();
   g.setAfterWrite(() => {
-    g.rows["gateway-project"].find((row) => row.key === "AUTH_REQUIRE_EMAIL_VERIFICATION")!.value =
-      "false";
+    const written = g.rows["gateway-project"].find(
+      (entry) => entry.key === "AUTH_REQUIRE_EMAIL_VERIFICATION",
+    );
+    if (written === undefined) {
+      throw new Error("Expected the newly created verification setting");
+    }
+    written.value = "false";
   });
   await expect(g.adapter.applyAndVerify(g.input)).rejects.toThrow("resource_mismatch");
   expect(g.writes).toHaveLength(1);
 });
-it("fails wrong scope, manifest digest, sender-in-app and revoked installation before requests", async () => {
-  for (const kind of ["production", "digest", "sender", "installation"]) {
+it.each(["production", "digest", "sender", "installation"])(
+  "fails %s before requests",
+  async (kind) => {
     const f = fixture("app");
     if (kind === "production") {
-      f.input.target = { ...f.input.target, environment: "production" } as never;
+      f.input.target = { ...f.input.target };
+      Object.assign(f.input.target, { environment: "production" });
     }
     if (kind === "digest") {
       f.input.approvedDeliveryDigest = "f".repeat(64);
@@ -574,29 +627,23 @@ it("fails wrong scope, manifest digest, sender-in-app and revoked installation b
       f.input.values = { ...f.input.values, AUTH_RECOVERY_RESEND_API_KEY: "fixture" };
     }
     if (kind === "installation") {
-      f.readCredential.mockResolvedValue(undefined);
+      const revokedCredential = undefined;
+      f.readCredential.mockResolvedValue(revokedCredential);
     }
     await expect(f.adapter.applyAndVerify(f.input)).rejects.toThrow();
     expect(f.calls).toHaveLength(0);
+  },
+);
+it.each(["team", "repository"])("rejects metadata from another %s", async (kind) => {
+  const f = fixture();
+  const project = f.projects["gateway-project"];
+  if (kind === "team") {
+    project.accountId = "other-team";
+  } else {
+    project.link.repoId = "other-repo";
   }
-});
-it("rejects metadata from another team or repository", async () => {
-  for (const kind of ["team", "repository"]) {
-    const f = fixture();
-    const project = f.projects["gateway-project"] as {
-      accountId: string;
-      link: { repoId: string };
-    };
-    if (kind === "team") {
-      project.accountId = "other-team";
-    } else {
-      project.link.repoId = "other-repo";
-    }
-    await expect(f.adapter.readProjectMetadata(f.metadataInput)).rejects.toThrow(
-      "resource_mismatch",
-    );
-    expect(f.writes).toHaveLength(0);
-  }
+  await expect(f.adapter.readProjectMetadata(f.metadataInput)).rejects.toThrow("resource_mismatch");
+  expect(f.writes).toHaveLength(0);
 });
 
 const projectionFixture = () => {
@@ -652,35 +699,33 @@ const projectionFixture = () => {
   };
   const assertAuthorized = vi.fn(async () => {});
   const assertCatalogApp = vi.fn(async () => {});
-  type ReconcileApp = ReturnType<
-    typeof import("./native-target-auth-only-preview-delivery").createNativeTargetAuthOnlyPreviewDelivery
-  >["reconcile"];
+  type ReconcileApp = ReturnType<typeof createNativeTargetAuthOnlyPreviewDelivery>["reconcile"];
   const reconcileApp = vi.fn<ReconcileApp>().mockResolvedValue({
     candidates: [appReceipt],
     selected: appReceipt,
     status: "applied",
   });
   let intent: NativeTargetAuthOnlyGatewayProjectionIntent | undefined;
-  const claim = vi.fn(async (next: NativeTargetAuthOnlyGatewayProjectionIntent) => {
+  const claim = vi.fn((next: NativeTargetAuthOnlyGatewayProjectionIntent) => {
     if (intent !== undefined) {
-      return false;
+      return Promise.resolve(false);
     }
     intent = next;
-    return true;
+    return Promise.resolve(true);
   });
   const execute = createNativeTargetAuthOnlyGatewayProjection(
     {
       assertAuthorized,
       assertCatalogApp,
-      journal: { claim, read: async () => intent },
+      journal: { claim, read: () => Promise.resolve(intent) },
       readCredential: state.readCredential,
     },
     {
-      openProjection: async (input) => await state.adapter.openGatewayProjection(input),
+      openProjection: (input) => state.adapter.openGatewayProjection(input),
       reconcileApp,
     },
   );
-  const run = async () => execute({ appReceipt, environment: state.metadataInput, source });
+  const run = () => execute({ appReceipt, environment: state.metadataInput, source });
   const patches = () => state.calls.filter(({ method }) => method === "PATCH");
   return {
     appReceipt,
@@ -719,7 +764,11 @@ it("merges exactly the current READY app into the owned projection and retains s
     f.state.rows["gateway-project"]
       ?.filter(({ key }) => senderKeys.includes(key))
       .map(({ value }) => value),
-  ).toEqual(senderKeys.map((key) => gatewayValues[key]));
+  ).toEqual(
+    senderKeys.map((key) =>
+      key === "AUTH_RECOVERY_EMAIL_FROM" ? gatewayValues.AUTH_RECOVERY_EMAIL_FROM : undefined,
+    ),
+  );
   expect(f.state.writes).toEqual([]);
   expect(await f.run()).toEqual(result);
   expect(f.patches()).toHaveLength(1);

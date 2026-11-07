@@ -294,7 +294,7 @@ const setup = () => {
         order.push("owner");
         await Promise.resolve();
       }),
-      assertNoStandardBuilderDestination: vi.fn(async () => Promise.resolve()),
+      assertNoStandardBuilderDestination: vi.fn(async () => {}),
       verifyWorkload: vi.fn(async () => {
         order.push("workload");
         await Promise.resolve();
@@ -633,8 +633,7 @@ describe("fresh normal same-project runtime assembly", () => {
     const resolve = createNativeTargetConfigurationResolver({
       configuration: base,
       environment,
-      openResources: async () =>
-        Promise.resolve({ ...f.resources, readStandardCapture, readStandardDestination }),
+      openResources: async () => ({ ...f.resources, readStandardCapture, readStandardDestination }),
     });
     const body = {
       action: "resolve-preview-target",
@@ -748,15 +747,13 @@ describe("fresh normal same-project runtime assembly", () => {
     const resolve = createNativeTargetConfigurationResolver({
       configuration: f.base,
       environment: f.environment,
-      openResources: async () =>
-        Promise.resolve({
-          ...f.resources,
-          readStandardCapture: f.readStandardCapture,
-          readStandardDestination: f.readStandardDestination,
-          readStandardOriginSelection: async () =>
-            Promise.resolve("https://different-chosen.example"),
-          readStandardPublicOrigin: f.readStandardPublicOrigin,
-        }),
+      openResources: async () => ({
+        ...f.resources,
+        readStandardCapture: f.readStandardCapture,
+        readStandardDestination: f.readStandardDestination,
+        readStandardOriginSelection: async () => "https://different-chosen.example",
+        readStandardPublicOrigin: f.readStandardPublicOrigin,
+      }),
     });
     await expect(resolve(request(f.body))).rejects.toMatchObject({
       code: "builder_destination_configuration_required",
@@ -773,14 +770,13 @@ describe("fresh normal same-project runtime assembly", () => {
     const resolve = createNativeTargetConfigurationResolver({
       configuration: f.base,
       environment: f.environment,
-      openResources: async () =>
-        Promise.resolve({
-          ...f.resources,
-          readStandardCapture: f.readStandardCapture,
-          readStandardDestination: f.readStandardDestination,
-          readStandardOriginSelection,
-          readStandardPublicOrigin: f.readStandardPublicOrigin,
-        }),
+      openResources: async () => ({
+        ...f.resources,
+        readStandardCapture: f.readStandardCapture,
+        readStandardDestination: f.readStandardDestination,
+        readStandardOriginSelection,
+        readStandardPublicOrigin: f.readStandardPublicOrigin,
+      }),
     });
     await expect(resolve(request(f.body))).rejects.toMatchObject({ code: "resource_mismatch" });
     expect(f.base).toEqual(before);
@@ -793,14 +789,13 @@ describe("fresh normal same-project runtime assembly", () => {
     f.readStandardPublicOrigin.mockResolvedValue("https://choice-b.example");
     const resolve = createNativeTargetConfigurationResolver({
       configuration: f.base,
-      openResources: async () =>
-        Promise.resolve({
-          ...f.resources,
-          readStandardCapture: f.readStandardCapture,
-          readStandardDestination: f.readStandardDestination,
-          readStandardOriginSelection,
-          readStandardPublicOrigin: f.readStandardPublicOrigin,
-        }),
+      openResources: async () => ({
+        ...f.resources,
+        readStandardCapture: f.readStandardCapture,
+        readStandardDestination: f.readStandardDestination,
+        readStandardOriginSelection,
+        readStandardPublicOrigin: f.readStandardPublicOrigin,
+      }),
     });
     await expect(resolve(request(f.body))).rejects.toMatchObject({ code: "resource_mismatch" });
     expect(readStandardOriginSelection).toHaveBeenCalledOnce();
@@ -1193,8 +1188,7 @@ describe("fresh normal same-project runtime assembly", () => {
     const resolve = createNativeTargetConfigurationResolver({
       configuration: base,
       environment,
-      openResources: async () =>
-        Promise.resolve({ ...f.resources, readStandardCapture, readStandardDestination }),
+      openResources: async () => ({ ...f.resources, readStandardCapture, readStandardDestination }),
     });
     const body = {
       action: "resolve-preview-target",
@@ -1454,12 +1448,15 @@ describe("Auth-only created target registration lookup", () => {
       sessionId: plan.origin.publicSessionId,
       store,
     });
-    const profileInventory = (configuration: typeof selected) => ({
+    if (effective === undefined) {
+      throw new Error("Expected the retained Auth-only registration to resolve its configuration");
+    }
+    const profileInventory = (profileConfiguration: typeof selected) => ({
       PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify([
         {
           appId: plan.appId,
           authority: plan.origin.authority,
-          configuration,
+          configuration: profileConfiguration,
           id: plan.authResource.profileId,
         },
       ]),
@@ -1475,7 +1472,7 @@ describe("Auth-only created target registration lookup", () => {
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
     const profileWithoutRole = structuredClone(selected);
-    profileWithoutRole.authOnlyApplications![plan.appId]!.accessRoles = ["other_role"];
+    profileWithoutRole.authOnlyApplications![plan.appId].accessRoles = ["other_role"];
     await expect(
       resolveNativeTargetAuthOnlyRegistration({
         appId: plan.appId,
@@ -1499,7 +1496,7 @@ describe("Auth-only created target registration lookup", () => {
     expect(effective?.authOnlyApplications?.[plan.appId]?.registration).not.toHaveProperty(
       "appDatabase",
     );
-    const ownerContext = {
+    const pilotOwnerContext = {
       adapterGeneration: 1,
       adapterSessionId: plan.origin.adapterSessionId,
       authority: plan.origin.authority,
@@ -1513,24 +1510,32 @@ describe("Auth-only created target registration lookup", () => {
       },
       sessionId: plan.origin.publicSessionId,
     };
-    const authorize = vi.fn(async (_request, selection) => ({
+    const authorize = vi.fn(async (_request: Request, selection: OperatorSelection) => ({
       authority: plan.origin.authority,
-      ownerContext,
-      target: { ...selection, scopeId: "team" },
+      ownerContext: pilotOwnerContext,
+      target: {
+        ...selection,
+        scopeId: "team",
+        scopeType: "team" as const,
+        installationId: plan.project.installationId,
+      },
     }));
     const resolveTarget = createConfiguredPreviewTargetResolver(
       effective,
       {
-        authorize: vi.fn(async () => ({ authority: plan.origin.authority, ownerContext })),
+        authorize: vi.fn(async () => ({
+          authority: plan.origin.authority,
+          ownerContext: pilotOwnerContext,
+        })),
       },
       { assertPlanningAuthorized: vi.fn(async () => undefined), authorize },
     );
-    const context = await resolveTarget(
+    const pilotContext = await resolveTarget(
       new Request("https://operator.example/v1/runtime"),
       { appId: plan.appId, sessionId: plan.origin.publicSessionId },
-      ownerContext,
+      pilotOwnerContext,
     );
-    expect(context.target).toMatchObject({
+    expect(pilotContext.target).toMatchObject({
       appId: plan.appId,
       branch: plan.branch,
       environment: "preview",

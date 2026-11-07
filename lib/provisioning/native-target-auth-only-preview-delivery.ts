@@ -1,14 +1,12 @@
 import { z } from "zod";
 
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
-import type { HostedOperatorPlan, OperatorDeploymentCandidate } from "./hosted-operator-contract";
+import type { OperatorDeploymentCandidate } from "./hosted-operator-contract";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import type { HostedOperatorDeploymentContext } from "./hosted-operator-service";
 import type { HostedRuntimeTarget } from "./hosted-runtime-journal";
-import {
-  createHostedOperatorDeploymentDelivery,
-  type GatewayAliasDiagnostic,
-} from "./hosted-operator-deployment-delivery";
+import { createHostedOperatorDeploymentDelivery } from "./hosted-operator-deployment-delivery";
+import type { GatewayAliasDiagnostic } from "./hosted-operator-deployment-delivery";
 import type { RetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
 import type { SharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import type { NativeTargetAuthOnlySchemaApproval } from "./hosted-operator-auth-only-runtime";
@@ -30,10 +28,7 @@ export const nativeTargetAuthOnlyPreviewDeliveryPlanSchema = z.strictObject({
       repoId: id,
     })
     .optional(),
-  deploymentBoundary: z
-    .object({ app: z.object({ branch: id }).optional() })
-    .passthrough()
-    .optional(),
+  deploymentBoundary: z.looseObject({ app: z.object({ branch: id }).optional() }).optional(),
   effects: z.array(z.strictObject({ id, kind: z.enum(["delivery", "gateway-delivery"]) })).min(1),
   gatewayDelivery: z
     .strictObject({
@@ -46,14 +41,13 @@ export const nativeTargetAuthOnlyPreviewDeliveryPlanSchema = z.strictObject({
     .optional(),
   hostProtection: z.unknown().optional(),
   publicGateway: z
-    .object({
+    .looseObject({
       authBrowserOrigin: id,
       branch: id,
       gatewayOrigin: id,
       origin: id,
       projectId: id,
     })
-    .passthrough()
     .optional(),
   stage: z.literal("app"),
 });
@@ -101,7 +95,9 @@ export const createNativeTargetAuthOnlyPreviewDelivery = (deps: {
   >[0]["beforeAliasWrite"];
 }) => {
   const delivery = createHostedOperatorDeploymentDelivery({
-    assertAuthorized: async () => {},
+    assertAuthorized: async () => {
+      // The shared engine invokes the projection's real assertCurrent immediately before this legacy hook.
+    },
     assertEnvironment: deps.assertEnvironment,
     readCredential: deps.readCredential,
     ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
@@ -109,140 +105,120 @@ export const createNativeTargetAuthOnlyPreviewDelivery = (deps: {
     ...(deps.wait === undefined ? {} : { wait: deps.wait }),
     ...(deps.observeAlias === undefined ? {} : { observeAlias: deps.observeAlias }),
     ...(deps.beforeAliasWrite === undefined ? {} : { beforeAliasWrite: deps.beforeAliasWrite }),
-    approvedPlanDigest: (input) => {
-      const bound = input as HostedOperatorDeploymentContext & {
-        approvedPlanDigest: string;
-      };
-      return digestSchema.parse(bound.approvedPlanDigest);
-    },
+    approvedPlanDigest: (input) =>
+      z.object({ approvedPlanDigest: digestSchema }).parse(input).approvedPlanDigest,
   });
 
+  const assertDeliveryInput = (
+    input: NativeTargetAuthOnlyPreviewDeliveryInput,
+    plan: NativeTargetAuthOnlyPreviewDeliveryPlan,
+    target: HostedRuntimeTarget,
+    reconciling: boolean,
+  ) => {
+    const kind = deps.target === "gateway" ? "gateway-delivery" : "delivery";
+    const selected = plan.effects.filter((effect) => effect.id === input.effectId);
+    const source = deps.target === "gateway" ? plan.gatewayDelivery : plan.delivery;
+    const expectedProjectId =
+      deps.target === "gateway" ? plan.publicGateway?.projectId : target.projectId;
+    const expectedBranch =
+      deps.target === "gateway"
+        ? plan.publicGateway?.branch
+        : (plan.deploymentBoundary?.app?.branch ?? target.branch);
+    const mismatch = () => new HostedOperatorError("resource_mismatch");
+    // Keep the original validation order, including malformed digest errors after the earlier scope checks.
+    if (target.environment !== "preview") {
+      throw mismatch();
+    }
+    if (reconciling && selected.length !== 1) {
+      throw mismatch();
+    }
+    if (input.approval.outcome !== "approved") {
+      throw mismatch();
+    }
+    if (input.approval.planDigest !== digestSchema.parse(input.approvedPlanDigest)) {
+      throw mismatch();
+    }
+    const exactApproval = [
+      input.approval.publicSessionId === target.sessionId,
+      input.approval.responderPrincipalId === input.authority.ownerUserId,
+    ];
+    if (!exactApproval.every(Boolean)) {
+      throw mismatch();
+    }
+    const exactEffect = [
+      plan.effects.filter((effect) => effect.kind === kind).length === 1,
+      selected.length === 1,
+      selected[0]?.kind === kind,
+    ];
+    if (!exactEffect.every(Boolean) || source === undefined) {
+      throw mismatch();
+    }
+    if (
+      ![
+        source.projectId === expectedProjectId,
+        source.branch === expectedBranch,
+        Number.isSafeInteger(input.fenceGeneration),
+        input.fenceGeneration > 0,
+      ].every(Boolean)
+    ) {
+      throw mismatch();
+    }
+    return kind;
+  };
+  const projectContext = (
+    input: NativeTargetAuthOnlyPreviewDeliveryInput,
+    plan: NativeTargetAuthOnlyPreviewDeliveryPlan,
+    target: HostedRuntimeTarget,
+    kind: "gateway-delivery" | "delivery",
+    delivering: boolean,
+  ) =>
+    // SAFETY: The legacy engine's context type includes database preparation fields, but its delivery path reads only this validated plan subset, target/effect, candidates, provenance and live callbacks. The digest callback above avoids full database-plan parsing. Real assertCurrent, environment and alias guards remain active in the shared engine.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- This single validated adapter boundary crosses the wider legacy signature; adding its unused database fields would invent authority.
+    ({
+      authority: structuredClone(input.authority),
+      target,
+      effect: { id: input.effectId, kind },
+      fenceGeneration: input.fenceGeneration,
+      operationRef: id.parse(input.operationRef),
+      plan: delivering ? { ...plan, delivery: plan.delivery } : { ...plan },
+      deliveryCandidates: structuredClone(input.deliveryCandidates ?? []),
+      ...(input.priorAppDelivery === undefined
+        ? {}
+        : { priorAppDelivery: structuredClone(input.priorAppDelivery) }),
+      ...(input.deliveryCorrections === undefined
+        ? {}
+        : { deliveryCorrections: structuredClone(input.deliveryCorrections) }),
+      ...(input.checkpointDeliveryCorrection === undefined
+        ? {}
+        : { checkpointDeliveryCorrection: input.checkpointDeliveryCorrection }),
+      ...(input.gatewayDeliveryProvenance === undefined
+        ? {}
+        : { gatewayDeliveryProvenance: structuredClone(input.gatewayDeliveryProvenance) }),
+      ...(input.renewalDeliveryProvenance === undefined
+        ? {}
+        : { renewalDeliveryProvenance: structuredClone(input.renewalDeliveryProvenance) }),
+      checkpointDelivery: input.checkpointDelivery,
+      workerCheckpoints: [],
+      assertCurrent: input.assertCurrent,
+      checkpoint: async () => {
+        // Delivery does not write an Auth worker or product-data checkpoint through the legacy worker port.
+      },
+      approvedPlanDigest: digestSchema.parse(input.approvedPlanDigest),
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
+    }) as unknown as HostedOperatorDeploymentContext;
   return {
     async deliver(input: NativeTargetAuthOnlyPreviewDeliveryInput) {
       const plan = nativeTargetAuthOnlyPreviewDeliveryPlanSchema.parse(input.plan);
       const target = { ...input.target };
-      const kind = deps.target === "gateway" ? "gateway-delivery" : "delivery";
-      const selected = plan.effects.filter((effect) => effect.id === input.effectId);
-      const sourceDelivery = deps.target === "gateway" ? plan.gatewayDelivery : plan.delivery;
-      const expectedProjectId =
-        deps.target === "gateway" ? plan.publicGateway?.projectId : target.projectId;
-      const expectedBranch =
-        deps.target === "gateway"
-          ? plan.publicGateway?.branch
-          : (plan.deploymentBoundary?.app?.branch ?? target.branch);
-      if (
-        target.environment !== "preview" ||
-        input.approval.outcome !== "approved" ||
-        input.approval.planDigest !== digestSchema.parse(input.approvedPlanDigest) ||
-        input.approval.publicSessionId !== target.sessionId ||
-        input.approval.responderPrincipalId !== input.authority.ownerUserId ||
-        plan.effects.filter((effect) => effect.kind === kind).length !== 1 ||
-        selected.length !== 1 ||
-        selected[0]?.kind !== kind ||
-        sourceDelivery === undefined ||
-        sourceDelivery.projectId !== expectedProjectId ||
-        sourceDelivery.branch !== expectedBranch ||
-        !Number.isSafeInteger(input.fenceGeneration) ||
-        input.fenceGeneration <= 0
-      ) {
-        throw new HostedOperatorError("resource_mismatch");
-      }
-
-      const legacyProjection = {
-        ...plan,
-        delivery: plan.delivery,
-      } as unknown as HostedOperatorPlan;
-      const context = {
-        authority: structuredClone(input.authority),
-        target,
-        effect: { id: input.effectId, kind },
-        fenceGeneration: input.fenceGeneration,
-        operationRef: id.parse(input.operationRef),
-        plan: legacyProjection,
-        deliveryCandidates: structuredClone(input.deliveryCandidates ?? []),
-        ...(input.priorAppDelivery === undefined
-          ? {}
-          : { priorAppDelivery: structuredClone(input.priorAppDelivery) }),
-        ...(input.deliveryCorrections === undefined
-          ? {}
-          : { deliveryCorrections: structuredClone(input.deliveryCorrections) }),
-        ...(input.checkpointDeliveryCorrection === undefined
-          ? {}
-          : { checkpointDeliveryCorrection: input.checkpointDeliveryCorrection }),
-        ...(input.gatewayDeliveryProvenance === undefined
-          ? {}
-          : { gatewayDeliveryProvenance: structuredClone(input.gatewayDeliveryProvenance) }),
-        ...(input.renewalDeliveryProvenance === undefined
-          ? {}
-          : { renewalDeliveryProvenance: structuredClone(input.renewalDeliveryProvenance) }),
-        checkpointDelivery: input.checkpointDelivery,
-        workerCheckpoints: [],
-        assertCurrent: input.assertCurrent,
-        checkpoint: async () => {},
-        approvedPlanDigest: digestSchema.parse(input.approvedPlanDigest),
-        ...(input.signal === undefined ? {} : { signal: input.signal }),
-      } as unknown as HostedOperatorDeploymentContext;
-      return await delivery.deliver(context);
+      const kind = assertDeliveryInput(input, plan, target, false);
+      return await delivery.deliver(projectContext(input, plan, target, kind, true));
     },
     async reconcile(input: NativeTargetAuthOnlyPreviewDeliveryInput) {
       const plan = nativeTargetAuthOnlyPreviewDeliveryPlanSchema.parse(input.plan);
-      const kind = deps.target === "gateway" ? "gateway-delivery" : "delivery";
-      const selected = plan.effects.filter((effect) => effect.id === input.effectId);
-      const sourceDelivery = deps.target === "gateway" ? plan.gatewayDelivery : plan.delivery;
-      const expectedProjectId =
-        deps.target === "gateway" ? plan.publicGateway?.projectId : input.target.projectId;
-      const expectedBranch =
-        deps.target === "gateway"
-          ? plan.publicGateway?.branch
-          : (plan.deploymentBoundary?.app?.branch ?? input.target.branch);
-      if (
-        input.target.environment !== "preview" ||
-        selected.length !== 1 ||
-        input.approval.outcome !== "approved" ||
-        input.approval.planDigest !== digestSchema.parse(input.approvedPlanDigest) ||
-        input.approval.publicSessionId !== input.target.sessionId ||
-        input.approval.responderPrincipalId !== input.authority.ownerUserId ||
-        plan.effects.filter((effect) => effect.kind === kind).length !== 1 ||
-        selected[0]?.kind !== kind ||
-        sourceDelivery === undefined ||
-        sourceDelivery.projectId !== expectedProjectId ||
-        sourceDelivery.branch !== expectedBranch ||
-        !Number.isSafeInteger(input.fenceGeneration) ||
-        input.fenceGeneration <= 0
-      ) {
-        throw new HostedOperatorError("resource_mismatch");
-      }
-      const context = {
-        authority: structuredClone(input.authority),
-        target: { ...input.target },
-        effect: { id: input.effectId, kind },
-        fenceGeneration: input.fenceGeneration,
-        operationRef: id.parse(input.operationRef),
-        plan: { ...plan } as unknown as HostedOperatorPlan,
-        deliveryCandidates: structuredClone(input.deliveryCandidates ?? []),
-        ...(input.priorAppDelivery === undefined
-          ? {}
-          : { priorAppDelivery: structuredClone(input.priorAppDelivery) }),
-        ...(input.deliveryCorrections === undefined
-          ? {}
-          : { deliveryCorrections: structuredClone(input.deliveryCorrections) }),
-        ...(input.checkpointDeliveryCorrection === undefined
-          ? {}
-          : { checkpointDeliveryCorrection: input.checkpointDeliveryCorrection }),
-        ...(input.gatewayDeliveryProvenance === undefined
-          ? {}
-          : { gatewayDeliveryProvenance: structuredClone(input.gatewayDeliveryProvenance) }),
-        ...(input.renewalDeliveryProvenance === undefined
-          ? {}
-          : { renewalDeliveryProvenance: structuredClone(input.renewalDeliveryProvenance) }),
-        checkpointDelivery: input.checkpointDelivery,
-        workerCheckpoints: [],
-        assertCurrent: input.assertCurrent,
-        checkpoint: async () => {},
-        approvedPlanDigest: digestSchema.parse(input.approvedPlanDigest),
-        ...(input.signal === undefined ? {} : { signal: input.signal }),
-      } as unknown as HostedOperatorDeploymentContext;
-      return await delivery.reconcile(context);
+      const kind = assertDeliveryInput(input, plan, input.target, true);
+      return await delivery.reconcile(
+        projectContext(input, plan, { ...input.target }, kind, false),
+      );
     },
   };
 };

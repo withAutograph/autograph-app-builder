@@ -84,7 +84,31 @@ const pending = {
   },
   sender: binding.sender,
 };
-const configuration = {
+const worker = {
+  executablePath: "/trusted/installer",
+  id: "fixture-installer",
+  operationScope: "generated-app-release-install-v1" as const,
+  sha256: "e".repeat(64),
+  subcommand: "protected-generated-app-install" as const,
+};
+const configuration: HostedOperatorSourceConfiguration = {
+  applications: {},
+  catalogAppIds: [],
+  workloadPolicy: binding.sender,
+  sandbox: {
+    accessWorker: worker,
+    authWorker: worker,
+    resourcesWorker: worker,
+    workers: {},
+    authProposal: {
+      executablePath: "/trusted/proposal",
+      id: "fixture-proposal",
+      sha256: "f".repeat(64),
+    },
+    image: "fixture-image",
+    projectId: "prj-operator",
+    teamId: binding.target.scopeId,
+  },
   authDatabase: {
     database: binding.bootstrapResource.database,
     migratorRole: binding.bootstrapResource.migratorRole,
@@ -93,6 +117,10 @@ const configuration = {
   },
   builderCallbackOrigin: builderOrigin,
   gateway: {
+    gatewayOrigin: binding.gateway.origin,
+    gitSha: "a".repeat(40),
+    protectedApplicationIds: [binding.target.appId],
+    repoId: binding.gateway.repoId,
     authBrowserOrigin: binding.browserOrigin,
     branch: binding.gateway.branch,
     environment: "preview",
@@ -101,14 +129,31 @@ const configuration = {
     workload: binding.sender,
   },
   nativeNeon: {
+    configuration: {
+      connector: "fixture-neon",
+      nativeStore: {
+        configurationId: "fixture-config",
+        resourceId: "fixture-store",
+        sourceProjectId: "prj-operator",
+      },
+      operator: { ...binding.sender, projectId: "prj-operator" },
+    },
     scope: {
+      endpointId: "ep-pilot",
+      maintenanceDatabase: "neondb",
+      maintenanceRole: "bootstrap_owner",
       hostname: binding.bootstrapResource.hostname,
       ...binding.bootstrapResource.neon,
     },
   },
-  operator: { environment: "preview", origin: binding.audience },
+  operator: {
+    environment: "preview",
+    origin: binding.audience,
+    projectId: "prj-operator",
+    deploymentId: "dpl-operator",
+  },
   teamId: binding.target.scopeId,
-} as HostedOperatorSourceConfiguration;
+};
 const context = {
   authority,
   ownerContext: operatorOwnerContextSchema.parse({
@@ -164,12 +209,13 @@ it("uses the authenticated retained Auth-only READY binding for the same saved s
 
 it("falls back only for a true lookup miss and rejects missing live readiness for a matched row", async () => {
   const ports = fixture();
-  ports.ownerLink.readPending.mockResolvedValueOnce();
+  const missing = undefined;
+  ports.ownerLink.readPending.mockResolvedValueOnce(missing);
   expect(
     await selectNativeTargetAuthOnlyRealmCallback(ports, selector, builderOrigin),
   ).toBeUndefined();
   expect(ports.readReadyBinding).not.toHaveBeenCalled();
-  ports.readReadyBinding.mockResolvedValueOnce();
+  ports.readReadyBinding.mockResolvedValueOnce(missing);
   await expect(
     selectNativeTargetAuthOnlyRealmCallback(ports, selector, builderOrigin),
   ).rejects.toThrow("auth_identity_required");

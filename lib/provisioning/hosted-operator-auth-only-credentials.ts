@@ -74,12 +74,12 @@ export interface AuthOnlyCredentialStorageKey {
   contextDigest: string;
 }
 export interface AuthOnlyCredentialStore {
-  read(key: AuthOnlyCredentialStorageKey): Promise<AuthOnlyCredentialRecord | undefined>;
+  read: (key: AuthOnlyCredentialStorageKey) => Promise<AuthOnlyCredentialRecord | undefined>;
   /** Atomic durable insert only. Existing ciphertext must never be replaced by a retry. */
-  writeIfAbsent(
+  writeIfAbsent: (
     key: AuthOnlyCredentialStorageKey,
     record: AuthOnlyCredentialRecord,
-  ): Promise<"written" | "exists">;
+  ) => Promise<"written" | "exists">;
 }
 export type AssertCurrentAuthOnlyCredentialAuthority = (
   context: AuthOnlyCredentialContext,
@@ -91,8 +91,10 @@ interface Access {
 }
 
 const mismatch = () => new HostedOperatorError("resource_mismatch");
-const canonical = (value: unknown) => centralHostCanonicalBytes(z.json().parse(value));
-const hash = (value: unknown) => createHash("sha256").update(canonical(value)).digest("hex");
+const canonical = (value: z.infer<ReturnType<typeof z.json>>) =>
+  centralHostCanonicalBytes(z.json().parse(value));
+const hash = (value: z.infer<ReturnType<typeof z.json>>) =>
+  createHash("sha256").update(canonical(value)).digest("hex");
 export const authOnlyCredentialContextDigest = (context: AuthOnlyCredentialContext) =>
   hash(context);
 const associatedData = (context: AuthOnlyCredentialContext) =>
@@ -161,7 +163,7 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
       throw new HostedOperatorError("operator_unavailable");
     }
     if (raw === undefined) {
-      return undefined;
+      return raw;
     }
     const parsed = authOnlyCredentialRecordSchema.safeParse(raw);
     if (!parsed.success || !isDeepStrictEqual(parsed.data.context, context)) {
@@ -212,15 +214,20 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
       if (
         !parsedRef.success ||
         parsedRef.data.contextDigest !== authOnlyCredentialContextDigest(context)
-      )
+      ) {
         throw mismatch();
+      }
       const expected = parsedRef.data;
       const runtimeConnection = input.runtimeConnection ?? "direct";
-      if (runtimeConnection !== "direct" && runtimeConnection !== "pooled") throw mismatch();
+      if (runtimeConnection !== "direct" && runtimeConnection !== "pooled") {
+        throw mismatch();
+      }
       await assertCurrent(input, context);
       const record = await readRecord(context);
       await assertCurrent(input, context);
-      if (record === undefined || !isDeepStrictEqual(reference(record), expected)) throw mismatch();
+      if (record === undefined || !isDeepStrictEqual(reference(record), expected)) {
+        throw mismatch();
+      }
       const credentials = decrypt(record, context);
       const { resource } = context;
       const directUrl = (role: string, secret: string) => {
@@ -249,8 +256,9 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
         ...validationResource,
         migratorRole: resource.runtimeRole,
       });
-      if (runtimeConnection === "pooled")
+      if (runtimeConnection === "pooled") {
         runtime.hostname = resource.neon.hostname.replace(".", "-pooler.");
+      }
       await assertCurrent(input, context);
       return { migrationUrl: migration.toString(), runtimeUrl: runtime.toString() };
     },
@@ -262,13 +270,15 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
       if (
         !parsedRef.success ||
         parsedRef.data.contextDigest !== authOnlyCredentialContextDigest(context)
-      )
+      ) {
         throw mismatch();
+      }
       await assertCurrent(input, context);
       const record = await readRecord(context);
       await assertCurrent(input, context);
-      if (record === undefined || !isDeepStrictEqual(reference(record), parsedRef.data))
+      if (record === undefined || !isDeepStrictEqual(reference(record), parsedRef.data)) {
         throw mismatch();
+      }
       const secret = decrypt(record, context);
       await assertCurrent(input, context);
       return structuredClone(secret);
@@ -313,11 +323,10 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
       await assertCurrent(input, context);
       const observed = await readRecord(context);
       await assertCurrent(input, context);
-      if (
-        observed === undefined ||
-        (outcome !== "written" && outcome !== "exists") ||
-        (outcome === "written" && !isDeepStrictEqual(observed, record))
-      ) {
+      if (observed === undefined || (outcome !== "written" && outcome !== "exists")) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      if (outcome === "written" && !isDeepStrictEqual(observed, record)) {
         throw new HostedOperatorError("operation_in_progress");
       }
       matchesCredentials(observed, context, credentials);

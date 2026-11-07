@@ -1,15 +1,19 @@
 import { defineWorkflowTool } from "eve/tools";
 import { nativeTargetAuthOnlyResourcePreparationInputSchema } from "../../lib/eve/private-native-target-auth-only-resource-approval";
+import {
+  authorizeAuthOnlyResourceApprovalResponseStep,
+  prepareAuthOnlyResourcesStep,
+  readAuthOnlyResourceApprovalStep,
+} from "../../lib/agent/prepare-app-native-target-auth-only-step";
 
 export default defineWorkflowTool({
   approval: {
     request: async (ctx) => {
-      if (ctx.toolInput === undefined) return "user-approval" as const;
+      if (ctx.toolInput === undefined) {
+        return "user-approval" as const;
+      }
       try {
-        const { nativeTargetOnboardingRuntimeForSession } =
-          await import("../../lib/agent/native-target-onboarding-runtime");
-        const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-        return (await runtime.hasAuthOnlyResourceApproval(ctx.toolInput, ctx))
+        return (await readAuthOnlyResourceApprovalStep(ctx.toolInput, ctx))
           ? "not-applicable"
           : "user-approval";
       } catch {
@@ -21,10 +25,7 @@ export default defineWorkflowTool({
     },
     response: async (ctx) => {
       try {
-        const { nativeTargetOnboardingRuntimeForSession } =
-          await import("../../lib/agent/native-target-onboarding-runtime");
-        const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-        await runtime.authorizeAuthOnlyResourceApprovalResponse(ctx);
+        await authorizeAuthOnlyResourceApprovalResponseStep(ctx);
         return { status: "allowed" as const };
       } catch {
         return {
@@ -39,10 +40,7 @@ export default defineWorkflowTool({
     "After the dedicated Preview project has been created, approve and prepare exactly its isolated Auth database resource from the retained resource plan. This applies only the pinned one-resource Auth bootstrap and verified-email Auth schema. It creates no app database, deployment, or product-data grant. Retry uses the original settled approval and retained resource bytes.",
   async execute(input, ctx) {
     "use workflow";
-    const { nativeTargetOnboardingRuntimeForSession } =
-      await import("../../lib/agent/native-target-onboarding-runtime");
-    const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-    return await runtime.prepareAuthOnlyResources(input, ctx);
+    return await prepareAuthOnlyResourcesStep(input, ctx);
   },
   inputSchema: nativeTargetAuthOnlyResourcePreparationInputSchema,
 });

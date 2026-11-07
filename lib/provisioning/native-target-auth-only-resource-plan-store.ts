@@ -14,8 +14,8 @@ import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "./native-target-
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const requestIdFor = (value: string) => {
   const bytes = Buffer.from(createHash("sha256").update(value).digest().subarray(0, 16));
-  bytes[6] = (bytes[6]! & 0x0f) | 0x50;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  bytes[6] = (bytes[6] % 16) + 0x50;
+  bytes[8] = (bytes[8] % 64) + 0x80;
   const hex = bytes.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
@@ -62,30 +62,35 @@ export const createNativeTargetAuthOnlyResourcePlanStore = (input: {
       )
       .limit(1);
     await input.assertCurrentOwner(context);
-    const row = rows[0];
-    if (row === undefined) return undefined;
+    const row = rows.at(0);
+    if (row === undefined) {
+      return row;
+    }
     const record = recordSchema.parse(row.record);
     if (
       row.state !== "settled" ||
       record.authOnlyPlanDigest !== authOnlyPlanDigest ||
       record.resourcePlanDigest !== resourcePlanDigest
-    )
+    ) {
       throw new Error("native_target_auth_only_resource_plan_mismatch");
+    }
     const bytes = Buffer.from(record.resourcePlanBase64, "base64");
     if (
       bytes.toString("base64") !== record.resourcePlanBase64 ||
       nativeTargetAuthOnlyResourcePlanDigest(bytes) !== resourcePlanDigest
-    )
+    ) {
       throw new Error("native_target_auth_only_resource_plan_mismatch");
+    }
     const parsed = nativeTargetAuthOnlyResourceApprovalPlanSchema.parse(
-      JSON.parse(bytes.toString("utf8")),
+      JSON.parse(bytes.toString("utf-8")),
     );
     if (
       parsed.authOnlyPlanDigest !== authOnlyPlanDigest ||
       parsed.target.appId !== context.target.appId ||
       parsed.target.sessionId !== context.target.sessionId
-    )
+    ) {
       throw new Error("native_target_auth_only_resource_plan_mismatch");
+    }
     return {
       bytes: Buffer.from(bytes),
       plan: parsed,
@@ -103,14 +108,15 @@ export const createNativeTargetAuthOnlyResourcePlanStore = (input: {
       const bytes = Buffer.from(rawBytes);
       const resourcePlanDigest = nativeTargetAuthOnlyResourcePlanDigest(bytes);
       const parsed = nativeTargetAuthOnlyResourceApprovalPlanSchema.parse(
-        JSON.parse(bytes.toString("utf8")),
+        JSON.parse(bytes.toString("utf-8")),
       );
       if (
         parsed.authOnlyPlanDigest !== authOnlyPlanDigest ||
         parsed.target.appId !== context.target.appId ||
         parsed.target.sessionId !== context.target.sessionId
-      )
+      ) {
         throw new Error("native_target_auth_only_resource_plan_mismatch");
+      }
       const authority = hostedTenantAuthoritySchema.parse(context.authority);
       const requestId = requestIdFor(resourcePlanDigest);
       const record = recordSchema.parse({
@@ -142,8 +148,9 @@ export const createNativeTargetAuthOnlyResourcePlanStore = (input: {
         retained === undefined ||
         !retained.bytes.equals(bytes) ||
         !isDeepStrictEqual(retained.plan, parsed)
-      )
+      ) {
         throw new Error("native_target_auth_only_resource_plan_conflict");
+      }
       return { resourcePlanDigest, bytes: Buffer.from(retained.bytes), plan: retained.plan };
     },
     async bindWorkerContext(
@@ -154,12 +161,17 @@ export const createNativeTargetAuthOnlyResourcePlanStore = (input: {
       contextDigest: string,
     ) {
       const retained = await read(context, authOnlyPlanDigest, resourcePlanDigest);
-      if (retained === undefined) throw new Error("native_target_auth_only_resource_plan_missing");
+      if (retained === undefined) {
+        throw new Error("native_target_auth_only_resource_plan_missing");
+      }
       const authority = hostedTenantAuthoritySchema.parse(context.authority);
       const previous = retained.workerContexts[stage];
-      if (previous !== undefined && previous !== contextDigest)
+      if (previous !== undefined && previous !== contextDigest) {
         throw new Error("native_target_auth_only_worker_context_conflict");
-      if (previous === contextDigest) return;
+      }
+      if (previous === contextDigest) {
+        return;
+      }
       const rowPredicate = and(
         eq(builderProvisioningJournals.issuer, authority.issuer),
         eq(builderProvisioningJournals.audience, authority.audience),
@@ -184,7 +196,9 @@ export const createNativeTargetAuthOnlyResourcePlanStore = (input: {
         .set({ record: next, revision: retained.revision + 1, updatedAt: new Date() })
         .where(rowPredicate)
         .returning();
-      if (rows[0] === undefined) throw new Error("native_target_auth_only_resource_plan_conflict");
+      if (rows[0] === undefined) {
+        throw new Error("native_target_auth_only_resource_plan_conflict");
+      }
       await input.assertCurrentOwner(context);
     },
   };

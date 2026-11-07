@@ -15,6 +15,11 @@ import {
 } from "./native-target-auth-only-plan-schema";
 import type { NativeTargetAuthOnlyPlan } from "./native-target-auth-only-plan-schema";
 
+import type { NativeTargetVercelProjectCreation } from "./native-target-vercel-provider";
+
+const conflict = () => new Error("native_target_auth_only_conflict");
+const mismatch = () => new Error("native_target_auth_only_mismatch");
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const instant = z.iso.datetime({ offset: true });
 export const nativeTargetAuthOnlyApprovalSchema = z.strictObject({
@@ -169,6 +174,7 @@ export const createPostgresNativeTargetAuthOnlyDispatchStore = (
   };
   return {
     async compareAndSet(key, expectedRevision, rawState) {
+      const notUpdated = undefined;
       const state = stateSchema.parse(rawState);
       const current = await read(key);
       const allowedUnknownSettlement =
@@ -179,11 +185,16 @@ export const createPostgresNativeTargetAuthOnlyDispatchStore = (
       if (
         current === undefined ||
         current.revision !== expectedRevision ||
-        current.state.planDigest !== state.planDigest ||
+        current.state.planDigest !== state.planDigest
+      ) {
+        return notUpdated;
+      }
+      if (
         current.state.stage === "created" ||
         (current.state.stage === "unknown" && !allowedUnknownSettlement)
-      )
-        return undefined;
+      ) {
+        return notUpdated;
+      }
       const rows = await database
         .update(builderProvisioningJournals)
         .set({
@@ -203,8 +214,9 @@ export const createPostgresNativeTargetAuthOnlyDispatchStore = (
       if (
         state.plan.appId !== key.appId ||
         !isDeepStrictEqual(authority, state.plan.origin.authority)
-      )
+      ) {
         throw mismatch();
+      }
       const now = new Date();
       const rows = await database
         .insert(builderProvisioningJournals)
@@ -221,15 +233,13 @@ export const createPostgresNativeTargetAuthOnlyDispatchStore = (
         .onConflictDoNothing()
         .returning();
       const inserted = rows[0] === undefined ? await read(key) : parseRow(rows[0]);
-      if (inserted === undefined || inserted.state.planDigest !== state.planDigest)
+      if (inserted === undefined || inserted.state.planDigest !== state.planDigest) {
         throw conflict();
+      }
       return inserted;
     },
   };
 };
-
-const conflict = () => new Error("native_target_auth_only_conflict");
-const mismatch = () => new Error("native_target_auth_only_mismatch");
 
 /** Auth-only dispatcher has project creation ports only: no DB, installer, or grant ports. */
 export const createNativeTargetAuthOnlyDispatch = <Invocation>(ports: {
@@ -254,15 +264,7 @@ export const createNativeTargetAuthOnlyDispatch = <Invocation>(ports: {
   }) => Promise<
     | { status: "created"; projectId: string }
     | { status: "uncertain"; projectId?: string }
-    | {
-        status: "rejected";
-        reason:
-          | "authorization_denied"
-          | "collision"
-          | "permission_denied"
-          | "provider_rejected"
-          | "rate_limited";
-      }
+    | Extract<NativeTargetVercelProjectCreation, { status: "rejected" }>
   >;
   observeProject: (input: {
     plan: NativeTargetAuthOnlyPlan;
@@ -305,9 +307,10 @@ export const createNativeTargetAuthOnlyDispatch = <Invocation>(ports: {
     const approval = nativeTargetAuthOnlyApprovalSchema.parse(
       await ports.readApproval(invocation, plan),
     );
+    if (approval.outcome !== "approved" || approval.responderPrincipalId !== owner.ownerUserId) {
+      throw mismatch();
+    }
     if (
-      approval.outcome !== "approved" ||
-      approval.responderPrincipalId !== owner.ownerUserId ||
       approval.publicSessionId !== owner.publicSessionId ||
       approval.planDigest !== planDigest ||
       approval.sourceDigest !== nativeTargetAuthOnlySchemaEffectDigest(plan, plan.publishedSource)
@@ -324,98 +327,70 @@ export const createNativeTargetAuthOnlyDispatch = <Invocation>(ports: {
     });
     return await ports.store.reserve(key, state);
   };
-  const dispatch = async (invocation: Invocation, rawPlan: NativeTargetAuthOnlyPlan) => {
-    const plan = nativeTargetAuthOnlyPlanSchema.parse(rawPlan);
-    const { owner, key } = await keyFor(invocation, plan);
-    const current = await ports.store.read(key);
-    const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
-    if (current?.state.stage === "created" && current.state.planDigest === planDigest) {
-      return { projectId: current.state.projectId, status: "created" as const };
-    }
-    if (current?.state.stage === "dispatching" && current.state.planDigest === planDigest) {
-      if (Date.parse(current.state.leaseExpiresAt) > now().getTime()) {
-        throw conflict();
-      }
-      if (current.state.dispatchAuthorizedAt === undefined) {
-        const released = await ports.store.compareAndSet(
-          key,
-          current.revision,
-          stateSchema.parse({
-            approval: current.state.approval,
-            kind: "native-target-auth-only-dispatch",
-            plan,
-            planDigest,
-            stage: "approved",
-            version: 1,
-          }),
-        );
-        if (released === undefined) {
-          throw conflict();
-        }
-        return await dispatch(invocation, plan);
-      }
-      const uncertain = await ports.store.compareAndSet(
-        key,
-        current.revision,
-        stateSchema.parse({
-          ...current.state,
-          dispatchAuthorizedAt: current.state.dispatchAuthorizedAt,
-          stage: "unknown",
-        }),
-      );
-      if (uncertain === undefined) {
-        throw conflict();
-      }
-      return await dispatch(invocation, plan);
-    }
-    if (
-      current?.state.planDigest !== planDigest ||
-      (current.state.stage !== "approved" && current.state.stage !== "unknown") ||
-      current.state.approval.responderPrincipalId !== owner.ownerUserId
-    ) {
+  type Owner = Awaited<ReturnType<typeof ports.authorize>>;
+  type Key = Awaited<ReturnType<typeof keyFor>>["key"];
+  const reconcileUnknown = async (
+    invocation: Invocation,
+    plan: NativeTargetAuthOnlyPlan,
+    planDigest: string,
+    key: Key,
+    owner: Owner,
+    current: {
+      revision: number;
+      state: Extract<NativeTargetAuthOnlyDispatchState, { stage: "unknown" }>;
+    },
+  ) => {
+    const projectId = current.state.acceptedProjectId;
+    if (projectId === undefined) {
       throw conflict();
     }
-    await ports.revalidate(invocation, plan);
-    if (current.state.stage === "unknown") {
-      const projectId = current.state.acceptedProjectId;
-      if (projectId === undefined) {
-        throw conflict();
-      }
-      const observed = await ports.observeProject({ plan, projectId });
-      const latestOwner = await ports.authorize(invocation, plan.appId);
-      if (
-        !isDeepStrictEqual(latestOwner.authority, owner.authority) ||
-        latestOwner.ownerUserId !== owner.ownerUserId ||
-        latestOwner.publicSessionId !== owner.publicSessionId
-      ) {
-        throw mismatch();
-      }
-      await ports.revalidate(invocation, plan);
-      if (observed.status !== "verified" || observed.projectId !== projectId) {
-        return { status: "unknown" as const, projectId };
-      }
-      const saved = await ports.store.compareAndSet(
-        key,
-        current.revision,
-        stateSchema.parse({
-          approval: current.state.approval,
-          kind: "native-target-auth-only-dispatch",
-          plan,
-          planDigest,
-          projectId,
-          stage: "created",
-          version: 1,
-        }),
-      );
-      if (saved === undefined) {
-        throw conflict();
-      }
-      return { projectId, status: "created" as const };
+    const observed = await ports.observeProject({ plan, projectId });
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Recheck owner authority after the provider observation; parallel reads would permit stale authorization.
+    const latestOwner = await ports.authorize(invocation, plan.appId);
+    if (
+      !isDeepStrictEqual(latestOwner.authority, owner.authority) ||
+      latestOwner.ownerUserId !== owner.ownerUserId ||
+      latestOwner.publicSessionId !== owner.publicSessionId
+    ) {
+      throw mismatch();
     }
+    await ports.revalidate(invocation, plan);
+    if (observed.status !== "verified" || observed.projectId !== projectId) {
+      return { status: "unknown" as const, projectId };
+    }
+    const saved = await ports.store.compareAndSet(
+      key,
+      current.revision,
+      stateSchema.parse({
+        approval: current.state.approval,
+        kind: "native-target-auth-only-dispatch",
+        plan,
+        planDigest,
+        projectId,
+        stage: "created",
+        version: 1,
+      }),
+    );
+    if (saved === undefined) {
+      throw conflict();
+    }
+    return { projectId, status: "created" as const };
+  };
+  const createAttempt = async (
+    invocation: Invocation,
+    plan: NativeTargetAuthOnlyPlan,
+    planDigest: string,
+    key: Key,
+    owner: Owner,
+    current: {
+      revision: number;
+      state: Extract<NativeTargetAuthOnlyDispatchState, { stage: "approved" }>;
+    },
+  ) => {
     const attemptId = crypto.randomUUID();
     const leaseId = crypto.randomUUID();
     const leaseExpiresAt = new Date(now().getTime() + (ports.leaseMs ?? 60_000)).toISOString();
-    let row = await ports.store.compareAndSet(
+    const claimed = await ports.store.compareAndSet(
       key,
       current.revision,
       stateSchema.parse({
@@ -426,9 +401,10 @@ export const createNativeTargetAuthOnlyDispatch = <Invocation>(ports: {
         stage: "dispatching",
       }),
     );
-    if (row === undefined) {
+    if (claimed === undefined) {
       throw conflict();
     }
+    let row = claimed;
     const assertFence = async () => {
       const latestOwner = await ports.authorize(invocation, plan.appId);
       if (
@@ -452,7 +428,7 @@ export const createNativeTargetAuthOnlyDispatch = <Invocation>(ports: {
     };
     const authorizeAttempt = async () => {
       await assertFence();
-      const latest = row!;
+      const latest = row;
       if (latest.state.stage !== "dispatching" || latest.state.dispatchAuthorizedAt !== undefined) {
         throw conflict();
       }
@@ -468,7 +444,7 @@ export const createNativeTargetAuthOnlyDispatch = <Invocation>(ports: {
     };
     const acceptProjectId = async (projectId: string) => {
       await assertFence();
-      const latest = row!;
+      const latest = row;
       if (
         latest.state.stage !== "dispatching" ||
         latest.state.dispatchAuthorizedAt === undefined ||
@@ -588,6 +564,70 @@ export const createNativeTargetAuthOnlyDispatch = <Invocation>(ports: {
       }
       throw error;
     }
+  };
+  const dispatch = async (invocation: Invocation, rawPlan: NativeTargetAuthOnlyPlan) => {
+    const plan = nativeTargetAuthOnlyPlanSchema.parse(rawPlan);
+    const { owner, key } = await keyFor(invocation, plan);
+    const current = await ports.store.read(key);
+    const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
+    if (current?.state.stage === "created" && current.state.planDigest === planDigest) {
+      return { projectId: current.state.projectId, status: "created" as const };
+    }
+    if (current?.state.stage === "dispatching" && current.state.planDigest === planDigest) {
+      if (Date.parse(current.state.leaseExpiresAt) > now().getTime()) {
+        throw conflict();
+      }
+      if (current.state.dispatchAuthorizedAt === undefined) {
+        const released = await ports.store.compareAndSet(
+          key,
+          current.revision,
+          stateSchema.parse({
+            approval: current.state.approval,
+            kind: "native-target-auth-only-dispatch",
+            plan,
+            planDigest,
+            stage: "approved",
+            version: 1,
+          }),
+        );
+        if (released === undefined) {
+          throw conflict();
+        }
+        return await dispatch(invocation, plan);
+      }
+      const uncertain = await ports.store.compareAndSet(
+        key,
+        current.revision,
+        stateSchema.parse({
+          ...current.state,
+          dispatchAuthorizedAt: current.state.dispatchAuthorizedAt,
+          stage: "unknown",
+        }),
+      );
+      if (uncertain === undefined) {
+        throw conflict();
+      }
+      return await dispatch(invocation, plan);
+    }
+    if (
+      current?.state.planDigest !== planDigest ||
+      (current.state.stage !== "approved" && current.state.stage !== "unknown") ||
+      current.state.approval.responderPrincipalId !== owner.ownerUserId
+    ) {
+      throw conflict();
+    }
+    await ports.revalidate(invocation, plan);
+    const selected = { revision: current.revision, state: current.state };
+    if (selected.state.stage === "unknown") {
+      return await reconcileUnknown(invocation, plan, planDigest, key, owner, {
+        revision: selected.revision,
+        state: selected.state,
+      });
+    }
+    return await createAttempt(invocation, plan, planDigest, key, owner, {
+      revision: selected.revision,
+      state: selected.state,
+    });
   };
   return { approve, dispatch };
 };

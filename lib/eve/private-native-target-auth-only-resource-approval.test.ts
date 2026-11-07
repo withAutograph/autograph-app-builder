@@ -131,7 +131,7 @@ const resourcePlan = {
   },
   version: 1,
 };
-const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
+const bytes = (value: typeof resourcePlan) => Buffer.from(JSON.stringify(value));
 const sha = (value: Buffer) => createHash("sha256").update(value).digest("hex");
 const resourcePlanDigest = sha(bytes(resourcePlan));
 const toolInput = { appId: plan.appId, operationRef, planDigest, resourcePlan, resourcePlanDigest };
@@ -194,13 +194,15 @@ const proof: NativeTargetAuthOnlyApproval = {
   sourceDigest: resourcePlanDigest,
 };
 const fixture = (events: MessageStreamEvent[] = [requested(), settled()], complete = true) => ({
-  assertOwner: vi.fn(async () => undefined),
+  assertOwner: vi.fn(async () => {}),
   historyOwner: structuredClone(historyOwner),
   operationRef,
   owner: structuredClone(owner),
   plan: structuredClone(plan),
   readHistory: vi.fn(async (start: number, observe: (event: MessageStreamEvent) => void) => {
-    for (const event of events) observe(event);
+    for (const event of events) {
+      observe(event);
+    }
     return {
       complete,
       nextNativeIndex: start + events.length,

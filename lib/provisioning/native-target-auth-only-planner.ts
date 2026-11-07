@@ -26,13 +26,11 @@ const resourceSchema = z.strictObject({
   resourceId: z.string().min(1),
   runtimeRole: z.string().min(1),
 });
-export const nativeTargetAuthOnlyAuthorityBindingSchema = z
-  .object({
-    nativeNeon: z.object({
-      scope: z.object({ endpointId: z.string().min(1), hostname: z.string().min(1) }).passthrough(),
-    }),
-  })
-  .passthrough();
+export const nativeTargetAuthOnlyAuthorityBindingSchema = z.looseObject({
+  nativeNeon: z.object({
+    scope: z.looseObject({ endpointId: z.string().min(1), hostname: z.string().min(1) }),
+  }),
+});
 
 /** Narrow projection of the full deployment-owned resource profile. */
 const authOnlyProfileSchema = z.strictObject({
@@ -111,18 +109,19 @@ export const planNativeTargetAuthOnly = (input: {
     input.authAuthorityBinding,
   );
   const publishedSource = publishedAppSourceSchema.parse(input.publishedSource);
-  if (
-    description.app.id !== proposal.appId ||
-    description.backend.kind !== "static" ||
-    profile.appId !== proposal.appId ||
-    profile.id !== proposal.authProfileId ||
-    !isDeepStrictEqual(profile.authority, owner.authority) ||
-    proposal.appRole.length === 0 ||
-    !roles.includes(proposal.appRole) ||
-    roles.length === 0 ||
-    profile.configuration.authDatabase.resourceId === input.sharedAuthResourceId ||
-    input.selectedPhysicalEndpointId === input.sharedPhysicalEndpointId
-  ) {
+  const exactProfile = [
+    description.app.id === proposal.appId,
+    description.backend.kind === "static",
+    profile.appId === proposal.appId,
+    profile.id === proposal.authProfileId,
+    isDeepStrictEqual(profile.authority, owner.authority),
+    proposal.appRole.length !== 0,
+    roles.includes(proposal.appRole),
+    roles.length !== 0,
+    profile.configuration.authDatabase.resourceId !== input.sharedAuthResourceId,
+    input.selectedPhysicalEndpointId !== input.sharedPhysicalEndpointId,
+  ].every(Boolean);
+  if (!exactProfile) {
     throw new Error("native_target_auth_only_resource_mismatch");
   }
   const projectSettings = hostedOperatorAppProjectSettingsSchema.parse({
@@ -181,6 +180,9 @@ export const planNativeTargetAuthOnly = (input: {
   });
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- These owner-scoped store reads deliberately return untrusted JSON; the planner validates each value with its existing domain schema.
+type ReadOwnedPlanningJson<TLookup> = (input: TLookup) => Promise<unknown>;
+
 /**
  * Read source and custody from private owner-scoped stores immediately before planning.
  * The caller cannot supply a description or Auth resource directly.
@@ -192,28 +194,28 @@ export const planNativeTargetAuthOnlyFromOwnedState = async (input: {
   sharedPhysicalEndpointId: string;
   selectedPhysicalEndpointId: string;
   authAuthorityBinding: unknown;
-  readCapturedDescription: (input: {
+  readCapturedDescription: ReadOwnedPlanningJson<{
     authority: AuthOnlyPlanOwner["authority"];
     appId: string;
     appSpecDigest: string;
     publicSessionId: string;
-  }) => Promise<unknown>;
-  readAuthProfile: (input: {
+  }>;
+  readAuthProfile: ReadOwnedPlanningJson<{
     authority: AuthOnlyPlanOwner["authority"];
     appId: string;
     profileId: string;
-  }) => Promise<unknown>;
+  }>;
   readConfiguredAppRoles: (input: {
     authority: AuthOnlyPlanOwner["authority"];
     appId: string;
     profileId: string;
   }) => Promise<readonly string[]>;
-  readPublishedSource: (input: {
+  readPublishedSource: ReadOwnedPlanningJson<{
     authority: AuthOnlyPlanOwner["authority"];
     appId: string;
     appSpecDigest: string;
     publicSessionId: string;
-  }) => Promise<unknown>;
+  }>;
   readAuthSchemaSelection: (input: {
     authority: AuthOnlyPlanOwner["authority"];
     appId: string;

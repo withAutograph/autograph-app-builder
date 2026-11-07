@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-
-const resolveProfileMock = vi.hoisted(() => vi.fn());
-vi.mock("./native-target-resource-profile", () => ({
-  resolveNativeTargetResourceProfile: resolveProfileMock,
-}));
+import { drizzle } from "drizzle-orm/postgres-js";
 
 import type { OperatorArtifactContext } from "./hosted-operator-artifact-store";
 import { createNativeTargetAuthOnlyRuntime } from "./hosted-operator-auth-only-runtime";
@@ -12,12 +8,19 @@ import {
   nativeTargetAuthOnlyPlanDigest,
   nativeTargetAuthOnlySchemaEffectDigest,
 } from "./native-target-auth-only-plan-schema";
-import {
-  nativeTargetAuthOnlyAuthorityDigest,
-  planNativeTargetAuthOnly,
-} from "./native-target-auth-only-planner";
-import { nativeTargetRequiredProjectProtection } from "./native-target-onboarding-plan-schema";
-import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
+import { planNativeTargetAuthOnly } from "./native-target-auth-only-planner";
+import { hostedOperatorSourceConfigurationSchema } from "./hosted-operator-source-configuration-schema";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- The typed partial mock retains the resource profile module's other exports.
+import type * as ResourceProfileModule from "./native-target-resource-profile";
+
+const resolveProfileMock = vi.hoisted(() =>
+  vi.fn<typeof ResourceProfileModule.resolveNativeTargetResourceProfile>(),
+);
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Isolate deployment-owned profile lookup; the real runtime compares its exact authority digest and roles before leasing.
+vi.mock("./native-target-resource-profile", async (original) => ({
+  ...(await original<typeof ResourceProfileModule>()),
+  resolveNativeTargetResourceProfile: resolveProfileMock,
+}));
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -50,30 +53,108 @@ const authDatabase = {
   resourceId: "isolated-auth-resource",
   runtimeRole: "auth_runtime",
 };
-const selectedProfile = {
+const workload = {
+  audience: "https://vercel.com/fixture",
+  environment: "preview",
+  issuer: "https://oidc.vercel.com/fixture",
+  ownerId: "team_fixture",
+  projectId: "operator-fixture",
+};
+const selectedProfile = hostedOperatorSourceConfigurationSchema.parse({
+  applications: {},
   authDatabase,
   authOnlyApplications: { "signup-reset-pilot": { accessRoles: ["pilot_user"] } },
+  builderCallbackOrigin: "https://builder.example",
+  catalogAppIds: ["signup-reset-pilot"],
   gateway: {
     authBrowserOrigin: "https://auth.example",
     branch: "preview-fixture",
     environment: "preview",
     gatewayOrigin: "https://gateway.example",
+    gitSha: "8".repeat(40),
     projectId: "gateway-fixture",
+    protectedApplicationIds: ["signup-reset-pilot"],
     publicOrigin: "https://apps.example",
-    workload: { projectId: "gateway-fixture" },
+    repoId: "gateway-repo",
+    workload: { ...workload, projectId: "gateway-fixture", subject: "gateway" },
   },
-  nativeNeon: { scope: { endpointId: "isolated-endpoint", hostname: "auth-preview.neon.tech" } },
+  nativeNeon: {
+    configuration: {
+      connector: "neon-owned",
+      nativeStore: {
+        configurationId: "icfg-neon",
+        resourceId: "store-neon",
+        sourceProjectId: "prj-anchor",
+      },
+      operator: workload,
+    },
+    scope: {
+      branchId: "pilot-branch",
+      endpointId: "isolated-endpoint",
+      hostname: "auth-preview.neon.tech",
+      maintenanceDatabase: "neondb",
+      maintenanceRole: "bootstrap_owner",
+      projectId: "pilot-project",
+    },
+  },
   operator: {
+    deploymentId: "dpl-operator",
     environment: "preview",
     origin: "https://operator.example",
     projectId: "operator-fixture",
   },
-};
+  sandbox: {
+    accessWorker: {
+      executablePath: "/fixture/access",
+      id: "access-worker",
+      operationScope: "generated-app-access-v1",
+      sha256: "7".repeat(64),
+      subcommand: "protected-generated-app-access",
+    },
+    authProposal: {
+      executablePath: "/fixture/proposal",
+      id: "auth-proposal",
+      sha256: "6".repeat(64),
+    },
+    authWorker: {
+      executablePath: "/fixture/auth",
+      id: "auth-worker",
+      operationScope: "auth-protected-schema-v1",
+      sha256: "3".repeat(64),
+      subcommand: "auth-protected-schema",
+    },
+    image: "fixture",
+    projectId: "operator-fixture",
+    resourcesWorker: {
+      executablePath: "/fixture/resources",
+      id: "neon-resource-bootstrap-v1",
+      operationScope: "neon-resource-bootstrap-v1",
+      sha256: "5".repeat(64),
+      subcommand: "neon-resource-bootstrap",
+    },
+    teamId: "team_fixture",
+    workers: {},
+  },
+  teamId: "team_fixture",
+  workloadPolicy: { ...workload, subject: "operator" },
+});
 const authorityBinding = {
   authDatabase,
-  gateway: selectedProfile.gateway,
+  gateway: {
+    authBrowserOrigin: selectedProfile.gateway.authBrowserOrigin,
+    branch: selectedProfile.gateway.branch,
+    environment: selectedProfile.gateway.environment,
+    gatewayOrigin: selectedProfile.gateway.gatewayOrigin,
+    projectId: selectedProfile.gateway.projectId,
+    publicOrigin: selectedProfile.gateway.publicOrigin,
+    workload: selectedProfile.gateway.workload,
+  },
   nativeNeon: selectedProfile.nativeNeon,
-  operator: selectedProfile.operator,
+  operator: {
+    environment: selectedProfile.operator.environment,
+    origin: selectedProfile.operator.origin,
+    projectId: selectedProfile.operator.projectId,
+  },
 };
 const plan = planNativeTargetAuthOnly({
   authAuthorityBinding: authorityBinding,
@@ -147,18 +228,21 @@ const initialState = {
 const makeStore = (): NativeTargetAuthOnlyRuntimeStore => {
   let row: Awaited<ReturnType<NativeTargetAuthOnlyRuntimeStore["read"]>>;
   return {
-    compareAndSet: async (_key, expectedRevision, state) => {
-      if (row?.revision !== expectedRevision) return undefined;
+    compareAndSet: (_key, expectedRevision, state) => {
+      if (row?.revision !== expectedRevision) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflicts resolve an absent row; resolve() would infer void outside the store contract.
+        return Promise.resolve(undefined);
+      }
       row = { revision: expectedRevision + 1, state };
-      return row;
+      return Promise.resolve(row);
     },
-    read: async () => row,
-    write: async (_key, expectedRevision, state) => {
+    read: () => Promise.resolve(row),
+    write: (_key, expectedRevision, state) => {
       if (expectedRevision === undefined ? row !== undefined : row?.revision !== expectedRevision) {
-        throw new Error("native_target_auth_only_runtime_conflict");
+        return Promise.reject(new Error("native_target_auth_only_runtime_conflict"));
       }
       row = { revision: (row?.revision ?? 0) + 1, state };
-      return row;
+      return Promise.resolve(row);
     },
   };
 };
@@ -181,25 +265,27 @@ const makeRuntime = (
   const store = makeStore();
   const now = overrides.now ?? (() => new Date("2026-11-06T12:00:00.000Z"));
   const prepareAuthSchema = vi.fn(
-    overrides.prepareAuthSchema ?? (async () => ({ authSchema, readiness: "auth_schema_ready" })),
+    overrides.prepareAuthSchema ??
+      (() => Promise.resolve({ authSchema, readiness: "auth_schema_ready" })),
   );
   const reconcileAuthSchema = vi.fn(
-    overrides.reconcileAuthSchema ?? (async () => ({ status: "uncertain" as const })),
+    overrides.reconcileAuthSchema ?? (() => Promise.resolve({ status: "uncertain" as const })),
   );
   resolveProfileMock.mockReturnValue(selectedProfile);
   const runtime = createNativeTargetAuthOnlyRuntime({
-    assertCurrentOwner: async () => undefined,
-    configuration: { applications: {} } as HostedOperatorSourceConfiguration,
-    database: {} as never,
+    assertCurrentOwner: () => Promise.resolve(),
+    configuration: selectedProfile,
+    database: drizzle.mock(),
     environment: {},
-    leaseMs: 1_000,
+    leaseMs: 1000,
     now,
     prepareAuthSchema: async (input) =>
       await prepareAuthSchema({ assertCurrent: input.assertCurrent }),
-    readApproval: async ({ effectDigest }) => ({ ...approval, sourceDigest: effectDigest }),
-    readAuthSchemaSelection: async () => plan.authSchema,
-    readCapturedDescription: async () => description,
-    readPublishedSource: async () => source,
+    readApproval: ({ effectDigest }) =>
+      Promise.resolve({ ...approval, sourceDigest: effectDigest }),
+    readAuthSchemaSelection: () => Promise.resolve(plan.authSchema),
+    readCapturedDescription: () => Promise.resolve(description),
+    readPublishedSource: () => Promise.resolve(source),
     reconcileAuthSchema: async (input) => await reconcileAuthSchema({ attemptId: input.attemptId }),
     store,
   });
@@ -227,25 +313,27 @@ describe("Auth-only schema runtime", () => {
   it("records an uncertain attempt and reconciles it as applied without replay", async () => {
     let failOnce = true;
     const { runtime, store, prepareAuthSchema, reconcileAuthSchema } = makeRuntime({
-      prepareAuthSchema: async () => {
+      prepareAuthSchema: () => {
         if (failOnce) {
           failOnce = false;
-          throw new Error("transport_lost_after_dispatch");
+          return Promise.reject(new Error("transport_lost_after_dispatch"));
         }
-        return { authSchema, readiness: "auth_schema_ready" };
+        return Promise.resolve({ authSchema, readiness: "auth_schema_ready" });
       },
-      reconcileAuthSchema: async () => ({
-        authSchema,
-        readiness: "auth_schema_ready",
-        status: "prepared",
-      }),
+      reconcileAuthSchema: () =>
+        Promise.resolve({
+          authSchema,
+          readiness: "auth_schema_ready",
+          status: "prepared",
+        }),
     });
     const key = { appId: plan.appId, authority, sessionId: plan.origin.publicSessionId };
     await store.write(key, undefined, initialState);
     await expect(runtime.prepare(context, plan, planDigest)).rejects.toThrow(
       "transport_lost_after_dispatch",
     );
-    expect((await store.read(key))?.state.stage).toBe("unknown");
+    const interrupted = await store.read(key);
+    expect(interrupted?.state.stage).toBe("unknown");
     const recovered = await runtime.prepare(context, plan, planDigest);
     expect(recovered.stage).toBe("prepared");
     expect(prepareAuthSchema).toHaveBeenCalledTimes(1);
@@ -255,14 +343,14 @@ describe("Auth-only schema runtime", () => {
   it("retries only after reconciliation proves the prior attempt was not applied", async () => {
     let failOnce = true;
     const { runtime, store, prepareAuthSchema, reconcileAuthSchema } = makeRuntime({
-      prepareAuthSchema: async () => {
+      prepareAuthSchema: () => {
         if (failOnce) {
           failOnce = false;
-          throw new Error("transport_lost_before_result");
+          return Promise.reject(new Error("transport_lost_before_result"));
         }
-        return { authSchema, readiness: "auth_schema_ready" };
+        return Promise.resolve({ authSchema, readiness: "auth_schema_ready" });
       },
-      reconcileAuthSchema: async () => ({ status: "not-applied" }),
+      reconcileAuthSchema: () => Promise.resolve({ status: "not-applied" }),
     });
     const key = { appId: plan.appId, authority, sessionId: plan.origin.publicSessionId };
     await store.write(key, undefined, initialState);
@@ -276,10 +364,12 @@ describe("Auth-only schema runtime", () => {
   });
 
   it("rejects a concurrent continuation while the worker attempt lease is live", async () => {
-    let nestedPrepare: (() => Promise<unknown>) | undefined;
+    let nestedPrepare: () => ReturnType<
+      ReturnType<typeof createNativeTargetAuthOnlyRuntime>["prepare"]
+    > = () => Promise.reject(new Error("Concurrent test continuation is not initialized"));
     const { runtime, store, prepareAuthSchema, reconcileAuthSchema } = makeRuntime({
       prepareAuthSchema: async () => {
-        await expect(nestedPrepare?.()).rejects.toThrow("native_target_auth_only_busy");
+        await expect(nestedPrepare()).rejects.toThrow("native_target_auth_only_busy");
         return { authSchema, readiness: "auth_schema_ready" };
       },
     });

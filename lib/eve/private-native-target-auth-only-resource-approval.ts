@@ -48,6 +48,9 @@ export const nativeTargetAuthOnlyResourcePreparationInputSchema = z.strictObject
   resourcePlanDigest: digestSchema,
   resourcePlan: nativeTargetAuthOnlyResourceApprovalPlanSchema,
 });
+export type NativeTargetAuthOnlyResourcePreparationInput = z.infer<
+  typeof nativeTargetAuthOnlyResourcePreparationInputSchema
+>;
 
 /** Read the original authenticated settlement for the exact retained resource operation, including on retry. */
 export const readPrivateNativeTargetAuthOnlyResourceApproval = async (input: {
@@ -73,36 +76,72 @@ export const readPrivateNativeTargetAuthOnlyResourceApproval = async (input: {
   const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
   const resourceBytes = Buffer.from(input.resourcePlanBytes);
   const resourcePlanDigest = digestSchema.parse(input.resourcePlanDigest);
-  if (createHash("sha256").update(resourceBytes).digest("hex") !== resourcePlanDigest)
+  if (createHash("sha256").update(resourceBytes).digest("hex") !== resourcePlanDigest) {
     throw unavailable();
-  const resourceJson: unknown = JSON.parse(resourceBytes.toString("utf8"));
+  }
+  const resourceJson: unknown = JSON.parse(resourceBytes.toString("utf-8"));
   const resource = nativeTargetAuthOnlyResourceApprovalPlanSchema.parse(resourceJson);
   const operationRef = z.uuid().parse(input.operationRef);
   const effects = resource.effects.filter((effect) => effect.kind === "resources");
+  const selectedOwner = {
+    historyAuthority: historyOwner.authority,
+    planAuthority: plan.origin.authority,
+    historySessionId: historyOwner.sessionId,
+    adapterSessionId: historyOwner.adapterSessionId,
+    adapterGeneration: historyOwner.adapterGeneration,
+    planSessionId: plan.origin.publicSessionId,
+  };
   if (
-    !isDeepStrictEqual(historyOwner.authority, owner.authority) ||
-    !isDeepStrictEqual(plan.origin.authority, owner.authority) ||
-    historyOwner.sessionId !== owner.publicSessionId ||
-    historyOwner.adapterSessionId !== owner.adapterSessionId ||
-    historyOwner.adapterGeneration !== owner.adapterGeneration ||
-    plan.origin.publicSessionId !== owner.publicSessionId ||
-    resource.authOnlyPlanDigest !== planDigest ||
-    resource.target.appId !== plan.appId ||
-    resource.target.sessionId !== plan.origin.publicSessionId ||
-    resource.target.branch !== plan.branch ||
-    resource.target.scopeType !== "team" ||
-    resource.target.scopeId !== plan.project.teamId ||
-    resource.target.installationId !== plan.project.installationId ||
-    resource.authDatabase.resourceId !== plan.authResource.resourceId ||
-    resource.authDatabase.database !== plan.authResource.database ||
-    resource.neon.endpoint !== plan.authResource.hostname ||
-    resource.bootstrap.endpointId !== plan.authResource.endpointId ||
+    !isDeepStrictEqual(selectedOwner, {
+      historyAuthority: owner.authority,
+      planAuthority: owner.authority,
+      historySessionId: owner.publicSessionId,
+      adapterSessionId: owner.adapterSessionId,
+      adapterGeneration: owner.adapterGeneration,
+      planSessionId: owner.publicSessionId,
+    })
+  ) {
+    throw unavailable();
+  }
+  const selectedResource = {
+    planDigest: resource.authOnlyPlanDigest,
+    appId: resource.target.appId,
+    sessionId: resource.target.sessionId,
+    branch: resource.target.branch,
+    scopeType: resource.target.scopeType,
+    scopeId: resource.target.scopeId,
+    installationId: resource.target.installationId,
+    resourceId: resource.authDatabase.resourceId,
+    database: resource.authDatabase.database,
+    hostname: resource.neon.endpoint,
+    endpointId: resource.bootstrap.endpointId,
+    installer: resource.resourcesInstaller.reference,
+  };
+  if (
+    !isDeepStrictEqual(selectedResource, {
+      planDigest,
+      appId: plan.appId,
+      sessionId: plan.origin.publicSessionId,
+      branch: plan.branch,
+      scopeType: "team",
+      scopeId: plan.project.teamId,
+      installationId: plan.project.installationId,
+      resourceId: plan.authResource.resourceId,
+      database: plan.authResource.database,
+      hostname: plan.authResource.hostname,
+      endpointId: plan.authResource.endpointId,
+      installer: "neon-resource-bootstrap-v1",
+    })
+  ) {
+    throw unavailable();
+  }
+  if (
     effects.length !== 1 ||
     effects[0]?.resourceId !== plan.authResource.resourceId ||
-    resource.effects.filter((effect) => effect.id === effects[0]?.id).length !== 1 ||
-    resource.resourcesInstaller.reference !== "neon-resource-bootstrap-v1"
-  )
+    resource.effects.filter((effect) => effect.id === effects[0]?.id).length !== 1
+  ) {
     throw unavailable();
+  }
   const expected = {
     appId: plan.appId,
     operationRef,
@@ -117,12 +156,23 @@ export const readPrivateNativeTargetAuthOnlyResourceApproval = async (input: {
       : nativeTargetAuthOnlyApprovalSchema.parse(input.retainedApproval);
   if (
     retainedApproval !== undefined &&
-    (retainedApproval.planDigest !== planDigest ||
-      retainedApproval.sourceDigest !== resourcePlanDigest ||
-      retainedApproval.publicSessionId !== plan.origin.publicSessionId ||
-      retainedApproval.responderPrincipalId !== owner.authority.ownerUserId)
-  )
+    !isDeepStrictEqual(
+      {
+        planDigest: retainedApproval.planDigest,
+        sourceDigest: retainedApproval.sourceDigest,
+        publicSessionId: retainedApproval.publicSessionId,
+        responderPrincipalId: retainedApproval.responderPrincipalId,
+      },
+      {
+        planDigest,
+        sourceDigest: resourcePlanDigest,
+        publicSessionId: plan.origin.publicSessionId,
+        responderPrincipalId: owner.authority.ownerUserId,
+      },
+    )
+  ) {
     throw unavailable();
+  }
   const saved =
     input.observation?.state === undefined
       ? undefined
@@ -166,18 +216,22 @@ export const readPrivateNativeTargetAuthOnlyResourceApproval = async (input: {
         const entry = current
           .snapshot()
           .entries.find((candidate) => candidate.requestId === terminal.requestId);
-        if (entry !== undefined && entry.callId === terminal.callId)
+        if (entry !== undefined && entry.callId === terminal.callId) {
           terminals.set(terminal.requestId, terminalSchema.parse(terminal));
+        }
       }
       const proofFor = (entry: PrivateOperatorApprovalCapture["entries"][number]) => {
         const terminal = terminals.get(entry.requestId);
+        if (terminal === undefined) {
+          throw unavailable();
+        }
         if (
-          terminal === undefined ||
           terminal.callId !== entry.callId ||
           terminal.responderPrincipalId !== owner.authority.ownerUserId ||
           terminal.outcome !== (entry.cancelled ? "cancelled" : "approved")
-        )
+        ) {
           throw unavailable();
+        }
         const proof = nativeTargetAuthOnlyApprovalSchema.parse({
           ...terminal,
           planDigest,
@@ -188,8 +242,9 @@ export const readPrivateNativeTargetAuthOnlyResourceApproval = async (input: {
           proof.outcome === "approved" &&
           retainedApproval !== undefined &&
           !isDeepStrictEqual(proof, retainedApproval)
-        )
+        ) {
           throw unavailable();
+        }
         return proof;
       };
       return {
@@ -199,27 +254,31 @@ export const readPrivateNativeTargetAuthOnlyResourceApproval = async (input: {
               if (
                 request.kind !== "tool-approval" ||
                 request.action.toolName !== nativeTargetAuthOnlyResourceApprovalTool
-              )
+              ) {
                 continue;
+              }
               if (
                 nativeTargetAuthOnlyResourcePreparationInputSchema.safeParse(request.action.input)
                   .success &&
                 isDeepStrictEqual(request.action.input, expected)
-              )
+              ) {
                 current.acceptRequest(request.requestId, request.action.callId);
+              }
             }
           } else if (event.type === "approval.settled") {
             const entry = current
               .snapshot()
               .entries.find((candidate) => candidate.requestId === event.data.requestId);
-            if (entry === undefined) return;
+            if (entry === undefined) {
+              return;
+            }
             current.settle(event);
             const outcome = event.data.outcome === "approved" ? "approved" : "cancelled";
             const previous = terminals.get(entry.requestId);
             if (
               previous === undefined ||
               (previous.outcome === "approved" && outcome === "cancelled")
-            )
+            ) {
               terminals.set(
                 entry.requestId,
                 terminalSchema.parse({
@@ -230,20 +289,29 @@ export const readPrivateNativeTargetAuthOnlyResourceApproval = async (input: {
                   observedAt: event.meta.at,
                 }),
               );
+            }
           }
         },
         read(): NativeTargetAuthOnlyApproval | null {
           const entries = current.snapshot().entries;
           const cancelled = entries.filter((entry) => entry.cancelled);
-          if (cancelled.length > 1) throw unavailable();
-          if (cancelled[0] !== undefined) return proofFor(cancelled[0]);
+          if (cancelled.length > 1) {
+            throw unavailable();
+          }
+          if (cancelled[0] !== undefined) {
+            return proofFor(cancelled[0]);
+          }
           const receipt = current.read();
           if (receipt === null) {
-            if (retainedApproval !== undefined) throw unavailable();
+            if (retainedApproval !== undefined) {
+              throw unavailable();
+            }
             return null;
           }
           const entry = entries.find((candidate) => candidate.requestId === receipt.approvalId);
-          if (entry === undefined) throw unavailable();
+          if (entry === undefined) {
+            throw unavailable();
+          }
           return proofFor(entry);
         },
         snapshot: current.snapshot,

@@ -195,37 +195,37 @@ describe("native Auth-only planning", () => {
       authAuthorityBinding,
       owner,
       proposal,
-      readAuthProfile: async (input) => {
+      readAuthProfile: (input) => {
         reads.push(`profile:${input.appId}:${input.profileId}:${input.authority.ownerUserId}`);
-        return profile;
+        return Promise.resolve(profile);
       },
-      readAuthSchemaSelection: async (input) => {
+      readAuthSchemaSelection: (input) => {
         reads.push(`auth-schema:${input.appId}:${input.appSpecDigest}:${input.publicSessionId}`);
-        return {
+        return Promise.resolve({
           artifactRef: "auth-artifact",
           planDigest: "1".repeat(64),
           targetDigest: "2".repeat(64),
           installer: { reference: "auth-worker", sha256: "3".repeat(64) },
-        };
+        });
       },
-      readCapturedDescription: async (input) => {
+      readCapturedDescription: (input) => {
         reads.push(`description:${input.appId}:${input.appSpecDigest}:${input.publicSessionId}`);
-        return description;
+        return Promise.resolve(description);
       },
-      readConfiguredAppRoles: async (input) => {
+      readConfiguredAppRoles: (input) => {
         reads.push(`roles:${input.appId}:${input.profileId}`);
-        return ["pilot_user"];
+        return Promise.resolve(["pilot_user"]);
       },
-      readPublishedSource: async (input) => {
+      readPublishedSource: (input) => {
         reads.push(`published:${input.appId}:${input.appSpecDigest}:${input.publicSessionId}`);
-        return {
+        return Promise.resolve({
           branch: "main",
           changeSetDigest: "c".repeat(64),
           gitSha: "d".repeat(40),
           gitTree: "e".repeat(40),
           repositoryId: "repo_fixture",
           reviewDigest: "f".repeat(64),
-        };
+        });
       },
       selectedPhysicalEndpointId: "isolated-endpoint",
       sharedAuthResourceId: "shared-auth-resource",

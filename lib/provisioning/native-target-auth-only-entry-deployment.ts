@@ -246,7 +246,11 @@ export const createNativeTargetAuthOnlyEntryDeployment = (input: {
       const opened = await input.store.openApprovedEffect(key, approval, assertCurrent);
       return effect === allowedWrite
         ? opened
-        : { ...opened, claimFirstDispatch: async () => Promise.resolve(false) };
+        : {
+            ...opened,
+            // oxlint-disable-next-line eslint/require-await -- This read-only capability must return a Promise without observing or claiming a worker dispatch.
+            claimFirstDispatch: async () => false,
+          };
     };
     return {
       ...ports,

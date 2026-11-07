@@ -114,17 +114,19 @@ const deliveryPlanBytes = Buffer.from(JSON.stringify(deliveryPlan));
 const deliveryPlanDigest = sha256(deliveryPlanBytes);
 const runtimeUrl =
   "postgresql://auth_runtime:private@auth-preview.neon.tech/auth_identity?sslmode=verify-full";
-const emailVerification = {
+const emailVerification: Parameters<
+  typeof composeNativeTargetAuthOnlyPreviewEnvironment
+>[0]["emailVerification"] = {
   required: "true" as const,
   sender: {
     apiKey: {
       id: "resend-secret-row",
       key: "AUTH_RECOVERY_RESEND_API_KEY" as const,
-      physicalBranch: null as string | null,
+      physicalBranch: null,
       projectId: "gateway-preview-project",
       target: "preview" as const,
       type: "sensitive",
-      updatedAt: 1793966400000,
+      updatedAt: 1_793_966_400_000,
     },
     environment: "preview" as const,
     from: "signup@example.test",
@@ -232,11 +234,11 @@ it("fails closed on changed Auth resource credentials, source SHA, or missing Ga
     }),
   ).toThrow("resource_mismatch");
   const wrongSha = { ...deliveryPlan, source: { ...deliveryPlan.source, gitSha: "8".repeat(40) } };
-  expect(() => compose({ deliveryPlan: wrongSha as typeof deliveryPlan })).toThrow(
-    "binding_mismatch",
-  );
-  const { PLATFORM_REALM_OPERATOR_LINK_CONFIG: _removed, ...missing } =
-    materials().gatewayProfileValues;
+  expect(() => compose({ deliveryPlan: wrongSha })).toThrow("binding_mismatch");
+  const missing = {
+    PLATFORM_GATEWAY_PROJECT_BINDINGS:
+      materials().gatewayProfileValues.PLATFORM_GATEWAY_PROJECT_BINDINGS,
+  };
   expect(() => compose({ gatewayProfileValues: missing })).toThrow("keys_mismatch");
   expect(() =>
     compose({ observedGatewayValues: { PLATFORM_AUTH_DATABASE_URL: "postgresql://conflict" } }),
@@ -248,7 +250,7 @@ it("fails closed on changed Auth resource credentials, source SHA, or missing Ga
 
 it("sends only the selected effect's exact project, branch and hashed approval to the verifier", async () => {
   const applyAndVerify = vi.fn(async () => {});
-  const readMaterials = vi.fn(async () => materials());
+  const readMaterials = vi.fn(() => Promise.resolve(materials()));
   const assertCurrent = vi.fn(async () => {});
   const port = createNativeTargetAuthOnlyPreviewEnvironmentPort({ applyAndVerify, readMaterials });
   const { signal } = new AbortController();

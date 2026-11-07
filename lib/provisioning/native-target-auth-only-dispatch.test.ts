@@ -86,16 +86,21 @@ const plan = nativeTargetAuthOnlyPlanSchema.parse({
 const fixture = () => {
   let row: { revision: number; state: NativeTargetAuthOnlyDispatchState } | undefined;
   const store: NativeTargetAuthOnlyDispatchStore = {
-    compareAndSet: async (_key, expected, state) => {
-      if (row?.revision !== expected) return undefined;
+    compareAndSet: (_key, expected, state) => {
+      if (row?.revision !== expected) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflicts resolve an absent row; resolve() would infer void outside the store contract.
+        return Promise.resolve(undefined);
+      }
       row = { revision: expected + 1, state };
-      return row;
+      return Promise.resolve(row);
     },
-    read: async () => row,
-    reserve: async (_key, state) => {
-      if (row !== undefined) throw new Error("occupied");
+    read: () => Promise.resolve(row),
+    reserve: (_key, state) => {
+      if (row !== undefined) {
+        return Promise.reject(new Error("occupied"));
+      }
       row = { revision: 1, state };
-      return row;
+      return Promise.resolve(row);
     },
   };
   const approval = {
@@ -127,16 +132,17 @@ const fixture = () => {
     },
   );
   const service = createNativeTargetAuthOnlyDispatch({
-    authorize: async () => ({
-      authority: plan.origin.authority,
-      ownerUserId: "owner_fixture",
-      publicSessionId: "public_original",
-    }),
+    authorize: () =>
+      Promise.resolve({
+        authority: plan.origin.authority,
+        ownerUserId: "owner_fixture",
+        publicSessionId: "public_original",
+      }),
     createProject,
     now: () => new Date("2026-11-06T12:00:00.000Z"),
-    observeProject: async ({ projectId }) => ({ status: "verified" as const, projectId }),
-    readApproval: async () => approval,
-    revalidate: async () => undefined,
+    observeProject: ({ projectId }) => Promise.resolve({ status: "verified" as const, projectId }),
+    readApproval: () => Promise.resolve(approval),
+    revalidate: () => Promise.resolve(),
     store,
   });
   return {
@@ -167,9 +173,8 @@ describe("Auth-only fenced dispatch", () => {
       projectId: "vercel_project_fixture",
       status: "created",
     });
-    expect(
-      (await f.store.read({ appId: plan.appId, authority: plan.origin.authority }))?.state.stage,
-    ).toBe("created");
+    const created = await f.store.read({ appId: plan.appId, authority: plan.origin.authority });
+    expect(created?.state.stage).toBe("created");
   });
 
   it("does not reserve approval for another plan digest", async () => {
@@ -214,25 +219,33 @@ describe("Auth-only fenced dispatch", () => {
       },
       sessionId: "public_original",
     };
-    const hostedDependencies = {
-      assertAuthorized: vi.fn(),
-      authorize: vi.fn(),
-      bindings: vi.fn(),
-      executeEffect: vi.fn(),
-      nativeTargetRequest: async (_request: Request, raw: unknown) => {
-        const request = raw as { action: string; input: { plan: typeof plan } };
-        expect(request.action).toBe("native-target-auth-only-prepare");
+    const hostedDependencies: ProtectedHostedOperatorDependencies = {
+      assertAuthorized: vi.fn<ProtectedHostedOperatorDependencies["assertAuthorized"]>(),
+      authorize: vi.fn<ProtectedHostedOperatorDependencies["authorize"]>(),
+      bindings: vi.fn<ProtectedHostedOperatorDependencies["bindings"]>(),
+      executeEffect: vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(),
+      nativeTargetRequest: async (_request, request) => {
+        if (request.action !== "native-target-auth-only-prepare") {
+          throw new Error(`Unexpected native target action: ${request.action}`);
+        }
         await f.service.approve("request", request.input.plan);
         const result = await f.service.dispatch("request", request.input.plan);
         return Response.json(result);
       },
-      plan: vi.fn(),
-      readApproval: vi.fn(),
-      reconcile: vi.fn(),
-      store: {},
-      verify: vi.fn(),
-      withResourceLease: vi.fn(),
-    } as unknown as ProtectedHostedOperatorDependencies;
+      plan: vi.fn<ProtectedHostedOperatorDependencies["plan"]>(),
+      readApproval: vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(),
+      reconcile: vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(),
+      store: {
+        compareAndSet: vi.fn<ProtectedHostedOperatorDependencies["store"]["compareAndSet"]>(),
+        read: vi.fn<ProtectedHostedOperatorDependencies["store"]["read"]>(),
+        reserve: vi.fn<ProtectedHostedOperatorDependencies["store"]["reserve"]>(),
+        reserveFenceGeneration:
+          vi.fn<ProtectedHostedOperatorDependencies["store"]["reserveFenceGeneration"]>(),
+      },
+      verify: vi.fn<ProtectedHostedOperatorDependencies["verify"]>(),
+      withResourceLease: () =>
+        Promise.reject(new Error("Auth-only dispatch must not enter a protected resource lease")),
+    };
     const handler = createProtectedHostedOperatorHandler(hostedDependencies);
     const response = await handler(
       new Request("https://builder.example/v1/runtime", {
@@ -253,6 +266,9 @@ describe("Auth-only fenced dispatch", () => {
       }),
     );
     expect(response.status).toBe(200);
+    expect(hostedDependencies.authorize).not.toHaveBeenCalled();
+    expect(hostedDependencies.store.reserve).not.toHaveBeenCalled();
+    expect(hostedDependencies.executeEffect).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toEqual({
       projectId: "vercel_project_fixture",
       status: "created",

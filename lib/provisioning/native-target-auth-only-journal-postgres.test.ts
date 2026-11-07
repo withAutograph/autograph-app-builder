@@ -39,7 +39,7 @@ const pgTools = [
   "/usr/lib/postgresql/17/bin",
 ].find((candidate) => {
   try {
-    return /PostgreSQL\) (17|18)\./u.test(
+    return /PostgreSQL\) (?:17|18)\./u.test(
       execFileSync(path.join(candidate, "postgres"), ["--version"], {
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
@@ -200,7 +200,7 @@ describe.skipIf(pgTools === undefined)(
         database: "postgres",
         host: root,
         max: 3,
-        port: 54329,
+        port: 54_329,
         ssl: false,
         username: userInfo().username,
       });
@@ -262,19 +262,20 @@ describe.skipIf(pgTools === undefined)(
       const store = createPostgresNativeTargetAuthOnlyDispatchStore(database);
       let creates = 0;
       const service = createNativeTargetAuthOnlyDispatch({
-        authorize: async () => ({
-          authority,
-          ownerUserId: authority.ownerUserId,
-          publicSessionId: plan.origin.publicSessionId,
-        }),
+        authorize: () =>
+          Promise.resolve({
+            authority,
+            ownerUserId: authority.ownerUserId,
+            publicSessionId: plan.origin.publicSessionId,
+          }),
         createProject: async ({ authorizeAttempt, acceptProjectId }) => {
           await authorizeAttempt();
-          creates++;
+          creates += 1;
           await acceptProjectId("prj-pilot");
           return { status: "uncertain", projectId: "prj-pilot" };
         },
-        observeProject: async ({ projectId }) => ({ status: "verified", projectId }),
-        readApproval: async () => approval,
+        observeProject: ({ projectId }) => Promise.resolve({ status: "verified", projectId }),
+        readApproval: () => Promise.resolve(approval),
         revalidate: assertCurrentOwner,
         store,
       });
@@ -283,11 +284,9 @@ describe.skipIf(pgTools === undefined)(
       const key = { appId: plan.appId, authority };
       const unknown = await createPostgresNativeTargetAuthOnlyDispatchStore(database).read(key);
       expect(unknown?.state.stage).toBe("unknown");
-      expect(
-        (
-          await client`select state, record->>'stage' as stage from builder_provisioning_journal`
-        )[0],
-      ).toMatchObject({ stage: "unknown", state: "pending" });
+      const unknownRow =
+        await client`select state, record->>'stage' as stage from builder_provisioning_journal`;
+      expect(unknownRow[0]).toMatchObject({ stage: "unknown", state: "pending" });
       await expect(
         store.read({ ...key, authority: { ...authority, ownerUserId: "another-owner" } }),
       ).resolves.toBeUndefined();
@@ -306,11 +305,9 @@ describe.skipIf(pgTools === undefined)(
         status: "created",
       });
       expect(creates).toBe(1);
-      expect(
-        (
-          await client`select state, record->>'stage' as stage from builder_provisioning_journal`
-        )[0],
-      ).toMatchObject({ stage: "created", state: "settled" });
+      const createdRow =
+        await client`select state, record->>'stage' as stage from builder_provisioning_journal`;
+      expect(createdRow[0]).toMatchObject({ stage: "created", state: "settled" });
     });
 
     it("round-trips Auth runtime stages with UUID identity, CAS and session isolation", async () => {
@@ -404,9 +401,15 @@ describe.skipIf(pgTools === undefined)(
         "auth",
         "5".repeat(64),
       );
-      expect(
-        (await store.read(artifactContext, planDigest, first.resourcePlanDigest))?.workerContexts,
-      ).toEqual({ auth: "5".repeat(64), resources: "4".repeat(64) });
+      const resourceReadback = await store.read(
+        artifactContext,
+        planDigest,
+        first.resourcePlanDigest,
+      );
+      expect(resourceReadback?.workerContexts).toEqual({
+        auth: "5".repeat(64),
+        resources: "4".repeat(64),
+      });
       await expect(
         store.bindWorkerContext(
           artifactContext,
@@ -426,11 +429,9 @@ describe.skipIf(pgTools === undefined)(
           first.resourcePlanDigest,
         ),
       ).rejects.toThrow("resource_plan_mismatch");
-      expect(
-        (
-          await client`select state, record->>'stage' as stage from builder_provisioning_journal`
-        )[0],
-      ).toMatchObject({ stage: "retained", state: "settled" });
+      const retainedRow =
+        await client`select state, record->>'stage' as stage from builder_provisioning_journal`;
+      expect(retainedRow[0]).toMatchObject({ stage: "retained", state: "settled" });
     });
 
     it("preserves encrypted credential custody and retry identity with a settled row", async () => {
@@ -457,10 +458,11 @@ describe.skipIf(pgTools === undefined)(
           keyring,
           store: createPostgresNativeTargetAuthOnlyCredentialStore(database),
         });
-      const assertCurrent = async () => ({
-        authorityDigest: context.profile.authorityDigest,
-        resource: context.resource,
-      });
+      const assertCurrent = () =>
+        Promise.resolve({
+          authorityDigest: context.profile.authorityDigest,
+          resource: context.resource,
+        });
       const access = { assertCurrent, context };
       const credentials = { migratorPassword: "m".repeat(32), runtimePassword: "r".repeat(32) };
       const reference = await makeCustody().seal({ ...access, credentials });
@@ -468,8 +470,7 @@ describe.skipIf(pgTools === undefined)(
       expect(await makeCustody().readSecrets({ ...access, reference })).toEqual(credentials);
       const rows = await client`select state, record from builder_provisioning_journal`;
       expect(rows).toHaveLength(1);
-      expect(rows[0]?.state).toBe("settled");
-      expect(rows[0]?.record.stage).toBe("sealed");
+      expect(rows[0]).toMatchObject({ state: "settled", record: { stage: "sealed" } });
       for (const secret of Object.values(credentials)) {
         expect(JSON.stringify(rows)).not.toContain(secret);
       }
@@ -497,9 +498,9 @@ describe.skipIf(pgTools === undefined)(
           planDigest,
         ),
       ).resolves.toBeUndefined();
-      expect(
-        (await client`select count(*)::int as count from builder_provisioning_journal`)[0]?.count,
-      ).toBe(0);
+      const journalCount =
+        await client`select count(*)::int as count from builder_provisioning_journal`;
+      expect(journalCount[0]?.count).toBe(0);
     });
   },
 );

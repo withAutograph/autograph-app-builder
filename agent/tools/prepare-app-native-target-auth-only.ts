@@ -1,15 +1,19 @@
 import { defineWorkflowTool } from "eve/tools";
 import { nativeTargetAuthOnlyPreparationRequestSchema } from "../../lib/agent/native-target-onboarding-input-schema";
+import {
+  authorizeAuthOnlyApprovalResponseStep,
+  prepareAuthOnlyStep,
+  readAuthOnlyApprovalStep,
+} from "../../lib/agent/prepare-app-native-target-auth-only-step";
 
 export default defineWorkflowTool({
   approval: {
     request: async (ctx) => {
-      if (ctx.toolInput === undefined) return "user-approval" as const;
+      if (ctx.toolInput === undefined) {
+        return "user-approval" as const;
+      }
       try {
-        const { nativeTargetOnboardingRuntimeForSession } =
-          await import("../../lib/agent/native-target-onboarding-runtime");
-        const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-        return (await runtime.hasAuthOnlyApproval(ctx.toolInput, ctx))
+        return (await readAuthOnlyApprovalStep(ctx.toolInput, ctx))
           ? "not-applicable"
           : "user-approval";
       } catch {
@@ -21,10 +25,7 @@ export default defineWorkflowTool({
     },
     response: async (ctx) => {
       try {
-        const { nativeTargetOnboardingRuntimeForSession } =
-          await import("../../lib/agent/native-target-onboarding-runtime");
-        const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-        await runtime.authorizeAuthOnlyApprovalResponse(ctx);
+        await authorizeAuthOnlyApprovalResponseStep(ctx);
         return { status: "allowed" };
       } catch {
         return {
@@ -39,10 +40,7 @@ export default defineWorkflowTool({
     "After explicit human approval, create only the Vercel Preview project in the exact retained Auth-only plan. The protected service verifies the settled approval, owner, Auth profile and installation before one project create, then performs GET-only readback. It does not deploy Auth, create an app database, run an installer, or grant application data access. Resume the same operation after uncertainty.",
   async execute(input, ctx) {
     "use workflow";
-    const { nativeTargetOnboardingRuntimeForSession } =
-      await import("../../lib/agent/native-target-onboarding-runtime");
-    const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-    return await runtime.prepareAuthOnly(input, ctx);
+    return await prepareAuthOnlyStep(input, ctx);
   },
   inputSchema: nativeTargetAuthOnlyPreparationRequestSchema,
 });

@@ -43,7 +43,7 @@ export const buildNativeTargetAuthOnlyDeliveryPlanBytes = (input: {
 }) => {
   const plan = input.plan;
   const resource = nativeTargetAuthOnlyResourceApprovalPlanSchema.parse(
-    JSON.parse(Buffer.from(input.resourcePlanBytes).toString("utf8")),
+    JSON.parse(Buffer.from(input.resourcePlanBytes).toString("utf-8")),
   );
   const source = plan.publishedSource;
   const gateway = input.selected.gateway;
@@ -51,15 +51,21 @@ export const buildNativeTargetAuthOnlyDeliveryPlanBytes = (input: {
     input.registration.ownerUserId !== plan.origin.authority.ownerUserId ||
     input.registration.sessionId !== plan.origin.publicSessionId ||
     input.registration.branch !== plan.branch ||
-    resource.target.projectId !== input.registration.projectId ||
+    resource.target.projectId !== input.registration.projectId
+  ) {
+    throw new Error("native_target_auth_only_delivery_mismatch");
+  }
+  if (
     resource.authOnlyPlanDigest !== nativeTargetAuthOnlyPlanDigest(plan) ||
     source.branch !== plan.branch ||
     source.repositoryId.length === 0 ||
-    source.gitSha.length !== 40 ||
-    gateway.environment !== "preview" ||
-    gateway.projectId === input.registration.projectId
-  )
+    source.gitSha.length !== 40
+  ) {
     throw new Error("native_target_auth_only_delivery_mismatch");
+  }
+  if (gateway.environment !== "preview" || gateway.projectId === input.registration.projectId) {
+    throw new Error("native_target_auth_only_delivery_mismatch");
+  }
 
   const delivery = nativeTargetAuthOnlyPreviewDeliveryPlanSchema.parse({
     action: "prepare",

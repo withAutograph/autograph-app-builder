@@ -9,7 +9,23 @@ const operationRef = "11111111-1111-4111-a111-111111111111";
 const workerAttemptId = "22222222-2222-4222-a222-222222222222";
 const spool = `/vercel/sandbox/protected-installer/${workerAttemptId}`;
 const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
-const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
+type JsonFixtureValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonFixtureValue[]
+  | { [key: string]: JsonFixtureValue }
+  | ProtectedInstallContextWire;
+
+const bytes = (value: JsonFixtureValue) => Buffer.from(JSON.stringify(value));
+const readFile = (files: Map<string, Buffer>, path: string) => {
+  const value = files.get(path);
+  if (!value) {
+    throw new Error(`Missing fixture file: ${path}`);
+  }
+  return value;
+};
 const worker = {
   executablePath: "/worker/auth",
   id: "auth-protected-schema-v1",
@@ -73,7 +89,8 @@ const fixture = (
   const recordCheckpoint = vi.fn(async () => {});
   const bindWorkerContext = vi.fn(async (_binding: { contextDigest: string }) => recordCheckpoint);
   const kill = vi.fn(async () => {});
-  const frame = (name: string, value: unknown) => files.set(`${spool}/${name}`, bytes(value));
+  const frame = (name: string, value: JsonFixtureValue) =>
+    files.set(`${spool}/${name}`, bytes(value));
   const sandbox = {
     delete: vi.fn(async () => {}),
     extendTimeout: vi.fn(async () => {}),
@@ -87,16 +104,16 @@ const fixture = (
     },
     readFileToBuffer: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
     runCommand: vi.fn(async (command: { detached?: boolean; args: string[] }) => {
-      if (!command.detached) {
+      if (command.detached === false || command.detached === undefined) {
         return {
           exitCode: 0,
           stdout: async () =>
-            `${options.wrongPin ? "f".repeat(64) : worker.sha256}  /worker/auth\n`,
+            `${options.wrongPin === true ? "f".repeat(64) : worker.sha256}  /worker/auth\n`,
         };
       }
       // SAFETY: context.json is emitted by the real launcher before the fake worker starts.
       const context = JSON.parse(
-        files.get(`${spool}/startup/context.json`)!.toString(),
+        readFile(files, `${spool}/startup/context.json`).toString(),
       ) as ProtectedInstallContextWire;
       const contextDigest = sha(bytes(context));
       const common = {
@@ -117,7 +134,8 @@ const fixture = (
         ...common,
         kind: "authorize_effect",
         sequence: 1,
-        effect_id: options.wrongEffect ? "generated_app.grant_access" : "auth:apply-schema-plan",
+        effect_id:
+          options.wrongEffect === true ? "generated_app.grant_access" : "auth:apply-schema-plan",
       });
       frame("requests/3.json", {
         kind: "checkpoint_effect",
@@ -160,7 +178,9 @@ const fixture = (
             ["protected_installer_frame_ready", 3],
             ["protected_installer_lifecycle_ready", 2],
           ] as const) {
-            if (kind === "protected_installer_frame_ready" && frameId === 1) fenceRequested = true;
+            if (kind === "protected_installer_frame_ready" && frameId === 1) {
+              fenceRequested = true;
+            }
             yield {
               stream: "stdout",
               data: `${JSON.stringify({ kind, version: 1, run_id: workerAttemptId, frame_id: frameId })}\n`,
@@ -184,8 +204,9 @@ const fixture = (
     approvalDigest: sha(bytes(plan)),
     approvedPlanBytes: bytes(plan),
     assertCurrent: vi.fn(async () => {
-      if (options.denyFence && fenceRequested)
+      if (options.denyFence === true && fenceRequested) {
         throw new HostedOperatorError("authorization_required");
+      }
     }),
     authSchemaPlan: { artifactRef: plan.authSchema.artifactRef, content: bytes(proposal) },
     bindWorkerContext,
@@ -223,7 +244,7 @@ it("executes and checkpoints an Auth-only approved plan with exact private start
   expect(f.files.get(`${spool}/startup/auth-schema-plan.json`)).toEqual(
     f.input.authSchemaPlan.content,
   );
-  const contextBytes = f.files.get(`${spool}/startup/context.json`)!;
+  const contextBytes = readFile(f.files, `${spool}/startup/context.json`);
   expect(JSON.parse(contextBytes.toString())).toMatchObject({
     app_id: "auth",
     operation: {

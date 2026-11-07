@@ -23,6 +23,10 @@ import {
 } from "./native-target-onboarding-runtime";
 import type { NativeTargetOnboardingRuntimePorts } from "./native-target-onboarding-runtime";
 
+// Planned responses retain their schema type; malformed response cases remain JSON transport values.
+type TransportResponseFixture =
+  | Preparation
+  | Record<string, z.infer<ReturnType<typeof z.json>> | undefined>;
 type Preparation = z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>;
 const fixture = () => {
   const authority = {
@@ -163,7 +167,7 @@ const fixture = () => {
     response: { decision: "approve" },
     session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
   };
-  let output: unknown = prep;
+  let output: TransportResponseFixture = prep;
   const sent: z.infer<typeof nativeTargetTransportRequestSchema>[] = [];
   const fetch = vi.fn<typeof globalThis.fetch>(async (_url, init) => {
     sent.push(nativeTargetTransportRequestSchema.parse(JSON.parse(z.string().parse(init?.body))));
@@ -179,7 +183,7 @@ const fixture = () => {
     client,
     ctx,
     fetch,
-    output(value: unknown) {
+    output(value: TransportResponseFixture) {
       output = value;
     },
     owner,
@@ -387,7 +391,7 @@ it("does not resend an uncertain delivery request", async () => {
 it("routes the private runtime through its typed delivery ports and rejects wrong results", async () => {
   const f = fixture();
   const ports = {
-    authorizeAuthOnlyDeliveryApprovalResponse: vi.fn(async () => undefined),
+    authorizeAuthOnlyDeliveryApprovalResponse: vi.fn(async () => {}),
     hasAuthOnlyDeliveryApproval: vi.fn(async () => true),
     planAuthOnlyDelivery: vi.fn(async () => f.prep),
     prepareAuthOnlyDelivery: vi.fn(async () => f.prepared),
@@ -480,22 +484,21 @@ it.each(["appId", "operationRef", "deliveryPlanDigest", "routingPlanBase64"] as 
   "rejects a routing-required result with changed or private %s",
   async (field) => {
     const f = fixture();
-    const intent: Record<string, string> = {
+    const intent = {
       appId: f.prep.appId,
       deliveryPlanDigest: f.prep.deliveryPlanDigest,
       operationRef: f.prep.operationRef,
       routingOperationRef: "22222222-2222-4222-a222-222222222222",
       routingPlanDigest: "f".repeat(64),
     };
-    intent[field] =
-      field === "appId"
-        ? "another-app"
-        : field === "operationRef"
-          ? "33333333-3333-4333-a333-333333333333"
-          : field === "deliveryPlanDigest"
-            ? "e".repeat(64)
-            : "private-fixture";
-    f.output({ ...f.prepared, finalRoutingPlan: intent, status: "routing-required" });
+    const changedValues = {
+      appId: "another-app",
+      operationRef: "33333333-3333-4333-a333-333333333333",
+      deliveryPlanDigest: "e".repeat(64),
+      routingPlanBase64: "private-fixture",
+    };
+    const changedIntent = { ...intent, [field]: changedValues[field] };
+    f.output({ ...f.prepared, finalRoutingPlan: changedIntent, status: "routing-required" });
     await expect(f.client.prepareAuthOnlyDelivery(f.prep, f.ctx)).rejects.toThrow();
   },
 );
@@ -571,12 +574,14 @@ it.each([
     if (kind === "app-operation") {
       changed.app.operationRef = final.finalRoutingPlan.routingOperationRef;
     }
-    const output =
-      kind === "missing-intent"
-        ? { ...changed, finalRoutingPlan: undefined }
-        : kind === "missing-projection"
-          ? { ...changed, projectionDigest: undefined }
-          : changed;
+    const omissions = {
+      "missing-intent": { ...changed, finalRoutingPlan: undefined },
+      "missing-projection": { ...changed, projectionDigest: undefined },
+    };
+    let output: TransportResponseFixture = changed;
+    if (kind === "missing-intent" || kind === "missing-projection") {
+      output = omissions[kind];
+    }
     f.output(output);
     await expect(f.client.prepareAuthOnlyDelivery(f.prep, f.ctx)).rejects.toThrow();
     const runtime = createNativeTargetOnboardingRuntime(

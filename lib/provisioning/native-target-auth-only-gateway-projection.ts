@@ -233,7 +233,9 @@ export const createNativeTargetAuthOnlyGatewayProjection = (
       ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
     });
     const reconcile = async (value: Parameters<PreviewAdapter["reconcile"]>[0]) =>
-      providers === undefined ? appDelivery.reconcile(value) : providers.reconcileApp(value);
+      providers === undefined
+        ? await appDelivery.reconcile(value)
+        : await providers.reconcileApp(value);
     const observed = await reconcile({
       approval: environment.approval,
       approvedPlanDigest: environment.approval.planDigest,

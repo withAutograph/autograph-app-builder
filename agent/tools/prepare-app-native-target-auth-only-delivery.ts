@@ -1,15 +1,19 @@
 import { defineWorkflowTool } from "eve/tools";
 import { nativeTargetAuthOnlyDeliveryPreparationInputSchema } from "../../lib/eve/private-native-target-auth-only-delivery-approval";
+import {
+  authorizeAuthOnlyDeliveryApprovalResponseStep,
+  prepareAuthOnlyDeliveryStep,
+  readAuthOnlyDeliveryApprovalStep,
+} from "../../lib/agent/prepare-app-native-target-auth-only-step";
 
 export default defineWorkflowTool({
   approval: {
     request: async (ctx) => {
-      if (ctx.toolInput === undefined) return "user-approval" as const;
+      if (ctx.toolInput === undefined) {
+        return "user-approval" as const;
+      }
       try {
-        const { nativeTargetOnboardingRuntimeForSession } =
-          await import("../../lib/agent/native-target-onboarding-runtime");
-        const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-        return (await runtime.hasAuthOnlyDeliveryApproval(ctx.toolInput, ctx))
+        return (await readAuthOnlyDeliveryApprovalStep(ctx.toolInput, ctx))
           ? "not-applicable"
           : "user-approval";
       } catch {
@@ -22,10 +26,7 @@ export default defineWorkflowTool({
     },
     response: async (ctx) => {
       try {
-        const { nativeTargetOnboardingRuntimeForSession } =
-          await import("../../lib/agent/native-target-onboarding-runtime");
-        const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-        await runtime.authorizeAuthOnlyDeliveryApprovalResponse(ctx);
+        await authorizeAuthOnlyDeliveryApprovalResponseStep(ctx);
         return { status: "allowed" as const };
       } catch {
         return {
@@ -40,10 +41,7 @@ export default defineWorkflowTool({
     "Approve and deliver exactly the retained Gateway and static-app Preview plan for this Auth-only target. Reuses the original settled approval and operation on retry, and reconciles uncertain delivery. Creates no app database or product-data grants; deployment readiness is not signup acceptance.",
   async *execute(input, ctx) {
     "use workflow";
-    const { nativeTargetOnboardingRuntimeForSession } =
-      await import("../../lib/agent/native-target-onboarding-runtime");
-    const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-    const result = await runtime.prepareAuthOnlyDelivery(input, ctx);
+    const result = await prepareAuthOnlyDeliveryStep(input, ctx);
     if (result.status === "pending-owner") {
       yield {
         authIdentityLink: result.authIdentityLink,

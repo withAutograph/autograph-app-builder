@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
-import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import type { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 
 import type { NativeTargetAuthOnlyPlan } from "./native-target-auth-only-plan-schema";
 import { nativeTargetAuthOnlyPlanDigest } from "./native-target-auth-only-plan-schema";
@@ -15,6 +15,7 @@ import type { HostedRuntimeTarget } from "./hosted-runtime-journal";
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const deliveryPlanDigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const origin = z.url().refine((value) => {
   const url = new URL(value);
   return url.protocol === "https:" && url.origin === value;
@@ -35,6 +36,12 @@ const variableName = z.string().regex(/^[A-Z][A-Z0-9_]*$/u);
 const valueMap = z.record(z.string(), z.string().min(1));
 export const recoverySenderApiKey = "AUTH_RECOVERY_RESEND_API_KEY";
 export const recoverySenderFrom = "AUTH_RECOVERY_EMAIL_FROM";
+const gatewayManifestKeys = [
+  ...gatewayEnvironmentKeys,
+  "AUTH_REQUIRE_EMAIL_VERIFICATION",
+  recoverySenderFrom,
+] as const;
+const gatewayManifestKeySchema = z.enum(gatewayManifestKeys);
 export const nativeTargetAuthOnlyRecoverySecretSchema = z
   .strictObject({
     id,
@@ -57,7 +64,7 @@ const recoverySenderSchema = z.strictObject({
 });
 type RecoverySender = z.infer<typeof recoverySenderSchema>;
 
-export type NativeTargetAuthOnlyDeliveryEnvironmentInput = {
+export interface NativeTargetAuthOnlyDeliveryEnvironmentInput {
   authority: z.infer<typeof hostedTenantAuthoritySchema>;
   target: HostedRuntimeTarget;
   plan: NativeTargetAuthOnlyPlan;
@@ -68,9 +75,9 @@ export type NativeTargetAuthOnlyDeliveryEnvironmentInput = {
   effect: "gateway" | "app";
   assertCurrent: () => Promise<void>;
   signal: AbortSignal;
-};
+}
 
-type NativeTargetAuthOnlyPreviewEnvironmentMaterials = {
+interface NativeTargetAuthOnlyPreviewEnvironmentMaterials {
   deliveryPlanBytes: Buffer;
   resourcePlanDigest: string;
   resourcePlan: z.infer<typeof nativeTargetAuthOnlyResourceApprovalPlanSchema>;
@@ -86,7 +93,7 @@ type NativeTargetAuthOnlyPreviewEnvironmentMaterials = {
   };
   gatewayProjectMetadata: unknown;
   appProjectMetadata: unknown;
-};
+}
 
 export const nativeTargetAuthOnlyPreviewEnvironmentManifestSchema = z.strictObject({
   version: z.literal(1),
@@ -125,70 +132,128 @@ const exactKeys = (values: Readonly<Record<string, string>>, expected: readonly 
   }
 };
 
+type PreviewEnvironmentCompositionInput = NativeTargetAuthOnlyPreviewEnvironmentMaterials &
+  Pick<NativeTargetAuthOnlyDeliveryEnvironmentInput, "plan" | "deliveryPlan" | "approval">;
+
+const assertCompositionBindings = (
+  input: PreviewEnvironmentCompositionInput,
+  resourcePlan: z.infer<typeof nativeTargetAuthOnlyResourceApprovalPlanSchema>,
+  planDigest: string,
+  deliveryDigest: string,
+) => {
+  const delivery = input.deliveryPlan;
+  const plan = input.plan;
+  const gateway = delivery.delivery.publicGateway;
+  const app = delivery.delivery.delivery;
+  const mismatch = () => new Error("native_target_auth_only_preview_environment_binding_mismatch");
+  if (
+    delivery.kind !== "native-target-auth-only-delivery" ||
+    delivery.authOnlyPlanDigest !== planDigest
+  ) {
+    throw mismatch();
+  }
+  if (
+    delivery.resourcePlanDigest !== digest.parse(input.resourcePlanDigest) ||
+    nativeTargetAuthOnlyResourcePlanDigest(input.resourcePlanBytes) !== input.resourcePlanDigest ||
+    !isDeepStrictEqual(JSON.parse(input.resourcePlanBytes.toString("utf-8")), resourcePlan)
+  ) {
+    throw mismatch();
+  }
+  if (deliveryDigest !== deliveryPlanDigestSchema.parse(input.approval.planDigest)) {
+    throw mismatch();
+  }
+  const exactApproval = [
+    input.approval.sourceDigest === deliveryDigest,
+    input.approval.outcome === "approved",
+    input.approval.publicSessionId === plan.origin.publicSessionId,
+    input.approval.responderPrincipalId === plan.origin.authority.ownerUserId,
+  ];
+  if (!exactApproval.every(Boolean)) {
+    throw mismatch();
+  }
+  if (
+    ![
+      delivery.source.branch === plan.publishedSource.branch,
+      delivery.source.gitSha === plan.publishedSource.gitSha,
+      delivery.source.repositoryId === plan.publishedSource.repositoryId,
+    ].every(Boolean)
+  ) {
+    throw mismatch();
+  }
+  if (gateway === undefined || app === undefined) {
+    throw mismatch();
+  }
+  const exactResource = [
+    gateway.projectId !== app.projectId,
+    app.projectId === delivery.target.projectId,
+    app.branch === delivery.target.branch,
+    resourcePlan.authOnlyPlanDigest === planDigest,
+    resourcePlan.target.projectId === delivery.target.projectId,
+    resourcePlan.authDatabase.resourceId === plan.authResource.resourceId,
+    resourcePlan.authDatabase.database === plan.authResource.database,
+    resourcePlan.bootstrap.endpointId === plan.authResource.endpointId,
+    resourcePlan.neon.endpoint === plan.authResource.hostname,
+    delivery.delivery.delivery?.gitSha === delivery.source.gitSha,
+    delivery.delivery.delivery?.repoId === delivery.source.repositoryId,
+    delivery.delivery.gatewayDelivery?.branch === gateway.branch,
+  ];
+  if (!exactResource.every(Boolean)) {
+    throw mismatch();
+  }
+  if (!isDeepStrictEqual(input.deliveryPlanBytes, Buffer.from(JSON.stringify(delivery)))) {
+    throw mismatch();
+  }
+  return { gateway, app };
+};
+const assertAuthRuntimeResource = (
+  runtime: URL,
+  resource: { hostname: string; runtimeRole: string; database: string },
+) => {
+  const mismatch = () => new Error("native_target_auth_only_preview_environment_resource_mismatch");
+  if (
+    !["postgres:", "postgresql:"].includes(runtime.protocol) ||
+    runtime.hostname !== resource.hostname ||
+    !["", "5432"].includes(runtime.port)
+  ) {
+    throw mismatch();
+  }
+  if (
+    decodeURIComponent(runtime.username) !== resource.runtimeRole ||
+    decodeURIComponent(runtime.pathname.slice(1)) !== resource.database
+  ) {
+    throw mismatch();
+  }
+  if (
+    runtime.password.length === 0 ||
+    runtime.searchParams.get("sslmode") !== "verify-full" ||
+    runtime.hash !== ""
+  ) {
+    throw mismatch();
+  }
+};
+
 /**
  * Compose private Gateway values and public static-app bindings from the same
  * retained delivery approval. The sender key is represented only by provider
  * metadata. Other private values go to the adapter, and the manifest hashes them.
  */
-export const composeNativeTargetAuthOnlyPreviewEnvironment = (input: {
-  plan: NativeTargetAuthOnlyPlan;
-  deliveryPlan: NativeTargetAuthOnlyDeliveryPlan;
-  deliveryPlanBytes: Buffer;
-  resourcePlanDigest: string;
-  resourcePlan: z.infer<typeof nativeTargetAuthOnlyResourceApprovalPlanSchema>;
-  resourcePlanBytes: Buffer;
-  approval: NativeTargetAuthOnlyApproval;
-  authRuntimeUrl: string;
-  emailVerification: {
-    required: "true";
-    sender: RecoverySender;
-  };
-  gatewayProfileValues: Readonly<Record<string, string>>;
-  observedGatewayValues?: Readonly<Record<string, string>>;
-  gatewayProjectMetadata: unknown;
-  appProjectMetadata: unknown;
-}) => {
+export const composeNativeTargetAuthOnlyPreviewEnvironment = (
+  input: PreviewEnvironmentCompositionInput,
+) => {
   const plan = input.plan;
   const delivery = input.deliveryPlan;
   const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
   const deliveryDigest = nativeTargetAuthOnlyDeliveryPlanDigest(input.deliveryPlanBytes);
   const resourcePlan = nativeTargetAuthOnlyResourceApprovalPlanSchema.parse(input.resourcePlan);
-  const gateway = delivery.delivery.publicGateway;
-  const gatewayOrigin = origin.parse(gateway?.gatewayOrigin);
-  const publicOrigin = origin.parse(gateway?.origin);
-  const app = delivery.delivery.delivery;
-  if (
-    delivery.kind !== "native-target-auth-only-delivery" ||
-    delivery.authOnlyPlanDigest !== planDigest ||
-    delivery.resourcePlanDigest !== digest.parse(input.resourcePlanDigest) ||
-    nativeTargetAuthOnlyResourcePlanDigest(input.resourcePlanBytes) !== input.resourcePlanDigest ||
-    !isDeepStrictEqual(JSON.parse(input.resourcePlanBytes.toString("utf8")), resourcePlan) ||
-    deliveryDigest !== deliveryPlanDigestSchema.parse(input.approval.planDigest) ||
-    input.approval.sourceDigest !== deliveryDigest ||
-    input.approval.outcome !== "approved" ||
-    input.approval.publicSessionId !== plan.origin.publicSessionId ||
-    input.approval.responderPrincipalId !== plan.origin.authority.ownerUserId ||
-    delivery.source.branch !== plan.publishedSource.branch ||
-    delivery.source.gitSha !== plan.publishedSource.gitSha ||
-    delivery.source.repositoryId !== plan.publishedSource.repositoryId ||
-    gateway === undefined ||
-    app === undefined ||
-    gateway.projectId === app.projectId ||
-    app?.projectId !== delivery.target.projectId ||
-    app?.branch !== delivery.target.branch ||
-    resourcePlan.authOnlyPlanDigest !== planDigest ||
-    resourcePlan.target.projectId !== delivery.target.projectId ||
-    resourcePlan.authDatabase.resourceId !== plan.authResource.resourceId ||
-    resourcePlan.authDatabase.database !== plan.authResource.database ||
-    resourcePlan.bootstrap.endpointId !== plan.authResource.endpointId ||
-    resourcePlan.neon.endpoint !== plan.authResource.hostname ||
-    delivery.delivery.delivery?.gitSha !== delivery.source.gitSha ||
-    delivery.delivery.delivery?.repoId !== delivery.source.repositoryId ||
-    delivery.delivery.gatewayDelivery?.branch !== gateway.branch ||
-    !isDeepStrictEqual(input.deliveryPlanBytes, Buffer.from(JSON.stringify(delivery)))
-  ) {
-    throw new Error("native_target_auth_only_preview_environment_binding_mismatch");
-  }
+  const publicGateway = delivery.delivery.publicGateway;
+  const gatewayOrigin = origin.parse(publicGateway?.gatewayOrigin);
+  const publicOrigin = origin.parse(publicGateway?.origin);
+  const { gateway, app } = assertCompositionBindings(
+    input,
+    resourcePlan,
+    planDigest,
+    deliveryDigest,
+  );
 
   const sender = recoverySenderSchema.safeParse(input.emailVerification.sender);
   if (
@@ -218,17 +283,7 @@ export const composeNativeTargetAuthOnlyPreviewEnvironment = (input: {
     branchId: resourcePlan.neon.branchId,
     projectId: resourcePlan.neon.projectId,
   };
-  if (
-    (runtime.protocol !== "postgres:" && runtime.protocol !== "postgresql:") ||
-    runtime.hostname !== resource.hostname ||
-    (runtime.port !== "" && runtime.port !== "5432") ||
-    decodeURIComponent(runtime.username) !== resource.runtimeRole ||
-    decodeURIComponent(runtime.pathname.slice(1)) !== resource.database ||
-    runtime.password.length === 0 ||
-    runtime.searchParams.get("sslmode") !== "verify-full" ||
-    runtime.hash !== ""
-  )
-    throw new Error("native_target_auth_only_preview_environment_resource_mismatch");
+  assertAuthRuntimeResource(runtime, resource);
   const resourceValue = JSON.stringify({
     database: resource.database,
     environment: "preview",
@@ -247,7 +302,7 @@ export const composeNativeTargetAuthOnlyPreviewEnvironment = (input: {
   if (new Set(protectedApps).size !== protectedApps.length) {
     throw new Error("native_target_auth_only_preview_environment_policy_mismatch");
   }
-  const gatewayExpected: Record<string, string> = {
+  const gatewayExpected = {
     AUTH_DATABASE_RESOURCE: resourceValue,
     PLATFORM_AUTH_DATABASE_URL: input.authRuntimeUrl,
     PLATFORM_GATEWAY_PROJECT_BINDINGS: profileValues.PLATFORM_GATEWAY_PROJECT_BINDINGS,
@@ -260,14 +315,11 @@ export const composeNativeTargetAuthOnlyPreviewEnvironment = (input: {
     AUTH_REQUIRE_EMAIL_VERIFICATION: input.emailVerification.required,
     [recoverySenderFrom]: sender.data.from,
   };
-  exactKeys(gatewayExpected, [
-    ...gatewayEnvironmentKeys,
-    "AUTH_REQUIRE_EMAIL_VERIFICATION",
-    recoverySenderFrom,
-  ]);
+  exactKeys(gatewayExpected, gatewayManifestKeys);
   if (input.observedGatewayValues !== undefined) {
     for (const [key, value] of Object.entries(input.observedGatewayValues)) {
-      if (!(key in gatewayExpected) || gatewayExpected[key] !== value) {
+      const parsedKey = gatewayManifestKeySchema.safeParse(key);
+      if (!parsedKey.success || gatewayExpected[parsedKey.data] !== value) {
         throw new Error("native_target_auth_only_preview_environment_conflict");
       }
     }
@@ -303,15 +355,15 @@ export const composeNativeTargetAuthOnlyPreviewEnvironment = (input: {
       branch: delivery.delivery.gatewayDelivery?.branch ?? delivery.target.branch,
       physicalBranch: gatewayPhysicalBranch,
       recoverySecret: sender.data.apiKey,
-      values: Object.keys(gatewayExpected)
+      values: gatewayManifestKeys
         .toSorted()
-        .map((key) => ({ key, sha256: hash(gatewayExpected[key]!) })),
+        .map((key) => ({ key, sha256: hash(gatewayExpected[key]) })),
     },
     app: {
       projectId: app.projectId,
       branch: app.branch,
       physicalBranch: appPhysicalBranch,
-      values: appEnvironmentKeys.map((key) => ({ key, sha256: hash(appValues[key]!) })),
+      values: appEnvironmentKeys.map((key) => ({ key, sha256: hash(appValues[key]) })),
     },
   });
   return { manifest, gatewayValues: gatewayExpected, appValues };
@@ -343,19 +395,22 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentPort =
     const plan = input.plan;
     const delivery = input.deliveryPlan;
     if (
-      input.target.environment !== "preview" ||
-      input.target.appId !== plan.appId ||
-      input.target.projectId !== delivery.target.projectId ||
-      input.target.branch !== delivery.target.branch ||
-      !isDeepStrictEqual(input.authority, plan.origin.authority) ||
-      input.approval.planDigest !==
-        nativeTargetAuthOnlyDeliveryPlanDigest(Buffer.from(JSON.stringify(delivery))) ||
-      input.approval.sourceDigest !== input.approval.planDigest ||
-      input.approval.outcome !== "approved" ||
-      !Number.isSafeInteger(input.fenceGeneration) ||
-      input.fenceGeneration <= 0
-    )
+      ![
+        input.target.environment === "preview",
+        input.target.appId === plan.appId,
+        input.target.projectId === delivery.target.projectId,
+        input.target.branch === delivery.target.branch,
+        isDeepStrictEqual(input.authority, plan.origin.authority),
+        input.approval.planDigest ===
+          nativeTargetAuthOnlyDeliveryPlanDigest(Buffer.from(JSON.stringify(delivery))),
+        input.approval.sourceDigest === input.approval.planDigest,
+        input.approval.outcome === "approved",
+        Number.isSafeInteger(input.fenceGeneration),
+        input.fenceGeneration > 0,
+      ].every(Boolean)
+    ) {
       throw new Error("native_target_auth_only_preview_environment_binding_mismatch");
+    }
     input.signal.throwIfAborted();
     await input.assertCurrent();
     const materials = await deps.readMaterials(input);
@@ -398,5 +453,3 @@ export const createNativeTargetAuthOnlyPreviewEnvironmentPort =
     await input.assertCurrent();
     input.signal.throwIfAborted();
   };
-
-const deliveryPlanDigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);

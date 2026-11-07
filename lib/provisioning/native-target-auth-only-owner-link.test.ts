@@ -77,7 +77,10 @@ const fixture = () => {
   const readPublishedProof = vi.fn(async () => proof);
   const store: NativeTargetAuthOnlyOwnerLinkStore = {
     compareAndSet: async (record, expectedRevision) => {
-      if (row?.revision !== expectedRevision) return undefined;
+      if (row?.revision !== expectedRevision) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- The CAS contract returns an absent row on conflict and a record on success.
+        return undefined;
+      }
       row = { record: structuredClone(record), revision: (expectedRevision ?? 0) + 1 };
       return structuredClone(row);
     },
@@ -101,7 +104,10 @@ const fixture = () => {
       throw new Error("fixture invitation missing");
     }
     const url = new URL(result.browserUrl);
-    const nonce = url.searchParams.get("nonce")!;
+    const nonce = url.searchParams.get("nonce");
+    if (nonce === null) {
+      throw new Error("Fixture invitation is missing its nonce");
+    }
     return {
       ...result,
       nonce,
@@ -162,7 +168,7 @@ describe("Auth-only owner link", () => {
     const invitation = await f.prepare();
     const input = { binding, nonceSha256: invitation.selector.nonceSha256, proofRef, proofSha256 };
     const race = await Promise.allSettled([f.service.consume(input), f.service.consume(input)]);
-    expect(race.map(({ status }) => status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(race.map(({ status }) => status).toSorted()).toEqual(["fulfilled", "rejected"]);
     expect(f.row()?.record.link.sealedNonce).toBeUndefined();
     expect(JSON.stringify(f.row())).not.toContain(proof);
     expect(await f.service.readCaptured(binding)).toMatchObject({ proofRef, proofSha256 });

@@ -90,6 +90,7 @@ export const nativeTargetAuthOnlyPlanSchema = z
 export type NativeTargetAuthOnlyPlan = z.infer<typeof nativeTargetAuthOnlyPlanSchema>;
 
 /** Digest the canonical captured static AppDescription, not model-authored metadata. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This captured-description boundary immediately parses untrusted input with appDescriptionSchema before hashing it.
 export const capturedStaticDescriptionProvenance = (description: unknown) => {
   const parsed = appDescriptionSchema.parse(description);
   if (parsed.backend.kind !== "static") {

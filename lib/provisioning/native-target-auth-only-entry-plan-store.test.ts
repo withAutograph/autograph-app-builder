@@ -231,7 +231,7 @@ const fixture = () => {
     complete = true,
     save = vi.fn(async (_state: PrivateNativeTargetApprovalObservation) => {}),
   ) =>
-    readPrivateNativeTargetAuthOnlyEntryApproval({
+    await readPrivateNativeTargetAuthOnlyEntryApproval({
       approvalInput,
       assertCurrentOwner,
       historyOwner,

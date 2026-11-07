@@ -332,7 +332,11 @@ describe("additive Auth-only resource profiles", () => {
       if (kind === "missing-auth-only-app") {
         delete profile.configuration.authOnlyApplications;
       } else {
-        profile.configuration.applications[profile.appId] = shared.selected.applications.sibling!;
+        const sibling = shared.selected.applications.sibling;
+        if (sibling === undefined) {
+          throw new Error("Fixture sibling application is missing");
+        }
+        profile.configuration.applications[profile.appId] = sibling;
       }
       expect(() =>
         resolveNativeTargetResourceProfile({

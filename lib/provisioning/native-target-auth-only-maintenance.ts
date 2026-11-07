@@ -41,10 +41,8 @@ export interface AuthOnlyMaintenanceAuthorityBinding {
 }
 type OwnerPorts = Parameters<typeof createNativePreviewNeonPlanningAuthority>[0]["controlPlane"];
 type Material = Parameters<
-  ReturnType<typeof createPreviewNeonMcpReader>["withMaintenanceCredential"]
->[2] extends (material: infer M) => Promise<unknown>
-  ? M
-  : never;
+  Parameters<ReturnType<typeof createPreviewNeonMcpReader>["withMaintenanceCredential"]>[2]
+>[0];
 
 /** Private reader only. The caller supplies the actual retained resource approval and live execution authority. */
 export const createNativeTargetAuthOnlyMaintenanceReader = (input: {
@@ -102,46 +100,110 @@ export const createNativeTargetAuthOnlyMaintenanceReader = (input: {
   const scope = scopeSchema.parse(native.scope);
   const { resource } = credentialContext;
   const effect = resourcePlan.effects.filter((entry) => entry.kind === "resources");
+  const selectedTarget = {
+    authority: context.authority,
+    appId: context.target.appId,
+    sessionId: context.target.sessionId,
+    branch: context.target.branch,
+    scopeType: context.target.scopeType,
+    scopeId: context.target.scopeId,
+    installationId: context.target.installationId,
+  };
   if (
-    !isDeepStrictEqual(context.authority, plan.origin.authority) ||
-    context.target.appId !== plan.appId ||
-    context.target.sessionId !== plan.origin.publicSessionId ||
-    context.target.branch !== plan.branch ||
-    context.target.scopeType !== "team" ||
-    context.target.scopeId !== plan.project.teamId ||
-    context.target.installationId !== plan.project.installationId ||
-    resourcePlan.authOnlyPlanDigest !== planDigest ||
-    !isDeepStrictEqual(resourcePlan.target, context.target) ||
-    !isDeepStrictEqual(resourcePlan.nativeNeonConfiguration, native.configuration) ||
-    !isDeepStrictEqual(resourcePlan.authDatabase, profile.authDatabase) ||
-    resourcePlan.neon.projectId !== scope.projectId ||
-    resourcePlan.neon.branchId !== scope.branchId ||
-    resourcePlan.neon.endpoint !== scope.hostname ||
-    resourcePlan.bootstrap.endpointId !== scope.endpointId ||
-    resourcePlan.bootstrap.maintenanceDatabase !== scope.maintenanceDatabase ||
-    resourcePlan.bootstrap.role !== scope.maintenanceRole ||
-    resourcePlan.resourcesInstaller.reference !== "neon-resource-bootstrap-v1" ||
-    resourcePlan.resourcesInstaller.reference !== profile.sandbox.resourcesWorker.id ||
-    resourcePlan.resourcesInstaller.sha256 !== profile.sandbox.resourcesWorker.sha256 ||
+    !isDeepStrictEqual(selectedTarget, {
+      authority: plan.origin.authority,
+      appId: plan.appId,
+      sessionId: plan.origin.publicSessionId,
+      branch: plan.branch,
+      scopeType: "team",
+      scopeId: plan.project.teamId,
+      installationId: plan.project.installationId,
+    })
+  ) {
+    throw unavailable();
+  }
+  const selectedResource = {
+    authOnlyPlanDigest: resourcePlan.authOnlyPlanDigest,
+    target: resourcePlan.target,
+    nativeNeonConfiguration: resourcePlan.nativeNeonConfiguration,
+    authDatabase: resourcePlan.authDatabase,
+    projectId: resourcePlan.neon.projectId,
+    branchId: resourcePlan.neon.branchId,
+    hostname: resourcePlan.neon.endpoint,
+    endpointId: resourcePlan.bootstrap.endpointId,
+    maintenanceDatabase: resourcePlan.bootstrap.maintenanceDatabase,
+    maintenanceRole: resourcePlan.bootstrap.role,
+    installer: resourcePlan.resourcesInstaller.reference,
+    installerSha256: resourcePlan.resourcesInstaller.sha256,
+  };
+  if (
+    !isDeepStrictEqual(selectedResource, {
+      authOnlyPlanDigest: planDigest,
+      target: context.target,
+      nativeNeonConfiguration: native.configuration,
+      authDatabase: profile.authDatabase,
+      projectId: scope.projectId,
+      branchId: scope.branchId,
+      hostname: scope.hostname,
+      endpointId: scope.endpointId,
+      maintenanceDatabase: scope.maintenanceDatabase,
+      maintenanceRole: scope.maintenanceRole,
+      installer: profile.sandbox.resourcesWorker.id,
+      installerSha256: profile.sandbox.resourcesWorker.sha256,
+    }) ||
+    resourcePlan.resourcesInstaller.reference !== "neon-resource-bootstrap-v1"
+  ) {
+    throw unavailable();
+  }
+  if (
     effect.length !== 1 ||
     effect[0]?.resourceId !== resource.resourceId ||
-    resourcePlan.effects.filter((entry) => entry.id === effect[0]?.id).length !== 1 ||
-    plan.authResource.resourceId !== resource.resourceId ||
-    plan.authResource.database !== resource.database ||
-    plan.authResource.hostname !== resource.neon.hostname ||
-    plan.authResource.endpointId !== resource.neon.endpointId ||
-    approval.outcome !== "approved" ||
-    approval.planDigest !== planDigest ||
-    approval.sourceDigest !== resourcePlanDigest ||
-    approval.publicSessionId !== plan.origin.publicSessionId ||
-    approval.responderPrincipalId !== plan.origin.authority.ownerUserId
+    resourcePlan.effects.filter((entry) => entry.id === effect[0]?.id).length !== 1
+  ) {
+    throw unavailable();
+  }
+  if (
+    !isDeepStrictEqual(
+      {
+        resourceId: plan.authResource.resourceId,
+        database: plan.authResource.database,
+        hostname: plan.authResource.hostname,
+        endpointId: plan.authResource.endpointId,
+      },
+      {
+        resourceId: resource.resourceId,
+        database: resource.database,
+        hostname: resource.neon.hostname,
+        endpointId: resource.neon.endpointId,
+      },
+    )
+  ) {
+    throw unavailable();
+  }
+  if (
+    !isDeepStrictEqual(
+      {
+        outcome: approval.outcome,
+        planDigest: approval.planDigest,
+        sourceDigest: approval.sourceDigest,
+        publicSessionId: approval.publicSessionId,
+        responderPrincipalId: approval.responderPrincipalId,
+      },
+      {
+        outcome: "approved",
+        planDigest,
+        sourceDigest: resourcePlanDigest,
+        publicSessionId: plan.origin.publicSessionId,
+        responderPrincipalId: plan.origin.authority.ownerUserId,
+      },
+    )
   ) {
     throw unavailable();
   }
 
   const binding = {
     context,
-    effectId: effect[0]!.id,
+    effectId: effect[0].id,
     execution,
     planDigest,
     resourceId: resource.resourceId,
@@ -212,13 +274,16 @@ export const createNativeTargetAuthOnlyMaintenanceReader = (input: {
       await guard(requested);
     },
     assertApprovedScope: async (requested, requestedScope) => {
-      if (!isDeepStrictEqual(requestedScope, scope)) throw unavailable();
+      if (!isDeepStrictEqual(requestedScope, scope)) {
+        throw unavailable();
+      }
       await guard(requested);
     },
     configuration: native.configuration,
     diagnosticSink: input.diagnosticSink,
     io: input.io,
-    readCurrentOwnerNativeStore: owner.readCurrentOwnerNativeStore,
+    readCurrentOwnerNativeStore: (requested, store) =>
+      owner.readCurrentOwnerNativeStore(requested, store),
   });
   return {
     async withMaintenanceCredential<T>(consume: (material: Material) => Promise<T>): Promise<T> {

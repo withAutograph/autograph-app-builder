@@ -45,7 +45,7 @@ const credentials = {
   runtimePassword: `runtime:@/%?${"r".repeat(32)}`,
 };
 const keyring = { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture_v1" };
-const hash = (value: unknown) =>
+const hash = (value: AuthOnlyCredentialContext | AuthOnlyCredentialRecord) =>
   createHash("sha256")
     .update(centralHostCanonicalBytes(z.json().parse(value)))
     .digest("hex");
@@ -150,11 +150,12 @@ it("recovers a lost write response by reading the same saved record, without rot
 });
 
 it("reuses a concurrent winner only when its sealed credentials match", async () => {
+  const missingRecord = undefined;
   const f = fixture();
   const reference = await f.custody.seal(f.input);
-  f.store.read.mockResolvedValueOnce();
+  f.store.read.mockResolvedValueOnce(missingRecord);
   expect(await f.custody.seal(f.input)).toEqual(reference);
-  f.store.read.mockResolvedValueOnce();
+  f.store.read.mockResolvedValueOnce(missingRecord);
   await expect(
     f.custody.seal({
       ...f.input,
@@ -238,7 +239,10 @@ it.each([
 it("cryptographically rejects a transplanted ciphertext even when its public record and reference are rewritten", async () => {
   const f = fixture();
   const original = await f.custody.seal(f.input);
-  const record = f.records.get(original.contextDigest)!;
+  const record = f.records.get(original.contextDigest);
+  if (record === undefined) {
+    throw new Error("Expected sealed credential record before transplanting it");
+  }
   const changed = { ...context, operationRef: "22222222-2222-4222-a222-222222222222" };
   const forged = { ...record, context: changed };
   const reference: AuthOnlyCredentialRef = {

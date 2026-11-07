@@ -127,7 +127,7 @@ const fixture = () => {
   };
   const responseCtx: ApprovalResponseContext<NativeTargetPreparationRequest> = {
     auth: {
-      getToken: async () => Promise.reject(new Error("unused")),
+      getToken: () => Promise.reject(new Error("unused")),
       requireAuth: () => {
         throw new Error("unused");
       },
@@ -148,25 +148,23 @@ const fixture = () => {
     options?: RequestInit;
     body: ReturnType<typeof nativeTargetTransportRequestSchema.parse>;
   }[] = [];
-  const request = vi.fn<typeof fetch>(async (url, options) => {
+  const request = vi.fn<typeof fetch>((url, options) => {
     const serialized = z.string().parse(options?.body);
     sent.push({
       body: nativeTargetTransportRequestSchema.parse(JSON.parse(serialized)),
       options,
       url: url instanceof Request ? url.url : url.toString(),
     });
-    return Promise.resolve(
-      Response.json(output, {
+    return Promise.resolve(Response.json(output, {
         headers: { "content-type": "application/json" },
         status: 200,
-      }),
-    );
+      }));
   });
   const client = createNativeTargetOnboardingClient({
     endpoint: "https://operator.example",
     fetch: request,
     ownerContext: owner,
-    token: async () => Promise.resolve("synthetic-oidc"),
+    token: () => Promise.resolve("synthetic-oidc"),
   });
   const proof = {
     callId: "original-approved-call",
@@ -251,7 +249,7 @@ describe("native target protected client", () => {
       signupPolicy: { eligibility: "approved-email-list", requireVerifiedEmail: true },
       version: 1,
     });
-    const request = vi.fn<typeof fetch>(async (_url, options) => {
+    const request = vi.fn<typeof fetch>((_url, options) => {
       const body = authOnlyRequestSchema.parse(JSON.parse(z.string().parse(options?.body)));
       expect(body.input.appId).toBe("invoice-review");
       expect(body.selectedApp.appSpecDigest).toBe("e".repeat(64));
@@ -262,19 +260,17 @@ describe("native target protected client", () => {
           selectedApp: { ...body.selectedApp, appId: "another-app" },
         }),
       ).toThrow();
-      return Promise.resolve(
-        Response.json({
+      return Promise.resolve(Response.json({
           plan: authPlan,
           planDigest: nativeTargetAuthOnlyPlanDigest(authPlan),
           status: "planned",
-        }),
-      );
+        }));
     });
     const client = createNativeTargetOnboardingClient({
       endpoint: "https://operator.example",
       fetch: request,
       ownerContext: f.owner,
-      token: async () => Promise.resolve("synthetic-oidc"),
+      token: () => Promise.resolve("synthetic-oidc"),
     });
     const result = await client.planAuthOnly(
       {
@@ -455,7 +451,7 @@ describe("native target protected client", () => {
         createNativeTargetOnboardingClient({
           endpoint,
           ownerContext: f.owner,
-          token: async () => Promise.resolve("synthetic"),
+          token: () => Promise.resolve("synthetic"),
         }),
       ).toThrow();
     }

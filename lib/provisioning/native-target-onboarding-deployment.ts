@@ -32,10 +32,7 @@ import {
   createNativeTargetAuthOnlyMaintenanceReader,
   nativeTargetAuthOnlyResourceApprovalPlanSchema,
 } from "./native-target-auth-only-maintenance";
-import {
-  createNativeTargetAuthOnlyResourcePlanStore,
-  nativeTargetAuthOnlyResourcePlanDigest,
-} from "./native-target-auth-only-resource-plan-store";
+import { createNativeTargetAuthOnlyResourcePlanStore } from "./native-target-auth-only-resource-plan-store";
 import {
   createNativeTargetAuthOnlyCredentialCustody,
   nativeTargetAuthOnlyCredentialContextForPlan,
@@ -77,9 +74,13 @@ import type {
 import {
   nativeTargetAuthOnlyPlanRequestSchema,
   nativeTargetAuthOnlyPlanResponseSchema,
+  nativeTargetAuthOnlyPrepareRequestSchema,
+  nativeTargetAuthOnlyDispatchResultSchema,
+  nativeTargetAuthOnlyFinalRoutingResultSchema,
+  nativeTargetAuthOnlyResourceResultSchema,
 } from "./native-target-onboarding-transport";
 import { createNativeTargetAuthOnlyPlanStore } from "./native-target-auth-only-plan-store";
-import { resolveNativeTargetAuthOnlyRegistration } from "./native-target-configuration-resolver";
+import { resolveNativeTargetAuthOnlyRegistration } from "./native-target-auth-only-registration";
 import {
   nativeTargetAuthOnlyPlanDigest,
   nativeTargetAuthOnlySchemaEffectDigest,
@@ -96,6 +97,8 @@ import {
   buildNativeTargetAuthOnlyDeliveryPlanBytes,
   nativeTargetAuthOnlyDeliveryPlanDigest,
 } from "./native-target-auth-only-delivery-plan";
+import type { NativeTargetAuthOnlyDeliveryPlan } from "./native-target-auth-only-delivery-plan";
+import type { NativeTargetAuthOnlyApproval } from "./native-target-auth-only-dispatch";
 import { createNativeTargetAuthOnlyPreviewDelivery } from "./native-target-auth-only-preview-delivery";
 import {
   createPostgresNativeTargetAuthOnlyDeliveryStore,
@@ -108,6 +111,8 @@ import type {
   NativeTargetAuthOnlyDeliveryEnvironmentInput,
   NativeTargetAuthOnlyAfterGatewayReadyInput,
   NativeTargetAuthOnlyEntryReadiness,
+  NativeTargetAuthOnlyDeliveryKey,
+  NativeTargetAuthOnlyDeliveryRow,
 } from "./native-target-auth-only-delivery-runtime";
 import {
   createNativeTargetAuthOnlyFinalRouting,
@@ -141,11 +146,6 @@ import {
   createPostgresNativeTargetAuthOnlyDispatchStore,
   nativeTargetAuthOnlyApprovalSchema,
 } from "./native-target-auth-only-dispatch";
-import {
-  nativeTargetAuthOnlyPrepareRequestSchema,
-  nativeTargetAuthOnlyDispatchResultSchema,
-  nativeTargetAuthOnlyResourceResultSchema,
-} from "./native-target-onboarding-transport";
 import { hostedRuntimeTargetSchema } from "./hosted-runtime-journal";
 import {
   createNativeTargetVercelProject,
@@ -175,6 +175,39 @@ interface AppOwner {
 const unavailable = () => new HostedOperatorError("operator_unavailable");
 const denied = () => new HostedOperatorError("authorization_required");
 const mismatch = () => new HostedOperatorError("resource_mismatch");
+const matchesAll = (...conditions: boolean[]) => conditions.every(Boolean);
+const isPreparedFinalRoutingResult = (
+  value: unknown,
+): value is z.infer<typeof nativeTargetAuthOnlyFinalRoutingResultSchema> =>
+  nativeTargetAuthOnlyFinalRoutingResultSchema.safeParse(value).success;
+const authOnlyDeliveryActions = new Set([
+  "native-target-auth-only-delivery-plan",
+  "native-target-auth-only-delivery-approval-read",
+  "native-target-auth-only-delivery",
+  "native-target-auth-only-final-routing-plan",
+  "native-target-auth-only-final-routing-approval-read",
+  "native-target-auth-only-final-routing",
+]);
+const authOnlyResourceActions = new Set([
+  "native-target-auth-only-resource-approval-read",
+  "native-target-auth-only-resources",
+]);
+const authOnlyPreparationActions = new Set([
+  "native-target-auth-only-prepare",
+  "native-target-auth-only-approval-read",
+]);
+type NativeTargetAuthOnlyDeliveryRequest = NativeTargetRequest & {
+  input: {
+    appId: string;
+    operationRef: string;
+    planDigest?: string;
+    resourcePlanDigest?: string;
+    deliveryPlanDigest?: string;
+  };
+};
+const isNativeTargetAuthOnlyDeliveryRequest = (
+  request: NativeTargetRequest,
+): request is NativeTargetAuthOnlyDeliveryRequest => authOnlyDeliveryActions.has(request.action);
 
 /** Distinct, bounded SQL names are frozen in the human-approved plan. */
 export const nativeTargetDatabaseNames = (appId: string) => {
@@ -196,14 +229,16 @@ export const buildNativeTargetAuthOnlyResourcePlanBytes = (input: {
 }) => {
   const { plan, selected, registration } = input;
   if (
-    registration.ownerUserId !== plan.origin.authority.ownerUserId ||
-    registration.sessionId !== plan.origin.publicSessionId ||
-    registration.branch !== plan.branch ||
-    selected.teamId !== plan.project.teamId ||
-    selected.authDatabase.resourceId !== plan.authResource.resourceId ||
-    selected.authDatabase.database !== plan.authResource.database ||
-    selected.nativeNeon.scope.endpointId !== plan.authResource.endpointId ||
-    selected.nativeNeon.scope.hostname !== plan.authResource.hostname
+    !matchesAll(
+      registration.ownerUserId === plan.origin.authority.ownerUserId,
+      registration.sessionId === plan.origin.publicSessionId,
+      registration.branch === plan.branch,
+      selected.teamId === plan.project.teamId,
+      selected.authDatabase.resourceId === plan.authResource.resourceId,
+      selected.authDatabase.database === plan.authResource.database,
+      selected.nativeNeon.scope.endpointId === plan.authResource.endpointId,
+      selected.nativeNeon.scope.hostname === plan.authResource.hostname,
+    )
   ) {
     throw mismatch();
   }
@@ -512,7 +547,7 @@ export const createNativeTargetApprovalHistoryTransport = (input: {
       });
       return true;
     },
-    workloadIdentity: { token: async () => Promise.resolve(carrier.slice(7)) },
+    workloadIdentity: { token: () => Promise.resolve(carrier.slice(7)) },
   });
 };
 
@@ -574,7 +609,7 @@ const createAuthOnlyWorkerJournal = (input: {
       .where(where)
       .limit(1);
     if (row === undefined) {
-      return undefined;
+      return null;
     }
     const record = authOnlyWorkerRecordSchema.parse(row.record);
     if (
@@ -613,21 +648,25 @@ const createAuthOnlyWorkerJournal = (input: {
         })
         .onConflictDoNothing();
       const bound = await read(stage);
-      if (bound === undefined || bound.record.contextDigest !== contextDigest) {
+      if (bound === null || bound.record.contextDigest !== contextDigest) {
         throw mismatch();
       }
       await input.assertCurrent();
       return async (rawFrame) => {
         const frame = workerEffectCheckpointFrameSchema.parse(rawFrame);
         const current = await read(stage);
+        if (current === null) {
+          throw mismatch();
+        }
         if (
-          current === undefined ||
-          current.record.contextDigest !== contextDigest ||
-          frame.contextDigest !== contextDigest ||
-          frame.operationId !== attempt.operationRef ||
-          frame.fenceGeneration !== attempt.fenceGeneration ||
-          frame.resourceId !== input.resourceId ||
-          frame.tenantId != null
+          !matchesAll(
+            current.record.contextDigest === contextDigest,
+            frame.contextDigest === contextDigest,
+            frame.operationId === attempt.operationRef,
+            frame.fenceGeneration === attempt.fenceGeneration,
+            frame.resourceId === input.resourceId,
+            frame.tenantId === null || frame.tenantId === undefined,
+          )
         ) {
           throw mismatch();
         }
@@ -1230,606 +1269,777 @@ export const createNativeTargetOnboardingDeployment = (input: {
       { headers },
     );
   };
-  return async (request: Request, rawInput: NativeTargetRequest): Promise<Response> => {
-    if (
-      rawInput.action === "native-target-auth-only-entry-plan" ||
-      rawInput.action === "native-target-auth-only-entry-approval-read" ||
-      rawInput.action === "native-target-auth-only-entry"
-    ) {
-      return await handleEntry(request, rawInput);
-    }
-    if (
-      rawInput.action === "native-target-auth-only-delivery-plan" ||
-      rawInput.action === "native-target-auth-only-delivery-approval-read" ||
-      rawInput.action === "native-target-auth-only-delivery" ||
-      rawInput.action === "native-target-auth-only-final-routing-plan" ||
-      rawInput.action === "native-target-auth-only-final-routing-approval-read" ||
-      rawInput.action === "native-target-auth-only-final-routing"
-    ) {
-      await input.owner.verifyWorkload(request);
-      const historyOwner = operatorOwnerContextSchema.parse(rawInput.ownerContext);
-      if (rawInput.adapterSessionId !== historyOwner.adapterSessionId) {
+  const authOnlyOwnerAssertion =
+    (
+      context: OperatorArtifactContext,
+      ownerRequest: Parameters<AppOwner["assertCanonicalAppOwner"]>[0],
+    ) =>
+    async (observed: OperatorArtifactContext) => {
+      if (!isDeepStrictEqual(observed, context)) {
         throw denied();
       }
-      const currentOwner: Current = {
-        adapterGeneration: historyOwner.adapterGeneration,
-        adapterSessionId: historyOwner.adapterSessionId,
-        authority: historyOwner.authority,
+      await input.owner.assertCanonicalAppOwner(ownerRequest);
+      if (input.owner.assertNoStandardBuilderDestination === undefined) {
+        throw unavailable();
+      }
+      await input.owner.assertNoStandardBuilderDestination(ownerRequest);
+    };
+
+  interface ExactAuthOnlyDelivery {
+    bytes: Buffer;
+    selected: HostedOperatorSourceConfiguration;
+    retained: NativeTargetAuthOnlyDeliveryRow;
+    plan: NativeTargetAuthOnlyDeliveryPlan;
+  }
+  interface FinalRoutingScope {
+    readExactDelivery: () => Promise<ExactAuthOnlyDelivery>;
+    key: NativeTargetAuthOnlyDeliveryKey;
+    finalAction: boolean;
+    rawInput: NativeTargetAuthOnlyDeliveryRequest;
+    currentOwner: Current;
+    appId: string;
+    historyOwner: OperatorOwnerContext;
+    assertRegistered: () => Promise<void>;
+    assertApproved: () => Promise<void>;
+    observePrivateHistory: NonNullable<
+      ReturnType<typeof createNativeTargetApprovalHistoryTransport>["observePrivateHistory"]
+    >;
+    approval: NativeTargetAuthOnlyApproval;
+    plan: NativeTargetAuthOnlyPlan;
+    environmentInput: (
+      fenceGeneration: number,
+      assertCurrent: () => Promise<void>,
+    ) => NativeTargetAuthOnlyDeliveryEnvironmentInput;
+    afterGatewayReady: (
+      value: NativeTargetAuthOnlyAfterGatewayReadyInput,
+    ) => Promise<NativeTargetAuthOnlyEntryReadiness>;
+    finalAuthority: NativeTargetAuthOnlyFinalRoutingAuthority | undefined;
+    deliveryStore: ReturnType<typeof createPostgresNativeTargetAuthOnlyDeliveryStore>;
+  }
+  const resumeFinalRouting = async ({
+    readExactDelivery,
+    key,
+    finalAction,
+    rawInput,
+    currentOwner,
+    appId,
+    historyOwner,
+    assertRegistered,
+    assertApproved,
+    observePrivateHistory,
+    approval,
+    plan,
+    environmentInput,
+    afterGatewayReady,
+    finalAuthority,
+    deliveryStore,
+  }: FinalRoutingScope) => {
+    const { retained } = await readExactDelivery();
+    const invitation = nativeTargetAuthOnlyRoutingRequired(key, retained.record);
+    const routingProposal = invitation.finalRoutingPlan;
+    const retainedRoutingPlan = retained.record.finalRoutingPlan;
+    if (retainedRoutingPlan === undefined) {
+      throw mismatch();
+    }
+    if (
+      finalAction &&
+      rawInput.action !== "native-target-auth-only-final-routing-plan" &&
+      !isDeepStrictEqual(
+        nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(rawInput.input),
+        routingProposal,
+      )
+    ) {
+      throw mismatch();
+    }
+    if (rawInput.action === "native-target-auth-only-final-routing-plan") {
+      return invitation.finalRoutingPlan;
+    }
+    const routingBytes = Buffer.from(retainedRoutingPlan.base64, "base64");
+    const routingPlan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
+      JSON.parse(routingBytes.toString("utf-8")),
+    );
+    const routingKey = { ...key, operationRef: routingProposal.routingOperationRef };
+    const routingStore = createPostgresNativeTargetAuthOnlyFinalRoutingStore(database);
+    const routingCheckpoint = createNativeTargetApprovalCheckpoint(
+      database,
+      currentOwner.authority,
+      appId,
+      routingProposal.routingPlanDigest,
+      {
+        adapterGeneration: currentOwner.adapterGeneration,
+        adapterSessionId: currentOwner.adapterSessionId,
+        assertCurrent: assertRegistered,
+      },
+      "native-target-auth-only-final-routing",
+    );
+    const readRoutingApproval = async () => {
+      await assertApproved();
+      const currentDelivery = await readExactDelivery();
+      const current = currentDelivery.retained;
+      if (!isDeepStrictEqual(current.record.finalRoutingPlan, retained.record.finalRoutingPlan)) {
+        throw mismatch();
+      }
+      const routingObservationState = await routingCheckpoint.read();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Preserve the settled routing checkpoint read before inspecting retained worker approval under the same exact parent authorization.
+      const retainedRoutingRow = await routingStore.read(routingKey);
+      const retainedRoutingApproval = retainedRoutingRow?.record.approval;
+      return await readPrivateNativeTargetAuthOnlyFinalRoutingApproval({
+        approvalInput: routingProposal,
+        assertOwner: assertRegistered,
         historyOwner,
-        publicSessionId: historyOwner.sessionId,
-      };
-      const { appId, operationRef } = rawInput.input;
-      const finalAction = rawInput.action.startsWith("native-target-auth-only-final-routing");
-      const context = artifactContext(currentOwner, appId);
-      const ownerRequest = { ...context, ownerContext: historyOwner };
-      const assertCurrentOwner = async (observed: OperatorArtifactContext) => {
-        if (!isDeepStrictEqual(observed, context)) {
+        observation: { save: routingCheckpoint.save, state: routingObservationState },
+        owner: currentOwner,
+        readHistory: async (startIndex, onEvent) =>
+          await observePrivateHistory({
+            principal: historyOwner.principal,
+            adapterSessionId: currentOwner.adapterSessionId,
+            sessionId: currentOwner.publicSessionId,
+            startIndex,
+            onEvent,
+          }),
+        retainedApproval: retainedRoutingApproval,
+        routingPlanBytes: routingBytes,
+      });
+    };
+    const routingApproval = await readRoutingApproval();
+    if (routingApproval?.outcome === "cancelled") {
+      throw denied();
+    }
+    if (rawInput.action === "native-target-auth-only-final-routing-approval-read") {
+      return { status: routingApproval === null ? "pending" : "approved" };
+    }
+    if (routingApproval === null) {
+      if (finalAction) {
+        throw denied();
+      }
+      return invitation;
+    }
+    if (finalAuthority === undefined) {
+      throw unavailable();
+    }
+    await routingStore.retain(routingKey, routingBytes, routingApproval);
+    let heldRoutingFence: (() => Promise<void>) | undefined;
+    return await withNativeTargetAuthOnlyFinalRoutingLease({
+      app: routingPlan.app,
+      approval,
+      assertAuthorized: async () => {
+        if (!isDeepStrictEqual(await readRoutingApproval(), routingApproval)) {
           throw denied();
         }
-        await input.owner.assertCanonicalAppOwner(ownerRequest);
-        if (input.owner.assertNoStandardBuilderDestination === undefined) {
-          throw unavailable();
+      },
+      deliveryPlanDigest: routingProposal.deliveryPlanDigest,
+      gateway: routingPlan.bootstrap,
+      key,
+      run: async ({ fenceGeneration, assertCurrent: assertLease }) => {
+        const assertCurrent = async () => {
+          await assertLease();
+          if (!isDeepStrictEqual(await readRoutingApproval(), routingApproval)) {
+            throw denied();
+          }
+          if (heldRoutingFence === undefined) {
+            throw unavailable();
+          }
+          await heldRoutingFence();
+          await assertLease();
+        };
+        const finalEnvironment = environmentInput(fenceGeneration, assertCurrent);
+        const readiness = await afterGatewayReady({
+          ...finalEnvironment,
+          gateway: routingPlan.bootstrap,
+          deliveryPlanDigest: routingProposal.deliveryPlanDigest,
+          assertCurrent,
+        });
+        if (readiness.status !== "ready") {
+          throw new HostedOperatorError("auth_identity_required");
         }
-        await input.owner.assertNoStandardBuilderDestination(ownerRequest);
-      };
+        const run = createNativeTargetAuthOnlyFinalRouting({
+          readCredential: async (authority, installationId) => {
+            await assertCurrent();
+            if (
+              !isDeepStrictEqual(authority, currentOwner.authority) ||
+              installationId !== plan.project.installationId
+            ) {
+              throw denied();
+            }
+            return await readInstallation(currentOwner, installationId, plan.project.teamId);
+          },
+          ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+          assertCatalogApp: finalAuthority.assertCatalogApp,
+          store: {
+            read: async () => await routingStore.read(routingKey),
+            compareAndSet: async (revision, record) =>
+              await routingStore.compareAndSet(routingKey, revision, record),
+          },
+          readRetainedParent: async () => {
+            await assertCurrent();
+            const currentDelivery = await readExactDelivery();
+            const row = currentDelivery.retained;
+            return row.record.gateway.receipt === undefined || row.record.app.receipt === undefined
+              ? undefined
+              : { bootstrap: row.record.gateway.receipt, app: row.record.app.receipt };
+          },
+        });
+        const result = await run({
+          projection: {
+            environment: { ...finalEnvironment, assertCurrent },
+            appReceipt: routingPlan.app,
+            source: routingPlan.source,
+          },
+          routingPlanBytes: routingBytes,
+          approval: routingApproval,
+          fenceGeneration,
+          assertCurrent,
+        });
+        return { ...result, deliveryPlanDigest: routingProposal.deliveryPlanDigest };
+      },
+      store: deliveryStore,
+      withExecutionLease: async ({ fenceGeneration, assertCurrent }, complete) => {
+        const finalEnvironment = environmentInput(fenceGeneration, assertCurrent);
+        return await finalAuthority.withGatewayLease(
+          {
+            environment: finalEnvironment,
+            readCurrentFence: async () => {
+              await assertCurrent();
+              const row = await deliveryStore.read(key);
+              if (row?.record.lease === undefined) {
+                throw mismatch();
+              }
+              return {
+                operationRef: routingProposal.routingOperationRef,
+                leaseId: row.record.lease.id,
+                fenceGeneration,
+              };
+            },
+          },
+          async (assertFence) => {
+            heldRoutingFence = assertFence;
+            try {
+              return await complete(assertFence);
+            } finally {
+              heldRoutingFence = undefined;
+            }
+          },
+        );
+      },
+    });
+  };
+
+  const readAuthOnlyDeliveryScope = async (
+    request: Request,
+    rawInput: NativeTargetAuthOnlyDeliveryRequest,
+  ) => {
+    await input.owner.verifyWorkload(request);
+    const historyOwner = operatorOwnerContextSchema.parse(rawInput.ownerContext);
+    if (rawInput.adapterSessionId !== historyOwner.adapterSessionId) {
+      throw denied();
+    }
+    const currentOwner: Current = {
+      adapterGeneration: historyOwner.adapterGeneration,
+      adapterSessionId: historyOwner.adapterSessionId,
+      authority: historyOwner.authority,
+      historyOwner,
+      publicSessionId: historyOwner.sessionId,
+    };
+    const { appId, operationRef } = rawInput.input;
+    const finalAction = rawInput.action.startsWith("native-target-auth-only-final-routing");
+    const context = artifactContext(currentOwner, appId);
+    const ownerRequest = { ...context, ownerContext: historyOwner };
+    const assertCurrentOwner = authOnlyOwnerAssertion(context, ownerRequest);
+    await assertCurrentOwner(context);
+    const dispatchStore = createPostgresNativeTargetAuthOnlyDispatchStore(database);
+    const createdRow = await dispatchStore.read({ appId, authority: currentOwner.authority });
+    const created = createdRow?.state;
+    if (
+      created?.stage !== "created" ||
+      nativeTargetAuthOnlyCredentialOperationRef(created.plan) !== operationRef
+    ) {
+      throw mismatch();
+    }
+    const deliveryStore = createPostgresNativeTargetAuthOnlyDeliveryStore(database);
+    const key = {
+      appId,
+      authority: currentOwner.authority,
+      operationRef,
+      sessionId: currentOwner.publicSessionId,
+    };
+    const priorDelivery = finalAction ? await deliveryStore.read(key) : undefined;
+    const planDigest =
+      "planDigest" in rawInput.input ? rawInput.input.planDigest : created.planDigest;
+    let resourcePlanDigest =
+      "resourcePlanDigest" in rawInput.input ? rawInput.input.resourcePlanDigest : undefined;
+    if (resourcePlanDigest === undefined && priorDelivery !== undefined) {
+      resourcePlanDigest = readNativeTargetAuthOnlyDeliveryPlan(key, priorDelivery.record).plan
+        .resourcePlanDigest;
+    }
+    if (created.planDigest !== planDigest || resourcePlanDigest === undefined) {
+      throw mismatch();
+    }
+    const planStore = createNativeTargetAuthOnlyPlanStore({ assertCurrentOwner, database });
+    const plan = await planStore.read(context, created.plan.origin.appSpecDigest, planDigest);
+    if (
+      plan === undefined ||
+      !isDeepStrictEqual(plan, created.plan) ||
+      plan.origin.publicSessionId !== currentOwner.publicSessionId ||
+      !isDeepStrictEqual(plan.origin.authority, currentOwner.authority)
+    ) {
+      throw mismatch();
+    }
+    const resourceStore = createNativeTargetAuthOnlyResourcePlanStore({
+      assertCurrentOwner,
+      database,
+    });
+    const authRuntimeStore = createPostgresNativeTargetAuthOnlyRuntimeStore(database);
+    const capturedStore = createCapturedAppDescriptionStore({ assertCurrentOwner, database });
+    return {
+      historyOwner,
+      currentOwner,
+      appId,
+      operationRef,
+      finalAction,
+      context,
+      assertCurrentOwner,
+      dispatchStore,
+      created,
+      deliveryStore,
+      key,
+      priorDelivery,
+      planDigest,
+      resourcePlanDigest,
+      plan,
+      planStore,
+      resourceStore,
+      authRuntimeStore,
+      capturedStore,
+    };
+  };
+
+  const authOnlyDeliveryHooks = (
+    request: Request,
+    currentOwner: Current,
+    appId: string,
+    context: OperatorArtifactContext,
+    assertCurrentOwner: (observed: OperatorArtifactContext) => Promise<void>,
+  ) => {
+    const environment = input.authOnlyDeliveryEnvironment;
+    const composedEntry =
+      input.authOnlyEntryAuthority === undefined
+        ? undefined
+        : entryFor(request, currentOwner, appId, async () => {
+            await assertCurrentOwner(context);
+          }).entry;
+    const afterGatewayReady =
+      composedEntry === undefined
+        ? input.authOnlyAfterGatewayReady
+        : async (value: NativeTargetAuthOnlyAfterGatewayReadyInput) =>
+            await composedEntry.afterGatewayReady(value);
+    if (
+      environment === undefined ||
+      afterGatewayReady === undefined ||
+      (input.authOnlyFinalRoutingAuthority === undefined &&
+        input.authOnlyPrepareFinalRoutingPlan === undefined)
+    ) {
+      throw unavailable();
+    }
+    return { environment, afterGatewayReady };
+  };
+
+  const handleAuthOnlyDelivery = async (
+    request: Request,
+    rawInput: NativeTargetRequest,
+  ): Promise<Response> => {
+    if (!isNativeTargetAuthOnlyDeliveryRequest(rawInput)) {
+      throw mismatch();
+    }
+    const {
+      historyOwner,
+      currentOwner,
+      appId,
+      operationRef,
+      finalAction,
+      context,
+      assertCurrentOwner,
+      dispatchStore,
+      created,
+      deliveryStore,
+      key,
+      priorDelivery,
+      planDigest,
+      resourcePlanDigest,
+      plan,
+      planStore,
+      resourceStore,
+      authRuntimeStore,
+      capturedStore,
+    } = await readAuthOnlyDeliveryScope(request, rawInput);
+    const readRegistered = async () => {
       await assertCurrentOwner(context);
-      const dispatchStore = createPostgresNativeTargetAuthOnlyDispatchStore(database);
-      const created = (await dispatchStore.read({ appId, authority: currentOwner.authority }))
-        ?.state;
-      if (
-        created?.stage !== "created" ||
-        nativeTargetAuthOnlyCredentialOperationRef(created.plan) !== operationRef
-      ) {
-        throw mismatch();
-      }
-      const deliveryStore = createPostgresNativeTargetAuthOnlyDeliveryStore(database);
-      const key = {
+      const selected = await resolveNativeTargetAuthOnlyRegistration({
         appId,
         authority: currentOwner.authority,
-        operationRef,
+        configuration,
+        environment: input.environment,
         sessionId: currentOwner.publicSessionId,
-      };
-      const priorDelivery = finalAction ? await deliveryStore.read(key) : undefined;
-      const planDigest =
-        "planDigest" in rawInput.input ? rawInput.input.planDigest : created.planDigest;
-      const resourcePlanDigest =
-        "resourcePlanDigest" in rawInput.input
-          ? rawInput.input.resourcePlanDigest
-          : priorDelivery === undefined
-            ? undefined
-            : readNativeTargetAuthOnlyDeliveryPlan(key, priorDelivery.record).plan
-                .resourcePlanDigest;
-      if (created.planDigest !== planDigest || resourcePlanDigest === undefined) {
-        throw mismatch();
-      }
-      const planStore = createNativeTargetAuthOnlyPlanStore({ assertCurrentOwner, database });
-      const plan = await planStore.read(context, created.plan.origin.appSpecDigest, planDigest);
+        store: dispatchStore,
+      });
+      const registration = selected?.authOnlyApplications?.[appId]?.registration;
+      // oxlint-disable-next-line react-doctor/async-parallel -- Resource, retained-plan and prepared-runtime reads intentionally remain in their original authorization/evidence order before any delivery approval or provider effect.
+      const resource = await resourceStore.read(context, planDigest, resourcePlanDigest);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Retain the original resource then captured-plan evidence read before prepared-runtime verification; each store rechecks canonical ownership.
+      const retained = await planStore.read(context, plan.origin.appSpecDigest, planDigest);
+      const preparedRow = await authRuntimeStore.read({
+        appId,
+        authority: currentOwner.authority,
+        sessionId: currentOwner.publicSessionId,
+      });
+      const prepared = preparedRow?.state;
+      const description = await capturedStore.read(context, plan.origin.appSpecDigest);
       if (
-        plan === undefined ||
-        !isDeepStrictEqual(plan, created.plan) ||
-        plan.origin.publicSessionId !== currentOwner.publicSessionId ||
-        !isDeepStrictEqual(plan.origin.authority, currentOwner.authority)
+        selected === undefined ||
+        registration === undefined ||
+        resource === undefined ||
+        prepared?.stage !== "prepared"
       ) {
         throw mismatch();
       }
-      const resourceStore = createNativeTargetAuthOnlyResourcePlanStore({
-        assertCurrentOwner,
-        database,
-      });
-      const authRuntimeStore = createPostgresNativeTargetAuthOnlyRuntimeStore(database);
-      const capturedStore = createCapturedAppDescriptionStore({ assertCurrentOwner, database });
-      const readRegistered = async () => {
-        await assertCurrentOwner(context);
-        const selected = await resolveNativeTargetAuthOnlyRegistration({
-          appId,
-          authority: currentOwner.authority,
-          configuration,
-          environment: input.environment,
-          sessionId: currentOwner.publicSessionId,
-          store: dispatchStore,
-        });
-        const registration = selected?.authOnlyApplications?.[appId]?.registration;
-        const resource = await resourceStore.read(context, planDigest, resourcePlanDigest);
-        const retained = await planStore.read(context, plan.origin.appSpecDigest, planDigest);
-        const prepared = (
-          await authRuntimeStore.read({
-            appId,
-            authority: currentOwner.authority,
-            sessionId: currentOwner.publicSessionId,
-          })
-        )?.state;
-        const description = await capturedStore.read(context, plan.origin.appSpecDigest);
-        if (
-          selected === undefined ||
-          registration === undefined ||
-          registration.projectId !== created.projectId ||
-          resource === undefined ||
-          !isDeepStrictEqual(retained, plan) ||
-          prepared?.stage !== "prepared" ||
-          prepared.planDigest !== planDigest ||
-          !isDeepStrictEqual(prepared.plan, plan) ||
-          !isDeepStrictEqual(prepared.authSchema, {
+      if (description?.backend.kind !== "static") {
+        throw mismatch();
+      }
+      if (
+        !matchesAll(
+          registration.projectId === created.projectId,
+          isDeepStrictEqual(retained, plan),
+          prepared.planDigest === planDigest,
+          isDeepStrictEqual(prepared.plan, plan),
+          isDeepStrictEqual(prepared.authSchema, {
             artifactRef: plan.authSchema.artifactRef,
             planDigest: plan.authSchema.planDigest,
             targetDigest: plan.authSchema.targetDigest,
-          }) ||
-          description?.backend.kind !== "static" ||
-          !resource.bytes.equals(
-            buildNativeTargetAuthOnlyResourcePlanBytes({ plan, registration, selected }),
-          )
-        ) {
-          throw mismatch();
-        }
-        const published = await readNativeTargetAuthOnlyPublishedSource({
-          appSpecDigest: plan.origin.appSpecDigest,
-          assertCurrentOwner,
-          context,
-          database,
-          description,
-        });
-        if (!isDeepStrictEqual(published, plan.publishedSource)) {
-          throw mismatch();
-        }
-        const bytes = buildNativeTargetAuthOnlyDeliveryPlanBytes({
-          plan,
-          registration,
-          resourcePlanBytes: resource.bytes,
+          }),
+        ) ||
+        !resource.bytes.equals(
+          buildNativeTargetAuthOnlyResourcePlanBytes({
+            plan,
+            registration,
+            selected,
+          }),
+        )
+      ) {
+        throw mismatch();
+      }
+      const published = await readNativeTargetAuthOnlyPublishedSource({
+        appSpecDigest: plan.origin.appSpecDigest,
+        assertCurrentOwner,
+        context,
+        database,
+        description,
+      });
+      if (!isDeepStrictEqual(published, plan.publishedSource)) {
+        throw mismatch();
+      }
+      const bytes = buildNativeTargetAuthOnlyDeliveryPlanBytes({
+        plan,
+        registration,
+        resourcePlanBytes: resource.bytes,
+        resourcePlanDigest,
+        selected,
+      });
+      await assertCurrentOwner(context);
+      return { bytes, selected };
+    };
+    const registered = await readRegistered();
+    if (rawInput.action === "native-target-auth-only-delivery-plan") {
+      const retained = await deliveryStore.retain(key, registered.bytes);
+      await readRegistered();
+      const { plan: deliveryPlan } = readNativeTargetAuthOnlyDeliveryPlan(key, retained.record);
+      return Response.json(
+        nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse({
+          appId,
+          deliveryPlan,
+          deliveryPlanDigest: retained.record.deliveryPlanDigest,
+          operationRef,
+          planDigest,
           resourcePlanDigest,
-          selected,
-        });
-        await assertCurrentOwner(context);
-        return { bytes, selected };
-      };
-      const registered = await readRegistered();
-      if (rawInput.action === "native-target-auth-only-delivery-plan") {
-        const retained = await deliveryStore.retain(key, registered.bytes);
-        await readRegistered();
-        const { plan: deliveryPlan } = readNativeTargetAuthOnlyDeliveryPlan(key, retained.record);
-        return Response.json(
-          nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse({
+        }),
+        { headers: { "cache-control": "private, no-store" } },
+      );
+    }
+    const proposal = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(
+      finalAction
+        ? {
             appId,
-            deliveryPlan,
-            deliveryPlanDigest: retained.record.deliveryPlanDigest,
+            deliveryPlan:
+              priorDelivery === undefined
+                ? undefined
+                : readNativeTargetAuthOnlyDeliveryPlan(key, priorDelivery.record).plan,
+            deliveryPlanDigest: priorDelivery?.record.deliveryPlanDigest,
             operationRef,
             planDigest,
             resourcePlanDigest,
-          }),
-          { headers: { "cache-control": "private, no-store" } },
-        );
-      }
-      const proposal = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(
-        finalAction
-          ? {
-              appId,
-              deliveryPlan:
-                priorDelivery === undefined
-                  ? undefined
-                  : readNativeTargetAuthOnlyDeliveryPlan(key, priorDelivery.record).plan,
-              deliveryPlanDigest: priorDelivery?.record.deliveryPlanDigest,
-              operationRef,
-              planDigest,
-              resourcePlanDigest,
-            }
-          : rawInput.input,
-      );
-      if (finalAction && proposal.deliveryPlanDigest !== rawInput.input.deliveryPlanDigest) {
-        throw mismatch();
-      }
-      const readExactDelivery = async () => {
-        const current = await readRegistered();
-        const retained = await deliveryStore.read(key);
-        if (
-          retained === undefined ||
-          retained.record.deliveryPlanDigest !== proposal.deliveryPlanDigest ||
-          nativeTargetAuthOnlyDeliveryPlanDigest(current.bytes) !== proposal.deliveryPlanDigest
-        ) {
-          throw mismatch();
-        }
-        const frozen = readNativeTargetAuthOnlyDeliveryPlan(key, retained.record);
-        if (
-          !frozen.bytes.equals(current.bytes) ||
-          !isDeepStrictEqual(frozen.plan, proposal.deliveryPlan)
-        ) {
-          throw mismatch();
-        }
-        return { ...current, retained, ...frozen };
-      };
-      const exact = await readExactDelivery();
-      const transport = createNativeTargetApprovalHistoryTransport({
-        appId,
-        assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
-        builderOrigin: input.builderOrigin,
-        owner: currentOwner,
-        workload: { authorization: request.headers.get("authorization"), signal: request.signal },
-        ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-      });
-      const { observePrivateHistory } = transport;
-      if (observePrivateHistory === undefined) {
-        throw unavailable();
-      }
-      const assertRegistered = async () => {
-        await readExactDelivery();
-      };
-      const checkpoint = createNativeTargetApprovalCheckpoint(
-        database,
-        currentOwner.authority,
-        appId,
-        proposal.deliveryPlanDigest,
-        {
-          adapterGeneration: currentOwner.adapterGeneration,
-          adapterSessionId: currentOwner.adapterSessionId,
-          assertCurrent: assertRegistered,
-        },
-        "native-target-auth-only-delivery",
-      );
-      const readApproval = async () => {
-        const current = await readExactDelivery();
-        const state = await checkpoint.read();
-        return await readPrivateNativeTargetAuthOnlyDeliveryApproval({
-          assertOwner: assertRegistered,
-          deliveryPlanBytes: current.bytes,
-          deliveryPlanDigest: proposal.deliveryPlanDigest,
-          historyOwner,
-          observation: { save: checkpoint.save, state },
-          operationRef,
-          owner: currentOwner,
-          plan,
-          readHistory: async (startIndex, onEvent) =>
-            await observePrivateHistory({
-              principal: historyOwner.principal,
-              adapterSessionId: currentOwner.adapterSessionId,
-              sessionId: currentOwner.publicSessionId,
-              startIndex,
-              onEvent,
-            }),
-          resourcePlanDigest,
-          retainedApproval: current.retained.record.approval,
-        });
-      };
-      const approval = await readApproval();
-      if (approval?.outcome === "cancelled") {
-        throw denied();
-      }
-      if (rawInput.action === "native-target-auth-only-delivery-approval-read") {
-        return Response.json(
-          { status: approval === null ? "pending" : "approved" },
-          { headers: { "cache-control": "private, no-store" } },
-        );
-      }
-      if (approval === null) {
-        throw denied();
-      }
-      const environment = input.authOnlyDeliveryEnvironment;
-      const composedEntry =
-        input.authOnlyEntryAuthority === undefined
-          ? undefined
-          : entryFor(request, currentOwner, appId, async () => {
-              await assertCurrentOwner(context);
-            }).entry;
-      const afterGatewayReady =
-        composedEntry === undefined
-          ? input.authOnlyAfterGatewayReady
-          : async (value: NativeTargetAuthOnlyAfterGatewayReadyInput) =>
-              composedEntry.afterGatewayReady(value);
+          }
+        : rawInput.input,
+    );
+    if (
+      finalAction &&
+      "deliveryPlanDigest" in rawInput.input &&
+      proposal.deliveryPlanDigest !== rawInput.input.deliveryPlanDigest
+    ) {
+      throw mismatch();
+    }
+    const readExactDelivery = async () => {
+      const current = await readRegistered();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read the delivery journal only after current registered resource and retained-plan verification succeeds.
+      const retained = await deliveryStore.read(key);
       if (
-        environment === undefined ||
-        afterGatewayReady === undefined ||
-        (input.authOnlyFinalRoutingAuthority === undefined &&
-          input.authOnlyPrepareFinalRoutingPlan === undefined)
+        retained === undefined ||
+        retained.record.deliveryPlanDigest !== proposal.deliveryPlanDigest ||
+        nativeTargetAuthOnlyDeliveryPlanDigest(current.bytes) !== proposal.deliveryPlanDigest
       ) {
-        throw unavailable();
-      }
-      const assertApproved = async () => {
-        request.signal.throwIfAborted();
-        if (!isDeepStrictEqual(await readApproval(), approval)) {
-          throw denied();
-        }
-      };
-      const finalAuthority = input.authOnlyFinalRoutingAuthority;
-      const environmentInput = (
-        fenceGeneration: number,
-        assertCurrent: () => Promise<void>,
-      ): NativeTargetAuthOnlyDeliveryEnvironmentInput => ({
-        approval,
-        assertCurrent,
-        authority: currentOwner.authority,
-        deliveryPlan: exact.plan,
-        effect: "gateway",
-        fenceGeneration,
-        operationRef,
-        plan,
-        signal: request.signal,
-        target: exact.plan.target,
-      });
-      const resumeFinal = async () => {
-        const { retained } = await readExactDelivery();
-        const invitation = nativeTargetAuthOnlyRoutingRequired(key, retained.record);
-        const proposal = invitation.finalRoutingPlan;
-        if (
-          finalAction &&
-          rawInput.action !== "native-target-auth-only-final-routing-plan" &&
-          !isDeepStrictEqual(
-            nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(rawInput.input),
-            proposal,
-          )
-        ) {
-          throw mismatch();
-        }
-        if (rawInput.action === "native-target-auth-only-final-routing-plan") {
-          return invitation.finalRoutingPlan;
-        }
-        const routingBytes = Buffer.from(retained.record.finalRoutingPlan!.base64, "base64");
-        const routingPlan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
-          JSON.parse(routingBytes.toString("utf-8")),
-        );
-        const routingKey = { ...key, operationRef: proposal.routingOperationRef };
-        const routingStore = createPostgresNativeTargetAuthOnlyFinalRoutingStore(database);
-        const routingCheckpoint = createNativeTargetApprovalCheckpoint(
-          database,
-          currentOwner.authority,
-          appId,
-          proposal.routingPlanDigest,
-          {
-            adapterGeneration: currentOwner.adapterGeneration,
-            adapterSessionId: currentOwner.adapterSessionId,
-            assertCurrent: assertRegistered,
-          },
-          "native-target-auth-only-final-routing",
-        );
-        const readRoutingApproval = async () => {
-          await assertApproved();
-          const current = (await readExactDelivery()).retained;
-          if (
-            !isDeepStrictEqual(current.record.finalRoutingPlan, retained.record.finalRoutingPlan)
-          ) {
-            throw mismatch();
-          }
-          return await readPrivateNativeTargetAuthOnlyFinalRoutingApproval({
-            approvalInput: proposal,
-            assertOwner: assertRegistered,
-            historyOwner,
-            observation: { save: routingCheckpoint.save, state: await routingCheckpoint.read() },
-            owner: currentOwner,
-            readHistory: async (startIndex, onEvent) =>
-              await observePrivateHistory({
-                principal: historyOwner.principal,
-                adapterSessionId: currentOwner.adapterSessionId,
-                sessionId: currentOwner.publicSessionId,
-                startIndex,
-                onEvent,
-              }),
-            retainedApproval: (await routingStore.read(routingKey))?.record.approval,
-            routingPlanBytes: routingBytes,
-          });
-        };
-        const routingApproval = await readRoutingApproval();
-        if (routingApproval?.outcome === "cancelled") {
-          throw denied();
-        }
-        if (rawInput.action === "native-target-auth-only-final-routing-approval-read") {
-          return { status: routingApproval === null ? "pending" : "approved" };
-        }
-        if (routingApproval === null) {
-          if (finalAction) {
-            throw denied();
-          }
-          return invitation;
-        }
-        if (finalAuthority === undefined) {
-          throw unavailable();
-        }
-        await routingStore.retain(routingKey, routingBytes, routingApproval);
-        let heldRoutingFence: (() => Promise<void>) | undefined;
-        return await withNativeTargetAuthOnlyFinalRoutingLease({
-          app: routingPlan.app,
-          approval,
-          assertAuthorized: async () => {
-            if (!isDeepStrictEqual(await readRoutingApproval(), routingApproval)) throw denied();
-          },
-          deliveryPlanDigest: proposal.deliveryPlanDigest,
-          gateway: routingPlan.bootstrap,
-          key,
-          run: async ({ fenceGeneration, assertCurrent: assertLease }) => {
-            const assertCurrent = async () => {
-              await assertLease();
-              if (!isDeepStrictEqual(await readRoutingApproval(), routingApproval)) throw denied();
-              if (heldRoutingFence === undefined) throw unavailable();
-              await heldRoutingFence();
-              await assertLease();
-            };
-            const finalEnvironment = environmentInput(fenceGeneration, assertCurrent);
-            const readiness = await afterGatewayReady({
-              ...finalEnvironment,
-              gateway: routingPlan.bootstrap,
-              deliveryPlanDigest: proposal.deliveryPlanDigest,
-              assertCurrent,
-            });
-            if (readiness.status !== "ready")
-              throw new HostedOperatorError("auth_identity_required");
-            const run = createNativeTargetAuthOnlyFinalRouting({
-              readCredential: async (authority, installationId) => {
-                await assertCurrent();
-                if (
-                  !isDeepStrictEqual(authority, currentOwner.authority) ||
-                  installationId !== plan.project.installationId
-                )
-                  throw denied();
-                return await readInstallation(currentOwner, installationId, plan.project.teamId);
-              },
-              ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-              assertCatalogApp: finalAuthority.assertCatalogApp,
-              store: {
-                read: async () => routingStore.read(routingKey),
-                compareAndSet: async (revision, record) =>
-                  routingStore.compareAndSet(routingKey, revision, record),
-              },
-              readRetainedParent: async () => {
-                await assertCurrent();
-                const row = (await readExactDelivery()).retained;
-                return row.record.gateway.receipt === undefined ||
-                  row.record.app.receipt === undefined
-                  ? undefined
-                  : { bootstrap: row.record.gateway.receipt, app: row.record.app.receipt };
-              },
-            });
-            const result = await run({
-              projection: {
-                environment: { ...finalEnvironment, assertCurrent },
-                appReceipt: routingPlan.app,
-                source: routingPlan.source,
-              },
-              routingPlanBytes: routingBytes,
-              approval: routingApproval,
-              fenceGeneration,
-              assertCurrent,
-            });
-            return { ...result, deliveryPlanDigest: proposal.deliveryPlanDigest };
-          },
-          store: deliveryStore,
-          withExecutionLease: async ({ fenceGeneration, assertCurrent }, complete) => {
-            const finalEnvironment = environmentInput(fenceGeneration, assertCurrent);
-            return await finalAuthority.withGatewayLease(
-              {
-                environment: finalEnvironment,
-                readCurrentFence: async () => {
-                  await assertCurrent();
-                  const row = await deliveryStore.read(key);
-                  if (row?.record.lease === undefined) throw mismatch();
-                  return {
-                    operationRef: proposal.routingOperationRef,
-                    leaseId: row.record.lease.id,
-                    fenceGeneration,
-                  };
-                },
-              },
-              async (assertFence) => {
-                heldRoutingFence = assertFence;
-                try {
-                  return await complete(assertFence);
-                } finally {
-                  heldRoutingFence = undefined;
-                }
-              },
-            );
-          },
-        });
-      };
-      if (exact.retained.record.finalRoutingPlan !== undefined) {
-        const result = await resumeFinal();
-        return Response.json(
-          !finalAction &&
-            result !== null &&
-            typeof result === "object" &&
-            "status" in result &&
-            result.status === "prepared"
-            ? {
-                ...result,
-                finalRoutingPlan: nativeTargetAuthOnlyRoutingRequired(key, exact.retained.record)
-                  .finalRoutingPlan,
-              }
-            : result,
-          { headers: { "cache-control": "private, no-store" } },
-        );
-      }
-      if (finalAction) {
         throw mismatch();
       }
-      const result = await prepareNativeTargetAuthOnlyDelivery({
-        adapter: (effect, assertCurrent, fenceGeneration) =>
-          createNativeTargetAuthOnlyPreviewDelivery({
-            target: effect,
-            ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-            readCredential: async (authority, installationId) => {
-              await assertCurrent();
-              if (
-                !isDeepStrictEqual(authority, currentOwner.authority) ||
-                installationId !== plan.project.installationId
-              )
-                throw denied();
-              return await readInstallation(currentOwner, installationId, plan.project.teamId);
-            },
-            assertEnvironment: async () => {
-              await assertCurrent();
-              if (effect === "app") {
-                const credential = await readInstallation(
-                  currentOwner,
-                  plan.project.installationId,
-                  plan.project.teamId,
-                );
-                await assertCurrent();
-                const observed = await observeNativeTargetVercelProject({
-                  installation: credential.binding,
-                  token: credential.token,
-                  projectId: exact.plan.target.projectId,
-                  name: plan.project.name,
-                  settings: plan.project.projectSettings,
-                  protection: plan.project.protection,
-                  ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-                });
-                if (observed.status !== "verified") throw mismatch();
-                await assertCurrent();
-              }
-              await environment({
-                authority: structuredClone(currentOwner.authority),
-                target: structuredClone(exact.plan.target),
-                plan: structuredClone(plan),
-                deliveryPlan: structuredClone(exact.plan),
-                operationRef,
-                approval: structuredClone(approval),
-                fenceGeneration,
-                effect,
-                assertCurrent,
-                signal: request.signal,
-              });
-              await assertCurrent();
-            },
+      const frozen = readNativeTargetAuthOnlyDeliveryPlan(key, retained.record);
+      if (
+        !frozen.bytes.equals(current.bytes) ||
+        !isDeepStrictEqual(frozen.plan, proposal.deliveryPlan)
+      ) {
+        throw mismatch();
+      }
+      return { ...current, retained, ...frozen };
+    };
+    const exact = await readExactDelivery();
+    const transport = createNativeTargetApprovalHistoryTransport({
+      appId,
+      assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
+      builderOrigin: input.builderOrigin,
+      owner: currentOwner,
+      workload: { authorization: request.headers.get("authorization"), signal: request.signal },
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+    });
+    const { observePrivateHistory } = transport;
+    if (observePrivateHistory === undefined) {
+      throw unavailable();
+    }
+    const assertRegistered = async () => {
+      await readExactDelivery();
+    };
+    const checkpoint = createNativeTargetApprovalCheckpoint(
+      database,
+      currentOwner.authority,
+      appId,
+      proposal.deliveryPlanDigest,
+      {
+        adapterGeneration: currentOwner.adapterGeneration,
+        adapterSessionId: currentOwner.adapterSessionId,
+        assertCurrent: assertRegistered,
+      },
+      "native-target-auth-only-delivery",
+    );
+    const readDeliveryApproval = async () => {
+      const current = await readExactDelivery();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read the private approval checkpoint only after exact delivery bytes and canonical registration are revalidated.
+      const state = await checkpoint.read();
+      return await readPrivateNativeTargetAuthOnlyDeliveryApproval({
+        assertOwner: assertRegistered,
+        deliveryPlanBytes: current.bytes,
+        deliveryPlanDigest: proposal.deliveryPlanDigest,
+        historyOwner,
+        observation: { save: checkpoint.save, state },
+        operationRef,
+        owner: currentOwner,
+        plan,
+        readHistory: async (startIndex, onEvent) =>
+          await observePrivateHistory({
+            principal: historyOwner.principal,
+            adapterSessionId: currentOwner.adapterSessionId,
+            sessionId: currentOwner.publicSessionId,
+            startIndex,
+            onEvent,
           }),
-        afterGatewayReady: async ({
-          gateway,
+        resourcePlanDigest,
+        retainedApproval: current.retained.record.approval,
+      });
+    };
+    const approval = await readDeliveryApproval();
+    if (approval?.outcome === "cancelled") {
+      throw denied();
+    }
+    if (rawInput.action === "native-target-auth-only-delivery-approval-read") {
+      return Response.json(
+        { status: approval === null ? "pending" : "approved" },
+        { headers: { "cache-control": "private, no-store" } },
+      );
+    }
+    if (approval === null) {
+      throw denied();
+    }
+    const { environment, afterGatewayReady } = authOnlyDeliveryHooks(
+      request,
+      currentOwner,
+      appId,
+      context,
+      assertCurrentOwner,
+    );
+    const assertApproved = async () => {
+      request.signal.throwIfAborted();
+      if (!isDeepStrictEqual(await readDeliveryApproval(), approval)) {
+        throw denied();
+      }
+    };
+    const finalAuthority = input.authOnlyFinalRoutingAuthority;
+    const environmentInput = (
+      fenceGeneration: number,
+      assertCurrent: () => Promise<void>,
+    ): NativeTargetAuthOnlyDeliveryEnvironmentInput => ({
+      approval,
+      assertCurrent,
+      authority: currentOwner.authority,
+      deliveryPlan: exact.plan,
+      effect: "gateway",
+      fenceGeneration,
+      operationRef,
+      plan,
+      signal: request.signal,
+      target: exact.plan.target,
+    });
+
+    if (exact.retained.record.finalRoutingPlan !== undefined) {
+      const result = await resumeFinalRouting({
+        readExactDelivery,
+        key,
+        finalAction,
+        rawInput,
+        currentOwner,
+        appId,
+        historyOwner,
+        assertRegistered,
+        assertApproved,
+        observePrivateHistory,
+        approval,
+        plan,
+        environmentInput,
+        afterGatewayReady,
+        finalAuthority,
+        deliveryStore,
+      });
+      return Response.json(
+        !finalAction && isPreparedFinalRoutingResult(result)
+          ? {
+              ...result,
+              finalRoutingPlan: nativeTargetAuthOnlyRoutingRequired(key, exact.retained.record)
+                .finalRoutingPlan,
+            }
+          : result,
+        { headers: { "cache-control": "private, no-store" } },
+      );
+    }
+    if (finalAction) {
+      throw mismatch();
+    }
+    const result = await prepareNativeTargetAuthOnlyDelivery({
+      adapter: (effect, assertCurrent, fenceGeneration) =>
+        createNativeTargetAuthOnlyPreviewDelivery({
+          target: effect,
+          ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+          readCredential: async (authority, installationId) => {
+            await assertCurrent();
+            if (
+              !isDeepStrictEqual(authority, currentOwner.authority) ||
+              installationId !== plan.project.installationId
+            ) {
+              throw denied();
+            }
+            return await readInstallation(currentOwner, installationId, plan.project.teamId);
+          },
+          assertEnvironment: async () => {
+            await assertCurrent();
+            if (effect === "app") {
+              const credential = await readInstallation(
+                currentOwner,
+                plan.project.installationId,
+                plan.project.teamId,
+              );
+              await assertCurrent();
+              const observed = await observeNativeTargetVercelProject({
+                installation: credential.binding,
+                token: credential.token,
+                projectId: exact.plan.target.projectId,
+                name: plan.project.name,
+                settings: plan.project.projectSettings,
+                protection: plan.project.protection,
+                ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+              });
+              if (observed.status !== "verified") {
+                throw mismatch();
+              }
+              await assertCurrent();
+            }
+            await environment({
+              authority: structuredClone(currentOwner.authority),
+              target: structuredClone(exact.plan.target),
+              plan: structuredClone(plan),
+              deliveryPlan: structuredClone(exact.plan),
+              operationRef,
+              approval: structuredClone(approval),
+              fenceGeneration,
+              effect,
+              assertCurrent,
+              signal: request.signal,
+            });
+            await assertCurrent();
+          },
+        }),
+      afterGatewayReady: async ({ gateway, deliveryPlanDigest, fenceGeneration, assertCurrent }) =>
+        await afterGatewayReady({
+          authority: structuredClone(currentOwner.authority),
+          target: structuredClone(exact.plan.target),
+          plan: structuredClone(plan),
+          deliveryPlan: structuredClone(exact.plan),
+          operationRef,
+          approval: structuredClone(approval),
+          gateway: structuredClone(gateway),
           deliveryPlanDigest,
           fenceGeneration,
           assertCurrent,
-        }) =>
-          await afterGatewayReady({
-            authority: structuredClone(currentOwner.authority),
-            target: structuredClone(exact.plan.target),
-            plan: structuredClone(plan),
-            deliveryPlan: structuredClone(exact.plan),
-            operationRef,
-            approval: structuredClone(approval),
-            gateway: structuredClone(gateway),
-            deliveryPlanDigest,
-            fenceGeneration,
-            assertCurrent,
-            signal: request.signal,
-          }),
-        approval,
-        assertCurrent: assertApproved,
-        key,
-        prepareFinalRoutingPlan: async (value) => {
-          if (finalAuthority !== undefined)
-            return await finalAuthority.preparePlan({
-              environment: environmentInput(value.fenceGeneration, value.assertCurrent),
-              gateway: value.gateway,
-              app: value.app,
-              routingOperationRef: randomUUID(),
-            });
-          if (input.authOnlyPrepareFinalRoutingPlan === undefined) throw unavailable();
-          return await input.authOnlyPrepareFinalRoutingPlan(value);
-        },
-        signal: request.signal,
-        store: deliveryStore,
-      });
-      return Response.json(result, { headers: { "cache-control": "private, no-store" } });
-    }
+          signal: request.signal,
+        }),
+      approval,
+      assertCurrent: assertApproved,
+      key,
+      prepareFinalRoutingPlan: async (value) => {
+        if (finalAuthority !== undefined) {
+          return await finalAuthority.preparePlan({
+            environment: environmentInput(value.fenceGeneration, value.assertCurrent),
+            gateway: value.gateway,
+            app: value.app,
+            routingOperationRef: randomUUID(),
+          });
+        }
+        if (input.authOnlyPrepareFinalRoutingPlan === undefined) {
+          throw unavailable();
+        }
+        return await input.authOnlyPrepareFinalRoutingPlan(value);
+      },
+      signal: request.signal,
+      store: deliveryStore,
+    });
+    return Response.json(result, { headers: { "cache-control": "private, no-store" } });
+  };
+  const handleAuthOnlyPreparation = async (
+    request: Request,
+    rawInput: NativeTargetRequest,
+  ): Promise<Response> => {
     if (
-      rawInput.action === "native-target-auth-only-prepare" ||
-      rawInput.action === "native-target-auth-only-approval-read"
+      !(
+        rawInput.action === "native-target-auth-only-prepare" ||
+        rawInput.action === "native-target-auth-only-approval-read"
+      )
     ) {
-      const authPrepare =
-        rawInput.action === "native-target-auth-only-prepare"
-          ? nativeTargetAuthOnlyPrepareRequestSchema.parse(rawInput)
-          : rawInput;
+      throw mismatch();
+    }
+    const authPrepare =
+      rawInput.action === "native-target-auth-only-prepare"
+        ? nativeTargetAuthOnlyPrepareRequestSchema.parse(rawInput)
+        : rawInput;
+    const readPreparationScope = async () => {
       await input.owner.verifyWorkload(request);
       const historyOwner = operatorOwnerContextSchema.parse(authPrepare.ownerContext);
       const currentOwner: Current = {
@@ -1894,17 +2104,18 @@ export const createNativeTargetOnboardingDeployment = (input: {
         {
           adapterGeneration: currentOwner.adapterGeneration,
           adapterSessionId: currentOwner.adapterSessionId,
-          assertCurrent: async () => assertCurrentOwner(context),
+          assertCurrent: async () => {
+            await assertCurrentOwner(context);
+          },
         },
         "native-target-auth-only",
       );
       const authDispatchStore = createPostgresNativeTargetAuthOnlyDispatchStore(database);
-      const existing = (
-        await authDispatchStore.read({
-          appId: retained.appId,
-          authority: currentOwner.authority,
-        })
-      )?.state;
+      const existingRow = await authDispatchStore.read({
+        appId: retained.appId,
+        authority: currentOwner.authority,
+      });
+      const existing = existingRow?.state;
       if (existing !== undefined && existing.planDigest !== authPrepare.input.planDigest) {
         throw mismatch();
       }
@@ -1914,786 +2125,1016 @@ export const createNativeTargetOnboardingDeployment = (input: {
         originalApproval?.callId ??
         (rawInput.action === "native-target-auth-only-prepare" ? authPrepare.callId : undefined);
       const artifactStore = createPostgresOperatorArtifactStore({
-        assertCurrentOwner: async (artifactContext) => {
-          await assertCurrentOwner(artifactContext);
+        assertCurrentOwner: async (observedContext) => {
+          await assertCurrentOwner(observedContext);
         },
         database,
       });
       const artifactPublication = createOperatorArtifactPublication({
-        assertCurrentOwner: async (artifactContext) => {
-          await assertCurrentOwner(artifactContext);
+        assertCurrentOwner: async (observedContext) => {
+          await assertCurrentOwner(observedContext);
         },
         store: artifactStore,
       });
-      const readSettledApproval = async () => {
-        const state = await approvalCheckpoint.read();
-        const settled = await readPrivateNativeTargetAuthOnlyApproval({
-          assertOwner: async () => {
-            await assertCurrentOwner(context);
-          },
-          callId: approvalCallId,
-          historyOwner,
-          observation: { save: approvalCheckpoint.save, state },
-          owner: currentOwner,
-          plan: retained,
-          readHistory: async (startIndex, onEvent) =>
-            (await transport.observePrivateHistory?.({
-              principal: historyOwner.principal,
-              adapterSessionId: currentOwner.adapterSessionId,
-              sessionId: currentOwner.publicSessionId,
-              startIndex,
-              onEvent,
-            })) ?? { complete: false, nativeTailIndex: startIndex, nextNativeIndex: startIndex },
+      return {
+        historyOwner,
+        currentOwner,
+        context,
+        assertCurrentOwner,
+        planStore,
+        retained,
+        transport,
+        approvalCheckpoint,
+        authDispatchStore,
+        originalApproval,
+        approvalCallId,
+        artifactPublication,
+      };
+    };
+    const {
+      historyOwner,
+      currentOwner,
+      context,
+      assertCurrentOwner,
+      planStore,
+      retained,
+      transport,
+      approvalCheckpoint,
+      authDispatchStore,
+      originalApproval,
+      approvalCallId,
+      artifactPublication,
+    } = await readPreparationScope();
+
+    const readSettledApproval = async () => {
+      const state = await approvalCheckpoint.read();
+      const settled = await readPrivateNativeTargetAuthOnlyApproval({
+        assertOwner: async () => {
+          await assertCurrentOwner(context);
+        },
+        callId: approvalCallId,
+        historyOwner,
+        observation: { save: approvalCheckpoint.save, state },
+        owner: currentOwner,
+        plan: retained,
+        readHistory: async (startIndex, onEvent) =>
+          (await transport.observePrivateHistory?.({
+            principal: historyOwner.principal,
+            adapterSessionId: currentOwner.adapterSessionId,
+            sessionId: currentOwner.publicSessionId,
+            startIndex,
+            onEvent,
+          })) ?? { complete: false, nativeTailIndex: startIndex, nextNativeIndex: startIndex },
+      });
+      if (originalApproval !== undefined && !isDeepStrictEqual(settled, originalApproval)) {
+        throw denied();
+      }
+      return settled;
+    };
+    if (rawInput.action === "native-target-auth-only-approval-read") {
+      const settled = await readSettledApproval();
+      return Response.json(
+        { status: settled?.outcome === "approved" ? "approved" : "pending" },
+        { headers: { "cache-control": "private, no-store" } },
+      );
+    }
+    const authSchemaArtifactReader = createAuthOnlySchemaArtifactReader({
+      assertCurrentApproval: async (binding) => {
+        await assertCurrentOwner(binding.context);
+        const currentPlan = await planStore.read(
+          binding.context,
+          retained.origin.appSpecDigest,
+          authPrepare.input.planDigest,
+        );
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Revalidate the retained plan before reading the original private schema approval and checking the selected worker.
+        const settled = await readSettledApproval();
+        const currentProfile = resolveNativeTargetResourceProfile({
+          base: configuration,
+          resourceProfileId: retained.authResource.profileId,
+          authority: currentOwner.authority,
+          appId: retained.appId,
+          environment: input.environment,
         });
-        if (originalApproval !== undefined && !isDeepStrictEqual(settled, originalApproval)) {
+        if (currentPlan === undefined || settled === null) {
           throw denied();
         }
-        return settled;
-      };
-      if (rawInput.action === "native-target-auth-only-approval-read") {
-        const settled = await readSettledApproval();
-        return Response.json(
-          { status: settled?.outcome === "approved" ? "approved" : "pending" },
-          { headers: { "cache-control": "private, no-store" } },
-        );
-      }
-      const authSchemaArtifactReader = createAuthOnlySchemaArtifactReader({
-        assertCurrentApproval: async (binding) => {
-          await assertCurrentOwner(binding.context);
-          const currentPlan = await planStore.read(
-            binding.context,
-            retained.origin.appSpecDigest,
-            authPrepare.input.planDigest,
-          );
-          const settled = await readSettledApproval();
-          const currentProfile = resolveNativeTargetResourceProfile({
-            base: configuration,
-            resourceProfileId: retained.authResource.profileId,
-            authority: currentOwner.authority,
-            appId: retained.appId,
-            environment: input.environment,
-          });
-          if (
-            currentPlan === undefined ||
-            !isDeepStrictEqual(currentPlan, retained) ||
-            !isDeepStrictEqual(binding.selection, retained.authSchema) ||
-            settled === null ||
-            settled.outcome !== "approved" ||
-            settled.planDigest !== nativeTargetAuthOnlyPlanDigest(retained) ||
-            settled.sourceDigest !==
-              nativeTargetAuthOnlySchemaEffectDigest(retained, retained.publishedSource) ||
-            settled.publicSessionId !== retained.origin.publicSessionId ||
-            settled.responderPrincipalId !== retained.origin.authority.ownerUserId ||
-            currentProfile.sandbox.authWorker.id !== binding.worker.id ||
-            currentProfile.sandbox.authWorker.sha256 !== binding.worker.sha256
-          )
-            throw denied();
-          await assertCurrentOwner(binding.context);
-        },
-        readAuthPlan: async (artifactContext, selection) =>
-          await artifactPublication.readAuthPlan(artifactContext, selection),
-      });
-      const dispatch = createNativeTargetAuthOnlyDispatch({
-        authorize: async (invocation, appId) => {
-          if (invocation !== authPrepare || appId !== retained.appId) throw denied();
-          await assertCurrentOwner(context);
-          return {
-            authority: currentOwner.authority,
-            ownerUserId: currentOwner.authority.ownerUserId,
-            publicSessionId: currentOwner.publicSessionId,
-          };
-        },
-        createProject: async ({ plan, authorizeAttempt, acceptProjectId }) => {
-          const credential = await readInstallation(
-            currentOwner,
-            plan.project.installationId,
-            plan.project.teamId,
-          );
-          const result = await createNativeTargetVercelProject({
-            installation: credential.binding,
-            token: credential.token,
-            name: plan.project.name,
-            settings: plan.project.projectSettings,
-            protection: plan.project.protection,
-            authorizeAttempt,
-            acceptProjectId,
-            ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-          });
-          if (result.status === "verified")
-            return { status: "created" as const, projectId: result.projectId };
-          if (result.status === "rejected")
-            return { status: "rejected" as const, reason: result.reason };
-          return {
-            status: "uncertain" as const,
-            ...("projectId" in result && result.projectId !== undefined
-              ? { projectId: result.projectId }
-              : {}),
-          };
-        },
-        observeProject: async ({ plan, projectId }) => {
-          const credential = await readInstallation(
-            currentOwner,
-            plan.project.installationId,
-            plan.project.teamId,
-          );
-          const result = await observeNativeTargetVercelProject({
-            installation: credential.binding,
-            token: credential.token,
-            name: plan.project.name,
-            settings: plan.project.projectSettings,
-            protection: plan.project.protection,
-            projectId,
-            ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-          });
-          return result.status === "verified"
-            ? { status: "verified" as const, projectId: result.projectId }
-            : { status: "uncertain" as const };
-        },
-        readApproval: async (invocation, plan) => {
-          if (invocation !== authPrepare || !isDeepStrictEqual(plan, retained)) throw denied();
-          const settled = await readSettledApproval();
-          if (settled === null) return null;
-          const currentProfile = resolveNativeTargetResourceProfile({
-            base: configuration,
-            resourceProfileId: plan.authResource.profileId,
-            authority: currentOwner.authority,
-            appId: plan.appId,
-            environment: input.environment,
-          });
-          const worker = currentProfile.sandbox.authWorker;
-          await authSchemaArtifactReader.read({
-            context,
-            selection: plan.authSchema,
-            worker: { id: worker.id, sha256: worker.sha256 },
-          });
-          return settled;
-        },
-        revalidate: async (invocation, plan) => {
-          if (invocation !== authPrepare || !isDeepStrictEqual(plan, retained)) throw denied();
-          await assertCurrentOwner(context);
-          const selected = resolveNativeTargetResourceProfile({
-            base: configuration,
-            resourceProfileId: plan.authResource.profileId,
-            authority: currentOwner.authority,
-            appId: plan.appId,
-            environment: input.environment,
-          });
-          const roles = selected.authOnlyApplications?.[plan.appId]?.accessRoles;
-          const binding = {
-            authDatabase: selected.authDatabase,
-            nativeNeon: selected.nativeNeon,
-            gateway: {
-              projectId: selected.gateway.projectId,
-              environment: selected.gateway.environment,
-              branch: selected.gateway.branch,
-              authBrowserOrigin: selected.gateway.authBrowserOrigin,
-              gatewayOrigin: selected.gateway.gatewayOrigin,
-              publicOrigin: selected.gateway.publicOrigin,
-              workload: selected.gateway.workload,
-            },
-            operator: {
-              projectId: selected.operator.projectId,
-              environment: selected.operator.environment,
-              origin: selected.operator.origin,
-            },
-          };
-          const profileDigest = nativeTargetAuthOnlyAuthorityDigest({
-            authority: currentOwner.authority,
-            appId: plan.appId,
-            profileId: plan.authResource.profileId,
-            authDatabase: selected.authDatabase,
-            roles: roles ?? [],
-            authorityBinding: binding,
-            physicalEndpointId: selected.nativeNeon.scope.endpointId,
-          });
-          if (
-            selected.teamId !== plan.project.teamId ||
-            selected.authDatabase.resourceId !== plan.authResource.resourceId ||
-            selected.authDatabase.database !== plan.authResource.database ||
-            selected.nativeNeon.scope.endpointId !== plan.authResource.endpointId ||
-            selected.nativeNeon.scope.hostname !== plan.authResource.hostname ||
-            profileDigest !== plan.authResource.authorityDigest ||
-            selected.applications[plan.appId]?.nativeTargetRegistration === true
-          )
-            throw mismatch();
-          await readInstallation(currentOwner, plan.project.installationId, plan.project.teamId);
-          await assertCurrentOwner(context);
-        },
-        store: authDispatchStore,
-      });
-      await dispatch.approve(authPrepare, retained);
-      const result = await dispatch.dispatch(authPrepare, retained);
-      await assertCurrentOwner(context);
-      if (result.status === "created") {
-        const registered = await resolveNativeTargetAuthOnlyRegistration({
-          appId: retained.appId,
-          authority: currentOwner.authority,
-          configuration,
-          environment: input.environment,
-          sessionId: currentOwner.publicSessionId,
-          store: authDispatchStore,
-        });
-        const registration = registered?.authOnlyApplications?.[retained.appId]?.registration;
         if (
-          registered === undefined ||
-          registration === undefined ||
-          registration.projectId !== result.projectId
+          !matchesAll(
+            isDeepStrictEqual(currentPlan, retained),
+            isDeepStrictEqual(binding.selection, retained.authSchema),
+            settled.outcome === "approved",
+            settled.planDigest === nativeTargetAuthOnlyPlanDigest(retained),
+            settled.sourceDigest ===
+              nativeTargetAuthOnlySchemaEffectDigest(retained, retained.publishedSource),
+            settled.publicSessionId === retained.origin.publicSessionId,
+            settled.responderPrincipalId === retained.origin.authority.ownerUserId,
+            currentProfile.sandbox.authWorker.id === binding.worker.id,
+            currentProfile.sandbox.authWorker.sha256 === binding.worker.sha256,
+          )
+        ) {
+          throw denied();
+        }
+        await assertCurrentOwner(binding.context);
+      },
+      readAuthPlan: async (observedContext, selection) =>
+        await artifactPublication.readAuthPlan(observedContext, selection),
+    });
+    const dispatch = createNativeTargetAuthOnlyDispatch({
+      authorize: async (invocation, appId) => {
+        if (invocation !== authPrepare || appId !== retained.appId) {
+          throw denied();
+        }
+        await assertCurrentOwner(context);
+        return {
+          authority: currentOwner.authority,
+          ownerUserId: currentOwner.authority.ownerUserId,
+          publicSessionId: currentOwner.publicSessionId,
+        };
+      },
+      createProject: async ({ plan, authorizeAttempt, acceptProjectId }) => {
+        const credential = await readInstallation(
+          currentOwner,
+          plan.project.installationId,
+          plan.project.teamId,
+        );
+        const result = await createNativeTargetVercelProject({
+          installation: credential.binding,
+          token: credential.token,
+          name: plan.project.name,
+          settings: plan.project.projectSettings,
+          protection: plan.project.protection,
+          authorizeAttempt,
+          acceptProjectId,
+          ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+        });
+        if (result.status === "verified") {
+          return { status: "created" as const, projectId: result.projectId };
+        }
+        if (result.status === "rejected") {
+          return { status: "rejected" as const, reason: result.reason };
+        }
+        return {
+          status: "uncertain" as const,
+          ...("projectId" in result && result.projectId !== undefined
+            ? { projectId: result.projectId }
+            : {}),
+        };
+      },
+      observeProject: async ({ plan, projectId }) => {
+        const credential = await readInstallation(
+          currentOwner,
+          plan.project.installationId,
+          plan.project.teamId,
+        );
+        const result = await observeNativeTargetVercelProject({
+          installation: credential.binding,
+          token: credential.token,
+          name: plan.project.name,
+          settings: plan.project.projectSettings,
+          protection: plan.project.protection,
+          projectId,
+          ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+        });
+        return result.status === "verified"
+          ? { status: "verified" as const, projectId: result.projectId }
+          : { status: "uncertain" as const };
+      },
+      readApproval: async (invocation, plan) => {
+        if (invocation !== authPrepare || !isDeepStrictEqual(plan, retained)) {
+          throw denied();
+        }
+        const settled = await readSettledApproval();
+        if (settled === null) {
+          return null;
+        }
+        const currentProfile = resolveNativeTargetResourceProfile({
+          base: configuration,
+          resourceProfileId: plan.authResource.profileId,
+          authority: currentOwner.authority,
+          appId: plan.appId,
+          environment: input.environment,
+        });
+        const worker = currentProfile.sandbox.authWorker;
+        await authSchemaArtifactReader.read({
+          context,
+          selection: plan.authSchema,
+          worker: { id: worker.id, sha256: worker.sha256 },
+        });
+        return settled;
+      },
+      revalidate: async (invocation, plan) => {
+        if (invocation !== authPrepare || !isDeepStrictEqual(plan, retained)) {
+          throw denied();
+        }
+        await assertCurrentOwner(context);
+        const selected = resolveNativeTargetResourceProfile({
+          base: configuration,
+          resourceProfileId: plan.authResource.profileId,
+          authority: currentOwner.authority,
+          appId: plan.appId,
+          environment: input.environment,
+        });
+        const roles = selected.authOnlyApplications?.[plan.appId]?.accessRoles;
+        const binding = {
+          authDatabase: selected.authDatabase,
+          nativeNeon: selected.nativeNeon,
+          gateway: {
+            projectId: selected.gateway.projectId,
+            environment: selected.gateway.environment,
+            branch: selected.gateway.branch,
+            authBrowserOrigin: selected.gateway.authBrowserOrigin,
+            gatewayOrigin: selected.gateway.gatewayOrigin,
+            publicOrigin: selected.gateway.publicOrigin,
+            workload: selected.gateway.workload,
+          },
+          operator: {
+            projectId: selected.operator.projectId,
+            environment: selected.operator.environment,
+            origin: selected.operator.origin,
+          },
+        };
+        const profileDigest = nativeTargetAuthOnlyAuthorityDigest({
+          authority: currentOwner.authority,
+          appId: plan.appId,
+          profileId: plan.authResource.profileId,
+          authDatabase: selected.authDatabase,
+          roles: roles ?? [],
+          authorityBinding: binding,
+          physicalEndpointId: selected.nativeNeon.scope.endpointId,
+        });
+        if (
+          !matchesAll(
+            selected.teamId === plan.project.teamId,
+            selected.authDatabase.resourceId === plan.authResource.resourceId,
+            selected.authDatabase.database === plan.authResource.database,
+            selected.nativeNeon.scope.endpointId === plan.authResource.endpointId,
+            selected.nativeNeon.scope.hostname === plan.authResource.hostname,
+            profileDigest === plan.authResource.authorityDigest,
+            selected.applications[plan.appId]?.nativeTargetRegistration !== true,
+          )
         ) {
           throw mismatch();
         }
-        const resourceBytes = buildNativeTargetAuthOnlyResourcePlanBytes({
-          plan: retained,
-          registration,
-          selected: registered,
-        });
-        const resourcePlanStore = createNativeTargetAuthOnlyResourcePlanStore({
-          assertCurrentOwner,
-          database,
-        });
-        const saved = await resourcePlanStore.writeIfAbsent(
-          context,
-          authPrepare.input.planDigest,
-          resourceBytes,
-        );
-        const resourceApprovalInput = nativeTargetAuthOnlyResourcePreparationInputSchema.parse({
-          appId: retained.appId,
-          operationRef: nativeTargetAuthOnlyCredentialOperationRef(retained),
-          planDigest: authPrepare.input.planDigest,
-          resourcePlan: saved.plan,
-          resourcePlanDigest: saved.resourcePlanDigest,
-        });
-        return Response.json(
-          {
-            projectId: result.projectId,
-            resourceApprovalInput,
-            status: "resource-approval-required",
-          },
-          { headers: { "cache-control": "private, no-store" } },
-        );
-      }
-      return Response.json(nativeTargetAuthOnlyDispatchResultSchema.parse(result), {
-        headers: { "cache-control": "private, no-store" },
+        await readInstallation(currentOwner, plan.project.installationId, plan.project.teamId);
+        await assertCurrentOwner(context);
+      },
+      store: authDispatchStore,
+    });
+    await dispatch.approve(authPrepare, retained);
+    const result = await dispatch.dispatch(authPrepare, retained);
+    await assertCurrentOwner(context);
+    if (result.status === "created") {
+      const registered = await resolveNativeTargetAuthOnlyRegistration({
+        appId: retained.appId,
+        authority: currentOwner.authority,
+        configuration,
+        environment: input.environment,
+        sessionId: currentOwner.publicSessionId,
+        store: authDispatchStore,
       });
-    }
-    if (
-      rawInput.action === "native-target-auth-only-resource-approval-read" ||
-      rawInput.action === "native-target-auth-only-resources"
-    ) {
-      const requestInput = nativeTargetAuthOnlyResourcePreparationInputSchema.parse(rawInput.input);
-      const { appId, operationRef, planDigest, resourcePlanDigest } = requestInput;
-      await input.owner.verifyWorkload(request);
-      const historyOwner = operatorOwnerContextSchema.parse(rawInput.ownerContext);
-      if (rawInput.adapterSessionId !== historyOwner.adapterSessionId) {
-        throw denied();
-      }
-      const currentOwner: Current = {
-        adapterGeneration: historyOwner.adapterGeneration,
-        adapterSessionId: historyOwner.adapterSessionId,
-        authority: historyOwner.authority,
-        historyOwner,
-        publicSessionId: historyOwner.sessionId,
-      };
-      const context = artifactContext(currentOwner, appId);
-      const ownerRequest = { ...context, ownerContext: historyOwner };
-      const assertCurrentOwner = async (observed: OperatorArtifactContext) => {
-        if (!isDeepStrictEqual(observed, context)) {
-          throw denied();
-        }
-        await input.owner.assertCanonicalAppOwner(ownerRequest);
-        if (input.owner.assertNoStandardBuilderDestination === undefined) {
-          throw unavailable();
-        }
-        await input.owner.assertNoStandardBuilderDestination(ownerRequest);
-      };
-      await assertCurrentOwner(context);
-      const dispatchStore = createPostgresNativeTargetAuthOnlyDispatchStore(database);
-      const dispatchKey = { appId, authority: currentOwner.authority };
-      const created = (await dispatchStore.read(dispatchKey))?.state;
+      const registration = registered?.authOnlyApplications?.[retained.appId]?.registration;
       if (
-        created?.stage !== "created" ||
-        created.planDigest !== planDigest ||
-        nativeTargetAuthOnlyCredentialOperationRef(created.plan) !== operationRef
+        registered === undefined ||
+        registration === undefined ||
+        registration.projectId !== result.projectId
       ) {
         throw mismatch();
       }
-      const planStore = createNativeTargetAuthOnlyPlanStore({ assertCurrentOwner, database });
-      const readRetainedPlan = async () =>
-        await planStore.read(context, created.plan.origin.appSpecDigest, planDigest);
-      const plan = await readRetainedPlan();
-      if (plan === undefined || !isDeepStrictEqual(plan, created.plan)) {
-        throw mismatch();
-      }
+      const resourceBytes = buildNativeTargetAuthOnlyResourcePlanBytes({
+        plan: retained,
+        registration,
+        selected: registered,
+      });
       const resourcePlanStore = createNativeTargetAuthOnlyResourcePlanStore({
         assertCurrentOwner,
         database,
       });
-      const readRegisteredResource = async () => {
-        await assertCurrentOwner(context);
-        const current = await readRetainedPlan();
-        const selected = await resolveNativeTargetAuthOnlyRegistration({
-          appId,
-          authority: currentOwner.authority,
-          configuration,
-          environment: input.environment,
-          sessionId: currentOwner.publicSessionId,
-          store: dispatchStore,
-        });
-        const registration = selected?.authOnlyApplications?.[appId]?.registration;
-        const resource = await resourcePlanStore.read(context, planDigest, resourcePlanDigest);
-        if (
-          !isDeepStrictEqual(current, plan) ||
-          selected === undefined ||
-          registration === undefined ||
-          registration.projectId !== created.projectId ||
-          resource === undefined ||
-          !isDeepStrictEqual(resource.plan, requestInput.resourcePlan) ||
-          !resource.bytes.equals(
-            buildNativeTargetAuthOnlyResourcePlanBytes({ plan, registration, selected }),
-          )
-        ) {
-          throw mismatch();
-        }
-        await assertCurrentOwner(context);
-        return { resource, selected };
-      };
-      const { selected, resource } = await readRegisteredResource();
-      const transport = createNativeTargetApprovalHistoryTransport({
-        appId,
-        assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
-        builderOrigin: input.builderOrigin,
-        owner: currentOwner,
-        workload: { authorization: request.headers.get("authorization"), signal: request.signal },
-        ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+      const saved = await resourcePlanStore.writeIfAbsent(
+        context,
+        authPrepare.input.planDigest,
+        resourceBytes,
+      );
+      const resourceApprovalInput = nativeTargetAuthOnlyResourcePreparationInputSchema.parse({
+        appId: retained.appId,
+        operationRef: nativeTargetAuthOnlyCredentialOperationRef(retained),
+        planDigest: authPrepare.input.planDigest,
+        resourcePlan: saved.plan,
+        resourcePlanDigest: saved.resourcePlanDigest,
       });
-      const { observePrivateHistory } = transport;
-      if (observePrivateHistory === undefined) {
-        throw unavailable();
+      return Response.json(
+        {
+          projectId: result.projectId,
+          resourceApprovalInput,
+          status: "resource-approval-required",
+        },
+        { headers: { "cache-control": "private, no-store" } },
+      );
+    }
+    return Response.json(nativeTargetAuthOnlyDispatchResultSchema.parse(result), {
+      headers: { "cache-control": "private, no-store" },
+    });
+  };
+  type RuntimeEffect = Parameters<
+    Parameters<typeof createNativeTargetAuthOnlyRuntime>[0]["prepareAuthSchema"]
+  >[0];
+  interface AuthOnlyResourceExecutionScope {
+    runtimeStore: ReturnType<typeof createPostgresNativeTargetAuthOnlyRuntimeStore>;
+    runtimeKey: Parameters<
+      ReturnType<typeof createPostgresNativeTargetAuthOnlyRuntimeStore>["read"]
+    >[0];
+    assertRegistered: () => Promise<void>;
+    planDigest: string;
+    operationRef: string;
+    request: Request;
+    profileInput: {
+      configuration: HostedOperatorSourceConfiguration;
+      environment: Readonly<Record<string, string | undefined>>;
+      plan: NativeTargetAuthOnlyPlan;
+    };
+    context: OperatorArtifactContext;
+    readSchemaApproval: () => Promise<NativeTargetAuthOnlyApproval | null>;
+    readRetainedPlan: () => Promise<NativeTargetAuthOnlyPlan | undefined>;
+    appId: string;
+    currentOwner: Current;
+    resource: NonNullable<
+      Awaited<ReturnType<ReturnType<typeof createNativeTargetAuthOnlyResourcePlanStore>["read"]>>
+    >;
+    resourcePlanDigest: string;
+    artifactPublication: ReturnType<typeof createOperatorArtifactPublication>;
+    plan: NativeTargetAuthOnlyPlan;
+    selected: HostedOperatorSourceConfiguration;
+    resourceApproval: NativeTargetAuthOnlyApproval;
+    hostedContext: Parameters<typeof createNativeTargetAuthOnlyMaintenanceReader>[0]["context"];
+    readRegisteredResource: () => Promise<{
+      resource: AuthOnlyResourceExecutionScope["resource"];
+      selected: HostedOperatorSourceConfiguration;
+    }>;
+    readResourceApproval: (
+      retainedApproval?: NativeTargetAuthOnlyApproval,
+    ) => Promise<NativeTargetAuthOnlyApproval | null>;
+    readinessPlan: {
+      authDatabase: AuthOnlyResourceExecutionScope["resource"]["plan"]["authDatabase"];
+      authSchema: NativeTargetAuthOnlyPlan["authSchema"];
+      neon: AuthOnlyResourceExecutionScope["resource"]["plan"]["neon"];
+    };
+    credentialContext: ReturnType<typeof nativeTargetAuthOnlyCredentialContextForPlan>;
+  }
+  interface AuthOnlyResourceAttempt {
+    assertCurrent: () => Promise<void>;
+    custody: ReturnType<typeof createNativeTargetAuthOnlyCredentialCustody>;
+    execution: Parameters<typeof createNativeTargetAuthOnlyMaintenanceReader>[0]["execution"];
+    journal: ReturnType<typeof createAuthOnlyWorkerJournal>;
+  }
+  const runAuthOnlyResourceAttempt = async (
+    scope: AuthOnlyResourceExecutionScope,
+    { assertCurrent, custody, execution, journal }: AuthOnlyResourceAttempt,
+    reference: NonNullable<
+      Awaited<
+        ReturnType<ReturnType<typeof createNativeTargetAuthOnlyCredentialCustody>["findReference"]>
+      >
+    >,
+    inspectOnly: boolean,
+  ) => {
+    const {
+      request,
+      profileInput,
+      currentOwner,
+      resource,
+      resourcePlanDigest,
+      plan,
+      selected,
+      resourceApproval,
+      hostedContext,
+      readRegisteredResource,
+      readResourceApproval,
+    } = scope;
+    const credentials = await custody.readSecrets(reference);
+    const credentialBytes = Buffer.from(JSON.stringify(credentials));
+    const sha256 = (value: Buffer) => createHash("sha256").update(value).digest("hex");
+    const digest = sha256(credentialBytes);
+    return await createNativeTargetAuthOnlyMaintenanceReader({
+      ...profileInput,
+      approval: resourceApproval,
+      approvedResourcePlanBytes: resource.bytes,
+      assertCurrent: async () => {
+        await assertCurrent();
+      },
+      assertCurrentOwner: async (observed) => {
+        if (!isDeepStrictEqual(observed, hostedContext)) {
+          throw denied();
+        }
+        await assertCurrent();
+      },
+      context: hostedContext,
+      execution,
+      readCredential: async (authority, installationId) => {
+        if (!isDeepStrictEqual(authority, currentOwner.authority)) {
+          throw denied();
+        }
+        return await readInstallation(currentOwner, installationId, plan.project.teamId);
+      },
+      readRetainedResourceApproval: async () => {
+        const { resource: current } = await readRegisteredResource();
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- The exact registered resource must be revalidated before reading its original private approval for maintenance custody.
+        const settled = await readResourceApproval(resourceApproval);
+        return settled === null
+          ? undefined
+          : {
+              plan,
+              approvedResourcePlanBytes: current.bytes,
+              approval: settled,
+            };
+      },
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+    }).withMaintenanceCredential(async ({ maintenanceUrl }) => {
+      const invocation = {
+        ...execution,
+        approvalDigest: resourcePlanDigest,
+        approvedPlanBytes: resource.bytes,
+        assertCredentialsCheckpointed: async ({
+          approvalDigest,
+          resourceId,
+          credentialsSha256,
+        }: {
+          approvalDigest: string;
+          resourceId: string;
+          credentialsSha256: string;
+        }) => {
+          if (
+            approvalDigest !== resourcePlanDigest ||
+            resourceId !== resource.plan.authDatabase.resourceId ||
+            credentialsSha256 !==
+              sha256(Buffer.from(JSON.stringify(await custody.readSecrets(reference))))
+          ) {
+            throw mismatch();
+          }
+        },
+        assertCurrent,
+        credentials: { bytes: credentialBytes, maintenanceUrl, sha256: digest },
+        effectId: resource.plan.effects[0].id,
+        signal: request.signal,
+      };
+      return await runAuthResourceFileSpool(
+        selected.sandbox,
+        inspectOnly
+          ? { ...invocation, readbackOnly: true }
+          : { ...invocation, bindWorkerContext: journal.bind("resources") },
+      );
+    });
+  };
+  const bindAuthOnlyResourceExecution = async (
+    scope: AuthOnlyResourceExecutionScope,
+    effect: RuntimeEffect,
+    stage: "dispatching" | "unknown",
+  ) => {
+    const {
+      runtimeStore,
+      runtimeKey,
+      assertRegistered,
+      planDigest,
+      operationRef,
+      request,
+      profileInput,
+      context,
+      readSchemaApproval,
+      readRetainedPlan,
+      appId,
+      currentOwner,
+      resource,
+      resourcePlanDigest,
+      artifactPublication,
+      plan,
+      selected,
+      hostedContext,
+      readinessPlan,
+      credentialContext,
+    } = scope;
+    const readRuntimeLease = async () => {
+      await effect.assertCurrent();
+      await assertRegistered();
+      const latest = await runtimeStore.read(runtimeKey);
+      if (
+        latest?.state.stage !== stage ||
+        latest.state.planDigest !== planDigest ||
+        latest.state.attemptId !== effect.attemptId ||
+        latest.state.leaseId !== effect.leaseId
+      ) {
+        throw new HostedOperatorError("reconciliation_required");
       }
-      const readHistory: Parameters<
-        typeof readPrivateNativeTargetAuthOnlyResourceApproval
-      >[0]["readHistory"] = async (startIndex, onEvent) =>
-        await observePrivateHistory({
-          adapterSessionId: currentOwner.adapterSessionId,
-          onEvent,
-          principal: historyOwner.principal,
-          sessionId: currentOwner.publicSessionId,
-          startIndex,
-        });
-      const assertRegistered = async () => {
-        await readRegisteredResource();
+      return latest.revision;
+    };
+    const revision = await readRuntimeLease();
+    const execution = {
+      operationRef,
+      workerAttemptId: effect.attemptId,
+      leaseId: effect.leaseId,
+      // Moving an expired or failed lease from dispatching to unknown increments the CAS revision once.
+      fenceGeneration: stage === "dispatching" ? revision : revision - 1,
+    };
+    if (execution.fenceGeneration < 1) {
+      throw mismatch();
+    }
+    const assertCurrent = async () => {
+      request.signal.throwIfAborted();
+      if ((await readRuntimeLease()) !== revision) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
+    };
+    const custody = createNativeTargetAuthOnlyCredentialCustody({
+      ...profileInput,
+      artifactContext: context,
+      assertCurrentOwner: async (observed) => {
+        if (!isDeepStrictEqual(observed, context)) {
+          throw denied();
+        }
+        await assertCurrent();
+      },
+      context: credentialContext,
+      database,
+      keyring,
+      readApproval: readSchemaApproval,
+      readRetainedPlan,
+    });
+    const journal = createAuthOnlyWorkerJournal({
+      ...execution,
+      appId,
+      assertCurrent,
+      authority: currentOwner.authority,
+      database,
+      resourceId: resource.plan.authDatabase.resourceId,
+      resourcePlanDigest,
+    });
+    const readAuthArtifact = () =>
+      createAuthOnlySchemaArtifactReader({
+        assertCurrentApproval: async (binding) => {
+          if (!isDeepStrictEqual(binding.context, context)) {
+            throw denied();
+          }
+          await assertCurrent();
+          if (!isDeepStrictEqual(await readSchemaApproval(), effect.approval)) {
+            throw denied();
+          }
+        },
+        readAuthPlan: (readContext, selection) =>
+          artifactPublication.readAuthPlan(readContext, selection),
+      }).read({
+        context,
+        selection: plan.authSchema,
+        worker: selected.sandbox.authWorker,
+      });
+    const runResources = (
+      reference: NonNullable<
+        Awaited<
+          ReturnType<
+            ReturnType<typeof createNativeTargetAuthOnlyCredentialCustody>["findReference"]
+          >
+        >
+      >,
+      inspectOnly: boolean,
+    ) =>
+      runAuthOnlyResourceAttempt(
+        scope,
+        { assertCurrent, custody, execution, journal },
+        reference,
+        inspectOnly,
+      );
+    const readReadiness = async (
+      reference: NonNullable<Awaited<ReturnType<typeof custody.findReference>>>,
+    ) => {
+      const readiness = await createHostedOperatorAuthReadiness<typeof readinessPlan>({
+        assertAuthorized: async () => {
+          await assertCurrent();
+        },
+        readAuthPlan: async () => {
+          const artifact = await readAuthArtifact();
+          return artifact.content;
+        },
+        readRuntimeUrl: async () => {
+          const credentials = await custody.read(reference);
+          return credentials.runtimeUrl;
+        },
+      }).verify({ ...hostedContext, assertCurrent, plan: readinessPlan });
+      return {
+        authSchema: {
+          artifactRef: plan.authSchema.artifactRef,
+          planDigest: plan.authSchema.planDigest,
+          targetDigest: plan.authSchema.targetDigest,
+        },
+        readiness: readiness.catalogFingerprint,
       };
-      const checkpointAuthority = {
-        adapterGeneration: currentOwner.adapterGeneration,
+    };
+    return {
+      assertCurrent,
+      custody,
+      execution,
+      journal,
+      readAuthArtifact,
+      readReadiness,
+      runResources,
+    };
+  };
+
+  const handleAuthOnlyResources = async (
+    request: Request,
+    rawInput: NativeTargetRequest,
+  ): Promise<Response> => {
+    if (!authOnlyResourceActions.has(rawInput.action)) {
+      throw mismatch();
+    }
+    const requestInput = nativeTargetAuthOnlyResourcePreparationInputSchema.parse(rawInput.input);
+    const { appId, operationRef, planDigest, resourcePlanDigest } = requestInput;
+    await input.owner.verifyWorkload(request);
+    const historyOwner = operatorOwnerContextSchema.parse(rawInput.ownerContext);
+    if (rawInput.adapterSessionId !== historyOwner.adapterSessionId) {
+      throw denied();
+    }
+    const currentOwner: Current = {
+      adapterGeneration: historyOwner.adapterGeneration,
+      adapterSessionId: historyOwner.adapterSessionId,
+      authority: historyOwner.authority,
+      historyOwner,
+      publicSessionId: historyOwner.sessionId,
+    };
+    const context = artifactContext(currentOwner, appId);
+    const ownerRequest = { ...context, ownerContext: historyOwner };
+    const assertCurrentOwner = authOnlyOwnerAssertion(context, ownerRequest);
+    await assertCurrentOwner(context);
+    const dispatchStore = createPostgresNativeTargetAuthOnlyDispatchStore(database);
+    const dispatchKey = { appId, authority: currentOwner.authority };
+    const createdRow = await dispatchStore.read(dispatchKey);
+    const created = createdRow?.state;
+    if (
+      created?.stage !== "created" ||
+      created.planDigest !== planDigest ||
+      nativeTargetAuthOnlyCredentialOperationRef(created.plan) !== operationRef
+    ) {
+      throw mismatch();
+    }
+    const planStore = createNativeTargetAuthOnlyPlanStore({ assertCurrentOwner, database });
+    const readRetainedPlan = async () =>
+      await planStore.read(context, created.plan.origin.appSpecDigest, planDigest);
+    const plan = await readRetainedPlan();
+    if (plan === undefined || !isDeepStrictEqual(plan, created.plan)) {
+      throw mismatch();
+    }
+    const resourcePlanStore = createNativeTargetAuthOnlyResourcePlanStore({
+      assertCurrentOwner,
+      database,
+    });
+    const readRegisteredResource = async () => {
+      await assertCurrentOwner(context);
+      const current = await readRetainedPlan();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Retain the original current-plan then live registration read order under canonical ownership checks.
+      const selected = await resolveNativeTargetAuthOnlyRegistration({
+        appId,
+        authority: currentOwner.authority,
+        configuration,
+        environment: input.environment,
+        sessionId: currentOwner.publicSessionId,
+        store: dispatchStore,
+      });
+      const registration = selected?.authOnlyApplications?.[appId]?.registration;
+      const resource = await resourcePlanStore.read(context, planDigest, resourcePlanDigest);
+      if (selected === undefined || registration === undefined || resource === undefined) {
+        throw mismatch();
+      }
+      if (
+        !matchesAll(
+          isDeepStrictEqual(current, plan),
+          registration.projectId === created.projectId,
+          isDeepStrictEqual(resource.plan, requestInput.resourcePlan),
+        ) ||
+        !resource.bytes.equals(
+          buildNativeTargetAuthOnlyResourcePlanBytes({
+            plan,
+            registration,
+            selected,
+          }),
+        )
+      ) {
+        throw mismatch();
+      }
+      await assertCurrentOwner(context);
+      return { resource, selected };
+    };
+    const { selected, resource } = await readRegisteredResource();
+    const transport = createNativeTargetApprovalHistoryTransport({
+      appId,
+      assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
+      builderOrigin: input.builderOrigin,
+      owner: currentOwner,
+      workload: { authorization: request.headers.get("authorization"), signal: request.signal },
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+    });
+    const { observePrivateHistory } = transport;
+    if (observePrivateHistory === undefined) {
+      throw unavailable();
+    }
+    const readHistory: Parameters<
+      typeof readPrivateNativeTargetAuthOnlyResourceApproval
+    >[0]["readHistory"] = async (startIndex, onEvent) =>
+      await observePrivateHistory({
         adapterSessionId: currentOwner.adapterSessionId,
-        assertCurrent: assertRegistered,
-      };
-      const resourceCheckpoint = createNativeTargetApprovalCheckpoint(
-        database,
-        currentOwner.authority,
-        appId,
+        onEvent,
+        principal: historyOwner.principal,
+        sessionId: currentOwner.publicSessionId,
+        startIndex,
+      });
+    const assertRegistered = async () => {
+      await readRegisteredResource();
+    };
+    const checkpointAuthority = {
+      adapterGeneration: currentOwner.adapterGeneration,
+      adapterSessionId: currentOwner.adapterSessionId,
+      assertCurrent: assertRegistered,
+    };
+    const resourceCheckpoint = createNativeTargetApprovalCheckpoint(
+      database,
+      currentOwner.authority,
+      appId,
+      resourcePlanDigest,
+      checkpointAuthority,
+      "native-target-auth-only-resources",
+    );
+    const readResourceApproval = async (
+      retainedApproval?: NonNullable<
+        Awaited<ReturnType<typeof readPrivateNativeTargetAuthOnlyResourceApproval>>
+      >,
+    ) => {
+      const state = await resourceCheckpoint.read();
+      return await readPrivateNativeTargetAuthOnlyResourceApproval({
+        assertOwner: assertRegistered,
+        historyOwner,
+        observation: { save: resourceCheckpoint.save, state },
+        operationRef,
+        owner: currentOwner,
+        plan,
+        readHistory,
+        resourcePlanBytes: resource.bytes,
         resourcePlanDigest,
-        checkpointAuthority,
-        "native-target-auth-only-resources",
-      );
-      const readResourceApproval = async (
-        retainedApproval?: NonNullable<
-          Awaited<ReturnType<typeof readPrivateNativeTargetAuthOnlyResourceApproval>>
-        >,
-      ) => {
-        const state = await resourceCheckpoint.read();
-        return await readPrivateNativeTargetAuthOnlyResourceApproval({
-          assertOwner: assertRegistered,
-          historyOwner,
-          observation: { save: resourceCheckpoint.save, state },
-          operationRef,
-          owner: currentOwner,
-          plan,
-          readHistory,
-          resourcePlanBytes: resource.bytes,
-          resourcePlanDigest,
-          retainedApproval,
-        });
-      };
-      const settledId = nativeTargetApprovalCheckpointId(
-        currentOwner.authority,
-        appId,
-        createHash("sha256")
-          .update(
-            JSON.stringify(["auth-only-resource-settlement", operationRef, resourcePlanDigest]),
-          )
-          .digest("hex"),
-        "native-target-auth-only-resources",
-      );
-      const settledPredicate = and(
-        eq(builderProvisioningJournals.issuer, currentOwner.authority.issuer),
-        eq(builderProvisioningJournals.audience, currentOwner.authority.audience),
-        eq(builderProvisioningJournals.workspaceId, currentOwner.authority.workspaceId),
-        eq(builderProvisioningJournals.ownerUserId, currentOwner.authority.ownerUserId),
-        eq(builderProvisioningJournals.requestId, settledId),
-        eq(builderProvisioningJournals.requestDigest, resourcePlanDigest),
-      );
-      const readOriginalResourceApproval = async () => {
-        await assertRegistered();
-        const [row] = await database
-          .select()
-          .from(builderProvisioningJournals)
-          .where(settledPredicate)
-          .limit(1);
-        if (row === undefined) {
-          return undefined;
-        }
-        if (row.state !== "settled") {
-          throw mismatch();
-        }
-        return nativeTargetAuthOnlyApprovalSchema.parse(row.record);
-      };
-      const resourceApproval = await readResourceApproval(await readOriginalResourceApproval());
+        retainedApproval,
+      });
+    };
+    const settledId = nativeTargetApprovalCheckpointId(
+      currentOwner.authority,
+      appId,
+      createHash("sha256")
+        .update(JSON.stringify(["auth-only-resource-settlement", operationRef, resourcePlanDigest]))
+        .digest("hex"),
+      "native-target-auth-only-resources",
+    );
+    const settledPredicate = and(
+      eq(builderProvisioningJournals.issuer, currentOwner.authority.issuer),
+      eq(builderProvisioningJournals.audience, currentOwner.authority.audience),
+      eq(builderProvisioningJournals.workspaceId, currentOwner.authority.workspaceId),
+      eq(builderProvisioningJournals.ownerUserId, currentOwner.authority.ownerUserId),
+      eq(builderProvisioningJournals.requestId, settledId),
+      eq(builderProvisioningJournals.requestDigest, resourcePlanDigest),
+    );
+    const readOriginalResourceApproval = async () => {
+      await assertRegistered();
+      const [row] = await database
+        .select()
+        .from(builderProvisioningJournals)
+        .where(settledPredicate)
+        .limit(1);
+      if (row === undefined) {
+        return null;
+      }
+      if (row.state !== "settled") {
+        throw mismatch();
+      }
+      return nativeTargetAuthOnlyApprovalSchema.parse(row.record);
+    };
+    const readSettledResourceApproval = async () => {
+      const originalResourceApproval = await readOriginalResourceApproval();
+      const resourceApproval =
+        originalResourceApproval === null
+          ? await readResourceApproval()
+          : await readResourceApproval(originalResourceApproval);
       if (resourceApproval?.outcome === "cancelled") {
         throw denied();
       }
-      if (rawInput.action === "native-target-auth-only-resource-approval-read") {
-        return Response.json(
-          { status: resourceApproval === null ? "pending" : "approved" },
-          { headers: { "cache-control": "private, no-store" } },
-        );
-      }
-      if (resourceApproval === null) {
-        throw denied();
-      }
-      const now = new Date();
-      await assertRegistered();
-      await database
-        .insert(builderProvisioningJournals)
-        .values({
-          ...currentOwner.authority,
-          createdAt: now,
-          record: resourceApproval,
-          requestDigest: resourcePlanDigest,
-          requestId: settledId,
-          revision: 1,
-          state: "settled",
-          updatedAt: now,
-        })
-        .onConflictDoNothing();
-      if (!isDeepStrictEqual(await readOriginalResourceApproval(), resourceApproval)) {
-        throw denied();
-      }
-
-      const schemaCheckpoint = createNativeTargetApprovalCheckpoint(
-        database,
-        currentOwner.authority,
-        appId,
-        planDigest,
-        checkpointAuthority,
-        "native-target-auth-only",
-      );
-      const readSchemaApproval = async () => {
-        const state = await schemaCheckpoint.read();
-        const proof = await readPrivateNativeTargetAuthOnlyApproval({
-          assertOwner: assertRegistered,
-          callId: created.approval.callId,
-          historyOwner,
-          observation: { save: schemaCheckpoint.save, state },
-          owner: currentOwner,
-          plan,
-          readHistory,
-        });
-        if (!isDeepStrictEqual(proof, created.approval)) {
-          throw denied();
-        }
-        return proof;
-      };
-      const artifactPublication = createOperatorArtifactPublication({
-        assertCurrentOwner,
-        store: createPostgresOperatorArtifactStore({ database, assertCurrentOwner }),
-      });
-      const capturedDescriptions = createCapturedAppDescriptionStore({
-        assertCurrentOwner,
-        database,
-      });
-      const readCapturedDescription = async () => {
-        const description = await capturedDescriptions.read(context, plan.origin.appSpecDigest);
-        if (description === undefined || description.backend.kind !== "static") {
-          throw mismatch();
-        }
-        return description;
-      };
-      const runtimeStore = createPostgresNativeTargetAuthOnlyRuntimeStore(database);
-      const runtimeKey = {
-        appId,
-        authority: currentOwner.authority,
-        sessionId: context.target.sessionId,
-      };
-      const hostedContext = { ...ownerRequest, target: resource.plan.target };
-      const profileInput = { configuration, environment: input.environment, plan };
-      const credentialContext = nativeTargetAuthOnlyCredentialContextForPlan(profileInput);
-      const approvedAuthSchema = resource.plan.authSchema;
-      if (!isDeepStrictEqual(approvedAuthSchema, plan.authSchema)) {
-        throw mismatch();
-      }
-      const readinessPlan = {
-        authDatabase: resource.plan.authDatabase,
-        authSchema: plan.authSchema,
-        neon: resource.plan.neon,
-      };
-      type RuntimeEffect = Parameters<
-        Parameters<typeof createNativeTargetAuthOnlyRuntime>[0]["prepareAuthSchema"]
-      >[0];
-      const bindExecution = async (effect: RuntimeEffect, stage: "dispatching" | "unknown") => {
-        const readRuntimeLease = async () => {
-          await effect.assertCurrent();
-          await assertRegistered();
-          const latest = await runtimeStore.read(runtimeKey);
-          if (
-            latest?.state.stage !== stage ||
-            latest.state.planDigest !== planDigest ||
-            latest.state.attemptId !== effect.attemptId ||
-            latest.state.leaseId !== effect.leaseId
-          ) {
-            throw new HostedOperatorError("reconciliation_required");
-          }
-          return latest.revision;
-        };
-        const revision = await readRuntimeLease();
-        const execution = {
-          operationRef,
-          workerAttemptId: effect.attemptId,
-          leaseId: effect.leaseId,
-          // Moving an expired or failed lease from dispatching to unknown increments the CAS revision once.
-          fenceGeneration: stage === "dispatching" ? revision : revision - 1,
-        };
-        if (execution.fenceGeneration < 1) {
-          throw mismatch();
-        }
-        const assertCurrent = async () => {
-          request.signal.throwIfAborted();
-          if ((await readRuntimeLease()) !== revision) {
-            throw new HostedOperatorError("reconciliation_required");
-          }
-        };
-        const custody = createNativeTargetAuthOnlyCredentialCustody({
-          ...profileInput,
-          artifactContext: context,
-          assertCurrentOwner: async (observed) => {
-            if (!isDeepStrictEqual(observed, context)) throw denied();
-            await assertCurrent();
-          },
-          context: credentialContext,
-          database,
-          keyring,
-          readApproval: readSchemaApproval,
-          readRetainedPlan,
-        });
-        const journal = createAuthOnlyWorkerJournal({
-          ...execution,
-          appId,
-          assertCurrent,
-          authority: currentOwner.authority,
-          database,
-          resourceId: resource.plan.authDatabase.resourceId,
-          resourcePlanDigest,
-        });
-        const readAuthArtifact = async () =>
-          await createAuthOnlySchemaArtifactReader({
-            assertCurrentApproval: async (binding) => {
-              if (!isDeepStrictEqual(binding.context, context)) throw denied();
-              await assertCurrent();
-              if (!isDeepStrictEqual(await readSchemaApproval(), effect.approval)) throw denied();
-            },
-            readAuthPlan: artifactPublication.readAuthPlan,
-          }).read({
-            context,
-            selection: plan.authSchema,
-            worker: selected.sandbox.authWorker,
-          });
-        const runResources = async (
-          reference: NonNullable<Awaited<ReturnType<typeof custody.findReference>>>,
-          inspectOnly: boolean,
-        ) => {
-          const credentials = await custody.readSecrets(reference);
-          const credentialBytes = Buffer.from(JSON.stringify(credentials));
-          const sha256 = (value: Buffer) => createHash("sha256").update(value).digest("hex");
-          const digest = sha256(credentialBytes);
-          return await createNativeTargetAuthOnlyMaintenanceReader({
-            ...profileInput,
-            approval: resourceApproval,
-            approvedResourcePlanBytes: resource.bytes,
-            assertCurrent: async () => {
-              await assertCurrent();
-            },
-            assertCurrentOwner: async (observed) => {
-              if (!isDeepStrictEqual(observed, hostedContext)) throw denied();
-              await assertCurrent();
-            },
-            context: hostedContext,
-            execution,
-            readCredential: async (authority, installationId) => {
-              if (!isDeepStrictEqual(authority, currentOwner.authority)) throw denied();
-              return await readInstallation(currentOwner, installationId, plan.project.teamId);
-            },
-            readRetainedResourceApproval: async () => {
-              const { resource: current } = await readRegisteredResource();
-              const settled = await readResourceApproval(resourceApproval);
-              return settled === null
-                ? undefined
-                : {
-                    plan,
-                    approvedResourcePlanBytes: current.bytes,
-                    approval: settled,
-                  };
-            },
-            ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-          }).withMaintenanceCredential(async ({ maintenanceUrl }) => {
-            const invocation = {
-              ...execution,
-              approvalDigest: resourcePlanDigest,
-              approvedPlanBytes: resource.bytes,
-              assertCredentialsCheckpointed: async ({
-                approvalDigest,
-                resourceId,
-                credentialsSha256,
-              }: {
-                approvalDigest: string;
-                resourceId: string;
-                credentialsSha256: string;
-              }) => {
-                if (
-                  approvalDigest !== resourcePlanDigest ||
-                  resourceId !== resource.plan.authDatabase.resourceId ||
-                  credentialsSha256 !==
-                    sha256(Buffer.from(JSON.stringify(await custody.readSecrets(reference))))
-                )
-                  throw mismatch();
-              },
-              assertCurrent,
-              credentials: { bytes: credentialBytes, maintenanceUrl, sha256: digest },
-              effectId: resource.plan.effects[0]!.id,
-              signal: request.signal,
-            };
-            return await runAuthResourceFileSpool(
-              selected.sandbox,
-              inspectOnly
-                ? { ...invocation, readbackOnly: true }
-                : { ...invocation, bindWorkerContext: journal.bind("resources") },
-            );
-          });
-        };
-        const readReadiness = async (
-          reference: NonNullable<Awaited<ReturnType<typeof custody.findReference>>>,
-        ) => {
-          const readiness = await createHostedOperatorAuthReadiness<typeof readinessPlan>({
-            assertAuthorized: async () => {
-              await assertCurrent();
-            },
-            readAuthPlan: async () => (await readAuthArtifact()).content,
-            readRuntimeUrl: async () => (await custody.read(reference)).runtimeUrl,
-          }).verify({ ...hostedContext, assertCurrent, plan: readinessPlan });
-          return {
-            authSchema: {
-              artifactRef: plan.authSchema.artifactRef,
-              planDigest: plan.authSchema.planDigest,
-              targetDigest: plan.authSchema.targetDigest,
-            },
-            readiness: readiness.catalogFingerprint,
-          };
-        };
-        return {
-          assertCurrent,
-          custody,
-          execution,
-          journal,
-          readAuthArtifact,
-          readReadiness,
-          runResources,
-        };
-      };
-      const runtime = createNativeTargetAuthOnlyRuntime({
-        ...profileInput,
-        assertCurrentOwner,
-        database,
-        prepareAuthSchema: async (effect) => {
-          const attempt = await bindExecution(effect, "dispatching");
-          const reference =
-            (await attempt.custody.findReference()) ??
-            (await attempt.custody.seal({
-              migratorPassword: randomBytes(32).toString("base64url"),
-              runtimePassword: randomBytes(32).toString("base64url"),
-            }));
-          const observed = await attempt.runResources(reference, true);
-          if (observed?.status === "absent" || observed?.status === "retryable") {
-            await attempt.runResources(reference, false);
-            const verified = await attempt.runResources(reference, true);
-            if (verified?.status !== "applied")
-              throw new HostedOperatorError("reconciliation_required");
-          } else if (observed?.status !== "applied") {
-            throw new HostedOperatorError("reconciliation_required");
-          }
-          const artifact = await attempt.readAuthArtifact();
-          const { migrationUrl } = await attempt.custody.read(reference);
-          await runAuthSchemaFileSpool(selected.sandbox, {
-            ...attempt.execution,
-            approvedPlanBytes: resource.bytes,
-            approvalDigest: resourcePlanDigest,
-            authSchemaPlan: artifact,
-            credentials: { migrationUrl },
-            assertCurrent: attempt.assertCurrent,
-            bindWorkerContext: attempt.journal.bind("auth"),
-            signal: request.signal,
-          });
-          return await attempt.readReadiness(reference);
-        },
-        readApproval: readSchemaApproval,
-        readAuthSchemaSelection: async () => plan.authSchema,
-        readCapturedDescription,
-        readPublishedSource: async () =>
-          await readNativeTargetAuthOnlyPublishedSource({
-            database,
-            context,
-            appSpecDigest: plan.origin.appSpecDigest,
-            description: await readCapturedDescription(),
-            assertCurrentOwner,
-          }),
-        reconcileAuthSchema: async (effect) => {
-          const attempt = await bindExecution(effect, "unknown");
-          const reference = await attempt.custody.findReference();
-          const schemaBound = (await attempt.journal.read("auth")) !== undefined;
-          if (schemaBound) {
-            if (reference === null) return { status: "uncertain" };
-            try {
-              return { status: "prepared", ...(await attempt.readReadiness(reference)) };
-            } catch {
-              return { status: "uncertain" };
-            }
-          }
-          if (reference === null) {
-            return (await attempt.journal.read("resources")) === undefined
-              ? { status: "not-applied" }
-              : { status: "uncertain" };
-          }
-          // The schema worker was never allocated. Independently inspect any partial resource effect before retry.
-          const observed = await attempt.runResources(reference, true);
-          return observed?.status === "applied" ||
-            observed?.status === "absent" ||
-            observed?.status === "retryable"
-            ? { status: "not-applied" }
-            : { status: "uncertain" };
-        },
-        store: runtimeStore,
-      });
-      const result = await runtime.prepare(context, plan, planDigest);
-      if (result.stage !== "prepared") {
-        throw unavailable();
-      }
-      await assertRegistered();
+      return resourceApproval;
+    };
+    const resourceApproval = await readSettledResourceApproval();
+    if (rawInput.action === "native-target-auth-only-resource-approval-read") {
       return Response.json(
-        nativeTargetAuthOnlyResourceResultSchema.parse({
-          authSchema: result.authSchema,
-          readiness: result.readiness,
-          resourcePlanDigest,
-          status: "prepared",
-        }),
+        { status: resourceApproval === null ? "pending" : "approved" },
         { headers: { "cache-control": "private, no-store" } },
       );
+    }
+    if (resourceApproval === null) {
+      throw denied();
+    }
+    const now = new Date();
+    await assertRegistered();
+    await database
+      .insert(builderProvisioningJournals)
+      .values({
+        ...currentOwner.authority,
+        createdAt: now,
+        record: resourceApproval,
+        requestDigest: resourcePlanDigest,
+        requestId: settledId,
+        revision: 1,
+        state: "settled",
+        updatedAt: now,
+      })
+      .onConflictDoNothing();
+    if (!isDeepStrictEqual(await readOriginalResourceApproval(), resourceApproval)) {
+      throw denied();
+    }
+
+    const schemaCheckpoint = createNativeTargetApprovalCheckpoint(
+      database,
+      currentOwner.authority,
+      appId,
+      planDigest,
+      checkpointAuthority,
+      "native-target-auth-only",
+    );
+    const readSchemaApproval = async () => {
+      const state = await schemaCheckpoint.read();
+      const proof = await readPrivateNativeTargetAuthOnlyApproval({
+        assertOwner: assertRegistered,
+        callId: created.approval.callId,
+        historyOwner,
+        observation: { save: schemaCheckpoint.save, state },
+        owner: currentOwner,
+        plan,
+        readHistory,
+      });
+      if (!isDeepStrictEqual(proof, created.approval)) {
+        throw denied();
+      }
+      return proof;
+    };
+    const artifactPublication = createOperatorArtifactPublication({
+      assertCurrentOwner,
+      store: createPostgresOperatorArtifactStore({ database, assertCurrentOwner }),
+    });
+    const capturedDescriptions = createCapturedAppDescriptionStore({
+      assertCurrentOwner,
+      database,
+    });
+    const readCapturedDescription = async () => {
+      const description = await capturedDescriptions.read(context, plan.origin.appSpecDigest);
+      if (description === undefined || description.backend.kind !== "static") {
+        throw mismatch();
+      }
+      return description;
+    };
+    const runtimeStore = createPostgresNativeTargetAuthOnlyRuntimeStore(database);
+    const runtimeKey = {
+      appId,
+      authority: currentOwner.authority,
+      sessionId: context.target.sessionId,
+    };
+    const hostedContext = { ...ownerRequest, target: resource.plan.target };
+    const profileInput = { configuration, environment: input.environment, plan };
+    const credentialContext = nativeTargetAuthOnlyCredentialContextForPlan(profileInput);
+    const approvedAuthSchema = resource.plan.authSchema;
+    if (!isDeepStrictEqual(approvedAuthSchema, plan.authSchema)) {
+      throw mismatch();
+    }
+    const readinessPlan = {
+      authDatabase: resource.plan.authDatabase,
+      authSchema: plan.authSchema,
+      neon: resource.plan.neon,
+    };
+    const executionScope: AuthOnlyResourceExecutionScope = {
+      runtimeStore,
+      runtimeKey,
+      assertRegistered,
+      planDigest,
+      operationRef,
+      request,
+      profileInput,
+      context,
+      readSchemaApproval,
+      readRetainedPlan,
+      appId,
+      currentOwner,
+      resource,
+      resourcePlanDigest,
+      artifactPublication,
+      plan,
+      selected,
+      resourceApproval,
+      hostedContext,
+      readRegisteredResource,
+      readResourceApproval,
+      readinessPlan,
+      credentialContext,
+    };
+    const runtime = createNativeTargetAuthOnlyRuntime({
+      ...profileInput,
+      assertCurrentOwner,
+      database,
+      prepareAuthSchema: async (effect) => {
+        const attempt = await bindAuthOnlyResourceExecution(executionScope, effect, "dispatching");
+        const reference =
+          (await attempt.custody.findReference()) ??
+          (await attempt.custody.seal({
+            migratorPassword: randomBytes(32).toString("base64url"),
+            runtimePassword: randomBytes(32).toString("base64url"),
+          }));
+        const observed = await attempt.runResources(reference, true);
+        if (observed?.status === "absent" || observed?.status === "retryable") {
+          await attempt.runResources(reference, false);
+          const verified = await attempt.runResources(reference, true);
+          if (verified?.status !== "applied") {
+            throw new HostedOperatorError("reconciliation_required");
+          }
+        } else if (observed?.status !== "applied") {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+        const artifact = await attempt.readAuthArtifact();
+        const { migrationUrl } = await attempt.custody.read(reference);
+        await runAuthSchemaFileSpool(selected.sandbox, {
+          ...attempt.execution,
+          approvedPlanBytes: resource.bytes,
+          approvalDigest: resourcePlanDigest,
+          authSchemaPlan: artifact,
+          credentials: { migrationUrl },
+          assertCurrent: attempt.assertCurrent,
+          bindWorkerContext: attempt.journal.bind("auth"),
+          signal: request.signal,
+        });
+        return await attempt.readReadiness(reference);
+      },
+      readApproval: readSchemaApproval,
+      readAuthSchemaSelection: () => Promise.resolve(plan.authSchema),
+      readCapturedDescription,
+      readPublishedSource: async () =>
+        await readNativeTargetAuthOnlyPublishedSource({
+          database,
+          context,
+          appSpecDigest: plan.origin.appSpecDigest,
+          description: await readCapturedDescription(),
+          assertCurrentOwner,
+        }),
+      reconcileAuthSchema: async (effect) => {
+        const attempt = await bindAuthOnlyResourceExecution(executionScope, effect, "unknown");
+        const reference = await attempt.custody.findReference();
+        const schemaBound = (await attempt.journal.read("auth")) !== undefined;
+        if (schemaBound) {
+          if (reference === null) {
+            return { status: "uncertain" };
+          }
+          try {
+            return { status: "prepared", ...(await attempt.readReadiness(reference)) };
+          } catch {
+            return { status: "uncertain" };
+          }
+        }
+        if (reference === null) {
+          return (await attempt.journal.read("resources")) === undefined
+            ? { status: "not-applied" }
+            : { status: "uncertain" };
+        }
+        // The schema worker was never allocated. Independently inspect any partial resource effect before retry.
+        const observed = await attempt.runResources(reference, true);
+        return observed?.status === "applied" ||
+          observed?.status === "absent" ||
+          observed?.status === "retryable"
+          ? { status: "not-applied" }
+          : { status: "uncertain" };
+      },
+      store: runtimeStore,
+    });
+    const result = await runtime.prepare(context, plan, planDigest);
+    if (result.stage !== "prepared") {
+      throw unavailable();
+    }
+    await assertRegistered();
+    return Response.json(
+      nativeTargetAuthOnlyResourceResultSchema.parse({
+        authSchema: result.authSchema,
+        readiness: result.readiness,
+        resourcePlanDigest,
+        status: "prepared",
+      }),
+      { headers: { "cache-control": "private, no-store" } },
+    );
+  };
+  return async (request: Request, rawInput: NativeTargetRequest): Promise<Response> => {
+    if (
+      rawInput.action === "native-target-auth-only-entry-plan" ||
+      rawInput.action === "native-target-auth-only-entry-approval-read" ||
+      rawInput.action === "native-target-auth-only-entry"
+    ) {
+      return await handleEntry(request, rawInput);
+    }
+    if (isNativeTargetAuthOnlyDeliveryRequest(rawInput)) {
+      return await handleAuthOnlyDelivery(request, rawInput);
+    }
+    if (authOnlyPreparationActions.has(rawInput.action)) {
+      return await handleAuthOnlyPreparation(request, rawInput);
+    }
+    if (authOnlyResourceActions.has(rawInput.action)) {
+      return await handleAuthOnlyResources(request, rawInput);
     }
     if (rawInput.action !== "native-target-auth-only-plan") {
       return await nativeTargetService(request, rawInput);
@@ -2773,25 +3214,26 @@ export const createNativeTargetOnboardingDeployment = (input: {
       authRequest.input.project.teamId,
     );
     const authRuntime = createNativeTargetAuthOnlyRuntime({
-      assertCurrentOwner: async (artifactContext) => {
+      assertCurrentOwner: async (observedContext) => {
         if (
-          artifactContext.target.appId !== context.target.appId ||
-          artifactContext.target.sessionId !== context.target.sessionId ||
-          !isDeepStrictEqual(artifactContext.authority, context.authority)
-        )
+          observedContext.target.appId !== context.target.appId ||
+          observedContext.target.sessionId !== context.target.sessionId ||
+          !isDeepStrictEqual(observedContext.authority, context.authority)
+        ) {
           throw denied();
+        }
         await assertCurrentOwner(context);
       },
       configuration,
       database,
       environment: input.environment,
-      prepareAuthSchema: async () => {
-        throw unavailable();
-      },
-      readApproval: async () => null,
+      prepareAuthSchema: () => Promise.reject(unavailable()),
+      readApproval: () => Promise.resolve(null),
       readAuthSchemaSelection: async ({ context: observed, source }) => {
         await assertCurrentOwner(observed);
-        if (source.branch !== authRequest.input.branch) throw mismatch();
+        if (source.branch !== authRequest.input.branch) {
+          throw mismatch();
+        }
         const currentProfile = resolveNativeTargetResourceProfile({
           base: configuration,
           resourceProfileId: authRequest.input.authProfileId,
@@ -2820,14 +3262,14 @@ export const createNativeTargetOnboardingDeployment = (input: {
         });
         const artifactStore = createPostgresOperatorArtifactStore({
           database,
-          assertCurrentOwner: async (artifactContext) => {
-            await assertCurrentOwner(artifactContext);
+          assertCurrentOwner: async (observedContext) => {
+            await assertCurrentOwner(observedContext);
           },
         });
         const publication = createOperatorArtifactPublication({
           store: artifactStore,
-          assertCurrentOwner: async (artifactContext) => {
-            await assertCurrentOwner(artifactContext);
+          assertCurrentOwner: async (observedContext) => {
+            await assertCurrentOwner(observedContext);
           },
         });
         const artifactRef = await publication.publishAuthPlan({
@@ -2835,7 +3277,9 @@ export const createNativeTargetOnboardingDeployment = (input: {
           context: observed,
         });
         const worker = currentProfile.sandbox.authWorker;
-        if (worker === undefined) throw unavailable();
+        if (worker === undefined) {
+          throw unavailable();
+        }
         const selected: NativeTargetAuthOnlyPlan["authSchema"] = {
           artifactRef,
           planDigest: proposed.planDigest,
@@ -2845,9 +3289,9 @@ export const createNativeTargetOnboardingDeployment = (input: {
         await assertCurrentOwner(observed);
         return selected;
       },
-      readCapturedDescription: async () => description,
-      readPublishedSource: async () =>
-        await readNativeTargetAuthOnlyPublishedSource({
+      readCapturedDescription: () => Promise.resolve(description),
+      readPublishedSource: () =>
+        readNativeTargetAuthOnlyPublishedSource({
           database,
           context,
           appSpecDigest: authRequest.selectedApp.appSpecDigest,
@@ -2856,7 +3300,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
             await assertCurrentOwner(context);
           },
         }),
-      reconcileAuthSchema: async () => ({ status: "uncertain" as const }),
+      reconcileAuthSchema: () => Promise.resolve({ status: "uncertain" as const }),
     });
     const authPlan = await authRuntime.plan(context, {
       adapterGeneration: currentOwner.adapterGeneration,

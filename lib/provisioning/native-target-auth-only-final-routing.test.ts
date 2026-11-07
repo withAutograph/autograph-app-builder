@@ -1,7 +1,7 @@
 /* oxlint-disable eslint/require-await -- The provider and journal fixtures are deliberately async. */
-import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { drizzle } from "drizzle-orm/postgres-js";
 import type { SQL } from "drizzle-orm";
 import { z } from "zod";
 
@@ -21,7 +21,6 @@ import {
   nativeTargetAuthOnlyFinalRoutingRecordSchema,
 } from "./native-target-auth-only-final-routing";
 
-const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const plan = nativeTargetAuthOnlyTestPlan();
 const { authority } = plan.origin;
 const target = {
@@ -206,6 +205,24 @@ const fixture = () => {
   };
   const gitSource = { ref: gatewayBranch, repoId: gatewayRepo, sha: gatewaySha, type: "github" };
   const events: string[] = [];
+  const createRefresh = (init: RequestInit | undefined) => {
+    expect(currentProjection).toBe(nextProjection);
+    expect(row.record.refreshAttempted).toBe(true);
+    expect(JSON.parse(z.string().parse(init?.body))).toMatchObject({
+      gitSource,
+      meta,
+      project: gatewayProjectId,
+    });
+    events.push("refresh");
+    deploymentExists = flags.createArrives;
+    if (flags.aliasMovesAfterRefresh) {
+      alias = "dpl-unrelated";
+    }
+    if (flags.loseCreate) {
+      throw new Error("lost create");
+    }
+    return Response.json({ id: refreshId });
+  };
   const fetcher: typeof fetch = async (raw, init) => {
     const url = new URL(raw instanceof Request ? raw.url : raw);
     const method = init?.method ?? "GET";
@@ -233,22 +250,7 @@ const fixture = () => {
       return Response.json({ id: target.scopeId, slug: "team-fixture" });
     }
     if (url.pathname === "/v13/deployments" && method === "POST") {
-      expect(currentProjection).toBe(nextProjection);
-      expect(row.record.refreshAttempted).toBe(true);
-      expect(JSON.parse(z.string().parse(init?.body))).toMatchObject({
-        gitSource,
-        meta,
-        project: gatewayProjectId,
-      });
-      events.push("refresh");
-      deploymentExists = flags.createArrives;
-      if (flags.aliasMovesAfterRefresh) {
-        alias = "dpl-unrelated";
-      }
-      if (flags.loseCreate) {
-        throw new Error("lost create");
-      }
-      return Response.json({ id: refreshId });
+      return createRefresh(init);
     }
     if (url.pathname === `/v13/deployments/${refreshId}`) {
       if (!deploymentExists) {
@@ -358,7 +360,7 @@ const fixture = () => {
     input,
     routingApproval,
     routingPlanBytes,
-    run: async () => execute(input),
+    run: async () => await execute(input),
   };
 };
 
@@ -377,7 +379,9 @@ it("retains exact separately approved routing bytes in an owner and session scop
     insert: () => ({
       values: (row: Row) => ({
         onConflictDoNothing: async () => {
-          if (!rows.has(row.requestId)) rows.set(row.requestId, structuredClone(row));
+          if (!rows.has(row.requestId)) {
+            rows.set(row.requestId, structuredClone(row));
+          }
         },
       }),
     }),
@@ -412,7 +416,11 @@ it("retains exact separately approved routing bytes in an owner and session scop
       }),
     }),
   };
-  const store = createPostgresNativeTargetAuthOnlyFinalRoutingStore(database);
+  const mockDatabase: Parameters<typeof createPostgresNativeTargetAuthOnlyFinalRoutingStore>[0] =
+    drizzle.mock();
+  const store = createPostgresNativeTargetAuthOnlyFinalRoutingStore(
+    Object.assign(mockDatabase, database),
+  );
   const key = {
     appId: target.appId,
     authority,
@@ -423,17 +431,20 @@ it("retains exact separately approved routing bytes in an owner and session scop
   expect(retained.record.routingPlanBase64).toBe(f.routingPlanBytes.toString("base64"));
   expect(await store.read({ ...key, sessionId: "other-session" })).toBeUndefined();
   expect(await store.compareAndSet(key, 0, retained.record)).toBeUndefined();
-  const plan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
+  const retainedPlan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
     JSON.parse(f.routingPlanBytes.toString("utf-8")),
   );
   const intent = await store.compareAndSet(key, retained.revision, {
     ...retained.record,
-    projectionAttempt: plan.projection,
+    projectionAttempt: retainedPlan.projection,
   });
-  expect(intent?.record.projectionAttempt).toEqual(plan.projection);
+  expect(intent?.record.projectionAttempt).toEqual(retainedPlan.projection);
   expect(intent?.record.refreshAttempted).toBe(false);
-  const changed = await store.compareAndSet(key, intent!.revision, {
-    ...intent!.record,
+  if (intent === undefined) {
+    throw new Error("Expected the projection intent CAS to persist");
+  }
+  const changed = await store.compareAndSet(key, intent.revision, {
+    ...intent.record,
     refreshAttempted: true,
   });
   expect(changed?.record.refreshAttempted).toBe(true);

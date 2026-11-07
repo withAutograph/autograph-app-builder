@@ -351,7 +351,7 @@ const fixture = () => {
     organization,
     ports,
     run: async () =>
-      createNativeTargetAuthOnlyEntryPreparation(ports, {
+      await createNativeTargetAuthOnlyEntryPreparation(ports, {
         organization: orgWorker,
         signupPolicy: policyWorker,
       })(input),

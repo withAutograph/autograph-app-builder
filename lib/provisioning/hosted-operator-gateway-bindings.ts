@@ -716,7 +716,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         }
         return resolveNativePreviewEnvironmentGitBranch(branch, raw);
       })();
-      return previewGitBranch;
+      return await previewGitBranch;
     };
     const approvedTrustedSources = input.plan.gatewayBindings?.trustedSources;
     const approvedTrustedSourceRules = Object.values(approvedTrustedSources ?? {}).filter(

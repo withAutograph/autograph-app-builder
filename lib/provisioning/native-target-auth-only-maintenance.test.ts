@@ -17,39 +17,47 @@ const mocks = vi.hoisted(() => ({
   profile: vi.fn(),
   store: vi.fn(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Fixture-owned registered profile replaces only the external configuration lookup.
 vi.mock("./native-target-resource-profile", () => ({
   resolveNativeTargetResourceProfile: mocks.profile,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Vercel installation access is an external authority boundary; the mock consumes the actual credential callback.
 vi.mock("../agent/prepared-provider-context", () => ({
   readOwnerVercelProjectAccess: mocks.access,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Native store binding is external provider metadata; this fixture retains its exact scope.
 vi.mock("./hosted-runtime-native-neon-binding", () => ({
   readVercelNativeNeonBinding: mocks.store,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- The external Neon credential exchange is replaced while invoking the real current-owner and approved-scope callbacks.
 vi.mock("./hosted-operator-native-preview-neon-mcp", () => ({
   createPreviewNeonMcpReader: (deps: PreviewNeonMcpDependencies) => ({
-    withMaintenanceCredential: async (
+    withMaintenanceCredential: async <T>(
       context: HostedOperatorContext,
       scope: Parameters<PreviewNeonMcpDependencies["assertApprovedScope"]>[1],
       consume: (material: {
         maintenanceUrl: string;
         scope: typeof scope;
         initSource: "empty";
-      }) => Promise<unknown>,
+      }) => Promise<T>,
     ) => {
-      context = { ...context, ownerContext: context.ownerContext };
-      await deps.assertApprovedScope(context, scope);
-      await deps.readCurrentOwnerNativeStore(context, deps.configuration.nativeStore);
-      await deps.assertApprovedOwner!(context, scope, deps.configuration.nativeStore);
+      const currentContext = { ...context, ownerContext: context.ownerContext };
+      const assertApprovedOwner = deps.assertApprovedOwner;
+      if (assertApprovedOwner === undefined) {
+        throw new Error("Expected the maintenance adapter to require current ownership");
+      }
+      await deps.assertApprovedScope(currentContext, scope);
+      await deps.readCurrentOwnerNativeStore(currentContext, deps.configuration.nativeStore);
+      await assertApprovedOwner(currentContext, scope, deps.configuration.nativeStore);
       await mocks.acquire();
-      await deps.assertApprovedOwner!(context, scope, deps.configuration.nativeStore);
+      await assertApprovedOwner(currentContext, scope, deps.configuration.nativeStore);
       return await consume({ initSource: "empty", maintenanceUrl: "private-fixture-uri", scope });
     },
   }),
 }));
 
 const sha = (value: Buffer) => createHash("sha256").update(value).digest("hex");
-const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
+const bytes = (value: typeof resourcePlan) => Buffer.from(JSON.stringify(value));
 const authority = {
   audience: "https://builder.example/mcp",
   issuer: "https://builder.example/api/auth",
@@ -66,8 +74,16 @@ const target = {
   scopeType: "team" as const,
   sessionId: "saved-session",
 };
+const worker = {
+  executablePath: "/trusted/installer",
+  id: "fixture-installer",
+  operationScope: "generated-app-release-install-v1" as const,
+  sha256: "b".repeat(64),
+  subcommand: "protected-generated-app-install" as const,
+};
 const baseProfile = {
   applications: {},
+  builderCallbackOrigin: "https://builder.example",
   authDatabase: {
     database: "pilot_auth",
     migratorRole: "pilot_migrator",
@@ -82,7 +98,17 @@ const baseProfile = {
     gatewayOrigin: "https://gateway.example",
     projectId: "prj-gateway",
     publicOrigin: "https://apps.example",
-    workload: { projectId: "prj-gateway" },
+    workload: {
+      audience: "https://vercel.com/owner",
+      environment: "preview",
+      issuer: "https://oidc.vercel.com/owner",
+      ownerId: target.scopeId,
+      projectId: "prj-gateway",
+      subject: "gateway-workload",
+    },
+    gitSha: "a".repeat(40),
+    repoId: "gateway-repo",
+    protectedApplicationIds: [target.appId],
   },
   nativeNeon: {
     configuration: {
@@ -110,12 +136,32 @@ const baseProfile = {
     },
   },
   operator: {
+    deploymentId: "dpl-operator",
     environment: "preview",
     origin: "https://operator.example",
     projectId: "prj-operator",
   },
-  sandbox: { resourcesWorker: { id: "neon-resource-bootstrap-v1", sha256: "b".repeat(64) } },
-};
+  sandbox: {
+    accessWorker: worker,
+    authWorker: worker,
+    resourcesWorker: { ...worker, id: "neon-resource-bootstrap-v1" },
+    workers: {},
+    authProposal: { executablePath: "/trusted/proposal", id: "proposal", sha256: "c".repeat(64) },
+    image: "fixture-image",
+    projectId: "prj-operator",
+    teamId: target.scopeId,
+  },
+  teamId: target.scopeId,
+  catalogAppIds: [],
+  workloadPolicy: {
+    audience: "https://vercel.com/owner",
+    environment: "preview",
+    issuer: "https://oidc.vercel.com/owner",
+    ownerId: target.scopeId,
+    projectId: "prj-operator",
+    subject: "operator-workload",
+  },
+} satisfies HostedOperatorSourceConfiguration;
 const source = {
   branch: "pilot",
   changeSetDigest: "c".repeat(64),
@@ -127,9 +173,21 @@ const source = {
 const plan = planNativeTargetAuthOnly({
   authAuthorityBinding: {
     authDatabase: baseProfile.authDatabase,
-    gateway: baseProfile.gateway,
+    gateway: {
+      authBrowserOrigin: baseProfile.gateway.authBrowserOrigin,
+      branch: baseProfile.gateway.branch,
+      environment: baseProfile.gateway.environment,
+      gatewayOrigin: baseProfile.gateway.gatewayOrigin,
+      projectId: baseProfile.gateway.projectId,
+      publicOrigin: baseProfile.gateway.publicOrigin,
+      workload: baseProfile.gateway.workload,
+    },
     nativeNeon: baseProfile.nativeNeon,
-    operator: baseProfile.operator,
+    operator: {
+      environment: baseProfile.operator.environment,
+      origin: baseProfile.operator.origin,
+      projectId: baseProfile.operator.projectId,
+    },
   },
   authSchema: {
     artifactRef: "auth-artifact",
@@ -199,9 +257,14 @@ beforeEach(() => {
 const fixture = () => {
   const profile = structuredClone(baseProfile);
   mocks.profile.mockReturnValue(profile);
-  mocks.acquire.mockResolvedValue();
+  mocks.acquire.mockImplementation(() => Promise.resolve());
   mocks.access.mockImplementation(
-    async (input: { readCredential: () => Promise<unknown>; projectId: string }) => {
+    async (input: {
+      readCredential: () => ReturnType<
+        Parameters<typeof createNativeTargetAuthOnlyMaintenanceReader>[0]["readCredential"]
+      >;
+      projectId: string;
+    }) => {
       await input.readCredential();
       return {
         project: { id: input.projectId },
@@ -242,9 +305,9 @@ const fixture = () => {
   const input = {
     approval,
     approvedResourcePlanBytes: bytes(resourcePlan),
-    assertCurrent: vi.fn(async () => undefined),
-    assertCurrentOwner: vi.fn(async () => undefined),
-    configuration: {} as HostedOperatorSourceConfiguration,
+    assertCurrent: vi.fn(async () => {}),
+    assertCurrentOwner: vi.fn(async () => {}),
+    configuration: structuredClone(baseProfile),
     context: { authority: { ...authority }, target: { ...target } },
     environment: {},
     execution: { ...execution },
@@ -366,7 +429,8 @@ it.each([
   const f = fixture();
   const reader = createNativeTargetAuthOnlyMaintenanceReader(f.input);
   if (kind === "missing") {
-    f.input.readRetainedResourceApproval.mockResolvedValue(undefined);
+    const missing = undefined;
+    f.input.readRetainedResourceApproval.mockResolvedValue(missing);
   }
   if (kind === "plan") {
     f.retained.plan.publishedSource.gitSha = "1".repeat(40);

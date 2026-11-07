@@ -118,6 +118,24 @@ const routingRequestId = (key: NativeTargetAuthOnlyFinalRoutingKey) => {
 const routingRowState = (record: RoutingRecord) =>
   record.refreshReceipt === undefined ? "pending" : "settled";
 
+const validateCandidate = (candidate: OperatorDeploymentCandidate, plan: RoutingPlan) => {
+  if (
+    candidate.operationRef !== plan.operationRef ||
+    candidate.projectId !== plan.gateway.projectId ||
+    candidate.branch !== plan.gateway.branch ||
+    candidate.repoId !== plan.gateway.repoId
+  ) {
+    throw mismatch();
+  }
+  if (
+    candidate.deploymentId === plan.bootstrap.deploymentId ||
+    candidate.deploymentId === plan.app.deploymentId ||
+    candidate.origin === plan.bootstrap.origin
+  ) {
+    throw mismatch();
+  }
+};
+
 /** Store the exact separately approved routing plan and its retry journal in the constrained owner journal. */
 export const createPostgresNativeTargetAuthOnlyFinalRoutingStore = (
   database: PostgresJsDatabase<typeof databaseSchema>,
@@ -130,26 +148,26 @@ export const createPostgresNativeTargetAuthOnlyFinalRoutingStore = (
       eq(builderProvisioningJournals.ownerUserId, key.authority.ownerUserId),
       eq(builderProvisioningJournals.requestId, routingRequestId(key)),
     );
-  const validateKeyRecord = (key: NativeTargetAuthOnlyFinalRoutingKey, raw: unknown) => {
-    const record = nativeTargetAuthOnlyFinalRoutingRecordSchema.parse(raw);
+  const validateKeyRecord = (key: NativeTargetAuthOnlyFinalRoutingKey, record: RoutingRecord) => {
     const bytes = Buffer.from(record.routingPlanBase64, "base64");
     const plan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
       JSON.parse(bytes.toString("utf-8")),
     );
-    if (
-      bytes.toString("base64") !== record.routingPlanBase64 ||
-      nativeTargetAuthOnlyFinalRoutingPlanDigest(bytes) !== record.routingPlanDigest ||
-      record.operationRef !== key.operationRef ||
-      plan.operationRef !== key.operationRef ||
-      plan.target.appId !== key.appId ||
-      plan.target.sessionId !== key.sessionId ||
-      plan.app.operationRef !== plan.deliveryOperationRef ||
-      record.approval.planDigest !== record.routingPlanDigest ||
-      record.approval.sourceDigest !== record.routingPlanDigest ||
-      record.approval.outcome !== "approved" ||
-      record.approval.publicSessionId !== key.sessionId ||
-      record.approval.responderPrincipalId !== key.authority.ownerUserId
-    ) {
+    const exactRecord = [
+      bytes.toString("base64") === record.routingPlanBase64,
+      nativeTargetAuthOnlyFinalRoutingPlanDigest(bytes) === record.routingPlanDigest,
+      record.operationRef === key.operationRef,
+      plan.operationRef === key.operationRef,
+      plan.target.appId === key.appId,
+      plan.target.sessionId === key.sessionId,
+      plan.app.operationRef === plan.deliveryOperationRef,
+      record.approval.planDigest === record.routingPlanDigest,
+      record.approval.sourceDigest === record.routingPlanDigest,
+      record.approval.outcome === "approved",
+      record.approval.publicSessionId === key.sessionId,
+      record.approval.responderPrincipalId === key.authority.ownerUserId,
+    ].every(Boolean);
+    if (!exactRecord) {
       throw mismatch();
     }
     for (const candidate of record.refreshCandidates) {
@@ -181,7 +199,10 @@ export const createPostgresNativeTargetAuthOnlyFinalRoutingStore = (
     key: NativeTargetAuthOnlyFinalRoutingKey,
     row: typeof builderProvisioningJournals.$inferSelect,
   ) => {
-    const record = validateKeyRecord(key, row.record);
+    const record = validateKeyRecord(
+      key,
+      nativeTargetAuthOnlyFinalRoutingRecordSchema.parse(row.record),
+    );
     if (
       row.requestId !== routingRequestId(key) ||
       row.requestDigest !== record.routingPlanDigest ||
@@ -207,7 +228,10 @@ export const createPostgresNativeTargetAuthOnlyFinalRoutingStore = (
       revision: number,
       rawRecord: RoutingRecord,
     ) {
-      const record = validateKeyRecord(key, rawRecord);
+      const record = validateKeyRecord(
+        key,
+        nativeTargetAuthOnlyFinalRoutingRecordSchema.parse(rawRecord),
+      );
       const [row] = await database
         .update(builderProvisioningJournals)
         .set({
@@ -234,18 +258,20 @@ export const createPostgresNativeTargetAuthOnlyFinalRoutingStore = (
     ) {
       const approval = nativeTargetAuthOnlyApprovalSchema.parse(rawApproval);
       const plan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
-        JSON.parse(bytes.toString("utf8")),
+        JSON.parse(bytes.toString("utf-8")),
       );
       const routingPlanDigest = nativeTargetAuthOnlyFinalRoutingPlanDigest(bytes);
       if (
-        plan.operationRef !== key.operationRef ||
-        plan.target.appId !== key.appId ||
-        plan.target.sessionId !== key.sessionId ||
-        approval.planDigest !== routingPlanDigest ||
-        approval.sourceDigest !== routingPlanDigest ||
-        approval.outcome !== "approved" ||
-        approval.publicSessionId !== key.sessionId ||
-        approval.responderPrincipalId !== key.authority.ownerUserId
+        ![
+          plan.operationRef === key.operationRef,
+          plan.target.appId === key.appId,
+          plan.target.sessionId === key.sessionId,
+          approval.planDigest === routingPlanDigest,
+          approval.sourceDigest === routingPlanDigest,
+          approval.outcome === "approved",
+          approval.publicSessionId === key.sessionId,
+          approval.responderPrincipalId === key.authority.ownerUserId,
+        ].every(Boolean)
       ) {
         throw denied();
       }
@@ -346,6 +372,27 @@ const checkProjectionScope = (plan: RoutingPlan, ownerId: string) => {
   }
 };
 
+const assertParentApproval = (
+  environment: ProjectionInput["environment"],
+  parentDigest: string,
+) => {
+  const { approval, authority, target } = environment;
+  if (
+    approval.outcome !== "approved" ||
+    approval.planDigest !== parentDigest ||
+    approval.sourceDigest !== parentDigest
+  ) {
+    throw denied();
+  }
+  if (
+    approval.responderPrincipalId !== authority.ownerUserId ||
+    approval.publicSessionId !== target.sessionId ||
+    environment.effect !== "gateway"
+  ) {
+    throw denied();
+  }
+};
+
 /** Freeze a read-only plan for the final alias refresh after both parent deployments are READY. */
 export const buildNativeTargetAuthOnlyFinalRoutingPlanBytes = (input: {
   operationRef: string;
@@ -415,27 +462,6 @@ export const buildNativeTargetAuthOnlyFinalRoutingPlanBytes = (input: {
   return Buffer.from(JSON.stringify(plan));
 };
 
-const assertParentApproval = (
-  environment: ProjectionInput["environment"],
-  parentDigest: string,
-) => {
-  const { approval, authority, target } = environment;
-  if (
-    approval.outcome !== "approved" ||
-    approval.planDigest !== parentDigest ||
-    approval.sourceDigest !== parentDigest
-  ) {
-    throw denied();
-  }
-  if (
-    approval.responderPrincipalId !== authority.ownerUserId ||
-    approval.publicSessionId !== target.sessionId ||
-    environment.effect !== "gateway"
-  ) {
-    throw denied();
-  }
-};
-
 const checkParent = (input: RoutingInput, plan: RoutingPlan, parent: RetainedParent) => {
   const { environment, appReceipt, source } = input.projection;
   const { deliveryPlan, target, operationRef } = environment;
@@ -445,11 +471,13 @@ const checkParent = (input: RoutingInput, plan: RoutingPlan, parent: RetainedPar
   }
   const { bootstrap, app } = parent;
   if (
-    !isDeepStrictEqual(plan.bootstrap, bootstrap) ||
-    !isDeepStrictEqual(plan.app, app) ||
-    !isDeepStrictEqual(plan.target, target) ||
-    !isDeepStrictEqual(appReceipt, app) ||
-    !isDeepStrictEqual(source, plan.source)
+    ![
+      isDeepStrictEqual(plan.bootstrap, bootstrap),
+      isDeepStrictEqual(plan.app, app),
+      isDeepStrictEqual(plan.target, target),
+      isDeepStrictEqual(appReceipt, app),
+      isDeepStrictEqual(source, plan.source),
+    ].every(Boolean)
   ) {
     throw mismatch();
   }
@@ -489,24 +517,6 @@ const checkParent = (input: RoutingInput, plan: RoutingPlan, parent: RetainedPar
     publicGateway,
     stage: "app",
   });
-};
-
-const validateCandidate = (candidate: OperatorDeploymentCandidate, plan: RoutingPlan) => {
-  if (
-    candidate.operationRef !== plan.operationRef ||
-    candidate.projectId !== plan.gateway.projectId ||
-    candidate.branch !== plan.gateway.branch ||
-    candidate.repoId !== plan.gateway.repoId
-  ) {
-    throw mismatch();
-  }
-  if (
-    candidate.deploymentId === plan.bootstrap.deploymentId ||
-    candidate.deploymentId === plan.app.deploymentId ||
-    candidate.origin === plan.bootstrap.origin
-  ) {
-    throw mismatch();
-  }
 };
 
 const requestMethod = (raw: URL | Request | string, init?: RequestInit) =>

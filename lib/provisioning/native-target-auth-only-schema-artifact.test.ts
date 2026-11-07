@@ -19,18 +19,17 @@ const context: OperatorArtifactContext = {
 const planDigest = "a".repeat(64);
 const targetDigest = "b".repeat(64);
 const worker = { id: "auth-protected-schema-v1", sha256: "c".repeat(64) };
-const content = () =>
-  Buffer.from(
-    JSON.stringify({
-      proposal: "new-empty",
-      resource: {
-        database: "isolated_auth",
-        migratorRole: "auth_migrator",
-        runtimeRole: "auth_runtime",
-      },
-      schemaPlan: { planDigest, targetDigest },
-    }),
-  );
+const schemaFrame = () => ({
+  proposal: "new-empty",
+  resource: {
+    database: "isolated_auth",
+    migratorRole: "auth_migrator",
+    runtimeRole: "auth_runtime",
+  },
+  schemaPlan: { planDigest, targetDigest },
+});
+const content = () => Buffer.from(JSON.stringify(schemaFrame()));
+type ArtifactReaderPorts = Parameters<typeof createAuthOnlySchemaArtifactReader>[0];
 const binding = (): AuthOnlySchemaArtifactBinding => ({
   context: structuredClone(context),
   selection: {
@@ -48,10 +47,11 @@ describe("approved Auth-only schema artifact read", () => {
     const key = (owned: OperatorArtifactContext, ref: string, index: number) =>
       JSON.stringify([owned, ref, index]);
     const store: OperatorArtifactStore = {
-      put: async (owned, chunk) => {
+      put: (owned, chunk) => {
         chunks.set(key(owned, chunk.artifactRef, chunk.chunkIndex), chunk.content);
+        return Promise.resolve();
       },
-      read: async (owned, ref, index) => chunks.get(key(owned, ref, index)),
+      read: (owned, ref, index) => Promise.resolve(chunks.get(key(owned, ref, index))),
     };
     const publication = createOperatorArtifactPublication({
       assertCurrentOwner: async () => {},
@@ -68,7 +68,7 @@ describe("approved Auth-only schema artifact read", () => {
     const assertCurrentApproval = vi.fn(async () => {});
     const reader = createAuthOnlySchemaArtifactReader({
       assertCurrentApproval,
-      readAuthPlan: publication.readAuthPlan,
+      readAuthPlan: (owned, selection) => publication.readAuthPlan(owned, selection),
     });
     expect(await reader.read(request)).toEqual({ artifactRef, content: content() });
     await expect(
@@ -84,12 +84,11 @@ describe("approved Auth-only schema artifact read", () => {
     let current = true;
     const request = binding();
     const reader = createAuthOnlySchemaArtifactReader({
-      assertCurrentApproval: async () => {
-        if (!current) throw new Error("approval no longer current");
-      },
-      readAuthPlan: async () => {
+      assertCurrentApproval: () =>
+        current ? Promise.resolve() : Promise.reject(new Error("approval no longer current")),
+      readAuthPlan: () => {
         current = false;
-        return { artifactRef: request.selection.artifactRef, content: content() };
+        return Promise.resolve({ artifactRef: request.selection.artifactRef, content: content() });
       },
     });
     await expect(reader.read(request)).rejects.toThrow("approval no longer current");
@@ -100,9 +99,13 @@ describe("approved Auth-only schema artifact read", () => {
     async (field) => {
       const request = binding();
       request.worker = { ...request.worker, [field]: "different" };
-      const readAuthPlan = vi.fn();
+      const readAuthPlan = vi
+        .fn<ArtifactReaderPorts["readAuthPlan"]>()
+        .mockRejectedValue(new Error("Unexpected private artifact read"));
       const reader = createAuthOnlySchemaArtifactReader({
-        assertCurrentApproval: async () => {},
+        assertCurrentApproval: vi
+          .fn<ArtifactReaderPorts["assertCurrentApproval"]>()
+          .mockImplementation(() => Promise.resolve()),
         readAuthPlan,
       });
       await expect(reader.read(request)).rejects.toThrow("schema_artifact_mismatch");
@@ -114,16 +117,20 @@ describe("approved Auth-only schema artifact read", () => {
     "refuses mismatched returned %s",
     async (field) => {
       const request = binding();
-      const frame = JSON.parse(content().toString());
+      const frame = schemaFrame();
       if (field !== "artifactRef") {
         frame.schemaPlan[field] = "e".repeat(64);
       }
       const reader = createAuthOnlySchemaArtifactReader({
-        assertCurrentApproval: async () => {},
-        readAuthPlan: async () => ({
-          artifactRef: field === "artifactRef" ? "another-artifact" : request.selection.artifactRef,
-          content: Buffer.from(JSON.stringify(frame)),
-        }),
+        assertCurrentApproval: vi
+          .fn<ArtifactReaderPorts["assertCurrentApproval"]>()
+          .mockImplementation(() => Promise.resolve()),
+        readAuthPlan: () =>
+          Promise.resolve({
+            artifactRef:
+              field === "artifactRef" ? "another-artifact" : request.selection.artifactRef,
+            content: Buffer.from(JSON.stringify(frame)),
+          }),
       });
       await expect(reader.read(request)).rejects.toThrow("schema_artifact_mismatch");
     },
@@ -134,14 +141,14 @@ describe("approved Auth-only schema artifact read", () => {
     const approved = structuredClone(request);
     const bytes = content();
     const observed: AuthOnlySchemaArtifactBinding[] = [];
-    const readAuthPlan = vi.fn(async (owned, expected) => {
+    const readAuthPlan = vi.fn<ArtifactReaderPorts["readAuthPlan"]>((owned, expected) => {
       expect(owned).toEqual(approved.context);
       expect(expected).toEqual({
         artifactRef: approved.selection.artifactRef,
         planDigest,
         targetDigest,
       });
-      return { artifactRef: expected.artifactRef, content: bytes };
+      return Promise.resolve({ artifactRef: expected.artifactRef, content: bytes });
     });
     const reader = createAuthOnlySchemaArtifactReader({
       assertCurrentApproval: async (received) => {
@@ -152,7 +159,9 @@ describe("approved Auth-only schema artifact read", () => {
           request.worker = { id: "changed", sha256: "f".repeat(64) };
           received.context.target.appId = "changed-by-port";
           await Promise.resolve();
-        } else bytes.fill(0);
+        } else {
+          bytes.fill(0);
+        }
       },
       readAuthPlan,
     });
@@ -164,11 +173,13 @@ describe("approved Auth-only schema artifact read", () => {
   });
 
   it("does not read private artifacts before authenticated approval succeeds", async () => {
-    const readAuthPlan = vi.fn();
+    const readAuthPlan = vi
+      .fn<ArtifactReaderPorts["readAuthPlan"]>()
+      .mockRejectedValue(new Error("Unexpected private artifact read"));
     const reader = createAuthOnlySchemaArtifactReader({
-      assertCurrentApproval: async () => {
-        throw new Error("approval required");
-      },
+      assertCurrentApproval: vi
+        .fn<ArtifactReaderPorts["assertCurrentApproval"]>()
+        .mockRejectedValue(new Error("approval required")),
       readAuthPlan,
     });
     await expect(reader.read(binding())).rejects.toThrow("approval required");

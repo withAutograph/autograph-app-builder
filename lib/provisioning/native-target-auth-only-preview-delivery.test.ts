@@ -3,6 +3,7 @@ import { expect, it, vi } from "vitest";
 import { createNativeTargetAuthOnlyPreviewDelivery } from "./native-target-auth-only-preview-delivery";
 import type { NativeTargetAuthOnlyPreviewDeliveryInput } from "./native-target-auth-only-preview-delivery";
 
+type DeliveryPorts = Parameters<typeof createNativeTargetAuthOnlyPreviewDelivery>[0];
 const authority = {
   audience: "autograph-operator",
   issuer: "https://builder.example.test",
@@ -61,68 +62,76 @@ it("reconciles a retained Auth-only Preview candidate using the exact approved d
   const assertCurrent = vi.fn(async () => {});
   const checkpointDelivery = vi.fn(async () => {});
   const requests: string[] = [];
-  const fetch = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
-    const url = new URL(input instanceof URL ? input : String(input));
+  const providerFetch = vi.fn<typeof globalThis.fetch>((request, init) => {
+    const url = new URL(request instanceof Request ? request.url : request);
     requests.push(`${init?.method ?? "GET"} ${url.pathname}`);
     if (url.pathname === "/v7/deployments") {
-      return Response.json({
-        deployments: [
-          {
-            meta: {
-              autograph_operator_effect: "auth-preview-delivery",
-              autograph_operator_operation: "11111111-1111-4111-a111-111111111111",
-              autograph_operator_plan: approvedPlanDigest,
+      return Promise.resolve(
+        Response.json({
+          deployments: [
+            {
+              meta: {
+                autograph_operator_effect: "auth-preview-delivery",
+                autograph_operator_operation: "11111111-1111-4111-a111-111111111111",
+                autograph_operator_plan: approvedPlanDigest,
+              },
+              uid: deploymentId,
             },
-            uid: deploymentId,
-          },
-        ],
-      });
+          ],
+        }),
+      );
     }
     if (url.pathname === `/v13/deployments/${deploymentId}`) {
-      return Response.json({
-        gitSource: { ref: "preview", repoId: "repo-1", sha, type: "github" },
-        id: deploymentId,
-        meta: {
-          autograph_operator_effect: "auth-preview-delivery",
-          autograph_operator_operation: "11111111-1111-4111-a111-111111111111",
-          autograph_operator_plan: approvedPlanDigest,
-        },
-        ownerId: "team-1",
-        projectId: "project-auth-only",
-        readyState: "READY",
-        target: null,
-        url: "signup-pilot-preview.example.test",
-      });
+      return Promise.resolve(
+        Response.json({
+          gitSource: { ref: "preview", repoId: "repo-1", sha, type: "github" },
+          id: deploymentId,
+          meta: {
+            autograph_operator_effect: "auth-preview-delivery",
+            autograph_operator_operation: "11111111-1111-4111-a111-111111111111",
+            autograph_operator_plan: approvedPlanDigest,
+          },
+          ownerId: "team-1",
+          projectId: "project-auth-only",
+          readyState: "READY",
+          target: null,
+          url: "signup-pilot-preview.example.test",
+        }),
+      );
     }
     if (url.pathname === "/v9/projects/project-auth-only") {
-      return Response.json({
-        accountId: "team-1",
-        id: "project-auth-only",
-        link: { repoId: "repo-1", type: "github" },
-        name: "signup-pilot",
-      });
+      return Promise.resolve(
+        Response.json({
+          accountId: "team-1",
+          id: "project-auth-only",
+          link: { repoId: "repo-1", type: "github" },
+          name: "signup-pilot",
+        }),
+      );
     }
     if (url.pathname === "/v2/teams/team-1") {
-      return Response.json({ id: "team-1", slug: "team" });
+      return Promise.resolve(Response.json({ id: "team-1", slug: "team" }));
     }
-    throw new Error(`Unexpected fake provider path: ${url.pathname}`);
+    return Promise.reject(new Error(`Unexpected fake provider path: ${url.pathname}`));
   });
   const delivery = createNativeTargetAuthOnlyPreviewDelivery({
     assertEnvironment: async () => {},
-    fetch: fetch as typeof globalThis.fetch,
-    readCredential: async () => ({
-      token: "fake-token",
-      binding: {
-        active: true,
-        displayName: "Owner",
-        installationId: "installation-1",
-        plan: "hobby",
-        scopeId: "team-1",
-        scopeType: "team",
-        slug: "team",
-        updatedAt: new Date("2026-11-06T00:00:00.000Z"),
-      },
-    }),
+    fetch: providerFetch,
+    readCredential: vi.fn<DeliveryPorts["readCredential"]>(() =>
+      Promise.resolve({
+        token: "fake-token",
+        binding: {
+          active: true,
+          displayName: "Owner",
+          installationId: "installation-1",
+          plan: "hobby",
+          scopeId: "team-1",
+          scopeType: "team",
+          slug: "team",
+          updatedAt: new Date("2026-11-06T00:00:00.000Z"),
+        },
+      }),
+    ),
   });
 
   const result = await delivery.deliver(input(checkpointDelivery, assertCurrent));
@@ -135,7 +144,7 @@ it("reconciles a retained Auth-only Preview candidate using the exact approved d
   expect(result.selected.projectId).toBe("project-auth-only");
   expect(assertCurrent).toHaveBeenCalled();
   expect(checkpointDelivery).toHaveBeenCalled();
-  expect(fetch).not.toHaveBeenCalledWith(
+  expect(providerFetch).not.toHaveBeenCalledWith(
     expect.anything(),
     expect.objectContaining({ method: "POST" }),
   );
@@ -144,23 +153,27 @@ it("reconciles a retained Auth-only Preview candidate using the exact approved d
 });
 
 it("does not read or create a Preview deployment while the Auth-only approval is pending", async () => {
-  const fetch = vi.fn(async () => Response.json({ deployments: [] }));
+  const providerFetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValue(Response.json({ deployments: [] }));
   const delivery = createNativeTargetAuthOnlyPreviewDelivery({
     assertEnvironment: async () => {},
-    fetch: fetch as typeof globalThis.fetch,
-    readCredential: async () => ({
-      token: "fake-token",
-      binding: {
-        active: true,
-        displayName: "Owner",
-        installationId: "installation-1",
-        plan: "hobby",
-        scopeId: "team-1",
-        scopeType: "team",
-        slug: "team",
-        updatedAt: new Date("2026-11-06T00:00:00.000Z"),
-      },
-    }),
+    fetch: providerFetch,
+    readCredential: vi.fn<DeliveryPorts["readCredential"]>(() =>
+      Promise.resolve({
+        token: "fake-token",
+        binding: {
+          active: true,
+          displayName: "Owner",
+          installationId: "installation-1",
+          plan: "hobby",
+          scopeId: "team-1",
+          scopeType: "team",
+          slug: "team",
+          updatedAt: new Date("2026-11-06T00:00:00.000Z"),
+        },
+      }),
+    ),
   });
   const pending = input(
     async () => {},
@@ -169,5 +182,5 @@ it("does not read or create a Preview deployment while the Auth-only approval is
   pending.approval.outcome = "cancelled";
 
   await expect(delivery.deliver(pending)).rejects.toThrow("resource_mismatch");
-  expect(fetch).not.toHaveBeenCalled();
+  expect(providerFetch).not.toHaveBeenCalled();
 });

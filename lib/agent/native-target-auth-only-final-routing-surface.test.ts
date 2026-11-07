@@ -22,6 +22,10 @@ import {
 } from "./native-target-onboarding-runtime";
 import type { NativeTargetOnboardingRuntimePorts } from "./native-target-onboarding-runtime";
 
+// Planned responses retain their schema type; malformed response cases remain JSON transport values.
+type TransportResponseFixture =
+  | Preparation
+  | Record<string, z.infer<ReturnType<typeof z.json>> | undefined>;
 type Preparation = z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>;
 const fixture = () => {
   const authority = {
@@ -105,7 +109,7 @@ const fixture = () => {
     response: { decision: "approve" },
     session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
   };
-  let output: unknown = prep;
+  let output: TransportResponseFixture = prep;
   const sent: z.infer<typeof nativeTargetTransportRequestSchema>[] = [];
   const fetch = vi.fn<typeof globalThis.fetch>(async (_url, init) => {
     sent.push(nativeTargetTransportRequestSchema.parse(JSON.parse(z.string().parse(init?.body))));
@@ -121,7 +125,7 @@ const fixture = () => {
     client,
     ctx,
     fetch,
-    output(value: unknown) {
+    output(value: TransportResponseFixture) {
       output = value;
     },
     owner,
@@ -313,7 +317,7 @@ it("stops cancelled requests before transport", async () => {
 it("routes through private ports and checks returned routing identity", async () => {
   const f = fixture();
   const ports = {
-    authorizeAuthOnlyFinalRoutingApprovalResponse: vi.fn(async () => undefined),
+    authorizeAuthOnlyFinalRoutingApprovalResponse: vi.fn(async () => {}),
     hasAuthOnlyFinalRoutingApproval: vi.fn(async () => true),
     planAuthOnlyFinalRouting: vi.fn(async () => f.prep),
     prepareAuthOnlyFinalRouting: vi.fn(async () => f.prepared),

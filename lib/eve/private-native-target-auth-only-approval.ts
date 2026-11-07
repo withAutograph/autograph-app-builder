@@ -59,8 +59,9 @@ export const readPrivateNativeTargetAuthOnlyApproval = async (input: {
     input.historyOwner.sessionId !== input.owner.publicSessionId ||
     input.historyOwner.adapterSessionId !== input.owner.adapterSessionId ||
     input.historyOwner.adapterGeneration !== input.owner.adapterGeneration
-  )
+  ) {
     throw new Error("Auth-only approval owner changed.");
+  }
   const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
   const sourceDigest = nativeTargetAuthOnlySchemaEffectDigest(plan, plan.publishedSource);
   const expected = inputSchema.parse({
@@ -74,8 +75,9 @@ export const readPrivateNativeTargetAuthOnlyApproval = async (input: {
     input.observation?.state === undefined
       ? undefined
       : privateNativeTargetApprovalObservationSchema.parse(input.observation.state);
-  for (const terminal of saved?.terminals ?? [])
+  for (const terminal of saved?.terminals ?? []) {
     terminals.set(terminal.requestId, terminalSchema.parse(terminal));
+  }
   let capture: ReturnType<typeof createPrivateOperatorApprovalCapture> | undefined;
   const result = await readPrivateOperatorApproval({
     owner: input.historyOwner,
@@ -85,7 +87,9 @@ export const readPrivateNativeTargetAuthOnlyApproval = async (input: {
           observation: {
             ...(saved === undefined ? {} : { state: saved.native }),
             save: async (native: PrivateOperatorApprovalObservation) => {
-              if (capture === undefined) throw new Error("Auth-only capture is unavailable.");
+              if (capture === undefined) {
+                throw new Error("Auth-only capture is unavailable.");
+              }
               await input.observation?.save(
                 privateNativeTargetApprovalObservationSchema.parse({
                   version: 1,
@@ -117,8 +121,9 @@ export const readPrivateNativeTargetAuthOnlyApproval = async (input: {
                 requested.action.toolName === "prepare-app-native-target-auth-only"
               ) {
                 const parsed = inputSchema.safeParse(requested.action.input);
-                if (parsed.success && isDeepStrictEqual(parsed.data, expected))
+                if (parsed.success && isDeepStrictEqual(parsed.data, expected)) {
                   capture?.acceptRequest(requested.requestId, requested.action.callId);
+                }
               }
             }
           } else if (event.type === "approval.settled") {
@@ -143,21 +148,27 @@ export const readPrivateNativeTargetAuthOnlyApproval = async (input: {
         read(): NativeTargetAuthOnlyApproval | null {
           const entries = capture?.snapshot().entries ?? [];
           // A settled cancellation denies this exact plan even when a later call is approved.
-          if (entries.some((entry) => entry.cancelled)) return null;
+          if (entries.some((entry) => entry.cancelled)) {
+            return null;
+          }
           const receipt = capture?.read();
-          if (receipt == null) return null;
+          if (receipt === null || receipt === undefined) {
+            return null;
+          }
           const entry = capture
             ?.snapshot()
             .entries.find((candidate) => candidate.requestId === receipt.approvalId);
           const terminal = terminals.get(receipt.approvalId);
+          if (entry === undefined || terminal === undefined) {
+            throw new Error("Auth-only approval settlement is unavailable.");
+          }
           if (
-            entry === undefined ||
-            terminal === undefined ||
             entry.callId !== terminal.callId ||
             terminal.responderPrincipalId !== input.owner.authority.ownerUserId ||
             terminal.outcome !== "approved"
-          )
+          ) {
             throw new Error("Auth-only approval settlement is unavailable.");
+          }
           return nativeTargetAuthOnlyApprovalSchema.parse({
             ...terminal,
             planDigest,
@@ -165,7 +176,12 @@ export const readPrivateNativeTargetAuthOnlyApproval = async (input: {
             publicSessionId: plan.origin.publicSessionId,
           });
         },
-        snapshot: () => capture!.snapshot(),
+        snapshot: () => {
+          if (capture === undefined) {
+            throw new Error("Auth-only capture is unavailable.");
+          }
+          return capture.snapshot();
+        },
         proveComplete: () => capture?.proveComplete(),
       };
     },

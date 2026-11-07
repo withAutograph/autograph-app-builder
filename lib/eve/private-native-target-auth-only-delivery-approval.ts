@@ -51,6 +51,9 @@ export const nativeTargetAuthOnlyDeliveryPreparationInputSchema = z.strictObject
   planDigest: digest,
   resourcePlanDigest: digest,
 });
+export type NativeTargetAuthOnlyDeliveryPreparationInput = z.infer<
+  typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema
+>;
 
 /** Reads the authenticated settlement for one immutable delivery projection and its two ordered effects. */
 export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
@@ -82,21 +85,51 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
   const resourcePlanDigest = digest.parse(input.resourcePlanDigest);
   if (
     createHash("sha256").update(bytes).digest("hex") !== deliveryPlanDigest ||
-    nativeTargetAuthOnlyDeliveryPlanDigest(bytes) !== deliveryPlanDigest ||
-    !isDeepStrictEqual(historyOwner.authority, owner.authority) ||
-    !isDeepStrictEqual(plan.origin.authority, owner.authority) ||
-    historyOwner.sessionId !== owner.publicSessionId ||
-    historyOwner.adapterSessionId !== owner.adapterSessionId ||
-    historyOwner.adapterGeneration !== owner.adapterGeneration ||
-    plan.origin.publicSessionId !== owner.publicSessionId ||
-    deliveryPlan.authOnlyPlanDigest !== planDigest ||
-    deliveryPlan.resourcePlanDigest !== resourcePlanDigest ||
-    deliveryPlan.target.appId !== plan.appId ||
-    deliveryPlan.target.sessionId !== plan.origin.publicSessionId ||
-    deliveryPlan.target.branch !== plan.branch ||
-    deliveryPlan.source.branch !== plan.branch ||
-    deliveryPlan.source.gitSha !== plan.publishedSource.gitSha ||
-    deliveryPlan.source.repositoryId !== plan.publishedSource.repositoryId
+    nativeTargetAuthOnlyDeliveryPlanDigest(bytes) !== deliveryPlanDigest
+  ) {
+    throw unavailable();
+  }
+  const selectedOwner = {
+    historyAuthority: historyOwner.authority,
+    planAuthority: plan.origin.authority,
+    historySessionId: historyOwner.sessionId,
+    adapterSessionId: historyOwner.adapterSessionId,
+    adapterGeneration: historyOwner.adapterGeneration,
+    planSessionId: plan.origin.publicSessionId,
+  };
+  if (
+    !isDeepStrictEqual(selectedOwner, {
+      historyAuthority: owner.authority,
+      planAuthority: owner.authority,
+      historySessionId: owner.publicSessionId,
+      adapterSessionId: owner.adapterSessionId,
+      adapterGeneration: owner.adapterGeneration,
+      planSessionId: owner.publicSessionId,
+    })
+  ) {
+    throw unavailable();
+  }
+  const selectedDelivery = {
+    authOnlyPlanDigest: deliveryPlan.authOnlyPlanDigest,
+    resourcePlanDigest: deliveryPlan.resourcePlanDigest,
+    appId: deliveryPlan.target.appId,
+    sessionId: deliveryPlan.target.sessionId,
+    targetBranch: deliveryPlan.target.branch,
+    sourceBranch: deliveryPlan.source.branch,
+    gitSha: deliveryPlan.source.gitSha,
+    repositoryId: deliveryPlan.source.repositoryId,
+  };
+  if (
+    !isDeepStrictEqual(selectedDelivery, {
+      authOnlyPlanDigest: planDigest,
+      resourcePlanDigest,
+      appId: plan.appId,
+      sessionId: plan.origin.publicSessionId,
+      targetBranch: plan.branch,
+      sourceBranch: plan.branch,
+      gitSha: plan.publishedSource.gitSha,
+      repositoryId: plan.publishedSource.repositoryId,
+    })
   ) {
     throw unavailable();
   }
@@ -115,10 +148,20 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
       : nativeTargetAuthOnlyApprovalSchema.parse(input.retainedApproval);
   if (
     retained !== undefined &&
-    (retained.planDigest !== deliveryPlanDigest ||
-      retained.sourceDigest !== deliveryPlanDigest ||
-      retained.publicSessionId !== plan.origin.publicSessionId ||
-      retained.responderPrincipalId !== owner.authority.ownerUserId)
+    !isDeepStrictEqual(
+      {
+        planDigest: retained.planDigest,
+        sourceDigest: retained.sourceDigest,
+        publicSessionId: retained.publicSessionId,
+        responderPrincipalId: retained.responderPrincipalId,
+      },
+      {
+        planDigest: deliveryPlanDigest,
+        sourceDigest: deliveryPlanDigest,
+        publicSessionId: plan.origin.publicSessionId,
+        responderPrincipalId: owner.authority.ownerUserId,
+      },
+    )
   ) {
     throw unavailable();
   }
@@ -128,16 +171,17 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
       : privateNativeTargetApprovalObservationSchema.parse(input.observation.state);
   const terminals = new Map<string, z.infer<typeof terminalSchema>>();
   const { assertOwner } = input;
+  const save = input.observation?.save;
   await assertOwner();
   return await readPrivateOperatorApproval({
     owner: historyOwner,
-    ...(input.observation?.save === undefined
+    ...(save === undefined
       ? {}
       : {
           observation: {
             ...(saved === undefined ? {} : { state: saved.native }),
             save: async (native: PrivateOperatorApprovalObservation) => {
-              await input.observation!.save(
+              await save(
                 privateNativeTargetApprovalObservationSchema.parse({
                   native,
                   terminals: [...terminals.values()],
@@ -169,8 +213,10 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
       }
       const proofFor = (entry: PrivateOperatorApprovalCapture["entries"][number]) => {
         const terminal = terminals.get(entry.requestId);
+        if (terminal === undefined) {
+          throw unavailable();
+        }
         if (
-          terminal === undefined ||
           terminal.callId !== entry.callId ||
           terminal.responderPrincipalId !== owner.authority.ownerUserId ||
           terminal.outcome !== (entry.cancelled ? "cancelled" : "approved")
@@ -199,20 +245,24 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
               if (
                 request.kind !== "tool-approval" ||
                 request.action.toolName !== nativeTargetAuthOnlyDeliveryApprovalTool
-              )
+              ) {
                 continue;
+              }
               if (
                 nativeTargetAuthOnlyDeliveryPreparationInputSchema.safeParse(request.action.input)
                   .success &&
                 isDeepStrictEqual(request.action.input, expected)
-              )
+              ) {
                 current.acceptRequest(request.requestId, request.action.callId);
+              }
             }
           } else if (event.type === "approval.settled") {
             const entry = current
               .snapshot()
               .entries.find((candidate) => candidate.requestId === event.data.requestId);
-            if (entry === undefined) return;
+            if (entry === undefined) {
+              return;
+            }
             current.settle(event);
             const previous = terminals.get(entry.requestId);
             const outcome = event.data.outcome === "approved" ? "approved" : "cancelled";
@@ -237,15 +287,23 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
         read(): NativeTargetAuthOnlyApproval | null {
           const entries = current.snapshot().entries;
           const cancelled = entries.filter((entry) => entry.cancelled);
-          if (cancelled.length > 1) throw unavailable();
-          if (cancelled[0] !== undefined) return proofFor(cancelled[0]);
+          if (cancelled.length > 1) {
+            throw unavailable();
+          }
+          if (cancelled[0] !== undefined) {
+            return proofFor(cancelled[0]);
+          }
           const receipt = current.read();
           if (receipt === null) {
-            if (retained !== undefined) throw unavailable();
+            if (retained !== undefined) {
+              throw unavailable();
+            }
             return null;
           }
           const entry = entries.find((candidate) => candidate.requestId === receipt.approvalId);
-          if (entry === undefined) throw unavailable();
+          if (entry === undefined) {
+            throw unavailable();
+          }
           return proofFor(entry);
         },
         snapshot: current.snapshot,

@@ -54,7 +54,11 @@ export const createNativeTargetAuthOnlyPlanStore = (input: {
     return plan;
   };
   return {
-    async read(context: OperatorArtifactContext, appSpecDigest: string, planDigest: string) {
+    async read(
+      context: OperatorArtifactContext,
+      appSpecDigest: string,
+      planDigest: string,
+    ): Promise<NativeTargetAuthOnlyPlan | undefined> {
       const selected = scope(context, appSpecDigest, planDigest);
       await input.assertCurrentOwner(context);
       const rows = await input.database

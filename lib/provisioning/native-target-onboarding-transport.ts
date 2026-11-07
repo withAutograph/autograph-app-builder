@@ -304,13 +304,9 @@ export const nativeTargetTransportRequestSchema = z
         request.input.deliveryPlan.resourcePlanDigest === request.input.resourcePlanDigest,
       );
     } else if (
-      request.action !== "native-target-auth-only-delivery-plan" &&
-      request.action !== "native-target-auth-only-entry-plan" &&
-      request.action !== "native-target-auth-only-entry-approval-read" &&
-      request.action !== "native-target-auth-only-entry" &&
-      request.action !== "native-target-auth-only-final-routing-plan" &&
-      request.action !== "native-target-auth-only-final-routing-approval-read" &&
-      request.action !== "native-target-auth-only-final-routing"
+      request.action === "native-target-approval-candidate" ||
+      request.action === "native-target-approval-read" ||
+      request.action === "native-target-prepare"
     ) {
       matches.push(
         request.input.appId === request.input.plan.appId,

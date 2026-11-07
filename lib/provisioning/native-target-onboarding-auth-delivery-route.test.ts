@@ -1,3 +1,44 @@
+import { nativeTargetAuthOnlyFinalRoutingPlanSchema } from "./native-target-auth-only-final-routing";
+import { nativeTargetAuthOnlyFinalRoutingApprovalInputSchema } from "../eve/private-native-target-auth-only-final-routing-approval";
+import {
+  nativeTargetAuthOnlyDeliveryResultSchema,
+  nativeTargetAuthOnlyFinalRoutingResultSchema,
+} from "./native-target-onboarding-transport";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { z } from "zod";
+import { appDescriptionSchema } from "../repository/app-description";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleNativeTargetAuthOnlyDispatch from "./native-target-auth-only-dispatch";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleNativeTargetAuthOnlyPlanStore from "./native-target-auth-only-plan-store";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleNativeTargetAuthOnlyResourcePlanStore from "./native-target-auth-only-resource-plan-store";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleNativeTargetAuthOnlyRegistration from "./native-target-auth-only-registration";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleCapturedAppDescription from "./captured-app-description";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleHostedOperatorAuthOnlyRuntime from "./hosted-operator-auth-only-runtime";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModulePrivateNativeTargetAuthOnlyDeliveryApproval from "../eve/private-native-target-auth-only-delivery-approval";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModulePrivateNativeTargetAuthOnlyEntryApproval from "../eve/private-native-target-auth-only-entry-approval";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModulePrivateNativeTargetAuthOnlyFinalRoutingApproval from "../eve/private-native-target-auth-only-final-routing-approval";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleNativeTargetAuthOnlyFinalRouting from "./native-target-auth-only-final-routing";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleHostedOperatorSandboxLauncher from "./hosted-operator-sandbox-launcher";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleVercelInstallation from "../integrations/vercel-installation";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleNativeTargetOnboardingService from "./native-target-onboarding-service";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleNativeTargetAuthOnlyPreviewDelivery from "./native-target-auth-only-preview-delivery";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModulePostgresVercelInstallation from "../integrations/postgres-vercel-installation";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Type the partial boundary mock against every real module export.
+import type * as ModuleNativeTargetVercelProvider from "./native-target-vercel-provider";
 import { beforeEach, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { PgDialect } from "drizzle-orm/pg-core";
@@ -17,8 +58,10 @@ import {
 import {
   buildNativeTargetAuthOnlyDeliveryPlanBytes,
   nativeTargetAuthOnlyDeliveryPlanDigest,
+  nativeTargetAuthOnlyDeliveryPlanSchema,
 } from "./native-target-auth-only-delivery-plan";
-import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
+import { hostedOperatorSourceConfigurationSchema } from "./hosted-operator-source-configuration-schema";
+import { nativeTargetAuthOnlyResourceApprovalPlanSchema } from "./native-target-auth-only-maintenance";
 import type { NativeTargetRequest } from "./native-target-onboarding-transport";
 import type { NativeTargetAuthOnlyFinalRoutingAuthority } from "./native-target-auth-only-final-routing-deployment";
 import type { NativeTargetAuthOnlyEntryAuthority } from "./native-target-auth-only-entry-deployment";
@@ -35,87 +78,190 @@ import type {
 } from "./native-target-auth-only-delivery-runtime";
 import type { NativeTargetAuthOnlyPreviewDeliveryInput } from "./native-target-auth-only-preview-delivery";
 
+const readBody = async (response: Promise<Response>) => {
+  const resolved = await response;
+  return z.json().parse(await resolved.json());
+};
+
 const mock = vi.hoisted(() => ({
-  environment: vi.fn(),
-  gate: vi.fn(),
-  genericService: vi.fn(),
-  readApproval: vi.fn(),
-  readDescription: vi.fn(),
-  readDispatch: vi.fn(),
-  readEntryApproval: vi.fn(),
-  readPlan: vi.fn(),
-  readPublishedSource: vi.fn(),
-  readResource: vi.fn(),
-  readRoutingApproval: vi.fn(),
-  readRuntime: vi.fn(),
-  reconcile: vi.fn(),
-  resolveRegistered: vi.fn(),
-  runOrganization: vi.fn(),
-  runRouting: vi.fn(),
-  runSignupPolicy: vi.fn(),
+  environment:
+    vi.fn<
+      NonNullable<
+        Parameters<typeof createNativeTargetOnboardingDeployment>[0]["authOnlyDeliveryEnvironment"]
+      >
+    >(),
+  gate: vi.fn<
+    NonNullable<
+      Parameters<typeof createNativeTargetOnboardingDeployment>[0]["authOnlyAfterGatewayReady"]
+    >
+  >(),
+  genericService:
+    vi.fn<
+      ReturnType<typeof ModuleNativeTargetOnboardingService.createNativeTargetOnboardingService>
+    >(),
+  readApproval:
+    vi.fn<
+      typeof ModulePrivateNativeTargetAuthOnlyDeliveryApproval.readPrivateNativeTargetAuthOnlyDeliveryApproval
+    >(),
+  readDescription:
+    vi.fn<
+      ReturnType<typeof ModuleCapturedAppDescription.createCapturedAppDescriptionStore>["read"]
+    >(),
+  readDispatch:
+    vi.fn<
+      ReturnType<
+        typeof ModuleNativeTargetAuthOnlyDispatch.createPostgresNativeTargetAuthOnlyDispatchStore
+      >["read"]
+    >(),
+  readEntryApproval:
+    vi.fn<
+      typeof ModulePrivateNativeTargetAuthOnlyEntryApproval.readPrivateNativeTargetAuthOnlyEntryApproval
+    >(),
+  readPlan:
+    vi.fn<
+      ReturnType<
+        typeof ModuleNativeTargetAuthOnlyPlanStore.createNativeTargetAuthOnlyPlanStore
+      >["read"]
+    >(),
+  readPublishedSource:
+    vi.fn<typeof ModuleHostedOperatorAuthOnlyRuntime.readNativeTargetAuthOnlyPublishedSource>(),
+  readResource:
+    vi.fn<
+      ReturnType<
+        typeof ModuleNativeTargetAuthOnlyResourcePlanStore.createNativeTargetAuthOnlyResourcePlanStore
+      >["read"]
+    >(),
+  readRoutingApproval:
+    vi.fn<
+      typeof ModulePrivateNativeTargetAuthOnlyFinalRoutingApproval.readPrivateNativeTargetAuthOnlyFinalRoutingApproval
+    >(),
+  readRuntime:
+    vi.fn<
+      ReturnType<
+        typeof ModuleHostedOperatorAuthOnlyRuntime.createPostgresNativeTargetAuthOnlyRuntimeStore
+      >["read"]
+    >(),
+  reconcile:
+    vi.fn<
+      (
+        target: "gateway" | "app",
+        context: NativeTargetAuthOnlyPreviewDeliveryInput,
+      ) => ReturnType<
+        ReturnType<
+          typeof ModuleNativeTargetAuthOnlyPreviewDelivery.createNativeTargetAuthOnlyPreviewDelivery
+        >["reconcile"]
+      >
+    >(),
+  resolveRegistered:
+    vi.fn<typeof ModuleNativeTargetAuthOnlyRegistration.resolveNativeTargetAuthOnlyRegistration>(),
+  runOrganization: vi.fn<typeof ModuleHostedOperatorSandboxLauncher.runAuthOrganizationFileSpool>(),
+  runRouting:
+    vi.fn<
+      (
+        deps: Parameters<
+          typeof ModuleNativeTargetAuthOnlyFinalRouting.createNativeTargetAuthOnlyFinalRouting
+        >[0],
+        input: Parameters<
+          ReturnType<
+            typeof ModuleNativeTargetAuthOnlyFinalRouting.createNativeTargetAuthOnlyFinalRouting
+          >
+        >[0],
+      ) => ReturnType<
+        ReturnType<
+          typeof ModuleNativeTargetAuthOnlyFinalRouting.createNativeTargetAuthOnlyFinalRouting
+        >
+      >
+    >(),
+  runSignupPolicy: vi.fn<typeof ModuleHostedOperatorSandboxLauncher.runAuthSignupPolicyFileSpool>(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Supply persisted project-dispatch state; the real route still checks its plan and owner.
 vi.mock("./native-target-auth-only-dispatch", async (original) => ({
-  ...(await original<typeof import("./native-target-auth-only-dispatch")>()),
+  ...(await original<typeof ModuleNativeTargetAuthOnlyDispatch>()),
   createPostgresNativeTargetAuthOnlyDispatchStore: () => ({ read: mock.readDispatch }),
 }));
-vi.mock("./native-target-auth-only-plan-store", () => ({
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Supply the retained plan from private persistence; preserve real route digest comparisons.
+vi.mock("./native-target-auth-only-plan-store", async (original) => ({
+  ...(await original<typeof ModuleNativeTargetAuthOnlyPlanStore>()),
   createNativeTargetAuthOnlyPlanStore: () => ({ read: mock.readPlan }),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Supply exact private resource bytes; exercise the real route mismatch and approval checks.
 vi.mock("./native-target-auth-only-resource-plan-store", async (original) => ({
-  ...(await original<typeof import("./native-target-auth-only-resource-plan-store")>()),
+  ...(await original<typeof ModuleNativeTargetAuthOnlyResourcePlanStore>()),
   createNativeTargetAuthOnlyResourcePlanStore: () => ({ read: mock.readResource }),
 }));
-vi.mock("./native-target-configuration-resolver", () => ({
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Supply deployment-owned registration; the unrelated-project case exercises the real route guard.
+vi.mock("./native-target-auth-only-registration", async (original) => ({
+  ...(await original<typeof ModuleNativeTargetAuthOnlyRegistration>()),
   resolveNativeTargetAuthOnlyRegistration: mock.resolveRegistered,
 }));
-vi.mock("./captured-app-description", () => ({
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Supply the captured description from private artifact storage; keep real static-app validation.
+vi.mock("./captured-app-description", async (original) => ({
+  ...(await original<typeof ModuleCapturedAppDescription>()),
   createCapturedAppDescriptionStore: () => ({ read: mock.readDescription }),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Isolate retained source/runtime reads; keep the real Auth-only runtime and route implementations.
 vi.mock("./hosted-operator-auth-only-runtime", async (original) => ({
-  ...(await original<typeof import("./hosted-operator-auth-only-runtime")>()),
+  ...(await original<typeof ModuleHostedOperatorAuthOnlyRuntime>()),
   createPostgresNativeTargetAuthOnlyRuntimeStore: () => ({ read: mock.readRuntime }),
   readNativeTargetAuthOnlyPublishedSource: mock.readPublishedSource,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Control private history approval observations; the real route must deny missing approval.
 vi.mock("../eve/private-native-target-auth-only-delivery-approval", async (original) => ({
-  ...(await original<typeof import("../eve/private-native-target-auth-only-delivery-approval")>()),
+  ...(await original<typeof ModulePrivateNativeTargetAuthOnlyDeliveryApproval>()),
   readPrivateNativeTargetAuthOnlyDeliveryApproval: mock.readApproval,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Control independently observed child approvals; retain real child plan and parent-lease checks.
 vi.mock("../eve/private-native-target-auth-only-entry-approval", async (original) => ({
-  ...(await original<typeof import("../eve/private-native-target-auth-only-entry-approval")>()),
+  ...(await original<typeof ModulePrivateNativeTargetAuthOnlyEntryApproval>()),
   readPrivateNativeTargetAuthOnlyEntryApproval: mock.readEntryApproval,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Control private final-routing approval observations; preserve normal replay denial and digest checks.
 vi.mock("../eve/private-native-target-auth-only-final-routing-approval", async (original) => ({
-  ...(await original<
-    typeof import("../eve/private-native-target-auth-only-final-routing-approval")
-  >()),
+  ...(await original<typeof ModulePrivateNativeTargetAuthOnlyFinalRoutingApproval>()),
   readPrivateNativeTargetAuthOnlyFinalRoutingApproval: mock.readRoutingApproval,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Isolate provider refresh execution; assert real route receipt retention and uncertain replay with identical bytes.
 vi.mock("./native-target-auth-only-final-routing", async (original) => ({
-  ...(await original<typeof import("./native-target-auth-only-final-routing")>()),
-  createNativeTargetAuthOnlyFinalRouting: (deps: unknown) => (value: unknown) =>
-    mock.runRouting(deps, value),
+  ...(await original<typeof ModuleNativeTargetAuthOnlyFinalRouting>()),
+  createNativeTargetAuthOnlyFinalRouting:
+    (
+      deps: Parameters<
+        typeof ModuleNativeTargetAuthOnlyFinalRouting.createNativeTargetAuthOnlyFinalRouting
+      >[0],
+    ) =>
+    (
+      value: Parameters<
+        ReturnType<
+          typeof ModuleNativeTargetAuthOnlyFinalRouting.createNativeTargetAuthOnlyFinalRouting
+        >
+      >[0],
+    ) =>
+      mock.runRouting(deps, value),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Replace external worker transport with typed readback/checkpoint fixtures; retain real route dispatch ordering.
 vi.mock("./hosted-operator-sandbox-launcher", async (original) => ({
-  ...(await original<typeof import("./hosted-operator-sandbox-launcher")>()),
+  ...(await original<typeof ModuleHostedOperatorSandboxLauncher>()),
   runAuthOrganizationFileSpool: mock.runOrganization,
   runAuthSignupPolicyFileSpool: mock.runSignupPolicy,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Use fixture token-key custody; these route tests never read machine credentials.
 vi.mock("../integrations/vercel-installation", async (original) => ({
-  ...(await original<typeof import("../integrations/vercel-installation")>()),
+  ...(await original<typeof ModuleVercelInstallation>()),
   readVercelTokenKeyringEnvironment: () => ({}),
 }));
-vi.mock("./native-target-onboarding-service", () => ({
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Detect accidental fallback to the generic onboarding service from the real Auth-only route.
+vi.mock("./native-target-onboarding-service", async (original) => ({
+  ...(await original<typeof ModuleNativeTargetOnboardingService>()),
   createNativeTargetOnboardingService: () => mock.genericService,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Reconcile controlled provider candidates while enforcing the real route owner and environment callbacks.
 vi.mock("./native-target-auth-only-preview-delivery", async (original) => ({
-  ...(await original<typeof import("./native-target-auth-only-preview-delivery")>()),
+  ...(await original<typeof ModuleNativeTargetAuthOnlyPreviewDelivery>()),
   createNativeTargetAuthOnlyPreviewDelivery: (deps: {
-    target: string;
+    target: "gateway" | "app";
     assertEnvironment: () => Promise<void>;
   }) => ({
-    deliver: async () => {
-      throw new Error("unexpected provider create");
-    },
+    deliver: () => Promise.reject(new Error("unexpected provider create")),
     reconcile: async (context: NativeTargetAuthOnlyPreviewDeliveryInput) => {
       await context.assertCurrent();
       await deps.assertEnvironment();
@@ -123,14 +269,19 @@ vi.mock("./native-target-auth-only-preview-delivery", async (original) => ({
     },
   }),
 }));
-vi.mock("../integrations/postgres-vercel-installation", () => ({
-  readActiveVercelInstallationToken: async () => ({
-    binding: { active: true, scopeId: "team-fixture", scopeType: "team" },
-    token: "fixture-token",
-  }),
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Supply a controlled installation grant without reading private token storage.
+vi.mock("../integrations/postgres-vercel-installation", async (original) => ({
+  ...(await original<typeof ModulePostgresVercelInstallation>()),
+  readActiveVercelInstallationToken: () =>
+    Promise.resolve({
+      binding: { active: true, scopeId: "team-fixture", scopeType: "team" },
+      token: "fixture-token",
+    }),
 }));
-vi.mock("./native-target-vercel-provider", () => ({
-  observeNativeTargetVercelProject: async () => ({ status: "verified" }),
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Supply verified project metadata at the external provider boundary; route ownership remains real.
+vi.mock("./native-target-vercel-provider", async (original) => ({
+  ...(await original<typeof ModuleNativeTargetVercelProvider>()),
+  observeNativeTargetVercelProject: () => Promise.resolve({ status: "verified" }),
 }));
 const authority = {
   audience: "https://builder.example/mcp",
@@ -148,13 +299,13 @@ const historyOwner = operatorOwnerContextSchema.parse({
 });
 const appId = "signup-pilot";
 const teamId = "team-fixture";
-const description = {
+const description = appDescriptionSchema.parse({
   app: { id: appId, routes: ["/"], workspacePath: `apps/${appId}` },
   backend: { kind: "static" },
   deployment: { framework: "nextjs", sourceFilesOutsideRootDirectory: true },
   validation: { browser: null, check: { task: "mise run app:check signup-pilot" }, test: null },
   version: 1,
-};
+});
 const source = {
   branch: "pilot",
   changeSetDigest: "c".repeat(64),
@@ -193,7 +344,14 @@ const profile = {
     projectId: "gateway-fixture",
     publicOrigin: "https://apps.example",
     repoId: "gateway-repo",
-    workload: { projectId: "gateway-fixture" },
+    workload: {
+      audience: "https://vercel.com/fixture",
+      environment: "preview",
+      issuer: "https://oidc.vercel.com/fixture",
+      ownerId: teamId,
+      projectId: "gateway-fixture",
+      subject: "gateway",
+    },
   },
   nativeNeon: {
     configuration: {
@@ -231,11 +389,18 @@ const profile = {
   },
   teamId,
 };
-const selected = profile as unknown as HostedOperatorSourceConfiguration;
 const plan = planNativeTargetAuthOnly({
   authAuthorityBinding: {
     authDatabase,
-    gateway: profile.gateway,
+    gateway: {
+      authBrowserOrigin: profile.gateway.authBrowserOrigin,
+      branch: profile.gateway.branch,
+      environment: profile.gateway.environment,
+      gatewayOrigin: profile.gateway.gatewayOrigin,
+      projectId: profile.gateway.projectId,
+      publicOrigin: profile.gateway.publicOrigin,
+      workload: profile.gateway.workload,
+    },
     nativeNeon: profile.nativeNeon,
     operator: profile.operator,
   },
@@ -263,10 +428,83 @@ const plan = planNativeTargetAuthOnly({
   sharedPhysicalEndpointId: "shared-endpoint",
 });
 const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
+const selected = hostedOperatorSourceConfigurationSchema.parse({
+  ...profile,
+  applications: {},
+  authOnlyApplications: {
+    [appId]: {
+      accessRoles: ["pilot_user"],
+      registration: {
+        ...registration,
+        projectSettings: plan.project.projectSettings,
+        planDigest,
+        authResource: plan.authResource,
+        appRole: plan.appRole,
+      },
+    },
+  },
+  builderCallbackOrigin: "https://builder.example",
+  catalogAppIds: [appId],
+  gateway: {
+    ...profile.gateway,
+    gitSha: "8".repeat(40),
+    repoId: "gateway-repo",
+    protectedApplicationIds: [appId],
+    workload: {
+      ...profile.nativeNeon.configuration.operator,
+      projectId: profile.gateway.projectId,
+      subject: "gateway",
+    },
+  },
+  operator: { ...profile.operator, deploymentId: "dpl-operator" },
+  sandbox: {
+    image: "fixture",
+    projectId: profile.operator.projectId,
+    teamId,
+    workers: {},
+    authProposal: {
+      executablePath: "/fixture/proposal",
+      id: "auth-proposal",
+      sha256: "6".repeat(64),
+    },
+    accessWorker: {
+      executablePath: "/fixture/access",
+      id: "access-worker",
+      operationScope: "generated-app-access-v1",
+      subcommand: "protected-generated-app-access",
+      sha256: "7".repeat(64),
+    },
+    authWorker: {
+      ...profile.sandbox.authWorker,
+      executablePath: "/fixture/auth",
+      operationScope: "auth-protected-schema-v1",
+      subcommand: "auth-protected-schema",
+    },
+    resourcesWorker: {
+      ...profile.sandbox.resourcesWorker,
+      executablePath: "/fixture/resources",
+      operationScope: "neon-resource-bootstrap-v1",
+      subcommand: "neon-resource-bootstrap",
+    },
+  },
+  workloadPolicy: { ...profile.nativeNeon.configuration.operator, subject: "operator" },
+});
+
 const operationRef = nativeTargetAuthOnlyCredentialOperationRef(plan);
+const workerReadback = (status: "absent" | "applied") => ({
+  version: 1 as const,
+  operation_id: operationRef,
+  context_digest: "6".repeat(64),
+  fence_generation: 1,
+  status,
+  readback_sha256: "7".repeat(64),
+});
+
 const resourceBytes = buildNativeTargetAuthOnlyResourcePlanBytes({ plan, registration, selected });
 const resourcePlanDigest = nativeTargetAuthOnlyResourcePlanDigest(resourceBytes);
-const resourcePlan = JSON.parse(resourceBytes.toString("utf-8"));
+const resourcePlan = nativeTargetAuthOnlyResourceApprovalPlanSchema.parse(
+  JSON.parse(resourceBytes.toString("utf-8")),
+);
 const schemaApproval = {
   callId: "original-schema-call",
   observedAt: "2026-11-06T12:00:00.000Z",
@@ -295,7 +533,9 @@ const deliveryBytes = buildNativeTargetAuthOnlyDeliveryPlanBytes({
 const deliveryPlanDigest = nativeTargetAuthOnlyDeliveryPlanDigest(deliveryBytes);
 const deliveryInput = {
   appId,
-  deliveryPlan: JSON.parse(deliveryBytes.toString("utf8")),
+  deliveryPlan: nativeTargetAuthOnlyDeliveryPlanSchema.parse(
+    JSON.parse(deliveryBytes.toString("utf-8")),
+  ),
   deliveryPlanDigest,
   operationRef,
   planDigest,
@@ -317,24 +557,27 @@ interface JournalRow {
 }
 const rows = new Map<string, JournalRow>();
 const params = (where: SQL) => new PgDialect().sqlToQuery(where).params;
-const database = {
+const journalDatabase = {
   insert: () => ({
     values: (row: JournalRow) => ({
-      onConflictDoNothing: async () => {
+      onConflictDoNothing: () => {
         expect(row.requestId).toMatch(
           /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
         );
         expect(["pending", "settled"]).toContain(row.state);
-        if (!rows.has(row.requestId)) rows.set(row.requestId, structuredClone(row));
+        if (!rows.has(row.requestId)) {
+          rows.set(row.requestId, structuredClone(row));
+        }
+        return Promise.resolve();
       },
     }),
   }),
   select: () => ({
     from: () => ({
       where: (where: SQL) => ({
-        limit: async () => {
+        limit: () => {
           const row = rows.get(String(params(where)[4]));
-          return row === undefined ? [] : [structuredClone(row)];
+          return Promise.resolve(row === undefined ? [] : [structuredClone(row)]);
         },
       }),
     }),
@@ -342,19 +585,23 @@ const database = {
   update: () => ({
     set: (change: Partial<JournalRow>) => ({
       where: (where: SQL) => ({
-        returning: async () => {
+        returning: () => {
           const values = params(where);
           const row = rows.get(String(values[4]));
-          if (row === undefined || row.revision !== values[5] || row.requestDigest !== values[6])
-            return [];
+          if (row === undefined || row.revision !== values[5] || row.requestDigest !== values[6]) {
+            return Promise.resolve([]);
+          }
           const next = { ...row, ...change };
           rows.set(row.requestId, structuredClone(next));
-          return [structuredClone(next)];
+          return Promise.resolve([structuredClone(next)]);
         },
       }),
     }),
   }),
 };
+const mockDatabase: Parameters<typeof createNativeTargetOnboardingDeployment>[0]["database"] =
+  drizzle.mock();
+const database = Object.assign(mockDatabase, journalDatabase);
 const routePlanBytes = (value: { gateway: unknown; app: { deploymentId: string } }) =>
   Buffer.from(
     JSON.stringify({
@@ -405,12 +652,12 @@ const request = async (
     authOnlyEntryAuthority,
     authOnlyFinalRoutingAuthority,
     builderOrigin: "https://builder.example",
-    configuration: { applications: {} } as HostedOperatorSourceConfiguration,
-    database: database as never,
+    configuration: selected,
+    database,
     environment: {},
     owner: {
       assertCanonicalAppOwner,
-      assertNoStandardBuilderDestination: async () => {},
+      assertNoStandardBuilderDestination: () => Promise.resolve(),
       verifyWorkload,
     },
     ...(ports
@@ -419,8 +666,10 @@ const request = async (
             await mock.gate(value),
           authOnlyDeliveryEnvironment: async (
             value: NativeTargetAuthOnlyDeliveryEnvironmentInput,
-          ) => await mock.environment(value),
-          authOnlyPrepareFinalRoutingPlan: async (value) => routePlanBytes(value),
+          ) => {
+            await mock.environment(value);
+          },
+          authOnlyPrepareFinalRoutingPlan: (value) => Promise.resolve(routePlanBytes(value)),
         }
       : {}),
   })(
@@ -431,7 +680,7 @@ const request = async (
     action,
   );
 const planRequest = async () =>
-  request({
+  await request({
     ...common,
     action: "native-target-auth-only-delivery-plan",
     input: { appId, operationRef, planDigest, resourcePlanDigest },
@@ -440,7 +689,10 @@ beforeEach(() => {
   vi.resetAllMocks();
   rows.clear();
   mock.readDispatch.mockResolvedValue({
+    revision: 1,
     state: {
+      kind: "native-target-auth-only-dispatch",
+      version: 1,
       approval: schemaApproval,
       plan,
       planDigest,
@@ -449,12 +701,27 @@ beforeEach(() => {
     },
   });
   mock.readPlan.mockResolvedValue(plan);
-  mock.readResource.mockResolvedValue({ bytes: resourceBytes, plan: resourcePlan });
+  mock.readResource.mockResolvedValue({
+    bytes: resourceBytes,
+    plan: resourcePlan,
+    revision: 1,
+    workerContexts: {},
+  });
   mock.resolveRegistered.mockResolvedValue(selected);
   mock.readDescription.mockResolvedValue(description);
   mock.readPublishedSource.mockResolvedValue(source);
   mock.readRuntime.mockResolvedValue({
+    revision: 1,
     state: {
+      kind: "native-target-auth-only-runtime",
+      version: 1,
+      source,
+      approval: schemaApproval,
+      effectDigest: schemaApproval.sourceDigest,
+      attemptId: "11111111-1111-4111-a111-111111111111",
+      leaseId: "22222222-2222-4222-a222-222222222222",
+      leaseExpiresAt: schemaApproval.observedAt,
+      readiness: "catalog-readback",
       authSchema: {
         artifactRef: authSchema.artifactRef,
         planDigest: authSchema.planDigest,
@@ -476,18 +743,22 @@ beforeEach(() => {
   });
   mock.reconcile.mockImplementation(
     async (target: string, context: NativeTargetAuthOnlyPreviewDeliveryInput) => {
-      const source = target === "gateway" ? context.plan.gatewayDelivery! : context.plan.delivery!;
-      const selected = {
-        branch: source.branch,
+      const deploymentSource =
+        target === "gateway" ? context.plan.gatewayDelivery : context.plan.delivery;
+      if (deploymentSource === undefined) {
+        throw new Error("Expected approved deployment source");
+      }
+      const selectedCandidate = {
+        branch: deploymentSource.branch,
         deploymentId: `dpl-${target}`,
         operationRef: context.operationRef,
         origin: `https://${target}.example`,
-        projectId: source.projectId,
+        projectId: deploymentSource.projectId,
         readyState: "READY",
-        repoId: source.repoId,
+        repoId: deploymentSource.repoId,
       };
-      await context.checkpointDelivery([selected]);
-      return { candidates: [selected], selected, status: "applied" };
+      await context.checkpointDelivery([selectedCandidate]);
+      return { candidates: [selectedCandidate], selected: selectedCandidate, status: "applied" };
     },
   );
 });
@@ -503,13 +774,13 @@ it("reads delivery approval independently and denies execution without approval 
   await planRequest();
   mock.readApproval.mockResolvedValue(null);
   expect(
-    await (
-      await request({
+    await readBody(
+      request({
         ...common,
         action: "native-target-auth-only-delivery-approval-read",
         input: deliveryInput,
-      })
-    ).json(),
+      }),
+    ),
   ).toEqual({ status: "pending" });
   await expect(
     request({ ...common, action: "native-target-auth-only-delivery", input: deliveryInput }),
@@ -549,14 +820,14 @@ it("publishes only owner-link fields and never enters app delivery before confir
   await planRequest();
   const pending = {
     authIdentityLink: "https://gateway.example/confirm",
-    authIdentityLinkExpiresAt: new Date(Date.now() + 60000).toISOString(),
-    status: "pending-owner",
+    authIdentityLinkExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    status: "pending-owner" as const,
   };
   mock.gate.mockResolvedValue(pending);
   expect(
-    await (
-      await request({ ...common, action: "native-target-auth-only-delivery", input: deliveryInput })
-    ).json(),
+    await readBody(
+      request({ ...common, action: "native-target-auth-only-delivery", input: deliveryInput }),
+    ),
   ).toEqual({ ...pending, deliveryPlanDigest });
   expect(mock.reconcile.mock.calls.map(([target]) => target)).toEqual(["gateway"]);
 });
@@ -568,21 +839,41 @@ it.each(["source", "registration", "resource", "runtime", "owner"])(
       mock.readPublishedSource.mockResolvedValue({ ...source, gitSha: "9".repeat(40) });
     }
     if (kind === "registration") {
+      const appRegistration = selected.authOnlyApplications?.[appId];
+      if (appRegistration?.registration === undefined) {
+        throw new Error("Expected app registration");
+      }
       mock.resolveRegistered.mockResolvedValue({
         ...selected,
         authOnlyApplications: {
           [appId]: {
-            ...selected.authOnlyApplications![appId],
-            registration: { ...registration, projectId: "unrelated" },
+            ...appRegistration,
+            registration: { ...appRegistration.registration, projectId: "unrelated" },
           },
         },
       });
     }
     if (kind === "resource") {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- A missing typed store row is undefined, not Promise<void>.
       mock.readResource.mockResolvedValue(undefined);
     }
     if (kind === "runtime") {
-      mock.readRuntime.mockResolvedValue({ state: { stage: "unknown" } });
+      mock.readRuntime.mockResolvedValue({
+        revision: 1,
+        state: {
+          kind: "native-target-auth-only-runtime",
+          version: 1,
+          source,
+          plan,
+          planDigest,
+          approval: schemaApproval,
+          effectDigest: schemaApproval.sourceDigest,
+          attemptId: "11111111-1111-4111-a111-111111111111",
+          leaseId: "22222222-2222-4222-a222-222222222222",
+          leaseExpiresAt: schemaApproval.observedAt,
+          stage: "unknown",
+        },
+      });
     }
     if (kind === "owner") {
       assertCanonicalAppOwner.mockRejectedValue(new Error("owner revoked"));
@@ -618,7 +909,7 @@ const childRequest = {
 const policyDigest = "4".repeat(64);
 const childAuthority =
   (consumed: boolean, policyApplied = () => false): NativeTargetAuthOnlyEntryAuthority =>
-  async (value) => {
+  (value) => {
     const proof = "private-proof-fixture";
     const proofSha256 = createHash("sha256").update(proof).digest("hex");
     const binding = nativeTargetAuthOnlyOwnerLinkBindingSchema.parse({
@@ -673,133 +964,155 @@ const childAuthority =
     };
     const identity = { actorId: "realm-owner", realmSessionId: "realm-session" };
     const jwksUrl = `${value.gateway.origin}/_platform/jwks.json`;
-    return {
+    return Promise.resolve({
       ownerLink: {
-        prepare: async () => ({
-          status: "linked",
-          operationRef,
-          sessionId: historyOwner.sessionId,
-        }),
-        readCaptured: async () => (consumed ? captured : undefined),
+        prepare: () =>
+          Promise.resolve({
+            status: "linked",
+            operationRef,
+            sessionId: historyOwner.sessionId,
+          }),
+        readCaptured: () => Promise.resolve(consumed ? captured : undefined),
       },
-      readCredentials: async () => ({ migrationUrl: "private-migrator" }),
-      readCurrentOwnerProof: async () => ({
-        ...identity,
-        reference: captured.proofRef,
-        proof,
-        oidcToken: "private-oidc",
-      }),
-      readOrganizationPlan: async () =>
-        authOnlyOrganizationPlanSchema.parse({
-          version: 1,
-          action: "prepare",
-          authDatabase,
-          neon: { ...binding.bootstrapResource.neon, endpoint: binding.bootstrapResource.hostname },
-          selection: { sessionId: historyOwner.sessionId, workspaceId: authority.workspaceId },
-          deploymentBoundary: {
-            teamId,
-            operator: { projectId: "operator-fixture", environment: "preview" },
-            verification: {
-              publicOrigin: binding.issuer,
-              gatewayOrigin: value.gateway.origin,
-              jwksUrl,
+      readCredentials: () => Promise.resolve({ migrationUrl: "private-migrator" }),
+      readCurrentOwnerProof: () =>
+        Promise.resolve({
+          ...identity,
+          reference: captured.proofRef,
+          proof,
+          oidcToken: "private-oidc",
+        }),
+      readOrganizationPlan: () =>
+        Promise.resolve(
+          authOnlyOrganizationPlanSchema.parse({
+            version: 1,
+            action: "prepare",
+            authDatabase,
+            neon: {
+              ...binding.bootstrapResource.neon,
+              endpoint: binding.bootstrapResource.hostname,
             },
-          },
-          authMembership: {
-            kind: "create-owned-organization",
-            name: "Pilot",
-            slug: "pilot",
-            organizationId: "pilot-org",
-            actorId: identity.actorId,
-            bootstrapPlanDigest: resourcePlanDigest,
-            identityCapture: {
-              capturedAt: captured.consumedAt,
-              realmSessionId: identity.realmSessionId,
-            },
-            identityNonceSha256: captured.nonceSha256,
-            identityProof: { reference: captured.proofRef, sha256: proofSha256 },
-            identityVerification: {
-              audience: binding.audience,
-              issuer: binding.issuer,
-              jwksUrl,
-              transportSource: {
-                audience: "https://vercel.com/fixture",
-                issuer: "https://oidc.vercel.com/fixture",
-                projectId: "operator-fixture",
-                ownerId: teamId,
-                environment: "preview",
+            selection: { sessionId: historyOwner.sessionId, workspaceId: authority.workspaceId },
+            deploymentBoundary: {
+              teamId,
+              operator: { projectId: "operator-fixture", environment: "preview" },
+              verification: {
+                publicOrigin: binding.issuer,
+                gatewayOrigin: value.gateway.origin,
+                jwksUrl,
               },
             },
-          },
-          effects: [
-            { kind: "auth-membership", id: "auth-membership", resourceId: authDatabase.resourceId },
-          ],
-          membershipInstaller: { reference: "auth-owned-organization-v1", sha256: "f".repeat(64) },
-        }),
-      readReadyBinding: async () => ({
-        binding,
-        sandbox: { image: "fixture", teamId, projectId: "operator-fixture", workers: {} },
-      }),
-      readSignupPolicy: async () =>
-        policyApplied() ? { status: "applied", policyDigest } : { status: "absent" },
-      readSignupPolicyPlan: async (_scope, organizationId) =>
-        authOnlySignupPolicyPlanSchema.parse({
-          version: 1,
-          action: "prepare",
-          authDatabase,
-          neon: { ...binding.bootstrapResource.neon, endpoint: binding.bootstrapResource.hostname },
-          selection: { sessionId: historyOwner.sessionId, workspaceId: authority.workspaceId },
-          deploymentBoundary: {
-            teamId,
-            operator: { projectId: "operator-fixture", environment: "preview" },
-            verification: {
-              publicOrigin: binding.issuer,
-              gatewayOrigin: value.gateway.origin,
-              jwksUrl,
+            authMembership: {
+              kind: "create-owned-organization",
+              name: "Pilot",
+              slug: "pilot",
+              organizationId: "pilot-org",
+              actorId: identity.actorId,
+              bootstrapPlanDigest: resourcePlanDigest,
+              identityCapture: {
+                capturedAt: captured.consumedAt,
+                realmSessionId: identity.realmSessionId,
+              },
+              identityNonceSha256: captured.nonceSha256,
+              identityProof: { reference: captured.proofRef, sha256: proofSha256 },
+              identityVerification: {
+                audience: binding.audience,
+                issuer: binding.issuer,
+                jwksUrl,
+                transportSource: {
+                  audience: "https://vercel.com/fixture",
+                  issuer: "https://oidc.vercel.com/fixture",
+                  projectId: "operator-fixture",
+                  ownerId: teamId,
+                  environment: "preview",
+                },
+              },
             },
-          },
-          authSignupPolicy: {
+            effects: [
+              {
+                kind: "auth-membership",
+                id: "auth-membership",
+                resourceId: authDatabase.resourceId,
+              },
+            ],
+            membershipInstaller: {
+              reference: "auth-owned-organization-v1",
+              sha256: "f".repeat(64),
+            },
+          }),
+        ),
+      readReadyBinding: () =>
+        Promise.resolve({
+          binding,
+          sandbox: { image: "fixture", teamId, projectId: "operator-fixture", workers: {} },
+        }),
+      readSignupPolicy: () =>
+        Promise.resolve(
+          policyApplied() ? { status: "applied", policyDigest } : { status: "absent" },
+        ),
+      readSignupPolicyPlan: (_scope, organizationId) =>
+        Promise.resolve(
+          authOnlySignupPolicyPlanSchema.parse({
             version: 1,
-            policyId: "pilot-policy",
-            authResourceId: authDatabase.resourceId,
-            appId,
-            origin: binding.issuer,
-            appPath: "/",
-            organizationId,
-            eligibility: "approved-email",
-            allowedEmails: ["private-pilot@example.test"],
-            membershipRole: "member",
-            appRoles: [plan.appRole],
-          },
-          normalActorProgram: {
-            appId,
-            origin: binding.issuer,
-            organizations: [{ organizationId }],
-            appAccess: [{ appId, organizationId, roles: [plan.appRole] }],
-          },
-          effects: [
-            {
-              kind: "auth-signup-policy",
-              id: "auth-signup-policy",
-              resourceId: authDatabase.resourceId,
+            action: "prepare",
+            authDatabase,
+            neon: {
+              ...binding.bootstrapResource.neon,
+              endpoint: binding.bootstrapResource.hostname,
             },
-          ],
-          signupPolicyInstaller: {
-            reference: "auth-owned-organization-v1",
-            sha256: "f".repeat(64),
-          },
-        }),
-    };
+            selection: { sessionId: historyOwner.sessionId, workspaceId: authority.workspaceId },
+            deploymentBoundary: {
+              teamId,
+              operator: { projectId: "operator-fixture", environment: "preview" },
+              verification: {
+                publicOrigin: binding.issuer,
+                gatewayOrigin: value.gateway.origin,
+                jwksUrl,
+              },
+            },
+            authSignupPolicy: {
+              version: 1,
+              policyId: "pilot-policy",
+              authResourceId: authDatabase.resourceId,
+              appId,
+              origin: binding.issuer,
+              appPath: "/",
+              organizationId,
+              eligibility: "approved-email",
+              allowedEmails: ["private-pilot@example.test"],
+              membershipRole: "member",
+              appRoles: [plan.appRole],
+            },
+            normalActorProgram: {
+              appId,
+              origin: binding.issuer,
+              organizations: [{ organizationId }],
+              appAccess: [{ appId, organizationId, roles: [plan.appRole] }],
+            },
+            effects: [
+              {
+                kind: "auth-signup-policy",
+                id: "auth-signup-policy",
+                resourceId: authDatabase.resourceId,
+              },
+            ],
+            signupPolicyInstaller: {
+              reference: "auth-owned-organization-v1",
+              sha256: "f".repeat(64),
+            },
+          }),
+        ),
+    });
   };
 const planChild = async (ports: NativeTargetAuthOnlyEntryAuthority) =>
   nativeTargetAuthOnlyEntryApprovalInputSchema.parse(
-    await (
-      await request(
+    await readBody(
+      request(
         { ...common, action: "native-target-auth-only-entry-plan", input: childRequest },
         true,
         ports,
-      )
-    ).json(),
+      ),
+    ),
   );
 it("plans only after READY and consumed proof, returns a stable digest-only child, and denies execution without its approval", async () => {
   await startOwnerPending();
@@ -835,9 +1148,9 @@ it("returns the approved organization only after worker readback, with no signup
     sourceDigest: child.childPlanDigest,
   });
   mock.runOrganization
-    .mockResolvedValueOnce({ status: "absent" })
+    .mockResolvedValueOnce(workerReadback("absent"))
     .mockResolvedValueOnce(null)
-    .mockResolvedValue({ status: "applied" });
+    .mockResolvedValue(workerReadback("applied"));
   const response = await request(
     { ...common, action: "native-target-auth-only-entry", input: child },
     true,
@@ -872,14 +1185,16 @@ it("requires the independently observed organization before the signup child can
   );
   const signup = nativeTargetAuthOnlyEntryApprovalInputSchema.parse(await signupResponse.json());
   expect(JSON.stringify(signup)).not.toContain("private-pilot");
-  mock.readEntryApproval.mockImplementation(async ({ approvalInput }) => ({
-    ...deliveryApproval,
-    callId: `call-${approvalInput.effect}`,
-    requestId: `request-${approvalInput.effect}`,
-    sourceDigest: approvalInput.childPlanDigest,
-  }));
+  mock.readEntryApproval.mockImplementation(({ approvalInput }) =>
+    Promise.resolve({
+      ...deliveryApproval,
+      callId: `call-${approvalInput.effect}`,
+      requestId: `request-${approvalInput.effect}`,
+      sourceDigest: approvalInput.childPlanDigest,
+    }),
+  );
   const runSignup = async () =>
-    request(
+    await request(
       {
         ...common,
         action: "native-target-auth-only-entry",
@@ -892,7 +1207,7 @@ it("requires the independently observed organization before the signup child can
   expect(mock.runOrganization).not.toHaveBeenCalled();
   expect(mock.runSignupPolicy).not.toHaveBeenCalled();
 
-  mock.runOrganization.mockResolvedValue({ status: "applied" });
+  mock.runOrganization.mockResolvedValue(workerReadback("applied"));
   await request(
     { ...common, action: "native-target-auth-only-entry", input: organization },
     true,
@@ -901,14 +1216,14 @@ it("requires the independently observed organization before the signup child can
   const attestation = createHash("sha256")
     .update(JSON.stringify({ appId, organizationId: "pilot-org", policyDigest }))
     .digest("hex");
-  mock.runSignupPolicy.mockImplementation(async (_sandbox, worker) => {
+  mock.runSignupPolicy.mockImplementation((_sandbox, worker) => {
     if (worker.readbackOnly === true) {
-      return { readback_sha256: attestation, status: "applied" };
+      return Promise.resolve({ ...workerReadback("applied"), readback_sha256: attestation });
     }
     policyApplied = true;
-    return null;
+    return Promise.resolve(null);
   });
-  expect(await (await runSignup()).json()).toEqual({
+  expect(await readBody(runSignup())).toEqual({
     childOperationRef: signup.childOperationRef,
     childPlanDigest: signup.childPlanDigest,
     effect: "signup-policy",
@@ -933,24 +1248,29 @@ it("keeps a competing child request outside the saved delivery lease", async () 
     requestId: "child-request",
     sourceDigest: child.childPlanDigest,
   });
-  const entered = Promise.withResolvers<void>();
-  const resume = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<null>();
+  const resume = Promise.withResolvers<null>();
   mock.runOrganization.mockImplementationOnce(async () => {
-    entered.resolve();
+    entered.resolve(null);
     await resume.promise;
-    return { status: "applied" };
+    return workerReadback("applied");
   });
   const run = async () =>
-    request({ ...common, action: "native-target-auth-only-entry", input: child }, true, ports);
+    await request(
+      { ...common, action: "native-target-auth-only-entry", input: child },
+      true,
+      ports,
+    );
   const first = run();
   await entered.promise;
   try {
     await expect(run()).rejects.toThrow("reconciliation_required");
     expect(mock.runOrganization).toHaveBeenCalledOnce();
   } finally {
-    resume.resolve();
+    resume.resolve(null);
   }
-  expect((await first).ok).toBe(true);
+  const firstResponse = await first;
+  expect(firstResponse.ok).toBe(true);
   expect(await planChild(ports)).toEqual(child);
 });
 
@@ -958,7 +1278,7 @@ const routingAuthority = (): NativeTargetAuthOnlyFinalRoutingAuthority => ({
   assertCatalogApp: async (value) => {
     await value.environment.assertCurrent();
   },
-  preparePlan: async (value) => routePlanBytes(value),
+  preparePlan: (value) => Promise.resolve(routePlanBytes(value)),
   withGatewayLease: async (value, run) => {
     await value.environment.assertCurrent();
     const snapshot = await value.readCurrentFence();
@@ -969,9 +1289,15 @@ const routingAuthority = (): NativeTargetAuthOnlyFinalRoutingAuthority => ({
 });
 const startRoutingPending = async () => {
   await planRequest();
-  return await (
-    await request({ ...common, action: "native-target-auth-only-delivery", input: deliveryInput })
-  ).json();
+  const body = nativeTargetAuthOnlyDeliveryResultSchema.parse(
+    await readBody(
+      request({ ...common, action: "native-target-auth-only-delivery", input: deliveryInput }),
+    ),
+  );
+  if (body.status !== "routing-required") {
+    throw new Error("Expected retained final routing invitation");
+  }
+  return body;
 };
 const approveRouting = () =>
   mock.readRoutingApproval.mockImplementation(async (input) => {
@@ -984,35 +1310,54 @@ const approveRouting = () =>
       sourceDigest: input.approvalInput.routingPlanDigest,
     };
   });
-const routingRecord = () =>
-  [...rows.values()].find(
-    (row) => (row.record as { kind?: string }).kind === "native-target-auth-only-delivery",
-  )!;
+const routingRecordSchema = z.looseObject({
+  kind: z.literal("native-target-auth-only-delivery"),
+  phase: z.enum(["routing-pending", "prepared", "unknown-final", "running-final"]),
+  lease: z.object({ id: z.uuid(), expiresAt: z.iso.datetime() }).optional(),
+  gateway: z.looseObject({ receipt: z.looseObject({ deploymentId: z.string() }) }),
+});
+const routingRecord = () => {
+  const row = [...rows.values()].find(
+    (entry) => routingRecordSchema.safeParse(entry.record).success,
+  );
+  if (row === undefined) {
+    throw new Error("Expected a retained delivery journal");
+  }
+  return { ...row, record: routingRecordSchema.parse(row.record) };
+};
 const mountSuccessfulRouting = () =>
   mock.runRouting.mockImplementation(async (deps, input) => {
     await input.assertCurrent();
     const retained = await deps.store.read();
-    const plan = JSON.parse(input.routingPlanBytes.toString());
-    expect(await deps.readRetainedParent()).toEqual({ app: plan.app, bootstrap: plan.bootstrap });
+    if (retained === undefined) {
+      throw new Error("Expected retained routing plan");
+    }
+    const routingPlan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
+      JSON.parse(input.routingPlanBytes.toString("utf-8")),
+    );
+    expect(await deps.readRetainedParent()).toEqual({
+      app: routingPlan.app,
+      bootstrap: routingPlan.bootstrap,
+    });
     await deps.assertCatalogApp(input.projection);
     const gateway = {
-      ...plan.bootstrap,
+      ...routingPlan.bootstrap,
       deploymentId: "dpl-final-gateway",
-      operationRef: plan.operationRef,
+      operationRef: routingPlan.operationRef,
       origin: "https://final-gateway.vercel.app",
     };
     await deps.store.compareAndSet(retained.revision, {
       ...retained.record,
-      projectionAttempt: plan.projection,
+      projectionAttempt: routingPlan.projection,
       refreshAttempted: true,
       refreshCandidates: [gateway],
       refreshReceipt: gateway,
     });
     await input.assertCurrent();
     return {
-      app: plan.app,
+      app: routingPlan.app,
       gateway,
-      projectionDigest: plan.projection.nextSha256,
+      projectionDigest: routingPlan.projection.nextSha256,
       status: "prepared",
     };
   });
@@ -1022,32 +1367,34 @@ it("normal delivery retains one digest-only routing invitation and final plan/ap
   expect(initial.status).toBe("routing-required");
   expect(JSON.stringify(initial)).not.toContain("base64");
   const original = structuredClone(routingRecord());
-  expect((original.record as { phase: string }).phase).toBe("routing-pending");
-  const plan = await (
-    await request({
-      ...common,
-      action: "native-target-auth-only-final-routing-plan",
-      input: { appId, deliveryPlanDigest, operationRef },
-    })
-  ).json();
-  expect(plan).toEqual(initial.finalRoutingPlan);
+  expect(original.record.phase).toBe("routing-pending");
+  const routingInput = nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(
+    await readBody(
+      request({
+        ...common,
+        action: "native-target-auth-only-final-routing-plan",
+        input: { appId, deliveryPlanDigest, operationRef },
+      }),
+    ),
+  );
+  expect(routingInput).toEqual(initial.finalRoutingPlan);
   expect(
-    await (
-      await request({
+    await readBody(
+      request({
         ...common,
         action: "native-target-auth-only-final-routing-approval-read",
-        input: plan,
-      })
-    ).json(),
+        input: routingInput,
+      }),
+    ),
   ).toEqual({ status: "pending" });
   await expect(
-    request({ ...common, action: "native-target-auth-only-final-routing", input: plan }),
+    request({ ...common, action: "native-target-auth-only-final-routing", input: routingInput }),
   ).rejects.toThrow("authorization_required");
   await expect(
     request({
       ...common,
       action: "native-target-auth-only-final-routing",
-      input: { ...plan, routingOperationRef: "44444444-4444-4444-a444-444444444444" },
+      input: { ...routingInput, routingOperationRef: "44444444-4444-4444-a444-444444444444" },
     }),
   ).rejects.toThrow("resource_mismatch");
   expect(mock.runRouting).not.toHaveBeenCalled();
@@ -1058,19 +1405,21 @@ it("mounts the separately approved routing coordinator, retains final receipt, a
   const initial = await startRoutingPending();
   approveRouting();
   mountSuccessfulRouting();
-  const authority = routingAuthority();
-  const execute = await (
-    await request(
-      {
-        ...common,
-        action: "native-target-auth-only-final-routing",
-        input: initial.finalRoutingPlan,
-      },
-      true,
-      undefined,
-      authority,
-    )
-  ).json();
+  const routingPorts = routingAuthority();
+  const execute = nativeTargetAuthOnlyFinalRoutingResultSchema.parse(
+    await readBody(
+      request(
+        {
+          ...common,
+          action: "native-target-auth-only-final-routing",
+          input: initial.finalRoutingPlan,
+        },
+        true,
+        undefined,
+        routingPorts,
+      ),
+    ),
+  );
   expect(execute).toMatchObject({
     deliveryPlanDigest,
     gateway: {
@@ -1079,19 +1428,18 @@ it("mounts the separately approved routing coordinator, retains final receipt, a
     },
     status: "prepared",
   });
-  expect((routingRecord().record as { phase: string }).phase).toBe("prepared");
-  expect(
-    (routingRecord().record as { gateway: { receipt: { deploymentId: string } } }).gateway.receipt
-      .deploymentId,
-  ).toBe("dpl-gateway");
-  const replay = await (
-    await request(
-      { ...common, action: "native-target-auth-only-delivery", input: deliveryInput },
-      true,
-      undefined,
-      authority,
-    )
-  ).json();
+  expect(routingRecord().record.phase).toBe("prepared");
+  expect(routingRecord().record.gateway.receipt.deploymentId).toBe("dpl-gateway");
+  const replay = nativeTargetAuthOnlyDeliveryResultSchema.parse(
+    await readBody(
+      request(
+        { ...common, action: "native-target-auth-only-delivery", input: deliveryInput },
+        true,
+        undefined,
+        routingPorts,
+      ),
+    ),
+  );
   expect(replay).toEqual({ ...execute, finalRoutingPlan: initial.finalRoutingPlan });
   expect(mock.runRouting).toHaveBeenCalledTimes(2);
   expect(mock.reconcile.mock.calls.map(([target]) => target)).toEqual(["gateway", "app"]);
@@ -1101,18 +1449,18 @@ it("mounts the separately approved routing coordinator, retains final receipt, a
       { ...common, action: "native-target-auth-only-delivery", input: deliveryInput },
       true,
       undefined,
-      authority,
+      routingPorts,
     ),
   ).rejects.toThrow("authorization_required");
   expect(mock.runRouting).toHaveBeenCalledTimes(2);
 });
-it.each(["unknown-final", "running-final"])(
+it.each(["unknown-final", "running-final"] as const)(
   "normal %s recovery reconciles the retained final plan without original provider loop",
   async (phase) => {
     const initial = await startRoutingPending();
     approveRouting();
     mock.runRouting.mockRejectedValueOnce(new Error("lost final provider response"));
-    const authority = routingAuthority();
+    const routingPorts = routingAuthority();
     await expect(
       request(
         {
@@ -1122,12 +1470,12 @@ it.each(["unknown-final", "running-final"])(
         },
         true,
         undefined,
-        authority,
+        routingPorts,
       ),
     ).rejects.toThrow("lost final provider response");
-    expect((routingRecord().record as { phase: string }).phase).toBe("unknown-final");
+    expect(routingRecord().record.phase).toBe("unknown-final");
     const row = routingRecord();
-    const record = row.record as { phase: string; lease?: { id: string; expiresAt: string } };
+    const record = row.record;
     record.phase = phase;
     if (phase === "running-final") {
       record.lease = {
@@ -1135,20 +1483,26 @@ it.each(["unknown-final", "running-final"])(
         expiresAt: "2020-01-01T00:00:00.000Z",
       };
     }
+    rows.set(row.requestId, { ...row, record });
     mountSuccessfulRouting();
     expect(
-      await (
-        await request(
+      await readBody(
+        request(
           { ...common, action: "native-target-auth-only-delivery", input: deliveryInput },
           true,
           undefined,
-          authority,
-        )
-      ).json(),
+          routingPorts,
+        ),
+      ),
     ).toMatchObject({ status: "prepared" });
     expect(mock.reconcile.mock.calls.map(([target]) => target)).toEqual(["gateway", "app"]);
     const { calls } = mock.runRouting.mock;
-    expect(calls[0][1].routingPlanBytes.equals(calls[1][1].routingPlanBytes)).toBe(true);
-    expect(calls[0][1].approval).toEqual(calls[1][1].approval);
+    const originalCall = calls.at(0);
+    const retryCall = calls.at(1);
+    if (originalCall === undefined || retryCall === undefined) {
+      throw new Error("Expected both final routing attempts");
+    }
+    expect(originalCall[1].routingPlanBytes.equals(retryCall[1].routingPlanBytes)).toBe(true);
+    expect(originalCall[1].approval).toEqual(retryCall[1].approval);
   },
 );

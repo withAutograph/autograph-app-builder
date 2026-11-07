@@ -1,15 +1,19 @@
 import { defineWorkflowTool } from "eve/tools";
 import { nativeTargetAuthOnlyFinalRoutingApprovalInputSchema } from "../../lib/eve/private-native-target-auth-only-final-routing-approval";
+import {
+  authorizeAuthOnlyFinalRoutingApprovalResponseStep,
+  prepareAuthOnlyFinalRoutingStep,
+  readAuthOnlyFinalRoutingApprovalStep,
+} from "../../lib/agent/prepare-app-native-target-auth-only-step";
 
 export default defineWorkflowTool({
   approval: {
     request: async (ctx) => {
-      if (ctx.toolInput === undefined) return "user-approval" as const;
+      if (ctx.toolInput === undefined) {
+        return "user-approval" as const;
+      }
       try {
-        const { nativeTargetOnboardingRuntimeForSession } =
-          await import("../../lib/agent/native-target-onboarding-runtime");
-        const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-        return (await runtime.hasAuthOnlyFinalRoutingApproval(ctx.toolInput, ctx))
+        return (await readAuthOnlyFinalRoutingApprovalStep(ctx.toolInput, ctx))
           ? "not-applicable"
           : "user-approval";
       } catch {
@@ -22,10 +26,7 @@ export default defineWorkflowTool({
     },
     response: async (ctx) => {
       try {
-        const { nativeTargetOnboardingRuntimeForSession } =
-          await import("../../lib/agent/native-target-onboarding-runtime");
-        const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-        await runtime.authorizeAuthOnlyFinalRoutingApprovalResponse(ctx);
+        await authorizeAuthOnlyFinalRoutingApprovalResponseStep(ctx);
         return { status: "allowed" as const };
       } catch {
         return {
@@ -41,10 +42,7 @@ export default defineWorkflowTool({
     "Approve and complete the retained final Gateway routing operation for this isolated Auth-only Preview. Reconciles the exact saved source, app projection, refreshed Gateway and stable alias on retry. The prepared result establishes routing readiness; hosted signup, sign-in and email delivery remain separate acceptance results.",
   async execute(input, ctx) {
     "use workflow";
-    const { nativeTargetOnboardingRuntimeForSession } =
-      await import("../../lib/agent/native-target-onboarding-runtime");
-    const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
-    return await runtime.prepareAuthOnlyFinalRouting(input, ctx);
+    return await prepareAuthOnlyFinalRoutingStep(input, ctx);
   },
   inputSchema: nativeTargetAuthOnlyFinalRoutingApprovalInputSchema,
 });

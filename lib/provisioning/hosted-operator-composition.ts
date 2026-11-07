@@ -552,7 +552,8 @@ export const createConfiguredPreviewTargetResolver =
     const currentOwner = await consentOwner.authorize(request, identity.sessionId, ownerContext);
     const application = configuration.applications[identity.appId];
     const authOnlyRegistration = configuration.authOnlyApplications?.[identity.appId]?.registration;
-    if (application === undefined && authOnlyRegistration === undefined) {
+    const target = application ?? authOnlyRegistration;
+    if (target === undefined) {
       throw new HostedOperatorError(RESOURCE_MISMATCH);
     }
     if (
@@ -564,9 +565,9 @@ export const createConfiguredPreviewTargetResolver =
     }
     const selection = operatorSelectionSchema.parse({
       appId: identity.appId,
-      branch: application?.branch ?? authOnlyRegistration!.branch,
+      branch: target.branch,
       environment: "preview",
-      projectId: application?.projectId ?? authOnlyRegistration!.projectId,
+      projectId: target.projectId,
       sessionId: identity.sessionId,
     });
     const context = await controlPlane.authorize(request, selection, currentOwner.ownerContext);
@@ -846,7 +847,7 @@ export const readCompletedCaptureBootstrap = (
     ) ||
     desired.deploymentBoundary?.teamId !== current.plan.deploymentBoundary?.teamId
   ) {
-    return;
+    return undefined;
   }
   /* oxlint-enable sonarjs/expression-complexity */
   return readUnapprovedCapturePredecessor(record, account.accountPlan, Date.now());
@@ -1393,7 +1394,7 @@ export const composeHostedOperatorDependencies = (
     readInstallationScopes:
       readInstallationScopes === undefined
         ? undefined
-        : async (input) => readInstallationScopes(input, input.plan),
+        : async (input) => await readInstallationScopes(input, input.plan),
     readReleaseManifest: async (input) => {
       const release = await readRelease(controlPlane, input);
       return release.files["release-manifest.json"];
@@ -2421,7 +2422,7 @@ export const composeHostedOperatorDependencies = (
   };
   const emptyAccessScope = (input: HostedOperatorEffectContext) => {
     if (input.effect.kind !== "access" || input.plan.access.length !== 0) {
-      return;
+      return undefined;
     }
     if (input.plan.action !== "prepare") {
       throw new HostedOperatorError(RESOURCE_MISMATCH);
@@ -2447,7 +2448,7 @@ export const composeHostedOperatorDependencies = (
     approved: ReturnType<typeof emptyAccessScope>,
   ) => {
     if (approved === undefined) {
-      return;
+      return undefined;
     }
     const assertScope = () => {
       if (!isDeepStrictEqual(emptyAccessScope(input), approved)) {
@@ -3059,11 +3060,11 @@ export const composeHostedOperatorDependencies = (
     plan,
     publicReleaseRequest: controlPlane.publicReleaseRequest,
     publicRuntimeBinding: controlPlane.readPublicRuntimeBinding,
-    readAppProjectSettings: async (context) =>
+    readAppProjectSettings: (context) =>
       Promise.resolve(selectedApplication(configuration, context).projectSettings),
     readApproval: controlPlane.readApproval,
     readApprovedPlan: controlPlane.readApprovedPlan,
-    readGatewayDeliverySource: async (_context, currentPlan) =>
+    readGatewayDeliverySource: (_context, currentPlan) =>
       Promise.resolve(gatewayDeliverySourceForPlan(configuration, currentPlan)),
     readReadyDeliveryReplacementPlan: async (context) => {
       const policy = selectedApplication(configuration, context).hostProtection;
@@ -3281,7 +3282,9 @@ export const createRequestScopedHostedOperatorDependencies =
     }
     try {
       return {
-        close: async () => controlPlane.close(),
+        close: async () => {
+          await controlPlane.close();
+        },
         dependencies: composeHostedOperatorDependencies(configuration, controlPlane),
       };
     } catch (error) {

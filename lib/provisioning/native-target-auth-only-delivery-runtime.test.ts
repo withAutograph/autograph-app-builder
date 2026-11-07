@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { drizzle } from "drizzle-orm/postgres-js";
 import type { SQL } from "drizzle-orm";
 import type { OperatorDeploymentCandidate } from "./hosted-operator-contract";
 import {
@@ -9,8 +10,11 @@ import {
   withNativeTargetAuthOnlyFinalRoutingLease,
 } from "./native-target-auth-only-delivery-runtime";
 import { nativeTargetAuthOnlyFinalRoutingPlanDigest } from "./native-target-auth-only-final-routing";
-import { nativeTargetAuthOnlyDeliveryPlanDigest } from "./native-target-auth-only-delivery-plan";
-import type { NativeTargetAuthOnlyPreviewDeliveryInput } from "./native-target-auth-only-preview-delivery";
+import {
+  nativeTargetAuthOnlyDeliveryPlanDigest,
+  nativeTargetAuthOnlyDeliveryPlanSchema,
+} from "./native-target-auth-only-delivery-plan";
+import type { createNativeTargetAuthOnlyPreviewDelivery } from "./native-target-auth-only-preview-delivery";
 
 const key = {
   appId: "pilot",
@@ -238,7 +242,7 @@ const routingBytes = Buffer.from(
       publicOrigin: "https://pilot.example",
       subject: "gateway",
     },
-    target: JSON.parse(bytes.toString()).target,
+    target: nativeTargetAuthOnlyDeliveryPlanSchema.parse(JSON.parse(bytes.toString())).target,
     version: 1,
   }),
 );
@@ -268,98 +272,91 @@ const fixture = async () => {
     expect(["pending", "settled"]).toContain(row.state);
     expect(row.revision).toBeGreaterThan(0);
   };
+  const selectRows = (where: SQL) => ({
+    limit: () => {
+      const row = rows.get(String(parameters(where)[4]));
+      return Promise.resolve(row === undefined ? [] : [structuredClone(row)]);
+    },
+  });
+  const updateRows = (change: Partial<Row>, where: SQL) => {
+    const params = parameters(where);
+    const row = rows.get(String(params[4]));
+    if (row === undefined || row.revision !== params[5] || row.requestDigest !== params[6]) {
+      return Promise.resolve([]);
+    }
+    const next = { ...row, ...change };
+    validate(next);
+    rows.set(row.requestId, structuredClone(next));
+    return Promise.resolve([structuredClone(next)]);
+  };
+  const updateWhere = (change: Partial<Row>) => (where: SQL) => ({
+    returning: () => updateRows(change, where),
+  });
   const database = {
     insert: () => ({
       values: (row: Row) => ({
-        onConflictDoNothing: async () => {
+        onConflictDoNothing: () => {
           validate(row);
-          if (!rows.has(row.requestId)) rows.set(row.requestId, structuredClone(row));
+          if (!rows.has(row.requestId)) {
+            rows.set(row.requestId, structuredClone(row));
+          }
+          return Promise.resolve();
         },
       }),
     }),
-    select: () => ({
-      from: () => ({
-        where: (where: SQL) => ({
-          limit: async () => {
-            const row = rows.get(String(parameters(where)[4]));
-            return row === undefined ? [] : [structuredClone(row)];
-          },
-        }),
-      }),
-    }),
-    update: () => ({
-      set: (change: Partial<Row>) => ({
-        where: (where: SQL) => ({
-          returning: async () => {
-            const params = parameters(where);
-            const row = rows.get(String(params[4]));
-            if (row === undefined || row.revision !== params[5] || row.requestDigest !== params[6])
-              return [];
-            const next = { ...row, ...change };
-            validate(next);
-            rows.set(row.requestId, structuredClone(next));
-            return [structuredClone(next)];
-          },
-        }),
-      }),
-    }),
+    select: () => ({ from: () => ({ where: selectRows }) }),
+    update: () => ({ set: (change: Partial<Row>) => ({ where: updateWhere(change) }) }),
   };
-  const store = createPostgresNativeTargetAuthOnlyDeliveryStore(database);
+  const mockDatabase: Parameters<typeof createPostgresNativeTargetAuthOnlyDeliveryStore>[0] =
+    drizzle.mock();
+  const store = createPostgresNativeTargetAuthOnlyDeliveryStore(
+    Object.assign(mockDatabase, database),
+  );
   await store.retain(key, bytes);
+  type Adapter = ReturnType<typeof createNativeTargetAuthOnlyPreviewDelivery>;
   const reconcile = {
-    app: vi.fn(
-      async (_context: NativeTargetAuthOnlyPreviewDeliveryInput) =>
-        retryable as Awaited<
-          ReturnType<
-            ReturnType<
-              typeof import("./native-target-auth-only-preview-delivery").createNativeTargetAuthOnlyPreviewDelivery
-            >["reconcile"]
-          >
-        >,
-    ),
-    gateway: vi.fn(
-      async (_context: NativeTargetAuthOnlyPreviewDeliveryInput) =>
-        retryable as Awaited<
-          ReturnType<
-            ReturnType<
-              typeof import("./native-target-auth-only-preview-delivery").createNativeTargetAuthOnlyPreviewDelivery
-            >["reconcile"]
-          >
-        >,
-    ),
+    app: vi.fn<Adapter["reconcile"]>().mockResolvedValue(retryable),
+    gateway: vi.fn<Adapter["reconcile"]>().mockResolvedValue(retryable),
   };
   const deliver = {
-    app: vi.fn(async (_context: NativeTargetAuthOnlyPreviewDeliveryInput) => applied("app")),
-    gateway: vi.fn(async (_context: NativeTargetAuthOnlyPreviewDeliveryInput) =>
-      applied("gateway"),
-    ),
+    app: vi.fn<Adapter["deliver"]>().mockResolvedValue(applied("app")),
+    gateway: vi.fn<Adapter["deliver"]>().mockResolvedValue(applied("gateway")),
   };
-  const afterGatewayReady = vi.fn(async () => ({
-    organizationId: "pilot-org",
-    signupPolicyDigest: "f".repeat(64),
-    status: "ready" as const,
-  }));
-  const assertCurrent = vi.fn(async () => {});
+  const afterGatewayReady = vi
+    .fn<Parameters<typeof prepareNativeTargetAuthOnlyDelivery>[0]["afterGatewayReady"]>()
+    .mockResolvedValue({
+      organizationId: "pilot-org",
+      signupPolicyDigest: "f".repeat(64),
+      status: "ready",
+    });
+  const assertCurrent = vi.fn(() => Promise.resolve());
+  const readSaved = async () => {
+    const saved = await store.read(key);
+    if (saved === undefined) {
+      throw new Error("Expected retained delivery journal row");
+    }
+    return saved;
+  };
   const run = async (
     gate: Parameters<
       typeof prepareNativeTargetAuthOnlyDelivery
     >[0]["afterGatewayReady"] = afterGatewayReady,
   ) =>
-    prepareNativeTargetAuthOnlyDelivery({
+    await prepareNativeTargetAuthOnlyDelivery({
       adapter: (target) => ({ reconcile: reconcile[target], deliver: deliver[target] }),
       afterGatewayReady: gate,
       approval,
       assertCurrent,
       key,
-      prepareFinalRoutingPlan: async () => routingBytes,
+      prepareFinalRoutingPlan: () => Promise.resolve(routingBytes),
       store,
     });
-  return { afterGatewayReady, assertCurrent, deliver, reconcile, rows, run, store };
+  return { afterGatewayReady, assertCurrent, deliver, reconcile, rows, run, store, readSaved };
 };
 
 it("persists valid UUID/pending-settled journal rows and exact bytes; stale CAS and other owner/session cannot replace them", async () => {
   const f = await fixture();
-  const saved = (await f.store.read(key))!;
+  const saved = await f.readSaved();
   expect(await f.store.retain(key, bytes)).toEqual(saved);
   await expect(
     f.store.retain(key, Buffer.from(`${bytes.toString().replace('"pilot-org"', '"other"')} `)),
@@ -382,16 +379,16 @@ it("retains the verified Gateway receipt and yields only the owner link before a
   const f = await fixture();
   const pending = {
     authIdentityLink: "https://gateway.example/auth/link",
-    authIdentityLinkExpiresAt: new Date(Date.now() + 60000).toISOString(),
+    authIdentityLinkExpiresAt: new Date(Date.now() + 60_000).toISOString(),
     status: "pending-owner" as const,
   };
   expect(
-    await f.run(async (input) => {
+    await f.run((input) => {
       expect(input.gateway).toEqual(candidate("gateway"));
-      return pending;
+      return Promise.resolve(pending);
     }),
   ).toEqual({ ...pending, deliveryPlanDigest });
-  const row = (await f.store.read(key))!;
+  const row = await f.readSaved();
   expect(row.record.gateway.receipt).toEqual(candidate("gateway"));
   expect(row.record.phase).toBe("pending-owner");
   expect(f.reconcile.app).not.toHaveBeenCalled();
@@ -405,7 +402,8 @@ it("reconciles a lost create response without creating another deployment", asyn
   const f = await fixture();
   f.deliver.gateway.mockRejectedValueOnce(new Error("lost response"));
   await expect(f.run()).rejects.toThrow("lost response");
-  expect((await f.store.read(key))!.record.gateway.attempted).toBe(true);
+  const uncertain = await f.readSaved();
+  expect(uncertain.record.gateway.attempted).toBe(true);
   await expect(f.run()).rejects.toThrow("reconciliation_required");
   expect(f.deliver.gateway).toHaveBeenCalledTimes(1);
   f.reconcile.gateway.mockResolvedValue(applied("gateway"));
@@ -415,11 +413,11 @@ it("reconciles a lost create response without creating another deployment", asyn
 
 it("does not acquire an active lease and rejects source/project mismatch in provider receipts", async () => {
   const f = await fixture();
-  const row = (await f.store.read(key))!;
+  const row = await f.readSaved();
   await f.store.compareAndSet(key, row.revision, {
     ...row.record,
     lease: {
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
       id: "22222222-2222-4222-a222-222222222222",
     },
   });
@@ -443,7 +441,7 @@ it("holds prepared settlement behind a separate Gateway routing lease", async ()
     approval,
     assertCurrent: f.assertCurrent,
     key,
-    prepareFinalRoutingPlan: vi.fn(async () => routingBytes),
+    prepareFinalRoutingPlan: vi.fn(() => Promise.resolve(routingBytes)),
     store: f.store,
   });
   expect(result).toMatchObject({
@@ -452,7 +450,7 @@ it("holds prepared settlement behind a separate Gateway routing lease", async ()
     gateway: candidate("gateway"),
     status: "routing-required",
   });
-  const pending = (await f.store.read(key))!;
+  const pending = await f.readSaved();
   expect(pending.record.phase).toBe("routing-pending");
   const routed = await withNativeTargetAuthOnlyFinalRoutingLease({
     app: candidate("app"),
@@ -468,7 +466,8 @@ it("holds prepared settlement behind a separate Gateway routing lease", async ()
     store: f.store,
   });
   expect(routed).toEqual({ status: "routed" });
-  expect((await f.store.read(key))?.record.phase).toBe("prepared");
+  const prepared = await f.readSaved();
+  expect(prepared.record.phase).toBe("prepared");
 });
 
 it("does not publish prepared when the separately approved Gateway route is uncertain", async () => {
@@ -479,7 +478,7 @@ it("does not publish prepared when the separately approved Gateway route is unce
     approval,
     assertCurrent: f.assertCurrent,
     key,
-    prepareFinalRoutingPlan: async () => routingBytes,
+    prepareFinalRoutingPlan: () => Promise.resolve(routingBytes),
     store: f.store,
   });
   await expect(
@@ -489,28 +488,32 @@ it("does not publish prepared when the separately approved Gateway route is unce
       deliveryPlanDigest,
       gateway: candidate("gateway"),
       key,
-      run: async () => {
-        throw new Error("reconciliation_required");
-      },
+      run: () => Promise.reject(new Error("reconciliation_required")),
       store: f.store,
     }),
   ).rejects.toThrow("reconciliation_required");
-  expect((await f.store.read(key))?.record.phase).toBe("unknown-final");
+  const uncertain = await f.readSaved();
+  expect(uncertain.record.phase).toBe("unknown-final");
 });
 
 it("rechecks entry readiness before app provider work and rejects revocation", async () => {
   const f = await fixture();
   let checks = 0;
   await expect(
-    f.run(async () => {
-      if (++checks > 1) {
-        return {
-          status: "pending-owner",
+    f.run(() => {
+      checks += 1;
+      if (checks > 1) {
+        return Promise.resolve({
+          status: "pending-owner" as const,
           authIdentityLink: "https://gateway.example/auth/link",
-          authIdentityLinkExpiresAt: new Date(Date.now() + 60000).toISOString(),
-        };
+          authIdentityLinkExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        });
       }
-      return { organizationId: "pilot-org", signupPolicyDigest: "f".repeat(64), status: "ready" };
+      return Promise.resolve({
+        organizationId: "pilot-org",
+        signupPolicyDigest: "f".repeat(64),
+        status: "ready" as const,
+      });
     }),
   ).rejects.toThrow("auth_identity_required");
   expect(f.reconcile.app).not.toHaveBeenCalled();
@@ -534,7 +537,7 @@ it.each(["routing-pending", "unknown-final", "running-final", "prepared"] as con
   async (phase) => {
     const f = await fixture();
     await f.run();
-    const retained = (await f.store.read(key))!;
+    const retained = await f.readSaved();
     await f.store.compareAndSet(key, retained.revision, {
       ...retained.record,
       lease: undefined,
@@ -544,9 +547,13 @@ it.each(["routing-pending", "unknown-final", "running-final", "prepared"] as con
     f.reconcile.app.mockClear();
     f.deliver.gateway.mockClear();
     f.deliver.app.mockClear();
-    const builder = vi.fn(async () => {
-      throw new Error("must reuse retained plan");
-    });
+    const builder = vi
+      .fn<
+        NonNullable<
+          Parameters<typeof prepareNativeTargetAuthOnlyDelivery>[0]["prepareFinalRoutingPlan"]
+        >
+      >()
+      .mockRejectedValue(new Error("must reuse retained plan"));
     const replay = await prepareNativeTargetAuthOnlyDelivery({
       adapter: (target) => ({ reconcile: f.reconcile[target], deliver: f.deliver[target] }),
       afterGatewayReady: f.afterGatewayReady,
@@ -562,7 +569,8 @@ it.each(["routing-pending", "unknown-final", "running-final", "prepared"] as con
     expect(f.reconcile.app).not.toHaveBeenCalled();
     expect(f.deliver.gateway).not.toHaveBeenCalled();
     expect(f.deliver.app).not.toHaveBeenCalled();
-    expect((await f.store.read(key))!.record.gateway.receipt).toEqual(candidate("gateway"));
+    const replayed = await f.readSaved();
+    expect(replayed.record.gateway.receipt).toEqual(candidate("gateway"));
   },
 );
 
@@ -576,14 +584,13 @@ it("does not settle parent after the held physical Gateway fence is lost", async
       deliveryPlanDigest,
       gateway: candidate("gateway"),
       key,
-      run: async () => ({ status: "prepared" }),
+      run: () => Promise.resolve({ status: "prepared" }),
       store: f.store,
       withExecutionLease: async (_, complete) =>
-        await complete(async () => {
-          throw new Error("physical fence lost");
-        }),
+        await complete(() => Promise.reject(new Error("physical fence lost"))),
     }),
   ).rejects.toThrow("physical fence lost");
-  expect((await f.store.read(key))!.record.phase).toBe("unknown-final");
+  const failed = await f.readSaved();
+  expect(failed.record.phase).toBe("unknown-final");
   expect([...f.rows.values()][0].state).toBe("pending");
 });

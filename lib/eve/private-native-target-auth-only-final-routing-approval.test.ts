@@ -103,7 +103,7 @@ const routingPlan = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse({
   },
   version: 1,
 });
-const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
+const bytes = (value: typeof routingPlan) => Buffer.from(JSON.stringify(value));
 const routingPlanDigest = nativeTargetAuthOnlyFinalRoutingPlanDigest(bytes(routingPlan));
 const toolInput = {
   appId: routingPlan.target.appId,
@@ -172,11 +172,13 @@ const proof: NativeTargetAuthOnlyApproval = {
 };
 const fixture = (events: MessageStreamEvent[] = [requested(), settled()], complete = true) => ({
   approvalInput: structuredClone(toolInput),
-  assertOwner: vi.fn(async () => undefined),
+  assertOwner: vi.fn(async () => {}),
   historyOwner: structuredClone(historyOwner),
   owner: structuredClone(owner),
   readHistory: vi.fn(async (start: number, observe: (event: MessageStreamEvent) => void) => {
-    for (const event of events) observe(event);
+    for (const event of events) {
+      observe(event);
+    }
     return {
       complete,
       nextNativeIndex: start + events.length,
@@ -283,64 +285,70 @@ it.each([
 ] as const)("rejects mismatched retained %s before reading history", async (kind) => {
   const f = fixture();
   const changed = structuredClone(routingPlan);
-  if (kind === "owner") {
-    f.owner.authority.ownerUserId = "foreign";
+  const mutations: Record<Exclude<typeof kind, "bytes">, () => void> = {
+    owner: () => {
+      f.owner.authority.ownerUserId = "foreign";
+    },
+    session: () => {
+      f.owner.publicSessionId = "foreign";
+    },
+    "adapter-session": () => {
+      f.owner.adapterSessionId = "foreign";
+    },
+    "adapter-generation": () => {
+      f.owner.adapterGeneration = 2;
+    },
+    app: () => {
+      changed.target.appId = "another-app";
+    },
+    "plan-session": () => {
+      changed.target.sessionId = "another-session";
+    },
+    "parent-operation": () => {
+      changed.deliveryOperationRef = "33333333-3333-4333-a333-333333333333";
+    },
+    "routing-operation": () => {
+      changed.operationRef = "33333333-3333-4333-a333-333333333333";
+    },
+    "delivery-digest": () => {
+      changed.deliveryPlanDigest = "e".repeat(64);
+    },
+    "provider-scope": () => {
+      changed.source.ownerId = "foreign-team";
+    },
+    "gateway-source": () => {
+      changed.source.projectId = "foreign-gateway";
+    },
+    "gateway-origin": () => {
+      changed.source.publicOrigin = "https://foreign.example";
+    },
+    bootstrap: () => {
+      changed.bootstrap.projectId = "foreign-gateway";
+    },
+    "app-receipt": () => {
+      changed.app.projectId = "another-project";
+    },
+    "projection-operation": () => {
+      changed.projection.operationRef = routingOperationRef;
+    },
+    "projection-digest": () => {
+      changed.projection.deliveryPlanDigest = "e".repeat(64);
+    },
+    "projection-app": () => {
+      changed.projection.appDeploymentId = "dpl-another";
+    },
+    "projection-gateway": () => {
+      changed.projection.gatewayProjectId = "another-gateway";
+    },
+    "same-operation": () => {
+      changed.operationRef = operationRef;
+      f.approvalInput.routingOperationRef = operationRef;
+    },
+  };
+  if (kind !== "bytes") {
+    mutations[kind]();
   }
-  if (kind === "session") {
-    f.owner.publicSessionId = "foreign";
-  }
-  if (kind === "adapter-session") {
-    f.owner.adapterSessionId = "foreign";
-  }
-  if (kind === "adapter-generation") {
-    f.owner.adapterGeneration = 2;
-  }
-  if (kind === "app") {
-    changed.target.appId = "another-app";
-  }
-  if (kind === "plan-session") {
-    changed.target.sessionId = "another-session";
-  }
-  if (kind === "parent-operation") {
-    changed.deliveryOperationRef = "33333333-3333-4333-a333-333333333333";
-  }
-  if (kind === "routing-operation") {
-    changed.operationRef = "33333333-3333-4333-a333-333333333333";
-  }
-  if (kind === "delivery-digest") {
-    changed.deliveryPlanDigest = "e".repeat(64);
-  }
-  if (kind === "provider-scope") {
-    changed.source.ownerId = "foreign-team";
-  }
-  if (kind === "gateway-source") {
-    changed.source.projectId = "foreign-gateway";
-  }
-  if (kind === "gateway-origin") {
-    changed.source.publicOrigin = "https://foreign.example";
-  }
-  if (kind === "bootstrap") {
-    changed.bootstrap.projectId = "foreign-gateway";
-  }
-  if (kind === "app-receipt") {
-    changed.app.projectId = "another-project";
-  }
-  if (kind === "projection-operation") {
-    changed.projection.operationRef = routingOperationRef;
-  }
-  if (kind === "projection-digest") {
-    changed.projection.deliveryPlanDigest = "e".repeat(64);
-  }
-  if (kind === "projection-app") {
-    changed.projection.appDeploymentId = "dpl-another";
-  }
-  if (kind === "projection-gateway") {
-    changed.projection.gatewayProjectId = "another-gateway";
-  }
-  if (kind === "same-operation") {
-    changed.operationRef = operationRef;
-    f.approvalInput.routingOperationRef = operationRef;
-  }
+
   f.routingPlanBytes = bytes(changed);
   f.approvalInput.routingPlanDigest = nativeTargetAuthOnlyFinalRoutingPlanDigest(
     f.routingPlanBytes,
@@ -481,8 +489,10 @@ it("does not carry an incomplete positive grant into a recovered adapter", async
     }),
   ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
   const resumed = fixture([]);
-  resumed.owner.adapterSessionId = resumed.historyOwner.adapterSessionId = "recovered-adapter";
-  resumed.owner.adapterGeneration = resumed.historyOwner.adapterGeneration = 2;
+  resumed.owner.adapterSessionId = "recovered-adapter";
+  resumed.historyOwner.adapterSessionId = "recovered-adapter";
+  resumed.owner.adapterGeneration = 2;
+  resumed.historyOwner.adapterGeneration = 2;
   await expect(
     readPrivateNativeTargetAuthOnlyFinalRoutingApproval({
       ...resumed,

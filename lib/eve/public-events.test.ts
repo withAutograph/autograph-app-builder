@@ -619,7 +619,20 @@ describe("installed Eve 0.68 projection", () => {
 
     const tampered = structuredClone(events);
     const last = tampered.at(-1);
-    last.data.result.output.digest = "0".repeat(64);
+    if (last?.type !== "action.result") {
+      throw new Error("Expected the final artifact record result");
+    }
+    const { output } = last.data.result;
+    if (output === null || typeof output !== "object" || !("digest" in output)) {
+      throw new Error("Expected the artifact record output object");
+    }
+    tampered[tampered.length - 1] = {
+      ...last,
+      data: {
+        ...last.data,
+        result: { ...last.data.result, output: { ...output, digest: "0".repeat(64) } },
+      },
+    };
     expect(latestInstalledPrototype(tampered)).toBeUndefined();
   });
 

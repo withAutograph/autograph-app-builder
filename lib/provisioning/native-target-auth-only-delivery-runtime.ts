@@ -87,15 +87,15 @@ export const nativeTargetAuthOnlyDeliveryAllowsReadyBinding = (input: {
       return false;
     }
     if (
-      !(
-        input.record.phase === "running" ||
-        input.record.phase === "pending-owner" ||
-        input.record.phase === "prepared" ||
-        input.record.phase === "routing-pending" ||
-        input.record.phase === "running-final" ||
-        input.record.phase === "unknown-final" ||
-        input.record.phase === "unknown"
-      )
+      ![
+        "running",
+        "pending-owner",
+        "prepared",
+        "routing-pending",
+        "running-final",
+        "unknown-final",
+        "unknown",
+      ].includes(input.record.phase)
     ) {
       return false;
     }
@@ -110,13 +110,14 @@ export const nativeTargetAuthOnlyDeliveryAllowsReadyBinding = (input: {
     }
     return leaseIsLive;
   }
-  return (
-    input.runningLease !== undefined &&
-    input.record.phase === "running" &&
-    input.record.fenceGeneration === input.runningLease.fenceGeneration &&
-    input.record.lease !== undefined &&
-    Date.parse(input.record.lease.expiresAt) > (input.now ?? Date.now())
-  );
+  if (input.runningLease === undefined || input.record.lease === undefined) {
+    return false;
+  }
+  return [
+    input.record.phase === "running",
+    input.record.fenceGeneration === input.runningLease.fenceGeneration,
+    Date.parse(input.record.lease.expiresAt) > (input.now ?? Date.now()),
+  ].every(Boolean);
 };
 export interface NativeTargetAuthOnlyDeliveryKey {
   authority: z.infer<typeof hostedTenantAuthoritySchema>;
@@ -125,16 +126,18 @@ export interface NativeTargetAuthOnlyDeliveryKey {
   operationRef: string;
 }
 export interface NativeTargetAuthOnlyDeliveryStore {
-  read(key: NativeTargetAuthOnlyDeliveryKey): Promise<NativeTargetAuthOnlyDeliveryRow | undefined>;
-  retain(
+  read: (
+    key: NativeTargetAuthOnlyDeliveryKey,
+  ) => Promise<NativeTargetAuthOnlyDeliveryRow | undefined>;
+  retain: (
     key: NativeTargetAuthOnlyDeliveryKey,
     bytes: Buffer,
-  ): Promise<NativeTargetAuthOnlyDeliveryRow>;
-  compareAndSet(
+  ) => Promise<NativeTargetAuthOnlyDeliveryRow>;
+  compareAndSet: (
     key: NativeTargetAuthOnlyDeliveryKey,
     revision: number,
     record: NativeTargetAuthOnlyDeliveryRecord,
-  ): Promise<NativeTargetAuthOnlyDeliveryRow | undefined>;
+  ) => Promise<NativeTargetAuthOnlyDeliveryRow | undefined>;
 }
 export interface NativeTargetAuthOnlyDeliveryEnvironmentInput {
   authority: NativeTargetAuthOnlyDeliveryKey["authority"];
@@ -195,6 +198,54 @@ const requestIdFor = (key: NativeTargetAuthOnlyDeliveryKey) => {
 };
 const stateFor = (record: NativeTargetAuthOnlyDeliveryRecord) =>
   record.phase === "prepared" ? "settled" : "pending";
+const assertRetainedApproval = (
+  key: NativeTargetAuthOnlyDeliveryKey,
+  record: NativeTargetAuthOnlyDeliveryRecord,
+) => {
+  const approval = record.approval;
+  if (approval === undefined) {
+    return;
+  }
+  if (
+    ![
+      approval.outcome === "approved",
+      approval.planDigest === record.deliveryPlanDigest,
+      approval.sourceDigest === record.deliveryPlanDigest,
+      approval.publicSessionId === key.sessionId,
+      approval.responderPrincipalId === key.authority.ownerUserId,
+    ].every(Boolean)
+  ) {
+    throw mismatch();
+  }
+};
+const assertRetainedRouting = (
+  key: NativeTargetAuthOnlyDeliveryKey,
+  record: NativeTargetAuthOnlyDeliveryRecord,
+  plan: NativeTargetAuthOnlyDeliveryPlan,
+) => {
+  const retained = record.finalRoutingPlan;
+  if (retained === undefined) {
+    return;
+  }
+  const bytes = Buffer.from(retained.base64, "base64");
+  const routing = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
+    JSON.parse(bytes.toString("utf-8")),
+  );
+  if (
+    ![
+      bytes.toString("base64") === retained.base64,
+      nativeTargetAuthOnlyFinalRoutingPlanDigest(bytes) === retained.digest,
+      routing.operationRef === retained.operationRef,
+      routing.deliveryOperationRef === key.operationRef,
+      routing.deliveryPlanDigest === record.deliveryPlanDigest,
+      isDeepStrictEqual(routing.target, plan.target),
+      isDeepStrictEqual(routing.bootstrap, record.gateway.receipt),
+      isDeepStrictEqual(routing.app, record.app.receipt),
+    ].every(Boolean)
+  ) {
+    throw mismatch();
+  }
+};
 export const readNativeTargetAuthOnlyDeliveryPlan = (
   key: NativeTargetAuthOnlyDeliveryKey,
   raw: NativeTargetAuthOnlyDeliveryRecord,
@@ -202,47 +253,26 @@ export const readNativeTargetAuthOnlyDeliveryPlan = (
   const record = recordSchema.parse(raw);
   const bytes = Buffer.from(record.planBase64, "base64");
   const plan = nativeTargetAuthOnlyDeliveryPlanSchema.parse(JSON.parse(bytes.toString("utf-8")));
-  if (
-    bytes.toString("base64") !== record.planBase64 ||
-    nativeTargetAuthOnlyDeliveryPlanDigest(bytes) !== record.deliveryPlanDigest ||
-    record.operationRef !== key.operationRef ||
-    plan.target.appId !== key.appId ||
-    plan.target.sessionId !== key.sessionId ||
-    plan.target.environment !== "preview" ||
-    plan.target.scopeType !== "team" ||
-    (["routing-pending", "running-final", "unknown-final", "prepared"].includes(record.phase) &&
-      (record.gateway.receipt === undefined || record.app.receipt === undefined))
-  ) {
+  const exactPlan = [
+    bytes.toString("base64") === record.planBase64,
+    nativeTargetAuthOnlyDeliveryPlanDigest(bytes) === record.deliveryPlanDigest,
+    record.operationRef === key.operationRef,
+    plan.target.appId === key.appId,
+    plan.target.sessionId === key.sessionId,
+    plan.target.environment === "preview",
+    plan.target.scopeType === "team",
+  ].every(Boolean);
+  if (!exactPlan) {
     throw mismatch();
   }
   if (
-    record.approval !== undefined &&
-    (record.approval.outcome !== "approved" ||
-      record.approval.planDigest !== record.deliveryPlanDigest ||
-      record.approval.sourceDigest !== record.deliveryPlanDigest ||
-      record.approval.publicSessionId !== key.sessionId ||
-      record.approval.responderPrincipalId !== key.authority.ownerUserId)
+    ["routing-pending", "running-final", "unknown-final", "prepared"].includes(record.phase) &&
+    (record.gateway.receipt === undefined || record.app.receipt === undefined)
   ) {
     throw mismatch();
   }
-  if (record.finalRoutingPlan !== undefined) {
-    const routingBytes = Buffer.from(record.finalRoutingPlan.base64, "base64");
-    const routing = nativeTargetAuthOnlyFinalRoutingPlanSchema.parse(
-      JSON.parse(routingBytes.toString("utf-8")),
-    );
-    if (
-      routingBytes.toString("base64") !== record.finalRoutingPlan.base64 ||
-      nativeTargetAuthOnlyFinalRoutingPlanDigest(routingBytes) !== record.finalRoutingPlan.digest ||
-      routing.operationRef !== record.finalRoutingPlan.operationRef ||
-      routing.deliveryOperationRef !== key.operationRef ||
-      routing.deliveryPlanDigest !== record.deliveryPlanDigest ||
-      !isDeepStrictEqual(routing.target, plan.target) ||
-      !isDeepStrictEqual(routing.bootstrap, record.gateway.receipt) ||
-      !isDeepStrictEqual(routing.app, record.app.receipt)
-    ) {
-      throw mismatch();
-    }
-  }
+  assertRetainedApproval(key, record);
+  assertRetainedRouting(key, record, plan);
   for (const target of ["gateway", "app"] as const) {
     const source = target === "gateway" ? plan.delivery.gatewayDelivery : plan.delivery.delivery;
     if (source === undefined || source.gitSha === undefined) {
@@ -252,14 +282,17 @@ export const readNativeTargetAuthOnlyDeliveryPlan = (
       ...record[target].candidates,
       ...(record[target].receipt === undefined ? [] : [record[target].receipt]),
     ]) {
+      const expectedBranch =
+        target === "gateway"
+          ? (plan.delivery.gatewayDelivery?.gitRef ?? source.branch)
+          : source.branch;
       if (
-        candidate.operationRef !== key.operationRef ||
-        candidate.projectId !== source.projectId ||
-        candidate.branch !==
-          (target === "gateway"
-            ? (plan.delivery.gatewayDelivery?.gitRef ?? source.branch)
-            : source.branch) ||
-        candidate.repoId !== source.repoId
+        ![
+          candidate.operationRef === key.operationRef,
+          candidate.projectId === source.projectId,
+          candidate.branch === expectedBranch,
+          candidate.repoId === source.repoId,
+        ].every(Boolean)
       ) {
         throw mismatch();
       }
@@ -349,8 +382,9 @@ export const createPostgresNativeTargetAuthOnlyDeliveryStore = (
         })
         .onConflictDoNothing();
       const retained = await read(key);
-      if (retained === undefined || retained.record.planBase64 !== record.planBase64)
+      if (retained === undefined || retained.record.planBase64 !== record.planBase64) {
         throw mismatch();
+      }
       return retained;
     },
   };
@@ -414,10 +448,11 @@ export const prepareNativeTargetAuthOnlyDelivery = async (input: {
     throw new HostedOperatorError("operator_unavailable");
   }
   await input.assertCurrent();
-  let row = await input.store.read(input.key);
-  if (row === undefined) {
+  const retained = await input.store.read(input.key);
+  if (retained === undefined) {
     throw mismatch();
   }
+  let row: NativeTargetAuthOnlyDeliveryRow = retained;
   const { plan } = readNativeTargetAuthOnlyDeliveryPlan(input.key, row.record);
   if (
     row.record.approval !== undefined &&
@@ -466,7 +501,7 @@ export const prepareNativeTargetAuthOnlyDelivery = async (input: {
     row = current;
   };
   const update = async (record: NativeTargetAuthOnlyDeliveryRecord) => {
-    const saved = await input.store.compareAndSet(input.key, row!.revision, record);
+    const saved = await input.store.compareAndSet(input.key, row.revision, record);
     if (saved === undefined) {
       throw uncertain();
     }
@@ -478,9 +513,9 @@ export const prepareNativeTargetAuthOnlyDelivery = async (input: {
     const observed = nativeTargetAuthOnlyEntryReadinessSchema.parse(
       await input.afterGatewayReady({
         assertCurrent,
-        deliveryPlanDigest: row!.record.deliveryPlanDigest,
+        deliveryPlanDigest: row.record.deliveryPlanDigest,
         fenceGeneration,
-        gateway: ready.parse(row!.record.gateway.receipt),
+        gateway: ready.parse(row.record.gateway.receipt),
       }),
     );
     if (observed.status !== "ready" || !isDeepStrictEqual(observed, entryReadiness)) {
@@ -488,71 +523,72 @@ export const prepareNativeTargetAuthOnlyDelivery = async (input: {
     }
     await assertCurrent();
   };
-  try {
-    for (const target of ["gateway", "app"] as const) {
-      const assertEffectCurrent = target === "gateway" ? assertCurrent : assertEntryReady;
-      await assertEffectCurrent();
-      const adapter = input.adapter(target, assertEffectCurrent, fenceGeneration);
-      const context = (): NativeTargetAuthOnlyPreviewDeliveryInput => ({
-        approval: input.approval,
-        approvedPlanDigest: row!.record.deliveryPlanDigest,
-        assertCurrent: assertEffectCurrent,
-        authority: input.key.authority,
-        checkpointDelivery: async (candidates) => {
-          await assertEffectCurrent();
-          await update({ ...row!.record, [target]: { ...row!.record[target], candidates } });
-        },
-        deliveryCandidates: structuredClone(row!.record[target].candidates),
-        effectId: target === "gateway" ? "auth-only-gateway-preview" : "auth-only-app-preview",
-        fenceGeneration,
-        operationRef: input.key.operationRef,
-        plan: plan.delivery,
-        signal: input.signal,
-        target: plan.target,
-      });
-      let result = await adapter.reconcile(context());
-      await assertEffectCurrent();
-      if (
-        result.status === "retryable" &&
-        (!row.record[target].attempted ||
-          (target === "gateway" &&
-            result.candidates.some((candidate) => candidate.readyState === "READY")))
-      ) {
-        if (!row.record[target].attempted) {
-          await update({ ...row.record, [target]: { ...row.record[target], attempted: true } });
-        }
-        result = await adapter.deliver(context());
+  const prepareEffect = async (target: "gateway" | "app") => {
+    const assertEffectCurrent = target === "gateway" ? assertCurrent : assertEntryReady;
+    await assertEffectCurrent();
+    const adapter = input.adapter(target, assertEffectCurrent, fenceGeneration);
+    const context = (): NativeTargetAuthOnlyPreviewDeliveryInput => ({
+      approval: input.approval,
+      approvedPlanDigest: row.record.deliveryPlanDigest,
+      assertCurrent: assertEffectCurrent,
+      authority: input.key.authority,
+      checkpointDelivery: async (candidates) => {
         await assertEffectCurrent();
+        await update({ ...row.record, [target]: { ...row.record[target], candidates } });
+      },
+      deliveryCandidates: structuredClone(row.record[target].candidates),
+      effectId: target === "gateway" ? "auth-only-gateway-preview" : "auth-only-app-preview",
+      fenceGeneration,
+      operationRef: input.key.operationRef,
+      plan: plan.delivery,
+      signal: input.signal,
+      target: plan.target,
+    });
+    let result = await adapter.reconcile(context());
+    await assertEffectCurrent();
+    if (
+      result.status === "retryable" &&
+      (!row.record[target].attempted ||
+        (target === "gateway" &&
+          result.candidates.some((candidate) => candidate.readyState === "READY")))
+    ) {
+      if (!row.record[target].attempted) {
+        await update({ ...row.record, [target]: { ...row.record[target], attempted: true } });
       }
-      if (result.status !== "applied") {
-        throw uncertain();
-      }
-      const receipt = ready.parse(result.selected);
-      await update({
-        ...row.record,
-        [target]: { ...row.record[target], candidates: result.candidates, receipt },
-      });
-      if (target === "gateway") {
-        await assertCurrent();
-        const readiness = nativeTargetAuthOnlyEntryReadinessSchema.parse(
-          await input.afterGatewayReady({
-            assertCurrent,
-            deliveryPlanDigest: row.record.deliveryPlanDigest,
-            fenceGeneration,
-            gateway: receipt,
-          }),
-        );
-        await assertCurrent();
-        if (readiness.status === "pending-owner") {
-          if (Date.parse(readiness.authIdentityLinkExpiresAt) <= now()) {
-            throw mismatch();
-          }
-          await update({ ...row.record, lease: undefined, phase: "pending-owner" });
-          return { ...readiness, deliveryPlanDigest: row.record.deliveryPlanDigest };
-        }
-        entryReadiness = readiness;
-      }
+      result = await adapter.deliver(context());
+      await assertEffectCurrent();
     }
+    if (result.status !== "applied") {
+      throw uncertain();
+    }
+    const receipt = ready.parse(result.selected);
+    await update({
+      ...row.record,
+      [target]: { ...row.record[target], candidates: result.candidates, receipt },
+    });
+    return receipt;
+  };
+  try {
+    const receipt = await prepareEffect("gateway");
+    await assertCurrent();
+    const readiness = nativeTargetAuthOnlyEntryReadinessSchema.parse(
+      await input.afterGatewayReady({
+        assertCurrent,
+        deliveryPlanDigest: row.record.deliveryPlanDigest,
+        fenceGeneration,
+        gateway: receipt,
+      }),
+    );
+    await assertCurrent();
+    if (readiness.status === "pending-owner") {
+      if (Date.parse(readiness.authIdentityLinkExpiresAt) <= now()) {
+        throw mismatch();
+      }
+      await update({ ...row.record, lease: undefined, phase: "pending-owner" });
+      return { ...readiness, deliveryPlanDigest: row.record.deliveryPlanDigest };
+    }
+    entryReadiness = readiness;
+    await prepareEffect("app");
     await assertEntryReady();
     const gateway = ready.parse(row.record.gateway.receipt);
     const app = ready.parse(row.record.app.receipt);
@@ -621,14 +657,16 @@ export const withNativeTargetAuthOnlyFinalRoutingLease = async <T>(input: {
   const current = await input.store.read(input.key);
   if (
     current === undefined ||
-    !["routing-pending", "unknown-final", "running-final", "prepared"].includes(
-      current.record.phase,
-    ) ||
-    current.record.deliveryPlanDigest !== input.deliveryPlanDigest ||
-    !isDeepStrictEqual(current.record.approval, input.approval) ||
-    !isDeepStrictEqual(current.record.gateway.receipt, input.gateway) ||
-    !isDeepStrictEqual(current.record.app.receipt, input.app) ||
-    (current.record.lease !== undefined && Date.parse(current.record.lease.expiresAt) > now())
+    ![
+      ["routing-pending", "unknown-final", "running-final", "prepared"].includes(
+        current.record.phase,
+      ),
+      current.record.deliveryPlanDigest === input.deliveryPlanDigest,
+      isDeepStrictEqual(current.record.approval, input.approval),
+      isDeepStrictEqual(current.record.gateway.receipt, input.gateway),
+      isDeepStrictEqual(current.record.app.receipt, input.app),
+      !(current.record.lease !== undefined && Date.parse(current.record.lease.expiresAt) > now()),
+    ].every(Boolean)
   ) {
     throw uncertain();
   }
@@ -647,16 +685,19 @@ export const withNativeTargetAuthOnlyFinalRoutingLease = async <T>(input: {
   const assertCurrent = async () => {
     await input.assertAuthorized?.();
     const fresh = await input.store.read(input.key);
+    const leaseExpired = Date.parse(lease.expiresAt) <= now();
     if (
       fresh === undefined ||
-      fresh.record.phase !== "running-final" ||
-      fresh.record.lease?.id !== lease.id ||
-      fresh.record.fenceGeneration !== fenceGeneration ||
-      Date.parse(lease.expiresAt) <= now() ||
-      fresh.record.deliveryPlanDigest !== input.deliveryPlanDigest ||
-      !isDeepStrictEqual(fresh.record.approval, input.approval) ||
-      !isDeepStrictEqual(fresh.record.gateway.receipt, input.gateway) ||
-      !isDeepStrictEqual(fresh.record.app.receipt, input.app)
+      leaseExpired ||
+      ![
+        fresh.record.phase === "running-final",
+        fresh.record.lease?.id === lease.id,
+        fresh.record.fenceGeneration === fenceGeneration,
+        fresh.record.deliveryPlanDigest === input.deliveryPlanDigest,
+        isDeepStrictEqual(fresh.record.approval, input.approval),
+        isDeepStrictEqual(fresh.record.gateway.receipt, input.gateway),
+        isDeepStrictEqual(fresh.record.app.receipt, input.app),
+      ].every(Boolean)
     ) {
       throw uncertain();
     }
@@ -666,14 +707,14 @@ export const withNativeTargetAuthOnlyFinalRoutingLease = async <T>(input: {
     await assertCurrent();
     // A retained running/unknown routing attempt may only reconcile its original
     // effect. The caller receives this bit so it cannot issue a fresh refresh.
-    const complete = async (assertPhysical: () => Promise<void>) => {
+    const complete = async (assertPhysical?: () => Promise<void>) => {
       const result = await input.run({
         assertCurrent,
         fenceGeneration,
         reconcileOnly: current.record.phase !== "routing-pending",
       });
       await assertCurrent();
-      await assertPhysical();
+      await assertPhysical?.();
       const prepared = await input.store.compareAndSet(input.key, row.revision, {
         ...row.record,
         lease: undefined,
@@ -685,7 +726,7 @@ export const withNativeTargetAuthOnlyFinalRoutingLease = async <T>(input: {
       return result;
     };
     return input.withExecutionLease === undefined
-      ? await complete(async () => {})
+      ? await complete()
       : await input.withExecutionLease({ assertCurrent, fenceGeneration }, complete);
   } catch (error) {
     const latest = await input.store.read(input.key);
