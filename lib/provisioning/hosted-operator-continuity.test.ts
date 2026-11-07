@@ -705,7 +705,7 @@ describe("approved managed app continuity service", () => {
     expect(result.state).toBe("settled");
     expect(result.outcome?.exitCode).toBe(0);
     expect(f.events.indexOf("close")).toBeLessThan(f.events.indexOf("revoke-owned-rows"));
-    const started = vi.mocked(f.deps.runtime.start).mock.calls[0];
+    const [started] = vi.mocked(f.deps.runtime.start).mock.calls;
     if (started === undefined) {
       throw new Error("Runtime did not start");
     }
