@@ -37,7 +37,7 @@ const input = {
 };
 const setup = () => {
   let choice: string | undefined;
-  const assertCurrent = vi.fn<() => Promise<void>>().mockImplementation(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readOrigins = vi
     .fn<() => Promise<string[]>>()
     .mockResolvedValue(["https://first.example", "https://second.example"]);
@@ -130,11 +130,11 @@ describe("public origin Server Action boundary", () => {
   it("uses current authenticated owner authority and rejects foreign origins before opening data", async () => {
     const select = vi
       .fn<ReturnType<typeof createBuilderPublicOriginService>["select"]>()
-      .mockImplementation(async () => {});
+      .mockResolvedValue();
     const open = vi.fn().mockResolvedValue({ principal, publicOrigins: { select } });
     const refresh = vi.fn<() => void>();
     const action = createBuilderPublicOriginAction({
-      enabled: async () => true,
+      enabled: vi.fn().mockResolvedValue(true),
       open,
       origin: "https://builder.example",
       refresh,
@@ -154,7 +154,7 @@ describe("public origin Server Action boundary", () => {
   it("keeps interrupted metadata writes visible without retrying or publishing", async () => {
     const select = vi.fn().mockRejectedValue(new Error("metadata acknowledgment interrupted"));
     const action = createBuilderPublicOriginAction({
-      enabled: async () => true,
+      enabled: vi.fn().mockResolvedValue(true),
       open: async () => ({ principal, publicOrigins: { select } }),
       origin: "https://builder.example",
       refresh: vi.fn<() => void>(),
