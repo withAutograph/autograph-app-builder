@@ -29,11 +29,13 @@ describe("hosted GitHub installation binding", () => {
   it("plans and applies only the exactly confirmed tenant binding", async () => {
     const plan = planHostedGitHubInstallation(request);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const bind = vi.fn(async ({ binding, now }) => ({
-      ...binding,
-      active: true,
-      updatedAt: now,
-    }));
+    const bind = vi.fn<Parameters<typeof bindHostedGitHubInstallation>[0]["store"]["bind"]>(
+      async ({ binding, now }) => ({
+        ...binding,
+        active: true,
+        updatedAt: now,
+      }),
+    );
     const receipt = await bindHostedGitHubInstallation({
       now: () => new Date("2026-08-28T00:01:00.000Z"),
       request: {
