@@ -43,11 +43,16 @@ const needsBrowserDependencies = async (
   }
 
   // The private reporter suppresses browser launch errors. Probe without app authority.
-  const probe = await input.sandbox.run({
+  const { sandbox } = input;
+  const run = sandbox.run.bind(sandbox);
+  const options: Parameters<typeof run>[0] = {
     command: browserDependencyProbe,
     workingDirectory: input.root,
-    ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-  });
+  };
+  if (input.signal !== undefined) {
+    options.abortSignal = input.signal;
+  }
+  const probe = await run(options);
   return probe.exitCode === 42;
 };
 
