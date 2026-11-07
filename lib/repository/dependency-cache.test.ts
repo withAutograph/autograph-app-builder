@@ -50,6 +50,26 @@ import {
   shouldPreferLiveTemplateDependencies,
 } from "./dependency-cache";
 
+const unexpectedSandboxOperation = (): never => {
+  throw new Error("Unexpected sandbox operation in test fixture");
+};
+const sandboxDefaults = {
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: unexpectedSandboxOperation,
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+} satisfies SandboxSession;
+const createSandbox = <T extends Partial<SandboxSession>>(overrides: T): SandboxSession & T => ({
+  ...sandboxDefaults,
+  ...overrides,
+});
+
 const { join } = nodePath;
 const executeFile = promisify(execFile);
 
@@ -223,7 +243,7 @@ function liveTemplateCacheFixture() {
   const writeTextFile = vi.fn(async ({ path, content }: { path: string; content: string }) => {
     stored.set(path, content);
   });
-  const sandbox = {
+  const sandbox = createSandbox({
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
       const content = source.contents.get(path.replace(/^repository\//u, ""));
@@ -238,7 +258,7 @@ function liveTemplateCacheFixture() {
     run,
     setNetworkPolicy,
     writeTextFile,
-  } as unknown as SandboxSession;
+  });
   return {
     run,
     sandbox,
@@ -279,12 +299,12 @@ function sandboxFixture(inputManifest: unknown = manifest) {
   run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const writeTextFile = vi.fn(async () => {});
-  const sandbox = {
+  const sandbox = createSandbox({
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     readTextFile: vi.fn(async () => JSON.stringify({ version: "2.4.0" })),
     run,
     writeTextFile,
-  } as unknown as SandboxSession;
+  });
   return { run, sandbox, writeTextFile };
 }
 
@@ -302,7 +322,7 @@ function hostedExecutionSandbox(inputManifest: unknown = hostedExecutionManifest
       stderr: "",
       stdout: `${hostedArchiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n1356765\n`,
     });
-  return { run, sandbox: { run } as unknown as SandboxSession };
+  return { run, sandbox: createSandbox({ run }) };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -652,7 +672,7 @@ describe("offline dependency cache", () => {
       sourceSha: "3".repeat(40),
       sourceTree: "4".repeat(40),
     };
-    const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
+    const cache = await inspectDependencyCache(createSandbox({}), process.env, target);
 
     expect(dependencyTargetForWorkspace(cache, target)).toEqual(
       expect.objectContaining({
@@ -675,7 +695,7 @@ describe("offline dependency cache", () => {
       sourceSha: "3".repeat(40),
       sourceTree: "4".repeat(40),
     };
-    const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
+    const cache = await inspectDependencyCache(createSandbox({}), process.env, target);
 
     expect(() =>
       assertExactDependencyTargetBinding({
@@ -769,7 +789,7 @@ describe("offline dependency cache", () => {
       stderr: "",
       stdout: "linux/x86_64\n",
     }));
-    const sandbox = {
+    const sandbox = createSandbox({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
         const content = source.contents.get(path.replace(/^repository\//u, ""));
@@ -780,7 +800,7 @@ describe("offline dependency cache", () => {
         path === ".app-builder/source-files.json" ? JSON.stringify(source.sourceFiles) : null,
       ),
       run,
-    } as unknown as SandboxSession;
+    });
 
     await expect(inspectDependencyCache(sandbox, {}, target, true)).rejects.toBeInstanceOf(
       DependencyCacheMissingError,

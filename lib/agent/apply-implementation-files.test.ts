@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SandboxSession } from "eve/sandbox";
 
 import {
   assertExistingAppImplementationFiles,
@@ -7,6 +8,23 @@ import {
   applyImplementationFiles,
   withImplementationFiles,
 } from "./apply-implementation-files";
+
+const unexpectedSandboxOperation = () => {
+  throw new Error("Unexpected sandbox operation");
+};
+
+const sandboxWithWriter = (writeTextFile: SandboxSession["writeTextFile"]): SandboxSession => ({
+  readFile: unexpectedSandboxOperation,
+  readBinaryFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeTextFile,
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: unexpectedSandboxOperation,
+});
 
 describe("approval-bound implementation files", () => {
   it("writes validated files into the successful apply overlay only", async () => {
@@ -43,7 +61,7 @@ describe("approval-bound implementation files", () => {
           operation: "iterate-existing-app",
           plan: { source: { workspacePath: "apps/stock-exceptions" } },
         } as never,
-        sandbox: { writeTextFile } as never,
+        sandbox: sandboxWithWriter(writeTextFile),
       }),
     ).resolves.toEqual({ exitCode: 0, stderr: "", stdout: "receipt" });
 
@@ -77,7 +95,7 @@ describe("approval-bound implementation files", () => {
           operation: "iterate-existing-app",
           plan: { source: { workspacePath: "apps/inventory-queue" } },
         } as never,
-        sandbox: { writeTextFile } as never,
+        sandbox: sandboxWithWriter(writeTextFile),
       }),
     ).rejects.toThrow("Existing-app implementation files must stay inside the app workspace.");
     expect(executor).not.toHaveBeenCalled();

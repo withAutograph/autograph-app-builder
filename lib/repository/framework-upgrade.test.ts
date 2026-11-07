@@ -111,14 +111,7 @@ const registry = (overrides: Record<string, RegistryMetadata> = {}) => {
   return vi.fn(read);
 };
 
-interface FixtureSandboxPorts {
-  run?: (input: {
-    command: string;
-  }) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
-  readBinaryFile?: SandboxSession["readBinaryFile"];
-  readTextFile?: SandboxSession["readTextFile"];
-  writeTextFile?: ReturnType<typeof vi.fn> | (() => Promise<void>);
-  removePath?: () => Promise<void>;
+interface FixtureSandboxPorts extends Partial<SandboxSession> {
   setNetworkPolicy?: () => Promise<void>;
 }
 const fixtureCommandExit = (command: string, existing: boolean) => {
@@ -127,10 +120,23 @@ const fixtureCommandExit = (command: string, existing: boolean) => {
   }
   return command.startsWith("test -f") ? 1 : 0;
 };
-const sandboxFixture = (ports: FixtureSandboxPorts): SandboxSession =>
-  // SAFETY: Each fixture implements the exact SandboxSession I/O members used by the exercised planning/apply path; no real provider authority is manufactured.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Intentional partial external port fixture; absent members fail if the implementation starts using them.
-  ports as unknown as SandboxSession;
+const unexpectedSandboxOperation = () =>
+  Promise.reject(new Error("Unexpected sandbox operation in framework upgrade fixture"));
+const sandboxFixture = (ports: FixtureSandboxPorts): SandboxSession => ({
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: () => {
+    throw new Error("Unexpected sandbox operation in framework upgrade fixture");
+  },
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+  ...ports,
+});
 
 describe("framework upgrade planning and apply", () => {
   it("resolves stable peer-compatible releases and matches React DOM to React", async () => {
@@ -357,8 +363,8 @@ describe("framework upgrade planning and apply", () => {
         calls.push(command);
         return { exitCode: 0, stdout: "{}", stderr: "" };
       },
-      writeTextFile: vi.fn(),
-      readBinaryFile: vi.fn(),
+      writeTextFile: vi.fn<SandboxSession["writeTextFile"]>(),
+      readBinaryFile: vi.fn<SandboxSession["readBinaryFile"]>(),
     });
     const result = await sandboxApplyCommandExecutor()({
       sandbox,

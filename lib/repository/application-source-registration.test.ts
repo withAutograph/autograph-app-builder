@@ -4,6 +4,22 @@ import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 import { planApplicationSourceRegistration } from "./application-source-registration";
 
+const unexpectedSandboxOperation = (): never => {
+  throw new Error("Unexpected sandbox operation in test fixture");
+};
+const createSandbox = (run: SandboxSession["run"]): SandboxSession => ({
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: unexpectedSandboxOperation,
+  run,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+});
+
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 describe("imported application registration planning", () => {
   it("uses only the acquired platform pure planner without executing app source", async () => {
@@ -21,9 +37,7 @@ describe("imported application registration planning", () => {
         stderr: "",
       }),
     );
-    // SAFETY: The planner only invokes run; fixtures never exercise dependency recovery.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Deliberately bounded Sandbox fixture.
-    const sandbox = { run } as unknown as SandboxSession;
+    const sandbox = createSandbox(run);
     const result = await planApplicationSourceRegistration(sandbox, "invoice-app");
     expect(result.newDigest).toBe(digest(proposedBytes));
     expect(run.mock.calls[0]?.[0].command).toContain(
@@ -45,9 +59,7 @@ describe("imported application registration planning", () => {
         stderr: "",
       }),
     );
-    // SAFETY: The planner only invokes run; fixtures never exercise dependency recovery.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Deliberately bounded Sandbox fixture.
-    const sandbox = { run } as unknown as SandboxSession;
+    const sandbox = createSandbox(run);
     await expect(planApplicationSourceRegistration(sandbox, "invoice-app")).rejects.toThrow(
       "plan mismatch",
     );
